@@ -1,4 +1,4 @@
-use crate::class_file::ClassFileParsingError;
+use crate::class_file::{read_u16, read_u32, ClassFileParsingError};
 
 pub enum ConstantPoolInfo {
     Padding,
@@ -137,7 +137,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let length = read_u8(reader)? as u16;
+        let length = read_u16(reader)?;
         let mut bytes = Vec::with_capacity(length as usize);
         for _ in 0..length {
             bytes.push(read_u8(reader)?);
@@ -153,7 +153,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let bytes = read_u8(reader)? as u32;
+        let bytes = read_u32(reader)?;
         Ok(Self::Integer { tag: 3, bytes })
     }
 
@@ -161,7 +161,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let bytes = read_u8(reader)? as u32;
+        let bytes = read_u32(reader)?;
         Ok(Self::Float { tag: 4, bytes })
     }
 
@@ -169,8 +169,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let high_bytes = read_u8(reader)? as u32;
-        let low_bytes = read_u8(reader)? as u32;
+        let high_bytes = read_u32(reader)?;
+        let low_bytes = read_u32(reader)?;
         Ok(Self::Long {
             tag: 5,
             high_bytes,
@@ -182,8 +182,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let high_bytes = read_u8(reader)? as u32;
-        let low_bytes = read_u8(reader)? as u32;
+        let high_bytes = read_u32(reader)?;
+        let low_bytes = read_u32(reader)?;
         Ok(Self::Double {
             tag: 6,
             high_bytes,
@@ -195,7 +195,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let name_index = read_u8(reader)? as u16;
+        let name_index = read_u16(reader)?;
         Ok(Self::Class { tag: 7, name_index })
     }
 
@@ -203,7 +203,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let string_index = read_u8(reader)? as u16;
+        let string_index = read_u16(reader)?;
         Ok(Self::String {
             tag: 8,
             string_index,
@@ -214,8 +214,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let class_index = read_u8(reader)? as u16;
-        let name_and_type_index = read_u8(reader)? as u16;
+        let class_index = read_u16(reader)?;
+        let name_and_type_index = read_u16(reader)?;
         Ok(Self::FieldRef {
             tag: 9,
             class_index,
@@ -227,8 +227,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let class_index = read_u8(reader)? as u16;
-        let name_and_type_index = read_u8(reader)? as u16;
+        let class_index = read_u16(reader)?;
+        let name_and_type_index = read_u16(reader)?;
         Ok(Self::MethodRef {
             tag: 10,
             class_index,
@@ -240,8 +240,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let class_index = read_u8(reader)? as u16;
-        let name_and_type_index = read_u8(reader)? as u16;
+        let class_index = read_u16(reader)?;
+        let name_and_type_index = read_u16(reader)?;
         Ok(Self::InterfaceMethodRef {
             tag: 11,
             class_index,
@@ -253,8 +253,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let name_index = read_u8(reader)? as u16;
-        let descriptor_index = read_u8(reader)? as u16;
+        let name_index = read_u16(reader)?;
+        let descriptor_index = read_u16(reader)?;
         Ok(Self::NameAndType {
             tag: 12,
             name_index,
@@ -267,7 +267,7 @@ impl ConstantPoolInfo {
         R: std::io::Read,
     {
         let reference_kind = read_u8(reader)?;
-        let reference_index = read_u8(reader)? as u16;
+        let reference_index = read_u16(reader)?;
         Ok(Self::MethodHandle {
             tag: 15,
             reference_kind,
@@ -279,7 +279,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let descriptor_index = read_u8(reader)? as u16;
+        let descriptor_index = read_u16(reader)?;
         Ok(Self::MethodType {
             tag: 16,
             descriptor_index,
@@ -290,8 +290,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let bootstrap_method_attr_index = read_u8(reader)? as u16;
-        let name_and_type_index = read_u8(reader)? as u16;
+        let bootstrap_method_attr_index = read_u16(reader)?;
+        let name_and_type_index = read_u16(reader)?;
         Ok(Self::Dynamic {
             tag: 17,
             bootstrap_method_attr_index,
@@ -303,8 +303,8 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let bootstrap_method_attr_index = read_u8(reader)? as u16;
-        let name_and_type_index = read_u8(reader)? as u16;
+        let bootstrap_method_attr_index = read_u16(reader)?;
+        let name_and_type_index = read_u16(reader)?;
         Ok(Self::InvokeDynamic {
             tag: 18,
             bootstrap_method_attr_index,
@@ -316,7 +316,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let name_index = read_u8(reader)? as u16;
+        let name_index = read_u16(reader)?;
         Ok(Self::Module {
             tag: 19,
             name_index,
@@ -327,7 +327,7 @@ impl ConstantPoolInfo {
     where
         R: std::io::Read,
     {
-        let name_index = read_u8(reader)? as u16;
+        let name_index = read_u16(reader)?;
         Ok(Self::Package {
             tag: 20,
             name_index,
