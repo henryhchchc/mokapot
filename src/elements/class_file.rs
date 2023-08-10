@@ -1,50 +1,91 @@
-use crate::constant_pool::ConstantPoolInfo;
+use crate::utils::{read_bytes, read_u16, read_u32};
 
+use super::constant_pool::ConstantPoolInfo;
+
+#[derive(Debug)]
 pub struct ClassFile {
-    magic: u32,
-    major_version: u16,
-    minor_version: u16,
-    constant_pool_count: u16,
+    version: ClassFileVersion,
     constant_pool: Vec<ConstantPoolInfo>,
     access_flags: u16,
     this_class: u16,
     super_class: u16,
-    interfaces_count: u16,
     interfaces: Vec<u16>,
-    fields_count: u16,
     fields: Vec<FieldInfo>,
-    methods_count: u16,
     methods: Vec<MethodInfo>,
-    attributes_count: u16,
     attributes: Vec<AttributeInfo>,
 }
 
-const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
+pub struct Class {
+    pub version: ClassFileVersion,
+    pub access_flags: u16,
+    pub binary_name: String,
+    pub super_class_binary_name: String,
+    pub interface_binary_names: Vec<String>,
+}
 
-/// Declared `public`; may be accessed from outside its package.
-const ACC_PUBLIC: u16 = 0x0001;
-/// Declared `final`; no subclasses allowed.
-const ACC_FINAL: u16 = 0x0010;
-/// Treat superclass methods specially when invoked by the invokespecial instruction.
-const ACC_SUPER: u16 = 0x0020;
-/// Is an interface, not a class.
-const ACC_INTERFACE: u16 = 0x0200;
-/// Declared `abstract`; must not be instantiated.
-const ACC_ABSTRACT: u16 = 0x0400;
-/// Declared synthetic; not present in the source code.
-const ACC_SYNTHETIC: u16 = 0x1000;
-/// Declared as an annotation interface.
-const ACC_ANNOTATION: u16 = 0x2000;
-/// Declared as an enum class.
-const ACC_ENUM: u16 = 0x4000;
-/// Is a module, not a class or interface.
-const ACC_MODULE: u16 = 0x8000;
+impl ClassFile {
+    pub fn to_class(&self) -> Result<Class, ClassFileParsingError> {
+        let binary_name = self.get_constant_pool_string(&self.this_class)?;
+        let super_class_binary_name = self.get_constant_pool_string(&self.super_class)?;
+        let interfaces = self.interfaces.iter().map(|i| self.get_constant_pool_string(i)).collect::<Result<Vec<String>, ClassFileParsingError>>()?;
+        Ok(Class {
+            version: self.version,
+            access_flags: self.access_flags,
+            binary_name,
+            super_class_binary_name,
+            interface_binary_names: interfaces,
+        })
+    }
 
+    fn get_constant_pool_string(
+        &self,
+        class_info_idx: &u16,
+    ) -> Result<String, ClassFileParsingError> {
+        if let Some(ConstantPoolInfo::Class { name_index }) =
+            &self.constant_pool_entry(class_info_idx)
+        {
+            if let Some(ConstantPoolInfo::Utf8 { bytes }) = &self.constant_pool_entry(name_index) {
+                return String::from_utf8(bytes.clone())
+                    .map_err(|_| ClassFileParsingError::MalformedClassFile);
+            }
+        }
+        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+    }
+
+    fn constant_pool_entry(&self, index: &u16) -> Option<&ConstantPoolInfo> {
+        self.constant_pool.get((index - 1) as usize)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+/// The version of a class file.
+pub struct ClassFileVersion {
+    /// The major version number.
+    pub major: u16,
+    /// the minor version number.
+    pub minor: u16,
+}
+
+impl ClassFileVersion {
+    /// Returns `true` if this class file is compiled with `--enable-preview`.
+    pub fn is_preview_enabled(&self) -> bool {
+        self.minor == 65535
+    }
+    fn parse<R>(reader: &mut R) -> std::io::Result<Self>
+    where
+        R: std::io::Read,
+    {
+        let minor = read_u16(reader)?;
+        let major = read_u16(reader)?;
+        Ok(Self { major, minor })
+    }
+}
+
+#[derive(Debug)]
 pub struct FieldInfo {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes_count: u16,
     attributes: Vec<AttributeInfo>,
 }
 impl FieldInfo {
@@ -75,16 +116,16 @@ impl FieldInfo {
             access_flags,
             name_index,
             descriptor_index,
-            attributes_count,
             attributes,
         })
     }
 }
+
+#[derive(Debug)]
 pub struct MethodInfo {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes_count: u16,
     attributes: Vec<AttributeInfo>,
 }
 impl MethodInfo {
@@ -115,14 +156,13 @@ impl MethodInfo {
             access_flags,
             name_index,
             descriptor_index,
-            attributes_count,
             attributes,
         })
     }
 }
+#[derive(Debug)]
 pub struct AttributeInfo {
     attribute_name_index: u16,
-    attribute_length: u32,
     info: Vec<u8>,
 }
 impl AttributeInfo {
@@ -149,22 +189,26 @@ impl AttributeInfo {
         let info = read_bytes(reader, attribute_length as usize)?;
         Ok(Self {
             attribute_name_index,
-            attribute_length,
             info,
         })
     }
 }
+
+const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
 
 impl ClassFile {
     pub fn parse<R>(reader: &mut R) -> Result<ClassFile, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        check_magic(reader)?;
-        let major_version = read_u16(reader)?;
-        let minor_version = read_u16(reader)?;
+        let magic = read_u32(reader)?;
+        if magic != JAVA_CLASS_MAIGC {
+            return Err(ClassFileParsingError::MalformedClassFile);
+        }
+        let version = ClassFileVersion::parse(reader)?;
         let constant_pool_count = read_u16(reader)?;
-        let constant_pool = ConstantPoolInfo::parse_multiple(reader, constant_pool_count)?;
+        // Constant pool is indexed from 1, so we need to subtract 1
+        let constant_pool = ConstantPoolInfo::parse_multiple(reader, constant_pool_count - 1)?;
         let access_flags = read_u16(reader)?;
         let this_class = read_u16(reader)?;
         let super_class = read_u16(reader)?;
@@ -180,78 +224,29 @@ impl ClassFile {
         let attributes_count = read_u16(reader)?;
         let attributes = AttributeInfo::parse_multiple(reader, attributes_count)?;
         Ok(ClassFile {
-            magic: JAVA_CLASS_MAIGC,
-            major_version,
-            minor_version,
-            constant_pool_count,
+            version,
             constant_pool,
             access_flags,
             this_class,
             super_class,
-            interfaces_count,
             interfaces,
-            fields_count,
             fields,
-            methods_count,
             methods,
-            attributes_count,
             attributes,
         })
     }
 }
 
-fn check_magic<R>(reader: &mut R) -> Result<(), ClassFileParsingError>
-where
-    R: std::io::Read,
-{
-    let mut magic_buf = [0u8; 4];
-    if reader.read_exact(&mut magic_buf).is_err() {
-        return Err(ClassFileParsingError::NotAClassFile);
-    }
-    let magic = u32::from_be_bytes(magic_buf);
-    if magic != JAVA_CLASS_MAIGC {
-        return Err(ClassFileParsingError::NotAClassFile);
-    }
-    Ok(())
-}
-
-pub fn read_u32<R>(reader: &mut R) -> Result<u32, ClassFileParsingError>
-where
-    R: std::io::Read,
-{
-    let mut buf = [0u8; 4];
-    if reader.read_exact(&mut buf).is_err() {
-        return Err(ClassFileParsingError::MalformedClassFile);
-    }
-    Ok(u32::from_be_bytes(buf))
-}
-
-pub fn read_u16<R>(reader: &mut R) -> Result<u16, ClassFileParsingError>
-where
-    R: std::io::Read,
-{
-    let mut buf = [0u8; 2];
-    if reader.read_exact(&mut buf).is_err() {
-        return Err(ClassFileParsingError::MalformedClassFile);
-    }
-    Ok(u16::from_be_bytes(buf))
-}
-
-pub fn read_bytes<R>(reader: &mut R, len: usize) -> Result<Vec<u8>, ClassFileParsingError>
-where
-    R: std::io::Read,
-{
-    let mut buf = vec![0u8; len];
-    if reader.read_exact(&mut buf).is_err() {
-        return Err(ClassFileParsingError::MalformedClassFile);
-    }
-    Ok(buf)
-}
-
 #[derive(Debug)]
 pub enum ClassFileParsingError {
-    NotAClassFile,
     MalformedClassFile,
+    MidmatchedConstantPoolTag,
+}
+
+impl From<std::io::Error> for ClassFileParsingError {
+    fn from(_value: std::io::Error) -> Self {
+        ClassFileParsingError::MalformedClassFile
+    }
 }
 
 impl std::fmt::Display for ClassFileParsingError {

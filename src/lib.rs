@@ -1,2 +1,6 @@
-pub mod class_file;
-pub mod constant_pool;
+pub mod elements;
+pub(crate) mod utils;
+pub mod access_flags;
+
+#[cfg(test)]
+mod test;
