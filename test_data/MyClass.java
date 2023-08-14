@@ -2,6 +2,8 @@ package org.pkg;
 
 public class MyClass implements Cloneable {
 
+    public static long test = 233;
+
     private String name;
 
     public static void main(String[] args) {

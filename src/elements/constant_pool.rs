@@ -1,28 +1,58 @@
-use crate::{
-    utils::{read_u16, read_u32, read_u8},
-};
+use std::collections::HashMap;
 
-use super::class_file::ClassFileParsingError;
+use crate::utils::{read_bytes, read_u16, read_u8};
+
+use super::class_file::{ClassFileParsingError, ClassReference};
+
+
+#[derive(Debug)]
+pub struct ConstantPool {
+    entries: HashMap<u16, ConstantPoolEntry>,
+}
+
+impl ConstantPool {
+    pub fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    where
+        R: std::io::Read,
+    {
+        let constant_pool_count = read_u16(reader)?;
+        let entries = ConstantPoolEntry::parse_multiple(reader, constant_pool_count)?;
+
+        Ok(Self { entries })
+    }
+
+    pub fn get_entry(&self, index: impl Into<u16>) -> Result<&ConstantPoolEntry, ClassFileParsingError> {
+        let Some(entry) = self.entries.get(&index.into()) else { 
+            return Err(ClassFileParsingError::BadConstantPoolIndex);
+        };
+        Ok(entry)
+    }
+
+    pub fn get_string(&self, index: impl Into<u16>) -> Result<String, ClassFileParsingError> {
+        if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
+            Ok(string.clone())
+        } else {
+            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        }
+    }
+
+    pub fn get_class_ref(&self, index: impl Into<u16>) -> Result<ClassReference, ClassFileParsingError> {
+        let ConstantPoolEntry::Class { name_index } = self.get_entry(index)? else {
+            return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
+        };
+        let name = self.get_string(*name_index)?;
+        Ok(ClassReference { name })
+    }
+
+}
 
 #[derive(Debug, Clone)]
-pub enum ConstantPoolInfo {
-    Utf8 {
-        bytes: Vec<u8>,
-    },
-    Integer {
-        bytes: u32,
-    },
-    Float {
-        bytes: u32,
-    },
-    Long {
-        high_bytes: u32,
-        low_bytes: u32,
-    },
-    Double {
-        high_bytes: u32,
-        low_bytes: u32,
-    },
+pub enum ConstantPoolEntry {
+    Utf8(String),
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
     Class {
         name_index: u16,
     },
@@ -68,14 +98,24 @@ pub enum ConstantPoolInfo {
     },
 }
 
-impl ConstantPoolInfo {
-    pub fn parse_multiple<R>(reader: &mut R, count: u16) -> Result<Vec<Self>, ClassFileParsingError>
+impl ConstantPoolEntry {
+    fn parse_multiple<R>(
+        reader: &mut R,
+        count: u16,
+    ) -> Result<HashMap<u16, Self>, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let mut result = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            result.push(Self::parse(reader)?);
+        let mut counter: u16 = 1;
+        let mut result = HashMap::with_capacity(count as usize);
+        while counter < count {
+            let entry = Self::parse(reader)?;
+            let increment = match entry {
+                ConstantPoolEntry::Long(_) | ConstantPoolEntry::Double(_) => 2,
+                _ => 1,
+            };
+            result.insert(counter, entry);
+            counter += increment;
         }
         Ok(result)
     }
@@ -116,47 +156,43 @@ impl ConstantPoolInfo {
         for _ in 0..length {
             bytes.push(read_u8(reader)?);
         }
-        Ok(Self::Utf8 { bytes })
+        if let Ok(result) = String::from_utf8(bytes) {
+            Ok(Self::Utf8(result))
+        } else {
+            Err(ClassFileParsingError::MalformedClassFile)
+        }
     }
 
     fn parse_integer<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let bytes = read_u32(reader)?;
-        Ok(Self::Integer { bytes })
+        let bytes = read_bytes(reader)?;
+        Ok(Self::Integer(i32::from_be_bytes(bytes)))
     }
 
     fn parse_float<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let bytes = read_u32(reader)?;
-        Ok(Self::Float { bytes })
+        let bytes = read_bytes(reader)?;
+        Ok(Self::Float(f32::from_be_bytes(bytes)))
     }
 
     fn parse_long<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let high_bytes = read_u32(reader)?;
-        let low_bytes = read_u32(reader)?;
-        Ok(Self::Long {
-            high_bytes,
-            low_bytes,
-        })
+        let bytes = read_bytes(reader)?;
+        Ok(Self::Long(i64::from_be_bytes(bytes)))
     }
 
     fn parse_double<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let high_bytes = read_u32(reader)?;
-        let low_bytes = read_u32(reader)?;
-        Ok(Self::Double {
-            high_bytes,
-            low_bytes,
-        })
+        let bytes = read_bytes(reader)?;
+        Ok(Self::Double(f64::from_be_bytes(bytes)))
     }
 
     fn parse_class<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>

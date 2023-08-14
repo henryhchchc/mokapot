@@ -1,59 +1,72 @@
-use crate::utils::{read_bytes, read_u16, read_u32};
+use crate::utils::{read_u16, read_u32};
 
-use super::constant_pool::ConstantPoolInfo;
+use super::{
+    attributes::{Attribute, AttributeList},
+    constant_pool::{ConstantPool},
+    fields::{Field, FieldInfo},
+};
 
 #[derive(Debug)]
 pub struct ClassFile {
     version: ClassFileVersion,
-    constant_pool: Vec<ConstantPoolInfo>,
+    constant_pool: ConstantPool,
     access_flags: u16,
     this_class: u16,
     super_class: u16,
     interfaces: Vec<u16>,
     fields: Vec<FieldInfo>,
     methods: Vec<MethodInfo>,
-    attributes: Vec<AttributeInfo>,
+    attributes: AttributeList,
 }
 
 pub struct Class {
     pub version: ClassFileVersion,
     pub access_flags: u16,
-    pub binary_name: String,
-    pub super_class_binary_name: String,
-    pub interface_binary_names: Vec<String>,
+    pub this_class: ClassReference,
+    pub super_class: ClassReference,
+    pub interfaces: Vec<ClassReference>,
+    pub fields: Vec<Field>,
+    pub methods: Vec<Method>,
+    pub source_file: Option<String>,
 }
 
 impl ClassFile {
-    pub fn to_class(&self) -> Result<Class, ClassFileParsingError> {
-        let binary_name = self.get_constant_pool_string(&self.this_class)?;
-        let super_class_binary_name = self.get_constant_pool_string(&self.super_class)?;
-        let interfaces = self.interfaces.iter().map(|i| self.get_constant_pool_string(i)).collect::<Result<Vec<String>, ClassFileParsingError>>()?;
+    pub fn to_class(self) -> Result<Class, ClassFileParsingError> {
+        let this_class = self.constant_pool.get_class_ref(self.this_class)?;
+        let super_class = self.constant_pool.get_class_ref(self.super_class)?;
+        let interfaces = self
+            .interfaces
+            .iter()
+            .map(|i| self.constant_pool.get_class_ref(*i))
+            .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
+        let fields = self
+            .fields
+            .iter()
+            .map(|f| f.to_field(&self.constant_pool))
+            .collect::<Result<Vec<Field>, ClassFileParsingError>>()?;
+        let methods = self
+            .methods
+            .iter()
+            .map(|m| m.to_method(&self.constant_pool))
+            .collect::<Result<Vec<Method>, ClassFileParsingError>>()?;
+
+        let mut source_file = None;
+        for attr in self.attributes.into_iter() {
+            match attr {
+                Attribute::SourceFile(file_name) => source_file = Some(file_name.clone()),
+                _ => {}
+            }
+        }
         Ok(Class {
             version: self.version,
             access_flags: self.access_flags,
-            binary_name,
-            super_class_binary_name,
-            interface_binary_names: interfaces,
+            this_class,
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            source_file,
         })
-    }
-
-    fn get_constant_pool_string(
-        &self,
-        class_info_idx: &u16,
-    ) -> Result<String, ClassFileParsingError> {
-        if let Some(ConstantPoolInfo::Class { name_index }) =
-            &self.constant_pool_entry(class_info_idx)
-        {
-            if let Some(ConstantPoolInfo::Utf8 { bytes }) = &self.constant_pool_entry(name_index) {
-                return String::from_utf8(bytes.clone())
-                    .map_err(|_| ClassFileParsingError::MalformedClassFile);
-            }
-        }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
-    }
-
-    fn constant_pool_entry(&self, index: &u16) -> Option<&ConstantPoolInfo> {
-        self.constant_pool.get((index - 1) as usize)
     }
 }
 
@@ -81,44 +94,10 @@ impl ClassFileVersion {
     }
 }
 
-#[derive(Debug)]
-pub struct FieldInfo {
-    access_flags: u16,
-    name_index: u16,
-    descriptor_index: u16,
-    attributes: Vec<AttributeInfo>,
-}
-impl FieldInfo {
-    fn parse_multiple<R>(
-        reader: &mut R,
-        fields_count: u16,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let mut fields = Vec::with_capacity(fields_count as usize);
-        for _ in 0..fields_count {
-            fields.push(Self::parse(reader)?);
-        }
-        Ok(fields)
-    }
-
-    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let access_flags = read_u16(reader)?;
-        let name_index = read_u16(reader)?;
-        let descriptor_index = read_u16(reader)?;
-        let attributes_count = read_u16(reader)?;
-        let attributes = AttributeInfo::parse_multiple(reader, attributes_count)?;
-        Ok(Self {
-            access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
-        })
-    }
+pub struct Method {
+    pub access_flags: u16,
+    pub name: String,
+    pub descriptor: String,
 }
 
 #[derive(Debug)]
@@ -126,70 +105,52 @@ pub struct MethodInfo {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Vec<AttributeInfo>,
+    attributes: AttributeList,
 }
+
 impl MethodInfo {
+    pub(crate) fn to_method(
+        &self,
+        constant_pool: &ConstantPool,
+    ) -> Result<Method, ClassFileParsingError> {
+        let access_flags = self.access_flags;
+        let name = constant_pool.get_string(self.name_index)?;
+        let descriptor = constant_pool.get_string(self.descriptor_index)?;
+        Ok(Method {
+            access_flags,
+            name,
+            descriptor,
+        })
+    }
+
     fn parse_multiple<R>(
         reader: &mut R,
         methods_count: u16,
+        constant_pool: &ConstantPool,
     ) -> Result<Vec<Self>, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let mut methods = Vec::with_capacity(methods_count as usize);
         for _ in 0..methods_count {
-            methods.push(Self::parse(reader)?);
+            methods.push(Self::parse(reader, constant_pool)?);
         }
         Ok(methods)
     }
 
-    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let access_flags = read_u16(reader)?;
         let name_index = read_u16(reader)?;
         let descriptor_index = read_u16(reader)?;
-        let attributes_count = read_u16(reader)?;
-        let attributes = AttributeInfo::parse_multiple(reader, attributes_count)?;
+        let attributes = AttributeList::parse(reader, constant_pool)?;
         Ok(Self {
             access_flags,
             name_index,
             descriptor_index,
             attributes,
-        })
-    }
-}
-#[derive(Debug)]
-pub struct AttributeInfo {
-    attribute_name_index: u16,
-    info: Vec<u8>,
-}
-impl AttributeInfo {
-    fn parse_multiple<R>(
-        reader: &mut R,
-        attributes_count: u16,
-    ) -> Result<Vec<AttributeInfo>, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let mut attributes = Vec::with_capacity(attributes_count as usize);
-        for _ in 0..attributes_count {
-            attributes.push(Self::parse(reader)?);
-        }
-        Ok(attributes)
-    }
-
-    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let attribute_name_index = read_u16(reader)?;
-        let attribute_length = read_u32(reader)?;
-        let info = read_bytes(reader, attribute_length as usize)?;
-        Ok(Self {
-            attribute_name_index,
-            info,
         })
     }
 }
@@ -206,9 +167,7 @@ impl ClassFile {
             return Err(ClassFileParsingError::MalformedClassFile);
         }
         let version = ClassFileVersion::parse(reader)?;
-        let constant_pool_count = read_u16(reader)?;
-        // Constant pool is indexed from 1, so we need to subtract 1
-        let constant_pool = ConstantPoolInfo::parse_multiple(reader, constant_pool_count - 1)?;
+        let constant_pool = ConstantPool::parse(reader)?;
         let access_flags = read_u16(reader)?;
         let this_class = read_u16(reader)?;
         let super_class = read_u16(reader)?;
@@ -218,11 +177,10 @@ impl ClassFile {
             interfaces.push(read_u16(reader)?);
         }
         let fields_count = read_u16(reader)?;
-        let fields = FieldInfo::parse_multiple(reader, fields_count)?;
+        let fields = FieldInfo::parse_multiple(reader, fields_count, &constant_pool)?;
         let methods_count = read_u16(reader)?;
-        let methods = MethodInfo::parse_multiple(reader, methods_count)?;
-        let attributes_count = read_u16(reader)?;
-        let attributes = AttributeInfo::parse_multiple(reader, attributes_count)?;
+        let methods = MethodInfo::parse_multiple(reader, methods_count, &constant_pool)?;
+        let attributes = AttributeList::parse(reader, &constant_pool)?;
         Ok(ClassFile {
             version,
             constant_pool,
@@ -237,10 +195,18 @@ impl ClassFile {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ClassReference {
+    pub name: String,
+}
+
 #[derive(Debug)]
 pub enum ClassFileParsingError {
     MalformedClassFile,
     MidmatchedConstantPoolTag,
+    BadConstantPoolIndex,
+    UnknownAttributeName(String),
+    InvalidAttributeLength { expected: u32, actual: u32 },
 }
 
 impl From<std::io::Error> for ClassFileParsingError {
