@@ -181,6 +181,11 @@ impl ClassFile {
         let methods_count = read_u16(reader)?;
         let methods = MethodInfo::parse_multiple(reader, methods_count, &constant_pool)?;
         let attributes = AttributeList::parse(reader, &constant_pool)?;
+        let mut may_remain: [u8; 1] = [0];
+        let remain = reader.read(&mut may_remain)?;
+        if remain == 1 {
+            return Err(ClassFileParsingError::UnexpectedData);
+        }
         Ok(ClassFile {
             version,
             constant_pool,
@@ -207,6 +212,8 @@ pub enum ClassFileParsingError {
     BadConstantPoolIndex,
     UnknownAttributeName(String),
     InvalidAttributeLength { expected: u32, actual: u32 },
+    UnexpectedAttribute,
+    UnexpectedData,
 }
 
 impl From<std::io::Error> for ClassFileParsingError {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::utils::{read_bytes, read_u16, read_u8};
 
-use super::class_file::{ClassFileParsingError, ClassReference};
+use super::{class_file::{ClassFileParsingError, ClassReference}, fields::ConstantValue};
 
 
 #[derive(Debug)]
@@ -42,6 +42,18 @@ impl ConstantPool {
         };
         let name = self.get_string(*name_index)?;
         Ok(ClassReference { name })
+    }
+
+    pub(crate) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, ClassFileParsingError> {
+        let entry = self.get_entry(value_index)?;
+        match entry {
+            ConstantPoolEntry::Integer(it) => Ok(ConstantValue::Integer(*it)),
+            ConstantPoolEntry::Long(it) => Ok(ConstantValue::Long(*it)),
+            ConstantPoolEntry::Float(it) => Ok(ConstantValue::Float(*it)),
+            ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(*it)),
+            ConstantPoolEntry::String { string_index } => self.get_string(*string_index).map(ConstantValue::String),
+            _ => Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        }
     }
 
 }
