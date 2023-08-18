@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::utils::{read_bytes, read_u16, read_u8};
+use crate::utils::{read_bytes, read_u16, read_u8, read_bytes_vec};
 
 use super::{class_file::{ClassFileParsingError, ClassReference, ClassFileParsingResult}, fields::ConstantValue, attributes::module::{ModuleReference, PackageReference}};
 
@@ -185,10 +185,7 @@ impl ConstantPoolEntry {
         R: std::io::Read,
     {
         let length = read_u16(reader)?;
-        let mut bytes = Vec::with_capacity(length as usize);
-        for _ in 0..length {
-            bytes.push(read_u8(reader)?);
-        }
+        let bytes = read_bytes_vec(reader, length as usize)?;
         if let Ok(result) = String::from_utf8(bytes) {
             Ok(Self::Utf8(result))
         } else {
