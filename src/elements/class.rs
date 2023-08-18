@@ -1,3 +1,5 @@
+use bitflags::bitflags;
+
 use super::{
     annotation::{Annotation, TypeAnnotation},
     field::Field,
@@ -9,7 +11,7 @@ use super::{
 #[derive(Debug)]
 pub struct Class {
     pub version: ClassVersion,
-    pub access_flags: u16,
+    pub access_flags: ClassAccessFlags,
     pub this_class: ClassReference,
     pub super_class: ClassReference,
     pub interfaces: Vec<ClassReference>,
@@ -60,7 +62,9 @@ pub struct EnclosingMethod {
 }
 
 #[derive(Debug)]
-pub struct BootstrapArgument {}
+pub struct BootstrapArgument {
+    pub cp_index: u16,
+}
 
 #[derive(Debug)]
 pub struct BootstrapMethod {
@@ -91,3 +95,28 @@ pub struct RecordComponent {
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
+
+bitflags! {
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct ClassAccessFlags: u16 {
+        /// Declared `public`; may be accessed from outside its package.
+        const PUBLIC = 0x0001;
+        /// Declared `final`; no subclasses allowed.
+        const FINAL = 0x0010;
+        /// Treat superclass methods specially when invoked by the invokespecial instruction.
+        const SUPER = 0x0020;
+        /// Is an interface, not a class.
+        const INTERFACE = 0x0200;
+        /// Declared `abstract`; must not be instantiated.
+        const ABSTRACT = 0x0400;
+        /// Declared synthetic; not present in the source code.
+        const SYNTHETIC = 0x1000;
+        /// Declared as an annotation interface.
+        const ANNOTATION = 0x2000;
+        /// Declared as an enum class.
+        const ENUM = 0x4000;
+        /// Is a module, not a class or interface.
+        const MODULE = 0x8000;
+    }
+}
+

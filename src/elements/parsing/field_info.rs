@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::Field,
+        field::{Field, FieldAccessFlags},
     },
     utils::read_u16,
 };
@@ -32,7 +32,10 @@ impl Field {
     where
         R: std::io::Read,
     {
-        let access_flags = read_u16(reader)?;
+        let access = read_u16(reader)?;
+        let Some(access_flags) = FieldAccessFlags::from_bits(access) else {
+            return Err(ClassFileParsingError::UnknownFlags(access));
+        };
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;

@@ -1,9 +1,11 @@
-use crate::utils::{read_u16, read_u32};
+use crate::{
+    utils::{read_u16, read_u32},
+};
 
 use super::{
-    class::{Class, ClassVersion},
+    class::{Class, ClassAccessFlags, ClassVersion},
     field::Field,
-    method::Method,
+    method::{Method},
     parsing::{
         attribute::{Attribute, AttributeList},
         constant_pool::ConstantPool,
@@ -24,7 +26,10 @@ impl<'a> ClassParser<'a> {
         }
         let version = ClassVersion::parse(reader)?;
         let constant_pool = ConstantPool::parse(reader, version)?;
-        let access_flags = read_u16(reader)?;
+        let access = read_u16(reader)?;
+        let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
+            return Err(ClassFileParsingError::UnknownFlags(access));
+        };
         let this_class_idx = read_u16(reader)?;
         let this_class = constant_pool.get_class_ref(&this_class_idx)?;
         let super_class_idx = read_u16(reader)?;
@@ -136,82 +141,7 @@ impl ClassVersion {
     }
 }
 
-impl Method {
-    pub(crate) fn parse_multiple<R>(
-        reader: &mut R,
-        methods_count: u16,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Self>>
-    where
-        R: std::io::Read,
-    {
-        let mut methods = Vec::with_capacity(methods_count as usize);
-        for _ in 0..methods_count {
-            let method = Self::parse(reader, constant_pool)?;
-            methods.push(method);
-        }
-        Ok(methods)
-    }
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let access_flags = read_u16(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
-        let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_string(&descriptor_index)?;
 
-        let attributes = AttributeList::parse(reader, constant_pool)?;
-        let mut body = None;
-        let mut exceptions = None;
-        let mut rt_visible_anno = None;
-        let mut rt_invisible_anno = None;
-        let mut rt_visible_type_anno = None;
-        let mut rt_invisible_type_anno = None;
-        let mut annotation_default = None;
-        let mut method_parameters = None;
-        let mut is_synthetic = false;
-        let mut is_deprecated = false;
-        let mut signature = None;
-        for attr in attributes.into_iter() {
-            match attr {
-                Attribute::Code(b) => body = Some(b),
-                Attribute::Exceptions(ex) => exceptions = Some(ex),
-                Attribute::RuntimeVisibleAnnotations(rv) => rt_visible_anno = Some(rv),
-                Attribute::RuntimeInvisibleAnnotations(ri) => rt_invisible_anno = Some(ri),
-                Attribute::RuntimeVisibleTypeAnnotations(rt) => rt_visible_type_anno = Some(rt),
-                Attribute::RuntimeInvisibleTypeAnnotations(rt) => rt_invisible_type_anno = Some(rt),
-                Attribute::AnnotationDefault(ad) => annotation_default = Some(ad),
-                Attribute::MethodParameters(mp) => method_parameters = Some(mp),
-                Attribute::Synthetic => is_synthetic = true,
-                Attribute::Deprecated => is_deprecated = true,
-                Attribute::Signature(sig) => signature = Some(sig),
-                _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
-            }
-        }
-
-        Ok(Method {
-            access_flags,
-            name,
-            descriptor,
-            body,
-            excaptions: exceptions.unwrap_or_default(),
-            runtime_visible_annotations: rt_visible_anno.unwrap_or_default(),
-            runtime_invisible_annotations: rt_invisible_anno.unwrap_or_default(),
-            runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or_default(),
-            runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
-            annotation_default,
-            parameters: method_parameters.unwrap_or_default(),
-            is_synthetic,
-            is_deprecated,
-            signature,
-        })
-    }
-}
 
 const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
 
@@ -239,6 +169,7 @@ pub enum ClassFileParsingError {
     UnknownStackMapFrameType(u8),
     InvalidVerificationTypeInfoTag(u8),
     UnexpectedOpCode,
+    UnknownFlags(u16),
 }
 
 impl From<std::io::Error> for ClassFileParsingError {

@@ -1,9 +1,8 @@
 use std::io::BufReader;
 
 use crate::{
-    access_flags,
     elements::{
-        class::Class,
+        class::{Class, ClassAccessFlags},
         class_parser::{ClassFileParsingError, ClassParser},
         references::ClassReference,
     },
@@ -33,7 +32,7 @@ fn test_parse_version() {
 #[test]
 fn test_access_flag() {
     let my_class = parse_my_class().unwrap();
-    let expected = access_flags::class::ACC_PUBLIC | access_flags::class::ACC_SUPER;
+    let expected = ClassAccessFlags::PUBLIC | ClassAccessFlags::SUPER;
     assert_eq!(expected, my_class.access_flags);
 }
 

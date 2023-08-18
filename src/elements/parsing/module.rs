@@ -1,7 +1,7 @@
 use crate::{
     elements::{
-        class_parser::ClassFileParsingResult,
-        module::{Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleRequire},
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        module::{Module, ModuleExport, ModuleFlags, ModuleOpen, ModuleProvide, ModuleRequire},
     },
     utils::{read_u16, read_u32},
 };
@@ -21,7 +21,10 @@ impl ModuleRequire {
         for _ in 0..requires_count {
             let module_index = read_u16(reader)?;
             let module = constant_pool.get_module_ref(&module_index)?;
-            let flags = read_u16(reader)?;
+            let flag_bits = read_u16(reader)?;
+            let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+            };
             let version_index = read_u16(reader)?;
             let version = if version_index > 0 {
                 Some(constant_pool.get_string(&version_index)?)
@@ -51,7 +54,10 @@ impl ModuleExport {
         for _ in 0..count {
             let package_index = read_u16(reader)?;
             let package = constant_pool.get_package_ref(&package_index)?;
-            let flags = read_u16(reader)?;
+            let flag_bits = read_u16(reader)?;
+            let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+            };
             let to_count = read_u16(reader)?;
             let mut to = Vec::with_capacity(to_count as usize);
             for _ in 0..to_count {
@@ -78,7 +84,10 @@ impl ModuleOpen {
         for _ in 0..count {
             let package_index = read_u16(reader)?;
             let package = constant_pool.get_package_ref(&package_index)?;
-            let flags = read_u16(reader)?;
+            let flag_bits = read_u16(reader)?;
+            let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+            };
             let to_count = read_u16(reader)?;
             let mut to = Vec::with_capacity(to_count as usize);
             for _ in 0..to_count {
@@ -129,7 +138,10 @@ impl Attribute {
         let _attribute_length = read_u32(reader)?;
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
-        let flags = read_u16(reader)?;
+        let flag_bits = read_u16(reader)?;
+        let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
+            return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+        };
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {
             Some(constant_pool.get_string(&version_index)?)
