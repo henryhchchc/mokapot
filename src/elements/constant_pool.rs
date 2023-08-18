@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::utils::{read_bytes, read_u16, read_u8};
 
-use super::{class_file::{ClassFileParsingError, ClassReference}, fields::ConstantValue};
+use super::{class_file::{ClassFileParsingError, ClassReference, ClassFileParsingResult}, fields::ConstantValue, attributes::module::{ModuleReference, PackageReference}};
 
 
 #[derive(Debug)]
@@ -10,8 +10,10 @@ pub struct ConstantPool {
     entries: HashMap<u16, ConstantPoolEntry>,
 }
 
+pub(crate) type ConstantPoolIndex = u16;
+
 impl ConstantPool {
-    pub fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    pub fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -21,14 +23,14 @@ impl ConstantPool {
         Ok(Self { entries })
     }
 
-    pub fn get_entry(&self, index: impl Into<u16>) -> Result<&ConstantPoolEntry, ClassFileParsingError> {
+    pub fn get_entry(&self, index: impl Into<u16>) -> ClassFileParsingResult<&ConstantPoolEntry> {
         let Some(entry) = self.entries.get(&index.into()) else { 
             return Err(ClassFileParsingError::BadConstantPoolIndex);
         };
         Ok(entry)
     }
 
-    pub fn get_string(&self, index: impl Into<u16>) -> Result<String, ClassFileParsingError> {
+    pub fn get_string(&self, index: impl Into<u16>) -> ClassFileParsingResult<String> {
         if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
             Ok(string.clone())
         } else {
@@ -36,7 +38,7 @@ impl ConstantPool {
         }
     }
 
-    pub fn get_class_ref(&self, index: impl Into<u16>) -> Result<ClassReference, ClassFileParsingError> {
+    pub fn get_class_ref(&self, index: impl Into<u16>) -> ClassFileParsingResult<ClassReference> {
         let ConstantPoolEntry::Class { name_index } = self.get_entry(index)? else {
             return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
         };
@@ -44,7 +46,7 @@ impl ConstantPool {
         Ok(ClassReference { name })
     }
 
-    pub(crate) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, ClassFileParsingError> {
+    pub(crate) fn get_constant_value(&self, value_index: u16) -> ClassFileParsingResult<ConstantValue> {
         let entry = self.get_entry(value_index)?;
         match entry {
             ConstantPoolEntry::Integer(it) => Ok(ConstantValue::Integer(*it)),
@@ -56,6 +58,25 @@ impl ConstantPool {
         }
     }
 
+    pub(crate) fn get_module_reference(&self, index: u16) -> ClassFileParsingResult<ModuleReference> {
+        let entry = self.get_entry(index)?;
+        if let ConstantPoolEntry::Module { name_index } = entry {
+            let name = self.get_string(*name_index)?;
+            Ok(ModuleReference { name })
+        } else {
+            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        }
+    }
+
+    pub(crate) fn get_package_reference(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
+        let entry = self.get_entry(index)?;
+        if let ConstantPoolEntry::Package { name_index } = entry {
+            let name = self.get_string(*name_index)?;
+            Ok(PackageReference { name })
+        } else {
+            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +135,7 @@ impl ConstantPoolEntry {
     fn parse_multiple<R>(
         reader: &mut R,
         count: u16,
-    ) -> Result<HashMap<u16, Self>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<HashMap<u16, Self>>
     where
         R: std::io::Read,
     {
@@ -132,7 +153,7 @@ impl ConstantPoolEntry {
         Ok(result)
     }
 
-    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -159,7 +180,7 @@ impl ConstantPoolEntry {
         }
     }
 
-    fn parse_utf8<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_utf8<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -175,7 +196,7 @@ impl ConstantPoolEntry {
         }
     }
 
-    fn parse_integer<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_integer<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -183,7 +204,7 @@ impl ConstantPoolEntry {
         Ok(Self::Integer(i32::from_be_bytes(bytes)))
     }
 
-    fn parse_float<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_float<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -191,7 +212,7 @@ impl ConstantPoolEntry {
         Ok(Self::Float(f32::from_be_bytes(bytes)))
     }
 
-    fn parse_long<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_long<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -199,7 +220,7 @@ impl ConstantPoolEntry {
         Ok(Self::Long(i64::from_be_bytes(bytes)))
     }
 
-    fn parse_double<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_double<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -207,7 +228,7 @@ impl ConstantPoolEntry {
         Ok(Self::Double(f64::from_be_bytes(bytes)))
     }
 
-    fn parse_class<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_class<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -215,7 +236,7 @@ impl ConstantPoolEntry {
         Ok(Self::Class { name_index })
     }
 
-    fn parse_string<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_string<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -223,7 +244,7 @@ impl ConstantPoolEntry {
         Ok(Self::String { string_index })
     }
 
-    fn parse_field_ref<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_field_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -235,7 +256,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_method_ref<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_method_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -247,7 +268,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_interface_method_ref<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_interface_method_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -259,7 +280,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_name_and_type<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_name_and_type<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -271,7 +292,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_method_handle<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_method_handle<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -283,7 +304,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_method_type<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_method_type<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -291,7 +312,7 @@ impl ConstantPoolEntry {
         Ok(Self::MethodType { descriptor_index })
     }
 
-    fn parse_dynamic<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_dynamic<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -303,7 +324,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_invoke_dynamic<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_invoke_dynamic<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -315,7 +336,7 @@ impl ConstantPoolEntry {
         })
     }
 
-    fn parse_module<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_module<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -323,7 +344,7 @@ impl ConstantPoolEntry {
         Ok(Self::Module { name_index })
     }
 
-    fn parse_package<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse_package<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

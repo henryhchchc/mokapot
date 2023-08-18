@@ -1,12 +1,14 @@
+use std::io::BufReader;
+
 use crate::{
     elements::{
-        class_file::{ClassFileParsingError, ClassReference},
+        class_file::{ClassFileParsingError, ClassReference, ClassFileParsingResult},
         constant_pool::ConstantPool,
     },
-    utils::{read_bytes_vec, read_u16, read_u32},
+    utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
-use super::{Attribute, AttributeList};
+use super::{Attribute, AttributeList, code::{LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry, StackMapFrame, instructions::Instruction}};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry {
@@ -20,7 +22,7 @@ impl ExceptionTableEntry {
     fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<ExceptionTableEntry, ClassFileParsingError>
+    ) -> ClassFileParsingResult<ExceptionTableEntry>
     where
         R: std::io::Read,
     {
@@ -38,111 +40,30 @@ impl ExceptionTableEntry {
     }
 }
 
-#[derive(Debug)]
-pub struct LineNumberTableEntry {
-    pub start_pc: u16,
-    pub line_number: u16,
-}
-impl LineNumberTableEntry {
-    fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let start_pc = read_u16(reader)?;
-        let line_number = read_u16(reader)?;
-        Ok(LineNumberTableEntry {
-            start_pc,
-            line_number,
-        })
-    }
-}
 
 #[derive(Debug)]
-pub struct LocalVariableTableEntry {
-    pub start_pc: u16,
-    pub length: u16,
+pub struct MethodParameter {
     pub name: String,
-    pub descriptor: String,
-    pub index: u16,
-}
-impl LocalVariableTableEntry {
-    fn parse<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> Result<LocalVariableTableEntry, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(name_index)?;
-        let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_string(descriptor_index)?;
-        let index = read_u16(reader)?;
-        Ok(LocalVariableTableEntry {
-            start_pc,
-            length,
-            name,
-            descriptor,
-            index,
-        })
-    }
+    pub access_flags: u16,
 }
 
 #[derive(Debug)]
-pub struct LocalVariableTypeTableEntry {
-    pub start_pc: u16,
-    pub length: u16,
-    pub name: String,
-    pub signature: String,
-    pub index: u16,
-}
-impl LocalVariableTypeTableEntry {
-    fn parse<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> Result<LocalVariableTypeTableEntry, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(name_index)?;
-        let signature_index = read_u16(reader)?;
-        let signature = constant_pool.get_string(signature_index)?;
-        let index = read_u16(reader)?;
-        Ok(LocalVariableTypeTableEntry {
-            start_pc,
-            length,
-            name,
-            signature,
-            index,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct StackMapTableEntry {}
-
-#[derive(Debug)]
-pub struct Code {
+pub struct MethodBody {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub code: Vec<u8>,
+    pub instructions: Vec<Instruction>,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
     pub local_variable_table: Option<Vec<LocalVariableTableEntry>>,
     pub local_variable_type_table: Option<Vec<LocalVariableTypeTableEntry>>,
-    pub stack_map_table: Option<Vec<StackMapTableEntry>>,
+    pub stack_map_table: Option<Vec<StackMapFrame>>,
 }
 
 impl Attribute {
     pub(super) fn parse_line_no_table<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
@@ -159,7 +80,7 @@ impl Attribute {
     pub(super) fn parse_code<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
@@ -169,6 +90,7 @@ impl Attribute {
         let code_length = read_u32(reader)?;
 
         let code = read_bytes_vec(reader, code_length as usize)?;
+        let instructions = Instruction::parse_code(code, constant_pool)?;
 
         // exception table
         let exception_table_len = read_u16(reader)?;
@@ -194,11 +116,11 @@ impl Attribute {
             }
         }
 
-        Ok(Attribute::Code(Code {
+        Ok(Attribute::Code(MethodBody {
             max_stack,
             max_locals,
             exception_table,
-            code,
+            instructions,
             line_number_table,
             local_variable_table,
             local_variable_type_table,
@@ -208,7 +130,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_table<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
@@ -225,7 +147,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_type_table<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
@@ -237,5 +159,58 @@ impl Attribute {
             local_variable_type_table.push(entry);
         }
         Ok(Attribute::LocalVariableTypeTable(local_variable_type_table))
+    }
+
+    pub(super) fn parse_stack_map_table<R>(
+        reader: &mut R,
+        constant_pool: &ConstantPool,
+    ) -> ClassFileParsingResult<Attribute>
+    where
+        R: std::io::Read,
+    {
+        let _attribute_length = read_u32(reader)?;
+        let num_entries = read_u16(reader)?;
+        let mut stack_map_table = Vec::with_capacity(num_entries as usize);
+        for _ in 0..num_entries {
+            let entry = StackMapFrame::parse(reader, constant_pool)?;
+            stack_map_table.push(entry);
+        }
+        Ok(Self::StackMapTable(stack_map_table))
+    }
+    pub(super) fn parse_exceptions<R>(
+        reader: &mut R,
+        constant_pool: &ConstantPool,
+    ) -> ClassFileParsingResult<Attribute>
+    where
+        R: std::io::Read,
+    {
+        let _attribute_length = read_u32(reader)?;
+        let number_of_exceptions = read_u16(reader)?;
+        let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
+        for _ in 0..number_of_exceptions {
+            let exception_index = read_u16(reader)?;
+            let exception = constant_pool.get_class_ref(exception_index)?;
+            exceptions.push(exception);
+        }
+        Ok(Self::Exceptions(exceptions))
+    }
+
+    pub(super) fn parse_method_parameters<R>(
+        reader: &mut R,
+        constant_pool: &ConstantPool,
+    ) -> ClassFileParsingResult<Self>
+    where
+        R: std::io::Read,
+    {
+        let _attribute_length = read_u32(reader)?;
+        let parameters_count = read_u8(reader)?;
+        let mut parameters = Vec::with_capacity(parameters_count as usize);
+        for _ in 0..parameters_count {
+            let name_index = read_u16(reader)?;
+            let name = constant_pool.get_string(name_index)?;
+            let access_flags = read_u16(reader)?;
+            parameters.push(MethodParameter { name, access_flags });
+        }
+        Ok(Self::MethodParameters(parameters))
     }
 }

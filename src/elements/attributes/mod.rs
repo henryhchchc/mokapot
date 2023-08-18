@@ -1,14 +1,19 @@
-mod methods;
+pub(crate) mod annotation;
+pub(crate) mod class_file;
+pub(crate) mod methods;
+pub(crate) mod module;
+pub(crate) mod code;
 
-use crate::utils::{read_bytes_vec, read_u16, read_u32};
+use crate::utils::{read_u16, read_u32};
 
-use self::methods::{
-    Code, LineNumberTableEntry, LocalVariableTableEntry,
-    LocalVariableTypeTableEntry, StackMapTableEntry,
+use self::{
+    annotation::{Annotation, ElementValue, TypeAnnotation},
+    class_file::{BootstrapMethod, InnerClassInfo, RecordComponent},
+    module::{Module, PackageReference}, code::{StackMapFrame, LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry}, methods::{MethodBody, MethodParameter},
 };
 
 use super::{
-    class_file::{ClassFileParsingError, ClassReference},
+    class_file::{ClassFileParsingError, ClassFileParsingResult, ClassReference},
     constant_pool::{ConstantPool, ConstantPoolEntry},
     fields::ConstantValue,
 };
@@ -32,7 +37,7 @@ impl AttributeList {
     pub(crate) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -47,52 +52,47 @@ impl AttributeList {
 }
 
 #[derive(Debug)]
-pub struct InnerClassInfo {
-    pub inner_class: ClassReference,
-    pub outer_class: Option<ClassReference>,
-    pub inner_name: String,
-    pub inner_class_access_flags: u16,
+pub struct EnclosingMethod{
+    pub class: ClassReference,
+    pub method_name_and_desc: Option<(String, String)>,
 }
 
 #[derive(Debug)]
 pub(crate) enum Attribute {
     ConstantValue(ConstantValue),
-    Code(Code),
+    Code(MethodBody),
+    StackMapTable(Vec<StackMapFrame>),
     Exceptions(Vec<ClassReference>),
     SourceFile(String),
     LineNumberTable(Vec<LineNumberTableEntry>),
     InnerClasses(Vec<InnerClassInfo>),
     Synthetic,
     Deprecated,
-    EnclosingMethod {
-        class: ClassReference,
-        method_name_and_desc: Option<(String, String)>,
-    },
+    EnclosingMethod(EnclosingMethod),
     Signature(String),
     SourceDebugExtension(Vec<u8>),
     LocalVariableTable(Vec<LocalVariableTableEntry>),
     LocalVariableTypeTable(Vec<LocalVariableTypeTableEntry>),
-    RuntimeVisibleAnnotations,
-    RuntimeInvisibleAnnotations,
-    RuntimeVisibleParameterAnnotations,
-    RuntimeInvisibleParameterAnnotations,
-    AnnotationDefault,
-    StackMapTable(Vec<StackMapTableEntry>),
-    BootstrapMethods,
-    RuntimeVisibleTypeAnnotations,
-    RuntimeInvisibleTypeAnnotations,
-    MethodParameters,
-    Module,
-    ModulePackages,
-    ModuleMainClass,
-    NestHost,
-    NestMembers,
-    Record,
-    PermittedSubclasses,
+    RuntimeVisibleAnnotations(Vec<Annotation>),
+    RuntimeInvisibleAnnotations(Vec<Annotation>),
+    RuntimeVisibleParameterAnnotations(Vec<Vec<Annotation>>),
+    RuntimeInvisibleParameterAnnotations(Vec<Vec<Annotation>>),
+    RuntimeVisibleTypeAnnotations(Vec<TypeAnnotation>),
+    RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation>),
+    AnnotationDefault(ElementValue),
+    BootstrapMethods(Vec<BootstrapMethod>),
+    MethodParameters(Vec<MethodParameter>),
+    Module(Module),
+    ModulePackages(Vec<PackageReference>),
+    ModuleMainClass(ClassReference),
+    NestHost(ClassReference),
+    NestMembers(Vec<ClassReference>),
+    Record(Vec<RecordComponent>),
+    PermittedSubclasses(Vec<ClassReference>),
 }
 
 impl Attribute {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -101,11 +101,11 @@ impl Attribute {
         match name.as_str() {
             "ConstantValue" => Self::parse_constant_value(reader, constant_pool),
             "Code" => Self::parse_code(reader, constant_pool),
+            "StackMapTable" => Self::parse_stack_map_table(reader, constant_pool),
             "Exceptions" => Self::parse_exceptions(reader, constant_pool),
             "InnerClasses" => Self::parse_innner_classes(reader, constant_pool),
-            "Synthetic" => Self::parse_synthetic(reader, constant_pool),
-            "Deprecated" => Self::parse_deprecated(reader, constant_pool),
             "EnclosingMethod" => Self::parse_enclosing_method(reader, constant_pool),
+            "Synthetic" => Self::parse_synthetic(reader, constant_pool),
             "Signature" => Self::parse_signature(reader, constant_pool),
             "SourceFile" => Self::parse_source_file(reader, constant_pool),
             "SourceDebugExtension" => Self::parse_source_debug_extension(reader, constant_pool),
@@ -114,28 +114,41 @@ impl Attribute {
             "LocalVariableTypeTable" => {
                 Self::parse_local_variable_type_table(reader, constant_pool)
             }
-            // "RuntimeVisibleAnnotations" => todo!(),
-            // "RuntimeInvisibleAnnotations" => todo!(),
-            // "RuntimeVisibleParameterAnnotations" => todo!(),
-            // "RuntimeInvisibleParameterAnnotations" => todo!(),
-            // "AnnotationDefault" => todo!(),
-            // "StackMapTable" => todo!(),
-            // "BootstrapMethods" => todo!(),
-            // "RuntimeVisibleTypeAnnotations" => todo!(),
-            // "RuntimeInvisibleTypeAnnotations" => todo!(),
-            // "MethodParameters" => todo!(),
-            // "Module" => todo!(),
-            // "ModulePackages" => todo!(),
-            // "ModuleMainClass" => todo!(),
-            // "NestHost" => todo!(),
-            // "NestMembers" => todo!(),
-            // "Record" => todo!(),
-            // "PermittedSubclasses" => todo!(),
+            "Deprecated" => Self::parse_deprecated(reader, constant_pool),
+            "RuntimeVisibleAnnotations" => {
+                Self::parse_annotations(reader, constant_pool).map(Self::RuntimeVisibleAnnotations)
+            }
+            "RuntimeInvisibleAnnotations" => Self::parse_annotations(reader, constant_pool)
+                .map(Self::RuntimeInvisibleAnnotations),
+            "RuntimeVisibleParameterAnnotations" => {
+                Self::parse_parameter_annotations(reader, constant_pool)
+                    .map(Self::RuntimeVisibleParameterAnnotations)
+            }
+            "RuntimeInvisibleParameterAnnotations" => {
+                Self::parse_parameter_annotations(reader, constant_pool)
+                    .map(Self::RuntimeInvisibleParameterAnnotations)
+            }
+            "RuntimeVisibleTypeAnnotations" => Self::parse_type_annotations(reader, constant_pool)
+                .map(Self::RuntimeVisibleTypeAnnotations),
+            "RuntimeInvisibleTypeAnnotations" => {
+                Self::parse_type_annotations(reader, constant_pool)
+                    .map(Self::RuntimeInvisibleTypeAnnotations)
+            }
+            "AnnotationDefault" => Self::parse_annotation_default(reader, constant_pool),
+            "BootstrapMethods" => Self::parse_bootstrap_methods(reader, constant_pool),
+            "MethodParameters" => Self::parse_method_parameters(reader, constant_pool),
+            "Module" => Self::parse_module(reader, constant_pool),
+            "ModulePackages" => Self::parse_module_packages(reader, constant_pool),
+            "ModuleMainClass" => Self::parse_module_main_class(reader, constant_pool),
+            "NestHost" => Self::parse_nest_host(reader, constant_pool),
+            "NestMembers" => Self::parse_nest_members(reader, constant_pool),
+            "Record" => Self::parse_record(reader, constant_pool),
+            "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, constant_pool),
             _ => Err(ClassFileParsingError::UnknownAttributeName(name)),
         }
     }
 
-    fn check_attribute_length<R>(reader: &mut R, expected: u32) -> Result<(), ClassFileParsingError>
+    fn check_attribute_length<R>(reader: &mut R, expected: u32) -> ClassFileParsingResult<()>
     where
         R: std::io::Read,
     {
@@ -149,109 +162,45 @@ impl Attribute {
         Ok(())
     }
 
-    fn parse_source_file<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        Self::check_attribute_length(reader, 2)?;
-        let sourcefile_index = read_u16(reader)?;
-        let file_name = constant_pool.get_string(sourcefile_index)?;
-        Ok(Self::SourceFile(file_name))
-    }
-
-    fn parse_exceptions<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let _attribute_length = read_u32(reader)?;
-        let number_of_exceptions = read_u16(reader)?;
-        let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
-        for _ in 0..number_of_exceptions {
-            let exception_index = read_u16(reader)?;
-            let exception = constant_pool.get_class_ref(exception_index)?;
-            exceptions.push(exception);
-        }
-        Ok(Attribute::Exceptions(exceptions))
-    }
-
     fn parse_constant_value<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let value_index = read_u16(reader)?;
         let value = constant_pool.get_constant_value(value_index)?;
-        Ok(Attribute::ConstantValue(value))
-    }
-
-    fn parse_innner_classes<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let _attribute_length = read_u32(reader)?;
-        let number_of_classes = read_u16(reader)?;
-        let mut classes = Vec::with_capacity(number_of_classes as usize);
-        for _ in 0..number_of_classes {
-            let inner_class_info_index = read_u16(reader)?;
-            let inner_class = constant_pool.get_class_ref(inner_class_info_index)?;
-            let outer_class_info_index = read_u16(reader)?;
-            let outer_class = if outer_class_info_index == 0 {
-                None
-            } else {
-                let the_class = constant_pool.get_class_ref(outer_class_info_index)?;
-                Some(the_class)
-            };
-            let inner_name_index = read_u16(reader)?;
-            let inner_name = constant_pool.get_string(inner_name_index)?;
-            let inner_class_access_flags = read_u16(reader)?;
-            classes.push(InnerClassInfo {
-                inner_class,
-                outer_class,
-                inner_name,
-                inner_class_access_flags,
-            });
-        }
-        Ok(Attribute::InnerClasses(classes))
+        Ok(Self::ConstantValue(value))
     }
 
     fn parse_synthetic<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 0)?;
-        Ok(Attribute::Synthetic)
+        Ok(Self::Synthetic)
     }
 
     fn parse_deprecated<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 0)?;
-        Ok(Attribute::Deprecated)
+        Ok(Self::Deprecated)
     }
 
     fn parse_enclosing_method<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
@@ -269,34 +218,22 @@ impl Attribute {
             let descriptor = constant_pool.get_string(*descriptor_index)?;
             Some((name, descriptor))
         };
-        Ok(Attribute::EnclosingMethod {
+        Ok(Self::EnclosingMethod(EnclosingMethod {
             class,
             method_name_and_desc,
-        })
+        }))
     }
 
     fn parse_signature<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Attribute>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
         let signature = constant_pool.get_string(signature_index)?;
-        Ok(Attribute::Signature(signature))
-    }
-
-    fn parse_source_debug_extension<R>(
-        reader: &mut R,
-        _constant_pool: &ConstantPool,
-    ) -> Result<Attribute, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let attribute_length = read_u32(reader)?;
-        let debug_extension = read_bytes_vec(reader, attribute_length as usize)?;
-        Ok(Attribute::SourceDebugExtension(debug_extension))
+        Ok(Self::Signature(signature))
     }
 }

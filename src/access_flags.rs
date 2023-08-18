@@ -66,3 +66,21 @@ pub mod method {
     /// Declared synthetic; not present in the source code.
     pub const ACC_SYNTHETIC: u16 = 0x1000;
 }
+
+pub mod parameter {
+    /// Declared `final`; may not be assigned to after initialization.
+    pub const ACC_FINAL: u16 = 0x0010;
+    /// Declared synthetic; not present in the source code.
+    pub const ACC_SYNTHETIC: u16 = 0x1000;
+    /// Declared as either `mandated` or `optional`.
+    pub const ACC_MANDATED: u16 = 0x8000;
+}
+
+pub mod module {
+    /// Indicates that this module is open.
+    pub const ACC_OPEN: u16 = 0x0020;
+    /// Indicates that this module was not explicitly or implicitly declared.
+    pub const ACC_SYNTHETIC: u16 = 0x1000;
+    /// Indicates that this module is implicitly declared.
+    pub const ACC_MANDATED: u16 = 0x8000;
+}
