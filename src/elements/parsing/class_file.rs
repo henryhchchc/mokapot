@@ -1,69 +1,67 @@
 use crate::{
     elements::{
-        class_file::{ClassFileParsingError, ClassFileParsingResult, ClassReference},
-        constant_pool::{ConstantPool, ConstantPoolEntry},
+        class::{BootstrapMethod, InnerClassInfo, MethodHandle, RecordComponent},
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
     },
     utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{
-    annotation::{Annotation, TypeAnnotation},
-    Attribute, AttributeList,
+    attribute::{Attribute, AttributeList},
+    constant_pool::{ConstantPool, ConstantPoolEntry},
 };
-
-#[derive(Debug)]
-pub struct InnerClassInfo {
-    pub inner_class: ClassReference,
-    pub outer_class: Option<ClassReference>,
-    pub inner_name: String,
-    pub inner_class_access_flags: u16,
-}
-
-#[derive(Debug)]
-pub enum MethodHandle {
-    GetField(u16),
-    GetStatic(u16),
-    PutField(u16),
-    PutStatic(u16),
-    InvokeVirtual(u16),
-    InvokeStatic(u16),
-    InvokeSpecial(u16),
-    NewInvokeSpecial(u16),
-    InvokeInterface(u16),
-}
 
 impl MethodHandle {
     pub(super) fn form_cp_idx(
         index: u16,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Self> {
-        let ConstantPoolEntry::MethodHandle { reference_kind,  reference_index } = constant_pool.get_entry(index)? else {
+        let ConstantPoolEntry::MethodHandle { reference_kind,  reference_index } = constant_pool.get_entry(&index)? else {
             Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
         };
         let result = match reference_kind {
-            1 => Self::GetField(*reference_index),
-            2 => Self::GetStatic(*reference_index),
-            3 => Self::PutField(*reference_index),
-            4 => Self::PutStatic(*reference_index),
-            5 => Self::InvokeVirtual(*reference_index),
-            6 => Self::InvokeStatic(*reference_index),
-            7 => Self::InvokeSpecial(*reference_index),
-            8 => Self::NewInvokeSpecial(*reference_index),
-            9 => Self::InvokeInterface(*reference_index),
+            1 => {
+                let field_ref = constant_pool.get_field_ref(reference_index)?;
+                Self::RefGetField(field_ref)
+            }
+            2 => {
+                let field_ref = constant_pool.get_field_ref(reference_index)?;
+                Self::RefGetStatic(field_ref)
+            }
+            3 => {
+                let field_ref = constant_pool.get_field_ref(reference_index)?;
+                Self::RefPutField(field_ref)
+            }
+            4 => {
+                let field_ref = constant_pool.get_field_ref(reference_index)?;
+                Self::RefPutStatic(field_ref)
+            }
+            5 => {
+                let method_ref = constant_pool.get_method_ref(reference_index)?;
+                Self::RefInvokeVirtual(method_ref)
+            }
+            6 => {
+                let method_ref = constant_pool.get_method_ref(reference_index)?;
+                Self::RefInvokeStatic(method_ref)
+            }
+            7 => {
+                let method_ref = constant_pool.get_method_ref(reference_index)?;
+                Self::RefInvokeSpecial(method_ref)
+            }
+            8 => {
+                let method_ref = constant_pool.get_method_ref(reference_index)?;
+                Self::RefNewInvokeSpecial(method_ref)
+            }
+            9 => {
+                let method_ref = constant_pool.get_method_ref(reference_index)?;
+                Self::RefInvokeInterface(method_ref)
+            }
             _ => Err(ClassFileParsingError::MalformedClassFile)?,
         };
         Ok(result)
     }
 }
 
-#[derive(Debug)]
-pub struct BootstrapArgument {}
-
-#[derive(Debug)]
-pub struct BootstrapMethod {
-    pub method: MethodHandle,
-    pub argument_indeices: Vec<u16>,
-}
 impl BootstrapMethod {
     fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
     where
@@ -75,7 +73,7 @@ impl BootstrapMethod {
         let mut argument_indeices = Vec::with_capacity(num_bootstrap_arguments as usize);
         for _ in 0..num_bootstrap_arguments {
             let arg_idx = read_u16(reader)?;
-            let _entry = constant_pool.get_entry(arg_idx)?;
+            let _entry = constant_pool.get_entry(&arg_idx)?;
             argument_indeices.push(arg_idx);
         }
         Ok(BootstrapMethod {
@@ -85,21 +83,8 @@ impl BootstrapMethod {
     }
 }
 
-
-
-#[derive(Debug)]
-pub struct RecordComponent {
-    pub name: String,
-    pub descriptor: String,
-    pub signature: Option<String>,
-    pub runtime_visible_annotations: Vec<Annotation>,
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-}
-
 impl Attribute {
-    pub(super) fn parse_source_file<R>(
+    pub fn parse_source_file<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Self>
@@ -108,10 +93,10 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let sourcefile_index = read_u16(reader)?;
-        let file_name = constant_pool.get_string(sourcefile_index)?;
+        let file_name = constant_pool.get_string(&sourcefile_index)?;
         Ok(Self::SourceFile(file_name))
     }
-    pub(super) fn parse_innner_classes<R>(
+    pub fn parse_innner_classes<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Self>
@@ -123,16 +108,16 @@ impl Attribute {
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
             let inner_class_info_index = read_u16(reader)?;
-            let inner_class = constant_pool.get_class_ref(inner_class_info_index)?;
+            let inner_class = constant_pool.get_class_ref(&inner_class_info_index)?;
             let outer_class_info_index = read_u16(reader)?;
             let outer_class = if outer_class_info_index == 0 {
                 None
             } else {
-                let the_class = constant_pool.get_class_ref(outer_class_info_index)?;
+                let the_class = constant_pool.get_class_ref(&outer_class_info_index)?;
                 Some(the_class)
             };
             let inner_name_index = read_u16(reader)?;
-            let inner_name = constant_pool.get_string(inner_name_index)?;
+            let inner_name = constant_pool.get_string(&inner_name_index)?;
             let inner_class_access_flags = read_u16(reader)?;
             classes.push(InnerClassInfo {
                 inner_class,
@@ -181,7 +166,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let nest_host_index = read_u16(reader)?;
-        let host_class = constant_pool.get_class_ref(nest_host_index)?;
+        let host_class = constant_pool.get_class_ref(&nest_host_index)?;
         Ok(Self::NestHost(host_class))
     }
     pub(super) fn parse_nest_members<R>(
@@ -196,7 +181,7 @@ impl Attribute {
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
             let class_index = read_u16(reader)?;
-            let class = constant_pool.get_class_ref(class_index)?;
+            let class = constant_pool.get_class_ref(&class_index)?;
             classes.push(class);
         }
         Ok(Self::NestMembers(classes))
@@ -213,9 +198,9 @@ impl Attribute {
         let mut components = Vec::with_capacity(component_count as usize);
         for _ in 0..component_count {
             let name_index = read_u16(reader)?;
-            let name = constant_pool.get_string(name_index)?;
+            let name = constant_pool.get_string(&name_index)?;
             let descriptor_index = read_u16(reader)?;
-            let descriptor = constant_pool.get_string(descriptor_index)?;
+            let descriptor = constant_pool.get_string(&descriptor_index)?;
 
             let attributes = AttributeList::parse(reader, constant_pool)?;
             let mut signature = None;
@@ -229,7 +214,9 @@ impl Attribute {
                     Attribute::RuntimeVisibleAnnotations(it) => rt_visible_anno = Some(it),
                     Attribute::RuntimeInvisibleAnnotations(it) => rt_invisible_anno = Some(it),
                     Attribute::RuntimeVisibleTypeAnnotations(it) => rt_visible_type_anno = Some(it),
-                    Attribute::RuntimeInvisibleTypeAnnotations(it) => rt_invisible_type_anno = Some(it),
+                    Attribute::RuntimeInvisibleTypeAnnotations(it) => {
+                        rt_invisible_type_anno = Some(it)
+                    }
                     _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
                 }
             }
@@ -257,7 +244,7 @@ impl Attribute {
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
             let class_index = read_u16(reader)?;
-            let class = constant_pool.get_class_ref(class_index)?;
+            let class = constant_pool.get_class_ref(&class_index)?;
             classes.push(class);
         }
         Ok(Self::PermittedSubclasses(classes))

@@ -1,15 +1,14 @@
 use crate::{
     elements::{
-        class_file::{ClassFileParsingError, ClassFileParsingResult},
-        constant_pool::ConstantPool,
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        instruction::Instruction,
+        parsing::constant_pool::ConstantPool,
     },
-    utils::{read_bytes, read_i16, read_i32, read_i8, read_u16, read_u8},
+    utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
 };
 
-use super::instructions::Instruction;
-
 impl Instruction {
-    pub(crate) fn parse_code(
+    pub fn parse_code(
         bytes: Vec<u8>,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Vec<Self>> {
@@ -122,9 +121,16 @@ impl Instruction {
             0x45 => Self::FStore2,
             0x46 => Self::FStore3,
             0x66 => Self::FSub,
-            0xb4 => Self::GetField(read_u16(reader)?),
-            0xb2 => Self::GetStatic(read_u16(reader)?),
-            0xa7 => Self::Goto(read_i16(reader)?),
+            0xb4 => {
+                let index = read_u16(reader)?;
+                let field = constant_pool.get_field_ref(&index)?;
+                Self::GetField(field)
+            }
+            0xb2 => {
+                let index = read_u16(reader)?;
+                let field = constant_pool.get_field_ref(&index)?;
+                Self::GetStatic(field)
+            }
             0xc8 => Self::GotoW(read_i32(reader)?),
             0x91 => Self::I2B,
             0x92 => Self::I2C,
@@ -283,8 +289,16 @@ impl Instruction {
             0x00 => Self::Nop,
             0x57 => Self::Pop,
             0x58 => Self::Pop2,
-            0xb5 => Self::PutField(read_u16(reader)?),
-            0xb3 => Self::PutStatic(read_u16(reader)?),
+            0xb5 => {
+                let index = read_u16(reader)?;
+                let field = constant_pool.get_field_ref(&index)?;
+                Self::PutField(field)
+            }
+            0xb3 => {
+                let index = read_u16(reader)?;
+                let field = constant_pool.get_field_ref(&index)?;
+                Self::PutStatic(field)
+            }
             0xa9 => Self::Ret(read_u8(reader)?),
             0xb1 => Self::Return,
             0x35 => Self::SALoad,

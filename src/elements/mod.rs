@@ -1,5 +1,9 @@
-pub mod class_file;
-pub mod constant_pool;
-pub mod attributes;
-pub mod fields;
-
+pub mod annotation;
+pub mod class;
+pub mod class_parser;
+pub mod field;
+pub mod instruction;
+pub mod method;
+pub mod module;
+mod parsing;
+pub mod references;

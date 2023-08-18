@@ -1,46 +1,30 @@
 use crate::{
     elements::{
-        class_file::{ClassFileParsingResult, ClassReference},
-        constant_pool::ConstantPool,
+        class_parser::ClassFileParsingResult,
+        module::{Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleRequire},
     },
     utils::{read_u16, read_u32},
 };
 
-use super::Attribute;
+use super::{attribute::Attribute, constant_pool::ConstantPool};
 
-#[derive(Debug)]
-pub struct ModuleReference {
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct PackageReference {
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct ModuleRequire {
-    pub module: ModuleReference,
-    pub flags: u16,
-    pub version: Option<String>,
-}
 impl ModuleRequire {
     fn parse_multiple<R>(
         reader: &mut R,
         requires_count: u16,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<ModuleRequire>>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
         let mut requires = Vec::with_capacity(requires_count as usize);
         for _ in 0..requires_count {
             let module_index = read_u16(reader)?;
-            let module = constant_pool.get_module_reference(module_index)?;
+            let module = constant_pool.get_module_ref(&module_index)?;
             let flags = read_u16(reader)?;
             let version_index = read_u16(reader)?;
             let version = if version_index > 0 {
-                Some(constant_pool.get_string(version_index)?)
+                Some(constant_pool.get_string(&version_index)?)
             } else {
                 None
             };
@@ -54,31 +38,25 @@ impl ModuleRequire {
     }
 }
 
-#[derive(Debug)]
-pub struct ModuleExport {
-    pub package: PackageReference,
-    pub flags: u16,
-    pub to: Vec<ModuleReference>,
-}
 impl ModuleExport {
     fn parse_multiple<R>(
         reader: &mut R,
-        exports_count: u16,
+        count: u16,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<ModuleExport>>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
-        let mut exports = Vec::with_capacity(exports_count as usize);
-        for _ in 0..exports_count {
+        let mut exports = Vec::with_capacity(count as usize);
+        for _ in 0..count {
             let package_index = read_u16(reader)?;
-            let package = constant_pool.get_package_reference(package_index)?;
+            let package = constant_pool.get_package_ref(&package_index)?;
             let flags = read_u16(reader)?;
             let to_count = read_u16(reader)?;
             let mut to = Vec::with_capacity(to_count as usize);
             for _ in 0..to_count {
                 let module_index = read_u16(reader)?;
-                let module = constant_pool.get_module_reference(module_index)?;
+                let module = constant_pool.get_module_ref(&module_index)?;
                 to.push(module);
             }
             exports.push(ModuleExport { package, flags, to });
@@ -87,31 +65,25 @@ impl ModuleExport {
     }
 }
 
-#[derive(Debug)]
-pub struct ModuleOpen {
-    pub package: PackageReference,
-    pub flags: u16,
-    pub to: Vec<ModuleReference>,
-}
 impl ModuleOpen {
     fn parse_multiple<R>(
         reader: &mut R,
-        opens_count: u16,
+        count: u16,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<ModuleOpen>>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
-        let mut opens = Vec::with_capacity(opens_count as usize);
-        for _ in 0..opens_count {
+        let mut opens = Vec::with_capacity(count as usize);
+        for _ in 0..count {
             let package_index = read_u16(reader)?;
-            let package = constant_pool.get_package_reference(package_index)?;
+            let package = constant_pool.get_package_ref(&package_index)?;
             let flags = read_u16(reader)?;
             let to_count = read_u16(reader)?;
             let mut to = Vec::with_capacity(to_count as usize);
             for _ in 0..to_count {
                 let module_index = read_u16(reader)?;
-                let module = constant_pool.get_module_reference(module_index)?;
+                let module = constant_pool.get_module_ref(&module_index)?;
                 to.push(module);
             }
             opens.push(ModuleOpen { package, flags, to });
@@ -120,47 +92,30 @@ impl ModuleOpen {
     }
 }
 
-#[derive(Debug)]
-pub struct ModuleProvide {
-    pub service: ClassReference,
-    pub with: Vec<ClassReference>,
-}
 impl ModuleProvide {
     fn parse_multiple<R>(
         reader: &mut R,
-        provides_count: u16,
+        count: u16,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<ModuleProvide>>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
-        let mut provides = Vec::with_capacity(provides_count as usize);
-        for _ in 0..provides_count {
+        let mut provides = Vec::with_capacity(count as usize);
+        for _ in 0..count {
             let service_index = read_u16(reader)?;
-            let service = constant_pool.get_class_ref(service_index)?;
+            let service = constant_pool.get_class_ref(&service_index)?;
             let with_count = read_u16(reader)?;
             let mut with = Vec::with_capacity(with_count as usize);
             for _ in 0..with_count {
                 let provider_idx = read_u16(reader)?;
-                let provider = constant_pool.get_class_ref(provider_idx)?;
+                let provider = constant_pool.get_class_ref(&provider_idx)?;
                 with.push(provider);
             }
             provides.push(ModuleProvide { service, with });
         }
         Ok(provides)
     }
-}
-
-#[derive(Debug)]
-pub struct Module {
-    pub name: String,
-    pub flags: u16,
-    pub version: Option<String>,
-    pub requires: Vec<ModuleRequire>,
-    pub exports: Vec<ModuleExport>,
-    pub opens: Vec<ModuleOpen>,
-    pub uses: Vec<ClassReference>,
-    pub provides: Vec<ModuleProvide>,
 }
 
 impl Attribute {
@@ -173,11 +128,11 @@ impl Attribute {
     {
         let _attribute_length = read_u32(reader)?;
         let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(name_index)?;
+        let name = constant_pool.get_string(&name_index)?;
         let flags = read_u16(reader)?;
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {
-            Some(constant_pool.get_string(version_index)?)
+            Some(constant_pool.get_string(&version_index)?)
         } else {
             None
         };
@@ -191,7 +146,7 @@ impl Attribute {
         let mut uses = Vec::with_capacity(uses_count as usize);
         for _ in 0..uses_count {
             let class_index = read_u16(reader)?;
-            let class = constant_pool.get_class_ref(class_index)?;
+            let class = constant_pool.get_class_ref(&class_index)?;
             uses.push(class);
         }
         let provides_count = read_u16(reader)?;
@@ -219,7 +174,7 @@ impl Attribute {
         let mut packages = Vec::with_capacity(package_count as usize);
         for _ in 0..package_count {
             let package_index = read_u16(reader)?;
-            let package = constant_pool.get_package_reference(package_index)?;
+            let package = constant_pool.get_package_ref(&package_index)?;
             packages.push(package);
         }
         Ok(Self::ModulePackages(packages))
@@ -233,7 +188,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let main_class_index = read_u16(reader)?;
-        let main_class = constant_pool.get_class_ref(main_class_index)?;
+        let main_class = constant_pool.get_class_ref(&main_class_index)?;
         Ok(Self::ModuleMainClass(main_class))
     }
 }

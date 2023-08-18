@@ -1,6 +1,4 @@
-use std::{fmt::Error, io::ErrorKind};
-
-use crate::elements::constant_pool::ConstantPoolIndex;
+use super::{parsing::constant_pool::ConstantPoolIndex, references::FieldReference};
 
 #[derive(Debug)]
 pub enum Instruction {
@@ -195,7 +193,7 @@ pub enum Instruction {
         high: i32,
         jump_offsets: Vec<i32>,
     },
-    LookupSwitch{
+    LookupSwitch {
         default: i32,
         match_offsets: Vec<(i32, i32)>,
     },
@@ -207,10 +205,10 @@ pub enum Instruction {
     Return,
 
     // References
-    GetStatic(ConstantPoolIndex),
-    PutStatic(ConstantPoolIndex),
-    GetField(ConstantPoolIndex),
-    PutField(ConstantPoolIndex),
+    GetStatic(FieldReference),
+    PutStatic(FieldReference),
+    GetField(FieldReference),
+    PutField(FieldReference),
     InvokeVirtual(ConstantPoolIndex),
     InvokeSpecial(ConstantPoolIndex),
     InvokeStatic(ConstantPoolIndex),

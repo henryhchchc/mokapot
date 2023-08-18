@@ -1,22 +1,20 @@
-pub(crate) mod annotation;
-pub(crate) mod class_file;
-pub(crate) mod methods;
-pub(crate) mod module;
-pub(crate) mod code;
-
-use crate::utils::{read_u16, read_u32};
-
-use self::{
-    annotation::{Annotation, ElementValue, TypeAnnotation},
-    class_file::{BootstrapMethod, InnerClassInfo, RecordComponent},
-    module::{Module, PackageReference}, code::{StackMapFrame, LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry}, methods::{MethodBody, MethodParameter},
+use crate::{
+    elements::{
+        annotation::{Annotation, ElementValue, TypeAnnotation},
+        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        field::ConstantValue,
+        method::{
+            LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry, MethodBody,
+            MethodParameter, StackMapFrame,
+        },
+        module::Module,
+        references::{ClassReference, PackageReference},
+    },
+    utils::{read_u16, read_u32},
 };
 
-use super::{
-    class_file::{ClassFileParsingError, ClassFileParsingResult, ClassReference},
-    constant_pool::{ConstantPool, ConstantPoolEntry},
-    fields::ConstantValue,
-};
+use super::constant_pool::{ConstantPool, ConstantPoolEntry};
 
 #[derive(Debug)]
 pub(crate) struct AttributeList {
@@ -49,12 +47,6 @@ impl AttributeList {
         }
         Ok(Self { entries })
     }
-}
-
-#[derive(Debug)]
-pub struct EnclosingMethod{
-    pub class: ClassReference,
-    pub method_name_and_desc: Option<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -97,7 +89,7 @@ impl Attribute {
         R: std::io::Read,
     {
         let name_idx = read_u16(reader)?;
-        let name = constant_pool.get_string(name_idx)?;
+        let name = constant_pool.get_string(&name_idx)?;
         match name.as_str() {
             "ConstantValue" => Self::parse_constant_value(reader, constant_pool),
             "Code" => Self::parse_code(reader, constant_pool),
@@ -148,7 +140,7 @@ impl Attribute {
         }
     }
 
-    fn check_attribute_length<R>(reader: &mut R, expected: u32) -> ClassFileParsingResult<()>
+    pub fn check_attribute_length<R>(reader: &mut R, expected: u32) -> ClassFileParsingResult<()>
     where
         R: std::io::Read,
     {
@@ -171,7 +163,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let value_index = read_u16(reader)?;
-        let value = constant_pool.get_constant_value(value_index)?;
+        let value = constant_pool.get_constant_value(&value_index)?;
         Ok(Self::ConstantValue(value))
     }
 
@@ -206,16 +198,16 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 4)?;
         let class_index = read_u16(reader)?;
-        let class = constant_pool.get_class_ref(class_index)?;
+        let class = constant_pool.get_class_ref(&class_index)?;
         let method_index = read_u16(reader)?;
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
-            let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = constant_pool.get_entry(method_index)? else {
+            let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = constant_pool.get_entry(&method_index)? else {
                 return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
             };
-            let name = constant_pool.get_string(*name_index)?;
-            let descriptor = constant_pool.get_string(*descriptor_index)?;
+            let name = constant_pool.get_string(name_index)?;
+            let descriptor = constant_pool.get_string(descriptor_index)?;
             Some((name, descriptor))
         };
         Ok(Self::EnclosingMethod(EnclosingMethod {
@@ -233,7 +225,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
-        let signature = constant_pool.get_string(signature_index)?;
+        let signature = constant_pool.get_string(&signature_index)?;
         Ok(Self::Signature(signature))
     }
 }

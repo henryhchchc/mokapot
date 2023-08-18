@@ -1,32 +1,18 @@
 use crate::{
     elements::{
-        class_file::{ClassFileParsingError, ClassFileParsingResult},
-        constant_pool::ConstantPool,
-        fields::ConstantValue,
+        annotation::{
+            Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement, TypePathKind,
+        },
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        field::ConstantValue,
     },
     utils::{read_u16, read_u32, read_u8},
 };
 
-use super::Attribute;
+use super::{attribute::Attribute, constant_pool::ConstantPool};
 
-#[derive(Debug)]
-pub enum ElementValue {
-    Constant(ConstantValue),
-    EnumConstant {
-        type_name: String,
-        const_name: String,
-    },
-    Class {
-        return_descriptor: String,
-    },
-    AnnotationInterface(Annotation),
-    Array(Vec<ElementValue>),
-}
 impl ElementValue {
-    fn parse<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<ElementValue>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -35,7 +21,7 @@ impl ElementValue {
 
         macro_rules! read_constant {
             ($constant_type:path) => {{
-                let $constant_type(value) = constant_pool.get_constant_value(const_value_index)? else {
+                let $constant_type(value) = constant_pool.get_constant_value(&const_value_index)? else {
                                 return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
                             };
                 Ok(Self::Constant($constant_type(value)))
@@ -49,9 +35,9 @@ impl ElementValue {
             's' => read_constant!(ConstantValue::String),
             'e' => {
                 let enum_type_idx = read_u16(reader)?;
-                let type_name = constant_pool.get_string(enum_type_idx)?;
+                let type_name = constant_pool.get_string(&enum_type_idx)?;
                 let const_name_idx = read_u16(reader)?;
-                let const_name = constant_pool.get_string(const_name_idx)?;
+                let const_name = constant_pool.get_string(&const_name_idx)?;
                 Ok(Self::EnumConstant {
                     type_name,
                     const_name,
@@ -59,7 +45,7 @@ impl ElementValue {
             }
             'c' => {
                 let class_info_idx = read_u16(reader)?;
-                let return_descriptor = constant_pool.get_string(class_info_idx)?;
+                let return_descriptor = constant_pool.get_string(&class_info_idx)?;
                 Ok(Self::Class { return_descriptor })
             }
             '@' => Annotation::parse(reader, constant_pool).map(Self::AnnotationInterface),
@@ -76,27 +62,18 @@ impl ElementValue {
     }
 }
 
-#[derive(Debug)]
-pub struct Annotation {
-    pub annotation_type_desc: String,
-    pub element_value_pairs: Vec<(String, ElementValue)>,
-}
-
 impl Annotation {
-    fn parse<R>(
-        reader: &mut R,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Annotation>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
         let type_idx = read_u16(reader)?;
-        let annotation_type_desc = constant_pool.get_string(type_idx)?;
+        let annotation_type_desc = constant_pool.get_string(&type_idx)?;
         let num_element_value_pairs = read_u16(reader)?;
         let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
         for _ in 0..num_element_value_pairs {
             let element_name_idx = read_u16(reader)?;
-            let element_name = constant_pool.get_string(element_name_idx)?;
+            let element_name = constant_pool.get_string(&element_name_idx)?;
             let element_value = ElementValue::parse(reader, constant_pool)?;
             element_value_pairs.push((element_name, element_value));
         }
@@ -107,33 +84,6 @@ impl Annotation {
     }
 }
 
-#[derive(Debug)]
-pub enum TargetInfo {
-    TypeParameter(u8),
-    SuperType(u16),
-    TypeParameterBound(u8, u8),
-    Empty,
-    FormalParameter(u8),
-    Throws(u16),
-    LocalVar(Vec<(u16, u16, u16)>),
-    Catch(u16),
-    Offset(u16),
-    TypeArgument(u16, u8),
-}
-
-#[derive(Debug)]
-pub enum TypePathKind {
-    Array = 0x00,
-    Nested = 0x01,
-    Bound = 0x02,
-    TypeArgument = 0x03,
-}
-
-#[derive(Debug)]
-pub struct TypePathElement {
-    pub kind: TypePathKind,
-    pub argument_index: u8,
-}
 impl TypePathElement {
     fn parse<R>(reader: &mut R) -> ClassFileParsingResult<TypePathElement>
     where
@@ -154,13 +104,6 @@ impl TypePathElement {
     }
 }
 
-#[derive(Debug)]
-pub struct TypeAnnotation {
-    pub target_info: TargetInfo,
-    pub target_path: Vec<TypePathElement>,
-    pub type_index: u16,
-    pub element_value_pairs: Vec<(String, ElementValue)>,
-}
 impl TypeAnnotation {
     fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
     where
@@ -201,7 +144,7 @@ impl TypeAnnotation {
         let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
         for _ in 0..num_element_value_pairs {
             let element_name_idx = read_u16(reader)?;
-            let element_name = constant_pool.get_string(element_name_idx)?;
+            let element_name = constant_pool.get_string(&element_name_idx)?;
             let element_value = ElementValue::parse(reader, constant_pool)?;
             element_value_pairs.push((element_name, element_value));
         }

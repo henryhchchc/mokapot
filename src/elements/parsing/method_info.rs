@@ -1,22 +1,17 @@
-use std::io::BufReader;
-
 use crate::{
     elements::{
-        class_file::{ClassFileParsingError, ClassReference, ClassFileParsingResult},
-        constant_pool::ConstantPool,
+        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        instruction::Instruction,
+        method::{
+            ExceptionTableEntry, LineNumberTableEntry, LocalVariableTableEntry,
+            LocalVariableTypeTableEntry, MethodBody, MethodParameter, StackMapFrame,
+        },
+        parsing::constant_pool::ConstantPool,
     },
     utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
-use super::{Attribute, AttributeList, code::{LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry, StackMapFrame, instructions::Instruction}};
-
-#[derive(Debug)]
-pub struct ExceptionTableEntry {
-    pub start_pc: u16,
-    pub end_pc: u16,
-    pub handler_pc: u16,
-    pub catch_type: ClassReference,
-}
+use super::attribute::{Attribute, AttributeList};
 
 impl ExceptionTableEntry {
     fn parse<R>(
@@ -30,7 +25,7 @@ impl ExceptionTableEntry {
         let end_pc = read_u16(reader)?;
         let handler_pc = read_u16(reader)?;
         let catch_type_idx = read_u16(reader)?;
-        let catch_type = constant_pool.get_class_ref(catch_type_idx)?;
+        let catch_type = constant_pool.get_class_ref(&catch_type_idx)?;
         Ok(ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -38,25 +33,6 @@ impl ExceptionTableEntry {
             catch_type,
         })
     }
-}
-
-
-#[derive(Debug)]
-pub struct MethodParameter {
-    pub name: String,
-    pub access_flags: u16,
-}
-
-#[derive(Debug)]
-pub struct MethodBody {
-    pub max_stack: u16,
-    pub max_locals: u16,
-    pub instructions: Vec<Instruction>,
-    pub exception_table: Vec<ExceptionTableEntry>,
-    pub line_number_table: Option<Vec<LineNumberTableEntry>>,
-    pub local_variable_table: Option<Vec<LocalVariableTableEntry>>,
-    pub local_variable_type_table: Option<Vec<LocalVariableTypeTableEntry>>,
-    pub stack_map_table: Option<Vec<StackMapFrame>>,
 }
 
 impl Attribute {
@@ -189,7 +165,7 @@ impl Attribute {
         let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
         for _ in 0..number_of_exceptions {
             let exception_index = read_u16(reader)?;
-            let exception = constant_pool.get_class_ref(exception_index)?;
+            let exception = constant_pool.get_class_ref(&exception_index)?;
             exceptions.push(exception);
         }
         Ok(Self::Exceptions(exceptions))
@@ -207,7 +183,7 @@ impl Attribute {
         let mut parameters = Vec::with_capacity(parameters_count as usize);
         for _ in 0..parameters_count {
             let name_index = read_u16(reader)?;
-            let name = constant_pool.get_string(name_index)?;
+            let name = constant_pool.get_string(&name_index)?;
             let access_flags = read_u16(reader)?;
             parameters.push(MethodParameter { name, access_flags });
         }

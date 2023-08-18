@@ -1,78 +1,51 @@
 use crate::utils::{read_u16, read_u32};
 
 use super::{
-    attributes::{
-        annotation::{Annotation, ElementValue, TypeAnnotation},
-        class_file::{BootstrapMethod, InnerClassInfo, RecordComponent},
-        methods::{MethodBody, MethodParameter},
-        module::{Module, PackageReference},
-        Attribute, AttributeList, EnclosingMethod,
+    class::{Class, ClassVersion},
+    field::Field,
+    method::Method,
+    parsing::{
+        attribute::{Attribute, AttributeList},
+        constant_pool::ConstantPool,
     },
-    constant_pool::ConstantPool,
-    fields::{Field, FieldInfo},
 };
 
-#[derive(Debug)]
-pub struct ClassFile {
-    version: ClassFileVersion,
-    constant_pool: ConstantPool,
-    access_flags: u16,
-    this_class: u16,
-    super_class: u16,
-    interfaces: Vec<u16>,
-    fields: Vec<FieldInfo>,
-    methods: Vec<MethodInfo>,
-    attributes: AttributeList,
+pub struct ClassParser<'a> {
+    reader: &'a mut dyn std::io::Read,
 }
 
-pub struct Class {
-    pub version: ClassFileVersion,
-    pub access_flags: u16,
-    pub this_class: ClassReference,
-    pub super_class: ClassReference,
-    pub interfaces: Vec<ClassReference>,
-    pub fields: Vec<Field>,
-    pub methods: Vec<Method>,
-    pub source_file: Option<String>,
-    pub inner_classes: Vec<InnerClassInfo>,
-    pub enclosing_method: Option<EnclosingMethod>,
-    pub source_debug_extension: Vec<u8>,
-    pub runtime_visible_annotations: Vec<Annotation>,
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    pub bootstrap_methods: Vec<BootstrapMethod>,
-    pub module: Option<Module>,
-    pub module_packages: Vec<PackageReference>,
-    pub module_main_class: Option<ClassReference>,
-    pub nest_host: Option<ClassReference>,
-    pub nest_members: Vec<ClassReference>,
-    pub permitted_subclasses: Vec<ClassReference>,
-    pub is_synthetic: bool,
-    pub is_deprecated: bool,
-    pub signature: Option<String>,
-    pub record: Vec<RecordComponent>,
-}
+impl<'a> ClassParser<'a> {
+    pub fn parse(mut self) -> Result<Class, ClassFileParsingError> {
+        let reader = &mut self.reader;
 
-impl ClassFile {
-    pub fn to_class(self) -> Result<Class, ClassFileParsingError> {
-        let this_class = self.constant_pool.get_class_ref(self.this_class)?;
-        let super_class = self.constant_pool.get_class_ref(self.super_class)?;
-        let interfaces = self
-            .interfaces
-            .into_iter()
-            .map(|i| self.constant_pool.get_class_ref(i))
-            .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
-        let fields = self
-            .fields
-            .into_iter()
-            .map(|f| f.to_field(&self.constant_pool))
-            .collect::<Result<Vec<Field>, ClassFileParsingError>>()?;
-        let methods = self
-            .methods
-            .into_iter()
-            .map(|m| m.to_method(&self.constant_pool))
-            .collect::<Result<Vec<Method>, ClassFileParsingError>>()?;
+        let magic = read_u32(reader)?;
+        if magic != JAVA_CLASS_MAIGC {
+            return Err(ClassFileParsingError::MalformedClassFile);
+        }
+        let version = ClassVersion::parse(reader)?;
+        let constant_pool = ConstantPool::parse(reader, version)?;
+        let access_flags = read_u16(reader)?;
+        let this_class_idx = read_u16(reader)?;
+        let this_class = constant_pool.get_class_ref(&this_class_idx)?;
+        let super_class_idx = read_u16(reader)?;
+        let super_class = constant_pool.get_class_ref(&super_class_idx)?;
+        let interfaces_count = read_u16(reader)?;
+        let mut interfaces = Vec::with_capacity(interfaces_count as usize);
+        for _ in 0..interfaces_count {
+            let interface_idx = read_u16(reader)?;
+            let interface_ref = constant_pool.get_class_ref(&interface_idx)?;
+            interfaces.push(interface_ref);
+        }
+        let fields_count = read_u16(reader)?;
+        let fields = Field::parse_multiple(reader, fields_count, &constant_pool)?;
+        let methods_count = read_u16(reader)?;
+        let methods = Method::parse_multiple(reader, methods_count, &constant_pool)?;
+        let attributes = AttributeList::parse(reader, &constant_pool)?;
+        let mut may_remain: [u8; 1] = [0];
+        let remain = reader.read(&mut may_remain)?;
+        if remain == 1 {
+            return Err(ClassFileParsingError::UnexpectedData);
+        }
 
         let mut source_file = None;
         let mut inner_classes = None;
@@ -93,7 +66,7 @@ impl ClassFile {
         let mut is_deprecated = false;
         let mut signature = None;
         let mut record = None;
-        for attr in self.attributes.into_iter() {
+        for attr in attributes.into_iter() {
             match attr {
                 Attribute::SourceFile(file_name) => source_file = Some(file_name),
                 Attribute::InnerClasses(it) => inner_classes = Some(it),
@@ -118,8 +91,8 @@ impl ClassFile {
             }
         }
         Ok(Class {
-            version: self.version,
-            access_flags: self.access_flags,
+            version,
+            access_flags,
             this_class,
             super_class,
             interfaces,
@@ -148,16 +121,7 @@ impl ClassFile {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-/// The version of a class file.
-pub struct ClassFileVersion {
-    /// The major version number.
-    pub major: u16,
-    /// the minor version number.
-    pub minor: u16,
-}
-
-impl ClassFileVersion {
+impl ClassVersion {
     /// Returns `true` if this class file is compiled with `--enable-preview`.
     pub fn is_preview_enabled(&self) -> bool {
         self.minor == 65535
@@ -172,40 +136,36 @@ impl ClassFileVersion {
     }
 }
 
-pub struct Method {
-    pub access_flags: u16,
-    pub name: String,
-    pub descriptor: String,
-    pub body: Option<MethodBody>,
-    pub excaptions: Vec<ClassReference>,
-    pub runtime_visible_annotations: Vec<Annotation>,
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    pub annotation_default: Option<ElementValue>,
-    pub parameters: Vec<MethodParameter>,
-    pub is_synthetic: bool,
-    pub is_deprecated: bool,
-    pub signature: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct MethodInfo {
-    access_flags: u16,
-    name_index: u16,
-    descriptor_index: u16,
-    attributes: AttributeList,
-}
-
-impl MethodInfo {
-    pub(crate) fn to_method(
-        self,
+impl Method {
+    pub(crate) fn parse_multiple<R>(
+        reader: &mut R,
+        methods_count: u16,
         constant_pool: &ConstantPool,
-    ) -> Result<Method, ClassFileParsingError> {
-        let access_flags = self.access_flags;
-        let name = constant_pool.get_string(self.name_index)?;
-        let descriptor = constant_pool.get_string(self.descriptor_index)?;
+    ) -> ClassFileParsingResult<Vec<Self>>
+    where
+        R: std::io::Read,
+    {
+        let mut methods = Vec::with_capacity(methods_count as usize);
+        for _ in 0..methods_count {
+            let method = Self::parse(reader, constant_pool)?;
+            methods.push(method);
+        }
+        Ok(methods)
+    }
+    pub(crate) fn parse<R>(
+        reader: &mut R,
+        constant_pool: &ConstantPool,
+    ) -> ClassFileParsingResult<Self>
+    where
+        R: std::io::Read,
+    {
+        let access_flags = read_u16(reader)?;
+        let name_index = read_u16(reader)?;
+        let name = constant_pool.get_string(&name_index)?;
+        let descriptor_index = read_u16(reader)?;
+        let descriptor = constant_pool.get_string(&descriptor_index)?;
 
+        let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut body = None;
         let mut exceptions = None;
         let mut rt_visible_anno = None;
@@ -217,7 +177,7 @@ impl MethodInfo {
         let mut is_synthetic = false;
         let mut is_deprecated = false;
         let mut signature = None;
-        for attr in self.attributes.into_iter() {
+        for attr in attributes.into_iter() {
             match attr {
                 Attribute::Code(b) => body = Some(b),
                 Attribute::Exceptions(ex) => exceptions = Some(ex),
@@ -251,87 +211,17 @@ impl MethodInfo {
             signature,
         })
     }
-
-    fn parse_multiple<R>(
-        reader: &mut R,
-        methods_count: u16,
-        constant_pool: &ConstantPool,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let mut methods = Vec::with_capacity(methods_count as usize);
-        for _ in 0..methods_count {
-            methods.push(Self::parse(reader, constant_pool)?);
-        }
-        Ok(methods)
-    }
-
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let access_flags = read_u16(reader)?;
-        let name_index = read_u16(reader)?;
-        let descriptor_index = read_u16(reader)?;
-        let attributes = AttributeList::parse(reader, constant_pool)?;
-        Ok(Self {
-            access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
-        })
-    }
 }
 
 const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
 
-impl ClassFile {
-    pub fn parse<R>(reader: &mut R) -> Result<ClassFile, ClassFileParsingError>
+impl<'a> ClassParser<'a> {
+    pub fn from_reader<'r, R>(reader: &'r mut R) -> ClassParser<'r>
     where
         R: std::io::Read,
     {
-        let magic = read_u32(reader)?;
-        if magic != JAVA_CLASS_MAIGC {
-            return Err(ClassFileParsingError::MalformedClassFile);
-        }
-        let version = ClassFileVersion::parse(reader)?;
-        let constant_pool = ConstantPool::parse(reader)?;
-        let access_flags = read_u16(reader)?;
-        let this_class = read_u16(reader)?;
-        let super_class = read_u16(reader)?;
-        let interfaces_count = read_u16(reader)?;
-        let mut interfaces: Vec<u16> = Vec::with_capacity(interfaces_count as usize);
-        for _ in 0..interfaces_count {
-            interfaces.push(read_u16(reader)?);
-        }
-        let fields_count = read_u16(reader)?;
-        let fields = FieldInfo::parse_multiple(reader, fields_count, &constant_pool)?;
-        let methods_count = read_u16(reader)?;
-        let methods = MethodInfo::parse_multiple(reader, methods_count, &constant_pool)?;
-        let attributes = AttributeList::parse(reader, &constant_pool)?;
-        let mut may_remain: [u8; 1] = [0];
-        let remain = reader.read(&mut may_remain)?;
-        if remain == 1 {
-            return Err(ClassFileParsingError::UnexpectedData);
-        }
-        Ok(ClassFile {
-            version,
-            constant_pool,
-            access_flags,
-            this_class,
-            super_class,
-            interfaces,
-            fields,
-            methods,
-            attributes,
-        })
+        ClassParser { reader }
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct ClassReference {
-    pub name: String,
 }
 
 #[derive(Debug)]

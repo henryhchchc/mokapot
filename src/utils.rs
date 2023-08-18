@@ -1,6 +1,5 @@
 use std::usize;
 
-
 pub(crate) fn read_u32<R>(reader: &mut R) -> std::io::Result<u32>
 where
     R: std::io::Read,
@@ -64,7 +63,6 @@ where
     Ok(buf[0])
 }
 
-
 pub(crate) fn read_i8<R>(reader: &mut R) -> std::io::Result<i8>
 where
     R: std::io::Read,
@@ -73,6 +71,3 @@ where
     reader.read_exact(&mut buf)?;
     Ok(i8::from_be_bytes(buf))
 }
-
-
-
