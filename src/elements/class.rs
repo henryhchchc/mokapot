@@ -72,7 +72,7 @@ pub struct BootstrapMethod {
     pub argument_indeices: Vec<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MethodHandle {
     RefGetField(FieldReference),
     RefGetStatic(FieldReference),

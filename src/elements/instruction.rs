@@ -1,6 +1,6 @@
 use super::{
     class::MethodHandle,
-    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
+    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference}, field::ConstantValue,
 };
 
 #[derive(Debug)]
@@ -24,9 +24,9 @@ pub enum Instruction {
     DConst1,
     BiPush(u8),
     SiPush(u16),
-    Ldc(u8),
-    LdcW(u16),
-    Ldc2W(u16),
+    Ldc(ConstantValue),
+    LdcW(ConstantValue),
+    Ldc2W(ConstantValue),
 
     // Loads
     ILoad(u8),

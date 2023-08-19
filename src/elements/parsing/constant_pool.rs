@@ -9,7 +9,7 @@ use crate::{
         references::{
             ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
             MethodReference, ModuleReference, PackageReference,
-        },
+        }, method::MethodDescriptor,
     },
     utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
 };
@@ -73,6 +73,19 @@ impl ConstantPool {
             ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(*it)),
             ConstantPoolEntry::String { string_index } => {
                 self.get_string(string_index).map(ConstantValue::String)
+            }
+            ConstantPoolEntry::MethodType { descriptor_index } => {
+                let descriptor_str = self.get_str(descriptor_index)?;
+                let descriptor = MethodDescriptor::from_descriptor(descriptor_str)?;
+                Ok(ConstantValue::MethodType(descriptor))
+            }
+            ConstantPoolEntry::Class { .. } => {
+                let class = self.get_class_ref(value_index)?;
+                Ok(ConstantValue::Class(class))
+            }
+            ConstantPoolEntry::MethodHandle { .. } => {
+                let method_handle = self.get_method_handle(value_index)?;
+                Ok(ConstantValue::MethodHandle(method_handle))
             }
             _ => Err(ClassFileParsingError::MidmatchedConstantPoolTag),
         }

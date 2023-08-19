@@ -1,7 +1,7 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class_parser::ClassFileParsingError,
-    references::ClassReference,
+    references::{ClassReference, MethodReference}, class::MethodHandle, method::MethodDescriptor,
 };
 
 #[derive(Debug)]
@@ -26,6 +26,9 @@ pub enum ConstantValue {
     Long(i64),
     Double(f64),
     String(String),
+    Class(ClassReference),
+    MethodHandle(MethodHandle),
+    MethodType(MethodDescriptor),
 }
 
 #[derive(Debug, PartialEq, Clone)]

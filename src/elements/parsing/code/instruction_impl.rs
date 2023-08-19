@@ -1,6 +1,7 @@
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        field::ConstantValue,
         instruction::Instruction,
         parsing::constant_pool::ConstantPool,
         references::MethodReference,
@@ -241,9 +242,38 @@ impl Instruction {
             0x94 => Self::LCmp,
             0x09 => Self::LConst0,
             0x0a => Self::LConst1,
-            0x12 => Self::Ldc(read_u8(reader)?),
-            0x13 => Self::LdcW(read_u16(reader)?),
-            0x14 => Self::Ldc2W(read_u16(reader)?),
+            0x12 => {
+                let index = read_u8(reader)? as u16;
+                let constant = match constant_pool.get_constant_value(&index)? {
+                    ConstantValue::Long(_) | ConstantValue::Double(_) => {
+                        Err(ClassFileParsingError::MalformedClassFile)?
+                    }
+                    // TODO: Check dynamically computed symbolic reference
+                    it @ _ => it,
+                };
+                Self::Ldc(constant)
+            }
+            0x13 => {
+                let index = read_u16(reader)?;
+                let constant = match constant_pool.get_constant_value(&index)? {
+                    ConstantValue::Long(_) | ConstantValue::Double(_) => {
+                        Err(ClassFileParsingError::MalformedClassFile)?
+                    }
+                    // TODO: Check dynamically computed symbolic reference
+                    it @ _ => it,
+                };
+                Self::LdcW(constant)
+            }
+            0x14 => {
+                let index = read_u16(reader)?;
+                let constant = match constant_pool.get_constant_value(&index)? {
+                    it @ ConstantValue::Long(_) => it,
+                    it @ ConstantValue::Double(_) => it,
+                    // TODO: Check dynamically computed symbolic reference
+                    _ => Err(ClassFileParsingError::MalformedClassFile)?,
+                };
+                Self::Ldc2W(constant)
+            }
             0x6d => Self::LDiv,
             0x16 => Self::LLoad(read_u8(reader)?),
             0x1e => Self::LLoad0,
