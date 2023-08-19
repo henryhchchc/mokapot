@@ -119,4 +119,3 @@ bitflags! {
         const MODULE = 0x8000;
     }
 }
-

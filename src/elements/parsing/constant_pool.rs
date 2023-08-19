@@ -2,11 +2,13 @@ use std::collections::HashMap;
 
 use crate::{
     elements::{
-        class::ClassVersion,
+        class::{MethodHandle},
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::ConstantValue,
+        field::{ArrayType, ConstantValue, FieldType},
+        instruction::ArrayTypeRef,
         references::{
-            ClassReference, FieldReference, MethodReference, ModuleReference, PackageReference,
+            ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
+            MethodReference, ModuleReference, PackageReference,
         },
     },
     utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
@@ -15,23 +17,17 @@ use crate::{
 #[derive(Debug)]
 pub struct ConstantPool {
     entries: HashMap<u16, ConstantPoolEntry>,
-    pub class_version: ClassVersion,
 }
 
-pub(crate) type ConstantPoolIndex = u16;
-
 impl ConstantPool {
-    pub fn parse<R>(reader: &mut R, class_version: ClassVersion) -> ClassFileParsingResult<Self>
+    pub fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
         let constant_pool_count = read_u16(reader)?;
         let entries = ConstantPoolEntry::parse_multiple(reader, constant_pool_count)?;
 
-        Ok(Self {
-            entries,
-            class_version,
-        })
+        Ok(Self { entries })
     }
 
     pub fn get_entry(&self, index: &u16) -> ClassFileParsingResult<&ConstantPoolEntry> {
@@ -141,24 +137,68 @@ impl ConstantPool {
 
     pub(crate) fn get_method_ref(&self, index: &u16) -> ClassFileParsingResult<MethodReference> {
         let entry = self.get_entry(index)?;
-        if let ConstantPoolEntry::MethodRef { class_index, name_and_type_index } = entry {
+        if let ConstantPoolEntry::MethodRef {
+            class_index,
+            name_and_type_index,
+        } = entry
+        {
             let class = self.get_class_ref(class_index)?;
             let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-            return Ok(MethodReference::Class {
+            return Ok(MethodReference::Class(ClassMethodReference {
                 class,
                 name,
                 descriptor,
-            });
-        } else if let ConstantPoolEntry::InterfaceMethodRef { class_index, name_and_type_index } = entry {
+            }));
+        } else if let ConstantPoolEntry::InterfaceMethodRef {
+            class_index,
+            name_and_type_index,
+        } = entry
+        {
             let class = self.get_class_ref(class_index)?;
             let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-            return Ok(MethodReference::Interface {
+            return Ok(MethodReference::Interface(InterfaceMethodReference {
                 class,
                 name,
                 descriptor,
-            });
+            }));
         }
         Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+    }
+
+    pub(crate) fn get_method_handle(&self, index: &u16) -> ClassFileParsingResult<MethodHandle> {
+        use MethodHandle::*;
+
+        let ConstantPoolEntry::MethodHandle {
+            reference_kind,
+            reference_index: idx,
+        } = self.get_entry(&index)? else {
+            Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
+        };
+
+        let result = match reference_kind {
+            1 => RefGetField(self.get_field_ref(idx)?),
+            2 => RefGetStatic(self.get_field_ref(idx)?),
+            3 => RefPutField(self.get_field_ref(idx)?),
+            4 => RefPutStatic(self.get_field_ref(idx)?),
+            5 => RefInvokeVirtual(self.get_method_ref(idx)?),
+            6 => RefInvokeStatic(self.get_method_ref(idx)?),
+            7 => RefInvokeSpecial(self.get_method_ref(idx)?),
+            8 => RefNewInvokeSpecial(self.get_method_ref(idx)?),
+            9 => RefInvokeInterface(self.get_method_ref(idx)?),
+            _ => Err(ClassFileParsingError::MalformedClassFile)?,
+        };
+        Ok(result)
+    }
+
+    pub(crate) fn get_array_type_ref(&self, index: &u16) -> ClassFileParsingResult<ArrayTypeRef> {
+        let ClassReference { name } = self.get_class_ref(index)?;
+        let FieldType::Array(ArrayType::Reference{ class, dimensions }) = FieldType::from_descriptor(&name)? else {
+            return Err(ClassFileParsingError::MalformedClassFile);
+        };
+        Ok(ArrayTypeRef {
+            base_type: class,
+            dimensions,
+        })
     }
 }
 

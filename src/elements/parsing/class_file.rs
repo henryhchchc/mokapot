@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        class::{BootstrapMethod, InnerClassInfo, MethodHandle, RecordComponent},
+        class::{BootstrapMethod, InnerClassInfo, RecordComponent},
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
     },
     utils::{read_bytes_vec, read_u16, read_u32},
@@ -8,59 +8,8 @@ use crate::{
 
 use super::{
     attribute::{Attribute, AttributeList},
-    constant_pool::{ConstantPool, ConstantPoolEntry},
+    constant_pool::ConstantPool,
 };
-
-impl MethodHandle {
-    pub(super) fn form_cp_idx(
-        index: u16,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self> {
-        let ConstantPoolEntry::MethodHandle { reference_kind,  reference_index } = constant_pool.get_entry(&index)? else {
-            Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
-        };
-        let result = match reference_kind {
-            1 => {
-                let field_ref = constant_pool.get_field_ref(reference_index)?;
-                Self::RefGetField(field_ref)
-            }
-            2 => {
-                let field_ref = constant_pool.get_field_ref(reference_index)?;
-                Self::RefGetStatic(field_ref)
-            }
-            3 => {
-                let field_ref = constant_pool.get_field_ref(reference_index)?;
-                Self::RefPutField(field_ref)
-            }
-            4 => {
-                let field_ref = constant_pool.get_field_ref(reference_index)?;
-                Self::RefPutStatic(field_ref)
-            }
-            5 => {
-                let method_ref = constant_pool.get_method_ref(reference_index)?;
-                Self::RefInvokeVirtual(method_ref)
-            }
-            6 => {
-                let method_ref = constant_pool.get_method_ref(reference_index)?;
-                Self::RefInvokeStatic(method_ref)
-            }
-            7 => {
-                let method_ref = constant_pool.get_method_ref(reference_index)?;
-                Self::RefInvokeSpecial(method_ref)
-            }
-            8 => {
-                let method_ref = constant_pool.get_method_ref(reference_index)?;
-                Self::RefNewInvokeSpecial(method_ref)
-            }
-            9 => {
-                let method_ref = constant_pool.get_method_ref(reference_index)?;
-                Self::RefInvokeInterface(method_ref)
-            }
-            _ => Err(ClassFileParsingError::MalformedClassFile)?,
-        };
-        Ok(result)
-    }
-}
 
 impl BootstrapMethod {
     fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
@@ -68,7 +17,7 @@ impl BootstrapMethod {
         R: std::io::Read,
     {
         let bootstrap_method_ref = read_u16(reader)?;
-        let method_ref = MethodHandle::form_cp_idx(bootstrap_method_ref, constant_pool)?;
+        let method_ref = constant_pool.get_method_handle(&bootstrap_method_ref)?;
         let num_bootstrap_arguments = read_u16(reader)?;
         let mut argument_indeices = Vec::with_capacity(num_bootstrap_arguments as usize);
         for _ in 0..num_bootstrap_arguments {

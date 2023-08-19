@@ -57,15 +57,54 @@ impl PrimitiveType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum ArrayType {
+    Primitive {
+        primitive: PrimitiveType,
+        dimensions: u8,
+    },
+    Reference {
+        class: ClassReference,
+        dimensions: u8,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
     Object(ClassReference),
-    Array(Box<FieldType>),
+    Array(ArrayType),
 }
 
 impl FieldType {
     pub fn make_array_type(&self) -> Self {
-        Self::Array(Box::new(self.clone()))
+        use ArrayType::*;
+        use FieldType::*;
+        match self {
+            Base(p) => Array(Primitive {
+                primitive: p.clone(),
+                dimensions: 1,
+            }),
+            Object(c) => Array(Reference {
+                class: c.clone(),
+                dimensions: 1,
+            }),
+            Array(t) => Array(match t {
+                Primitive {
+                    primitive: primitive_type,
+                    dimensions,
+                } => Primitive {
+                    primitive: primitive_type.clone(),
+                    dimensions: dimensions + 1,
+                },
+                Reference {
+                    class: class_reference,
+                    dimensions,
+                } => Reference {
+                    class: class_reference.clone(),
+                    dimensions: dimensions + 1,
+                },
+            }),
+        }
     }
 
     pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {

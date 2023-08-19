@@ -1,4 +1,7 @@
-use super::{parsing::constant_pool::ConstantPoolIndex, references::FieldReference};
+use super::{
+    class::MethodHandle,
+    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
+};
 
 #[derive(Debug)]
 pub enum Instruction {
@@ -209,14 +212,14 @@ pub enum Instruction {
     PutStatic(FieldReference),
     GetField(FieldReference),
     PutField(FieldReference),
-    InvokeVirtual(ConstantPoolIndex),
-    InvokeSpecial(ConstantPoolIndex),
-    InvokeStatic(ConstantPoolIndex),
-    InvokeInterface(ConstantPoolIndex, u8),
-    InvokeDynamic(ConstantPoolIndex),
-    New(ConstantPoolIndex),
+    InvokeVirtual(MethodReference),
+    InvokeSpecial(MethodReference),
+    InvokeStatic(MethodReference),
+    InvokeInterface(InterfaceMethodReference, u8),
+    InvokeDynamic(MethodHandle),
+    New(ClassReference),
     NewArray(u8),
-    ANewArray(ConstantPoolIndex),
+    ANewArray(ArrayTypeRef),
     ArrayLength,
     AThrow,
     CheckCast(u16),
@@ -237,7 +240,7 @@ pub enum Instruction {
     WideAStore(u16),
     WideIInc(u16, i16),
     WideRet(u16),
-    MultiANewArray(ConstantPoolIndex, u8),
+    MultiANewArray(ArrayTypeRef, u8),
     IfNull(i16),
     IfNonNull(i16),
     GotoW(i32),
@@ -247,4 +250,10 @@ pub enum Instruction {
     Breakpoint,
     ImpDep1,
     ImpDep2,
+}
+
+#[derive(Debug)]
+pub struct ArrayTypeRef {
+    pub base_type: ClassReference,
+    pub dimensions: u8,
 }

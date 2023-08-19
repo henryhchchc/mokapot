@@ -1,11 +1,9 @@
-use crate::{
-    utils::{read_u16, read_u32},
-};
+use crate::utils::{read_u16, read_u32};
 
 use super::{
     class::{Class, ClassAccessFlags, ClassVersion},
     field::Field,
-    method::{Method},
+    method::Method,
     parsing::{
         attribute::{Attribute, AttributeList},
         constant_pool::ConstantPool,
@@ -25,7 +23,7 @@ impl<'a> ClassParser<'a> {
             return Err(ClassFileParsingError::MalformedClassFile);
         }
         let version = ClassVersion::parse(reader)?;
-        let constant_pool = ConstantPool::parse(reader, version)?;
+        let constant_pool = ConstantPool::parse(reader)?;
         let access = read_u16(reader)?;
         let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
             return Err(ClassFileParsingError::UnknownFlags(access));
@@ -140,8 +138,6 @@ impl ClassVersion {
         Ok(Self { major, minor })
     }
 }
-
-
 
 const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
 

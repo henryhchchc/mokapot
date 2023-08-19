@@ -3,6 +3,7 @@ use crate::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         instruction::Instruction,
         parsing::constant_pool::ConstantPool,
+        references::MethodReference,
     },
     utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
 };
@@ -47,7 +48,11 @@ impl Instruction {
             0x2b => Self::ALoad1,
             0x2c => Self::ALoad2,
             0x2d => Self::ALoad3,
-            0xbd => Self::ANewArray(read_u16(reader)?),
+            0xbd => {
+                let index = read_u16(reader)?;
+                let array_type = constant_pool.get_array_type_ref(&index)?;
+                Self::ANewArray(array_type)
+            }
             0xb0 => Self::AReturn,
             0xbe => Self::ArrayLength,
             0x3a => Self::AStore(read_u8(reader)?),
@@ -177,24 +182,40 @@ impl Instruction {
             0xc1 => Self::InstanceOf(read_u16(reader)?),
             0xba => {
                 let index = read_u16(reader)?;
+                let method_handle = constant_pool.get_method_handle(&index)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile)?
                 }
-                Self::InvokeDynamic(index)
+                Self::InvokeDynamic(method_handle)
             }
             0xb9 => {
                 let index = read_u16(reader)?;
+                let MethodReference::Interface(method_ref) = constant_pool.get_method_ref(&index)? else {
+                    Err(ClassFileParsingError::MalformedClassFile)?
+                };
                 let count = read_u8(reader)?;
                 let zero = read_u8(reader)?;
                 if zero != 0 {
                     Err(ClassFileParsingError::MalformedClassFile)?
                 }
-                Self::InvokeInterface(index, count)
+                Self::InvokeInterface(method_ref, count)
             }
-            0xb7 => Self::InvokeSpecial(read_u16(reader)?),
-            0xb8 => Self::InvokeStatic(read_u16(reader)?),
-            0xb6 => Self::InvokeVirtual(read_u16(reader)?),
+            0xb7 => {
+                let index = read_u16(reader)?;
+                let method_ref = constant_pool.get_method_ref(&index)?;
+                Self::InvokeSpecial(method_ref)
+            }
+            0xb8 => {
+                let index = read_u16(reader)?;
+                let method_ref = constant_pool.get_method_ref(&index)?;
+                Self::InvokeStatic(method_ref)
+            }
+            0xb6 => {
+                let index = read_u16(reader)?;
+                let method_ref = constant_pool.get_method_ref(&index)?;
+                Self::InvokeVirtual(method_ref)
+            }
             0x80 => Self::IOr,
             0x70 => Self::IRem,
             0xac => Self::IReturn,
@@ -283,8 +304,16 @@ impl Instruction {
             0x83 => Self::LXor,
             0xc2 => Self::MonitorEnter,
             0xc3 => Self::MonitorExit,
-            0xc5 => Self::MultiANewArray(read_u16(reader)?, read_u8(reader)?),
-            0xbb => Self::New(read_u16(reader)?),
+            0xc5 => {
+                let index = read_u16(reader)?;
+                let array_type = constant_pool.get_array_type_ref(&index)?;
+                Self::MultiANewArray(array_type, read_u8(reader)?)
+            }
+            0xbb => {
+                let index = read_u16(reader)?;
+                let class_ref = constant_pool.get_class_ref(&index)?;
+                Self::New(class_ref)
+            }
             0xbc => Self::NewArray(read_u8(reader)?),
             0x00 => Self::Nop,
             0x57 => Self::Pop,

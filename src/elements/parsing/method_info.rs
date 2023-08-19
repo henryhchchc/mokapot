@@ -4,7 +4,8 @@ use crate::{
         instruction::Instruction,
         method::{
             ExceptionTableEntry, LineNumberTableEntry, LocalVariableTableEntry,
-            LocalVariableTypeTableEntry, Method, MethodBody, MethodParameter, StackMapFrame, MethodAccessFlags, MethodParameterAccessFlags, MethodDescriptor,
+            LocalVariableTypeTableEntry, Method, MethodAccessFlags, MethodBody, MethodDescriptor,
+            MethodParameter, MethodParameterAccessFlags, StackMapFrame,
         },
         parsing::constant_pool::ConstantPool,
     },

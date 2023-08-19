@@ -21,15 +21,21 @@ pub struct FieldReference {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct InterfaceMethodReference {
+    pub class: ClassReference,
+    pub name: String,
+    pub descriptor: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ClassMethodReference {
+    pub class: ClassReference,
+    pub name: String,
+    pub descriptor: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MethodReference {
-    Class {
-        class: ClassReference,
-        name: String,
-        descriptor: String,
-    },
-    Interface {
-        class: ClassReference,
-        name: String,
-        descriptor: String,
-    },
+    Class(ClassMethodReference),
+    Interface(InterfaceMethodReference),
 }
