@@ -1,7 +1,7 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class_parser::ClassFileParsingError,
-    references::{ClassReference, MethodReference}, class::MethodHandle, method::MethodDescriptor,
+    references::{ClassReference}, class::MethodHandle, method::MethodDescriptor,
 };
 
 #[derive(Debug)]
