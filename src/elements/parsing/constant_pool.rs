@@ -49,6 +49,14 @@ impl ConstantPool {
         }
     }
 
+    pub fn get_str(&self, index: &u16) -> ClassFileParsingResult<&str> {
+        if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
+            Ok(string)
+        } else {
+            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        }
+    }
+
     pub fn get_class_ref(&self, index: &u16) -> ClassFileParsingResult<ClassReference> {
         let ConstantPoolEntry::Class { name_index } = self.get_entry(index)? else {
             return Err(ClassFileParsingError::MidmatchedConstantPoolTag);

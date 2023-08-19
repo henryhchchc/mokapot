@@ -1,11 +1,10 @@
 use std::io::BufReader;
 
-use crate::{
-    elements::{
-        class::{Class, ClassAccessFlags},
-        class_parser::{ClassFileParsingError, ClassParser},
-        references::ClassReference,
-    },
+use crate::elements::{
+    class::{Class, ClassAccessFlags},
+    class_parser::{ClassFileParsingError, ClassParser},
+    field::{FieldType, PrimitiveType},
+    references::ClassReference,
 };
 
 /// Parses the class file `MyClass.class` from the `test_data` directory.
@@ -18,7 +17,7 @@ fn parse_my_class() -> Result<Class, ClassFileParsingError> {
 
 #[test]
 fn test_parse_file() {
-    print!("{:?}", parse_my_class().unwrap());
+    print!("{:#?}", parse_my_class().unwrap());
 }
 
 #[test]
@@ -80,7 +79,7 @@ fn test_fields() {
         .filter(|f| f.name == "test")
         .next()
         .unwrap();
-    assert_eq!("J", test_field.descriptor);
+    assert_eq!(FieldType::Base(PrimitiveType::Long), test_field.field_type);
 }
 
 #[test]

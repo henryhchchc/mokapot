@@ -170,6 +170,7 @@ pub enum ClassFileParsingError {
     InvalidVerificationTypeInfoTag(u8),
     UnexpectedOpCode,
     UnknownFlags(u16),
+    InvalidDescriptor,
 }
 
 impl From<std::io::Error> for ClassFileParsingError {

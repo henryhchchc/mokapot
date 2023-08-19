@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::{Field, FieldAccessFlags},
+        field::{Field, FieldAccessFlags, FieldType},
     },
     utils::read_u16,
 };
@@ -39,7 +39,8 @@ impl Field {
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_string(&descriptor_index)?;
+        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let field_type = FieldType::from_descriptor(descriptor)?;
 
         let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut constant_value = None;
@@ -73,7 +74,7 @@ impl Field {
         Ok(Field {
             access_flags,
             name,
-            descriptor,
+            field_type,
             constant_value,
             is_synthetic,
             is_deperecated,
