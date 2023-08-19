@@ -4,7 +4,7 @@ use crate::{
         instruction::Instruction,
         method::{
             ExceptionTableEntry, LineNumberTableEntry, LocalVariableTableEntry,
-            LocalVariableTypeTableEntry, Method, MethodBody, MethodParameter, StackMapFrame, MethodAccessFlags, MethodParameterAccessFlags,
+            LocalVariableTypeTableEntry, Method, MethodBody, MethodParameter, StackMapFrame, MethodAccessFlags, MethodParameterAccessFlags, MethodDescriptor,
         },
         parsing::constant_pool::ConstantPool,
     },
@@ -224,7 +224,8 @@ impl Method {
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_string(&descriptor_index)?;
+        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let descriptor = MethodDescriptor::from_descriptor(descriptor)?;
 
         let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut body = None;

@@ -1,6 +1,7 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class_parser::ClassFileParsingError,
+    references::ClassReference,
 };
 
 #[derive(Debug)]
@@ -40,16 +41,16 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    pub fn from_descriptor(descriptor: &char) -> Result<PrimitiveType, ClassFileParsingError> {
+    pub fn from_descriptor(descriptor: &char) -> Result<Self, ClassFileParsingError> {
         match descriptor {
-            'Z' => Ok(PrimitiveType::Boolean),
-            'C' => Ok(PrimitiveType::Char),
-            'F' => Ok(PrimitiveType::Float),
-            'D' => Ok(PrimitiveType::Double),
-            'B' => Ok(PrimitiveType::Byte),
-            'S' => Ok(PrimitiveType::Short),
-            'I' => Ok(PrimitiveType::Int),
-            'J' => Ok(PrimitiveType::Long),
+            'Z' => Ok(Self::Boolean),
+            'C' => Ok(Self::Char),
+            'F' => Ok(Self::Float),
+            'D' => Ok(Self::Double),
+            'B' => Ok(Self::Byte),
+            'S' => Ok(Self::Short),
+            'I' => Ok(Self::Int),
+            'J' => Ok(Self::Long),
             _ => Err(ClassFileParsingError::InvalidDescriptor),
         }
     }
@@ -58,7 +59,7 @@ impl PrimitiveType {
 #[derive(Debug, PartialEq, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
-    Object(String),
+    Object(ClassReference),
     Array(Box<FieldType>),
 }
 
@@ -69,25 +70,32 @@ impl FieldType {
 
     pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
         let mut chars = descriptor.chars();
-        match chars.next() {
+        let result = match chars.next() {
             Some('L') => {
-                if descriptor.ends_with(';') {
-                    let type_name = chars.take_while(|it| *it != ';').collect::<String>();
-                    Ok(FieldType::Object(type_name))
-                } else {
-                    Err(ClassFileParsingError::InvalidDescriptor)
+                let type_name = chars.take_while_ref(|it| *it != ';').collect::<String>();
+                match chars.next() {
+                    Some(';') => Ok(FieldType::Object(ClassReference { name: type_name })),
+                    _ => Err(ClassFileParsingError::InvalidDescriptor),
                 }
             }
             Some('[') => {
-                FieldType::from_descriptor(chars.as_str()).map(|ft| FieldType::Array(Box::new(ft)))
+                // Skip trailing character checking via `return`
+                return FieldType::from_descriptor(chars.as_str()).map(|it| it.make_array_type());
             }
-            Some(ref c) => PrimitiveType::from_descriptor(c).map(|pt| FieldType::Base(pt)),
+            Some(ref c) => PrimitiveType::from_descriptor(c).map(|it| FieldType::Base(it)),
             None => Err(ClassFileParsingError::InvalidDescriptor),
+        }?;
+        // Check if there is any trailing character
+        if chars.next().is_none() {
+            Ok(result)
+        } else {
+            Err(ClassFileParsingError::UnexpectedData)
         }
     }
 }
 
 use bitflags::bitflags;
+use itertools::Itertools;
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq)]
@@ -115,7 +123,9 @@ bitflags! {
 
 #[cfg(test)]
 mod test {
-    use super::{FieldType, PrimitiveType};
+    use crate::elements::{field::PrimitiveType, references::ClassReference};
+
+    use super::{FieldType, PrimitiveType::*};
 
     #[test]
     fn parse_primitive_types() {
@@ -123,17 +133,17 @@ mod test {
         let mut types = descs
             .into_iter()
             .map(|ref d| PrimitiveType::from_descriptor(d))
-            .collect::<Result<Vec<PrimitiveType>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse primitive types")
             .into_iter();
-        assert_eq!(types.next(), Some(PrimitiveType::Boolean));
-        assert_eq!(types.next(), Some(PrimitiveType::Char));
-        assert_eq!(types.next(), Some(PrimitiveType::Float));
-        assert_eq!(types.next(), Some(PrimitiveType::Double));
-        assert_eq!(types.next(), Some(PrimitiveType::Byte));
-        assert_eq!(types.next(), Some(PrimitiveType::Short));
-        assert_eq!(types.next(), Some(PrimitiveType::Int));
-        assert_eq!(types.next(), Some(PrimitiveType::Long));
+        assert_eq!(types.next(), Some(Boolean));
+        assert_eq!(types.next(), Some(Char));
+        assert_eq!(types.next(), Some(Float));
+        assert_eq!(types.next(), Some(Double));
+        assert_eq!(types.next(), Some(Byte));
+        assert_eq!(types.next(), Some(Short));
+        assert_eq!(types.next(), Some(Int));
+        assert_eq!(types.next(), Some(Long));
     }
 
     #[test]
@@ -159,33 +169,39 @@ mod test {
         let mut types = descriptors
             .into_iter()
             .map(|ref it| FieldType::from_descriptor(it))
-            .collect::<Result<Vec<FieldType>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse field types")
             .into_iter();
 
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Boolean)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Char)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Float)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Double)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Byte)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Short)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Int)));
-        assert_eq!(types.next(), Some(FieldType::Base(PrimitiveType::Long)));
+        let string_type = FieldType::Object(ClassReference {
+            name: "java/lang/String".to_string(),
+        });
+
+        assert_eq!(types.next(), Some(FieldType::Base(Boolean)));
+        assert_eq!(types.next(), Some(FieldType::Base(Char)));
+        assert_eq!(types.next(), Some(FieldType::Base(Float)));
+        assert_eq!(types.next(), Some(FieldType::Base(Double)));
+        assert_eq!(types.next(), Some(FieldType::Base(Byte)));
+        assert_eq!(types.next(), Some(FieldType::Base(Short)));
+        assert_eq!(types.next(), Some(FieldType::Base(Int)));
+        assert_eq!(types.next(), Some(FieldType::Base(Long)));
+        assert_eq!(types.next(), Some(string_type.clone()));
+        assert_eq!(types.next(), Some(FieldType::Base(Int).make_array_type()));
         assert_eq!(
             types.next(),
-            Some(FieldType::Object("java/lang/String".to_string()))
+            Some(string_type.make_array_type().make_array_type())
         );
-        assert_eq!(
-            types.next(),
-            Some(FieldType::Base(PrimitiveType::Int).make_array_type())
-        );
-        assert_eq!(
-            types.next(),
-            Some(
-                FieldType::Object("java/lang/String".to_string())
-                    .make_array_type()
-                    .make_array_type()
-            )
-        );
+    }
+
+    #[test]
+    fn missing_semicolon() {
+        let descriptor = "Ljava/lang/String";
+        assert!(FieldType::from_descriptor(descriptor).is_err())
+    }
+
+    #[test]
+    fn tailing_chars() {
+        let descriptor = "Ljava/lang/String;A";
+        assert!(FieldType::from_descriptor(descriptor).is_err())
     }
 }

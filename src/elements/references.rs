@@ -8,19 +8,19 @@ pub struct PackageReference {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ClassReference {
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FieldReference {
     pub class: ClassReference,
     pub name: String,
     pub descriptor: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MethodReference {
     Class {
         class: ClassReference,

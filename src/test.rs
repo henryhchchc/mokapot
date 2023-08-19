@@ -4,6 +4,7 @@ use crate::elements::{
     class::{Class, ClassAccessFlags},
     class_parser::{ClassFileParsingError, ClassParser},
     field::{FieldType, PrimitiveType},
+    method::ReturnType,
     references::ClassReference,
 };
 
@@ -91,6 +92,13 @@ fn test_methods() {
         .iter()
         .filter(|f| f.name == "main")
         .next()
-        .unwrap();
-    assert_eq!("([Ljava/lang/String;)V", main_method.descriptor);
+        .expect("main method not found");
+    assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
+    assert_eq!(
+        FieldType::Object(ClassReference {
+            name: "java/lang/String".to_string()
+        })
+        .make_array_type(),
+        main_method.descriptor.parameters_types[0]
+    );
 }

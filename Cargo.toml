@@ -10,3 +10,4 @@ license = "MIT"
 
 [dependencies]
 bitflags = "2.*"
+itertools = "0.*"

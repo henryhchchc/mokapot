@@ -1,7 +1,12 @@
+use std::str::Chars;
+
 use bitflags::bitflags;
+use itertools::Itertools;
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
+    class_parser::ClassFileParsingError,
+    field::{FieldType, PrimitiveType},
     instruction::Instruction,
     references::ClassReference,
 };
@@ -10,7 +15,7 @@ use super::{
 pub struct Method {
     pub access_flags: MethodAccessFlags,
     pub name: String,
-    pub descriptor: String,
+    pub descriptor: MethodDescriptor,
     pub body: Option<MethodBody>,
     pub excaptions: Vec<ClassReference>,
     pub runtime_visible_annotations: Vec<Annotation>,
@@ -151,5 +156,127 @@ bitflags! {
         const SYNTHETIC = 0x1000;
         /// Declared as either `mandated` or `optional`.
         const MANDATED = 0x8000;
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MethodDescriptor {
+    pub parameters_types: Vec<FieldType>,
+    pub return_type: ReturnType,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ReturnType {
+    Some(FieldType),
+    Void,
+}
+
+impl MethodDescriptor {
+    fn parse_single_param(
+        prefix: char,
+        remaining: &mut Chars,
+    ) -> Result<FieldType, ClassFileParsingError> {
+        if let Ok(p) = PrimitiveType::from_descriptor(&prefix) {
+            return Ok(FieldType::Base(p));
+        }
+        match prefix {
+            'L' => {
+                let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
+                match remaining.next() {
+                    Some(';') => Ok(FieldType::Object(ClassReference { name: binary_name })),
+                    _ => Err(ClassFileParsingError::InvalidDescriptor),
+                }
+            }
+            '[' => {
+                let next_prefix = remaining
+                    .next()
+                    .ok_or(ClassFileParsingError::InvalidDescriptor)?;
+                Self::parse_single_param(next_prefix, remaining).map(|p| p.make_array_type())
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+        let mut chars = descriptor.chars();
+        let mut parameters_types = Vec::new();
+        let return_type = loop {
+            match chars.next() {
+                Some('(') => {}
+                Some(')') => break ReturnType::from_descriptor(chars.as_str())?,
+                Some(c) => {
+                    let param = Self::parse_single_param(c, &mut chars)?;
+                    parameters_types.push(param);
+                }
+                None => Err(ClassFileParsingError::InvalidDescriptor)?,
+            }
+        };
+        Ok(Self {
+            parameters_types,
+            return_type,
+        })
+    }
+}
+
+impl ReturnType {
+    pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+        if descriptor == "V" {
+            Ok(ReturnType::Void)
+        } else {
+            FieldType::from_descriptor(descriptor).map(ReturnType::Some)
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::elements::{
+        field::{FieldType, PrimitiveType::*},
+        method::ReturnType,
+        references::ClassReference,
+    };
+
+    use super::MethodDescriptor;
+
+    #[test]
+    fn single_param() {
+        let descriptor = "(I)V";
+        let method_descriptor = MethodDescriptor::from_descriptor(descriptor)
+            .expect("Failed to parse method descriptor");
+        assert_eq!(method_descriptor.return_type, ReturnType::Void);
+        assert_eq!(
+            method_descriptor.parameters_types,
+            vec![FieldType::Base(Int)]
+        );
+    }
+
+    #[test]
+    fn param_complex() {
+        let descriptor = "(I[JLjava/lang/String;J)I";
+        let method_descriptor = MethodDescriptor::from_descriptor(descriptor)
+            .expect("Failed to parse method descriptor");
+        let string_type = FieldType::Object(ClassReference {
+            name: "java/lang/String".to_string(),
+        });
+        assert_eq!(
+            method_descriptor.return_type,
+            ReturnType::Some(FieldType::Base(Int))
+        );
+        assert_eq!(
+            method_descriptor.parameters_types,
+            vec![
+                FieldType::Base(Int),
+                FieldType::Base(Long).make_array_type(),
+                string_type,
+                FieldType::Base(Long),
+            ]
+        );
+    }
+
+    #[test]
+    fn too_many_return_type() {
+        let descriptor = "(I)VJ";
+        let method_descriptor = MethodDescriptor::from_descriptor(descriptor);
+        assert!(method_descriptor.is_err());
     }
 }
