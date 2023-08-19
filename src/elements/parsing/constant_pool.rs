@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use crate::{
     elements::{
-        class::{MethodHandle},
+        class::MethodHandle,
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::{ArrayType, ConstantValue, FieldType},
+        field::{ConstantValue, FieldType},
         instruction::ArrayTypeRef,
+        method::MethodDescriptor,
         references::{
             ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
             MethodReference, ModuleReference, PackageReference,
-        }, method::MethodDescriptor,
+        },
     },
     utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
 };
@@ -205,11 +206,23 @@ impl ConstantPool {
 
     pub(crate) fn get_array_type_ref(&self, index: &u16) -> ClassFileParsingResult<ArrayTypeRef> {
         let ClassReference { name } = self.get_class_ref(index)?;
-        let FieldType::Array(ArrayType::Reference{ class, dimensions }) = FieldType::from_descriptor(&name)? else {
+        let FieldType::Array(b) = FieldType::from_descriptor(&name)? else {
             return Err(ClassFileParsingError::MalformedClassFile);
         };
+        let mut dim = 1;
+        let mut current_type = *b;
+        let (base_type, dimensions) = loop {
+            match current_type {
+                FieldType::Object(it) => break (it, dim),
+                FieldType::Array(e) => {
+                    current_type = *e;
+                    dim += 1;
+                }
+                _ => return Err(ClassFileParsingError::MalformedClassFile)
+            }
+        };
         Ok(ArrayTypeRef {
-            base_type: class,
+            base_type,
             dimensions,
         })
     }

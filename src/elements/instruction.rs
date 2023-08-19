@@ -1,6 +1,7 @@
 use super::{
     class::MethodHandle,
-    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference}, field::ConstantValue,
+    field::ConstantValue,
+    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
 };
 
 #[derive(Debug)]

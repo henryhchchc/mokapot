@@ -1,7 +1,9 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
+    class::MethodHandle,
     class_parser::ClassFileParsingError,
-    references::{ClassReference}, class::MethodHandle, method::MethodDescriptor,
+    method::MethodDescriptor,
+    references::ClassReference,
 };
 
 #[derive(Debug)]
@@ -60,54 +62,15 @@ impl PrimitiveType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ArrayType {
-    Primitive {
-        primitive: PrimitiveType,
-        dimensions: u8,
-    },
-    Reference {
-        class: ClassReference,
-        dimensions: u8,
-    },
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
     Object(ClassReference),
-    Array(ArrayType),
+    Array(Box<FieldType>),
 }
 
 impl FieldType {
     pub fn make_array_type(&self) -> Self {
-        use ArrayType::*;
-        use FieldType::*;
-        match self {
-            Base(p) => Array(Primitive {
-                primitive: p.clone(),
-                dimensions: 1,
-            }),
-            Object(c) => Array(Reference {
-                class: c.clone(),
-                dimensions: 1,
-            }),
-            Array(t) => Array(match t {
-                Primitive {
-                    primitive: primitive_type,
-                    dimensions,
-                } => Primitive {
-                    primitive: primitive_type.clone(),
-                    dimensions: dimensions + 1,
-                },
-                Reference {
-                    class: class_reference,
-                    dimensions,
-                } => Reference {
-                    class: class_reference.clone(),
-                    dimensions: dimensions + 1,
-                },
-            }),
-        }
+        Self::Array(Box::new(self.clone()))
     }
 
     pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
