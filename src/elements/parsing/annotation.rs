@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         annotation::{
-            Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement, TypePathKind,
+            Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement,
         },
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         field::ConstantValue,
@@ -35,11 +35,11 @@ impl ElementValue {
             's' => read_constant!(ConstantValue::String),
             'e' => {
                 let enum_type_idx = read_u16(reader)?;
-                let type_name = constant_pool.get_string(&enum_type_idx)?;
+                let enum_type = constant_pool.get_class_ref(&enum_type_idx)?;
                 let const_name_idx = read_u16(reader)?;
                 let const_name = constant_pool.get_string(&const_name_idx)?;
                 Ok(Self::EnumConstant {
-                    type_name,
+                    enum_type,
                     const_name,
                 })
             }
@@ -68,7 +68,7 @@ impl Annotation {
         R: std::io::Read,
     {
         let type_idx = read_u16(reader)?;
-        let annotation_type_desc = constant_pool.get_string(&type_idx)?;
+        let annotation_type = constant_pool.get_class_ref(&type_idx)?;
         let num_element_value_pairs = read_u16(reader)?;
         let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
         for _ in 0..num_element_value_pairs {
@@ -78,29 +78,26 @@ impl Annotation {
             element_value_pairs.push((element_name, element_value));
         }
         Ok(Annotation {
-            annotation_type_desc,
+            annotation_type,
             element_value_pairs,
         })
     }
 }
 
 impl TypePathElement {
-    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<TypePathElement>
+    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let kind = match read_u8(reader)? {
-            0x00 => TypePathKind::Array,
-            0x01 => TypePathKind::Nested,
-            0x02 => TypePathKind::Bound,
-            0x03 => TypePathKind::TypeArgument,
-            _ => Err(ClassFileParsingError::InvalidTypePathKind)?,
-        };
+        let kind = read_u8(reader)?;
         let argument_index = read_u8(reader)?;
-        Ok(Self {
-            kind,
-            argument_index,
-        })
+        match (kind, argument_index) {
+            (0, 0) => Ok(Self::Array),
+            (1, 0) => Ok(Self::Nested),
+            (2, 0) => Ok(Self::Bound),
+            (3, idx) => Ok(Self::TypeArgument(idx)),
+            _ => Err(ClassFileParsingError::InvalidTypePathKind),
+        }
     }
 }
 

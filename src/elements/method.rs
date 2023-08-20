@@ -1,5 +1,5 @@
 use core::str;
-use std::str::Chars;
+use std::{collections::HashMap, str::Chars};
 
 use bitflags::bitflags;
 use itertools::Itertools;
@@ -63,96 +63,72 @@ pub struct LineNumberTableEntry {
 
 #[derive(Debug)]
 pub struct LocalVariableTable {
-    entries: Vec<LocalVariableTableEntry>,
+    entries: HashMap<LocalVariableKey, LocalVariableTableEntry>,
 }
 
 impl LocalVariableTable {
+
     pub fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: HashMap::new(),
         }
     }
 
     pub(crate) fn merge_desc_attr(&mut self, attrs: Vec<LocalVariableDescAttr>) {
         for LocalVariableDescAttr {
-            start_pc,
-            length,
+            key,
             name,
             field_type,
-            index,
         } in attrs.into_iter()
         {
-            let entry = self
-                .entries
-                .iter_mut()
-                .find(|it| it.start_pc == start_pc && it.length == length && it.name == name);
-            match entry {
-                Some(it) => it.var_type = Some(field_type),
-                None => self.entries.push(LocalVariableTableEntry {
-                    start_pc,
-                    length,
-                    name,
-                    var_type: Some(field_type),
-                    signature: None,
-                    index,
-                }),
-            }
+            let entry = self.entries.entry(key).or_default();
+            entry.name = name;
+            entry.var_type = Some(field_type);
         }
     }
     pub(crate) fn merge_type_attr(&mut self, attrs: Vec<LocalVariableTypeAttr>) {
         for LocalVariableTypeAttr {
-            start_pc,
-            length,
+            key,
             name,
             signature,
-            index,
         } in attrs.into_iter()
         {
-            let entry = self
-                .entries
-                .iter_mut()
-                .find(|it| it.start_pc == start_pc && it.length == length && it.name == name);
-            match entry {
-                Some(it) => it.signature = Some(signature),
-                None => self.entries.push(LocalVariableTableEntry {
-                    start_pc,
-                    length,
-                    name,
-                    var_type: None,
-                    signature: Some(signature),
-                    index,
-                }),
-            }
+            let entry = self.entries.entry(key).or_default();
+            entry.name = name;
+            entry.signature = Some(signature);
         }
     }
 }
 
-#[derive(Debug)]
-pub struct LocalVariableTableEntry {
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
+pub struct LocalVariableKey {
     pub start_pc: u16,
     pub length: u16,
-    pub name: String,
-    pub var_type: Option<FieldType>,
-    pub signature: Option<String>,
     pub index: u16,
 }
 
+#[derive(Debug, Default)]
+pub struct LocalVariableTableEntry {
+    pub key: LocalVariableKey,
+    pub name: String,
+    pub var_type: Option<FieldType>,
+    pub signature: Option<String>,
+}
+
+// impl Default for Local
+
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {
-    pub start_pc: u16,
-    pub length: u16,
+    pub key: LocalVariableKey,
     pub name: String,
     pub field_type: FieldType,
-    pub index: u16,
 }
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableTypeAttr {
-    pub start_pc: u16,
-    pub length: u16,
+    pub key: LocalVariableKey,
     pub name: String,
     pub signature: String,
-    pub index: u16,
 }
 
 #[derive(Debug)]

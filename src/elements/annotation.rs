@@ -1,8 +1,8 @@
-use super::field::ConstantValue;
+use super::{field::ConstantValue, references::ClassReference};
 
 #[derive(Debug)]
 pub struct Annotation {
-    pub annotation_type_desc: String,
+    pub annotation_type: ClassReference,
     pub element_value_pairs: Vec<(String, ElementValue)>,
 }
 
@@ -21,17 +21,11 @@ pub enum TargetInfo {
 }
 
 #[derive(Debug)]
-pub enum TypePathKind {
-    Array = 0x00,
-    Nested = 0x01,
-    Bound = 0x02,
-    TypeArgument = 0x03,
-}
-
-#[derive(Debug)]
-pub struct TypePathElement {
-    pub kind: TypePathKind,
-    pub argument_index: u8,
+pub enum TypePathElement {
+    Array,
+    Nested,
+    Bound,
+    TypeArgument(u8),
 }
 
 #[derive(Debug)]
@@ -46,7 +40,7 @@ pub struct TypeAnnotation {
 pub enum ElementValue {
     Constant(ConstantValue),
     EnumConstant {
-        type_name: String,
+        enum_type: ClassReference,
         const_name: String,
     },
     Class {

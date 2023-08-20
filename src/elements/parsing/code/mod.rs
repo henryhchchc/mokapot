@@ -6,7 +6,7 @@ use crate::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         field::FieldType,
         method::{
-            LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTypeAttr,
+            LineNumberTableEntry, LocalVariableDescAttr, LocalVariableKey, LocalVariableTypeAttr,
             VerificationTypeInfo,
         },
     },
@@ -45,12 +45,15 @@ impl LocalVariableDescAttr {
         let descriptor = constant_pool.get_str(&descriptor_index)?;
         let field_type = FieldType::new(descriptor)?;
         let index = read_u16(reader)?;
-        Ok(LocalVariableDescAttr {
+        let key = LocalVariableKey {
             start_pc,
             length,
+            index,
+        };
+        Ok(LocalVariableDescAttr {
+            key,
             name,
             field_type,
-            index,
         })
     }
 }
@@ -70,12 +73,15 @@ impl LocalVariableTypeAttr {
         let signature_index = read_u16(reader)?;
         let signature = constant_pool.get_string(&signature_index)?;
         let index = read_u16(reader)?;
-        Ok(LocalVariableTypeAttr {
+        let key = LocalVariableKey {
             start_pc,
             length,
+            index,
+        };
+        Ok(LocalVariableTypeAttr {
+            key,
             name,
             signature,
-            index,
         })
     }
 }
