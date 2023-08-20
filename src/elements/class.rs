@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    field::Field,
+    field::{Field, ConstantValue},
     method::Method,
     module::Module,
     references::{ClassReference, FieldReference, MethodReference, PackageReference},
@@ -62,14 +62,9 @@ pub struct EnclosingMethod {
 }
 
 #[derive(Debug)]
-pub struct BootstrapArgument {
-    pub cp_index: u16,
-}
-
-#[derive(Debug)]
 pub struct BootstrapMethod {
     pub method: MethodHandle,
-    pub argument_indeices: Vec<u16>,
+    pub arguments: Vec<ConstantValue>,
 }
 
 #[derive(Debug, PartialEq)]

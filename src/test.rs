@@ -41,7 +41,7 @@ fn test_class_name() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(
         ClassReference {
-            name: "org/pkg/MyClass".to_string()
+            binary_name: "org/pkg/MyClass".to_string()
         },
         my_class.this_class
     );
@@ -52,7 +52,7 @@ fn test_super_class_name() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(
         ClassReference {
-            name: "java/lang/Object".to_string()
+            binary_name: "java/lang/Object".to_string()
         },
         my_class.super_class
     );
@@ -64,7 +64,7 @@ fn test_interfaces() {
     let mut interfaces = my_class.interfaces.into_iter();
     assert_eq!(
         Some(ClassReference {
-            name: "java/lang/Cloneable".to_string()
+            binary_name: "java/lang/Cloneable".to_string()
         }),
         interfaces.next()
     );
@@ -96,7 +96,7 @@ fn test_methods() {
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
         FieldType::Object(ClassReference {
-            name: "java/lang/String".to_string()
+            binary_name: "java/lang/String".to_string()
         })
         .make_array_type(),
         main_method.descriptor.parameters_types[0]

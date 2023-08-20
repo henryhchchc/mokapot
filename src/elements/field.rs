@@ -33,15 +33,24 @@ pub enum ConstantValue {
     MethodType(MethodDescriptor),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+/// A primitive type in Java.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PrimitiveType {
+    /// The `boolean` type.
     Boolean,
+    /// The `char` type.
     Char,
+    /// The `float` type.
     Float,
+    /// The `double` type.
     Double,
+    /// The `byte` type.
     Byte,
+    /// The `short` type.
     Short,
+    /// The `int` type.
     Int,
+    /// The `long` type.
     Long,
 }
 
@@ -61,7 +70,7 @@ impl PrimitiveType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
     Object(ClassReference),
@@ -79,7 +88,9 @@ impl FieldType {
             Some('L') => {
                 let type_name = chars.take_while_ref(|it| *it != ';').collect::<String>();
                 match chars.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference { name: type_name })),
+                    Some(';') => Ok(FieldType::Object(ClassReference {
+                        binary_name: type_name,
+                    })),
                     _ => Err(ClassFileParsingError::InvalidDescriptor),
                 }
             }
@@ -179,7 +190,7 @@ mod test {
             .into_iter();
 
         let string_type = FieldType::Object(ClassReference {
-            name: "java/lang/String".to_string(),
+            binary_name: "java/lang/String".to_string(),
         });
 
         assert_eq!(types.next(), Some(FieldType::Base(Boolean)));

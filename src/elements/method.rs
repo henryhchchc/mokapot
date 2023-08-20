@@ -138,7 +138,7 @@ pub struct LocalVariableTableEntry {
 }
 
 #[derive(Debug)]
-pub struct LocalVariableDescAttr {
+pub(crate) struct LocalVariableDescAttr {
     pub start_pc: u16,
     pub length: u16,
     pub name: String,
@@ -147,7 +147,7 @@ pub struct LocalVariableDescAttr {
 }
 
 #[derive(Debug)]
-pub struct LocalVariableTypeAttr {
+pub(crate) struct LocalVariableTypeAttr {
     pub start_pc: u16,
     pub length: u16,
     pub name: String,
@@ -194,6 +194,7 @@ pub enum StackMapFrame {
 }
 
 bitflags! {
+    /// Access flags for a [`Method`].
     #[derive(Debug, PartialEq, Eq)]
     pub struct MethodAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
@@ -224,6 +225,7 @@ bitflags! {
 }
 
 bitflags! {
+    /// The access flags for a method parameter.
     #[derive(Debug, PartialEq, Eq)]
     pub struct MethodParameterAccessFlags: u16 {
         /// Declared `final`; may not be assigned to after initialization.
@@ -235,19 +237,40 @@ bitflags! {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+/// The descriptor of a method.
+/// Consists of the parameters types and the return type.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MethodDescriptor {
+    /// The type of the parameters.
     pub parameters_types: Vec<FieldType>,
+    /// The return type.
     pub return_type: ReturnType,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+/// Denotes the return type of a method.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ReturnType {
+    /// The method returns a specific type.
     Some(FieldType),
+    /// The return type of the method is `void`.
     Void,
 }
 
 impl MethodDescriptor {
+    /// Parses a method descriptor from a string and advances the iterator.
+    /// For an input as follows.
+    /// ```text
+    ///   L      java/lang/String;IJB)V
+    ///   ^      ^
+    ///   prefix remaining
+    /// ````
+    /// It returns a [`FieldType::Object`] with `"java/lang/String"` and the [remaining] is as
+    /// follows.
+    /// ```text
+    ///   ...;IJB)V
+    ///       ^
+    ///       remaining
+    /// ````
     fn parse_single_param(
         prefix: char,
         remaining: &mut Chars,
@@ -259,7 +282,7 @@ impl MethodDescriptor {
             'L' => {
                 let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
                 match remaining.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference { name: binary_name })),
+                    Some(';') => Ok(FieldType::Object(ClassReference { binary_name })),
                     _ => Err(ClassFileParsingError::InvalidDescriptor),
                 }
             }
@@ -273,13 +296,14 @@ impl MethodDescriptor {
         }
     }
 
-    pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+    /// Creates a new [`MethodDescriptor`] from the [descriptor].
+    pub fn new(descriptor: &str) -> Result<Self, ClassFileParsingError> {
         let mut chars = descriptor.chars();
         let mut parameters_types = Vec::new();
         let return_type = loop {
             match chars.next() {
                 Some('(') => {}
-                Some(')') => break ReturnType::from_descriptor(chars.as_str())?,
+                Some(')') => break ReturnType::new(chars.as_str())?,
                 Some(c) => {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
@@ -295,7 +319,7 @@ impl MethodDescriptor {
 }
 
 impl ReturnType {
-    pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+    pub fn new(descriptor: &str) -> Result<Self, ClassFileParsingError> {
         if descriptor == "V" {
             Ok(ReturnType::Void)
         } else {
@@ -317,8 +341,8 @@ mod test {
     #[test]
     fn single_param() {
         let descriptor = "(I)V";
-        let method_descriptor = MethodDescriptor::from_descriptor(descriptor)
-            .expect("Failed to parse method descriptor");
+        let method_descriptor =
+            MethodDescriptor::new(descriptor).expect("Failed to parse method descriptor");
         assert_eq!(method_descriptor.return_type, ReturnType::Void);
         assert_eq!(
             method_descriptor.parameters_types,
@@ -329,10 +353,10 @@ mod test {
     #[test]
     fn param_complex() {
         let descriptor = "(I[JLjava/lang/String;J)I";
-        let method_descriptor = MethodDescriptor::from_descriptor(descriptor)
-            .expect("Failed to parse method descriptor");
+        let method_descriptor =
+            MethodDescriptor::new(descriptor).expect("Failed to parse method descriptor");
         let string_type = FieldType::Object(ClassReference {
-            name: "java/lang/String".to_string(),
+            binary_name: "java/lang/String".to_string(),
         });
         assert_eq!(
             method_descriptor.return_type,
@@ -352,7 +376,7 @@ mod test {
     #[test]
     fn too_many_return_type() {
         let descriptor = "(I)VJ";
-        let method_descriptor = MethodDescriptor::from_descriptor(descriptor);
+        let method_descriptor = MethodDescriptor::new(descriptor);
         assert!(method_descriptor.is_err());
     }
 }

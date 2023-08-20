@@ -228,7 +228,7 @@ impl Method {
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
         let descriptor = constant_pool.get_str(&descriptor_index)?;
-        let descriptor = MethodDescriptor::from_descriptor(descriptor)?;
+        let descriptor = MethodDescriptor::new(descriptor)?;
 
         let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut body = None;

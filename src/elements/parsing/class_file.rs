@@ -19,15 +19,15 @@ impl BootstrapMethod {
         let bootstrap_method_ref = read_u16(reader)?;
         let method_ref = constant_pool.get_method_handle(&bootstrap_method_ref)?;
         let num_bootstrap_arguments = read_u16(reader)?;
-        let mut argument_indeices = Vec::with_capacity(num_bootstrap_arguments as usize);
+        let mut arguments = Vec::with_capacity(num_bootstrap_arguments as usize);
         for _ in 0..num_bootstrap_arguments {
             let arg_idx = read_u16(reader)?;
-            let _entry = constant_pool.get_entry(&arg_idx)?;
-            argument_indeices.push(arg_idx);
+            let arg = constant_pool.get_constant_value(&arg_idx)?;
+            arguments.push(arg);
         }
         Ok(BootstrapMethod {
             method: method_ref,
-            argument_indeices,
+            arguments
         })
     }
 }
