@@ -46,7 +46,7 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    pub fn from_descriptor(descriptor: &char) -> Result<Self, ClassFileParsingError> {
+    pub fn new(descriptor: &char) -> Result<Self, ClassFileParsingError> {
         match descriptor {
             'Z' => Ok(Self::Boolean),
             'C' => Ok(Self::Char),
@@ -73,7 +73,7 @@ impl FieldType {
         Self::Array(Box::new(self.clone()))
     }
 
-    pub fn from_descriptor(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+    pub fn new(descriptor: &str) -> Result<Self, ClassFileParsingError> {
         let mut chars = descriptor.chars();
         let result = match chars.next() {
             Some('L') => {
@@ -85,9 +85,9 @@ impl FieldType {
             }
             Some('[') => {
                 // Skip trailing character checking via `return`
-                return FieldType::from_descriptor(chars.as_str()).map(|it| it.make_array_type());
+                return FieldType::new(chars.as_str()).map(|it| it.make_array_type());
             }
-            Some(ref c) => PrimitiveType::from_descriptor(c).map(|it| FieldType::Base(it)),
+            Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
             None => Err(ClassFileParsingError::InvalidDescriptor),
         }?;
         // Check if there is any trailing character
@@ -137,7 +137,7 @@ mod test {
         let descs = vec!['Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J'];
         let mut types = descs
             .into_iter()
-            .map(|ref d| PrimitiveType::from_descriptor(d))
+            .map(|ref d| PrimitiveType::new(d))
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse primitive types")
             .into_iter();
@@ -153,7 +153,7 @@ mod test {
 
     #[test]
     fn parse_invalid_primitive_type() {
-        assert!(PrimitiveType::from_descriptor(&'A').is_err())
+        assert!(PrimitiveType::new(&'A').is_err())
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod test {
         ];
         let mut types = descriptors
             .into_iter()
-            .map(|ref it| FieldType::from_descriptor(it))
+            .map(|ref it| FieldType::new(it))
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse field types")
             .into_iter();
@@ -201,12 +201,12 @@ mod test {
     #[test]
     fn missing_semicolon() {
         let descriptor = "Ljava/lang/String";
-        assert!(FieldType::from_descriptor(descriptor).is_err())
+        assert!(FieldType::new(descriptor).is_err())
     }
 
     #[test]
     fn tailing_chars() {
         let descriptor = "Ljava/lang/String;A";
-        assert!(FieldType::from_descriptor(descriptor).is_err())
+        assert!(FieldType::new(descriptor).is_err())
     }
 }

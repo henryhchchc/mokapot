@@ -4,8 +4,9 @@ pub(super) mod stack_map;
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        field::FieldType,
         method::{
-            LineNumberTableEntry, LocalVariableTableEntry, LocalVariableTypeTableEntry,
+            LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTypeAttr,
             VerificationTypeInfo,
         },
     },
@@ -28,11 +29,11 @@ impl LineNumberTableEntry {
     }
 }
 
-impl LocalVariableTableEntry {
+impl LocalVariableDescAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<LocalVariableTableEntry>
+    ) -> ClassFileParsingResult<LocalVariableDescAttr>
     where
         R: std::io::Read,
     {
@@ -41,23 +42,24 @@ impl LocalVariableTableEntry {
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_string(&descriptor_index)?;
+        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let field_type = FieldType::new(descriptor)?;
         let index = read_u16(reader)?;
-        Ok(LocalVariableTableEntry {
+        Ok(LocalVariableDescAttr {
             start_pc,
             length,
             name,
-            descriptor,
+            field_type,
             index,
         })
     }
 }
 
-impl LocalVariableTypeTableEntry {
+impl LocalVariableTypeAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<LocalVariableTypeTableEntry>
+    ) -> ClassFileParsingResult<LocalVariableTypeAttr>
     where
         R: std::io::Read,
     {
@@ -68,7 +70,7 @@ impl LocalVariableTypeTableEntry {
         let signature_index = read_u16(reader)?;
         let signature = constant_pool.get_string(&signature_index)?;
         let index = read_u16(reader)?;
-        Ok(LocalVariableTypeTableEntry {
+        Ok(LocalVariableTypeAttr {
             start_pc,
             length,
             name,

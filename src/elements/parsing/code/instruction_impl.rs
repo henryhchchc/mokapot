@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::ConstantValue,
+        field::{ConstantValue, PrimitiveType},
         instruction::Instruction,
         parsing::constant_pool::ConstantPool,
         references::MethodReference,
@@ -344,7 +344,21 @@ impl Instruction {
                 let class_ref = constant_pool.get_class_ref(&index)?;
                 Self::New(class_ref)
             }
-            0xbc => Self::NewArray(read_u8(reader)?),
+            0xbc => {
+                let type_id = read_u8(reader)?;
+                let arr_type = match type_id {
+                    4 => PrimitiveType::Boolean,
+                    5 => PrimitiveType::Char,
+                    6 => PrimitiveType::Float,
+                    7 => PrimitiveType::Double,
+                    8 => PrimitiveType::Byte,
+                    9 => PrimitiveType::Short,
+                    10 => PrimitiveType::Int,
+                    11 => PrimitiveType::Long,
+                    _ => Err(ClassFileParsingError::MalformedClassFile)?
+                };
+                Self::NewArray(arr_type)
+            }
             0x00 => Self::Nop,
             0x57 => Self::Pop,
             0x58 => Self::Pop2,

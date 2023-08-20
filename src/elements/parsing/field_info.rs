@@ -40,7 +40,7 @@ impl Field {
         let name = constant_pool.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
         let descriptor = constant_pool.get_str(&descriptor_index)?;
-        let field_type = FieldType::from_descriptor(descriptor)?;
+        let field_type = FieldType::new(descriptor)?;
 
         let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut constant_value = None;

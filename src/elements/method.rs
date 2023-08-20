@@ -1,3 +1,4 @@
+use core::str;
 use std::str::Chars;
 
 use bitflags::bitflags;
@@ -42,8 +43,7 @@ pub struct MethodBody {
     pub instructions: Vec<Instruction>,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
-    pub local_variable_table: Option<Vec<LocalVariableTableEntry>>,
-    pub local_variable_type_table: Option<Vec<LocalVariableTypeTableEntry>>,
+    pub local_variable_table: Option<LocalVariableTable>,
     pub stack_map_table: Option<Vec<StackMapFrame>>,
 }
 
@@ -62,16 +62,92 @@ pub struct LineNumberTableEntry {
 }
 
 #[derive(Debug)]
+pub struct LocalVariableTable {
+    entries: Vec<LocalVariableTableEntry>,
+}
+
+impl LocalVariableTable {
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    pub(crate) fn merge_desc_attr(&mut self, attrs: Vec<LocalVariableDescAttr>) {
+        for LocalVariableDescAttr {
+            start_pc,
+            length,
+            name,
+            field_type,
+            index,
+        } in attrs.into_iter()
+        {
+            let entry = self
+                .entries
+                .iter_mut()
+                .find(|it| it.start_pc == start_pc && it.length == length && it.name == name);
+            match entry {
+                Some(it) => it.var_type = Some(field_type),
+                None => self.entries.push(LocalVariableTableEntry {
+                    start_pc,
+                    length,
+                    name,
+                    var_type: Some(field_type),
+                    signature: None,
+                    index,
+                }),
+            }
+        }
+    }
+    pub(crate) fn merge_type_attr(&mut self, attrs: Vec<LocalVariableTypeAttr>) {
+        for LocalVariableTypeAttr {
+            start_pc,
+            length,
+            name,
+            signature,
+            index,
+        } in attrs.into_iter()
+        {
+            let entry = self
+                .entries
+                .iter_mut()
+                .find(|it| it.start_pc == start_pc && it.length == length && it.name == name);
+            match entry {
+                Some(it) => it.signature = Some(signature),
+                None => self.entries.push(LocalVariableTableEntry {
+                    start_pc,
+                    length,
+                    name,
+                    var_type: None,
+                    signature: Some(signature),
+                    index,
+                }),
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct LocalVariableTableEntry {
     pub start_pc: u16,
     pub length: u16,
     pub name: String,
-    pub descriptor: String,
+    pub var_type: Option<FieldType>,
+    pub signature: Option<String>,
     pub index: u16,
 }
 
 #[derive(Debug)]
-pub struct LocalVariableTypeTableEntry {
+pub struct LocalVariableDescAttr {
+    pub start_pc: u16,
+    pub length: u16,
+    pub name: String,
+    pub field_type: FieldType,
+    pub index: u16,
+}
+
+#[derive(Debug)]
+pub struct LocalVariableTypeAttr {
     pub start_pc: u16,
     pub length: u16,
     pub name: String,
@@ -176,7 +252,7 @@ impl MethodDescriptor {
         prefix: char,
         remaining: &mut Chars,
     ) -> Result<FieldType, ClassFileParsingError> {
-        if let Ok(p) = PrimitiveType::from_descriptor(&prefix) {
+        if let Ok(p) = PrimitiveType::new(&prefix) {
             return Ok(FieldType::Base(p));
         }
         match prefix {
@@ -223,7 +299,7 @@ impl ReturnType {
         if descriptor == "V" {
             Ok(ReturnType::Void)
         } else {
-            FieldType::from_descriptor(descriptor).map(ReturnType::Some)
+            FieldType::new(descriptor).map(ReturnType::Some)
         }
     }
 }

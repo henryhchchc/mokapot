@@ -206,7 +206,7 @@ impl ConstantPool {
 
     pub(crate) fn get_array_type_ref(&self, index: &u16) -> ClassFileParsingResult<ArrayTypeRef> {
         let ClassReference { name } = self.get_class_ref(index)?;
-        let FieldType::Array(b) = FieldType::from_descriptor(&name)? else {
+        let FieldType::Array(b) = FieldType::new(&name)? else {
             return Err(ClassFileParsingError::MalformedClassFile);
         };
         let mut dim = 1;

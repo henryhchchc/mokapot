@@ -3,9 +3,9 @@ use crate::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         instruction::Instruction,
         method::{
-            ExceptionTableEntry, LineNumberTableEntry, LocalVariableTableEntry,
-            LocalVariableTypeTableEntry, Method, MethodAccessFlags, MethodBody, MethodDescriptor,
-            MethodParameter, MethodParameterAccessFlags, StackMapFrame,
+            ExceptionTableEntry, LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTable,
+            LocalVariableTypeAttr, MethodBody, MethodDescriptor, MethodParameter,
+            MethodParameterAccessFlags, StackMapFrame, Method, MethodAccessFlags,
         },
         parsing::constant_pool::ConstantPool,
     },
@@ -80,17 +80,20 @@ impl Attribute {
         let attributes = AttributeList::parse(reader, constant_pool)?;
         let mut line_number_table = None;
         let mut local_variable_table = None;
-        let mut local_variable_type_table = None;
         let mut stack_map_table = None;
 
         for attr in attributes.into_iter() {
             match attr {
                 Attribute::LineNumberTable(it) => line_number_table = Some(it),
-                Attribute::LocalVariableTable(it) => local_variable_table = Some(it),
-                Attribute::LocalVariableTypeTable(it) => local_variable_type_table = Some(it),
+                Attribute::LocalVariableTable(it) => local_variable_table
+                    .get_or_insert(LocalVariableTable::new())
+                    .merge_desc_attr(it),
+                Attribute::LocalVariableTypeTable(it) => local_variable_table
+                    .get_or_insert(LocalVariableTable::new())
+                    .merge_type_attr(it),
                 Attribute::StackMapTable(it) => stack_map_table = Some(it),
                 _ => return Err(ClassFileParsingError::UnexpectedAttribute),
-            }
+            };
         }
 
         Ok(Attribute::Code(MethodBody {
@@ -100,7 +103,6 @@ impl Attribute {
             instructions,
             line_number_table,
             local_variable_table,
-            local_variable_type_table,
             stack_map_table,
         }))
     }
@@ -115,7 +117,7 @@ impl Attribute {
         let table_len = read_u16(reader)?;
         let mut local_variable_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
-            let entry = LocalVariableTableEntry::parse(reader, constant_pool)?;
+            let entry = LocalVariableDescAttr::parse(reader, constant_pool)?;
             local_variable_table.push(entry);
         }
         Ok(Attribute::LocalVariableTable(local_variable_table))
@@ -132,7 +134,7 @@ impl Attribute {
         let table_len = read_u16(reader)?;
         let mut local_variable_type_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
-            let entry = LocalVariableTypeTableEntry::parse(reader, constant_pool)?;
+            let entry = LocalVariableTypeAttr::parse(reader, constant_pool)?;
             local_variable_type_table.push(entry);
         }
         Ok(Attribute::LocalVariableTypeTable(local_variable_type_table))

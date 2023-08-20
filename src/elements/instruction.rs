@@ -1,6 +1,6 @@
 use super::{
     class::MethodHandle,
-    field::ConstantValue,
+    field::{ConstantValue, PrimitiveType},
     references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
 };
 
@@ -219,7 +219,7 @@ pub enum Instruction {
     InvokeInterface(InterfaceMethodReference, u8),
     InvokeDynamic(MethodHandle),
     New(ClassReference),
-    NewArray(u8),
+    NewArray(PrimitiveType),
     ANewArray(ArrayTypeRef),
     ArrayLength,
     AThrow,
