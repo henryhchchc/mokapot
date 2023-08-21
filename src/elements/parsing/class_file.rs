@@ -66,7 +66,11 @@ impl Attribute {
                 Some(the_class)
             };
             let inner_name_index = read_u16(reader)?;
-            let inner_name = constant_pool.get_string(&inner_name_index)?;
+            let inner_name = if inner_name_index == 0 {
+                None
+            } else {
+                Some(constant_pool.get_string(&inner_name_index)?)
+            };
             let inner_class_access_flags = read_u16(reader)?;
             classes.push(InnerClassInfo {
                 inner_class,

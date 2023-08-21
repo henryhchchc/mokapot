@@ -159,14 +159,14 @@ pub enum ClassFileParsingError {
     InvalidAttributeLength { expected: u32, actual: u32 },
     UnexpectedAttribute,
     UnexpectedData,
-    InvalidElementValueTag(u8),
+    InvalidElementValueTag(char),
     InvalidTargetType(u8),
     InvalidTypePathKind,
     UnknownStackMapFrameType(u8),
     InvalidVerificationTypeInfoTag(u8),
-    UnexpectedOpCode,
+    UnexpectedOpCode(u8),
     UnknownFlags(u16),
-    InvalidDescriptor,
+    InvalidDescriptor(String),
 }
 
 impl From<std::io::Error> for ClassFileParsingError {
@@ -178,9 +178,8 @@ impl From<std::io::Error> for ClassFileParsingError {
 impl std::fmt::Display for ClassFileParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            _ => write!(f, "{:?}", self)
+            _ => write!(f, "{:?}", self),
         }
-
     }
 }
 

@@ -26,7 +26,11 @@ impl ExceptionTableEntry {
         let end_pc = read_u16(reader)?;
         let handler_pc = read_u16(reader)?;
         let catch_type_idx = read_u16(reader)?;
-        let catch_type = constant_pool.get_class_ref(&catch_type_idx)?;
+        let catch_type = if catch_type_idx == 0 {
+            None
+        } else {
+            Some(constant_pool.get_class_ref(&catch_type_idx)?)
+        };
         Ok(ExceptionTableEntry {
             start_pc,
             end_pc,

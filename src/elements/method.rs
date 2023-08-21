@@ -52,7 +52,7 @@ pub struct ExceptionTableEntry {
     pub start_pc: u16,
     pub end_pc: u16,
     pub handler_pc: u16,
-    pub catch_type: ClassReference,
+    pub catch_type: Option<ClassReference>,
 }
 
 #[derive(Debug)]
@@ -253,21 +253,22 @@ impl MethodDescriptor {
         if let Ok(p) = PrimitiveType::new(&prefix) {
             return Ok(FieldType::Base(p));
         }
+        let build_err = |rem: &Chars| {
+            ClassFileParsingError::InvalidDescriptor(format!("{}{}", prefix, rem.as_str()))
+        };
         match prefix {
             'L' => {
                 let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
                 match remaining.next() {
                     Some(';') => Ok(FieldType::Object(ClassReference { binary_name })),
-                    _ => Err(ClassFileParsingError::InvalidDescriptor),
+                    _ => Err(build_err(remaining)),
                 }
             }
             '[' => {
-                let next_prefix = remaining
-                    .next()
-                    .ok_or(ClassFileParsingError::InvalidDescriptor)?;
+                let next_prefix = remaining.next().ok_or(build_err(remaining))?;
                 Self::parse_single_param(next_prefix, remaining).map(|p| p.make_array_type())
             }
-            _ => todo!(),
+            _ => Err(build_err(remaining)),
         }
     }
 
@@ -283,7 +284,9 @@ impl MethodDescriptor {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
                 }
-                None => Err(ClassFileParsingError::InvalidDescriptor)?,
+                None => Err(ClassFileParsingError::InvalidDescriptor(
+                    descriptor.to_string(),
+                ))?,
             }
         };
         Ok(Self {

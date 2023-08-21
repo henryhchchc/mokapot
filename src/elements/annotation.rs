@@ -1,8 +1,11 @@
-use super::{field::ConstantValue, references::ClassReference};
+use super::{
+    field::{ConstantValue, FieldType},
+    references::ClassReference,
+};
 
 #[derive(Debug)]
 pub struct Annotation {
-    pub annotation_type: ClassReference,
+    pub annotation_type: FieldType,
     pub element_value_pairs: Vec<(String, ElementValue)>,
 }
 

@@ -220,7 +220,7 @@ pub enum Instruction {
     InvokeDynamic(u16, String, MethodDescriptor),
     New(ClassReference),
     NewArray(PrimitiveType),
-    ANewArray(ArrayTypeRef),
+    ANewArray(ClassReference),
     ArrayLength,
     AThrow,
     CheckCast(u16),

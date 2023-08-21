@@ -51,7 +51,7 @@ pub struct ClassVersion {
 pub struct InnerClassInfo {
     pub inner_class: ClassReference,
     pub outer_class: Option<ClassReference>,
-    pub inner_name: String,
+    pub inner_name: Option<String>,
     pub inner_class_access_flags: u16,
 }
 

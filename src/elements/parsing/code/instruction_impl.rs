@@ -52,8 +52,8 @@ impl Instruction {
             0x2d => Self::ALoad3,
             0xbd => {
                 let index = read_u16(reader)?;
-                let array_type = constant_pool.get_array_type_ref(&index)?;
-                Self::ANewArray(array_type)
+                let element_type = constant_pool.get_class_ref(&index)?;
+                Self::ANewArray(element_type)
             }
             0xb0 => Self::AReturn,
             0xbe => Self::ArrayLength,
@@ -138,6 +138,7 @@ impl Instruction {
                 let field = constant_pool.get_field_ref(&index)?;
                 Self::GetStatic(field)
             }
+            0xa7 => Self::Goto(read_i16(reader)?),
             0xc8 => Self::GotoW(read_i32(reader)?),
             0x91 => Self::I2B,
             0x92 => Self::I2C,
@@ -412,10 +413,10 @@ impl Instruction {
                     0x3a => Self::WideAStore(read_u16(reader)?),
                     0xa9 => Self::WideRet(read_u16(reader)?),
                     0x84 => Self::WideIInc(read_u16(reader)?, read_i16(reader)?),
-                    _ => Err(ClassFileParsingError::UnexpectedOpCode)?,
+                    it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
                 }
             }
-            _ => Err(ClassFileParsingError::UnexpectedOpCode)?,
+            it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
         };
         Ok(Some(instruction))
     }

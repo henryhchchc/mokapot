@@ -2,7 +2,7 @@ use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::ConstantValue,
+        field::{ConstantValue, FieldType},
     },
     utils::{read_u16, read_u32, read_u8},
 };
@@ -15,10 +15,10 @@ impl ElementValue {
         R: std::io::Read,
     {
         let tag = read_u8(reader)?;
-        let const_value_index = read_u16(reader)?;
 
         macro_rules! read_constant {
             ($constant_type:path) => {{
+                let const_value_index = read_u16(reader)?;
                 let $constant_type(value) = constant_pool.get_constant_value(&const_value_index)? else {
                                 return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
                             };
@@ -30,7 +30,11 @@ impl ElementValue {
             'D' => read_constant!(ConstantValue::Double),
             'F' => read_constant!(ConstantValue::Float),
             'J' => read_constant!(ConstantValue::Long),
-            's' => read_constant!(ConstantValue::String),
+            's' => {
+                let utf8_idx = read_u16(reader)?;
+                let string = constant_pool.get_string(&utf8_idx)?;
+                Ok(Self::Constant(ConstantValue::String(string)))
+            }
             'e' => {
                 let enum_type_idx = read_u16(reader)?;
                 let enum_type = constant_pool.get_class_ref(&enum_type_idx)?;
@@ -55,7 +59,7 @@ impl ElementValue {
                 }
                 Ok(Self::Array(values))
             }
-            _ => Err(ClassFileParsingError::InvalidElementValueTag(tag)),
+            _ => Err(ClassFileParsingError::InvalidElementValueTag(tag as char)),
         }
     }
 }
@@ -66,7 +70,8 @@ impl Annotation {
         R: std::io::Read,
     {
         let type_idx = read_u16(reader)?;
-        let annotation_type = constant_pool.get_class_ref(&type_idx)?;
+        let annotation_type = constant_pool.get_str(&type_idx)?;
+        let annotation_type = FieldType::new(annotation_type)?;
         let num_element_value_pairs = read_u16(reader)?;
         let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
         for _ in 0..num_element_value_pairs {

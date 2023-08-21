@@ -226,6 +226,9 @@ impl ConstantPool {
 
     pub(crate) fn get_array_type_ref(&self, index: &u16) -> ClassFileParsingResult<ArrayTypeRef> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
+        if !name.starts_with('[') {
+            return Err(ClassFileParsingError::MalformedClassFile);
+        }
         let FieldType::Array(b) = FieldType::new(&name)? else {
             return Err(ClassFileParsingError::MalformedClassFile);
         };
