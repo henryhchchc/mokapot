@@ -177,7 +177,10 @@ impl From<std::io::Error> for ClassFileParsingError {
 
 impl std::fmt::Display for ClassFileParsingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Oops")
+        match self {
+            _ => write!(f, "{:?}", self)
+        }
+
     }
 }
 
