@@ -27,7 +27,7 @@ impl BootstrapMethod {
         }
         Ok(BootstrapMethod {
             method: method_ref,
-            arguments
+            arguments,
         })
     }
 }

@@ -67,7 +67,6 @@ pub struct LocalVariableTable {
 }
 
 impl LocalVariableTable {
-
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),

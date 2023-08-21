@@ -41,7 +41,7 @@ pub struct InterfaceMethodReference {
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
-    pub descriptor: MethodDescriptor
+    pub descriptor: MethodDescriptor,
 }
 
 /// A reference to a class method.

@@ -1,6 +1,6 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    class::MethodHandle,
+    class::Handle,
     class_parser::ClassFileParsingError,
     method::MethodDescriptor,
     references::ClassReference,
@@ -29,8 +29,9 @@ pub enum ConstantValue {
     Double(f64),
     String(String),
     Class(ClassReference),
-    MethodHandle(MethodHandle),
+    Handle(Handle),
     MethodType(MethodDescriptor),
+    Dynamic(u16, String, FieldType),
 }
 
 /// A primitive type in Java.

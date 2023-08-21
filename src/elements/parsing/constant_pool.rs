@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     elements::{
-        class::MethodHandle,
+        class::Handle,
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         field::{ConstantValue, FieldType},
         instruction::ArrayTypeRef,
@@ -32,7 +32,7 @@ impl ConstantPool {
     }
 
     pub fn get_entry(&self, index: &u16) -> ClassFileParsingResult<&ConstantPoolEntry> {
-        let Some(entry) = self.entries.get(index) else { 
+        let Some(entry) = self.entries.get(index) else {
             return Err(ClassFileParsingError::BadConstantPoolIndex);
         };
         Ok(entry)
@@ -86,7 +86,19 @@ impl ConstantPool {
             }
             ConstantPoolEntry::MethodHandle { .. } => {
                 let method_handle = self.get_method_handle(value_index)?;
-                Ok(ConstantValue::MethodHandle(method_handle))
+                Ok(ConstantValue::Handle(method_handle))
+            }
+            ConstantPoolEntry::Dynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                let (name, descriptor_str) = self.get_name_and_type(&name_and_type_index)?;
+                let descriptor = FieldType::new(descriptor_str)?;
+                Ok(ConstantValue::Dynamic(
+                    *bootstrap_method_attr_index,
+                    name.to_string(),
+                    descriptor,
+                ))
             }
             _ => Err(ClassFileParsingError::MidmatchedConstantPoolTag),
         }
@@ -129,14 +141,17 @@ impl ConstantPool {
                 return Ok(FieldReference {
                     class,
                     name,
-                    field_type
+                    field_type,
                 });
             }
         }
         Err(ClassFileParsingError::MidmatchedConstantPoolTag)
     }
 
-    fn get_name_and_type<'a>(&'a self, index: &u16) -> ClassFileParsingResult<(&'a str, &'a str)> {
+    pub(crate) fn get_name_and_type<'a>(
+        &'a self,
+        index: &u16,
+    ) -> ClassFileParsingResult<(&'a str, &'a str)> {
         let entry = self.get_entry(index)?;
         if let ConstantPoolEntry::NameAndType {
             name_index,
@@ -160,7 +175,7 @@ impl ConstantPool {
             let class = self.get_class_ref(class_index)?;
             let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
             let name = name.to_string();
-            let descriptor =  MethodDescriptor::new(descriptor_str)?;
+            let descriptor = MethodDescriptor::new(descriptor_str)?;
             return Ok(MethodReference::Class(ClassMethodReference {
                 class,
                 name,
@@ -184,8 +199,8 @@ impl ConstantPool {
         Err(ClassFileParsingError::MidmatchedConstantPoolTag)
     }
 
-    pub(crate) fn get_method_handle(&self, index: &u16) -> ClassFileParsingResult<MethodHandle> {
-        use MethodHandle::*;
+    pub(crate) fn get_method_handle(&self, index: &u16) -> ClassFileParsingResult<Handle> {
+        use Handle::*;
 
         let ConstantPoolEntry::MethodHandle {
             reference_kind,
@@ -223,7 +238,7 @@ impl ConstantPool {
                     current_type = *e;
                     dim += 1;
                 }
-                _ => return Err(ClassFileParsingError::MalformedClassFile)
+                _ => return Err(ClassFileParsingError::MalformedClassFile),
             }
         };
         Ok(ArrayTypeRef {

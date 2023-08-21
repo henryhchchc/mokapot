@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    field::{Field, ConstantValue},
+    field::{ConstantValue, Field},
     method::Method,
     module::Module,
     references::{ClassReference, FieldReference, MethodReference, PackageReference},
@@ -63,12 +63,12 @@ pub struct EnclosingMethod {
 
 #[derive(Debug)]
 pub struct BootstrapMethod {
-    pub method: MethodHandle,
+    pub method: Handle,
     pub arguments: Vec<ConstantValue>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum MethodHandle {
+pub enum Handle {
     RefGetField(FieldReference),
     RefGetStatic(FieldReference),
     RefPutField(FieldReference),

@@ -1,8 +1,6 @@
 use crate::{
     elements::{
-        annotation::{
-            Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement,
-        },
+        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
         field::ConstantValue,
     },

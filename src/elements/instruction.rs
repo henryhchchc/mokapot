@@ -1,6 +1,6 @@
 use super::{
-    class::MethodHandle,
     field::{ConstantValue, PrimitiveType},
+    method::MethodDescriptor,
     references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
 };
 
@@ -217,7 +217,7 @@ pub enum Instruction {
     InvokeSpecial(MethodReference),
     InvokeStatic(MethodReference),
     InvokeInterface(InterfaceMethodReference, u8),
-    InvokeDynamic(MethodHandle),
+    InvokeDynamic(u16, String, MethodDescriptor),
     New(ClassReference),
     NewArray(PrimitiveType),
     ANewArray(ArrayTypeRef),

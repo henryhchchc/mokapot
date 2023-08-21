@@ -1,9 +1,10 @@
 use crate::{
     elements::{
         class_parser::{ClassFileParsingError, ClassFileParsingResult},
-        field::{ConstantValue, PrimitiveType},
+        field::{ConstantValue, FieldType, PrimitiveType},
         instruction::Instruction,
-        parsing::constant_pool::ConstantPool,
+        method::MethodDescriptor,
+        parsing::constant_pool::{ConstantPool, ConstantPoolEntry},
         references::MethodReference,
     },
     utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
@@ -183,12 +184,19 @@ impl Instruction {
             0xc1 => Self::InstanceOf(read_u16(reader)?),
             0xba => {
                 let index = read_u16(reader)?;
-                let method_handle = constant_pool.get_method_handle(&index)?;
+                let ConstantPoolEntry::InvokeDynamic {
+                    bootstrap_method_attr_index: bootstrap_method_index,
+                    name_and_type_index,
+                } = constant_pool.get_entry(&index)? else {
+                    Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
+                };
+                let (name, desc_str) = constant_pool.get_name_and_type(&name_and_type_index)?;
+                let descriptor = MethodDescriptor::new(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile)?
                 }
-                Self::InvokeDynamic(method_handle)
+                Self::InvokeDynamic(*bootstrap_method_index, name.to_string(), descriptor)
             }
             0xb9 => {
                 let index = read_u16(reader)?;
@@ -243,33 +251,44 @@ impl Instruction {
             0x09 => Self::LConst0,
             0x0a => Self::LConst1,
             0x12 => {
+                use FieldType::Base;
+                use PrimitiveType::{Double, Long};
                 let index = read_u8(reader)? as u16;
                 let constant = match constant_pool.get_constant_value(&index)? {
-                    ConstantValue::Long(_) | ConstantValue::Double(_) => {
+                    ConstantValue::Long(_)
+                    | ConstantValue::Double(_)
+                    | ConstantValue::Dynamic(_, _, Base(Long))
+                    | ConstantValue::Dynamic(_, _, Base(Double)) => {
                         Err(ClassFileParsingError::MalformedClassFile)?
                     }
-                    // TODO: Check dynamically computed symbolic reference
                     it @ _ => it,
                 };
                 Self::Ldc(constant)
             }
             0x13 => {
+                use FieldType::Base;
+                use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
                 let constant = match constant_pool.get_constant_value(&index)? {
-                    ConstantValue::Long(_) | ConstantValue::Double(_) => {
+                    ConstantValue::Long(_)
+                    | ConstantValue::Double(_)
+                    | ConstantValue::Dynamic(_, _, Base(Long))
+                    | ConstantValue::Dynamic(_, _, Base(Double)) => {
                         Err(ClassFileParsingError::MalformedClassFile)?
                     }
-                    // TODO: Check dynamically computed symbolic reference
                     it @ _ => it,
                 };
                 Self::LdcW(constant)
             }
             0x14 => {
+                use FieldType::Base;
+                use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
                 let constant = match constant_pool.get_constant_value(&index)? {
-                    it @ ConstantValue::Long(_) => it,
-                    it @ ConstantValue::Double(_) => it,
-                    // TODO: Check dynamically computed symbolic reference
+                    it @ (ConstantValue::Long(_)
+                    | ConstantValue::Double(_)
+                    | ConstantValue::Dynamic(_, _, Base(Long))
+                    | ConstantValue::Dynamic(_, _, Base(Double))) => it,
                     _ => Err(ClassFileParsingError::MalformedClassFile)?,
                 };
                 Self::Ldc2W(constant)
@@ -355,7 +374,7 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(ClassFileParsingError::MalformedClassFile)?
+                    _ => Err(ClassFileParsingError::MalformedClassFile)?,
                 };
                 Self::NewArray(arr_type)
             }
