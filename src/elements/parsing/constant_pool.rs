@@ -42,7 +42,7 @@ impl ConstantPool {
         if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
             Ok(string.clone())
         } else {
-            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+            Err(ClassFileParsingError::MismatchedConstantPoolTag)
         }
     }
 
@@ -50,13 +50,13 @@ impl ConstantPool {
         if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
             Ok(string)
         } else {
-            Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+            Err(ClassFileParsingError::MismatchedConstantPoolTag)
         }
     }
 
     pub fn get_class_ref(&self, index: &u16) -> ClassFileParsingResult<ClassReference> {
         let ConstantPoolEntry::Class { name_index } = self.get_entry(index)? else {
-            return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
+            return Err(ClassFileParsingError::MismatchedConstantPoolTag);
         };
         let name = self.get_string(&name_index)?;
         Ok(ClassReference { binary_name: name })
@@ -100,7 +100,7 @@ impl ConstantPool {
                     descriptor,
                 ))
             }
-            _ => Err(ClassFileParsingError::MidmatchedConstantPoolTag),
+            _ => Err(ClassFileParsingError::MismatchedConstantPoolTag),
         }
     }
 
@@ -110,7 +110,7 @@ impl ConstantPool {
             let name = self.get_string(&name_index)?;
             return Ok(ModuleReference { name });
         }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolTag)
     }
 
     pub(crate) fn get_package_ref(&self, index: &u16) -> ClassFileParsingResult<PackageReference> {
@@ -119,7 +119,7 @@ impl ConstantPool {
             let name = self.get_string(&name_index)?;
             return Ok(PackageReference { binary_name: name });
         }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolTag)
     }
 
     pub(crate) fn get_field_ref(&self, index: &u16) -> ClassFileParsingResult<FieldReference> {
@@ -145,7 +145,7 @@ impl ConstantPool {
                 });
             }
         }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolTag)
     }
 
     pub(crate) fn get_name_and_type<'a>(
@@ -162,7 +162,7 @@ impl ConstantPool {
             let descriptor = self.get_str(&descriptor_index)?;
             return Ok((name, descriptor));
         }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
+        Err(ClassFileParsingError::MismatchedConstantPoolTag)?
     }
 
     pub(crate) fn get_method_ref(&self, index: &u16) -> ClassFileParsingResult<MethodReference> {
@@ -196,7 +196,7 @@ impl ConstantPool {
                 descriptor,
             }));
         }
-        Err(ClassFileParsingError::MidmatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolTag)
     }
 
     pub(crate) fn get_method_handle(&self, index: &u16) -> ClassFileParsingResult<Handle> {
@@ -206,7 +206,7 @@ impl ConstantPool {
             reference_kind,
             reference_index: idx,
         } = self.get_entry(&index)? else {
-            Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
+            Err(ClassFileParsingError::MismatchedConstantPoolTag)?
         };
 
         let result = match reference_kind {

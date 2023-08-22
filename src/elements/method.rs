@@ -267,7 +267,7 @@ impl MethodDescriptor {
                 }
             }
             '[' => {
-                let next_prefix = remaining.next().ok_or(build_err(remaining))?;
+                let next_prefix = remaining.next().ok_or_else(|| build_err(remaining))?;
                 Self::parse_single_param(next_prefix, remaining).map(|p| p.make_array_type())
             }
             _ => Err(build_err(remaining)),

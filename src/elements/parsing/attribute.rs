@@ -108,10 +108,14 @@ impl Attribute {
             }
             "Deprecated" => Self::parse_deprecated(reader, constant_pool),
             "RuntimeVisibleAnnotations" => {
+                let _attribute_length = read_u32(reader)?;
                 Self::parse_annotations(reader, constant_pool).map(Self::RuntimeVisibleAnnotations)
             }
-            "RuntimeInvisibleAnnotations" => Self::parse_annotations(reader, constant_pool)
-                .map(Self::RuntimeInvisibleAnnotations),
+            "RuntimeInvisibleAnnotations" => {
+                let _attribute_length = read_u32(reader)?;
+                Self::parse_annotations(reader, constant_pool)
+                    .map(Self::RuntimeInvisibleAnnotations)
+            }
             "RuntimeVisibleParameterAnnotations" => {
                 Self::parse_parameter_annotations(reader, constant_pool)
                     .map(Self::RuntimeVisibleParameterAnnotations)
@@ -204,7 +208,7 @@ impl Attribute {
             None
         } else {
             let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = constant_pool.get_entry(&method_index)? else {
-                return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
+                return Err(ClassFileParsingError::MismatchedConstantPoolTag);
             };
             let name = constant_pool.get_string(name_index)?;
             let descriptor = constant_pool.get_string(descriptor_index)?;

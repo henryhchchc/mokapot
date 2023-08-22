@@ -43,7 +43,7 @@ pub struct TypeAnnotation {
 pub enum ElementValue {
     Constant(ConstantValue),
     EnumConstant {
-        enum_type: ClassReference,
+        enum_type_name: String,
         const_name: String,
     },
     Class {

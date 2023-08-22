@@ -20,7 +20,7 @@ impl ElementValue {
             ($constant_type:path) => {{
                 let const_value_index = read_u16(reader)?;
                 let $constant_type(value) = constant_pool.get_constant_value(&const_value_index)? else {
-                                return Err(ClassFileParsingError::MidmatchedConstantPoolTag);
+                                return Err(ClassFileParsingError::MismatchedConstantPoolTag);
                             };
                 Ok(Self::Constant($constant_type(value)))
             }};
@@ -36,12 +36,12 @@ impl ElementValue {
                 Ok(Self::Constant(ConstantValue::String(string)))
             }
             'e' => {
-                let enum_type_idx = read_u16(reader)?;
-                let enum_type = constant_pool.get_class_ref(&enum_type_idx)?;
+                let enum_type_name_idx = read_u16(reader)?;
+                let enum_type = constant_pool.get_string(&enum_type_name_idx)?;
                 let const_name_idx = read_u16(reader)?;
                 let const_name = constant_pool.get_string(&const_name_idx)?;
                 Ok(Self::EnumConstant {
-                    enum_type,
+                    enum_type_name: enum_type,
                     const_name,
                 })
             }
@@ -165,7 +165,7 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
+        // Length is to be checked outside.
         let num_annotations = read_u16(reader)?;
         let mut annotations = Vec::with_capacity(num_annotations as usize);
         for _ in 0..num_annotations {

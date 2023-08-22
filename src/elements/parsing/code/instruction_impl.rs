@@ -189,7 +189,7 @@ impl Instruction {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
                 } = constant_pool.get_entry(&index)? else {
-                    Err(ClassFileParsingError::MidmatchedConstantPoolTag)?
+                    Err(ClassFileParsingError::MismatchedConstantPoolTag)?
                 };
                 let (name, desc_str) = constant_pool.get_name_and_type(&name_and_type_index)?;
                 let descriptor = MethodDescriptor::new(desc_str)?;
