@@ -20,7 +20,7 @@ impl<'a> ClassParser<'a> {
 
         let magic = read_u32(reader)?;
         if magic != JAVA_CLASS_MAIGC {
-            return Err(ClassFileParsingError::MalformedClassFile);
+            return Err(ClassFileParsingError::NotAClassFile);
         }
         let version = ClassVersion::parse(reader)?;
         let constant_pool = ConstantPool::parse(reader)?;
@@ -170,6 +170,8 @@ pub enum ClassFileParsingError {
     UnexpectedOpCode(u8),
     UnknownFlags(u16),
     InvalidDescriptor(String),
+    UnexpectedConstantPoolTag(u8),
+    NotAClassFile,
 }
 
 impl From<std::io::Error> for ClassFileParsingError {

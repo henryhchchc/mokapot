@@ -1,6 +1,5 @@
 use super::{
     field::{ConstantValue, FieldType},
-    references::ClassReference,
 };
 
 #[derive(Debug)]

@@ -1,5 +1,5 @@
 use super::{
-    field::{ConstantValue, PrimitiveType},
+    field::{ConstantValue, FieldType, PrimitiveType},
     method::MethodDescriptor,
     references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
 };
@@ -255,6 +255,6 @@ pub enum Instruction {
 
 #[derive(Debug)]
 pub struct ArrayTypeRef {
-    pub base_type: ClassReference,
+    pub base_type: FieldType,
     pub dimensions: u8,
 }

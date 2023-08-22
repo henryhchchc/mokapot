@@ -236,12 +236,11 @@ impl ConstantPool {
         let mut current_type = *b;
         let (base_type, dimensions) = loop {
             match current_type {
-                FieldType::Object(it) => break (it, dim),
                 FieldType::Array(e) => {
                     current_type = *e;
                     dim += 1;
                 }
-                _ => return Err(ClassFileParsingError::MalformedClassFile),
+                it @ _ => break (it, dim),
             }
         };
         Ok(ArrayTypeRef {
@@ -345,7 +344,7 @@ impl ConstantPoolEntry {
             18 => Self::parse_invoke_dynamic(reader),
             19 => Self::parse_module(reader),
             20 => Self::parse_package(reader),
-            _ => Err(ClassFileParsingError::MalformedClassFile),
+            _ => Err(ClassFileParsingError::UnexpectedConstantPoolTag(tag)),
         }
     }
 
@@ -355,8 +354,8 @@ impl ConstantPoolEntry {
     {
         let length = read_u16(reader)?;
         let bytes = read_bytes_vec(reader, length as usize)?;
-        if let Ok(result) = String::from_utf8(bytes) {
-            Ok(Self::Utf8(result))
+        if let Ok(result) = cesu8::from_java_cesu8(bytes.as_slice()) {
+            Ok(Self::Utf8(result.into_owned()))
         } else {
             Err(ClassFileParsingError::MalformedClassFile)
         }

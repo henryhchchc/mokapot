@@ -259,8 +259,12 @@ impl Method {
                 Attribute::RuntimeInvisibleAnnotations(it) => rt_invisible_anno = Some(it),
                 Attribute::RuntimeVisibleTypeAnnotations(it) => rt_visible_type_anno = Some(it),
                 Attribute::RuntimeInvisibleTypeAnnotations(it) => rt_invisible_type_anno = Some(it),
-                Attribute::RuntimeVisibleParameterAnnotations(it) => rt_visible_param_anno = Some(it),
-                Attribute::RuntimeInvisibleParameterAnnotations(it) => rt_invisible_param_anno = Some(it),
+                Attribute::RuntimeVisibleParameterAnnotations(it) => {
+                    rt_visible_param_anno = Some(it)
+                }
+                Attribute::RuntimeInvisibleParameterAnnotations(it) => {
+                    rt_invisible_param_anno = Some(it)
+                }
                 Attribute::AnnotationDefault(ad) => annotation_default = Some(ad),
                 Attribute::MethodParameters(mp) => method_parameters = Some(mp),
                 Attribute::Synthetic => is_synthetic = true,
