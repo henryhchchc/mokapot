@@ -170,7 +170,10 @@ impl Attribute {
                     Attribute::RuntimeInvisibleTypeAnnotations(it) => {
                         rt_invisible_type_anno = Some(it)
                     }
-                    _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
+                    it => Err(ClassFileParsingError::UnexpectedAttribute(
+                        format!("{:?}", it),
+                        "record".to_string(),
+                    ))?,
                 }
             }
             components.push(RecordComponent {

@@ -67,7 +67,10 @@ impl Field {
                 Attribute::RuntimeInvisibleTypeAnnotations(a) => {
                     runtime_invisible_type_annotations = Some(a)
                 }
-                _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
+                it => Err(ClassFileParsingError::UnexpectedAttribute(
+                    format!("{:?}", it),
+                    "field_info".to_string(),
+                ))?,
             }
         }
 

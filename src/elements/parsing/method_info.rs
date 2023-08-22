@@ -96,7 +96,10 @@ impl Attribute {
                     .get_or_insert(LocalVariableTable::new())
                     .merge_type_attr(it),
                 Attribute::StackMapTable(it) => stack_map_table = Some(it),
-                _ => return Err(ClassFileParsingError::UnexpectedAttribute),
+                it => Err(ClassFileParsingError::UnexpectedAttribute(
+                    format!("{:?}", it),
+                    "code".to_string(),
+                ))?,
             };
         }
 
@@ -259,7 +262,10 @@ impl Method {
                 Attribute::Synthetic => is_synthetic = true,
                 Attribute::Deprecated => is_deprecated = true,
                 Attribute::Signature(sig) => signature = Some(sig),
-                _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
+                it => Err(ClassFileParsingError::UnexpectedAttribute(
+                    format!("{:?}", it),
+                    "method_info".to_string(),
+                ))?,
             }
         }
 

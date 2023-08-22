@@ -90,7 +90,10 @@ impl<'a> ClassParser<'a> {
                 Attribute::Deprecated => is_deprecated = true,
                 Attribute::Signature(sig) => signature = Some(sig),
                 Attribute::Record(rec) => record = Some(rec),
-                _ => Err(ClassFileParsingError::UnexpectedAttribute)?,
+                it => Err(ClassFileParsingError::UnexpectedAttribute(
+                    format!("{:?}", it),
+                    "class_file".to_string(),
+                ))?,
             }
         }
         Ok(Class {
@@ -157,7 +160,7 @@ pub enum ClassFileParsingError {
     BadConstantPoolIndex,
     UnknownAttributeName(String),
     InvalidAttributeLength { expected: u32, actual: u32 },
-    UnexpectedAttribute,
+    UnexpectedAttribute(String, String),
     UnexpectedData,
     InvalidElementValueTag(char),
     InvalidTargetType(u8),
