@@ -244,6 +244,8 @@ impl Method {
         let mut rt_invisible_anno = None;
         let mut rt_visible_type_anno = None;
         let mut rt_invisible_type_anno = None;
+        let mut rt_visible_param_anno = None;
+        let mut rt_invisible_param_anno = None;
         let mut annotation_default = None;
         let mut method_parameters = None;
         let mut is_synthetic = false;
@@ -253,10 +255,12 @@ impl Method {
             match attr {
                 Attribute::Code(b) => body = Some(b),
                 Attribute::Exceptions(ex) => exceptions = Some(ex),
-                Attribute::RuntimeVisibleAnnotations(rv) => rt_visible_anno = Some(rv),
-                Attribute::RuntimeInvisibleAnnotations(ri) => rt_invisible_anno = Some(ri),
-                Attribute::RuntimeVisibleTypeAnnotations(rt) => rt_visible_type_anno = Some(rt),
-                Attribute::RuntimeInvisibleTypeAnnotations(rt) => rt_invisible_type_anno = Some(rt),
+                Attribute::RuntimeVisibleAnnotations(it) => rt_visible_anno = Some(it),
+                Attribute::RuntimeInvisibleAnnotations(it) => rt_invisible_anno = Some(it),
+                Attribute::RuntimeVisibleTypeAnnotations(it) => rt_visible_type_anno = Some(it),
+                Attribute::RuntimeInvisibleTypeAnnotations(it) => rt_invisible_type_anno = Some(it),
+                Attribute::RuntimeVisibleParameterAnnotations(it) => rt_visible_param_anno = Some(it),
+                Attribute::RuntimeInvisibleParameterAnnotations(it) => rt_invisible_param_anno = Some(it),
                 Attribute::AnnotationDefault(ad) => annotation_default = Some(ad),
                 Attribute::MethodParameters(mp) => method_parameters = Some(mp),
                 Attribute::Synthetic => is_synthetic = true,
@@ -279,6 +283,8 @@ impl Method {
             runtime_invisible_annotations: rt_invisible_anno.unwrap_or_default(),
             runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or_default(),
             runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
+            runtime_visible_parameter_annotations: rt_visible_param_anno.unwrap_or_default(),
+            runtime_invisible_parameter_annotations: rt_invisible_param_anno.unwrap_or_default(),
             annotation_default,
             parameters: method_parameters.unwrap_or_default(),
             is_synthetic,

@@ -23,6 +23,8 @@ pub struct Method {
     pub runtime_invisible_annotations: Vec<Annotation>,
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
+    pub runtime_invisible_parameter_annotations: Vec<Vec<Annotation>>,
     pub annotation_default: Option<ElementValue>,
     pub parameters: Vec<MethodParameter>,
     pub is_synthetic: bool,
