@@ -1,6 +1,4 @@
-use super::{
-    field::{ConstantValue, FieldType},
-};
+use super::field::{ConstantValue, FieldType};
 
 #[derive(Debug)]
 pub struct Annotation {

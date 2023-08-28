@@ -156,10 +156,16 @@ impl<'a> ClassParser<'a> {
 #[derive(Debug)]
 pub enum ClassFileParsingError {
     MalformedClassFile,
-    MismatchedConstantPoolTag,
-    BadConstantPoolIndex,
-    UnknownAttributeName(String),
-    InvalidAttributeLength { expected: u32, actual: u32 },
+    MismatchedConstantPoolEntryType {
+        expected: &'static str,
+        found: &'static str,
+    },
+    BadConstantPoolIndex(u16),
+    UnknownAttribute(String),
+    InvalidAttributeLength {
+        expected: u32,
+        actual: u32,
+    },
     UnexpectedAttribute(String, String),
     UnexpectedData,
     InvalidElementValueTag(char),

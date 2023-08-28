@@ -185,11 +185,12 @@ impl Instruction {
             0xc1 => Self::InstanceOf(read_u16(reader)?),
             0xba => {
                 let index = read_u16(reader)?;
+                let constant_pool_entry = constant_pool.get_entry(&index)?;
                 let ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
-                } = constant_pool.get_entry(&index)? else {
-                    Err(ClassFileParsingError::MismatchedConstantPoolTag)?
+                } = constant_pool_entry else {
+                    Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "InvokeDynamic", found: constant_pool_entry.type_name()})?
                 };
                 let (name, desc_str) = constant_pool.get_name_and_type(&name_and_type_index)?;
                 let descriptor = MethodDescriptor::new(desc_str)?;

@@ -16,20 +16,39 @@ impl ElementValue {
     {
         let tag = read_u8(reader)?;
 
-        macro_rules! read_constant {
-            ($constant_type:path) => {{
-                let const_value_index = read_u16(reader)?;
-                let $constant_type(value) = constant_pool.get_constant_value(&const_value_index)? else {
-                                return Err(ClassFileParsingError::MismatchedConstantPoolTag);
-                            };
-                Ok(Self::Constant($constant_type(value)))
-            }};
-        }
         match tag as char {
-            'B' | 'C' | 'I' | 'S' | 'Z' => read_constant!(ConstantValue::Integer),
-            'D' => read_constant!(ConstantValue::Double),
-            'F' => read_constant!(ConstantValue::Float),
-            'J' => read_constant!(ConstantValue::Long),
+            'B' | 'C' | 'I' | 'S' | 'Z' => {
+                let const_value_index = read_u16(reader)?;
+                let const_value = constant_pool.get_constant_value(&const_value_index)?;
+                let ConstantValue::Integer(value) = const_value else {
+                    return Err(ClassFileParsingError::MalformedClassFile);
+                };
+                Ok(Self::Constant(ConstantValue::Integer(value)))
+            }
+            'D' => {
+                let const_value_index = read_u16(reader)?;
+                let cons_value = constant_pool.get_constant_value(&const_value_index)?;
+                let ConstantValue::Double(value) = cons_value else {
+                    return Err(ClassFileParsingError::MalformedClassFile);
+                };
+                Ok(Self::Constant(ConstantValue::Double(value)))
+            }
+            'F' => {
+                let const_value_index = read_u16(reader)?;
+                let const_value = constant_pool.get_constant_value(&const_value_index)?;
+                let ConstantValue::Float(value) = const_value else {
+                    return Err(ClassFileParsingError::MalformedClassFile);
+                };
+                Ok(Self::Constant(ConstantValue::Float(value)))
+            }
+            'J' => {
+                let const_value_index = read_u16(reader)?;
+                let const_value = constant_pool.get_constant_value(&const_value_index)?;
+                let ConstantValue::Long(value) = const_value else {
+                    return Err(ClassFileParsingError::MalformedClassFile);
+                };
+                Ok(Self::Constant(ConstantValue::Long(value)))
+            }
             's' => {
                 let utf8_idx = read_u16(reader)?;
                 let string = constant_pool.get_string(&utf8_idx)?;

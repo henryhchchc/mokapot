@@ -33,30 +33,39 @@ impl ConstantPool {
 
     pub fn get_entry(&self, index: &u16) -> ClassFileParsingResult<&ConstantPoolEntry> {
         let Some(entry) = self.entries.get(index) else {
-            return Err(ClassFileParsingError::BadConstantPoolIndex);
+            return Err(ClassFileParsingError::BadConstantPoolIndex(index.clone()));
         };
         Ok(entry)
     }
 
     pub fn get_string(&self, index: &u16) -> ClassFileParsingResult<String> {
-        if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
+        let entry = self.get_entry(index)?;
+        if let ConstantPoolEntry::Utf8(string) = entry {
             Ok(string.clone())
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolTag)
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Utf8",
+                found: entry.type_name(),
+            })
         }
     }
 
     pub fn get_str<'a>(&'a self, index: &u16) -> ClassFileParsingResult<&'a str> {
-        if let ConstantPoolEntry::Utf8(string) = self.get_entry(index)? {
+        let entry = self.get_entry(index)?;
+        if let ConstantPoolEntry::Utf8(string) = entry {
             Ok(string)
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolTag)
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Utf8",
+                found: entry.type_name(),
+            })
         }
     }
 
     pub fn get_class_ref(&self, index: &u16) -> ClassFileParsingResult<ClassReference> {
-        let ConstantPoolEntry::Class { name_index } = self.get_entry(index)? else {
-            return Err(ClassFileParsingError::MismatchedConstantPoolTag);
+        let entry = self.get_entry(index)?;
+        let ConstantPoolEntry::Class { name_index } = entry else {
+            return Err(ClassFileParsingError::MismatchedConstantPoolEntryType{ expected: "Class", found: entry.type_name() })
         };
         let name = self.get_string(&name_index)?;
         Ok(ClassReference { binary_name: name })
@@ -100,7 +109,10 @@ impl ConstantPool {
                     descriptor,
                 ))
             }
-            _ => Err(ClassFileParsingError::MismatchedConstantPoolTag),
+            _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType{
+                expected: "Integer | Long | Float | Double | String | MethodType | Class | MethodHandle | Dynamic",
+                found: entry.type_name(),
+            })
         }
     }
 
@@ -110,7 +122,10 @@ impl ConstantPool {
             let name = self.get_string(&name_index)?;
             return Ok(ModuleReference { name });
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            expected: "Module",
+            found: entry.type_name(),
+        })
     }
 
     pub(crate) fn get_package_ref(&self, index: &u16) -> ClassFileParsingResult<PackageReference> {
@@ -119,7 +134,10 @@ impl ConstantPool {
             let name = self.get_string(&name_index)?;
             return Ok(PackageReference { binary_name: name });
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            expected: "Package",
+            found: entry.type_name(),
+        })
     }
 
     pub(crate) fn get_field_ref(&self, index: &u16) -> ClassFileParsingResult<FieldReference> {
@@ -145,7 +163,10 @@ impl ConstantPool {
                 });
             }
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            expected: "Field",
+            found: entry.type_name(),
+        })
     }
 
     pub(crate) fn get_name_and_type<'a>(
@@ -162,7 +183,10 @@ impl ConstantPool {
             let descriptor = self.get_str(&descriptor_index)?;
             return Ok((name, descriptor));
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolTag)?
+        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            expected: "NameAndType",
+            found: entry.type_name(),
+        })?
     }
 
     pub(crate) fn get_method_ref(&self, index: &u16) -> ClassFileParsingResult<MethodReference> {
@@ -196,17 +220,22 @@ impl ConstantPool {
                 descriptor,
             }));
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolTag)
+        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            expected: "MethodRef | InterfaceMethodRef",
+            found: entry.type_name(),
+        })
     }
 
     pub(crate) fn get_method_handle(&self, index: &u16) -> ClassFileParsingResult<Handle> {
         use Handle::*;
 
+        let entry = self.get_entry(&index)?;
         let ConstantPoolEntry::MethodHandle {
             reference_kind,
             reference_index: idx,
-        } = self.get_entry(&index)? else {
-            Err(ClassFileParsingError::MismatchedConstantPoolTag)?
+        } = entry else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "MethodHandle", found: entry.type_name()
+            })?
         };
 
         let result = match reference_kind {
@@ -345,6 +374,28 @@ impl ConstantPoolEntry {
             19 => Self::parse_module(reader),
             20 => Self::parse_package(reader),
             _ => Err(ClassFileParsingError::UnexpectedConstantPoolTag(tag)),
+        }
+    }
+
+    pub(crate) fn type_name(&self) -> &'static str {
+        match self {
+            Self::Utf8(_) => "Utf8",
+            Self::Integer(_) => "Integer",
+            Self::Float(_) => "Float",
+            Self::Long(_) => "Long",
+            Self::Double(_) => "Double",
+            Self::Class { .. } => "Class",
+            Self::String { .. } => "String",
+            Self::FieldRef { .. } => "FieldRef",
+            Self::MethodRef { .. } => "MethodRef",
+            Self::InterfaceMethodRef { .. } => "InterfaceMethodRef",
+            Self::NameAndType { .. } => "NameAndType",
+            Self::MethodHandle { .. } => "MethodHandle",
+            Self::MethodType { .. } => "MethodType",
+            Self::Dynamic { .. } => "Dynamic",
+            Self::InvokeDynamic { .. } => "InvokeDynamic",
+            Self::Module { .. } => "Module",
+            Self::Package { .. } => "Package",
         }
     }
 

@@ -140,7 +140,7 @@ impl Attribute {
             "NestMembers" => Self::parse_nest_members(reader, constant_pool),
             "Record" => Self::parse_record(reader, constant_pool),
             "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, constant_pool),
-            _ => Err(ClassFileParsingError::UnknownAttributeName(name)),
+            _ => Err(ClassFileParsingError::UnknownAttribute(name)),
         }
     }
 
@@ -207,8 +207,9 @@ impl Attribute {
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
-            let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = constant_pool.get_entry(&method_index)? else {
-                return Err(ClassFileParsingError::MismatchedConstantPoolTag);
+            let entry = constant_pool.get_entry(&method_index)?;
+            let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = entry else {
+                return Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "NameAndType", found: entry.type_name()});
             };
             let name = constant_pool.get_string(name_index)?;
             let descriptor = constant_pool.get_string(descriptor_index)?;
