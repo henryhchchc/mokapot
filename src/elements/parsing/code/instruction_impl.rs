@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::{ClassFileParsingError, },
         field::{ConstantValue, FieldType, PrimitiveType},
         instruction::Instruction,
         method::MethodDescriptor,
@@ -14,7 +14,7 @@ impl Instruction {
     pub fn parse_code(
         bytes: Vec<u8>,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Self>> {
+    ) -> Result<Vec<Self>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut instructions = Vec::new();
         loop {
@@ -30,7 +30,7 @@ impl Instruction {
     pub(crate) fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Option<Self>> {
+    ) -> Result<Option<Self>, ClassFileParsingError> {
         let opcode = match read_u8(reader) {
             Ok(it) => it,
             Err(e) => {

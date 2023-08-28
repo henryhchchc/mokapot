@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::ClassFileParsingError,
         field::{ConstantValue, FieldType},
     },
     utils::{read_u16, read_u32, read_u8},
@@ -10,44 +10,23 @@ use crate::{
 use super::{attribute::Attribute, constant_pool::ConstantPool};
 
 impl ElementValue {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        let tag = read_u8(reader)?;
+        let tag = read_u8(reader)? as char;
 
-        match tag as char {
-            'B' | 'C' | 'I' | 'S' | 'Z' => {
+        match tag {
+            'B' | 'C' | 'I' | 'S' | 'Z' | 'D' | 'F' | 'J' => {
                 let const_value_index = read_u16(reader)?;
                 let const_value = constant_pool.get_constant_value(&const_value_index)?;
-                let ConstantValue::Integer(value) = const_value else {
-                    return Err(ClassFileParsingError::MalformedClassFile);
-                };
-                Ok(Self::Constant(ConstantValue::Integer(value)))
-            }
-            'D' => {
-                let const_value_index = read_u16(reader)?;
-                let cons_value = constant_pool.get_constant_value(&const_value_index)?;
-                let ConstantValue::Double(value) = cons_value else {
-                    return Err(ClassFileParsingError::MalformedClassFile);
-                };
-                Ok(Self::Constant(ConstantValue::Double(value)))
-            }
-            'F' => {
-                let const_value_index = read_u16(reader)?;
-                let const_value = constant_pool.get_constant_value(&const_value_index)?;
-                let ConstantValue::Float(value) = const_value else {
-                    return Err(ClassFileParsingError::MalformedClassFile);
-                };
-                Ok(Self::Constant(ConstantValue::Float(value)))
-            }
-            'J' => {
-                let const_value_index = read_u16(reader)?;
-                let const_value = constant_pool.get_constant_value(&const_value_index)?;
-                let ConstantValue::Long(value) = const_value else {
-                    return Err(ClassFileParsingError::MalformedClassFile);
-                };
-                Ok(Self::Constant(ConstantValue::Long(value)))
+                match (tag, &const_value) {
+                    ('B' | 'C' | 'I' | 'S' | 'Z', ConstantValue::Integer(_))
+                    | ('D', ConstantValue::Double(_))
+                    | ('F', ConstantValue::Float(_))
+                    | ('J', ConstantValue::Long(_)) => Ok(Self::Constant(const_value)),
+                    _ => Err(ClassFileParsingError::MalformedClassFile),
+                }
             }
             's' => {
                 let utf8_idx = read_u16(reader)?;
@@ -72,10 +51,9 @@ impl ElementValue {
             '@' => Annotation::parse(reader, constant_pool).map(Self::AnnotationInterface),
             '[' => {
                 let num_values = read_u16(reader)?;
-                let mut values = Vec::with_capacity(num_values as usize);
-                for _ in 0..num_values {
-                    values.push(Self::parse(reader, constant_pool)?);
-                }
+                let values = (0..num_values)
+                    .map(|_| Self::parse(reader, constant_pool))
+                    .collect::<Result<_, ClassFileParsingError>>()?;
                 Ok(Self::Array(values))
             }
             _ => Err(ClassFileParsingError::InvalidElementValueTag(tag as char)),
@@ -84,7 +62,7 @@ impl ElementValue {
 }
 
 impl Annotation {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -92,13 +70,14 @@ impl Annotation {
         let annotation_type = constant_pool.get_str(&type_idx)?;
         let annotation_type = FieldType::new(annotation_type)?;
         let num_element_value_pairs = read_u16(reader)?;
-        let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
-        for _ in 0..num_element_value_pairs {
-            let element_name_idx = read_u16(reader)?;
-            let element_name = constant_pool.get_string(&element_name_idx)?;
-            let element_value = ElementValue::parse(reader, constant_pool)?;
-            element_value_pairs.push((element_name, element_value));
-        }
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_idx = read_u16(reader)?;
+                let element_name = constant_pool.get_string(&element_name_idx)?;
+                let element_value = ElementValue::parse(reader, constant_pool)?;
+                Ok((element_name, element_value))
+            })
+            .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(Annotation {
             annotation_type,
             element_value_pairs,
@@ -107,7 +86,7 @@ impl Annotation {
 }
 
 impl TypePathElement {
-    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -124,7 +103,7 @@ impl TypePathElement {
 }
 
 impl TypeAnnotation {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -138,13 +117,14 @@ impl TypeAnnotation {
             0x17 => TargetInfo::Throws(read_u16(reader)?),
             0x40 | 0x41 => {
                 let table_length = read_u16(reader)?;
-                let mut table = Vec::with_capacity(table_length as usize);
-                for _ in 0..table_length {
-                    let start_pc = read_u16(reader)?;
-                    let length = read_u16(reader)?;
-                    let index = read_u16(reader)?;
-                    table.push((start_pc, length, index));
-                }
+                let table = (0..table_length)
+                    .map(|_| {
+                        let start_pc = read_u16(reader)?;
+                        let length = read_u16(reader)?;
+                        let index = read_u16(reader)?;
+                        Ok((start_pc, length, index))
+                    })
+                    .collect::<Result<_, ClassFileParsingError>>()?;
                 TargetInfo::LocalVar(table)
             }
             0x42 => TargetInfo::Catch(read_u16(reader)?),
@@ -152,21 +132,20 @@ impl TypeAnnotation {
             0x47..=0x4B => TargetInfo::TypeArgument(read_u16(reader)?, read_u8(reader)?),
             _ => Err(ClassFileParsingError::InvalidTargetType(target_type))?,
         };
-        let mut target_path = Vec::new();
         let path_length = read_u8(reader)?;
-        for _ in 0..path_length {
-            let type_path_element = TypePathElement::parse(reader)?;
-            target_path.push(type_path_element);
-        }
+        let target_path = (0..path_length)
+            .map(|_| TypePathElement::parse(reader))
+            .collect::<Result<_, _>>()?;
         let type_index = read_u16(reader)?;
         let num_element_value_pairs = read_u16(reader)?;
-        let mut element_value_pairs = Vec::with_capacity(num_element_value_pairs as usize);
-        for _ in 0..num_element_value_pairs {
-            let element_name_idx = read_u16(reader)?;
-            let element_name = constant_pool.get_string(&element_name_idx)?;
-            let element_value = ElementValue::parse(reader, constant_pool)?;
-            element_value_pairs.push((element_name, element_value));
-        }
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_idx = read_u16(reader)?;
+                let element_name = constant_pool.get_string(&element_name_idx)?;
+                let element_value = ElementValue::parse(reader, constant_pool)?;
+                Ok((element_name, element_value))
+            })
+            .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(TypeAnnotation {
             target_info,
             target_path,
@@ -180,59 +159,53 @@ impl Attribute {
     pub(super) fn parse_annotations<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Annotation>>
+        _attribute_length: Option<u32>,
+    ) -> Result<Vec<Annotation>, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        // Length is to be checked outside.
+        // Attribute length is to be checked outside.
         let num_annotations = read_u16(reader)?;
-        let mut annotations = Vec::with_capacity(num_annotations as usize);
-        for _ in 0..num_annotations {
-            let annotation = Annotation::parse(reader, constant_pool)?;
-            annotations.push(annotation);
-        }
-
+        let annotations = (0..num_annotations)
+            .map(|_| Annotation::parse(reader, constant_pool))
+            .collect::<Result<_, _>>()?;
         Ok(annotations)
     }
 
     pub(super) fn parse_parameter_annotations<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Vec<Annotation>>>
+    ) -> Result<Vec<Vec<Annotation>>, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let _attribute_length = read_u32(reader)?;
         let num_parameters = read_u8(reader)?;
-        let mut parameter_annotations = Vec::with_capacity(num_parameters as usize);
-        for _ in 0..num_parameters {
-            let par_annotations = Self::parse_annotations(reader, constant_pool)?;
-            parameter_annotations.push(par_annotations);
-        }
+        let parameter_annotations = (0..num_parameters)
+            .map(|_| Self::parse_annotations(reader, constant_pool, None))
+            .collect::<Result<_, _>>()?;
         Ok(parameter_annotations)
     }
 
     pub(super) fn parse_type_annotations<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<TypeAnnotation>>
+    ) -> Result<Vec<TypeAnnotation>, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let _attribute_length = read_u32(reader)?;
         let num_annotations = read_u16(reader)?;
-        let mut annotations = Vec::with_capacity(num_annotations as usize);
-        for _ in 0..num_annotations {
-            let type_annotation = TypeAnnotation::parse(reader, constant_pool)?;
-            annotations.push(type_annotation);
-        }
+        let annotations = (0..num_annotations)
+            .map(|_| TypeAnnotation::parse(reader, constant_pool))
+            .collect::<Result<_, _>>()?;
         Ok(annotations)
     }
 
     pub(super) fn parse_annotation_default<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {

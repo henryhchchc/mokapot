@@ -3,7 +3,7 @@ pub(super) mod stack_map;
 
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::{ClassFileParsingError, },
         field::FieldType,
         method::{
             LineNumberTableEntry, LocalVariableDescAttr, LocalVariableKey, LocalVariableTypeAttr,
@@ -16,7 +16,7 @@ use crate::{
 use super::constant_pool::ConstantPool;
 
 impl LineNumberTableEntry {
-    pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<LineNumberTableEntry>
+    pub(super) fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -33,7 +33,7 @@ impl LocalVariableDescAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<LocalVariableDescAttr>
+    ) -> Result<LocalVariableDescAttr, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -62,7 +62,7 @@ impl LocalVariableTypeAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<LocalVariableTypeAttr>
+    ) -> Result<LocalVariableTypeAttr, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -90,7 +90,7 @@ impl VerificationTypeInfo {
     pub(super) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<VerificationTypeInfo>
+    ) -> Result<VerificationTypeInfo, ClassFileParsingError>
     where
         R: std::io::Read,
     {

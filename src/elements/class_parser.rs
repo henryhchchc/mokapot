@@ -32,18 +32,27 @@ impl<'a> ClassParser<'a> {
         let this_class = constant_pool.get_class_ref(&this_class_idx)?;
         let super_class_idx = read_u16(reader)?;
         let super_class = constant_pool.get_class_ref(&super_class_idx)?;
+
         let interfaces_count = read_u16(reader)?;
-        let mut interfaces = Vec::with_capacity(interfaces_count as usize);
-        for _ in 0..interfaces_count {
-            let interface_idx = read_u16(reader)?;
-            let interface_ref = constant_pool.get_class_ref(&interface_idx)?;
-            interfaces.push(interface_ref);
-        }
+        let interfaces = (0..interfaces_count)
+            .map(|_| {
+                let interface_idx = read_u16(reader)?;
+                constant_pool.get_class_ref(&interface_idx)
+            })
+            .collect::<Result<_, ClassFileParsingError>>()?;
         let fields_count = read_u16(reader)?;
-        let fields = Field::parse_multiple(reader, fields_count, &constant_pool)?;
+        let fields = (0..fields_count)
+            .into_iter()
+            .map(|_| Field::parse(reader, &constant_pool))
+            .collect::<Result<_, ClassFileParsingError>>()?;
+
         let methods_count = read_u16(reader)?;
-        let methods = Method::parse_multiple(reader, methods_count, &constant_pool)?;
+        let methods = (0..methods_count)
+            .map(|_| Method::parse(reader, &constant_pool))
+            .collect::<Result<_, ClassFileParsingError>>()?;
+
         let attributes = AttributeList::parse(reader, &constant_pool)?;
+
         let mut may_remain: [u8; 1] = [0];
         let remain = reader.read(&mut may_remain)?;
         if remain == 1 {
@@ -204,4 +213,3 @@ impl std::error::Error for ClassFileParsingError {
     }
 }
 
-pub type ClassFileParsingResult<T> = Result<T, ClassFileParsingError>;

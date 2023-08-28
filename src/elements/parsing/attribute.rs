@@ -2,7 +2,7 @@ use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TypeAnnotation},
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::ClassFileParsingError,
         field::ConstantValue,
         method::{
             LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTypeAttr, MethodBody,
@@ -35,16 +35,14 @@ impl AttributeList {
     pub(crate) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let attributes_count = read_u16(reader)?;
-        let mut entries = Vec::with_capacity(attributes_count as usize);
-        for _i in 0..attributes_count {
-            let attribute = Attribute::parse(reader, constant_pool)?;
-            entries.push(attribute);
-        }
+        let entries = (0..attributes_count)
+            .map(|_| Attribute::parse(reader, constant_pool))
+            .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(Self { entries })
     }
 }
@@ -84,7 +82,7 @@ pub(crate) enum Attribute {
 }
 
 impl Attribute {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -108,12 +106,13 @@ impl Attribute {
             }
             "Deprecated" => Self::parse_deprecated(reader, constant_pool),
             "RuntimeVisibleAnnotations" => {
-                let _attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, constant_pool).map(Self::RuntimeVisibleAnnotations)
+                let attribute_length = read_u32(reader)?;
+                Self::parse_annotations(reader, constant_pool, Some(attribute_length))
+                    .map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                let _attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, constant_pool)
+                let attribute_length = read_u32(reader)?;
+                Self::parse_annotations(reader, constant_pool, Some(attribute_length))
                     .map(Self::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
@@ -144,7 +143,10 @@ impl Attribute {
         }
     }
 
-    pub fn check_attribute_length<R>(reader: &mut R, expected: u32) -> ClassFileParsingResult<()>
+    pub fn check_attribute_length<R>(
+        reader: &mut R,
+        expected: u32,
+    ) -> Result<(), ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -161,7 +163,7 @@ impl Attribute {
     fn parse_constant_value<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -174,7 +176,7 @@ impl Attribute {
     fn parse_synthetic<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -185,7 +187,7 @@ impl Attribute {
     fn parse_deprecated<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -196,7 +198,7 @@ impl Attribute {
     fn parse_enclosing_method<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -224,7 +226,7 @@ impl Attribute {
     fn parse_signature<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {

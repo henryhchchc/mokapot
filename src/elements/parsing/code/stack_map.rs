@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::{ClassFileParsingError, },
         method::{StackMapFrame, VerificationTypeInfo},
         parsing::constant_pool::ConstantPool,
     },
@@ -11,7 +11,7 @@ impl StackMapFrame {
     pub fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<StackMapFrame>
+    ) -> Result<StackMapFrame, ClassFileParsingError>
     where
         R: std::io::Read,
     {

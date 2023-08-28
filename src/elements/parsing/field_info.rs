@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::ClassFileParsingError,
         field::{Field, FieldAccessFlags, FieldType},
     },
     utils::read_u16,
@@ -12,23 +12,10 @@ use super::{
 };
 
 impl Field {
-    pub(crate) fn parse_multiple<R>(
+    pub(crate) fn parse<R>(
         reader: &mut R,
-        fields_count: u16,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Field>>
-    where
-        R: std::io::Read,
-    {
-        let mut fields = Vec::with_capacity(fields_count as usize);
-        for _ in 0..fields_count {
-            let field = Self::parse(reader, constant_pool)?;
-            fields.push(field);
-        }
-        Ok(fields)
-    }
-
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> ClassFileParsingResult<Field>
+    ) -> Result<Field, ClassFileParsingError>
     where
         R: std::io::Read,
     {

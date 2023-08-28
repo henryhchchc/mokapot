@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, ClassFileParsingResult},
+        class_parser::{ClassFileParsingError, },
         instruction::Instruction,
         method::{
             ExceptionTableEntry, LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTable,
@@ -18,7 +18,7 @@ impl ExceptionTableEntry {
     fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<ExceptionTableEntry>
+    ) -> Result<ExceptionTableEntry, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -44,7 +44,7 @@ impl Attribute {
     pub(super) fn parse_line_no_table<R>(
         reader: &mut R,
         _constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -61,7 +61,7 @@ impl Attribute {
     pub(super) fn parse_code<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -116,7 +116,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_table<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -133,7 +133,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_type_table<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -150,7 +150,7 @@ impl Attribute {
     pub(super) fn parse_stack_map_table<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -166,7 +166,7 @@ impl Attribute {
     pub(super) fn parse_exceptions<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Attribute>
+    ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -184,7 +184,7 @@ impl Attribute {
     pub(super) fn parse_method_parameters<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -205,25 +205,10 @@ impl Attribute {
 }
 
 impl Method {
-    pub(crate) fn parse_multiple<R>(
-        reader: &mut R,
-        methods_count: u16,
-        constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Vec<Self>>
-    where
-        R: std::io::Read,
-    {
-        let mut methods = Vec::with_capacity(methods_count as usize);
-        for _ in 0..methods_count {
-            let method = Self::parse(reader, constant_pool)?;
-            methods.push(method);
-        }
-        Ok(methods)
-    }
     pub(crate) fn parse<R>(
         reader: &mut R,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
