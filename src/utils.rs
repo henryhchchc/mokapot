@@ -1,5 +1,9 @@
 use std::usize;
 
+use crate::elements::{
+    class_parser::ClassFileParsingError, instruction::ProgramCounter,
+};
+
 pub(crate) fn read_u32<R>(reader: &mut R) -> std::io::Result<u32>
 where
     R: std::io::Read,
@@ -70,4 +74,32 @@ where
     let mut buf: [u8; 1] = [0];
     reader.read_exact(&mut buf)?;
     Ok(i8::from_be_bytes(buf))
+}
+
+pub(crate) fn read_offset32<R>(
+    reader: &mut R,
+    current_pc: u16,
+) -> Result<ProgramCounter, ClassFileParsingError>
+where
+    R: std::io::Read,
+{
+    let offset = read_i32(reader)?;
+    let target_pc_signed = (current_pc as i32) + offset;
+    u16::try_from(target_pc_signed)
+        .map(ProgramCounter)
+        .map_err(|_| ClassFileParsingError::InvalidJumpTarget)
+}
+
+pub(crate) fn read_offset16<R>(
+    reader: &mut R,
+    current_pc: u16,
+) -> Result<ProgramCounter, ClassFileParsingError>
+where
+    R: std::io::Read,
+{
+    let offset = read_i16(reader)?;
+    let target_pc_signed = (current_pc as i16) + offset;
+    u16::try_from(target_pc_signed)
+        .map(ProgramCounter)
+        .map_err(|_| ClassFileParsingError::InvalidJumpTarget)
 }

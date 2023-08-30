@@ -1,13 +1,13 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, },
+        class_parser::ClassFileParsingError,
         field::{ConstantValue, FieldType, PrimitiveType},
         instruction::Instruction,
         method::MethodDescriptor,
         parsing::constant_pool::{ConstantPool, ConstantPoolEntry},
         references::MethodReference,
     },
-    utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
+    utils::{read_i16, read_i32, read_i8, read_offset16, read_offset32, read_u16, read_u8},
 };
 
 impl Instruction {
@@ -17,8 +17,9 @@ impl Instruction {
     ) -> Result<Vec<Self>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut instructions = Vec::new();
+        let mut pc = 0;
         loop {
-            if let Some(instruction) = Instruction::parse(&mut cursor, constant_pool)? {
+            if let Some(instruction) = Instruction::parse(&mut cursor, constant_pool, &mut pc)? {
                 instructions.push(instruction);
             } else {
                 break;
@@ -30,6 +31,7 @@ impl Instruction {
     pub(crate) fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
         constant_pool: &ConstantPool,
+        pc: &mut u16,
     ) -> Result<Option<Self>, ClassFileParsingError> {
         let opcode = match read_u8(reader) {
             Ok(it) => it,
@@ -138,8 +140,8 @@ impl Instruction {
                 let field = constant_pool.get_field_ref(&index)?;
                 Self::GetStatic(field)
             }
-            0xa7 => Self::Goto(read_i16(reader)?),
-            0xc8 => Self::GotoW(read_i32(reader)?),
+            0xa7 => Self::Goto(read_offset16(reader, *pc)?),
+            0xc8 => Self::GotoW(read_offset32(reader, *pc)?),
             0x91 => Self::I2B,
             0x92 => Self::I2C,
             0x87 => Self::I2D,
@@ -158,22 +160,22 @@ impl Instruction {
             0x07 => Self::IConst4,
             0x08 => Self::IConst5,
             0x6c => Self::IDiv,
-            0xa5 => Self::IfACmpEq(read_i16(reader)?),
-            0xa6 => Self::IfACmpNe(read_i16(reader)?),
-            0x9f => Self::IfICmpEq(read_i16(reader)?),
-            0xa0 => Self::IfICmpNe(read_i16(reader)?),
-            0xa1 => Self::IfICmpLt(read_i16(reader)?),
-            0xa2 => Self::IfICmpGe(read_i16(reader)?),
-            0xa3 => Self::IfICmpGt(read_i16(reader)?),
-            0xa4 => Self::IfICmpLe(read_i16(reader)?),
-            0x99 => Self::IfEq(read_i16(reader)?),
-            0x9a => Self::IfNe(read_i16(reader)?),
-            0x9b => Self::IfLt(read_i16(reader)?),
-            0x9c => Self::IfGe(read_i16(reader)?),
-            0x9d => Self::IfGt(read_i16(reader)?),
-            0x9e => Self::IfLe(read_i16(reader)?),
-            0xc7 => Self::IfNonNull(read_i16(reader)?),
-            0xc6 => Self::IfNull(read_i16(reader)?),
+            0xa5 => Self::IfACmpEq(read_offset16(reader, *pc)?),
+            0xa6 => Self::IfACmpNe(read_offset16(reader, *pc)?),
+            0x9f => Self::IfICmpEq(read_offset16(reader, *pc)?),
+            0xa0 => Self::IfICmpNe(read_offset16(reader, *pc)?),
+            0xa1 => Self::IfICmpLt(read_offset16(reader, *pc)?),
+            0xa2 => Self::IfICmpGe(read_offset16(reader, *pc)?),
+            0xa3 => Self::IfICmpGt(read_offset16(reader, *pc)?),
+            0xa4 => Self::IfICmpLe(read_offset16(reader, *pc)?),
+            0x99 => Self::IfEq(read_offset16(reader, *pc)?),
+            0x9a => Self::IfNe(read_offset16(reader, *pc)?),
+            0x9b => Self::IfLt(read_offset16(reader, *pc)?),
+            0x9c => Self::IfGe(read_offset16(reader, *pc)?),
+            0x9d => Self::IfGt(read_offset16(reader, *pc)?),
+            0x9e => Self::IfLe(read_offset16(reader, *pc)?),
+            0xc7 => Self::IfNonNull(read_offset16(reader, *pc)?),
+            0xc6 => Self::IfNull(read_offset16(reader, *pc)?),
             0x84 => Self::IInc(read_u8(reader)?, read_i8(reader)?),
             0x15 => Self::ILoad(read_u8(reader)?),
             0x1a => Self::ILoad0,
@@ -240,8 +242,8 @@ impl Instruction {
             0x64 => Self::ISub,
             0x7c => Self::IUShr,
             0x82 => Self::IXor,
-            0xa8 => Self::Jsr(read_i16(reader)?),
-            0xc9 => Self::JsrW(read_i32(reader)?),
+            0xa8 => Self::Jsr(read_offset16(reader, *pc)?),
+            0xc9 => Self::JsrW(read_offset32(reader, *pc)?),
             0x8a => Self::L2D,
             0x89 => Self::L2F,
             0x88 => Self::L2I,
@@ -309,15 +311,16 @@ impl Instruction {
                 }
                 let default = read_i32(reader)?;
                 let npairs = read_i32(reader)?;
-                let mut match_offsets = Vec::with_capacity(npairs as usize);
-                for _ in 0..npairs {
-                    let match_value = read_i32(reader)?;
-                    let offset = read_i32(reader)?;
-                    match_offsets.push((match_value, offset));
-                }
+                let match_targets = (0..npairs)
+                    .map(|_| {
+                        let match_value = read_i32(reader)?;
+                        let offset = read_offset32(reader, *pc)?;
+                        Ok((match_value, offset))
+                    })
+                    .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
                 Self::LookupSwitch {
                     default,
-                    match_offsets,
+                    match_targets,
                 }
             }
             0xaa => {
@@ -328,16 +331,14 @@ impl Instruction {
                 let low = read_i32(reader)?;
                 let high = read_i32(reader)?;
                 let offset_count = high - low + 1;
-                let mut jump_offsets = Vec::with_capacity(offset_count as usize);
-                for _ in 0..offset_count {
-                    let offset = read_i32(reader)?;
-                    jump_offsets.push(offset);
-                }
+                let jump_targets = (0..offset_count)
+                    .map(|_| read_offset32(reader, *pc))
+                    .collect::<Result<Vec<_>, _>>()?;
                 Self::TableSwitch {
                     default,
                     low,
                     high,
-                    jump_offsets,
+                    jump_targets,
                 }
             }
             0x81 => Self::LOr,
@@ -419,6 +420,7 @@ impl Instruction {
             }
             it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
         };
+        *pc += 1;
         Ok(Some(instruction))
     }
 }

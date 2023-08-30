@@ -187,6 +187,7 @@ pub enum ClassFileParsingError {
     InvalidDescriptor(String),
     UnexpectedConstantPoolTag(u8),
     NotAClassFile,
+    InvalidJumpTarget,
 }
 
 impl From<std::io::Error> for ClassFileParsingError {
