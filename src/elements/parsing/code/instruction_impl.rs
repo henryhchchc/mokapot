@@ -1,10 +1,12 @@
 use crate::{
     elements::{
-        class_parser::ClassFileParsingError,
         field::{ConstantValue, FieldType, PrimitiveType},
         instruction::Instruction,
         method::MethodDescriptor,
-        parsing::constant_pool::{ConstantPool, ConstantPoolEntry},
+        parsing::{
+            constant_pool::{ConstantPool, ConstantPoolEntry},
+            error::ClassFileParsingError,
+        },
         references::MethodReference,
     },
     utils::{read_i16, read_i32, read_i8, read_offset16, read_offset32, read_u16, read_u8},

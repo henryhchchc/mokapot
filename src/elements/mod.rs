@@ -5,5 +5,5 @@ pub mod field;
 pub mod instruction;
 pub mod method;
 pub mod module;
-mod parsing;
+pub mod parsing;
 pub mod references;

@@ -3,7 +3,6 @@ pub(super) mod stack_map;
 
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, },
         field::FieldType,
         method::{
             LineNumberTableEntry, LocalVariableDescAttr, LocalVariableKey, LocalVariableTypeAttr,
@@ -13,7 +12,7 @@ use crate::{
     utils::{read_u16, read_u8},
 };
 
-use super::constant_pool::ConstantPool;
+use super::{constant_pool::ConstantPool, error::ClassFileParsingError};
 
 impl LineNumberTableEntry {
     pub(super) fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>

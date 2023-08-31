@@ -2,9 +2,10 @@ use std::io::BufReader;
 
 use crate::elements::{
     class::{Class, ClassAccessFlags},
-    class_parser::{ClassFileParsingError, ClassParser},
+    class_parser::ClassParser,
     field::{FieldType, PrimitiveType},
     method::ReturnType,
+    parsing::error::ClassFileParsingError,
     references::ClassReference,
 };
 

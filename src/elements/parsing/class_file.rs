@@ -1,14 +1,12 @@
 use crate::{
-    elements::{
-        class::{BootstrapMethod, InnerClassInfo, RecordComponent},
-        class_parser::ClassFileParsingError,
-    },
+    elements::class::{BootstrapMethod, InnerClassInfo, RecordComponent},
     utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{
     attribute::{Attribute, AttributeList},
     constant_pool::ConstantPool,
+    error::ClassFileParsingError,
 };
 
 impl BootstrapMethod {

@@ -1,8 +1,6 @@
 use std::usize;
 
-use crate::elements::{
-    class_parser::ClassFileParsingError, instruction::ProgramCounter,
-};
+use crate::elements::{instruction::ProgramCounter, parsing::error::ClassFileParsingError};
 
 /// Reads a u32 and advances the reader by 4 bytes.
 pub(crate) fn read_u32<R>(reader: &mut R) -> std::io::Result<u32>

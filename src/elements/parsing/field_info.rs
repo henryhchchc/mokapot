@@ -1,14 +1,12 @@
 use crate::{
-    elements::{
-        class_parser::ClassFileParsingError,
-        field::{Field, FieldAccessFlags, FieldType},
-    },
+    elements::field::{Field, FieldAccessFlags, FieldType},
     utils::read_u16,
 };
 
 use super::{
     attribute::{Attribute, AttributeList},
     constant_pool::ConstantPool,
+    error::ClassFileParsingError,
 };
 
 impl Field {

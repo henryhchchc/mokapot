@@ -7,6 +7,7 @@ use super::{
     parsing::{
         attribute::{Attribute, AttributeList},
         constant_pool::ConstantPool,
+        error::ClassFileParsingError,
     },
 };
 
@@ -161,56 +162,3 @@ impl<'a> ClassParser<'a> {
         ClassParser { reader }
     }
 }
-
-#[derive(Debug)]
-pub enum ClassFileParsingError {
-    MalformedClassFile,
-    MismatchedConstantPoolEntryType {
-        expected: &'static str,
-        found: &'static str,
-    },
-    BadConstantPoolIndex(u16),
-    UnknownAttribute(String),
-    InvalidAttributeLength {
-        expected: u32,
-        actual: u32,
-    },
-    UnexpectedAttribute(String, String),
-    UnexpectedData,
-    InvalidElementValueTag(char),
-    InvalidTargetType(u8),
-    InvalidTypePathKind,
-    UnknownStackMapFrameType(u8),
-    InvalidVerificationTypeInfoTag(u8),
-    UnexpectedOpCode(u8),
-    UnknownFlags(u16),
-    InvalidDescriptor(String),
-    UnexpectedConstantPoolTag(u8),
-    NotAClassFile,
-    InvalidJumpTarget,
-}
-
-impl From<std::io::Error> for ClassFileParsingError {
-    fn from(_value: std::io::Error) -> Self {
-        ClassFileParsingError::MalformedClassFile
-    }
-}
-
-impl std::fmt::Display for ClassFileParsingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-impl std::error::Error for ClassFileParsingError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.source()
-    }
-}
-

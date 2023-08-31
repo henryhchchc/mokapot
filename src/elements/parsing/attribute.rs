@@ -2,7 +2,6 @@ use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TypeAnnotation},
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
-        class_parser::ClassFileParsingError,
         field::ConstantValue,
         method::{
             LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTypeAttr, MethodBody,
@@ -14,7 +13,10 @@ use crate::{
     utils::{read_u16, read_u32},
 };
 
-use super::constant_pool::{ConstantPool, ConstantPoolEntry};
+use super::{
+    constant_pool::{ConstantPool, ConstantPoolEntry},
+    error::ClassFileParsingError,
+};
 
 #[derive(Debug)]
 pub(crate) struct AttributeList {

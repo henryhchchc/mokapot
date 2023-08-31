@@ -1,8 +1,7 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, },
         method::{StackMapFrame, VerificationTypeInfo},
-        parsing::constant_pool::ConstantPool,
+        parsing::{constant_pool::ConstantPool, error::ClassFileParsingError},
     },
     utils::{read_u16, read_u8},
 };

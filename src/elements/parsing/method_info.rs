@@ -1,6 +1,5 @@
 use crate::{
     elements::{
-        class_parser::{ClassFileParsingError, },
         instruction::Instruction,
         method::{
             ExceptionTableEntry, LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTable,
@@ -12,7 +11,10 @@ use crate::{
     utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
-use super::attribute::{Attribute, AttributeList};
+use super::{
+    attribute::{Attribute, AttributeList},
+    error::ClassFileParsingError,
+};
 
 impl ExceptionTableEntry {
     fn parse<R>(

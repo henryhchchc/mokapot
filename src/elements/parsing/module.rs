@@ -1,12 +1,11 @@
 use crate::{
-    elements::{
-        class_parser::ClassFileParsingError,
-        module::{Module, ModuleExport, ModuleFlags, ModuleOpen, ModuleProvide, ModuleRequire},
+    elements::module::{
+        Module, ModuleExport, ModuleFlags, ModuleOpen, ModuleProvide, ModuleRequire,
     },
     utils::{read_u16, read_u32},
 };
 
-use super::{attribute::Attribute, constant_pool::ConstantPool};
+use super::{attribute::Attribute, constant_pool::ConstantPool, error::ClassFileParsingError};
 
 impl ModuleRequire {
     fn parse_multiple<R>(

@@ -1,8 +1,8 @@
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class::Handle,
-    class_parser::ClassFileParsingError,
     method::MethodDescriptor,
+    parsing::error::ClassFileParsingError,
     references::ClassReference,
 };
 

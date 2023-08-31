@@ -1,13 +1,12 @@
 use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-        class_parser::ClassFileParsingError,
         field::{ConstantValue, FieldType},
     },
     utils::{read_u16, read_u32, read_u8},
 };
 
-use super::{attribute::Attribute, constant_pool::ConstantPool};
+use super::{attribute::Attribute, constant_pool::ConstantPool, error::ClassFileParsingError};
 
 impl ElementValue {
     fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>

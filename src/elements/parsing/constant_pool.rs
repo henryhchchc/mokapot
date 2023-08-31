@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::{
     elements::{
         class::Handle,
-        class_parser::ClassFileParsingError,
         field::{ConstantValue, FieldType},
         instruction::ArrayTypeRef,
         method::MethodDescriptor,
@@ -14,6 +13,8 @@ use crate::{
     },
     utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
 };
+
+use super::error::ClassFileParsingError;
 
 #[derive(Debug)]
 pub struct ConstantPool {

@@ -6,9 +6,9 @@ use itertools::Itertools;
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
-    class_parser::ClassFileParsingError,
     field::{FieldType, PrimitiveType},
     instruction::Instruction,
+    parsing::error::ClassFileParsingError,
     references::ClassReference,
 };
 
