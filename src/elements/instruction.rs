@@ -259,5 +259,5 @@ pub struct ArrayTypeRef {
     pub dimensions: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub struct ProgramCounter(pub u16);

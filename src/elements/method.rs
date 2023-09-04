@@ -7,7 +7,7 @@ use itertools::Itertools;
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     field::{FieldType, PrimitiveType},
-    instruction::Instruction,
+    instruction::{Instruction, ProgramCounter},
     parsing::error::ClassFileParsingError,
     references::ClassReference,
 };
@@ -42,7 +42,7 @@ pub struct MethodParameter {
 pub struct MethodBody {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instructions: Vec<Instruction>,
+    pub instructions: HashMap<ProgramCounter, Instruction>,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
     pub local_variable_table: Option<LocalVariableTable>,

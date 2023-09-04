@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use crate::{
     elements::{
         field::{ConstantValue, FieldType, PrimitiveType},
-        instruction::Instruction,
+        instruction::{Instruction, ProgramCounter},
         method::MethodDescriptor,
         parsing::{
             constant_pool::{ConstantPool, ConstantPoolEntry},
@@ -16,13 +18,12 @@ impl Instruction {
     pub fn parse_code(
         bytes: Vec<u8>,
         constant_pool: &ConstantPool,
-    ) -> Result<Vec<Self>, ClassFileParsingError> {
+    ) -> Result<HashMap<ProgramCounter, Self>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
-        let mut instructions = Vec::new();
-        let mut pc = 0;
+        let mut instructions = HashMap::new();
         loop {
-            if let Some(instruction) = Instruction::parse(&mut cursor, constant_pool, &mut pc)? {
-                instructions.push(instruction);
+            if let Some((addr, instruction)) = Instruction::parse(&mut cursor, constant_pool)? {
+                instructions.insert(addr, instruction);
             } else {
                 break;
             }
@@ -33,8 +34,8 @@ impl Instruction {
     pub(crate) fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
         constant_pool: &ConstantPool,
-        pc: &mut u16,
-    ) -> Result<Option<Self>, ClassFileParsingError> {
+    ) -> Result<Option<(ProgramCounter, Self)>, ClassFileParsingError> {
+        let pc = reader.position() as u16;
         let opcode = match read_u8(reader) {
             Ok(it) => it,
             Err(e) => {
@@ -142,8 +143,8 @@ impl Instruction {
                 let field = constant_pool.get_field_ref(&index)?;
                 Self::GetStatic(field)
             }
-            0xa7 => Self::Goto(read_offset16(reader, *pc)?),
-            0xc8 => Self::GotoW(read_offset32(reader, *pc)?),
+            0xa7 => Self::Goto(read_offset16(reader, pc)?),
+            0xc8 => Self::GotoW(read_offset32(reader, pc)?),
             0x91 => Self::I2B,
             0x92 => Self::I2C,
             0x87 => Self::I2D,
@@ -162,22 +163,22 @@ impl Instruction {
             0x07 => Self::IConst4,
             0x08 => Self::IConst5,
             0x6c => Self::IDiv,
-            0xa5 => Self::IfACmpEq(read_offset16(reader, *pc)?),
-            0xa6 => Self::IfACmpNe(read_offset16(reader, *pc)?),
-            0x9f => Self::IfICmpEq(read_offset16(reader, *pc)?),
-            0xa0 => Self::IfICmpNe(read_offset16(reader, *pc)?),
-            0xa1 => Self::IfICmpLt(read_offset16(reader, *pc)?),
-            0xa2 => Self::IfICmpGe(read_offset16(reader, *pc)?),
-            0xa3 => Self::IfICmpGt(read_offset16(reader, *pc)?),
-            0xa4 => Self::IfICmpLe(read_offset16(reader, *pc)?),
-            0x99 => Self::IfEq(read_offset16(reader, *pc)?),
-            0x9a => Self::IfNe(read_offset16(reader, *pc)?),
-            0x9b => Self::IfLt(read_offset16(reader, *pc)?),
-            0x9c => Self::IfGe(read_offset16(reader, *pc)?),
-            0x9d => Self::IfGt(read_offset16(reader, *pc)?),
-            0x9e => Self::IfLe(read_offset16(reader, *pc)?),
-            0xc7 => Self::IfNonNull(read_offset16(reader, *pc)?),
-            0xc6 => Self::IfNull(read_offset16(reader, *pc)?),
+            0xa5 => Self::IfACmpEq(read_offset16(reader, pc)?),
+            0xa6 => Self::IfACmpNe(read_offset16(reader, pc)?),
+            0x9f => Self::IfICmpEq(read_offset16(reader, pc)?),
+            0xa0 => Self::IfICmpNe(read_offset16(reader, pc)?),
+            0xa1 => Self::IfICmpLt(read_offset16(reader, pc)?),
+            0xa2 => Self::IfICmpGe(read_offset16(reader, pc)?),
+            0xa3 => Self::IfICmpGt(read_offset16(reader, pc)?),
+            0xa4 => Self::IfICmpLe(read_offset16(reader, pc)?),
+            0x99 => Self::IfEq(read_offset16(reader, pc)?),
+            0x9a => Self::IfNe(read_offset16(reader, pc)?),
+            0x9b => Self::IfLt(read_offset16(reader, pc)?),
+            0x9c => Self::IfGe(read_offset16(reader, pc)?),
+            0x9d => Self::IfGt(read_offset16(reader, pc)?),
+            0x9e => Self::IfLe(read_offset16(reader, pc)?),
+            0xc7 => Self::IfNonNull(read_offset16(reader, pc)?),
+            0xc6 => Self::IfNull(read_offset16(reader, pc)?),
             0x84 => Self::IInc(read_u8(reader)?, read_i8(reader)?),
             0x15 => Self::ILoad(read_u8(reader)?),
             0x1a => Self::ILoad0,
@@ -193,8 +194,12 @@ impl Instruction {
                 let ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
-                } = constant_pool_entry else {
-                    Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "InvokeDynamic", found: constant_pool_entry.type_name()})?
+                } = constant_pool_entry
+                else {
+                    Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                        expected: "InvokeDynamic",
+                        found: constant_pool_entry.type_name(),
+                    })?
                 };
                 let (name, desc_str) = constant_pool.get_name_and_type(&name_and_type_index)?;
                 let descriptor = MethodDescriptor::new(desc_str)?;
@@ -206,7 +211,9 @@ impl Instruction {
             }
             0xb9 => {
                 let index = read_u16(reader)?;
-                let MethodReference::Interface(method_ref) = constant_pool.get_method_ref(&index)? else {
+                let MethodReference::Interface(method_ref) =
+                    constant_pool.get_method_ref(&index)?
+                else {
                     Err(ClassFileParsingError::MalformedClassFile)?
                 };
                 let count = read_u8(reader)?;
@@ -244,8 +251,8 @@ impl Instruction {
             0x64 => Self::ISub,
             0x7c => Self::IUShr,
             0x82 => Self::IXor,
-            0xa8 => Self::Jsr(read_offset16(reader, *pc)?),
-            0xc9 => Self::JsrW(read_offset32(reader, *pc)?),
+            0xa8 => Self::Jsr(read_offset16(reader, pc)?),
+            0xc9 => Self::JsrW(read_offset32(reader, pc)?),
             0x8a => Self::L2D,
             0x89 => Self::L2F,
             0x88 => Self::L2I,
@@ -316,7 +323,7 @@ impl Instruction {
                 let match_targets = (0..npairs)
                     .map(|_| {
                         let match_value = read_i32(reader)?;
-                        let offset = read_offset32(reader, *pc)?;
+                        let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
                     .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
@@ -334,7 +341,7 @@ impl Instruction {
                 let high = read_i32(reader)?;
                 let offset_count = high - low + 1;
                 let jump_targets = (0..offset_count)
-                    .map(|_| read_offset32(reader, *pc))
+                    .map(|_| read_offset32(reader, pc))
                     .collect::<Result<Vec<_>, _>>()?;
                 Self::TableSwitch {
                     default,
@@ -422,7 +429,6 @@ impl Instruction {
             }
             it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
         };
-        *pc += 1;
-        Ok(Some(instruction))
+        Ok(Some((ProgramCounter(pc), instruction)))
     }
 }
