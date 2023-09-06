@@ -71,6 +71,19 @@ impl PrimitiveType {
             )),
         }
     }
+
+    fn descriptor_str(&self) -> &'static str {
+        match self {
+            Self::Boolean => "Z",
+            Self::Char => "C",
+            Self::Float => "F",
+            Self::Double => "D",
+            Self::Byte => "B",
+            Self::Short => "S",
+            Self::Int => "I",
+            Self::Long => "J",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -117,6 +130,16 @@ impl FieldType {
             Ok(result)
         } else {
             Err(ClassFileParsingError::UnexpectedData)
+        }
+    }
+
+    pub(crate) fn descriptor_string(&self) -> String {
+        match self {
+            FieldType::Base(it) => it.descriptor_str().to_string(),
+            FieldType::Object(ClassReference { binary_name }) => {
+                format!("L{};", binary_name)
+            }
+            FieldType::Array(inner) => format!("[{}", inner.descriptor_string()),
         }
     }
 }

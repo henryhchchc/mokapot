@@ -236,6 +236,17 @@ pub enum ReturnType {
 }
 
 impl MethodDescriptor {
+    pub fn to_string(&self) -> String {
+        let mut result = String::new();
+        result.push('(');
+        for param in &self.parameters_types {
+            result.push_str(&param.descriptor_string());
+        }
+        result.push(')');
+        result.push_str(&self.return_type.descriptor_string());
+        result
+    }
+
     /// Parses a method descriptor from a string and advances the iterator.
     /// For an input as follows.
     /// ```text
@@ -306,6 +317,13 @@ impl ReturnType {
             Ok(ReturnType::Void)
         } else {
             FieldType::new(descriptor).map(ReturnType::Some)
+        }
+    }
+
+    fn descriptor_string(&self) -> String {
+        match self {
+            ReturnType::Some(it) => it.descriptor_string(),
+            ReturnType::Void => "V".to_string(),
         }
     }
 }
