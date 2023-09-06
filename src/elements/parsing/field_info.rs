@@ -19,7 +19,7 @@ impl Field {
     {
         let access = read_u16(reader)?;
         let Some(access_flags) = FieldAccessFlags::from_bits(access) else {
-            return Err(ClassFileParsingError::UnknownFlags(access));
+            return Err(ClassFileParsingError::UnknownFlags(access, "field"));
         };
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
@@ -53,8 +53,8 @@ impl Field {
                     runtime_invisible_type_annotations = Some(a)
                 }
                 it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    format!("{:?}", it),
-                    "field_info".to_string(),
+                    it.name(),
+                    "field_info",
                 ))?,
             }
         }

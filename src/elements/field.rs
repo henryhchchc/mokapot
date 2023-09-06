@@ -95,7 +95,6 @@ impl FieldType {
                         binary_name: type_name,
                     })),
                     _ => {
-                        // panic!("233");
                         Err(ClassFileParsingError::InvalidDescriptor(
                             descriptor.to_string(),
                         ))
@@ -108,7 +107,6 @@ impl FieldType {
             }
             Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
             None => {
-                // panic!("233");
                 Err(ClassFileParsingError::InvalidDescriptor(
                     descriptor.to_string(),
                 ))

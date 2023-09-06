@@ -106,7 +106,7 @@ where
     R: std::io::Read,
 {
     let offset = read_i16(reader)?;
-    let target_pc_signed = (current_pc as i16) + offset;
+    let target_pc_signed = i32::from(current_pc) + i32::from(offset);
     u16::try_from(target_pc_signed)
         .map(ProgramCounter)
         .map_err(|_| ClassFileParsingError::InvalidJumpTarget)

@@ -169,8 +169,8 @@ impl Attribute {
                             rt_invisible_type_anno = Some(it)
                         }
                         it => Err(ClassFileParsingError::UnexpectedAttribute(
-                            format!("{:?}", it),
-                            "record".to_string(),
+                            it.name(),
+                            "record",
                         ))?,
                     }
                 }

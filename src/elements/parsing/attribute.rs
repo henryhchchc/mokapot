@@ -84,6 +84,41 @@ pub(crate) enum Attribute {
 }
 
 impl Attribute {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::ConstantValue(_) => "ConstantValue",
+            Self::Code(_) => "Code",
+            Self::StackMapTable(_) => "StackMapTable",
+            Self::Exceptions(_) => "Exceptions",
+            Self::SourceFile(_) => "SourceFile",
+            Self::LineNumberTable(_) => "LineNumberTable",
+            Self::InnerClasses(_) => "InnerClasses",
+            Self::Synthetic => "Synthetic",
+            Self::Deprecated => "Deprecated",
+            Self::EnclosingMethod(_) => "EnclosingMethod",
+            Self::Signature(_) => "Signature",
+            Self::SourceDebugExtension(_) => "SourceDebugExtension",
+            Self::LocalVariableTable(_) => "LocalVariableTable",
+            Self::LocalVariableTypeTable(_) => "LocalVariableTypeTable",
+            Self::RuntimeVisibleAnnotations(_) => "RuntimeVisibleAnnotations",
+            Self::RuntimeInvisibleAnnotations(_) => "RuntimeInvisibleAnnotations",
+            Self::RuntimeVisibleParameterAnnotations(_) => "RuntimeVisibleParameterAnnotations",
+            Self::RuntimeInvisibleParameterAnnotations(_) => "RuntimeInvisibleParameterAnnotations",
+            Self::RuntimeVisibleTypeAnnotations(_) => "RuntimeVisibleTypeAnnotations",
+            Self::RuntimeInvisibleTypeAnnotations(_) => "RuntimeInvisibleTypeAnnotations",
+            Self::AnnotationDefault(_) => "AnnotationDefault",
+            Self::BootstrapMethods(_) => "BootstrapMethods",
+            Self::MethodParameters(_) => "MethodParameters",
+            Self::Module(_) => "Module",
+            Self::ModulePackages(_) => "ModulePackages",
+            Self::ModuleMainClass(_) => "ModuleMainClass",
+            Self::NestHost(_) => "NestHost",
+            Self::NestMembers(_) => "NestMembers",
+            Self::Record(_) => "Record",
+            Self::PermittedSubclasses(_) => "PermittedSubclasses",
+        }
+    }
+
     fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,

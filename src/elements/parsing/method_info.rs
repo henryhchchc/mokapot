@@ -87,6 +87,8 @@ impl Attribute {
         let mut line_number_table = None;
         let mut local_variable_table = None;
         let mut stack_map_table = None;
+        let mut runtime_visible_type_annotations = None;
+        let mut runtime_invisible_type_annotations = None;
 
         for attr in attributes.into_iter() {
             match attr {
@@ -98,9 +100,15 @@ impl Attribute {
                     .get_or_insert(LocalVariableTable::new())
                     .merge_type_attr(it),
                 Attribute::StackMapTable(it) => stack_map_table = Some(it),
+                Attribute::RuntimeVisibleTypeAnnotations(it) => {
+                    runtime_visible_type_annotations = Some(it)
+                }
+                Attribute::RuntimeInvisibleTypeAnnotations(it) => {
+                    runtime_invisible_type_annotations = Some(it)
+                }
                 it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    format!("{:?}", it),
-                    "code".to_string(),
+                    it.name(),
+                    "code",
                 ))?,
             };
         }
@@ -113,6 +121,9 @@ impl Attribute {
             line_number_table,
             local_variable_table,
             stack_map_table,
+            runtime_visible_type_annotations: runtime_visible_type_annotations.unwrap_or_default(),
+            runtime_invisible_type_annotations: runtime_invisible_type_annotations
+                .unwrap_or_default(),
         }))
     }
     pub(super) fn parse_local_variable_table<R>(
@@ -198,7 +209,7 @@ impl Attribute {
             let name = constant_pool.get_string(&name_index)?;
             let access_flag_bits = read_u16(reader)?;
             let Some(access_flags) = MethodParameterAccessFlags::from_bits(access_flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(access_flag_bits));
+                return Err(ClassFileParsingError::UnknownFlags(access_flag_bits, "method_parameter"));
             };
             parameters.push(MethodParameter { name, access_flags });
         }
@@ -216,7 +227,7 @@ impl Method {
     {
         let access = read_u16(reader)?;
         let Some(access_flags) = MethodAccessFlags::from_bits(access) else {
-            return Err(ClassFileParsingError::UnknownFlags(access));
+            return Err(ClassFileParsingError::UnknownFlags(access, "method"));
         };
         let name_index = read_u16(reader)?;
         let name = constant_pool.get_string(&name_index)?;
@@ -258,8 +269,8 @@ impl Method {
                 Attribute::Deprecated => is_deprecated = true,
                 Attribute::Signature(sig) => signature = Some(sig),
                 it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    format!("{:?}", it),
-                    "method_info".to_string(),
+                    it.name(),
+                    "method_info",
                 ))?,
             }
         }

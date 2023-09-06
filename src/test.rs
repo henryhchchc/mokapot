@@ -52,9 +52,9 @@ fn test_class_name() {
 fn test_super_class_name() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(
-        ClassReference {
+        Some(ClassReference {
             binary_name: "java/lang/Object".to_string()
-        },
+        }),
         my_class.super_class
     );
 }

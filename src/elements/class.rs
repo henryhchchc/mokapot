@@ -13,7 +13,7 @@ pub struct Class {
     pub version: ClassVersion,
     pub access_flags: ClassAccessFlags,
     pub this_class: ClassReference,
-    pub super_class: ClassReference,
+    pub super_class: Option<ClassReference>,
     pub interfaces: Vec<ClassReference>,
     pub fields: Vec<Field>,
     pub methods: Vec<Method>,

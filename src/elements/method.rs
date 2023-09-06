@@ -47,6 +47,8 @@ pub struct MethodBody {
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
     pub local_variable_table: Option<LocalVariableTable>,
     pub stack_map_table: Option<Vec<StackMapFrame>>,
+    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 
 #[derive(Debug)]

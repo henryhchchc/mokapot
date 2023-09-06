@@ -42,7 +42,7 @@ impl Instruction {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {
                     return Ok(None);
                 } else {
-                    return Err(ClassFileParsingError::MalformedClassFile);
+                    return Err(ClassFileParsingError::MalformedClassFile("Extra data at the end of code"));
                 }
             }
         };
@@ -205,7 +205,7 @@ impl Instruction {
                 let descriptor = MethodDescriptor::new(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile)?
+                    Err(ClassFileParsingError::MalformedClassFile("Zero paddings are not zero"))?
                 }
                 Self::InvokeDynamic(*bootstrap_method_index, name.to_string(), descriptor)
             }
@@ -214,12 +214,12 @@ impl Instruction {
                 let MethodReference::Interface(method_ref) =
                     constant_pool.get_method_ref(&index)?
                 else {
-                    Err(ClassFileParsingError::MalformedClassFile)?
+                    Err(ClassFileParsingError::MalformedClassFile("InvokeInterface is not associated with an interfac method"))?
                 };
                 let count = read_u8(reader)?;
                 let zero = read_u8(reader)?;
                 if zero != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile)?
+                    Err(ClassFileParsingError::MalformedClassFile("Zero paddings are not zero"))?
                 }
                 Self::InvokeInterface(method_ref, count)
             }
@@ -272,7 +272,7 @@ impl Instruction {
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double)) => {
-                        Err(ClassFileParsingError::MalformedClassFile)?
+                        Err(ClassFileParsingError::MalformedClassFile("Ldc must not load wide data types"))?
                     }
                     it @ _ => it,
                 };
@@ -287,7 +287,7 @@ impl Instruction {
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double)) => {
-                        Err(ClassFileParsingError::MalformedClassFile)?
+                        Err(ClassFileParsingError::MalformedClassFile("LdcW must not load wide data types"))?
                     }
                     it @ _ => it,
                 };
@@ -302,7 +302,7 @@ impl Instruction {
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double))) => it,
-                    _ => Err(ClassFileParsingError::MalformedClassFile)?,
+                    _ => Err(ClassFileParsingError::MalformedClassFile("Ldc2W must load wide data types"))?,
                 };
                 Self::Ldc2W(constant)
             }
@@ -386,7 +386,7 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(ClassFileParsingError::MalformedClassFile)?,
+                    _ => Err(ClassFileParsingError::MalformedClassFile("NewArray must create primitive array"))?,
                 };
                 Self::NewArray(arr_type)
             }

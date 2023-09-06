@@ -2,8 +2,8 @@
 pub enum ClassFileParsingError {
     #[error("Failed to read from buffer: {0}")]
     ReadFail(#[from] std::io::Error),
-    #[error("MalformedClassFile")]
-    MalformedClassFile,
+    #[error("MalformedClassFile: {0}")]
+    MalformedClassFile(&'static str),
     #[error("Mismatched constant pool entry, expected {expected}, but found {found}")]
     MismatchedConstantPoolEntryType {
         expected: &'static str,
@@ -16,7 +16,7 @@ pub enum ClassFileParsingError {
     #[error("Invalid attribute lengeh, expected {expected} but was {actual}")]
     InvalidAttributeLength { expected: u32, actual: u32 },
     #[error("Unexpected attribute {0} in {1}")]
-    UnexpectedAttribute(String, String),
+    UnexpectedAttribute(&'static str, &'static str),
     #[error("Unexpected data at the end of the file")]
     UnexpectedData,
     #[error("Invalid element tag {0}")]
@@ -31,8 +31,8 @@ pub enum ClassFileParsingError {
     InvalidVerificationTypeInfoTag(u8),
     #[error("Unexpected opcode {0:#x}")]
     UnexpectedOpCode(u8),
-    #[error("Unknown access flag {0}")]
-    UnknownFlags(u16),
+    #[error("Unknown access flag in {1}: {0:#x}")]
+    UnknownFlags(u16, &'static str),
     #[error("Invalid descriptor {0}")]
     InvalidDescriptor(String),
     #[error("Unexpected constant pool tag {0}")]

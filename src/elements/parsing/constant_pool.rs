@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use crate::{
     elements::{
@@ -264,7 +264,7 @@ impl ConstantPool {
             7 => RefInvokeSpecial(self.get_method_ref(idx)?),
             8 => RefNewInvokeSpecial(self.get_method_ref(idx)?),
             9 => RefInvokeInterface(self.get_method_ref(idx)?),
-            _ => Err(ClassFileParsingError::MalformedClassFile)?,
+            _ => Err(ClassFileParsingError::MalformedClassFile("Invalid reference kind in method handle"))?,
         };
         Ok(result)
     }
@@ -274,11 +274,8 @@ impl ConstantPool {
         index: &u16,
     ) -> Result<ArrayTypeRef, ClassFileParsingError> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
-        if !name.starts_with('[') {
-            return Err(ClassFileParsingError::MalformedClassFile);
-        }
         let FieldType::Array(b) = FieldType::new(&name)? else {
-            return Err(ClassFileParsingError::MalformedClassFile);
+            return Err(ClassFileParsingError::MalformedClassFile("Invalid type name for arrty type ref"));
         };
         let mut dim = 1;
         let mut current_type = *b;
@@ -430,7 +427,7 @@ impl ConstantPoolEntry {
         if let Ok(result) = cesu8::from_java_cesu8(bytes.as_slice()) {
             Ok(Self::Utf8(result.into_owned()))
         } else {
-            Err(ClassFileParsingError::MalformedClassFile)
+            Err(ClassFileParsingError::MalformedClassFile("The constant pool entry does not contain valid UTF-8 bytes"))
         }
     }
 

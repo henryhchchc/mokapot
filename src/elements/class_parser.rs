@@ -27,12 +27,19 @@ impl<'a> ClassParser<'a> {
         let constant_pool = ConstantPool::parse(reader)?;
         let access = read_u16(reader)?;
         let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
-            return Err(ClassFileParsingError::UnknownFlags(access));
+            return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
         let this_class_idx = read_u16(reader)?;
         let this_class = constant_pool.get_class_ref(&this_class_idx)?;
         let super_class_idx = read_u16(reader)?;
-        let super_class = constant_pool.get_class_ref(&super_class_idx)?;
+        let super_class = match super_class_idx {
+            0 if this_class.binary_name == "java/lang/Object" => None,
+            0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
+            0 => Err(ClassFileParsingError::MalformedClassFile(
+                "Class must have a super type except for java/lang/Object or a module",
+            ))?,
+            it @ _ => Some(constant_pool.get_class_ref(&it)?),
+        };
 
         let interfaces_count = read_u16(reader)?;
         let interfaces = (0..interfaces_count)
@@ -100,9 +107,9 @@ impl<'a> ClassParser<'a> {
                 Attribute::Deprecated => is_deprecated = true,
                 Attribute::Signature(sig) => signature = Some(sig),
                 Attribute::Record(rec) => record = Some(rec),
-                it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    format!("{:?}", it),
-                    "class_file".to_string(),
+                it @ _ => Err(ClassFileParsingError::UnexpectedAttribute(
+                    it.name(),
+                    "class_file",
                 ))?,
             }
         }

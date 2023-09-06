@@ -1,11 +1,18 @@
 use crate::{
-    elements::module::{
-        Module, ModuleExport, ModuleFlags, ModuleOpen, ModuleProvide, ModuleRequire,
+    elements::{
+        module::{
+            Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
+            ModuleProvide, ModuleRequire, ModuleRequireFlags,
+        },
     },
     utils::{read_u16, read_u32},
 };
 
-use super::{attribute::Attribute, constant_pool::ConstantPool, error::ClassFileParsingError};
+use super::{
+    attribute::Attribute,
+    constant_pool::{ConstantPool, ConstantPoolEntry},
+    error::ClassFileParsingError,
+};
 
 impl ModuleRequire {
     fn parse_multiple<R>(
@@ -21,8 +28,8 @@ impl ModuleRequire {
                 let module_index = read_u16(reader)?;
                 let module = constant_pool.get_module_ref(&module_index)?;
                 let flag_bits = read_u16(reader)?;
-                let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+                let Some(flags) = ModuleRequireFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_require"));
             };
                 let version_index = read_u16(reader)?;
                 let version = if version_index > 0 {
@@ -54,8 +61,8 @@ impl ModuleExport {
                 let package_index = read_u16(reader)?;
                 let package = constant_pool.get_package_ref(&package_index)?;
                 let flag_bits = read_u16(reader)?;
-                let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+                let Some(flags) = ModuleExportFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_export"));
             };
                 let to_count = read_u16(reader)?;
                 let mut to = Vec::with_capacity(to_count as usize);
@@ -84,8 +91,8 @@ impl ModuleOpen {
                 let package_index = read_u16(reader)?;
                 let package = constant_pool.get_package_ref(&package_index)?;
                 let flag_bits = read_u16(reader)?;
-                let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+                let Some(flags) = ModuleOpenFlags::from_bits(flag_bits) else {
+                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_open"));
             };
                 let to_count = read_u16(reader)?;
                 let mut to = Vec::with_capacity(to_count as usize);
@@ -135,11 +142,15 @@ impl Attribute {
         R: std::io::Read,
     {
         let _attribute_length = read_u32(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
+        let module_info_idx = read_u16(reader)?;
+        let module_info_entry = constant_pool.get_entry(&module_info_idx)?;
+        let ConstantPoolEntry::Module { name_index } = module_info_entry else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType { expected: "Module", found: module_info_entry.type_name() })?
+        };
+        let name = constant_pool.get_string(name_index)?;
         let flag_bits = read_u16(reader)?;
         let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
-            return Err(ClassFileParsingError::UnknownFlags(flag_bits));
+            return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module"));
         };
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {

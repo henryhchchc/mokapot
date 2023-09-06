@@ -24,7 +24,7 @@ impl ElementValue {
                     | ('D', ConstantValue::Double(_))
                     | ('F', ConstantValue::Float(_))
                     | ('J', ConstantValue::Long(_)) => Ok(Self::Constant(const_value)),
-                    _ => Err(ClassFileParsingError::MalformedClassFile),
+                    _ => Err(ClassFileParsingError::MalformedClassFile("Primitive element tag must point to primitive constant values")),
                 }
             }
             's' => {
