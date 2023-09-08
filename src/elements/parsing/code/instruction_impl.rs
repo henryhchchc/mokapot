@@ -6,7 +6,7 @@ use crate::{
         instruction::{Instruction, ProgramCounter},
         method::MethodDescriptor,
         parsing::{
-            constant_pool::{ConstantPool, ConstantPoolEntry},
+            constant_pool::{ConstantPoolEntry, ParsingContext},
             error::ClassFileParsingError,
         },
         references::MethodReference,
@@ -17,12 +17,12 @@ use crate::{
 impl Instruction {
     pub fn parse_code(
         bytes: Vec<u8>,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<HashMap<ProgramCounter, Self>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut instructions = HashMap::new();
         loop {
-            if let Some((addr, instruction)) = Instruction::parse(&mut cursor, constant_pool)? {
+            if let Some((addr, instruction)) = Instruction::parse(&mut cursor, ctx)? {
                 instructions.insert(addr, instruction);
             } else {
                 break;
@@ -33,7 +33,7 @@ impl Instruction {
 
     pub(crate) fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Option<(ProgramCounter, Self)>, ClassFileParsingError> {
         let pc = reader.position() as u16;
         let opcode = match read_u8(reader) {
@@ -42,7 +42,9 @@ impl Instruction {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {
                     return Ok(None);
                 } else {
-                    return Err(ClassFileParsingError::MalformedClassFile("Extra data at the end of code"));
+                    return Err(ClassFileParsingError::MalformedClassFile(
+                        "Extra data at the end of code",
+                    ));
                 }
             }
         };
@@ -57,7 +59,7 @@ impl Instruction {
             0x2d => Self::ALoad3,
             0xbd => {
                 let index = read_u16(reader)?;
-                let element_type = constant_pool.get_class_ref(&index)?;
+                let element_type = ctx.get_class_ref(&index)?;
                 Self::ANewArray(element_type)
             }
             0xb0 => Self::AReturn,
@@ -135,12 +137,12 @@ impl Instruction {
             0x66 => Self::FSub,
             0xb4 => {
                 let index = read_u16(reader)?;
-                let field = constant_pool.get_field_ref(&index)?;
+                let field = ctx.get_field_ref(&index)?;
                 Self::GetField(field)
             }
             0xb2 => {
                 let index = read_u16(reader)?;
-                let field = constant_pool.get_field_ref(&index)?;
+                let field = ctx.get_field_ref(&index)?;
                 Self::GetStatic(field)
             }
             0xa7 => Self::Goto(read_offset16(reader, pc)?),
@@ -190,7 +192,7 @@ impl Instruction {
             0xc1 => Self::InstanceOf(read_u16(reader)?),
             0xba => {
                 let index = read_u16(reader)?;
-                let constant_pool_entry = constant_pool.get_entry(&index)?;
+                let constant_pool_entry = ctx.get_entry(&index)?;
                 let ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
@@ -201,41 +203,45 @@ impl Instruction {
                         found: constant_pool_entry.type_name(),
                     })?
                 };
-                let (name, desc_str) = constant_pool.get_name_and_type(&name_and_type_index)?;
+                let (name, desc_str) = ctx.get_name_and_type(&name_and_type_index)?;
                 let descriptor = MethodDescriptor::new(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile("Zero paddings are not zero"))?
+                    Err(ClassFileParsingError::MalformedClassFile(
+                        "Zero paddings are not zero",
+                    ))?
                 }
                 Self::InvokeDynamic(*bootstrap_method_index, name.to_string(), descriptor)
             }
             0xb9 => {
                 let index = read_u16(reader)?;
-                let MethodReference::Interface(method_ref) =
-                    constant_pool.get_method_ref(&index)?
-                else {
-                    Err(ClassFileParsingError::MalformedClassFile("InvokeInterface is not associated with an interfac method"))?
+                let MethodReference::Interface(method_ref) = ctx.get_method_ref(&index)? else {
+                    Err(ClassFileParsingError::MalformedClassFile(
+                        "InvokeInterface is not associated with an interfac method",
+                    ))?
                 };
                 let count = read_u8(reader)?;
                 let zero = read_u8(reader)?;
                 if zero != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile("Zero paddings are not zero"))?
+                    Err(ClassFileParsingError::MalformedClassFile(
+                        "Zero paddings are not zero",
+                    ))?
                 }
                 Self::InvokeInterface(method_ref, count)
             }
             0xb7 => {
                 let index = read_u16(reader)?;
-                let method_ref = constant_pool.get_method_ref(&index)?;
+                let method_ref = ctx.get_method_ref(&index)?;
                 Self::InvokeSpecial(method_ref)
             }
             0xb8 => {
                 let index = read_u16(reader)?;
-                let method_ref = constant_pool.get_method_ref(&index)?;
+                let method_ref = ctx.get_method_ref(&index)?;
                 Self::InvokeStatic(method_ref)
             }
             0xb6 => {
                 let index = read_u16(reader)?;
-                let method_ref = constant_pool.get_method_ref(&index)?;
+                let method_ref = ctx.get_method_ref(&index)?;
                 Self::InvokeVirtual(method_ref)
             }
             0x80 => Self::IOr,
@@ -267,12 +273,14 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u8(reader)? as u16;
-                let constant = match constant_pool.get_constant_value(&index)? {
+                let constant = match ctx.get_constant_value(&index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double)) => {
-                        Err(ClassFileParsingError::MalformedClassFile("Ldc must not load wide data types"))?
+                        Err(ClassFileParsingError::MalformedClassFile(
+                            "Ldc must not load wide data types",
+                        ))?
                     }
                     it @ _ => it,
                 };
@@ -282,12 +290,14 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
-                let constant = match constant_pool.get_constant_value(&index)? {
+                let constant = match ctx.get_constant_value(&index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double)) => {
-                        Err(ClassFileParsingError::MalformedClassFile("LdcW must not load wide data types"))?
+                        Err(ClassFileParsingError::MalformedClassFile(
+                            "LdcW must not load wide data types",
+                        ))?
                     }
                     it @ _ => it,
                 };
@@ -297,12 +307,14 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
-                let constant = match constant_pool.get_constant_value(&index)? {
+                let constant = match ctx.get_constant_value(&index)? {
                     it @ (ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
                     | ConstantValue::Dynamic(_, _, Base(Double))) => it,
-                    _ => Err(ClassFileParsingError::MalformedClassFile("Ldc2W must load wide data types"))?,
+                    _ => Err(ClassFileParsingError::MalformedClassFile(
+                        "Ldc2W must load wide data types",
+                    ))?,
                 };
                 Self::Ldc2W(constant)
             }
@@ -367,12 +379,12 @@ impl Instruction {
             0xc3 => Self::MonitorExit,
             0xc5 => {
                 let index = read_u16(reader)?;
-                let array_type = constant_pool.get_array_type_ref(&index)?;
+                let array_type = ctx.get_array_type_ref(&index)?;
                 Self::MultiANewArray(array_type, read_u8(reader)?)
             }
             0xbb => {
                 let index = read_u16(reader)?;
-                let class_ref = constant_pool.get_class_ref(&index)?;
+                let class_ref = ctx.get_class_ref(&index)?;
                 Self::New(class_ref)
             }
             0xbc => {
@@ -386,7 +398,9 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(ClassFileParsingError::MalformedClassFile("NewArray must create primitive array"))?,
+                    _ => Err(ClassFileParsingError::MalformedClassFile(
+                        "NewArray must create primitive array",
+                    ))?,
                 };
                 Self::NewArray(arr_type)
             }
@@ -395,12 +409,12 @@ impl Instruction {
             0x58 => Self::Pop2,
             0xb5 => {
                 let index = read_u16(reader)?;
-                let field = constant_pool.get_field_ref(&index)?;
+                let field = ctx.get_field_ref(&index)?;
                 Self::PutField(field)
             }
             0xb3 => {
                 let index = read_u16(reader)?;
-                let field = constant_pool.get_field_ref(&index)?;
+                let field = ctx.get_field_ref(&index)?;
                 Self::PutStatic(field)
             }
             0xa9 => Self::Ret(read_u8(reader)?),

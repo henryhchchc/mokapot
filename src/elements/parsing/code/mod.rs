@@ -12,7 +12,7 @@ use crate::{
     utils::{read_u16, read_u8},
 };
 
-use super::{constant_pool::ConstantPool, error::ClassFileParsingError};
+use super::{constant_pool::ParsingContext, error::ClassFileParsingError};
 
 impl LineNumberTableEntry {
     pub(super) fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>
@@ -31,7 +31,7 @@ impl LineNumberTableEntry {
 impl LocalVariableDescAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<LocalVariableDescAttr, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -39,9 +39,9 @@ impl LocalVariableDescAttr {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
+        let name = ctx.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let descriptor = ctx.get_str(&descriptor_index)?;
         let field_type = FieldType::new(descriptor)?;
         let index = read_u16(reader)?;
         let key = LocalVariableKey {
@@ -60,7 +60,7 @@ impl LocalVariableDescAttr {
 impl LocalVariableTypeAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<LocalVariableTypeAttr, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -68,9 +68,9 @@ impl LocalVariableTypeAttr {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
+        let name = ctx.get_string(&name_index)?;
         let signature_index = read_u16(reader)?;
-        let signature = constant_pool.get_string(&signature_index)?;
+        let signature = ctx.get_string(&signature_index)?;
         let index = read_u16(reader)?;
         let key = LocalVariableKey {
             start_pc,
@@ -88,7 +88,7 @@ impl LocalVariableTypeAttr {
 impl VerificationTypeInfo {
     pub(super) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<VerificationTypeInfo, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -104,7 +104,7 @@ impl VerificationTypeInfo {
             6 => Self::UninitializedThisVariable,
             7 => {
                 let cpool_index = read_u16(reader)?;
-                let class_ref = constant_pool.get_class_ref(&cpool_index)?;
+                let class_ref = ctx.get_class_ref(&cpool_index)?;
                 Self::ObjectVariable(class_ref)
             }
             8 => {

@@ -1,8 +1,8 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     elements::{
-        class::Handle,
+        class::{ClassVersion, Handle},
         field::{ConstantValue, FieldType},
         instruction::ArrayTypeRef,
         method::MethodDescriptor,
@@ -17,23 +17,34 @@ use crate::{
 use super::error::ClassFileParsingError;
 
 #[derive(Debug)]
-pub struct ConstantPool {
-    entries: HashMap<u16, ConstantPoolEntry>,
+pub struct ParsingContext {
+    constant_pool: HashMap<u16, ConstantPoolEntry>,
+    class_version: ClassVersion,
 }
 
-impl ConstantPool {
-    pub fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+impl ParsingContext {
+    pub fn class_version(&self) -> &ClassVersion {
+        &self.class_version
+    }
+
+    pub fn parse<R>(
+        reader: &mut R,
+        class_version: &ClassVersion,
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let constant_pool_count = read_u16(reader)?;
         let entries = ConstantPoolEntry::parse_multiple(reader, constant_pool_count)?;
 
-        Ok(Self { entries })
+        Ok(Self {
+            constant_pool: entries,
+            class_version: class_version.clone(),
+        })
     }
 
     pub fn get_entry(&self, index: &u16) -> Result<&ConstantPoolEntry, ClassFileParsingError> {
-        let Some(entry) = self.entries.get(index) else {
+        let Some(entry) = self.constant_pool.get(index) else {
             return Err(ClassFileParsingError::BadConstantPoolIndex(index.clone()));
         };
         Ok(entry)
@@ -51,7 +62,7 @@ impl ConstantPool {
         }
     }
 
-    pub fn get_str<'a>(&'a self, index: &u16) -> Result<&'a str, ClassFileParsingError> {
+    pub fn get_str(&self, index: &u16) -> Result<&str, ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         if let ConstantPoolEntry::Utf8(string) = entry {
             Ok(string)
@@ -66,7 +77,10 @@ impl ConstantPool {
     pub fn get_class_ref(&self, index: &u16) -> Result<ClassReference, ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         let ConstantPoolEntry::Class { name_index } = entry else {
-            return Err(ClassFileParsingError::MismatchedConstantPoolEntryType{ expected: "Class", found: entry.type_name() })
+            return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Class",
+                found: entry.type_name(),
+            });
         };
         let name = self.get_string(&name_index)?;
         Ok(ClassReference { binary_name: name })
@@ -250,8 +264,12 @@ impl ConstantPool {
         let ConstantPoolEntry::MethodHandle {
             reference_kind,
             reference_index: idx,
-        } = entry else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "MethodHandle", found: entry.type_name() })?
+        } = entry
+        else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "MethodHandle",
+                found: entry.type_name(),
+            })?
         };
 
         let result = match reference_kind {
@@ -264,7 +282,9 @@ impl ConstantPool {
             7 => RefInvokeSpecial(self.get_method_ref(idx)?),
             8 => RefNewInvokeSpecial(self.get_method_ref(idx)?),
             9 => RefInvokeInterface(self.get_method_ref(idx)?),
-            _ => Err(ClassFileParsingError::MalformedClassFile("Invalid reference kind in method handle"))?,
+            _ => Err(ClassFileParsingError::MalformedClassFile(
+                "Invalid reference kind in method handle",
+            ))?,
         };
         Ok(result)
     }
@@ -275,7 +295,9 @@ impl ConstantPool {
     ) -> Result<ArrayTypeRef, ClassFileParsingError> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
         let FieldType::Array(b) = FieldType::new(&name)? else {
-            return Err(ClassFileParsingError::MalformedClassFile("Invalid type name for arrty type ref"));
+            return Err(ClassFileParsingError::MalformedClassFile(
+                "Invalid type name for arrty type ref",
+            ));
         };
         let mut dim = 1;
         let mut current_type = *b;
@@ -427,7 +449,9 @@ impl ConstantPoolEntry {
         if let Ok(result) = cesu8::from_java_cesu8(bytes.as_slice()) {
             Ok(Self::Utf8(result.into_owned()))
         } else {
-            Err(ClassFileParsingError::MalformedClassFile("The constant pool entry does not contain valid UTF-8 bytes"))
+            Err(ClassFileParsingError::MalformedClassFile(
+                "The constant pool entry does not contain valid UTF-8 bytes",
+            ))
         }
     }
 

@@ -107,11 +107,9 @@ impl FieldType {
                     Some(';') => Ok(FieldType::Object(ClassReference {
                         binary_name: type_name,
                     })),
-                    _ => {
-                        Err(ClassFileParsingError::InvalidDescriptor(
-                            descriptor.to_string(),
-                        ))
-                    }
+                    _ => Err(ClassFileParsingError::InvalidDescriptor(
+                        descriptor.to_string(),
+                    )),
                 }
             }
             Some('[') => {
@@ -119,11 +117,9 @@ impl FieldType {
                 return FieldType::new(chars.as_str()).map(|it| it.make_array_type());
             }
             Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
-            None => {
-                Err(ClassFileParsingError::InvalidDescriptor(
-                    descriptor.to_string(),
-                ))
-            }
+            None => Err(ClassFileParsingError::InvalidDescriptor(
+                descriptor.to_string(),
+            )),
         }?;
         // Check if there is any trailing character
         if chars.next().is_none() {

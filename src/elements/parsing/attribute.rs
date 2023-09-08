@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    constant_pool::{ConstantPool, ConstantPoolEntry},
+    constant_pool::{ConstantPoolEntry, ParsingContext},
     error::ClassFileParsingError,
 };
 
@@ -36,14 +36,14 @@ impl IntoIterator for AttributeList {
 impl AttributeList {
     pub(crate) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let attributes_count = read_u16(reader)?;
         let entries = (0..attributes_count)
-            .map(|_| Attribute::parse(reader, constant_pool))
+            .map(|_| Attribute::parse(reader, ctx))
             .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(Self { entries })
     }
@@ -119,63 +119,59 @@ impl Attribute {
         }
     }
 
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let name_idx = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_idx)?;
+        let name = ctx.get_string(&name_idx)?;
         match name.as_str() {
-            "ConstantValue" => Self::parse_constant_value(reader, constant_pool),
-            "Code" => Self::parse_code(reader, constant_pool),
-            "StackMapTable" => Self::parse_stack_map_table(reader, constant_pool),
-            "Exceptions" => Self::parse_exceptions(reader, constant_pool),
-            "InnerClasses" => Self::parse_innner_classes(reader, constant_pool),
-            "EnclosingMethod" => Self::parse_enclosing_method(reader, constant_pool),
-            "Synthetic" => Self::parse_synthetic(reader, constant_pool),
-            "Signature" => Self::parse_signature(reader, constant_pool),
-            "SourceFile" => Self::parse_source_file(reader, constant_pool),
-            "SourceDebugExtension" => Self::parse_source_debug_extension(reader, constant_pool),
-            "LineNumberTable" => Self::parse_line_no_table(reader, constant_pool),
-            "LocalVariableTable" => Self::parse_local_variable_table(reader, constant_pool),
-            "LocalVariableTypeTable" => {
-                Self::parse_local_variable_type_table(reader, constant_pool)
-            }
-            "Deprecated" => Self::parse_deprecated(reader, constant_pool),
+            "ConstantValue" => Self::parse_constant_value(reader, ctx),
+            "Code" => Self::parse_code(reader, ctx),
+            "StackMapTable" => Self::parse_stack_map_table(reader, ctx),
+            "Exceptions" => Self::parse_exceptions(reader, ctx),
+            "InnerClasses" => Self::parse_innner_classes(reader, ctx),
+            "EnclosingMethod" => Self::parse_enclosing_method(reader, ctx),
+            "Synthetic" => Self::parse_synthetic(reader, ctx),
+            "Signature" => Self::parse_signature(reader, ctx),
+            "SourceFile" => Self::parse_source_file(reader, ctx),
+            "SourceDebugExtension" => Self::parse_source_debug_extension(reader, ctx),
+            "LineNumberTable" => Self::parse_line_no_table(reader, ctx),
+            "LocalVariableTable" => Self::parse_local_variable_table(reader, ctx),
+            "LocalVariableTypeTable" => Self::parse_local_variable_type_table(reader, ctx),
+            "Deprecated" => Self::parse_deprecated(reader, ctx),
             "RuntimeVisibleAnnotations" => {
                 let attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, constant_pool, Some(attribute_length))
+                Self::parse_annotations(reader, ctx, Some(attribute_length))
                     .map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
                 let attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, constant_pool, Some(attribute_length))
+                Self::parse_annotations(reader, ctx, Some(attribute_length))
                     .map(Self::RuntimeInvisibleAnnotations)
             }
-            "RuntimeVisibleParameterAnnotations" => {
-                Self::parse_parameter_annotations(reader, constant_pool)
-                    .map(Self::RuntimeVisibleParameterAnnotations)
-            }
+            "RuntimeVisibleParameterAnnotations" => Self::parse_parameter_annotations(reader, ctx)
+                .map(Self::RuntimeVisibleParameterAnnotations),
             "RuntimeInvisibleParameterAnnotations" => {
-                Self::parse_parameter_annotations(reader, constant_pool)
+                Self::parse_parameter_annotations(reader, ctx)
                     .map(Self::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => Self::parse_type_annotations(reader, constant_pool)
-                .map(Self::RuntimeVisibleTypeAnnotations),
-            "RuntimeInvisibleTypeAnnotations" => {
-                Self::parse_type_annotations(reader, constant_pool)
-                    .map(Self::RuntimeInvisibleTypeAnnotations)
+            "RuntimeVisibleTypeAnnotations" => {
+                Self::parse_type_annotations(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
             }
-            "AnnotationDefault" => Self::parse_annotation_default(reader, constant_pool),
-            "BootstrapMethods" => Self::parse_bootstrap_methods(reader, constant_pool),
-            "MethodParameters" => Self::parse_method_parameters(reader, constant_pool),
-            "Module" => Self::parse_module(reader, constant_pool),
-            "ModulePackages" => Self::parse_module_packages(reader, constant_pool),
-            "ModuleMainClass" => Self::parse_module_main_class(reader, constant_pool),
-            "NestHost" => Self::parse_nest_host(reader, constant_pool),
-            "NestMembers" => Self::parse_nest_members(reader, constant_pool),
-            "Record" => Self::parse_record(reader, constant_pool),
-            "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, constant_pool),
+            "RuntimeInvisibleTypeAnnotations" => {
+                Self::parse_type_annotations(reader, ctx).map(Self::RuntimeInvisibleTypeAnnotations)
+            }
+            "AnnotationDefault" => Self::parse_annotation_default(reader, ctx),
+            "BootstrapMethods" => Self::parse_bootstrap_methods(reader, ctx),
+            "MethodParameters" => Self::parse_method_parameters(reader, ctx),
+            "Module" => Self::parse_module(reader, ctx),
+            "ModulePackages" => Self::parse_module_packages(reader, ctx),
+            "ModuleMainClass" => Self::parse_module_main_class(reader, ctx),
+            "NestHost" => Self::parse_nest_host(reader, ctx),
+            "NestMembers" => Self::parse_nest_members(reader, ctx),
+            "Record" => Self::parse_record(reader, ctx),
+            "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, ctx),
             _ => Err(ClassFileParsingError::UnknownAttribute(name)),
         }
     }
@@ -199,20 +195,20 @@ impl Attribute {
 
     fn parse_constant_value<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let value_index = read_u16(reader)?;
-        let value = constant_pool.get_constant_value(&value_index)?;
+        let value = ctx.get_constant_value(&value_index)?;
         Ok(Self::ConstantValue(value))
     }
 
     fn parse_synthetic<R>(
         reader: &mut R,
-        _constant_pool: &ConstantPool,
+        _ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -223,7 +219,7 @@ impl Attribute {
 
     fn parse_deprecated<R>(
         reader: &mut R,
-        _constant_pool: &ConstantPool,
+        _ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -234,24 +230,31 @@ impl Attribute {
 
     fn parse_enclosing_method<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 4)?;
         let class_index = read_u16(reader)?;
-        let class = constant_pool.get_class_ref(&class_index)?;
+        let class = ctx.get_class_ref(&class_index)?;
         let method_index = read_u16(reader)?;
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
-            let entry = constant_pool.get_entry(&method_index)?;
-            let ConstantPoolEntry::NameAndType{ name_index, descriptor_index } = entry else {
-                return Err(ClassFileParsingError::MismatchedConstantPoolEntryType{expected: "NameAndType", found: entry.type_name()});
+            let entry = ctx.get_entry(&method_index)?;
+            let ConstantPoolEntry::NameAndType {
+                name_index,
+                descriptor_index,
+            } = entry
+            else {
+                return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                    expected: "NameAndType",
+                    found: entry.type_name(),
+                });
             };
-            let name = constant_pool.get_string(name_index)?;
-            let descriptor = constant_pool.get_string(descriptor_index)?;
+            let name = ctx.get_string(name_index)?;
+            let descriptor = ctx.get_string(descriptor_index)?;
             Some((name, descriptor))
         };
         Ok(Self::EnclosingMethod(EnclosingMethod {
@@ -262,14 +265,14 @@ impl Attribute {
 
     fn parse_signature<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
-        let signature = constant_pool.get_string(&signature_index)?;
+        let signature = ctx.get_string(&signature_index)?;
         Ok(Self::Signature(signature))
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         method::{StackMapFrame, VerificationTypeInfo},
-        parsing::{constant_pool::ConstantPool, error::ClassFileParsingError},
+        parsing::{constant_pool::ParsingContext, error::ClassFileParsingError},
     },
     utils::{read_u16, read_u8},
 };
@@ -9,7 +9,7 @@ use crate::{
 impl StackMapFrame {
     pub fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<StackMapFrame, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -19,12 +19,10 @@ impl StackMapFrame {
             0..=63 => Self::SameFrame {
                 offset_delta: frame_type as u16,
             },
-            64..=127 => {
-                Self::SameLocals1StackItemFrame(VerificationTypeInfo::parse(reader, constant_pool)?)
-            }
+            64..=127 => Self::SameLocals1StackItemFrame(VerificationTypeInfo::parse(reader, ctx)?),
             247 => {
                 let offset_delta = read_u16(reader)?;
-                let stack = VerificationTypeInfo::parse(reader, constant_pool)?;
+                let stack = VerificationTypeInfo::parse(reader, ctx)?;
                 Self::Semantics1StackItemFrameExtended(offset_delta, stack)
             }
             248..=250 => {
@@ -44,7 +42,7 @@ impl StackMapFrame {
                 let locals_count = frame_type - 251;
                 let mut locals = Vec::with_capacity(locals_count as usize);
                 for _ in 0..locals_count {
-                    let local = VerificationTypeInfo::parse(reader, constant_pool)?;
+                    let local = VerificationTypeInfo::parse(reader, ctx)?;
                     locals.push(local);
                 }
                 Self::AppendFrame {
@@ -57,13 +55,13 @@ impl StackMapFrame {
                 let locals_count = read_u16(reader)?;
                 let mut locals = Vec::with_capacity(locals_count as usize);
                 for _ in 0..locals_count {
-                    let local = VerificationTypeInfo::parse(reader, constant_pool)?;
+                    let local = VerificationTypeInfo::parse(reader, ctx)?;
                     locals.push(local);
                 }
                 let stacks_count = read_u16(reader)?;
                 let mut stack = Vec::with_capacity(stacks_count as usize);
                 for _ in 0..stacks_count {
-                    let stack_element = VerificationTypeInfo::parse(reader, constant_pool)?;
+                    let stack_element = VerificationTypeInfo::parse(reader, ctx)?;
                     stack.push(stack_element)
                 }
                 Self::FullFrame {

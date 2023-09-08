@@ -5,22 +5,22 @@ use crate::{
 
 use super::{
     attribute::{Attribute, AttributeList},
-    constant_pool::ConstantPool,
+    constant_pool::ParsingContext,
     error::ClassFileParsingError,
 };
 
 impl BootstrapMethod {
-    fn parse<R>(reader: &mut R, constant_pool: &ConstantPool) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let bootstrap_method_ref = read_u16(reader)?;
-        let method_ref = constant_pool.get_method_handle(&bootstrap_method_ref)?;
+        let method_ref = ctx.get_method_handle(&bootstrap_method_ref)?;
         let num_bootstrap_arguments = read_u16(reader)?;
         let arguments = (0..num_bootstrap_arguments)
             .map(|_| {
                 let arg_idx = read_u16(reader)?;
-                constant_pool.get_constant_value(&arg_idx)
+                ctx.get_constant_value(&arg_idx)
             })
             .collect::<Result<_, _>>()?;
         Ok(BootstrapMethod {
@@ -33,19 +33,19 @@ impl BootstrapMethod {
 impl Attribute {
     pub fn parse_source_file<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let sourcefile_index = read_u16(reader)?;
-        let file_name = constant_pool.get_string(&sourcefile_index)?;
+        let file_name = ctx.get_string(&sourcefile_index)?;
         Ok(Self::SourceFile(file_name))
     }
     pub fn parse_innner_classes<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -55,19 +55,19 @@ impl Attribute {
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
             let inner_class_info_index = read_u16(reader)?;
-            let inner_class = constant_pool.get_class_ref(&inner_class_info_index)?;
+            let inner_class = ctx.get_class_ref(&inner_class_info_index)?;
             let outer_class_info_index = read_u16(reader)?;
             let outer_class = if outer_class_info_index == 0 {
                 None
             } else {
-                let the_class = constant_pool.get_class_ref(&outer_class_info_index)?;
+                let the_class = ctx.get_class_ref(&outer_class_info_index)?;
                 Some(the_class)
             };
             let inner_name_index = read_u16(reader)?;
             let inner_name = if inner_name_index == 0 {
                 None
             } else {
-                Some(constant_pool.get_string(&inner_name_index)?)
+                Some(ctx.get_string(&inner_name_index)?)
             };
             let inner_class_access_flags = read_u16(reader)?;
             classes.push(InnerClassInfo {
@@ -82,7 +82,7 @@ impl Attribute {
 
     pub(super) fn parse_source_debug_extension<R>(
         reader: &mut R,
-        _constant_pool: &ConstantPool,
+        _ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -94,7 +94,7 @@ impl Attribute {
 
     pub(super) fn parse_bootstrap_methods<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -102,25 +102,25 @@ impl Attribute {
         let _attribute_length = read_u32(reader)?;
         let num_bootstrap_methods = read_u16(reader)?;
         let bootstrap_methods = (0..num_bootstrap_methods)
-            .map(|_| BootstrapMethod::parse(reader, constant_pool))
+            .map(|_| BootstrapMethod::parse(reader, ctx))
             .collect::<Result<_, _>>()?;
         Ok(Self::BootstrapMethods(bootstrap_methods))
     }
     pub(super) fn parse_nest_host<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let nest_host_index = read_u16(reader)?;
-        let host_class = constant_pool.get_class_ref(&nest_host_index)?;
+        let host_class = ctx.get_class_ref(&nest_host_index)?;
         Ok(Self::NestHost(host_class))
     }
     pub(super) fn parse_nest_members<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -130,14 +130,14 @@ impl Attribute {
         let classes = (0..number_of_classes)
             .map(|_| {
                 let class_index = read_u16(reader)?;
-                constant_pool.get_class_ref(&class_index)
+                ctx.get_class_ref(&class_index)
             })
             .collect::<Result<_, _>>()?;
         Ok(Self::NestMembers(classes))
     }
     pub(super) fn parse_record<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -147,11 +147,11 @@ impl Attribute {
         let components = (0..component_count)
             .map(|_| {
                 let name_index = read_u16(reader)?;
-                let name = constant_pool.get_string(&name_index)?;
+                let name = ctx.get_string(&name_index)?;
                 let descriptor_index = read_u16(reader)?;
-                let descriptor = constant_pool.get_string(&descriptor_index)?;
+                let descriptor = ctx.get_string(&descriptor_index)?;
 
-                let attributes = AttributeList::parse(reader, constant_pool)?;
+                let attributes = AttributeList::parse(reader, ctx)?;
                 let mut signature = None;
                 let mut rt_visible_anno = None;
                 let mut rt_invisible_anno = None;
@@ -190,7 +190,7 @@ impl Attribute {
 
     pub(super) fn parse_permitted_subclasses<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -200,7 +200,7 @@ impl Attribute {
         let classes = (0..number_of_classes)
             .map(|_| {
                 let class_index = read_u16(reader)?;
-                constant_pool.get_class_ref(&class_index)
+                ctx.get_class_ref(&class_index)
             })
             .collect::<Result<_, _>>()?;
         Ok(Self::PermittedSubclasses(classes))

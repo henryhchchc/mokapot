@@ -6,7 +6,7 @@ use crate::{
             LocalVariableTypeAttr, Method, MethodAccessFlags, MethodBody, MethodDescriptor,
             MethodParameter, MethodParameterAccessFlags, StackMapFrame,
         },
-        parsing::constant_pool::ConstantPool,
+        parsing::constant_pool::ParsingContext,
     },
     utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
@@ -19,7 +19,7 @@ use super::{
 impl ExceptionTableEntry {
     fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<ExceptionTableEntry, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -31,7 +31,7 @@ impl ExceptionTableEntry {
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
-            Some(constant_pool.get_class_ref(&catch_type_idx)?)
+            Some(ctx.get_class_ref(&catch_type_idx)?)
         };
         Ok(ExceptionTableEntry {
             start_pc,
@@ -45,7 +45,7 @@ impl ExceptionTableEntry {
 impl Attribute {
     pub(super) fn parse_line_no_table<R>(
         reader: &mut R,
-        _constant_pool: &ConstantPool,
+        _ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -62,7 +62,7 @@ impl Attribute {
 
     pub(super) fn parse_code<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -73,17 +73,17 @@ impl Attribute {
         let code_length = read_u32(reader)?;
 
         let code = read_bytes_vec(reader, code_length as usize)?;
-        let instructions = Instruction::parse_code(code, constant_pool)?;
+        let instructions = Instruction::parse_code(code, ctx)?;
 
         // exception table
         let exception_table_len = read_u16(reader)?;
         let mut exception_table = Vec::with_capacity(exception_table_len as usize);
         for _ in 0..exception_table_len {
-            let entry = ExceptionTableEntry::parse(reader, constant_pool)?;
+            let entry = ExceptionTableEntry::parse(reader, ctx)?;
             exception_table.push(entry);
         }
 
-        let attributes = AttributeList::parse(reader, constant_pool)?;
+        let attributes = AttributeList::parse(reader, ctx)?;
         let mut line_number_table = None;
         let mut local_variable_table = None;
         let mut stack_map_table = None;
@@ -128,7 +128,7 @@ impl Attribute {
     }
     pub(super) fn parse_local_variable_table<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -137,7 +137,7 @@ impl Attribute {
         let table_len = read_u16(reader)?;
         let mut local_variable_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
-            let entry = LocalVariableDescAttr::parse(reader, constant_pool)?;
+            let entry = LocalVariableDescAttr::parse(reader, ctx)?;
             local_variable_table.push(entry);
         }
         Ok(Attribute::LocalVariableTable(local_variable_table))
@@ -145,7 +145,7 @@ impl Attribute {
 
     pub(super) fn parse_local_variable_type_table<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -154,7 +154,7 @@ impl Attribute {
         let table_len = read_u16(reader)?;
         let mut local_variable_type_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
-            let entry = LocalVariableTypeAttr::parse(reader, constant_pool)?;
+            let entry = LocalVariableTypeAttr::parse(reader, ctx)?;
             local_variable_type_table.push(entry);
         }
         Ok(Attribute::LocalVariableTypeTable(local_variable_type_table))
@@ -162,7 +162,7 @@ impl Attribute {
 
     pub(super) fn parse_stack_map_table<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -171,14 +171,14 @@ impl Attribute {
         let num_entries = read_u16(reader)?;
         let mut stack_map_table = Vec::with_capacity(num_entries as usize);
         for _ in 0..num_entries {
-            let entry = StackMapFrame::parse(reader, constant_pool)?;
+            let entry = StackMapFrame::parse(reader, ctx)?;
             stack_map_table.push(entry);
         }
         Ok(Self::StackMapTable(stack_map_table))
     }
     pub(super) fn parse_exceptions<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -188,7 +188,7 @@ impl Attribute {
         let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
         for _ in 0..number_of_exceptions {
             let exception_index = read_u16(reader)?;
-            let exception = constant_pool.get_class_ref(&exception_index)?;
+            let exception = ctx.get_class_ref(&exception_index)?;
             exceptions.push(exception);
         }
         Ok(Self::Exceptions(exceptions))
@@ -196,7 +196,7 @@ impl Attribute {
 
     pub(super) fn parse_method_parameters<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -206,10 +206,13 @@ impl Attribute {
         let mut parameters = Vec::with_capacity(parameters_count as usize);
         for _ in 0..parameters_count {
             let name_index = read_u16(reader)?;
-            let name = constant_pool.get_string(&name_index)?;
+            let name = ctx.get_string(&name_index)?;
             let access_flag_bits = read_u16(reader)?;
             let Some(access_flags) = MethodParameterAccessFlags::from_bits(access_flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(access_flag_bits, "method_parameter"));
+                return Err(ClassFileParsingError::UnknownFlags(
+                    access_flag_bits,
+                    "method_parameter",
+                ));
             };
             parameters.push(MethodParameter { name, access_flags });
         }
@@ -220,7 +223,7 @@ impl Attribute {
 impl Method {
     pub(crate) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -230,12 +233,12 @@ impl Method {
             return Err(ClassFileParsingError::UnknownFlags(access, "method"));
         };
         let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
+        let name = ctx.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let descriptor = ctx.get_str(&descriptor_index)?;
         let descriptor = MethodDescriptor::new(descriptor)?;
 
-        let attributes = AttributeList::parse(reader, constant_pool)?;
+        let attributes = AttributeList::parse(reader, ctx)?;
         let mut body = None;
         let mut exceptions = None;
         let mut rt_visible_anno = None;

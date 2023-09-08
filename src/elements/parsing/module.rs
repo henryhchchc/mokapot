@@ -1,16 +1,14 @@
 use crate::{
-    elements::{
-        module::{
-            Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
-            ModuleProvide, ModuleRequire, ModuleRequireFlags,
-        },
+    elements::module::{
+        Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
+        ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
     utils::{read_u16, read_u32},
 };
 
 use super::{
     attribute::Attribute,
-    constant_pool::{ConstantPool, ConstantPoolEntry},
+    constant_pool::{ConstantPoolEntry, ParsingContext},
     error::ClassFileParsingError,
 };
 
@@ -18,7 +16,7 @@ impl ModuleRequire {
     fn parse_multiple<R>(
         reader: &mut R,
         requires_count: u16,
-        constant_pool: &ConstantPool,
+        parsing_context: &ParsingContext,
     ) -> Result<Vec<Self>, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -26,14 +24,17 @@ impl ModuleRequire {
         (0..requires_count)
             .map(|_| {
                 let module_index = read_u16(reader)?;
-                let module = constant_pool.get_module_ref(&module_index)?;
+                let module = parsing_context.get_module_ref(&module_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleRequireFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_require"));
-            };
+                    return Err(ClassFileParsingError::UnknownFlags(
+                        flag_bits,
+                        "module_require",
+                    ));
+                };
                 let version_index = read_u16(reader)?;
                 let version = if version_index > 0 {
-                    Some(constant_pool.get_string(&version_index)?)
+                    Some(parsing_context.get_string(&version_index)?)
                 } else {
                     None
                 };
@@ -51,7 +52,7 @@ impl ModuleExport {
     fn parse_multiple<R>(
         reader: &mut R,
         count: u16,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Vec<Self>, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -59,16 +60,19 @@ impl ModuleExport {
         (0..count)
             .map(|_| {
                 let package_index = read_u16(reader)?;
-                let package = constant_pool.get_package_ref(&package_index)?;
+                let package = ctx.get_package_ref(&package_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleExportFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_export"));
-            };
+                    return Err(ClassFileParsingError::UnknownFlags(
+                        flag_bits,
+                        "module_export",
+                    ));
+                };
                 let to_count = read_u16(reader)?;
                 let mut to = Vec::with_capacity(to_count as usize);
                 for _ in 0..to_count {
                     let module_index = read_u16(reader)?;
-                    let module = constant_pool.get_module_ref(&module_index)?;
+                    let module = ctx.get_module_ref(&module_index)?;
                     to.push(module);
                 }
                 Ok(ModuleExport { package, flags, to })
@@ -81,7 +85,7 @@ impl ModuleOpen {
     fn parse_multiple<R>(
         reader: &mut R,
         count: u16,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Vec<Self>, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -89,16 +93,19 @@ impl ModuleOpen {
         (0..count)
             .map(|_| {
                 let package_index = read_u16(reader)?;
-                let package = constant_pool.get_package_ref(&package_index)?;
+                let package = ctx.get_package_ref(&package_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleOpenFlags::from_bits(flag_bits) else {
-                return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module_open"));
-            };
+                    return Err(ClassFileParsingError::UnknownFlags(
+                        flag_bits,
+                        "module_open",
+                    ));
+                };
                 let to_count = read_u16(reader)?;
                 let mut to = Vec::with_capacity(to_count as usize);
                 for _ in 0..to_count {
                     let module_index = read_u16(reader)?;
-                    let module = constant_pool.get_module_ref(&module_index)?;
+                    let module = ctx.get_module_ref(&module_index)?;
                     to.push(module);
                 }
                 Ok(ModuleOpen { package, flags, to })
@@ -111,7 +118,7 @@ impl ModuleProvide {
     fn parse_multiple<R>(
         reader: &mut R,
         count: u16,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Vec<Self>, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -119,12 +126,12 @@ impl ModuleProvide {
         (0..count)
             .map(|_| {
                 let service_index = read_u16(reader)?;
-                let service = constant_pool.get_class_ref(&service_index)?;
+                let service = ctx.get_class_ref(&service_index)?;
                 let with_count = read_u16(reader)?;
                 let mut with = Vec::with_capacity(with_count as usize);
                 for _ in 0..with_count {
                     let provider_idx = read_u16(reader)?;
-                    let provider = constant_pool.get_class_ref(&provider_idx)?;
+                    let provider = ctx.get_class_ref(&provider_idx)?;
                     with.push(provider);
                 }
                 Ok(ModuleProvide { service, with })
@@ -136,43 +143,46 @@ impl ModuleProvide {
 impl Attribute {
     pub(super) fn parse_module<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         let _attribute_length = read_u32(reader)?;
         let module_info_idx = read_u16(reader)?;
-        let module_info_entry = constant_pool.get_entry(&module_info_idx)?;
+        let module_info_entry = ctx.get_entry(&module_info_idx)?;
         let ConstantPoolEntry::Module { name_index } = module_info_entry else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType { expected: "Module", found: module_info_entry.type_name() })?
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Module",
+                found: module_info_entry.type_name(),
+            })?
         };
-        let name = constant_pool.get_string(name_index)?;
+        let name = ctx.get_string(name_index)?;
         let flag_bits = read_u16(reader)?;
         let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
             return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module"));
         };
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {
-            Some(constant_pool.get_string(&version_index)?)
+            Some(ctx.get_string(&version_index)?)
         } else {
             None
         };
         let requires_count = read_u16(reader)?;
-        let requires = ModuleRequire::parse_multiple(reader, requires_count, constant_pool)?;
+        let requires = ModuleRequire::parse_multiple(reader, requires_count, ctx)?;
         let exports_count = read_u16(reader)?;
-        let exports = ModuleExport::parse_multiple(reader, exports_count, constant_pool)?;
+        let exports = ModuleExport::parse_multiple(reader, exports_count, ctx)?;
         let opens_count = read_u16(reader)?;
-        let opens = ModuleOpen::parse_multiple(reader, opens_count, constant_pool)?;
+        let opens = ModuleOpen::parse_multiple(reader, opens_count, ctx)?;
         let uses_count = read_u16(reader)?;
         let mut uses = Vec::with_capacity(uses_count as usize);
         for _ in 0..uses_count {
             let class_index = read_u16(reader)?;
-            let class = constant_pool.get_class_ref(&class_index)?;
+            let class = ctx.get_class_ref(&class_index)?;
             uses.push(class);
         }
         let provides_count = read_u16(reader)?;
-        let provides = ModuleProvide::parse_multiple(reader, provides_count, constant_pool)?;
+        let provides = ModuleProvide::parse_multiple(reader, provides_count, ctx)?;
         Ok(Self::Module(Module {
             name,
             flags,
@@ -186,7 +196,7 @@ impl Attribute {
     }
     pub(super) fn parse_module_packages<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -196,21 +206,21 @@ impl Attribute {
         let mut packages = Vec::with_capacity(package_count as usize);
         for _ in 0..package_count {
             let package_index = read_u16(reader)?;
-            let package = constant_pool.get_package_ref(&package_index)?;
+            let package = ctx.get_package_ref(&package_index)?;
             packages.push(package);
         }
         Ok(Self::ModulePackages(packages))
     }
     pub(super) fn parse_module_main_class<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
         Self::check_attribute_length(reader, 2)?;
         let main_class_index = read_u16(reader)?;
-        let main_class = constant_pool.get_class_ref(&main_class_index)?;
+        let main_class = ctx.get_class_ref(&main_class_index)?;
         Ok(Self::ModuleMainClass(main_class))
     }
 }

@@ -6,7 +6,7 @@ use super::{
     method::Method,
     parsing::{
         attribute::{Attribute, AttributeList},
-        constant_pool::ConstantPool,
+        constant_pool::ParsingContext,
         error::ClassFileParsingError,
     },
 };
@@ -24,13 +24,13 @@ impl<'a> ClassParser<'a> {
             return Err(ClassFileParsingError::NotAClassFile);
         }
         let version = ClassVersion::parse(reader)?;
-        let constant_pool = ConstantPool::parse(reader)?;
+        let parsing_context = ParsingContext::parse(reader, &version)?;
         let access = read_u16(reader)?;
         let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
             return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
         let this_class_idx = read_u16(reader)?;
-        let this_class = constant_pool.get_class_ref(&this_class_idx)?;
+        let this_class = parsing_context.get_class_ref(&this_class_idx)?;
         let super_class_idx = read_u16(reader)?;
         let super_class = match super_class_idx {
             0 if this_class.binary_name == "java/lang/Object" => None,
@@ -38,28 +38,28 @@ impl<'a> ClassParser<'a> {
             0 => Err(ClassFileParsingError::MalformedClassFile(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it @ _ => Some(constant_pool.get_class_ref(&it)?),
+            it @ _ => Some(parsing_context.get_class_ref(&it)?),
         };
 
         let interfaces_count = read_u16(reader)?;
         let interfaces = (0..interfaces_count)
             .map(|_| {
                 let interface_idx = read_u16(reader)?;
-                constant_pool.get_class_ref(&interface_idx)
+                parsing_context.get_class_ref(&interface_idx)
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
         let fields_count = read_u16(reader)?;
         let fields = (0..fields_count)
             .into_iter()
-            .map(|_| Field::parse(reader, &constant_pool))
+            .map(|_| Field::parse(reader, &parsing_context))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
         let methods_count = read_u16(reader)?;
         let methods = (0..methods_count)
-            .map(|_| Method::parse(reader, &constant_pool))
+            .map(|_| Method::parse(reader, &parsing_context))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
-        let attributes = AttributeList::parse(reader, &constant_pool)?;
+        let attributes = AttributeList::parse(reader, &parsing_context)?;
 
         let mut may_remain: [u8; 1] = [0];
         let remain = reader.read(&mut may_remain)?;

@@ -5,14 +5,14 @@ use crate::{
 
 use super::{
     attribute::{Attribute, AttributeList},
-    constant_pool::ConstantPool,
+    constant_pool::ParsingContext,
     error::ClassFileParsingError,
 };
 
 impl Field {
     pub(crate) fn parse<R>(
         reader: &mut R,
-        constant_pool: &ConstantPool,
+        ctx: &ParsingContext,
     ) -> Result<Field, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -22,12 +22,12 @@ impl Field {
             return Err(ClassFileParsingError::UnknownFlags(access, "field"));
         };
         let name_index = read_u16(reader)?;
-        let name = constant_pool.get_string(&name_index)?;
+        let name = ctx.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
-        let descriptor = constant_pool.get_str(&descriptor_index)?;
+        let descriptor = ctx.get_str(&descriptor_index)?;
         let field_type = FieldType::new(descriptor)?;
 
-        let attributes = AttributeList::parse(reader, constant_pool)?;
+        let attributes = AttributeList::parse(reader, ctx)?;
         let mut constant_value = None;
         let mut is_synthetic = false;
         let mut is_deperecated = false;
