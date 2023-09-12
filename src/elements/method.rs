@@ -32,6 +32,9 @@ pub struct Method {
     pub signature: Option<String>,
 }
 
+pub const CLASS_INITIALIZER_NAME: &str = "<clinit>";
+pub const CONSTRUCTOR_NAME: &str = "<init>";
+
 #[derive(Debug)]
 pub struct MethodParameter {
     pub name: String,
