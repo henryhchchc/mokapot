@@ -8,7 +8,7 @@ use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     field::{FieldType, PrimitiveType},
     instruction::{Instruction, ProgramCounter},
-    parsing::error::ClassFileParsingError,
+    parsing::error::{ClassFileParsingError, InvalidDescriptor},
     references::ClassReference,
 };
 
@@ -267,13 +267,11 @@ impl MethodDescriptor {
     fn parse_single_param(
         prefix: char,
         remaining: &mut Chars,
-    ) -> Result<FieldType, ClassFileParsingError> {
+    ) -> Result<FieldType, InvalidDescriptor> {
         if let Ok(p) = PrimitiveType::new(&prefix) {
             return Ok(FieldType::Base(p));
         }
-        let build_err = |rem: &Chars| {
-            ClassFileParsingError::InvalidDescriptor(format!("{}{}", prefix, rem.as_str()))
-        };
+        let build_err = |rem: &Chars| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
         match prefix {
             'L' => {
                 let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
@@ -291,7 +289,7 @@ impl MethodDescriptor {
     }
 
     /// Creates a new [`MethodDescriptor`] from the [descriptor].
-    pub fn new(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+    pub fn new(descriptor: &str) -> Result<Self, InvalidDescriptor> {
         let mut chars = descriptor.chars();
         let mut parameters_types = Vec::new();
         let return_type = loop {
@@ -302,9 +300,7 @@ impl MethodDescriptor {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
                 }
-                None => Err(ClassFileParsingError::InvalidDescriptor(
-                    descriptor.to_string(),
-                ))?,
+                None => Err(InvalidDescriptor(descriptor.to_string()))?,
             }
         };
         Ok(Self {
@@ -315,7 +311,7 @@ impl MethodDescriptor {
 }
 
 impl ReturnType {
-    pub fn new(descriptor: &str) -> Result<Self, ClassFileParsingError> {
+    pub fn new(descriptor: &str) -> Result<Self, InvalidDescriptor> {
         if descriptor == "V" {
             Ok(ReturnType::Void)
         } else {

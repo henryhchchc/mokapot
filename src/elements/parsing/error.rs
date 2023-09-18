@@ -1,3 +1,4 @@
+
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {
     #[error("Failed to read from buffer: {0}")]
@@ -33,8 +34,8 @@ pub enum ClassFileParsingError {
     UnexpectedOpCode(u8),
     #[error("Unknown access flag in {1}: {0:#x}")]
     UnknownFlags(u16, &'static str),
-    #[error("Invalid descriptor {0}")]
-    InvalidDescriptor(String),
+    #[error("Fail to parse descriptor: {0}")]
+    InvalidDescriptor(#[from]InvalidDescriptor),
     #[error("Unexpected constant pool tag {0}")]
     UnexpectedConstantPoolTag(u8),
     #[error("The buffer does not contains a Java class file")]
@@ -42,3 +43,7 @@ pub enum ClassFileParsingError {
     #[error("Invalid jump target")]
     InvalidJumpTarget,
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("Invalid descriptor: {0}")]
+pub struct InvalidDescriptor(pub String);
