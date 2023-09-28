@@ -1,4 +1,3 @@
-
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {
     #[error("Failed to read from buffer: {0}")]
@@ -35,7 +34,7 @@ pub enum ClassFileParsingError {
     #[error("Unknown access flag in {1}: {0:#x}")]
     UnknownFlags(u16, &'static str),
     #[error("Fail to parse descriptor: {0}")]
-    InvalidDescriptor(#[from]InvalidDescriptor),
+    InvalidDescriptor(#[from] InvalidDescriptor),
     #[error("Unexpected constant pool tag {0}")]
     UnexpectedConstantPoolTag(u8),
     #[error("The buffer does not contains a Java class file")]

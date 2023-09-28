@@ -237,7 +237,7 @@ impl Method {
         let name = ctx.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
-        let descriptor = MethodDescriptor::new(descriptor)?; 
+        let descriptor = MethodDescriptor::new(descriptor)?;
 
         let attributes = AttributeList::parse(reader, ctx)?;
         let mut body = None;

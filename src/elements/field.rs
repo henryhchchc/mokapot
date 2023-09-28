@@ -2,7 +2,7 @@ use super::{
     annotation::{Annotation, TypeAnnotation},
     class::Handle,
     method::MethodDescriptor,
-    parsing::error::{ClassFileParsingError, InvalidDescriptor},
+    parsing::error::{InvalidDescriptor},
     references::ClassReference,
 };
 

@@ -8,7 +8,7 @@ use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     field::{FieldType, PrimitiveType},
     instruction::{Instruction, ProgramCounter},
-    parsing::error::{ClassFileParsingError, InvalidDescriptor},
+    parsing::error::{InvalidDescriptor},
     references::ClassReference,
 };
 
