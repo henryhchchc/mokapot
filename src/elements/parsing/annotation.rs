@@ -31,22 +31,22 @@ impl ElementValue {
             }
             's' => {
                 let utf8_idx = read_u16(reader)?;
-                let string = ctx.get_string(&utf8_idx)?;
-                Ok(Self::Constant(ConstantValue::String(string)))
+                let str = ctx.get_str(&utf8_idx)?;
+                Ok(Self::Constant(ConstantValue::String(str.to_owned())))
             }
             'e' => {
                 let enum_type_name_idx = read_u16(reader)?;
-                let enum_type = ctx.get_string(&enum_type_name_idx)?;
+                let enum_type = ctx.get_str(&enum_type_name_idx)?;
                 let const_name_idx = read_u16(reader)?;
-                let const_name = ctx.get_string(&const_name_idx)?;
+                let const_name = ctx.get_str(&const_name_idx)?.to_owned();
                 Ok(Self::EnumConstant {
-                    enum_type_name: enum_type,
+                    enum_type_name: enum_type.to_owned(),
                     const_name,
                 })
             }
             'c' => {
                 let class_info_idx = read_u16(reader)?;
-                let return_descriptor = ctx.get_string(&class_info_idx)?;
+                let return_descriptor = ctx.get_str(&class_info_idx)?.to_owned();
                 Ok(Self::Class { return_descriptor })
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
@@ -74,9 +74,9 @@ impl Annotation {
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.get_string(&element_name_idx)?;
+                let element_name = ctx.get_str(&element_name_idx)?;
                 let element_value = ElementValue::parse(reader, ctx)?;
-                Ok((element_name, element_value))
+                Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(Annotation {
@@ -142,9 +142,9 @@ impl TypeAnnotation {
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.get_string(&element_name_idx)?;
+                let element_name = ctx.get_str(&element_name_idx)?;
                 let element_value = ElementValue::parse(reader, ctx)?;
-                Ok((element_name, element_value))
+                Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
         Ok(TypeAnnotation {

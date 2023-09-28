@@ -22,7 +22,7 @@ impl Field {
             return Err(ClassFileParsingError::UnknownFlags(access, "field"));
         };
         let name_index = read_u16(reader)?;
-        let name = ctx.get_string(&name_index)?;
+        let name = ctx.get_str(&name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
         let field_type = FieldType::new(descriptor)?;

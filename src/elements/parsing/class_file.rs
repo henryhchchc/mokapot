@@ -40,8 +40,8 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let sourcefile_index = read_u16(reader)?;
-        let file_name = ctx.get_string(&sourcefile_index)?;
-        Ok(Self::SourceFile(file_name))
+        let file_name = ctx.get_str(&sourcefile_index)?;
+        Ok(Self::SourceFile(file_name.to_owned()))
     }
     pub fn parse_innner_classes<R>(
         reader: &mut R,
@@ -67,7 +67,7 @@ impl Attribute {
             let inner_name = if inner_name_index == 0 {
                 None
             } else {
-                Some(ctx.get_string(&inner_name_index)?)
+                Some(ctx.get_str(&inner_name_index)?.to_owned())
             };
             let inner_class_access_flags = read_u16(reader)?;
             classes.push(InnerClassInfo {
@@ -147,9 +147,9 @@ impl Attribute {
         let components = (0..component_count)
             .map(|_| {
                 let name_index = read_u16(reader)?;
-                let name = ctx.get_string(&name_index)?;
+                let name = ctx.get_str(&name_index)?.to_owned();
                 let descriptor_index = read_u16(reader)?;
-                let descriptor = ctx.get_string(&descriptor_index)?;
+                let descriptor = ctx.get_str(&descriptor_index)?.to_owned();
 
                 let attributes = AttributeList::parse(reader, ctx)?;
                 let mut signature = None;

@@ -39,7 +39,7 @@ impl LocalVariableDescAttr {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let name_index = read_u16(reader)?;
-        let name = ctx.get_string(&name_index)?;
+        let name = ctx.get_str(&name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
         let field_type = FieldType::new(descriptor)?;
@@ -68,9 +68,9 @@ impl LocalVariableTypeAttr {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let name_index = read_u16(reader)?;
-        let name = ctx.get_string(&name_index)?;
+        let name = ctx.get_str(&name_index)?.to_owned();
         let signature_index = read_u16(reader)?;
-        let signature = ctx.get_string(&signature_index)?;
+        let signature = ctx.get_str(&signature_index)?.to_owned();
         let index = read_u16(reader)?;
         let key = LocalVariableKey {
             start_pc,

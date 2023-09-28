@@ -8,7 +8,7 @@ use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     field::{FieldType, PrimitiveType},
     instruction::{Instruction, ProgramCounter},
-    parsing::error::{InvalidDescriptor},
+    parsing::error::InvalidDescriptor,
     references::ClassReference,
 };
 
@@ -238,8 +238,8 @@ pub enum ReturnType {
     Void,
 }
 
-impl MethodDescriptor {
-    pub fn to_string(&self) -> String {
+impl ToString for MethodDescriptor {
+    fn to_string(&self) -> String {
         let mut result = String::new();
         result.push('(');
         for param in &self.parameters_types {
@@ -249,7 +249,9 @@ impl MethodDescriptor {
         result.push_str(&self.return_type.descriptor_string());
         result
     }
+}
 
+impl MethodDescriptor {
     /// Parses a method descriptor from a string and advances the iterator.
     /// For an input as follows.
     /// ```text
@@ -300,7 +302,7 @@ impl MethodDescriptor {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
                 }
-                None => Err(InvalidDescriptor(descriptor.to_string()))?,
+                None => Err(InvalidDescriptor(descriptor.to_owned()))?,
             }
         };
         Ok(Self {
@@ -322,7 +324,7 @@ impl ReturnType {
     fn descriptor_string(&self) -> String {
         match self {
             ReturnType::Some(it) => it.descriptor_string(),
-            ReturnType::Void => "V".to_string(),
+            ReturnType::Void => "V".to_owned(),
         }
     }
 }
@@ -355,7 +357,7 @@ mod test {
         let method_descriptor =
             MethodDescriptor::new(descriptor).expect("Failed to parse method descriptor");
         let string_type = FieldType::Object(ClassReference {
-            binary_name: "java/lang/String".to_string(),
+            binary_name: "java/lang/String".to_owned(),
         });
         assert_eq!(
             method_descriptor.return_type,

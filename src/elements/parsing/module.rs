@@ -34,7 +34,7 @@ impl ModuleRequire {
                 };
                 let version_index = read_u16(reader)?;
                 let version = if version_index > 0 {
-                    Some(parsing_context.get_string(&version_index)?)
+                    Some(parsing_context.get_str(&version_index)?.to_owned())
                 } else {
                     None
                 };
@@ -157,14 +157,14 @@ impl Attribute {
                 found: module_info_entry.type_name(),
             })?
         };
-        let name = ctx.get_string(name_index)?;
+        let name = ctx.get_str(name_index)?.to_owned();
         let flag_bits = read_u16(reader)?;
         let Some(flags) = ModuleFlags::from_bits(flag_bits) else {
             return Err(ClassFileParsingError::UnknownFlags(flag_bits, "module"));
         };
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {
-            Some(ctx.get_string(&version_index)?)
+            Some(ctx.get_str(&version_index)?.to_owned())
         } else {
             None
         };

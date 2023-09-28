@@ -211,7 +211,7 @@ impl Instruction {
                         "Zero paddings are not zero",
                     ))?
                 }
-                Self::InvokeDynamic(*bootstrap_method_index, name.to_string(), descriptor)
+                Self::InvokeDynamic(*bootstrap_method_index, name.to_owned(), descriptor)
             }
             0xb9 => {
                 let index = read_u16(reader)?;

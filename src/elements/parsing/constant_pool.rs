@@ -50,18 +50,6 @@ impl ParsingContext {
         Ok(entry)
     }
 
-    pub fn get_string(&self, index: &u16) -> Result<String, ClassFileParsingError> {
-        let entry = self.get_entry(index)?;
-        if let ConstantPoolEntry::Utf8(string) = entry {
-            Ok(string.clone())
-        } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
-                expected: "Utf8",
-                found: entry.type_name(),
-            })
-        }
-    }
-
     pub fn get_str(&self, index: &u16) -> Result<&str, ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         if let ConstantPoolEntry::Utf8(string) = entry {
@@ -82,8 +70,10 @@ impl ParsingContext {
                 found: entry.type_name(),
             });
         };
-        let name = self.get_string(&name_index)?;
-        Ok(ClassReference { binary_name: name })
+        let name = self.get_str(&name_index)?;
+        Ok(ClassReference {
+            binary_name: name.to_owned(),
+        })
     }
 
     pub(crate) fn get_constant_value(
@@ -97,7 +87,7 @@ impl ParsingContext {
             ConstantPoolEntry::Float(it) => Ok(ConstantValue::Float(*it)),
             ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(*it)),
             ConstantPoolEntry::String { string_index } => {
-                self.get_string(string_index).map(ConstantValue::String)
+                self.get_str(string_index).map(|it| ConstantValue::String(it.to_owned()))
             }
             ConstantPoolEntry::MethodType { descriptor_index } => {
                 let descriptor_str = self.get_str(descriptor_index)?;
@@ -120,7 +110,7 @@ impl ParsingContext {
                 let descriptor = FieldType::new(descriptor_str)?;
                 Ok(ConstantValue::Dynamic(
                     *bootstrap_method_attr_index,
-                    name.to_string(),
+                    name.to_owned(),
                     descriptor,
                 ))
             }
@@ -137,7 +127,7 @@ impl ParsingContext {
     ) -> Result<ModuleReference, ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         if let ConstantPoolEntry::Module { name_index } = entry {
-            let name = self.get_string(&name_index)?;
+            let name = self.get_str(&name_index)?.to_owned();
             return Ok(ModuleReference { name });
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
@@ -152,8 +142,10 @@ impl ParsingContext {
     ) -> Result<PackageReference, ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         if let ConstantPoolEntry::Package { name_index } = entry {
-            let name = self.get_string(&name_index)?;
-            return Ok(PackageReference { binary_name: name });
+            let name = self.get_str(&name_index)?;
+            return Ok(PackageReference {
+                binary_name: name.to_owned(),
+            });
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "Package",
@@ -177,7 +169,7 @@ impl ParsingContext {
                 descriptor_index,
             } = self.get_entry(name_and_type_index)?
             {
-                let name = self.get_string(&name_index)?;
+                let name = self.get_str(&name_index)?.to_owned();
                 let descriptor = self.get_str(&descriptor_index)?;
                 let field_type = FieldType::new(descriptor)?;
                 return Ok(FieldReference {
@@ -229,7 +221,7 @@ impl ParsingContext {
             } => {
                 let class_or_interface = self.get_class_ref(class_index)?;
                 let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
-                let name = name.to_string();
+                let name = name.to_owned();
                 let descriptor = MethodDescriptor::new(descriptor_str)?;
                 let result = match entry {
                     ConstantPoolEntry::MethodRef { .. } => {

@@ -2,7 +2,7 @@ use super::{
     annotation::{Annotation, TypeAnnotation},
     class::Handle,
     method::MethodDescriptor,
-    parsing::error::{InvalidDescriptor},
+    parsing::error::InvalidDescriptor,
     references::ClassReference,
 };
 
@@ -105,7 +105,7 @@ impl FieldType {
                     Some(';') => Ok(FieldType::Object(ClassReference {
                         binary_name: type_name,
                     })),
-                    _ => Err(InvalidDescriptor(descriptor.to_string())),
+                    _ => Err(InvalidDescriptor(descriptor.to_owned())),
                 }
             }
             Some('[') => {
@@ -113,19 +113,19 @@ impl FieldType {
                 return FieldType::new(chars.as_str()).map(|it| it.make_array_type());
             }
             Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
-            None => Err(InvalidDescriptor(descriptor.to_string())),
+            None => Err(InvalidDescriptor(descriptor.to_owned())),
         }?;
         // Check if there is any trailing character
         if chars.next().is_none() {
             Ok(result)
         } else {
-            Err(InvalidDescriptor(descriptor.to_string()))
+            Err(InvalidDescriptor(descriptor.to_owned()))
         }
     }
 
     pub(crate) fn descriptor_string(&self) -> String {
         match self {
-            FieldType::Base(it) => it.descriptor_str().to_string(),
+            FieldType::Base(it) => it.descriptor_str().to_owned(),
             FieldType::Object(ClassReference { binary_name }) => {
                 format!("L{};", binary_name)
             }
@@ -214,7 +214,7 @@ mod test {
             .into_iter();
 
         let string_type = FieldType::Object(ClassReference {
-            binary_name: "java/lang/String".to_string(),
+            binary_name: "java/lang/String".to_owned(),
         });
 
         assert_eq!(types.next(), Some(FieldType::Base(Boolean)));

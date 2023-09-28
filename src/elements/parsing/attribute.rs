@@ -253,8 +253,8 @@ impl Attribute {
                     found: entry.type_name(),
                 });
             };
-            let name = ctx.get_string(name_index)?;
-            let descriptor = ctx.get_string(descriptor_index)?;
+            let name = ctx.get_str(name_index)?.to_owned();
+            let descriptor = ctx.get_str(descriptor_index)?.to_owned();
             Some((name, descriptor))
         };
         Ok(Self::EnclosingMethod(EnclosingMethod {
@@ -272,7 +272,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
-        let signature = ctx.get_string(&signature_index)?;
+        let signature = ctx.get_str(&signature_index)?.to_owned();
         Ok(Self::Signature(signature))
     }
 }
