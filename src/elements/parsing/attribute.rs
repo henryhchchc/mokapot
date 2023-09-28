@@ -124,8 +124,8 @@ impl Attribute {
         R: std::io::Read,
     {
         let name_idx = read_u16(reader)?;
-        let name = ctx.get_string(&name_idx)?;
-        match name.as_str() {
+        let name = ctx.get_str(&name_idx)?;
+        match name {
             "ConstantValue" => Self::parse_constant_value(reader, ctx),
             "Code" => Self::parse_code(reader, ctx),
             "StackMapTable" => Self::parse_stack_map_table(reader, ctx),
@@ -172,7 +172,7 @@ impl Attribute {
             "NestMembers" => Self::parse_nest_members(reader, ctx),
             "Record" => Self::parse_record(reader, ctx),
             "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, ctx),
-            _ => Err(ClassFileParsingError::UnknownAttribute(name)),
+            _ => Err(ClassFileParsingError::UnknownAttribute(name.to_owned())),
         }
     }
 
