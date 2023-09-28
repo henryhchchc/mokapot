@@ -237,7 +237,7 @@ impl Method {
         let name = ctx.get_string(&name_index)?;
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
-        let descriptor = MethodDescriptor::new(descriptor)?;
+        let descriptor = MethodDescriptor::new(descriptor)?; 
 
         let attributes = AttributeList::parse(reader, ctx)?;
         let mut body = None;
@@ -258,13 +258,31 @@ impl Method {
             match attr {
                 Code(b) => fill_once!(body, b, "code"),
                 Exceptions(ex) => fill_once!(exceptions, ex, "exception table"),
-                RuntimeVisibleAnnotations(it) => rt_visible_anno = Some(it),
-                RuntimeInvisibleAnnotations(it) => rt_invisible_anno = Some(it),
-                RuntimeVisibleTypeAnnotations(it) => rt_visible_type_anno = Some(it),
-                RuntimeInvisibleTypeAnnotations(it) => rt_invisible_type_anno = Some(it),
-                RuntimeVisibleParameterAnnotations(it) => rt_visible_param_anno = Some(it),
-                RuntimeInvisibleParameterAnnotations(it) => rt_invisible_param_anno = Some(it),
-                AnnotationDefault(ad) => annotation_default = Some(ad),
+                RuntimeVisibleAnnotations(it) => {
+                    fill_once!(rt_visible_anno, it, "RuntimeVisibleAnnotations")
+                }
+                RuntimeInvisibleAnnotations(it) => {
+                    fill_once!(rt_invisible_anno, it, "RuntimeInvisibleAnnotations")
+                }
+                RuntimeVisibleTypeAnnotations(it) => {
+                    fill_once!(rt_visible_type_anno, it, "RuntimeVisibleTypeAnnotations")
+                }
+                RuntimeInvisibleTypeAnnotations(it) => fill_once!(
+                    rt_invisible_type_anno,
+                    it,
+                    "RuntimeInvisibleTypeAnnotations"
+                ),
+                RuntimeVisibleParameterAnnotations(it) => fill_once!(
+                    rt_visible_param_anno,
+                    it,
+                    "RuntimeVisibleParameterAnnotations"
+                ),
+                RuntimeInvisibleParameterAnnotations(it) => fill_once!(
+                    rt_invisible_param_anno,
+                    it,
+                    "RuntimeInvisibleParameterAnnotations"
+                ),
+                AnnotationDefault(it) => fill_once!(annotation_default, it, "AnnotationDefault"),
                 MethodParameters(mp) => fill_once!(method_parameters, mp, "method parameter table"),
                 Synthetic => is_synthetic = true,
                 Deprecated => is_deprecated = true,

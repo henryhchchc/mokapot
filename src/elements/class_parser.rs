@@ -1,4 +1,7 @@
-use crate::utils::{read_u16, read_u32};
+use crate::{
+    fill_once,
+    utils::{read_u16, read_u32},
+};
 
 use super::{
     class::{Class, ClassAccessFlags, ClassVersion},
@@ -87,32 +90,48 @@ impl<'a> ClassParser<'a> {
         let mut signature = None;
         let mut record = None;
         for attr in attributes.into_iter() {
+            use Attribute::*;
             match attr {
-                Attribute::SourceFile(file_name) => source_file = Some(file_name),
-                Attribute::InnerClasses(it) => inner_classes = Some(it),
-                Attribute::EnclosingMethod(em) => enclosing_method = Some(em),
-                Attribute::SourceDebugExtension(sde) => source_debug_extension = Some(sde),
-                Attribute::RuntimeVisibleAnnotations(rv) => rt_visible_anno = Some(rv),
-                Attribute::RuntimeInvisibleAnnotations(ri) => rt_invisible_anno = Some(ri),
-                Attribute::RuntimeVisibleTypeAnnotations(rv) => rt_visible_type_anno = Some(rv),
-                Attribute::RuntimeInvisibleTypeAnnotations(ri) => rt_invisible_type_anno = Some(ri),
-                Attribute::BootstrapMethods(bm) => bootstrap_methods = Some(bm),
-                Attribute::Module(m) => module = Some(m),
-                Attribute::ModulePackages(mp) => module_packages = Some(mp),
-                Attribute::ModuleMainClass(mmc) => module_main_class = Some(mmc),
-                Attribute::NestHost(nh) => nest_host = Some(nh),
-                Attribute::NestMembers(nm) => nest_members = Some(nm),
-                Attribute::PermittedSubclasses(ps) => permitted_subclasses = Some(ps),
-                Attribute::Synthetic => is_synthetic = true,
-                Attribute::Deprecated => is_deprecated = true,
-                Attribute::Signature(sig) => signature = Some(sig),
-                Attribute::Record(rec) => record = Some(rec),
-                it @ _ => Err(ClassFileParsingError::UnexpectedAttribute(
-                    it.name(),
+                SourceFile(it) => fill_once!(source_file, it, "SourceFile"),
+                InnerClasses(it) => fill_once!(inner_classes, it, "InnerClasses"),
+                EnclosingMethod(it) => fill_once!(enclosing_method, it, "EnclosingMethod"),
+                SourceDebugExtension(it) => {
+                    fill_once!(source_debug_extension, it, "SourceDebugExtension")
+                }
+                RuntimeVisibleAnnotations(it) => {
+                    fill_once!(rt_visible_anno, it, "RuntimeVisibleAnnotations")
+                }
+                RuntimeInvisibleAnnotations(it) => {
+                    fill_once!(rt_invisible_anno, it, "RuntimeInvisibleAnnotations")
+                }
+                RuntimeVisibleTypeAnnotations(it) => {
+                    fill_once!(rt_visible_type_anno, it, "RuntimeVisibleTypeAnnotations")
+                }
+                RuntimeInvisibleTypeAnnotations(it) => fill_once!(
+                    rt_invisible_type_anno,
+                    it,
+                    "RuntimeInvisibleTypeAnnotations"
+                ),
+                BootstrapMethods(bm) => fill_once!(bootstrap_methods, bm, "BootstrapMethods"),
+                Module(it) => fill_once!(module, it, "Module"),
+                ModulePackages(mp) => fill_once!(module_packages, mp, "ModulePackages"),
+                ModuleMainClass(mmc) => fill_once!(module_main_class, mmc, "ModuleMainClass"),
+                NestHost(nh) => fill_once!(nest_host, nh, "NestHost"),
+                NestMembers(nm) => fill_once!(nest_members, nm, "NestMembers"),
+                PermittedSubclasses(ps) => {
+                    fill_once!(permitted_subclasses, ps, "PermittedSubclasses")
+                }
+                Synthetic => is_synthetic = true,
+                Deprecated => is_deprecated = true,
+                Signature(sig) => fill_once!(signature, sig, "Signature"),
+                Record(rec) => fill_once!(record, rec, "Recoed"),
+                unexpected => Err(ClassFileParsingError::UnexpectedAttribute(
+                    unexpected.name(),
                     "class_file",
                 ))?,
             }
         }
+
         Ok(Class {
             version,
             access_flags,
