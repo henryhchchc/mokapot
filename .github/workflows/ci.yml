@@ -3,6 +3,10 @@ name: Cargo Build & Test
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - src/**
+      - test_data/**
+      - Cargo.toml
   pull_request:
 
 env: 
