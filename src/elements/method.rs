@@ -7,8 +7,9 @@ use itertools::Itertools;
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     field::{FieldType, PrimitiveType},
-    instruction::{Instruction, ProgramCounter},
+    instruction::Instruction,
     parsing::error::InvalidDescriptor,
+    pc::ProgramCounter,
     references::ClassReference,
 };
 

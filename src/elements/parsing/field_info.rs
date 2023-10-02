@@ -1,6 +1,6 @@
 use crate::{
     elements::field::{Field, FieldAccessFlags, FieldType},
-    utils::read_u16,
+    reader_utils::read_u16,
 };
 
 use super::{

@@ -3,7 +3,7 @@ use crate::{
         Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
         ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
-    utils::{read_u16, read_u32},
+    reader_utils::{read_u16, read_u32},
 };
 
 use super::{

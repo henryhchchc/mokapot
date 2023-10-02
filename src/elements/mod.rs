@@ -6,4 +6,5 @@ pub mod instruction;
 pub mod method;
 pub mod module;
 pub mod parsing;
+pub mod pc;
 pub mod references;

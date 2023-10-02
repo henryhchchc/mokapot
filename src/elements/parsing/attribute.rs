@@ -10,7 +10,7 @@ use crate::{
         module::Module,
         references::{ClassReference, PackageReference},
     },
-    utils::{read_u16, read_u32},
+    reader_utils::{read_u16, read_u32},
 };
 
 use super::{

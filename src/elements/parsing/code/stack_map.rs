@@ -3,7 +3,7 @@ use crate::{
         method::{StackMapFrame, VerificationTypeInfo},
         parsing::{constant_pool::ParsingContext, error::ClassFileParsingError},
     },
-    utils::{read_u16, read_u8},
+    reader_utils::{read_u16, read_u8},
 };
 
 impl StackMapFrame {

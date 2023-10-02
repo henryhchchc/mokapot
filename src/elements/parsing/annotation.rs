@@ -3,7 +3,7 @@ use crate::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         field::{ConstantValue, FieldType},
     },
-    utils::{read_u16, read_u32, read_u8},
+    reader_utils::{read_u16, read_u32, read_u8},
 };
 
 use super::{attribute::Attribute, constant_pool::ParsingContext, error::ClassFileParsingError};

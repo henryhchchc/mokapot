@@ -11,7 +11,7 @@ use crate::{
             MethodReference, ModuleReference, PackageReference,
         },
     },
-    utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
+    reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
 };
 
 use super::error::ClassFileParsingError;

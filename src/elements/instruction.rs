@@ -1,6 +1,7 @@
 use super::{
     field::{ConstantValue, FieldType, PrimitiveType},
     method::MethodDescriptor,
+    pc::ProgramCounter,
     references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
 };
 
@@ -258,6 +259,3 @@ pub struct ArrayTypeRef {
     pub base_type: FieldType,
     pub dimensions: u8,
 }
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct ProgramCounter(pub u16);

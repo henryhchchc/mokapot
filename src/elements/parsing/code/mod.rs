@@ -9,7 +9,7 @@ use crate::{
             VerificationTypeInfo,
         },
     },
-    utils::{read_u16, read_u8},
+    reader_utils::{read_u16, read_u8},
 };
 
 use super::{constant_pool::ParsingContext, error::ClassFileParsingError};

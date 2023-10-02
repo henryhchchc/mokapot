@@ -1,6 +1,6 @@
 use crate::{
     elements::class::{BootstrapMethod, InnerClassInfo, RecordComponent},
-    utils::{read_bytes_vec, read_u16, read_u32},
+    reader_utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{

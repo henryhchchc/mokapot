@@ -1,3 +1,5 @@
+use crate::elements::pc::InvalidOffset;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {
     #[error("Failed to read from buffer: {0}")]
@@ -39,8 +41,8 @@ pub enum ClassFileParsingError {
     UnexpectedConstantPoolTag(u8),
     #[error("The buffer does not contains a Java class file")]
     NotAClassFile,
-    #[error("Invalid jump target")]
-    InvalidJumpTarget,
+    #[error("Invalid jump target: {0}")]
+    InvalidJumpTarget(#[from] InvalidOffset),
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -9,7 +9,7 @@ use crate::{
         parsing::constant_pool::ParsingContext,
     },
     fill_once,
-    utils::{read_bytes_vec, read_u16, read_u32, read_u8},
+    reader_utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
 use super::{
