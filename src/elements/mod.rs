@@ -1,10 +1,16 @@
 pub mod annotation;
-pub mod class;
-pub mod class_parser;
-pub mod field;
-pub mod instruction;
-pub mod method;
+pub(crate) mod class;
+pub(crate) mod class_parser;
+pub(crate) mod field;
+pub(crate) mod instruction;
+pub(crate) mod method;
 pub mod module;
-pub mod parsing;
+pub(crate) mod parsing;
 pub mod pc;
-pub mod references;
+pub(crate) mod references;
+
+pub use class::*;
+pub use class_parser::ClassParser;
+pub use instruction::*;
+pub use method::*;
+pub use references::*;

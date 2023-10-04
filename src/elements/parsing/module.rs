@@ -3,13 +3,13 @@ use crate::{
         Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
         ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
+    errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u32},
 };
 
 use super::{
     attribute::Attribute,
     constant_pool::{ConstantPoolEntry, ParsingContext},
-    error::ClassFileParsingError,
 };
 
 impl ModuleRequire {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     elements::{
         class::{ClassVersion, Handle},
-        field::{ConstantValue, FieldType},
+        field::ConstantValue,
         instruction::ArrayTypeRef,
         method::MethodDescriptor,
         references::{
@@ -11,10 +11,10 @@ use crate::{
             MethodReference, ModuleReference, PackageReference,
         },
     },
+    errors::ClassFileParsingError,
     reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
+    types::FieldType,
 };
-
-use super::error::ClassFileParsingError;
 
 #[derive(Debug)]
 pub struct ParsingContext {
@@ -71,9 +71,7 @@ impl ParsingContext {
             });
         };
         let name = self.get_str(&name_index)?;
-        Ok(ClassReference {
-            binary_name: name.to_owned(),
-        })
+        Ok(ClassReference::new(name))
     }
 
     pub(crate) fn get_constant_value(

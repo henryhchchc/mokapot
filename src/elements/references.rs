@@ -1,4 +1,6 @@
-use super::{field::FieldType, method::MethodDescriptor};
+use crate::types::FieldType;
+
+use super::MethodDescriptor;
 
 /// A reference to a module in the binary format.
 #[derive(Debug)]
@@ -19,6 +21,15 @@ pub struct PackageReference {
 pub struct ClassReference {
     /// The binary name of the class.
     pub binary_name: String,
+}
+
+impl ClassReference {
+    /// Creates a new class reference.
+    pub fn new<S: Into<String>>(binary_name: S) -> Self {
+        ClassReference {
+            binary_name: binary_name.into(),
+        }
+    }
 }
 
 /// A reference to a field.

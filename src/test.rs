@@ -1,12 +1,14 @@
 use std::io::BufReader;
 
-use crate::elements::{
-    class::{Class, ClassAccessFlags},
-    class_parser::ClassParser,
-    field::{FieldType, PrimitiveType},
-    method::ReturnType,
-    parsing::error::ClassFileParsingError,
-    references::ClassReference,
+use crate::{
+    elements::{
+        class::{Class, ClassAccessFlags},
+        class_parser::ClassParser,
+        method::ReturnType,
+        references::ClassReference,
+    },
+    errors::ClassFileParsingError,
+    types::{FieldType, PrimitiveType},
 };
 
 /// Parses the class file `MyClass.class` from the `test_data` directory.
@@ -40,21 +42,14 @@ fn test_access_flag() {
 #[test]
 fn test_class_name() {
     let my_class = parse_my_class().unwrap();
-    assert_eq!(
-        ClassReference {
-            binary_name: "org/pkg/MyClass".to_owned()
-        },
-        my_class.this_class
-    );
+    assert_eq!(ClassReference::new("org/pkg/MyClass"), my_class.this_class);
 }
 
 #[test]
 fn test_super_class_name() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(
-        Some(ClassReference {
-            binary_name: "java/lang/Object".to_owned()
-        }),
+        Some(ClassReference::new("java/lang/Object")),
         my_class.super_class
     );
 }
@@ -64,9 +59,7 @@ fn test_interfaces() {
     let my_class = parse_my_class().unwrap();
     let mut interfaces = my_class.interfaces.into_iter();
     assert_eq!(
-        Some(ClassReference {
-            binary_name: "java/lang/Cloneable".to_owned()
-        }),
+        Some(ClassReference::new("java/lang/Cloneable")),
         interfaces.next()
     );
 }
@@ -96,10 +89,7 @@ fn test_methods() {
         .expect("main method not found");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::Object(ClassReference {
-            binary_name: "java/lang/String".to_owned()
-        })
-        .make_array_type(),
+        FieldType::Object(ClassReference::new("java/lang/String")).make_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }

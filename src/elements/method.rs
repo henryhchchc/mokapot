@@ -4,11 +4,14 @@ use std::{collections::HashMap, str::Chars};
 use bitflags::bitflags;
 use itertools::Itertools;
 
+use crate::{
+    errors::InvalidDescriptor,
+    types::{FieldType, PrimitiveType},
+};
+
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
-    field::{FieldType, PrimitiveType},
     instruction::Instruction,
-    parsing::error::InvalidDescriptor,
     pc::ProgramCounter,
     references::ClassReference,
 };
@@ -279,7 +282,7 @@ impl MethodDescriptor {
             'L' => {
                 let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
                 match remaining.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference { binary_name })),
+                    Some(';') => Ok(FieldType::Object(ClassReference::new(binary_name))),
                     _ => Err(build_err(remaining)),
                 }
             }
@@ -303,7 +306,7 @@ impl MethodDescriptor {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
                 }
-                None => Err(InvalidDescriptor(descriptor.to_owned()))?,
+                None => Err(InvalidDescriptor(descriptor.into()))?,
             }
         };
         Ok(Self {
@@ -332,10 +335,10 @@ impl ReturnType {
 
 #[cfg(test)]
 mod test {
-    use crate::elements::{
-        field::{FieldType, PrimitiveType::*},
-        method::ReturnType,
-        references::ClassReference,
+    use crate::{
+        elements::{method::ReturnType, references::ClassReference},
+        types::FieldType,
+        types::PrimitiveType::*,
     };
 
     use super::MethodDescriptor;
@@ -357,9 +360,7 @@ mod test {
         let descriptor = "(I[JLjava/lang/String;J)I";
         let method_descriptor =
             MethodDescriptor::new(descriptor).expect("Failed to parse method descriptor");
-        let string_type = FieldType::Object(ClassReference {
-            binary_name: "java/lang/String".to_owned(),
-        });
+        let string_type = FieldType::Object(ClassReference::new("java/lang/String"));
         assert_eq!(
             method_descriptor.return_type,
             ReturnType::Some(FieldType::Base(Int))

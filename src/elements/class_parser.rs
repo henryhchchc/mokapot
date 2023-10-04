@@ -1,4 +1,5 @@
 use crate::{
+    errors::ClassFileParsingError,
     fill_once,
     reader_utils::{read_u16, read_u32},
 };
@@ -10,7 +11,6 @@ use super::{
     parsing::{
         attribute::{Attribute, AttributeList},
         constant_pool::ParsingContext,
-        error::ClassFileParsingError,
     },
 };
 

@@ -10,13 +10,11 @@ use crate::{
         module::Module,
         references::{ClassReference, PackageReference},
     },
+    errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u32},
 };
 
-use super::{
-    constant_pool::{ConstantPoolEntry, ParsingContext},
-    error::ClassFileParsingError,
-};
+use super::constant_pool::{ConstantPoolEntry, ParsingContext};
 
 #[derive(Debug)]
 pub(crate) struct AttributeList {

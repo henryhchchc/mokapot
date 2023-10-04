@@ -1,5 +1,7 @@
+use crate::types::{FieldType, PrimitiveType};
+
 use super::{
-    field::{ConstantValue, FieldType, PrimitiveType},
+    field::ConstantValue,
     method::MethodDescriptor,
     pc::ProgramCounter,
     references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},

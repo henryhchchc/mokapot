@@ -2,17 +2,16 @@ use std::{collections::HashMap, io::Read};
 
 use crate::{
     elements::{
-        field::{ConstantValue, FieldType, PrimitiveType},
+        field::ConstantValue,
         instruction::Instruction,
         method::MethodDescriptor,
-        parsing::{
-            constant_pool::{ConstantPoolEntry, ParsingContext},
-            error::ClassFileParsingError,
-        },
+        parsing::constant_pool::{ConstantPoolEntry, ParsingContext},
         pc::ProgramCounter,
         references::MethodReference,
     },
+    errors::ClassFileParsingError,
     reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
+    types::{FieldType, PrimitiveType},
 };
 
 impl Instruction {

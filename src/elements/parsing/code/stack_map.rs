@@ -1,8 +1,9 @@
 use crate::{
     elements::{
         method::{StackMapFrame, VerificationTypeInfo},
-        parsing::{constant_pool::ParsingContext, error::ClassFileParsingError},
+        parsing::constant_pool::ParsingContext,
     },
+    errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u8},
 };
 

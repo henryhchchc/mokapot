@@ -1,4 +1,6 @@
-use super::field::{ConstantValue, FieldType};
+use crate::types::FieldType;
+
+use super::field::ConstantValue;
 
 #[derive(Debug)]
 pub struct Annotation {

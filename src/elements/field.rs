@@ -1,8 +1,9 @@
+use crate::types::FieldType;
+
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class::Handle,
     method::MethodDescriptor,
-    parsing::error::InvalidDescriptor,
     references::ClassReference,
 };
 
@@ -34,108 +35,7 @@ pub enum ConstantValue {
     Dynamic(u16, String, FieldType),
 }
 
-/// A primitive type in Java.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PrimitiveType {
-    /// The `boolean` type.
-    Boolean,
-    /// The `char` type.
-    Char,
-    /// The `float` type.
-    Float,
-    /// The `double` type.
-    Double,
-    /// The `byte` type.
-    Byte,
-    /// The `short` type.
-    Short,
-    /// The `int` type.
-    Int,
-    /// The `long` type.
-    Long,
-}
-
-impl PrimitiveType {
-    pub fn new(descriptor: &char) -> Result<Self, InvalidDescriptor> {
-        match descriptor {
-            'Z' => Ok(Self::Boolean),
-            'C' => Ok(Self::Char),
-            'F' => Ok(Self::Float),
-            'D' => Ok(Self::Double),
-            'B' => Ok(Self::Byte),
-            'S' => Ok(Self::Short),
-            'I' => Ok(Self::Int),
-            'J' => Ok(Self::Long),
-            _ => Err(InvalidDescriptor(descriptor.to_string())),
-        }
-    }
-
-    fn descriptor_str(&self) -> &'static str {
-        match self {
-            Self::Boolean => "Z",
-            Self::Char => "C",
-            Self::Float => "F",
-            Self::Double => "D",
-            Self::Byte => "B",
-            Self::Short => "S",
-            Self::Int => "I",
-            Self::Long => "J",
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum FieldType {
-    Base(PrimitiveType),
-    Object(ClassReference),
-    Array(Box<FieldType>),
-}
-
-impl FieldType {
-    pub fn make_array_type(&self) -> Self {
-        Self::Array(Box::new(self.clone()))
-    }
-
-    pub fn new(descriptor: &str) -> Result<Self, InvalidDescriptor> {
-        let mut chars = descriptor.chars();
-        let result = match chars.next() {
-            Some('L') => {
-                let type_name = chars.take_while_ref(|it| *it != ';').collect::<String>();
-                match chars.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference {
-                        binary_name: type_name,
-                    })),
-                    _ => Err(InvalidDescriptor(descriptor.to_owned())),
-                }
-            }
-            Some('[') => {
-                // Skip trailing character checking via `return`
-                return FieldType::new(chars.as_str()).map(|it| it.make_array_type());
-            }
-            Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
-            None => Err(InvalidDescriptor(descriptor.to_owned())),
-        }?;
-        // Check if there is any trailing character
-        if chars.next().is_none() {
-            Ok(result)
-        } else {
-            Err(InvalidDescriptor(descriptor.to_owned()))
-        }
-    }
-
-    pub(crate) fn descriptor_string(&self) -> String {
-        match self {
-            FieldType::Base(it) => it.descriptor_str().to_owned(),
-            FieldType::Object(ClassReference { binary_name }) => {
-                format!("L{};", binary_name)
-            }
-            FieldType::Array(inner) => format!("[{}", inner.descriptor_string()),
-        }
-    }
-}
-
 use bitflags::bitflags;
-use itertools::Itertools;
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq)]
@@ -163,9 +63,10 @@ bitflags! {
 
 #[cfg(test)]
 mod test {
-    use crate::elements::{field::PrimitiveType, references::ClassReference};
 
-    use super::{FieldType, PrimitiveType::*};
+    use crate::elements::ClassReference;
+    use crate::types::PrimitiveType::*;
+    use crate::types::{FieldType, PrimitiveType};
 
     #[test]
     fn parse_primitive_types() {
@@ -213,9 +114,7 @@ mod test {
             .expect("Failed to parse field types")
             .into_iter();
 
-        let string_type = FieldType::Object(ClassReference {
-            binary_name: "java/lang/String".to_owned(),
-        });
+        let string_type = FieldType::Object(ClassReference::new("java/lang/String"));
 
         assert_eq!(types.next(), Some(FieldType::Base(Boolean)));
         assert_eq!(types.next(), Some(FieldType::Base(Char)));

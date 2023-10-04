@@ -8,14 +8,12 @@ use crate::{
         },
         parsing::constant_pool::ParsingContext,
     },
+    errors::ClassFileParsingError,
     fill_once,
     reader_utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
-use super::{
-    attribute::{Attribute, AttributeList},
-    error::ClassFileParsingError,
-};
+use super::attribute::{Attribute, AttributeList};
 
 impl ExceptionTableEntry {
     fn parse<R>(
