@@ -1,6 +1,8 @@
 # MokaPot
 
 [![Cargo Build & Test](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml/badge.svg)](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml)
+![Crates.io](https://img.shields.io/crates/v/mokapot)
+![docs.rs](https://img.shields.io/docsrs/mokapot)
 
 MokaPot is a Java byte code analysis library to facilitate my research.
 
