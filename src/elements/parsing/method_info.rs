@@ -1,19 +1,24 @@
 use crate::{
     elements::{
-        instruction::Instruction,
+        instruction::{
+            ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
+            StackMapFrame,
+        },
         method::{
-            ExceptionTableEntry, LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTable,
-            LocalVariableTypeAttr, Method, MethodAccessFlags, MethodBody, MethodDescriptor,
-            MethodParameter, MethodParameterAccessFlags, StackMapFrame, CLASS_INITIALIZER_NAME,
+            Method, MethodAccessFlags, MethodDescriptor, MethodParameter,
+            MethodParameterAccessFlags, CLASS_INITIALIZER_NAME,
         },
         parsing::constant_pool::ParsingContext,
     },
     errors::ClassFileParsingError,
-    fill_once,
+    macros::fill_once,
     reader_utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
-use super::attribute::{Attribute, AttributeList};
+use super::{
+    attribute::{Attribute, AttributeList},
+    code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+};
 
 impl ExceptionTableEntry {
     fn parse<R>(

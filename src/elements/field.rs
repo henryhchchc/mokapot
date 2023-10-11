@@ -64,7 +64,7 @@ bitflags! {
 #[cfg(test)]
 mod test {
 
-    use crate::elements::ClassReference;
+    use crate::elements::references::ClassReference;
     use crate::types::PrimitiveType::*;
     use crate::types::{FieldType, PrimitiveType};
 

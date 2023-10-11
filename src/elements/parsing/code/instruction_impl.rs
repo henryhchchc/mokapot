@@ -3,10 +3,9 @@ use std::{collections::HashMap, io::Read};
 use crate::{
     elements::{
         field::ConstantValue,
-        instruction::Instruction,
+        instruction::{Instruction, ProgramCounter},
         method::MethodDescriptor,
         parsing::constant_pool::{ConstantPoolEntry, ParsingContext},
-        pc::ProgramCounter,
         references::MethodReference,
     },
     errors::ClassFileParsingError,

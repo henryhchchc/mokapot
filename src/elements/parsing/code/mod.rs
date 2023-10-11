@@ -2,16 +2,27 @@ pub(super) mod instruction_impl;
 pub(super) mod stack_map;
 
 use crate::{
-    elements::method::{
-        LineNumberTableEntry, LocalVariableDescAttr, LocalVariableKey, LocalVariableTypeAttr,
-        VerificationTypeInfo,
-    },
+    elements::instruction::{LineNumberTableEntry, LocalVariableKey, VerificationTypeInfo},
     errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u8},
     types::FieldType,
 };
 
 use super::constant_pool::ParsingContext;
+
+#[derive(Debug)]
+pub(crate) struct LocalVariableDescAttr {
+    pub key: LocalVariableKey,
+    pub name: String,
+    pub field_type: FieldType,
+}
+
+#[derive(Debug)]
+pub(crate) struct LocalVariableTypeAttr {
+    pub key: LocalVariableKey,
+    pub name: String,
+    pub signature: String,
+}
 
 impl LineNumberTableEntry {
     pub(super) fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>

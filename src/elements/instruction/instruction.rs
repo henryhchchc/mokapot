@@ -1,11 +1,13 @@
-use crate::types::{FieldType, PrimitiveType};
-
-use super::{
-    field::ConstantValue,
-    method::MethodDescriptor,
-    pc::ProgramCounter,
-    references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
+use crate::{
+    elements::{
+        field::ConstantValue,
+        references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
+        MethodDescriptor,
+    },
+    types::{FieldType, PrimitiveType},
 };
+
+use super::ProgramCounter;
 
 #[derive(Debug)]
 pub enum Instruction {

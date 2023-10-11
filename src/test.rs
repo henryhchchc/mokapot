@@ -3,7 +3,6 @@ use std::io::BufReader;
 use crate::{
     elements::{
         class::{Class, ClassAccessFlags},
-        class_parser::ClassParser,
         method::ReturnType,
         references::ClassReference,
     },
@@ -15,8 +14,8 @@ use crate::{
 /// The source code ot the class files is as follows.
 fn parse_my_class() -> Result<Class, ClassFileParsingError> {
     let bytes = include_bytes!("../test_data/MyClass.class");
-    let mut reader = BufReader::new(&bytes[..]);
-    ClassParser::from_reader(&mut reader).parse()
+    let reader = BufReader::new(&bytes[..]);
+    Class::from_reader(reader)
 }
 
 #[test]

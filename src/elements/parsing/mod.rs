@@ -1,8 +1,9 @@
 mod annotation;
-pub(super) mod attribute;
+mod attribute;
 mod class_file;
-mod code;
-pub(super) mod constant_pool;
+mod class_parser;
+pub(crate) mod code;
+mod constant_pool;
 pub mod error;
 mod field_info;
 mod method_info;

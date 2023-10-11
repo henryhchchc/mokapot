@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::{elements::ClassReference, errors::InvalidDescriptor};
+use crate::{elements::references::ClassReference, errors::InvalidDescriptor};
 
 /// A primitive type in Java.
 #[derive(Debug, PartialEq, Eq, Clone)]

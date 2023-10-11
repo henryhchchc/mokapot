@@ -1,6 +1,6 @@
 use crate::{
     elements::{
-        method::{StackMapFrame, VerificationTypeInfo},
+        instruction::{StackMapFrame, VerificationTypeInfo},
         parsing::constant_pool::ParsingContext,
     },
     errors::ClassFileParsingError,

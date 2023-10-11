@@ -1,40 +1,32 @@
+use super::attribute::Attribute;
 use crate::{
+    elements::{field::Field, Class, ClassAccessFlags, ClassVersion, Method},
     errors::ClassFileParsingError,
-    fill_once,
+    macros::fill_once,
     reader_utils::{read_u16, read_u32},
 };
 
-use super::{
-    class::{Class, ClassAccessFlags, ClassVersion},
-    field::Field,
-    method::Method,
-    parsing::{
-        attribute::{Attribute, AttributeList},
-        constant_pool::ParsingContext,
-    },
-};
+use super::{attribute::AttributeList, constant_pool::ParsingContext};
 
-pub struct ClassParser<'a> {
-    reader: &'a mut dyn std::io::Read,
-}
-
-impl<'a> ClassParser<'a> {
-    pub fn parse(mut self) -> Result<Class, ClassFileParsingError> {
-        let reader = &mut self.reader;
-
-        let magic = read_u32(reader)?;
+impl Class {
+    pub fn from_reader<R>(reader: R) -> Result<Class, ClassFileParsingError>
+    where
+        R: std::io::Read,
+    {
+        let mut reader = reader;
+        let magic = read_u32(&mut reader)?;
         if magic != JAVA_CLASS_MAIGC {
             return Err(ClassFileParsingError::NotAClassFile);
         }
-        let version = ClassVersion::parse(reader)?;
-        let parsing_context = ParsingContext::parse(reader, &version)?;
-        let access = read_u16(reader)?;
+        let version = ClassVersion::parse(&mut reader)?;
+        let parsing_context = ParsingContext::parse(&mut reader, &version)?;
+        let access = read_u16(&mut reader)?;
         let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
             return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
-        let this_class_idx = read_u16(reader)?;
+        let this_class_idx = read_u16(&mut reader)?;
         let this_class = parsing_context.get_class_ref(&this_class_idx)?;
-        let super_class_idx = read_u16(reader)?;
+        let super_class_idx = read_u16(&mut reader)?;
         let super_class = match super_class_idx {
             0 if this_class.binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
@@ -44,25 +36,25 @@ impl<'a> ClassParser<'a> {
             it @ _ => Some(parsing_context.get_class_ref(&it)?),
         };
 
-        let interfaces_count = read_u16(reader)?;
+        let interfaces_count = read_u16(&mut reader)?;
         let interfaces = (0..interfaces_count)
             .map(|_| {
-                let interface_idx = read_u16(reader)?;
+                let interface_idx = read_u16(&mut reader)?;
                 parsing_context.get_class_ref(&interface_idx)
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
-        let fields_count = read_u16(reader)?;
+        let fields_count = read_u16(&mut reader)?;
         let fields = (0..fields_count)
             .into_iter()
-            .map(|_| Field::parse(reader, &parsing_context))
+            .map(|_| Field::parse(&mut reader, &parsing_context))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
-        let methods_count = read_u16(reader)?;
+        let methods_count = read_u16(&mut reader)?;
         let methods = (0..methods_count)
-            .map(|_| Method::parse(reader, &parsing_context))
+            .map(|_| Method::parse(&mut reader, &parsing_context))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
-        let attributes = AttributeList::parse(reader, &parsing_context)?;
+        let attributes = AttributeList::parse(&mut reader, &parsing_context)?;
 
         let mut may_remain: [u8; 1] = [0];
         let remain = reader.read(&mut may_remain)?;
@@ -179,12 +171,3 @@ impl ClassVersion {
 }
 
 const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
-
-impl<'a> ClassParser<'a> {
-    pub fn from_reader<'r, R>(reader: &'r mut R) -> ClassParser<'r>
-    where
-        R: std::io::Read,
-    {
-        ClassParser { reader }
-    }
-}

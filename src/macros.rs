@@ -1,4 +1,3 @@
-#[macro_export]
 macro_rules! fill_once {
     ($container:ident, $with:ident, $what:literal) => {
         if $container.replace($with).is_some() {
@@ -9,3 +8,5 @@ macro_rules! fill_once {
         }
     };
 }
+
+pub(crate) use fill_once;

@@ -1,4 +1,4 @@
-use crate::elements::pc::InvalidOffset;
+use crate::elements::instruction::InvalidOffset;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {

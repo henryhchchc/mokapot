@@ -3,10 +3,8 @@ use crate::{
         annotation::{Annotation, ElementValue, TypeAnnotation},
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         field::ConstantValue,
-        method::{
-            LineNumberTableEntry, LocalVariableDescAttr, LocalVariableTypeAttr, MethodBody,
-            MethodParameter, StackMapFrame,
-        },
+        instruction::{LineNumberTableEntry, MethodBody, StackMapFrame},
+        method::MethodParameter,
         module::Module,
         references::{ClassReference, PackageReference},
     },
@@ -14,7 +12,10 @@ use crate::{
     reader_utils::{read_u16, read_u32},
 };
 
-use super::constant_pool::{ConstantPoolEntry, ParsingContext};
+use super::{
+    code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+    constant_pool::{ConstantPoolEntry, ParsingContext},
+};
 
 #[derive(Debug)]
 pub(crate) struct AttributeList {
