@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{char, collections::HashMap};
 
 use crate::{
     elements::{
@@ -435,13 +435,10 @@ impl ConstantPoolEntry {
         R: std::io::Read,
     {
         let length = read_u16(reader)?;
-        let bytes = read_bytes_vec(reader, length as usize)?;
-        if let Ok(result) = cesu8::from_java_cesu8(bytes.as_slice()) {
-            Ok(Self::Utf8(result.into_owned()))
-        } else {
-            Err(ClassFileParsingError::MalformedClassFile(
-                "The constant pool entry does not contain valid UTF-8 bytes",
-            ))
+        let cesu8_content = read_bytes_vec(reader, length as usize)?;
+        match Self::parse_cesu8_string(cesu8_content) {
+            Some(result) => Ok(Self::Utf8(result)),
+            None => Err(ClassFileParsingError::BrokenCesu8),
         }
     }
 
@@ -599,5 +596,70 @@ impl ConstantPoolEntry {
     {
         let name_index = read_u16(reader)?;
         Ok(Self::Package { name_index })
+    }
+
+    fn parse_cesu8_string(cesu8_content: Vec<u8>) -> Option<String> {
+        let mut cesu8_buf = cesu8_content.into_iter();
+        let mut result = String::new();
+
+        loop {
+            let Some(first_byte) = cesu8_buf.next() else {
+                break;
+            };
+            if 0x00 == first_byte || (0xF0 <= first_byte) {
+                return None;
+            }
+            if 0x00 < first_byte && first_byte <= 0x7F {
+                let cp = first_byte as u32;
+                result.push(char::from_u32(cp)?);
+                continue;
+            }
+            if 0xC0 <= first_byte && first_byte <= 0xD0 {
+                let Some(second_byte @ 0x80..=0xBF) = cesu8_buf.next() else {
+                    return None;
+                };
+                let cp = ((first_byte as u32 & 0x1F) << 6) | (second_byte as u32 & 0x3F);
+                result.push(char::from_u32(cp)?);
+                continue;
+            }
+            if 0xE0 <= first_byte && first_byte <= 0xEF {
+                let Some(second_byte @ 0x80..=0xBF) = cesu8_buf.next() else {
+                    return None;
+                };
+                if first_byte == 0xED && 0xA0 <= second_byte && second_byte <= 0xAF {
+                    match (
+                        cesu8_buf.next(),
+                        cesu8_buf.next(),
+                        cesu8_buf.next(),
+                        cesu8_buf.next(),
+                    ) {
+                        (
+                            Some(third_byte @ 0x80..=0xBF),
+                            Some(_fourth_byte @ 0xED),
+                            Some(fifth_byte @ 0xB0..=0xBF),
+                            Some(sixth_byte @ 0x80..=0xBF),
+                        ) => {
+                            let cp = 0x10000 + ((second_byte as u32 & 0x0F) << 16)
+                                | ((third_byte as u32 & 0x3F) << 10)
+                                | ((fifth_byte as u32 & 0x0F) << 6)
+                                | (sixth_byte as u32 & 0x3F);
+                            result.push(char::from_u32(cp)?);
+                            continue;
+                        }
+                        _ => return None,
+                    }
+                } else {
+                    let Some(third_byte @ 0x80..=0xBF) = cesu8_buf.next() else {
+                        return None;
+                    };
+                    let cp = ((first_byte as u32 & 0x0F) << 12)
+                        | ((second_byte as u32 & 0x3F) << 6)
+                        | (third_byte as u32 & 0x3F);
+                    result.push(char::from_u32(cp)?);
+                    continue;
+                }
+            }
+        }
+        Some(result)
     }
 }
