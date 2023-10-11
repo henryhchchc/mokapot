@@ -25,8 +25,8 @@ Before building your project, run `cargo update` to fetch the latest commit.
 ### Parsing a class
 
 ```rust
-use mokapot::elements::ClassParser;
+use mokapot::elements::Class;
 
-let mut reader: std::io::Reader = todo!("Some reader for the byte code");
-let class = ClassParser::new(&mut reader).parse()?;
+let reader: std::io::Read = todo!("Some reader for the byte code");
+let class = Class::from_reader(reader)?;
 ```
