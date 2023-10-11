@@ -6,9 +6,10 @@
 
 MokaPot is a Java byte code analysis library to facilitate my research.
 
-> [!NOTE]
-> This project is in an early development stage and stability is not the current focus.
-> I will add the documentation stuff when the basic functionalities are ready for use.
+> [!WARNING]
+> **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
+> Documentations are incomplete, which will be added when the basic functionalities works.
+> Using this project for production is currently NOT RECOMMENDED.
 
 ## Usage
 
