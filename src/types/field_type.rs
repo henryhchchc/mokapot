@@ -66,26 +66,22 @@ impl FieldType {
 
     pub fn new(descriptor: &str) -> Result<Self, InvalidDescriptor> {
         let mut chars = descriptor.chars();
-        let result = match chars.next() {
+        match chars.next() {
+            Some('[') => Self::new(chars.as_str())
+                .map(|it| it.make_array_type())
+                .map_err(|_| InvalidDescriptor(descriptor.to_owned())),
             Some('L') => {
-                let type_name = chars.take_while_ref(|it| *it != ';').collect::<String>();
-                match chars.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference::new(&type_name))),
+                let type_name = chars.take_while_ref(|it| it != &';').collect::<String>();
+                match (chars.next(), chars.next()) {
+                    (Some(';'), None) => Ok(Self::Object(ClassReference::new(type_name))),
                     _ => Err(InvalidDescriptor(descriptor.to_owned())),
                 }
             }
-            Some('[') => {
-                // Skip trailing character checking via `return`
-                return FieldType::new(chars.as_str()).map(|it| it.make_array_type());
-            }
-            Some(ref c) => PrimitiveType::new(c).map(|it| FieldType::Base(it)),
+            Some(ref c) => match chars.next() {
+                None => PrimitiveType::new(c).map(|it| Self::Base(it)),
+                _ => Err(InvalidDescriptor(descriptor.to_owned())),
+            },
             None => Err(InvalidDescriptor(descriptor.to_owned())),
-        }?;
-        // Check if there is any trailing character
-        if chars.next().is_none() {
-            Ok(result)
-        } else {
-            Err(InvalidDescriptor(descriptor.to_owned()))
         }
     }
 
