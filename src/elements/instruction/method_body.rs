@@ -15,7 +15,7 @@ use super::{Instruction, ProgramCounter};
 pub struct MethodBody {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instructions: HashMap<ProgramCounter, Instruction>,
+    pub instructions: Vec<(ProgramCounter, Instruction)>,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
     pub local_variable_table: Option<LocalVariableTable>,

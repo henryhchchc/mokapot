@@ -1,3 +1,4 @@
+pub mod analysis;
 pub mod elements;
 pub mod errors;
 pub(crate) mod macros;

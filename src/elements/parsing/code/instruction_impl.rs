@@ -17,12 +17,12 @@ impl Instruction {
     pub fn parse_code(
         bytes: Vec<u8>,
         ctx: &ParsingContext,
-    ) -> Result<HashMap<ProgramCounter, Self>, ClassFileParsingError> {
+    ) -> Result<Vec<(ProgramCounter, Self)>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
-        let mut instructions = HashMap::new();
+        let mut instructions = Vec::new();
         loop {
-            if let Some((addr, instruction)) = Instruction::parse(&mut cursor, ctx)? {
-                instructions.insert(addr, instruction);
+            if let Some((pc, instruction)) = Instruction::parse(&mut cursor, ctx)? {
+                instructions.push((pc, instruction));
             } else {
                 break;
             }
