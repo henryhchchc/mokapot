@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Read};
+use std::{io::Read};
 
 use crate::{
     elements::{
@@ -329,7 +329,7 @@ impl Instruction {
                 while reader.position() % 4 != 0 {
                     let _padding_byte = read_u8(reader)?;
                 }
-                let default = read_i32(reader)?;
+                let default = read_offset32(reader, &pc)?;
                 let npairs = read_i32(reader)?;
                 let match_targets = (0..npairs)
                     .map(|_| {
@@ -347,7 +347,7 @@ impl Instruction {
                 while reader.position() % 4 != 0 {
                     let _padding_byte = read_u8(reader)?;
                 }
-                let default = read_i32(reader)?;
+                let default = read_offset32(reader, &pc)?;
                 let low = read_i32(reader)?;
                 let high = read_i32(reader)?;
                 let offset_count = high - low + 1;

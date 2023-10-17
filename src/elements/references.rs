@@ -17,7 +17,7 @@ pub struct PackageReference {
 }
 
 /// A reference to a class in the binary format.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ClassReference {
     /// The binary name of the class.
     pub binary_name: String,

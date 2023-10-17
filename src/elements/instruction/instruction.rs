@@ -197,13 +197,13 @@ pub enum Instruction {
     Jsr(ProgramCounter),
     Ret(u8),
     TableSwitch {
-        default: i32,
+        default: ProgramCounter,
         low: i32,
         high: i32,
         jump_targets: Vec<ProgramCounter>,
     },
     LookupSwitch {
-        default: i32,
+        default: ProgramCounter,
         match_targets: Vec<(i32, ProgramCounter)>,
     },
     IReturn,
