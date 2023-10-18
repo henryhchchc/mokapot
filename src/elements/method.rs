@@ -90,7 +90,7 @@ bitflags! {
 
 /// The descriptor of a method.
 /// Consists of the parameters types and the return type.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MethodDescriptor {
     /// The type of the parameters.
     pub parameters_types: Vec<FieldType>,
@@ -99,7 +99,7 @@ pub struct MethodDescriptor {
 }
 
 /// Denotes the return type of a method.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum ReturnType {
     /// The method returns a specific type.
     Some(FieldType),

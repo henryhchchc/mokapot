@@ -33,7 +33,7 @@ impl ClassReference {
 }
 
 /// A reference to a field.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FieldReference {
     /// A reference to the class that contains the field.
     pub class: ClassReference,
@@ -45,7 +45,7 @@ pub struct FieldReference {
 }
 
 /// A reference to an interface method.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct InterfaceMethodReference {
     /// The reference to the interface.
     pub interface: ClassReference,
@@ -56,7 +56,7 @@ pub struct InterfaceMethodReference {
 }
 
 /// A reference to a class method.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct ClassMethodReference {
     /// The reference to the class.
     pub class: ClassReference,
@@ -66,7 +66,7 @@ pub struct ClassMethodReference {
     pub descriptor: MethodDescriptor,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum MethodReference {
     Class(ClassMethodReference),
     Interface(InterfaceMethodReference),
