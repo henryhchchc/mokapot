@@ -73,7 +73,7 @@ mod test {
         let descs = vec!['Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J'];
         let mut types = descs
             .into_iter()
-            .map(|ref d| PrimitiveType::new(d))
+            .map(|d| PrimitiveType::try_from(d))
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse primitive types")
             .into_iter();
@@ -89,7 +89,7 @@ mod test {
 
     #[test]
     fn parse_invalid_primitive_type() {
-        assert!(PrimitiveType::new(&'A').is_err())
+        assert!(PrimitiveType::try_from('A').is_err())
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod test {
         ];
         let mut types = descriptors
             .into_iter()
-            .map(|ref it| FieldType::new(it))
+            .map(|it| FieldType::try_from(it))
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse field types")
             .into_iter();
@@ -135,12 +135,12 @@ mod test {
     #[test]
     fn missing_semicolon() {
         let descriptor = "Ljava/lang/String";
-        assert!(FieldType::new(descriptor).is_err())
+        assert!(FieldType::try_from(descriptor).is_err())
     }
 
     #[test]
     fn tailing_chars() {
         let descriptor = "Ljava/lang/String;A";
-        assert!(FieldType::new(descriptor).is_err())
+        assert!(FieldType::try_from(descriptor).is_err())
     }
 }

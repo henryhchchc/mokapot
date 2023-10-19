@@ -71,7 +71,7 @@ impl Annotation {
     {
         let type_idx = read_u16(reader)?;
         let annotation_type = ctx.get_str(&type_idx)?;
-        let annotation_type = FieldType::new(annotation_type)?;
+        let annotation_type = FieldType::try_from(annotation_type)?;
         let num_element_value_pairs = read_u16(reader)?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {

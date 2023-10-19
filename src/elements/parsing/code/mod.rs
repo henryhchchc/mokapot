@@ -52,7 +52,7 @@ impl LocalVariableDescAttr {
         let name = ctx.get_str(&name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
-        let field_type = FieldType::new(descriptor)?;
+        let field_type = FieldType::try_from(descriptor)?;
         let index = read_u16(reader)?;
         let key = LocalVariableKey {
             start_pc,

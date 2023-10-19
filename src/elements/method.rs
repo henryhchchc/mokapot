@@ -139,7 +139,7 @@ impl MethodDescriptor {
         prefix: char,
         remaining: &mut Chars,
     ) -> Result<FieldType, InvalidDescriptor> {
-        if let Ok(p) = PrimitiveType::new(&prefix) {
+        if let Ok(p) = PrimitiveType::try_from(prefix) {
             return Ok(FieldType::Base(p));
         }
         let build_err = |rem: &Chars| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
@@ -186,7 +186,7 @@ impl ReturnType {
         if descriptor == "V" {
             Ok(ReturnType::Void)
         } else {
-            FieldType::new(descriptor).map(ReturnType::Some)
+            FieldType::try_from(descriptor).map(ReturnType::Some)
         }
     }
 

@@ -105,7 +105,7 @@ impl ParsingContext {
                 name_and_type_index,
             } => {
                 let (name, descriptor_str) = self.get_name_and_type(&name_and_type_index)?;
-                let descriptor = FieldType::new(descriptor_str)?;
+                let descriptor = FieldType::try_from(descriptor_str)?;
                 Ok(ConstantValue::Dynamic(
                     *bootstrap_method_attr_index,
                     name.to_owned(),
@@ -169,7 +169,7 @@ impl ParsingContext {
             {
                 let name = self.get_str(&name_index)?.to_owned();
                 let descriptor = self.get_str(&descriptor_index)?;
-                let field_type = FieldType::new(descriptor)?;
+                let field_type = FieldType::try_from(descriptor)?;
                 return Ok(FieldReference {
                     class,
                     name,
@@ -284,7 +284,7 @@ impl ParsingContext {
         index: &u16,
     ) -> Result<ArrayTypeRef, ClassFileParsingError> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
-        let FieldType::Array(b) = FieldType::new(&name)? else {
+        let FieldType::Array(b) = FieldType::try_from(name.as_str())? else {
             return Err(ClassFileParsingError::MalformedClassFile(
                 "Invalid type name for arrty type ref",
             ));

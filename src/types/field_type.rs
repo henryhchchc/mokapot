@@ -24,20 +24,6 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    pub fn new(descriptor: &char) -> Result<Self, InvalidDescriptor> {
-        match descriptor {
-            'Z' => Ok(Self::Boolean),
-            'C' => Ok(Self::Char),
-            'F' => Ok(Self::Float),
-            'D' => Ok(Self::Double),
-            'B' => Ok(Self::Byte),
-            'S' => Ok(Self::Short),
-            'I' => Ok(Self::Int),
-            'J' => Ok(Self::Long),
-            _ => Err(InvalidDescriptor(descriptor.to_string())),
-        }
-    }
-
     fn descriptor_str(&self) -> &'static str {
         match self {
             Self::Boolean => "Z",
@@ -52,6 +38,24 @@ impl PrimitiveType {
     }
 }
 
+impl TryFrom<char> for PrimitiveType {
+    type Error = InvalidDescriptor;
+
+    fn try_from(descriptor: char) -> Result<Self, Self::Error> {
+        match descriptor {
+            'Z' => Ok(Self::Boolean),
+            'C' => Ok(Self::Char),
+            'F' => Ok(Self::Float),
+            'D' => Ok(Self::Double),
+            'B' => Ok(Self::Byte),
+            'S' => Ok(Self::Short),
+            'I' => Ok(Self::Int),
+            'J' => Ok(Self::Long),
+            _ => Err(InvalidDescriptor(descriptor.to_string())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
@@ -59,15 +63,13 @@ pub enum FieldType {
     Array(Box<FieldType>),
 }
 
-impl FieldType {
-    pub fn make_array_type(&self) -> Self {
-        Self::Array(Box::new(self.clone()))
-    }
+impl TryFrom<&str> for FieldType {
+    type Error = InvalidDescriptor;
 
-    pub fn new(descriptor: &str) -> Result<Self, InvalidDescriptor> {
+    fn try_from(descriptor: &str) -> Result<Self, Self::Error> {
         let mut chars = descriptor.chars();
         match chars.next() {
-            Some('[') => Self::new(chars.as_str())
+            Some('[') => Self::try_from(chars.as_str())
                 .map(|it| it.make_array_type())
                 .map_err(|_| InvalidDescriptor(descriptor.to_owned())),
             Some('L') => {
@@ -77,12 +79,18 @@ impl FieldType {
                     _ => Err(InvalidDescriptor(descriptor.to_owned())),
                 }
             }
-            Some(ref c) => match chars.next() {
-                None => PrimitiveType::new(c).map(|it| Self::Base(it)),
+            Some(c) => match chars.next() {
+                None => PrimitiveType::try_from(c).map(|it| Self::Base(it)),
                 _ => Err(InvalidDescriptor(descriptor.to_owned())),
             },
             None => Err(InvalidDescriptor(descriptor.to_owned())),
         }
+    }
+}
+
+impl FieldType {
+    pub fn make_array_type(&self) -> Self {
+        Self::Array(Box::new(self.clone()))
     }
 
     pub(crate) fn descriptor_string(&self) -> String {
