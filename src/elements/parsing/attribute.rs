@@ -83,7 +83,7 @@ pub(crate) enum Attribute {
 }
 
 impl Attribute {
-    pub fn name(&self) -> &'static str {
+    pub fn name<'a>(&self) -> &'a str {
         match self {
             Self::ConstantValue(_) => "ConstantValue",
             Self::Code(_) => "Code",

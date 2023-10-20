@@ -484,7 +484,7 @@ impl Instruction {
     }
 
     /// Gets the name of the [Instruction].
-    pub fn name(&self) -> &'static str {
+    pub fn name<'a>(&self) -> &'a str {
         use Instruction::*;
         match self {
             AALoad => "aaload",
