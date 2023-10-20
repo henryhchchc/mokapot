@@ -1,5 +1,7 @@
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
-pub struct ProgramCounter(pub u16);
+use std::u16;
+
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
@@ -12,6 +14,12 @@ impl ProgramCounter {
         u16::try_from(self.0 as i16 + offset)
             .map(Self)
             .map_err(|_| InvalidOffset::I16(offset))
+    }
+}
+
+impl From<u16> for ProgramCounter {
+    fn from(value: u16) -> Self {
+        Self(value)
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{io::Read};
+use std::io::Read;
 
 use crate::{
     elements::{
@@ -34,7 +34,7 @@ impl Instruction {
         reader: &mut std::io::Cursor<Vec<u8>>,
         ctx: &ParsingContext,
     ) -> Result<Option<(ProgramCounter, Self)>, ClassFileParsingError> {
-        let pc = ProgramCounter(reader.position() as u16);
+        let pc = (reader.position() as u16).into();
         let opcode = match read_u8(reader) {
             Ok(it) => it,
             Err(e) => {

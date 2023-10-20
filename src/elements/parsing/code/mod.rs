@@ -2,7 +2,7 @@ pub(super) mod instruction_impl;
 pub(super) mod stack_map;
 
 use crate::{
-    elements::instruction::{LineNumberTableEntry, LocalVariableKey, VerificationTypeInfo},
+    elements::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u8},
     types::FieldType,
@@ -12,15 +12,13 @@ use super::constant_pool::ParsingContext;
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {
-    pub key: LocalVariableKey,
-    pub name: String,
+    pub key: LocalVariableId,
     pub field_type: FieldType,
 }
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableTypeAttr {
-    pub key: LocalVariableKey,
-    pub name: String,
+    pub key: LocalVariableId,
     pub signature: String,
 }
 
@@ -29,7 +27,7 @@ impl LineNumberTableEntry {
     where
         R: std::io::Read,
     {
-        let start_pc = read_u16(reader)?;
+        let start_pc = read_u16(reader)?.into();
         let line_number = read_u16(reader)?;
         Ok(LineNumberTableEntry {
             start_pc,
@@ -46,24 +44,21 @@ impl LocalVariableDescAttr {
     where
         R: std::io::Read,
     {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
+        let start_pc = read_u16(reader)?.into();
+        let length = read_u16(reader)?.into();
         let name_index = read_u16(reader)?;
         let name = ctx.get_str(&name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(&descriptor_index)?;
         let field_type = FieldType::try_from(descriptor)?;
         let index = read_u16(reader)?;
-        let key = LocalVariableKey {
+        let key = LocalVariableId {
             start_pc,
             length,
             index,
-        };
-        Ok(LocalVariableDescAttr {
-            key,
             name,
-            field_type,
-        })
+        };
+        Ok(LocalVariableDescAttr { key, field_type })
     }
 }
 
@@ -75,23 +70,20 @@ impl LocalVariableTypeAttr {
     where
         R: std::io::Read,
     {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
+        let start_pc = read_u16(reader)?.into();
+        let length = read_u16(reader)?.into();
         let name_index = read_u16(reader)?;
         let name = ctx.get_str(&name_index)?.to_owned();
         let signature_index = read_u16(reader)?;
         let signature = ctx.get_str(&signature_index)?.to_owned();
         let index = read_u16(reader)?;
-        let key = LocalVariableKey {
+        let key = LocalVariableId {
             start_pc,
             length,
+            name,
             index,
         };
-        Ok(LocalVariableTypeAttr {
-            key,
-            name,
-            signature,
-        })
+        Ok(LocalVariableTypeAttr { key, signature })
     }
 }
 

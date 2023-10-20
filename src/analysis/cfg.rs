@@ -15,7 +15,7 @@ pub struct ControlFlowGraph<'b> {
 impl<'b> ControlFlowGraph<'b> {
     pub fn new(method_body: &'b MethodBody) -> Self {
         let mut edges = HashSet::new();
-        let entry = ProgramCounter(0);
+        let entry = ProgramCounter::from(0);
         let mut exits = HashSet::new();
         let mut insn_iter = method_body.instructions.iter().peekable();
         while let Some((pc, insn)) = insn_iter.next() {
