@@ -203,7 +203,7 @@ impl Instruction {
                     })?
                 };
                 let (name, desc_str) = ctx.get_name_and_type(&name_and_type_index)?;
-                let descriptor = MethodDescriptor::new(desc_str)?;
+                let descriptor = MethodDescriptor::try_from(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(

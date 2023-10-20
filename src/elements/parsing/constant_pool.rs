@@ -89,7 +89,7 @@ impl ParsingContext {
             }
             ConstantPoolEntry::MethodType { descriptor_index } => {
                 let descriptor_str = self.get_str(descriptor_index)?;
-                let descriptor = MethodDescriptor::new(descriptor_str)?;
+                let descriptor = MethodDescriptor::try_from(descriptor_str)?;
                 Ok(ConstantValue::MethodType(descriptor))
             }
             ConstantPoolEntry::Class { .. } => {
@@ -220,7 +220,7 @@ impl ParsingContext {
                 let class_or_interface = self.get_class_ref(class_index)?;
                 let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
                 let name = name.to_owned();
-                let descriptor = MethodDescriptor::new(descriptor_str)?;
+                let descriptor = MethodDescriptor::try_from(descriptor_str)?;
                 let result = match entry {
                     ConstantPoolEntry::MethodRef { .. } => {
                         MethodReference::Class(ClassMethodReference {
