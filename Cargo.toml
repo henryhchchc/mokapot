@@ -5,7 +5,6 @@ edition = "2021"
 description = "JVM analysis library"
 documentation = "https://docs.rs/mokapot"
 license = "MIT"
-license-file = "LICENSE"
 repository = "https://github.com/henryhchchc/mokapot"
 
 
