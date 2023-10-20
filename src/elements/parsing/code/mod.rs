@@ -47,9 +47,9 @@ impl LocalVariableDescAttr {
         let start_pc = read_u16(reader)?.into();
         let length = read_u16(reader)?.into();
         let name_index = read_u16(reader)?;
-        let name = ctx.get_str(&name_index)?.to_owned();
+        let name = ctx.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.get_str(&descriptor_index)?;
+        let descriptor = ctx.get_str(descriptor_index)?;
         let field_type = FieldType::try_from(descriptor)?;
         let index = read_u16(reader)?;
         let key = LocalVariableId {
@@ -73,9 +73,9 @@ impl LocalVariableTypeAttr {
         let start_pc = read_u16(reader)?.into();
         let length = read_u16(reader)?.into();
         let name_index = read_u16(reader)?;
-        let name = ctx.get_str(&name_index)?.to_owned();
+        let name = ctx.get_str(name_index)?.to_owned();
         let signature_index = read_u16(reader)?;
-        let signature = ctx.get_str(&signature_index)?.to_owned();
+        let signature = ctx.get_str(signature_index)?.to_owned();
         let index = read_u16(reader)?;
         let key = LocalVariableId {
             start_pc,
@@ -106,7 +106,7 @@ impl VerificationTypeInfo {
             6 => Self::UninitializedThisVariable,
             7 => {
                 let cpool_index = read_u16(reader)?;
-                let class_ref = ctx.get_class_ref(&cpool_index)?;
+                let class_ref = ctx.get_class_ref(cpool_index)?;
                 Self::ObjectVariable(class_ref)
             }
             8 => {

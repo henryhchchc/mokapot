@@ -123,7 +123,7 @@ impl Attribute {
         R: std::io::Read,
     {
         let name_idx = read_u16(reader)?;
-        let name = ctx.get_str(&name_idx)?;
+        let name = ctx.get_str(name_idx)?;
         match name {
             "ConstantValue" => Self::parse_constant_value(reader, ctx),
             "Code" => Self::parse_code(reader, ctx),
@@ -201,7 +201,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let value_index = read_u16(reader)?;
-        let value = ctx.get_constant_value(&value_index)?;
+        let value = ctx.get_constant_value(value_index)?;
         Ok(Self::ConstantValue(value))
     }
 
@@ -236,13 +236,13 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 4)?;
         let class_index = read_u16(reader)?;
-        let class = ctx.get_class_ref(&class_index)?;
+        let class = ctx.get_class_ref(class_index)?;
         let method_index = read_u16(reader)?;
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
-            let entry = ctx.get_entry(&method_index)?;
-            let ConstantPoolEntry::NameAndType {
+            let entry = ctx.get_entry(method_index)?;
+            let &ConstantPoolEntry::NameAndType {
                 name_index,
                 descriptor_index,
             } = entry
@@ -271,7 +271,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
-        let signature = ctx.get_str(&signature_index)?.to_owned();
+        let signature = ctx.get_str(signature_index)?.to_owned();
         Ok(Self::Signature(signature))
     }
 }

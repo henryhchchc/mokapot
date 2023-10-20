@@ -24,7 +24,7 @@ impl ModuleRequire {
         (0..requires_count)
             .map(|_| {
                 let module_index = read_u16(reader)?;
-                let module = parsing_context.get_module_ref(&module_index)?;
+                let module = parsing_context.get_module_ref(module_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleRequireFlags::from_bits(flag_bits) else {
                     return Err(ClassFileParsingError::UnknownFlags(
@@ -34,7 +34,7 @@ impl ModuleRequire {
                 };
                 let version_index = read_u16(reader)?;
                 let version = if version_index > 0 {
-                    Some(parsing_context.get_str(&version_index)?.to_owned())
+                    Some(parsing_context.get_str(version_index)?.to_owned())
                 } else {
                     None
                 };
@@ -60,7 +60,7 @@ impl ModuleExport {
         (0..count)
             .map(|_| {
                 let package_index = read_u16(reader)?;
-                let package = ctx.get_package_ref(&package_index)?;
+                let package = ctx.get_package_ref(package_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleExportFlags::from_bits(flag_bits) else {
                     return Err(ClassFileParsingError::UnknownFlags(
@@ -72,7 +72,7 @@ impl ModuleExport {
                 let mut to = Vec::with_capacity(to_count as usize);
                 for _ in 0..to_count {
                     let module_index = read_u16(reader)?;
-                    let module = ctx.get_module_ref(&module_index)?;
+                    let module = ctx.get_module_ref(module_index)?;
                     to.push(module);
                 }
                 Ok(ModuleExport { package, flags, to })
@@ -93,7 +93,7 @@ impl ModuleOpen {
         (0..count)
             .map(|_| {
                 let package_index = read_u16(reader)?;
-                let package = ctx.get_package_ref(&package_index)?;
+                let package = ctx.get_package_ref(package_index)?;
                 let flag_bits = read_u16(reader)?;
                 let Some(flags) = ModuleOpenFlags::from_bits(flag_bits) else {
                     return Err(ClassFileParsingError::UnknownFlags(
@@ -105,7 +105,7 @@ impl ModuleOpen {
                 let mut to = Vec::with_capacity(to_count as usize);
                 for _ in 0..to_count {
                     let module_index = read_u16(reader)?;
-                    let module = ctx.get_module_ref(&module_index)?;
+                    let module = ctx.get_module_ref(module_index)?;
                     to.push(module);
                 }
                 Ok(ModuleOpen { package, flags, to })
@@ -126,12 +126,12 @@ impl ModuleProvide {
         (0..count)
             .map(|_| {
                 let service_index = read_u16(reader)?;
-                let service = ctx.get_class_ref(&service_index)?;
+                let service = ctx.get_class_ref(service_index)?;
                 let with_count = read_u16(reader)?;
                 let mut with = Vec::with_capacity(with_count as usize);
                 for _ in 0..with_count {
                     let provider_idx = read_u16(reader)?;
-                    let provider = ctx.get_class_ref(&provider_idx)?;
+                    let provider = ctx.get_class_ref(provider_idx)?;
                     with.push(provider);
                 }
                 Ok(ModuleProvide { service, with })
@@ -150,8 +150,8 @@ impl Attribute {
     {
         let _attribute_length = read_u32(reader)?;
         let module_info_idx = read_u16(reader)?;
-        let module_info_entry = ctx.get_entry(&module_info_idx)?;
-        let ConstantPoolEntry::Module { name_index } = module_info_entry else {
+        let module_info_entry = ctx.get_entry(module_info_idx)?;
+        let &ConstantPoolEntry::Module { name_index } = module_info_entry else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Module",
                 found: module_info_entry.type_name(),
@@ -164,7 +164,7 @@ impl Attribute {
         };
         let version_index = read_u16(reader)?;
         let version = if version_index > 0 {
-            Some(ctx.get_str(&version_index)?.to_owned())
+            Some(ctx.get_str(version_index)?.to_owned())
         } else {
             None
         };
@@ -178,7 +178,7 @@ impl Attribute {
         let mut uses = Vec::with_capacity(uses_count as usize);
         for _ in 0..uses_count {
             let class_index = read_u16(reader)?;
-            let class = ctx.get_class_ref(&class_index)?;
+            let class = ctx.get_class_ref(class_index)?;
             uses.push(class);
         }
         let provides_count = read_u16(reader)?;
@@ -206,7 +206,7 @@ impl Attribute {
         let mut packages = Vec::with_capacity(package_count as usize);
         for _ in 0..package_count {
             let package_index = read_u16(reader)?;
-            let package = ctx.get_package_ref(&package_index)?;
+            let package = ctx.get_package_ref(package_index)?;
             packages.push(package);
         }
         Ok(Self::ModulePackages(packages))
@@ -220,7 +220,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let main_class_index = read_u16(reader)?;
-        let main_class = ctx.get_class_ref(&main_class_index)?;
+        let main_class = ctx.get_class_ref(main_class_index)?;
         Ok(Self::ModuleMainClass(main_class))
     }
 }

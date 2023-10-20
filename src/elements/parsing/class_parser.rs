@@ -25,7 +25,7 @@ impl Class {
             return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
         let this_class_idx = read_u16(&mut reader)?;
-        let this_class = parsing_context.get_class_ref(&this_class_idx)?;
+        let this_class = parsing_context.get_class_ref(this_class_idx)?;
         let super_class_idx = read_u16(&mut reader)?;
         let super_class = match super_class_idx {
             0 if this_class.binary_name == "java/lang/Object" => None,
@@ -33,14 +33,14 @@ impl Class {
             0 => Err(ClassFileParsingError::MalformedClassFile(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it @ _ => Some(parsing_context.get_class_ref(&it)?),
+            it @ _ => Some(parsing_context.get_class_ref(it)?),
         };
 
         let interfaces_count = read_u16(&mut reader)?;
         let interfaces = (0..interfaces_count)
             .map(|_| {
                 let interface_idx = read_u16(&mut reader)?;
-                parsing_context.get_class_ref(&interface_idx)
+                parsing_context.get_class_ref(interface_idx)
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
         let fields_count = read_u16(&mut reader)?;

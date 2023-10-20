@@ -35,7 +35,7 @@ impl ExceptionTableEntry {
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
-            Some(ctx.get_class_ref(&catch_type_idx)?)
+            Some(ctx.get_class_ref(catch_type_idx)?)
         };
         Ok(ExceptionTableEntry {
             start_pc,
@@ -192,7 +192,7 @@ impl Attribute {
         let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
         for _ in 0..number_of_exceptions {
             let exception_index = read_u16(reader)?;
-            let exception = ctx.get_class_ref(&exception_index)?;
+            let exception = ctx.get_class_ref(exception_index)?;
             exceptions.push(exception);
         }
         Ok(Self::Exceptions(exceptions))
@@ -210,7 +210,7 @@ impl Attribute {
         let mut parameters = Vec::with_capacity(parameters_count as usize);
         for _ in 0..parameters_count {
             let name_index = read_u16(reader)?;
-            let name = ctx.get_str(&name_index)?.to_owned();
+            let name = ctx.get_str(name_index)?.to_owned();
             let access_flag_bits = read_u16(reader)?;
             let Some(access_flags) = MethodParameterAccessFlags::from_bits(access_flag_bits) else {
                 return Err(ClassFileParsingError::UnknownFlags(
@@ -237,9 +237,9 @@ impl Method {
             return Err(ClassFileParsingError::UnknownFlags(access, "method"));
         };
         let name_index = read_u16(reader)?;
-        let name = ctx.get_str(&name_index)?.to_owned();
+        let name = ctx.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.get_str(&descriptor_index)?;
+        let descriptor = ctx.get_str(descriptor_index)?;
         let descriptor = MethodDescriptor::try_from(descriptor)?;
 
         let attributes = AttributeList::parse(reader, ctx)?;
