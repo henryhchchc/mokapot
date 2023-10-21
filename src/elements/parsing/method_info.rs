@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     elements::{
         instruction::{
@@ -240,7 +242,7 @@ impl Method {
         let name = ctx.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(descriptor_index)?;
-        let descriptor = MethodDescriptor::try_from(descriptor)?;
+        let descriptor = MethodDescriptor::from_str(descriptor)?;
 
         let attributes = AttributeList::parse(reader, ctx)?;
         let mut body = None;

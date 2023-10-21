@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     elements::field::{Field, FieldAccessFlags},
     errors::ClassFileParsingError,
@@ -26,7 +28,7 @@ impl Field {
         let name = ctx.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(descriptor_index)?;
-        let field_type = FieldType::try_from(descriptor)?;
+        let field_type = FieldType::from_str(descriptor)?;
 
         let attributes = AttributeList::parse(reader, ctx)?;
         let mut constant_value = None;

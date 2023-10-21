@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use itertools::Itertools;
 
 use crate::{elements::references::ClassReference, errors::InvalidDescriptor};
@@ -56,6 +58,18 @@ impl TryFrom<char> for PrimitiveType {
     }
 }
 
+impl FromStr for PrimitiveType {
+    type Err = InvalidDescriptor;
+
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
+        let mut chars = descriptor.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Self::try_from(c),
+            _ => Err(InvalidDescriptor(descriptor.to_owned())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum FieldType {
     Base(PrimitiveType),
@@ -63,13 +77,13 @@ pub enum FieldType {
     Array(Box<FieldType>),
 }
 
-impl TryFrom<&str> for FieldType {
-    type Error = InvalidDescriptor;
+impl FromStr for FieldType {
+    type Err = InvalidDescriptor;
 
-    fn try_from(descriptor: &str) -> Result<Self, Self::Error> {
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
         let mut chars = descriptor.chars();
         match chars.next() {
-            Some('[') => Self::try_from(chars.as_str())
+            Some('[') => Self::from_str(chars.as_str())
                 .map(|it| it.make_array_type())
                 .map_err(|_| InvalidDescriptor(descriptor.to_owned())),
             Some('L') => {

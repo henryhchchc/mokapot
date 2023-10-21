@@ -64,6 +64,8 @@ bitflags! {
 #[cfg(test)]
 mod test {
 
+    use std::str::FromStr;
+
     use crate::elements::references::ClassReference;
     use crate::types::PrimitiveType::*;
     use crate::types::{FieldType, PrimitiveType};
@@ -109,7 +111,7 @@ mod test {
         ];
         let mut types = descriptors
             .into_iter()
-            .map(|it| FieldType::try_from(it))
+            .map(|it| FieldType::from_str(it))
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse field types")
             .into_iter();
@@ -135,12 +137,12 @@ mod test {
     #[test]
     fn missing_semicolon() {
         let descriptor = "Ljava/lang/String";
-        assert!(FieldType::try_from(descriptor).is_err())
+        assert!(FieldType::from_str(descriptor).is_err())
     }
 
     #[test]
     fn tailing_chars() {
         let descriptor = "Ljava/lang/String;A";
-        assert!(FieldType::try_from(descriptor).is_err())
+        assert!(FieldType::from_str(descriptor).is_err())
     }
 }

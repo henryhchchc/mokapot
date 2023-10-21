@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, str::FromStr};
 
 use crate::{
     elements::{
@@ -193,7 +193,7 @@ impl Instruction {
                     })?
                 };
                 let (name, desc_str) = ctx.get_name_and_type(name_and_type_index)?;
-                let descriptor = MethodDescriptor::try_from(desc_str)?;
+                let descriptor = MethodDescriptor::from_str(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(

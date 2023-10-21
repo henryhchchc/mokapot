@@ -1,5 +1,5 @@
 use core::str;
-use std::str::Chars;
+use std::str::{Chars, FromStr};
 
 use bitflags::bitflags;
 use itertools::Itertools;
@@ -160,16 +160,16 @@ impl MethodDescriptor {
     }
 }
 
-impl TryFrom<&str> for MethodDescriptor {
-    type Error = InvalidDescriptor;
+impl FromStr for MethodDescriptor {
+    type Err = InvalidDescriptor;
 
-    fn try_from(descriptor: &str) -> Result<Self, Self::Error> {
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
         let mut chars = descriptor.chars();
         let mut parameters_types = Vec::new();
         let return_type = loop {
             match chars.next() {
                 Some('(') => {}
-                Some(')') => break ReturnType::try_from(chars.as_str())?,
+                Some(')') => break ReturnType::from_str(chars.as_str())?,
                 Some(c) => {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
@@ -184,13 +184,13 @@ impl TryFrom<&str> for MethodDescriptor {
     }
 }
 
-impl TryFrom<&str> for ReturnType {
-    type Error = InvalidDescriptor;
-    fn try_from(descriptor: &str) -> Result<Self, Self::Error> {
+impl FromStr for ReturnType {
+    type Err = InvalidDescriptor;
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
         if descriptor == "V" {
             Ok(ReturnType::Void)
         } else {
-            FieldType::try_from(descriptor).map(ReturnType::Some)
+            FieldType::from_str(descriptor).map(ReturnType::Some)
         }
     }
 }
@@ -206,6 +206,8 @@ impl ReturnType {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use crate::{
         elements::{method::ReturnType, references::ClassReference},
         types::FieldType,
@@ -218,7 +220,7 @@ mod test {
     fn single_param() {
         let descriptor = "(I)V";
         let method_descriptor =
-            MethodDescriptor::try_from(descriptor).expect("Failed to parse method descriptor");
+            MethodDescriptor::from_str(descriptor).expect("Failed to parse method descriptor");
         assert_eq!(method_descriptor.return_type, ReturnType::Void);
         assert_eq!(
             method_descriptor.parameters_types,
@@ -230,7 +232,7 @@ mod test {
     fn param_complex() {
         let descriptor = "(I[JLjava/lang/String;J)I";
         let method_descriptor =
-            MethodDescriptor::try_from(descriptor).expect("Failed to parse method descriptor");
+            MethodDescriptor::from_str(descriptor).expect("Failed to parse method descriptor");
         let string_type = FieldType::Object(ClassReference::new("java/lang/String"));
         assert_eq!(
             method_descriptor.return_type,
@@ -250,7 +252,7 @@ mod test {
     #[test]
     fn too_many_return_type() {
         let descriptor = "(I)VJ";
-        let method_descriptor = MethodDescriptor::try_from(descriptor);
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
         assert!(method_descriptor.is_err());
     }
 }

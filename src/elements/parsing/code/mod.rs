@@ -1,6 +1,8 @@
 pub(super) mod instruction_impl;
 pub(super) mod stack_map;
 
+use std::str::FromStr;
+
 use crate::{
     elements::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     errors::ClassFileParsingError,
@@ -50,7 +52,7 @@ impl LocalVariableDescAttr {
         let name = ctx.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.get_str(descriptor_index)?;
-        let field_type = FieldType::try_from(descriptor)?;
+        let field_type = FieldType::from_str(descriptor)?;
         let index = read_u16(reader)?;
         let key = LocalVariableId {
             start_pc,
