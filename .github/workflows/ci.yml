@@ -2,15 +2,16 @@ name: Cargo Build & Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
       - src/**
       - test_data/**
       - Cargo.toml
       - build.rs
+      - .github/workflows/**
   pull_request:
 
-env: 
+env:
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -25,11 +26,10 @@ jobs:
           - nightly
     steps:
       - uses: actions/setup-java@v3
-      - uses: actions/checkout@v3
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo build --verbose
         with:
           java-version: 21
           distribution: corretto
+      - uses: actions/checkout@v3
+      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run: cargo build --verbose
       - run: cargo test --verbose
-  
