@@ -13,7 +13,10 @@ use crate::{
 /// Parses the class file `MyClass.class` from the `test_data` directory.
 /// The source code ot the class files is as follows.
 fn parse_my_class() -> Result<Class, ClassFileParsingError> {
-    let bytes = include_bytes!("../test_data/MyClass.class");
+    let bytes = include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/java_classes/org/pkg/MyClass.class"
+    ));
     let reader = BufReader::new(&bytes[..]);
     Class::from_reader(reader)
 }
