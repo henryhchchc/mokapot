@@ -76,9 +76,16 @@ impl<'b> ControlFlowGraph<'b> {
                         target: default.clone(),
                     });
                 }
-                Jsr(_) | JsrW(_) | Ret(_) => {
-                    unimplemented!("Subroutines are currently not supportted")
+                Jsr(target) | JsrW(target) => {
+                    edges.insert(ControlFlowEdge::Execution {
+                        source: pc.clone(),
+                        target: target.clone(),
+                    });
                 }
+                Ret(_) => {
+                    // TODO: Implement ret
+                }
+                AThrow => {}
                 _ => {
                     if let Some((next_pc, _next_insn)) = insn_iter.peek() {
                         edges.insert(ControlFlowEdge::Execution {
@@ -88,7 +95,15 @@ impl<'b> ControlFlowGraph<'b> {
                     }
                 }
             }
-            todo!("Resolve exception handling edges");
+            method_body.exception_table.iter().for_each(|e| {
+                if e.covers(*pc) {
+                    edges.insert(ControlFlowEdge::Exception {
+                        source: *pc,
+                        target: e.handler_pc,
+                        catch_type: e.catch_type.clone(),
+                    });
+                }
+            });
         }
         Self {
             method_body,
@@ -108,6 +123,6 @@ pub enum ControlFlowEdge {
     Exception {
         source: ProgramCounter,
         target: ProgramCounter,
-        exception: ClassReference,
+        catch_type: Option<ClassReference>,
     },
 }

@@ -28,8 +28,14 @@ pub struct MethodBody {
 pub struct ExceptionTableEntry {
     pub start_pc: ProgramCounter,
     pub end_pc: ProgramCounter,
-    pub handler_pc: u16,
+    pub handler_pc: ProgramCounter,
     pub catch_type: Option<ClassReference>,
+}
+
+impl ExceptionTableEntry {
+    pub fn covers(&self, pc: ProgramCounter) -> bool {
+        self.start_pc <= pc && pc <= self.end_pc
+    }
 }
 
 #[derive(Debug)]

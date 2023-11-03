@@ -32,7 +32,7 @@ impl ExceptionTableEntry {
     {
         let start_pc = read_u16(reader)?.into();
         let end_pc = read_u16(reader)?.into();
-        let handler_pc = read_u16(reader)?;
+        let handler_pc = read_u16(reader)?.into();
         let catch_type_idx = read_u16(reader)?;
         let catch_type = if catch_type_idx == 0 {
             None
