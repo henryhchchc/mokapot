@@ -1,9 +1,7 @@
 use std::{env, process::Command};
 
 fn main() {
-    if cfg!(test) {
-        compile_java_test_data();
-    }
+    compile_java_test_data();
 }
 
 fn compile_java_test_data() {
@@ -15,8 +13,6 @@ fn compile_java_test_data() {
             env!("CARGO_MANIFEST_DIR"),
             "/test_data/MyClass.java"
         ))
-        .spawn()
-        .unwrap()
-        .wait()
+        .status()
         .unwrap();
 }
