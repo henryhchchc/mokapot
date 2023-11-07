@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct ParsingContext {
+pub(crate) struct ParsingContext {
     constant_pool: HashMap<u16, ConstantPoolEntry>,
     class_version: ClassVersion,
 }

@@ -14,7 +14,7 @@ use crate::{
 };
 
 impl Instruction {
-    pub fn parse_code(
+    pub(crate) fn parse_code(
         bytes: Vec<u8>,
         ctx: &ParsingContext,
     ) -> Result<Vec<(ProgramCounter, Self)>, ClassFileParsingError> {

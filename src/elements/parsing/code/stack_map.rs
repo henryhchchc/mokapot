@@ -8,7 +8,7 @@ use crate::{
 };
 
 impl StackMapFrame {
-    pub fn parse<R>(
+    pub(crate) fn parse<R>(
         reader: &mut R,
         ctx: &ParsingContext,
     ) -> Result<StackMapFrame, ClassFileParsingError>
