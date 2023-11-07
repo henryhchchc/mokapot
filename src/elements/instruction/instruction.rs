@@ -9,7 +9,7 @@ use crate::{
 
 use super::ProgramCounter;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Instruction {
     // Constants
     Nop,
@@ -707,7 +707,8 @@ impl Instruction {
     }
 }
 
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq)]
 pub struct ArrayTypeRef {
     pub base_type: FieldType,
     pub dimensions: u8,

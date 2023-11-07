@@ -1,3 +1,2 @@
-mod cfg;
+mod fixed_point;
 
-pub use cfg::*;

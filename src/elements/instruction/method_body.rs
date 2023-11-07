@@ -24,6 +24,73 @@ pub struct MethodBody {
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 
+impl MethodBody {
+    pub fn instruction_at(&self, pc: ProgramCounter) -> Option<&Instruction> {
+        self.instructions
+            .iter()
+            .find(|(it, _)| it == &pc)
+            .map(|(_, it)| it)
+    }
+    pub fn next_pc_of(&self, this_pc: ProgramCounter) -> Option<ProgramCounter> {
+        let mut iter = self.instructions.iter().skip_while(|(pc, _)| *pc < this_pc);
+        iter.next()
+            .filter(|(pc, _)| *pc == this_pc)
+            .and_then(|_| iter.next().map(|(it, _)| it).cloned())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::elements::instruction::Instruction;
+
+    use super::MethodBody;
+    use Instruction::*;
+
+    impl Default for MethodBody {
+        fn default() -> Self {
+            Self {
+                max_stack: Default::default(),
+                max_locals: Default::default(),
+                instructions: Default::default(),
+                exception_table: Default::default(),
+                line_number_table: Default::default(),
+                local_variable_table: Default::default(),
+                stack_map_table: Default::default(),
+                runtime_visible_type_annotations: Default::default(),
+                runtime_invisible_type_annotations: Default::default(),
+            }
+        }
+    }
+
+    #[test]
+    fn instruction_at() {
+        let body = MethodBody {
+            instructions: vec![(0.into(), Nop), (1.into(), IConst0), (2.into(), IConst1)],
+            ..Default::default()
+        };
+        assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
+    }
+
+    #[test]
+    fn next_insn() {
+        let body = MethodBody {
+            instructions: vec![
+                (0.into(), Nop),
+                (2.into(), IConst0),
+                (3.into(), IConst1),
+                (5.into(), Nop),
+                (7.into(), IConst0),
+                (9.into(), IConst1),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(None, body.next_pc_of(1.into()));
+        assert_eq!(None, body.next_pc_of(4.into()));
+        assert_eq!(Some(2.into()), body.next_pc_of(0.into()));
+        assert_eq!(Some(7.into()), body.next_pc_of(5.into()));
+    }
+}
+
 #[derive(Debug)]
 pub struct ExceptionTableEntry {
     pub start_pc: ProgramCounter,

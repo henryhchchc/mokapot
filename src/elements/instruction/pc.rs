@@ -23,6 +23,12 @@ impl From<u16> for ProgramCounter {
     }
 }
 
+impl Default for ProgramCounter {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum InvalidOffset {
     #[error("Invalid i16 offset {0}")]
