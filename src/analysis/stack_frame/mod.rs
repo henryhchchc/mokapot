@@ -15,6 +15,8 @@ use crate::elements::{
 mod execution;
 mod ir;
 
+use self::ir::MokaInstruction;
+
 use super::fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
 
 #[derive(PartialEq, Clone)]
@@ -27,8 +29,15 @@ pub struct StackFrame {
     pub preceding_kept_nodes: HashSet<ProgramCounter>,
 }
 
+impl StackFrame {
+    pub(crate) fn set_current_node(&mut self, pc: ProgramCounter) {
+        self.preceding_kept_nodes.clear();
+        self.preceding_kept_nodes.insert(pc);
+    }
+}
+
 pub struct StackFrameAnalyzer {
-    defs: HashMap<Identifier, Expression>,
+    code_map: HashMap<ProgramCounter, MokaInstruction>,
 }
 
 impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
@@ -182,16 +191,16 @@ impl FixedPointFact for StackFrame {
 impl Default for StackFrameAnalyzer {
     fn default() -> Self {
         Self {
-            defs: Default::default(),
+            code_map: Default::default(),
         }
     }
 }
 
 impl StackFrameAnalyzer {
-    pub fn definitions(self, method: &Method) -> HashMap<Identifier, Expression> {
+    pub fn moka_ir(self, method: &Method) -> HashMap<ProgramCounter, MokaInstruction> {
         let mut self_mut = self;
         fixed_point::analyze(method, &mut self_mut);
-        self_mut.defs
+        self_mut.code_map
     }
 }
 

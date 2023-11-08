@@ -28,8 +28,8 @@ fn load_test_method() {
 fn analyze() {
     let method = get_test_method();
     let analyzer = StackFrameAnalyzer::default();
-    let defs = analyzer.definitions(&method);
-    for (loc, expr) in defs {
-        println!("{} = {}", loc, expr);
+    let ir = analyzer.moka_ir(&method);
+    for (loc, expr) in ir {
+        println!("{:?}", expr);
     }
 }

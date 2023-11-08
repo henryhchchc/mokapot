@@ -2,9 +2,10 @@ use crate::elements::instruction::{Instruction, ProgramCounter};
 
 use super::{Expression, Identifier, ValueRef};
 
+#[derive(Debug)]
 pub enum MokaInstruction {
     Assignment {
-        lhs: u16,
+        lhs: Identifier,
         rhs: Expression,
     },
     Jump {

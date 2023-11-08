@@ -1,5 +1,7 @@
+use std::iter::once;
+
 use crate::{
-    analysis::stack_frame::{Expression, FrameValue, Identifier},
+    analysis::stack_frame::{ir::MokaInstruction, Expression, FrameValue, Identifier},
     elements::{
         instruction::{Instruction, ProgramCounter},
         ConstantValue, ReturnType,
@@ -22,60 +24,105 @@ impl StackFrameAnalyzer {
             Nop => {}
             AConstNull => {
                 let def_id = Identifier::Val(pc.into());
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Null));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Null),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
                 let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as i32) - 3;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Integer(value)),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             LConst0 | LConst1 => {
                 let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as i64) - 9;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Long(value)));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Long(value)),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             FConst0 | FConst1 | FConst2 => {
                 let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as f32) - 11.0;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Float(value)));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Float(value)),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             DConst0 | DConst1 => {
                 let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as f64) - 14.0;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Double(value)));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Double(value)),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             BiPush(value) => {
                 let def_id = Identifier::Val(pc.into());
                 let value = *value as i32;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                let ir = MokaInstruction::Assignment {
+                    lhs: def_id,
+                    rhs: Expression::Const(ConstantValue::Integer(value)),
+                };
+                self.code_map.insert(pc, ir);
                 frame.operand_stack.push(def_id.into());
             }
             SiPush(value) => {
                 let def_id = Identifier::Val(pc.into());
                 let value = *value as i32;
-                self.defs
-                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(ConstantValue::Integer(value)),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             Ldc(value) | LdcW(value) => {
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(def_id, Expression::Const(value.clone()));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(value.clone()),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             Ldc2W(value) => {
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(def_id, Expression::Const(value.clone()));
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Const(value.clone()),
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
@@ -158,11 +205,14 @@ impl StackFrameAnalyzer {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![index, arrayref],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -171,11 +221,14 @@ impl StackFrameAnalyzer {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![index, arrayref],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -236,11 +289,14 @@ impl StackFrameAnalyzer {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref, value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![index, arrayref, value],
+                        },
                     },
                 );
             }
@@ -250,11 +306,14 @@ impl StackFrameAnalyzer {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref, value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![index, arrayref, value],
+                        },
                     },
                 );
             }
@@ -326,11 +385,14 @@ impl StackFrameAnalyzer {
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value2, value1],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -341,11 +403,14 @@ impl StackFrameAnalyzer {
                 let value2_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1, value2_padding, value1_padding],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value2, value1, value2_padding, value1_padding],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -354,11 +419,14 @@ impl StackFrameAnalyzer {
             INeg | FNeg => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -367,11 +435,14 @@ impl StackFrameAnalyzer {
                 let value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value, value_padding],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value, value_padding],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -381,11 +452,14 @@ impl StackFrameAnalyzer {
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value2, value1],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -396,11 +470,14 @@ impl StackFrameAnalyzer {
                     .expect("Fail to get local")
                     .clone();
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![base],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![base],
+                        },
                     },
                 );
                 frame.local_variables[*idx as usize].replace(def_id.into());
@@ -411,11 +488,14 @@ impl StackFrameAnalyzer {
                     .expect("Fail to get local")
                     .clone();
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![base],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![base],
+                        },
                     },
                 );
                 frame.local_variables[*idx as usize].replace(def_id.into());
@@ -423,11 +503,14 @@ impl StackFrameAnalyzer {
             I2F | I2B | I2C | I2S | F2I => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -435,11 +518,14 @@ impl StackFrameAnalyzer {
             I2L | I2D | F2L | F2D => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -449,11 +535,14 @@ impl StackFrameAnalyzer {
                 let _value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -462,11 +551,14 @@ impl StackFrameAnalyzer {
                 let _value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -478,11 +570,14 @@ impl StackFrameAnalyzer {
                 let _value2_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value1, value2],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value1, value2],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -490,13 +585,19 @@ impl StackFrameAnalyzer {
             IfEq(_) | IfNe(_) | IfLt(_) | IfGe(_) | IfGt(_) | IfLe(_) | IfNull(_)
             | IfNonNull(_) | IfICmpEq(_) | IfICmpNe(_) | IfICmpLt(_) | IfICmpGe(_)
             | IfICmpGt(_) | IfICmpLe(_) | IfACmpEq(_) | IfACmpNe(_) => {
-                let _value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value = frame.operand_stack.pop().expect("Fail to pop stack");
             }
             Goto(_) | GotoW(_) => {}
             Jsr(_) | JsrW(_) => {
                 let value = Expression::ReturnAddress(pc);
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(def_id, value);
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: value,
+                    },
+                );
                 frame.operand_stack.push(def_id.into());
             }
             Ret(idx) => {
@@ -524,11 +625,14 @@ impl StackFrameAnalyzer {
             Return => {}
             GetStatic(field) => {
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -543,11 +647,14 @@ impl StackFrameAnalyzer {
             GetField(field) => {
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![objectref],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![objectref],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -569,11 +676,14 @@ impl StackFrameAnalyzer {
                 }
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![value],
+                        },
                     },
                 );
             }
@@ -591,11 +701,14 @@ impl StackFrameAnalyzer {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![objectref, value],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![objectref, value],
+                        },
                     },
                 );
             }
@@ -608,13 +721,17 @@ impl StackFrameAnalyzer {
                     .collect::<Vec<_>>();
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: std::iter::once(objectref)
-                            .chain(arguments.into_iter().rev())
-                            .collect(),
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![objectref]
+                                .into_iter()
+                                .chain(arguments.into_iter().rev())
+                                .collect(),
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -635,13 +752,14 @@ impl StackFrameAnalyzer {
                     .collect::<Vec<_>>();
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: std::iter::once(objectref)
-                            .chain(arguments.into_iter().rev())
-                            .collect(),
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: once(objectref).chain(arguments.into_iter().rev()).collect(),
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -662,11 +780,14 @@ impl StackFrameAnalyzer {
                     .collect::<Vec<_>>();
                 arguments.reverse();
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments,
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments,
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -686,11 +807,14 @@ impl StackFrameAnalyzer {
                     .rev()
                     .collect::<Vec<_>>();
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments,
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments,
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -704,11 +828,14 @@ impl StackFrameAnalyzer {
             }
             New(_) | NewArray(_) | ANewArray(_) | MultiANewArray(_, _) => {
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -716,11 +843,14 @@ impl StackFrameAnalyzer {
             ArrayLength => {
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![arrayref],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![arrayref],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
@@ -731,17 +861,31 @@ impl StackFrameAnalyzer {
             CheckCast(_) | InstanceOf(_) => {
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
                 let def_id = Identifier::Val(pc.into());
-                self.defs.insert(
-                    def_id,
-                    Expression::Expr {
-                        instruction: insn.clone(),
-                        arguments: vec![objectref],
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![objectref],
+                        },
                     },
                 );
                 frame.operand_stack.push(def_id.into());
             }
             MonitorEnter | MonitorExit => {
-                let _objectref = frame.operand_stack.pop().expect("Fail to pop stack");
+                let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
+                let def_id = Identifier::Val(pc.into());
+                self.code_map.insert(
+                    pc,
+                    MokaInstruction::Assignment {
+                        lhs: def_id,
+                        rhs: Expression::Expr {
+                            instruction: insn.clone(),
+                            arguments: vec![objectref],
+                        },
+                    },
+                );
             }
             WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
                 let value = frame.local_variables[*idx as usize]
