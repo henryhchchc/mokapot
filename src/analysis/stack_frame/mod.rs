@@ -30,10 +30,77 @@ pub struct StackFrame {
 }
 
 impl StackFrame {
+    pub(crate) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
+        let value = self
+            .operand_stack
+            .pop()
+            .ok_or(StackFrameError::StackUnderflow)?;
+        match value {
+            FrameValue::ValueRef(it) => Ok(it),
+            FrameValue::Padding => Err(StackFrameError::ValueMismatch),
+        }
+    }
+
+    pub(crate) fn pop_padding(&mut self) -> Result<(), StackFrameError> {
+        let value = self
+            .operand_stack
+            .pop()
+            .ok_or(StackFrameError::StackUnderflow)?;
+        match value {
+            FrameValue::ValueRef(_) => Err(StackFrameError::ValueMismatch),
+            FrameValue::Padding => Ok(()),
+        }
+    }
+
+    pub(crate) fn push_value(&mut self, value: ValueRef) {
+        self.operand_stack.push(FrameValue::ValueRef(value));
+    }
+
+    pub(crate) fn push_padding(&mut self) {
+        self.operand_stack.push(FrameValue::Padding);
+    }
+
+    pub(crate) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
+        let frame_value = self
+            .local_variables
+            .get(idx.into())
+            .unwrap()
+            .clone()
+            .ok_or(StackFrameError::LocalUnset)?;
+        match frame_value {
+            FrameValue::ValueRef(it) => Ok(it),
+            FrameValue::Padding => Err(StackFrameError::ValueMismatch),
+        }
+    }
+
+    pub(crate) fn set_local(&mut self, idx: impl Into<usize>, value: ValueRef) {
+        self.local_variables
+            .get_mut(idx.into())
+            .expect("Out of index")
+            .replace(FrameValue::ValueRef(value));
+    }
+
+    pub(crate) fn set_local_padding(&mut self, idx: impl Into<usize>) {
+        self.local_variables
+            .get_mut(idx.into())
+            .expect("Out of index")
+            .replace(FrameValue::Padding);
+    }
+
     pub(crate) fn set_current_node(&mut self, pc: ProgramCounter) {
         self.preceding_kept_nodes.clear();
         self.preceding_kept_nodes.insert(pc);
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StackFrameError {
+    #[error("Trying to pop an empty stack")]
+    StackUnderflow,
+    #[error("Expected a ValueRef but got Padding")]
+    ValueMismatch,
+    #[error("The local variable is not initialized")]
+    LocalUnset,
 }
 
 pub struct StackFrameAnalyzer {
@@ -277,7 +344,7 @@ pub enum Expression {
     ReturnAddress(ProgramCounter),
     Expr {
         instruction: Instruction,
-        arguments: Vec<FrameValue>,
+        arguments: Vec<ValueRef>,
     },
 }
 

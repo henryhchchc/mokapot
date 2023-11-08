@@ -14,6 +14,7 @@ pub enum MokaInstruction {
     ConditionalJump {
         condition: ValueRef,
         target: ProgramCounter,
+        instruction: Instruction,
     },
     Switch {
         condition: ValueRef,
