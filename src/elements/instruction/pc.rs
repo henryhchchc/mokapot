@@ -23,6 +23,12 @@ impl From<u16> for ProgramCounter {
     }
 }
 
+impl Into<u16> for ProgramCounter {
+    fn into(self) -> u16 {
+        self.0
+    }
+}
+
 impl Default for ProgramCounter {
     fn default() -> Self {
         Self(Default::default())

@@ -1,5 +1,5 @@
 use crate::{
-    analysis::stack_frame::{DefId, FrameValue, JavaAbstractValue},
+    analysis::stack_frame::{Expression, FrameValue, Identifier},
     elements::{
         instruction::{Instruction, ProgramCounter},
         ConstantValue, ReturnType,
@@ -17,77 +17,66 @@ impl StackFrameAnalyzer {
         frame: &mut StackFrame,
     ) {
         use Instruction::*;
+        // TODO: Clear preceding kept instructions if the current instruction should be kept
         match insn {
             Nop => {}
             AConstNull => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs
-                    .insert(def_id, JavaAbstractValue::Const(ConstantValue::Null));
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                    .insert(def_id, Expression::Const(ConstantValue::Null));
+                frame.operand_stack.push(def_id.into());
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as i32) - 3;
-                self.defs.insert(
-                    def_id,
-                    JavaAbstractValue::Const(ConstantValue::Integer(value)),
-                );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                self.defs
+                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                frame.operand_stack.push(def_id.into());
             }
             LConst0 | LConst1 => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as i64) - 9;
                 self.defs
-                    .insert(def_id, JavaAbstractValue::Const(ConstantValue::Long(value)));
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                    .insert(def_id, Expression::Const(ConstantValue::Long(value)));
+                frame.operand_stack.push(def_id.into());
             }
             FConst0 | FConst1 | FConst2 => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as f32) - 11.0;
-                self.defs.insert(
-                    def_id,
-                    JavaAbstractValue::Const(ConstantValue::Float(value)),
-                );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                self.defs
+                    .insert(def_id, Expression::Const(ConstantValue::Float(value)));
+                frame.operand_stack.push(def_id.into());
             }
             DConst0 | DConst1 => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = (insn.opcode() as f64) - 14.0;
-                self.defs.insert(
-                    def_id,
-                    JavaAbstractValue::Const(ConstantValue::Double(value)),
-                );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                self.defs
+                    .insert(def_id, Expression::Const(ConstantValue::Double(value)));
+                frame.operand_stack.push(def_id.into());
             }
             BiPush(value) => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = *value as i32;
-                self.defs.insert(
-                    def_id,
-                    JavaAbstractValue::Const(ConstantValue::Integer(value)),
-                );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                self.defs
+                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                frame.operand_stack.push(def_id.into());
             }
             SiPush(value) => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 let value = *value as i32;
-                self.defs.insert(
-                    def_id,
-                    JavaAbstractValue::Const(ConstantValue::Integer(value)),
-                );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                self.defs
+                    .insert(def_id, Expression::Const(ConstantValue::Integer(value)));
+                frame.operand_stack.push(def_id.into());
             }
             Ldc(value) | LdcW(value) => {
-                let def_id = DefId::At(pc);
-                self.defs
-                    .insert(def_id, JavaAbstractValue::Const(value.clone()));
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                let def_id = Identifier::Val(pc.into());
+                self.defs.insert(def_id, Expression::Const(value.clone()));
+                frame.operand_stack.push(def_id.into());
             }
             Ldc2W(value) => {
-                let def_id = DefId::At(pc);
-                self.defs
-                    .insert(def_id, JavaAbstractValue::Const(value.clone()));
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                let def_id = Identifier::Val(pc.into());
+                self.defs.insert(def_id, Expression::Const(value.clone()));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             ILoad(idx) | FLoad(idx) | ALoad(idx) => {
@@ -168,28 +157,28 @@ impl StackFrameAnalyzer {
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             LALoad | DALoad => {
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             IStore(idx) | FStore(idx) | AStore(idx) => {
@@ -246,10 +235,10 @@ impl StackFrameAnalyzer {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref, value],
                     },
@@ -260,10 +249,10 @@ impl StackFrameAnalyzer {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
                 let index = frame.operand_stack.pop().expect("Fail to pop stack");
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref, value],
                     },
@@ -336,151 +325,151 @@ impl StackFrameAnalyzer {
             IAdd | FAdd | ISub | FSub | IMul | FMul | IDiv | FDiv | IRem | FRem => {
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             LAdd | DAdd | LSub | DSub | LMul | DMul | LDiv | DDiv | LRem | DRem => {
                 let value1_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1, value2_padding, value1_padding],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             INeg | FNeg => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             LNeg | DNeg => {
                 let value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value, value_padding],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             IShl | LShl | IShr | LShr | IUShr | LUShr | IAnd | LAnd | IOr | LOr | IXor | LXor => {
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             IInc(idx, _) => {
                 let base = frame.local_variables[*idx as usize]
                     .as_ref()
                     .expect("Fail to get local")
                     .clone();
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![base],
                     },
                 );
-                frame.local_variables[*idx as usize].replace(FrameValue::Def(def_id));
+                frame.local_variables[*idx as usize].replace(def_id.into());
             }
             WideIInc(idx, _) => {
                 let base = frame.local_variables[*idx as usize]
                     .as_ref()
                     .expect("Fail to get local")
                     .clone();
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![base],
                     },
                 );
-                frame.local_variables[*idx as usize].replace(FrameValue::Def(def_id));
+                frame.local_variables[*idx as usize].replace(def_id.into());
             }
             I2F | I2B | I2C | I2S | F2I => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             I2L | I2D | F2L | F2D => {
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             L2I | L2F | D2I | D2F => {
                 let _value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             L2D | D2L => {
                 let _value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 frame.operand_stack.push(FrameValue::Padding);
             }
             LCmp | FCmpL | FCmpG | DCmpL | DCmpG => {
@@ -488,15 +477,15 @@ impl StackFrameAnalyzer {
                 let value1 = frame.operand_stack.pop().expect("Fail to pop stack");
                 let _value2_padding = frame.operand_stack.pop().expect("Fail to pop stack");
                 let value2 = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![value1, value2],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             IfEq(_) | IfNe(_) | IfLt(_) | IfGe(_) | IfGt(_) | IfLe(_) | IfNull(_)
             | IfNonNull(_) | IfICmpEq(_) | IfICmpNe(_) | IfICmpLt(_) | IfICmpGe(_)
@@ -505,19 +494,19 @@ impl StackFrameAnalyzer {
             }
             Goto(_) | GotoW(_) => {}
             Jsr(_) | JsrW(_) => {
-                let value = JavaAbstractValue::ReturnAddress(pc);
-                let def_id = DefId::At(pc);
+                let value = Expression::ReturnAddress(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(def_id, value);
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             Ret(idx) => {
-                let _return_address = frame.local_variables[*idx as usize]
+                let return_address = frame.local_variables[*idx as usize]
                     .as_ref()
                     .expect("Fail to get local")
                     .clone();
             }
             WideRet(idx) => {
-                let _return_address = frame.local_variables[*idx as usize]
+                let return_address = frame.local_variables[*idx as usize]
                     .as_ref()
                     .expect("Fail to get local")
                     .clone();
@@ -526,23 +515,23 @@ impl StackFrameAnalyzer {
                 let _key = frame.operand_stack.pop().expect("Fail to pop stack");
             }
             IReturn | FReturn | AReturn => {
-                let _value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value = frame.operand_stack.pop().expect("Fail to pop stack");
             }
             LReturn | DReturn => {
-                let _value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
-                let _value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value_padding = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value = frame.operand_stack.pop().expect("Fail to pop stack");
             }
             Return => {}
             GetStatic(field) => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match field.field_type {
                     FieldType::Base(PrimitiveType::Long)
                     | FieldType::Base(PrimitiveType::Double) => {
@@ -553,15 +542,15 @@ impl StackFrameAnalyzer {
             }
             GetField(field) => {
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![objectref],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match field.field_type {
                     FieldType::Base(PrimitiveType::Long)
                     | FieldType::Base(PrimitiveType::Double) => {
@@ -578,7 +567,15 @@ impl StackFrameAnalyzer {
                     }
                     _ => {}
                 }
-                let _value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let def_id = Identifier::Val(pc.into());
+                self.defs.insert(
+                    def_id,
+                    Expression::Expr {
+                        instruction: insn.clone(),
+                        arguments: vec![value],
+                    },
+                );
             }
             PutField(field) => {
                 match field.field_type {
@@ -591,8 +588,16 @@ impl StackFrameAnalyzer {
                         frame.operand_stack.pop().expect("Fail to pop stack");
                     }
                 }
-                let _value = frame.operand_stack.pop().expect("Fail to pop stack");
-                let _objectref = frame.operand_stack.pop().expect("Fail to pop stack");
+                let value = frame.operand_stack.pop().expect("Fail to pop stack");
+                let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
+                let def_id = Identifier::Val(pc.into());
+                self.defs.insert(
+                    def_id,
+                    Expression::Expr {
+                        instruction: insn.clone(),
+                        arguments: vec![objectref, value],
+                    },
+                );
             }
             InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
                 let arguments = method_ref
@@ -602,17 +607,17 @@ impl StackFrameAnalyzer {
                     .map(|_| frame.operand_stack.pop().expect("Fail to pop stack"))
                     .collect::<Vec<_>>();
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: std::iter::once(objectref)
                             .chain(arguments.into_iter().rev())
                             .collect(),
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match method_ref.descriptor().return_type {
                     ReturnType::Some(FieldType::Base(PrimitiveType::Long))
                     | ReturnType::Some(FieldType::Base(PrimitiveType::Double)) => {
@@ -629,17 +634,17 @@ impl StackFrameAnalyzer {
                     .map(|_| frame.operand_stack.pop().expect("Fail to pop stack"))
                     .collect::<Vec<_>>();
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: std::iter::once(objectref)
                             .chain(arguments.into_iter().rev())
                             .collect(),
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match i_method_ref.descriptor.return_type {
                     ReturnType::Some(FieldType::Base(PrimitiveType::Long))
                     | ReturnType::Some(FieldType::Base(PrimitiveType::Double)) => {
@@ -656,15 +661,15 @@ impl StackFrameAnalyzer {
                     .map(|_| frame.operand_stack.pop().expect("Fail to pop stack"))
                     .collect::<Vec<_>>();
                 arguments.reverse();
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments,
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match method_ref.descriptor().return_type {
                     ReturnType::Some(FieldType::Base(PrimitiveType::Long))
                     | ReturnType::Some(FieldType::Base(PrimitiveType::Double)) => {
@@ -680,15 +685,15 @@ impl StackFrameAnalyzer {
                     .map(|_| frame.operand_stack.pop().expect("Fail to pop stack"))
                     .rev()
                     .collect::<Vec<_>>();
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments,
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
                 match descriptor.return_type {
                     ReturnType::Some(FieldType::Base(PrimitiveType::Long))
                     | ReturnType::Some(FieldType::Base(PrimitiveType::Double)) => {
@@ -698,42 +703,42 @@ impl StackFrameAnalyzer {
                 }
             }
             New(_) | NewArray(_) | ANewArray(_) | MultiANewArray(_, _) => {
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             ArrayLength => {
                 let arrayref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![arrayref],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             AThrow => {
                 let _objectref = frame.operand_stack.pop().expect("Fail to pop stack");
             }
             CheckCast(_) | InstanceOf(_) => {
                 let objectref = frame.operand_stack.pop().expect("Fail to pop stack");
-                let def_id = DefId::At(pc);
+                let def_id = Identifier::Val(pc.into());
                 self.defs.insert(
                     def_id,
-                    JavaAbstractValue::Expression {
+                    Expression::Expr {
                         instruction: insn.clone(),
                         arguments: vec![objectref],
                     },
                 );
-                frame.operand_stack.push(FrameValue::Def(def_id));
+                frame.operand_stack.push(def_id.into());
             }
             MonitorEnter | MonitorExit => {
                 let _objectref = frame.operand_stack.pop().expect("Fail to pop stack");

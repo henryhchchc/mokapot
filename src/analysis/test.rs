@@ -1,4 +1,3 @@
-
 use crate::elements::{Class, Method};
 
 use super::stack_frame::StackFrameAnalyzer;
@@ -26,9 +25,11 @@ fn load_test_method() {
 }
 
 #[test]
-fn analyze(){
+fn analyze() {
     let method = get_test_method();
     let analyzer = StackFrameAnalyzer::default();
     let defs = analyzer.definitions(&method);
-    println!("{:?}", defs);
+    for (loc, expr) in defs {
+        println!("{} = {}", loc, expr);
+    }
 }

@@ -14,7 +14,7 @@ try {
     }
     int z = callMe(a, b, y);
 } catch(Exception e) {
-  System.out.println();
+  System.out.println(e);
 }
 
 

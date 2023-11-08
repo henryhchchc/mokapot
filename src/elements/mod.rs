@@ -8,5 +8,5 @@ pub(crate) mod parsing;
 pub mod references;
 
 pub use class::*;
-pub use method::*;
 pub use field::*;
+pub use method::*;

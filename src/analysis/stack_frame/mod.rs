@@ -1,15 +1,19 @@
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    fmt::{write, Display},
     iter::once,
     usize,
 };
+
+use itertools::Itertools;
 
 use crate::elements::{
     instruction::{Instruction, MethodBody, ProgramCounter},
     ConstantValue, Method, MethodAccessFlags,
 };
 mod execution;
+mod ir;
 
 use super::fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
 
@@ -20,12 +24,12 @@ pub struct StackFrame {
     pub local_variables: Vec<Option<FrameValue>>,
     pub operand_stack: Vec<FrameValue>,
     pub reachable_subroutines: BTreeSet<ProgramCounter>,
+    pub preceding_kept_nodes: HashSet<ProgramCounter>,
 }
 
 pub struct StackFrameAnalyzer {
-    defs: HashMap<DefId, JavaAbstractValue>,
+    defs: HashMap<Identifier, Expression>,
 }
-
 
 impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
     fn entry_frame(&self, method: &Method) -> StackFrame {
@@ -36,11 +40,11 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
         }
         let mut local_idx = 0;
         if !method.access_flags.contains(MethodAccessFlags::STATIC) {
-            locals[local_idx].replace(FrameValue::Def(DefId::This));
+            locals[local_idx].replace(Identifier::This.into());
             local_idx += 1;
         }
         for i in 0..method.descriptor.parameters_types.len() {
-            locals[local_idx].replace(FrameValue::Def(DefId::Arg(i as u8)));
+            locals[local_idx].replace(Identifier::Arg(i as u8).into());
             local_idx += 1;
         }
         StackFrame {
@@ -49,6 +53,7 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
             local_variables: locals,
             operand_stack: Vec::with_capacity(body.max_stack as usize),
             reachable_subroutines: BTreeSet::new(),
+            preceding_kept_nodes: HashSet::new(),
         }
     }
 
@@ -113,9 +118,9 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
             if handler.covers(pc) {
                 let mut handler_frame = frame.clone();
                 handler_frame.operand_stack.clear();
-                let def_id = DefId::Exception(handler.handler_pc);
-                self.defs.insert(def_id, JavaAbstractValue::CaughtException);
-                handler_frame.operand_stack.push(FrameValue::Def(def_id));
+                handler_frame
+                    .operand_stack
+                    .push(Identifier::CaughtException.into());
                 dirty_pcs.insert(handler.handler_pc, handler_frame);
             }
         }
@@ -157,6 +162,11 @@ impl FixedPointFact for StackFrame {
             };
             stack.push(stack_value);
         }
+        let prededing_kept_nodes = self
+            .preceding_kept_nodes
+            .union(&other.preceding_kept_nodes)
+            .cloned()
+            .collect();
 
         Self {
             max_locals,
@@ -164,18 +174,21 @@ impl FixedPointFact for StackFrame {
             local_variables,
             operand_stack: stack,
             reachable_subroutines,
+            preceding_kept_nodes: prededing_kept_nodes,
         }
     }
 }
 
 impl Default for StackFrameAnalyzer {
     fn default() -> Self {
-        Self { defs: Default::default() }
+        Self {
+            defs: Default::default(),
+        }
     }
 }
 
 impl StackFrameAnalyzer {
-    pub fn definitions(self, method: &Method) -> HashMap<DefId, JavaAbstractValue> {
+    pub fn definitions(self, method: &Method) -> HashMap<Identifier, Expression> {
         let mut self_mut = self;
         fixed_point::analyze(method, &mut self_mut);
         self_mut.defs
@@ -185,47 +198,120 @@ impl StackFrameAnalyzer {
 pub trait AbstractValue {}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum DefId {
-    At(ProgramCounter),
-    Exception(ProgramCounter),
+pub enum Identifier {
+    Val(u16),
     This,
     Arg(u8),
+    CaughtException,
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Identifier::*;
+        match self {
+            Val(idx) => write!(f, "v{}", idx),
+            This => write!(f, "this"),
+            Arg(idx) => write!(f, "arg{}", idx),
+            CaughtException => write!(f, "exception"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ValueRef {
+    Def(Identifier),
+    Phi(HashSet<Identifier>),
+}
+
+impl Display for ValueRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueRef::Def(id) => write!(f, "{}", id),
+            ValueRef::Phi(ids) => {
+                write!(f, "Phi({})", ids.iter().map(|it| it.to_string()).join(", "))
+            }
+        }
+    }
+}
+
+impl From<Identifier> for ValueRef {
+    fn from(value: Identifier) -> Self {
+        Self::Def(value)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FrameValue {
-    Def(DefId),
-    Phi(HashSet<DefId>),
+    ValueRef(ValueRef),
     Padding,
 }
 
+impl From<Identifier> for FrameValue {
+    fn from(value: Identifier) -> Self {
+        Self::ValueRef(ValueRef::Def(value))
+    }
+}
+
+impl Display for FrameValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use FrameValue::*;
+        match self {
+            ValueRef(id) => write!(f, "{}", id),
+            Padding => write!(f, "Padding"),
+        }
+    }
+}
 
 #[derive(Debug)]
-pub enum JavaAbstractValue {
+pub enum Expression {
     Const(ConstantValue),
     ReturnAddress(ProgramCounter),
-    Expression {
+    Expr {
         instruction: Instruction,
         arguments: Vec<FrameValue>,
     },
-    CaughtException,
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Expression::*;
+        match self {
+            Const(c) => write!(f, "{:?}", c),
+            ReturnAddress(pc) => write!(f, "{:?}", pc),
+            Expr {
+                instruction,
+                arguments,
+            } => {
+                write!(
+                    f,
+                    "{}({})",
+                    instruction.name(),
+                    arguments.iter().map(|it| it.to_string()).join(", ")
+                )
+            }
+        }
+    }
 }
 
 impl FrameValue {
     pub fn merge(x: Self, y: Self) -> Self {
-        use FrameValue::*;
+        use ValueRef::*;
         match (x, y) {
             (lhs, rhs) if lhs == rhs => lhs,
-            (Def(id_x), Def(id_y)) => {
-                let mut values = HashSet::new();
-                values.insert(id_x);
-                values.insert(id_y);
-                Phi(values)
-            },
-            (Def(id_x), Phi(ids)) => Phi(ids.into_iter().chain(once(id_x)).collect()),
-            (Phi(ids), Def(id_y)) => Phi(ids.into_iter().chain(once(id_y)).collect()),
-            (Phi(ids_x), Phi(ids_y)) => Phi(ids_x.into_iter().chain(ids_y).collect()),
-            (Padding, Padding) => Padding,
+            (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
+                let result = match (lhs, rhs) {
+                    (Def(id_x), Def(id_y)) => {
+                        let mut values = HashSet::new();
+                        values.insert(id_x);
+                        values.insert(id_y);
+                        Phi(values)
+                    }
+                    (Def(id_x), Phi(ids)) => Phi(ids.into_iter().chain(once(id_x)).collect()),
+                    (Phi(ids), Def(id_y)) => Phi(ids.into_iter().chain(once(id_y)).collect()),
+                    (Phi(ids_x), Phi(ids_y)) => Phi(ids_x.into_iter().chain(ids_y).collect()),
+                };
+                FrameValue::ValueRef(result)
+            }
             _ => panic!(),
         }
     }
