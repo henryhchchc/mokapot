@@ -4,7 +4,7 @@ use crate::{
     elements::{
         class::{ClassVersion, Handle},
         field::ConstantValue,
-        instruction::ArrayTypeRef,
+        instruction::TypeReference,
         method::MethodDescriptor,
         references::{
             ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
@@ -279,31 +279,10 @@ impl ParsingContext {
         Ok(result)
     }
 
-    pub(crate) fn get_array_type_ref(
-        &self,
-        index: u16,
-    ) -> Result<ArrayTypeRef, ClassFileParsingError> {
+    pub(crate) fn get_type_ref(&self, index: u16) -> Result<TypeReference, ClassFileParsingError> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
-        let FieldType::Array(b) = FieldType::from_str(name.as_str())? else {
-            return Err(ClassFileParsingError::MalformedClassFile(
-                "Invalid type name for arrty type ref",
-            ));
-        };
-        let mut dim = 1;
-        let mut current_type = *b;
-        let (base_type, dimensions) = loop {
-            match current_type {
-                FieldType::Array(e) => {
-                    current_type = *e;
-                    dim += 1;
-                }
-                it @ _ => break (it, dim),
-            }
-        };
-        Ok(ArrayTypeRef {
-            base_type,
-            dimensions,
-        })
+        let field_type = FieldType::from_str(name.as_str())?;
+        Ok(TypeReference(field_type.to_owned()))
     }
 }
 

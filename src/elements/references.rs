@@ -71,3 +71,12 @@ pub enum MethodReference {
     Class(ClassMethodReference),
     Interface(InterfaceMethodReference),
 }
+
+impl MethodReference {
+    pub fn descriptor(&self) -> &MethodDescriptor {
+        match self {
+            Self::Class(ClassMethodReference { descriptor, .. }) => descriptor,
+            Self::Interface(InterfaceMethodReference { descriptor, .. }) => descriptor,
+        }
+    }
+}

@@ -22,8 +22,9 @@ pub struct Field {
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ConstantValue {
+    Null,
     Integer(i32),
     Float(f32),
     Long(i64),

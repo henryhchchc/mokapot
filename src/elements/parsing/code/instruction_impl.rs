@@ -64,7 +64,11 @@ impl Instruction {
             0x10 => BiPush(read_u8(reader)?),
             0x34 => CALoad,
             0x55 => CAStore,
-            0xc0 => CheckCast(read_u16(reader)?),
+            0xc0 => {
+                let type_ref_idx = read_u16(reader)?;
+                let type_ref = ctx.get_type_ref(type_ref_idx)?;
+                CheckCast(type_ref)
+            }
             0x90 => D2F,
             0x8e => D2I,
             0x8f => D2L,
@@ -178,7 +182,11 @@ impl Instruction {
             0x1d => ILoad3,
             0x68 => IMul,
             0x74 => INeg,
-            0xc1 => InstanceOf(read_u16(reader)?),
+            0xc1 => {
+                let type_ref_idx = read_u16(reader)?;
+                let type_ref = ctx.get_type_ref(type_ref_idx)?;
+                InstanceOf(type_ref)
+            }
             0xba => {
                 let index = read_u16(reader)?;
                 let constant_pool_entry = ctx.get_entry(index)?;
@@ -200,7 +208,11 @@ impl Instruction {
                         "Zero paddings are not zero",
                     ))?
                 }
-                InvokeDynamic(bootstrap_method_index, name.to_owned(), descriptor)
+                InvokeDynamic {
+                    bootstrap_method_index,
+                    descriptor,
+                    name: name.to_owned(),
+                }
             }
             0xb9 => {
                 let index = read_u16(reader)?;
@@ -368,7 +380,7 @@ impl Instruction {
             0xc3 => MonitorExit,
             0xc5 => {
                 let index = read_u16(reader)?;
-                let array_type = ctx.get_array_type_ref(index)?;
+                let array_type = ctx.get_type_ref(index)?;
                 MultiANewArray(array_type, read_u8(reader)?)
             }
             0xbb => {

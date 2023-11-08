@@ -9,7 +9,7 @@ use crate::{
 
 use super::ProgramCounter;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
     // Constants
     Nop,
@@ -222,14 +222,18 @@ pub enum Instruction {
     InvokeSpecial(MethodReference),
     InvokeStatic(MethodReference),
     InvokeInterface(InterfaceMethodReference, u8),
-    InvokeDynamic(u16, String, MethodDescriptor),
+    InvokeDynamic {
+        bootstrap_method_index: u16,
+        name: String,
+        descriptor: MethodDescriptor,
+    },
     New(ClassReference),
     NewArray(PrimitiveType),
     ANewArray(ClassReference),
     ArrayLength,
     AThrow,
-    CheckCast(u16),
-    InstanceOf(u16),
+    CheckCast(TypeReference),
+    InstanceOf(TypeReference),
     MonitorEnter,
     MonitorExit,
 
@@ -246,7 +250,7 @@ pub enum Instruction {
     WideAStore(u16),
     WideIInc(u16, i16),
     WideRet(u16),
-    MultiANewArray(ArrayTypeRef, u8),
+    MultiANewArray(TypeReference, u8),
     IfNull(ProgramCounter),
     IfNonNull(ProgramCounter),
     GotoW(ProgramCounter),
@@ -392,7 +396,7 @@ impl Instruction {
             IMul => 0x68,
             INeg => 0x74,
             InstanceOf(_) => 0xc1,
-            InvokeDynamic(_, _, _) => 0xba,
+            InvokeDynamic { .. } => 0xba,
             InvokeInterface(_, _) => 0xb9,
             InvokeSpecial(_) => 0xb7,
             InvokeStatic(_) => 0xb8,
@@ -616,7 +620,7 @@ impl Instruction {
             IMul => "imul",
             INeg => "ineg",
             InstanceOf(_) => "instanceof",
-            InvokeDynamic(_, _, _) => "invokedynamic",
+            InvokeDynamic { .. } => "invokedynamic",
             InvokeInterface(_, _) => "invokeinterface",
             InvokeSpecial(_) => "invokespecial",
             InvokeStatic(_) => "invokestatic",
@@ -707,9 +711,5 @@ impl Instruction {
     }
 }
 
-
-#[derive(Debug, PartialEq)]
-pub struct ArrayTypeRef {
-    pub base_type: FieldType,
-    pub dimensions: u8,
-}
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeReference(pub FieldType);
