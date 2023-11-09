@@ -11,6 +11,10 @@ on:
       - .github/workflows/**
   pull_request:
 
+permissions:
+  pages: write
+  id-token: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -34,6 +38,7 @@ jobs:
       - run: cargo build --all-features --verbose
       - run: cargo test --all-features --verbose
       - run: cargo doc --all-features --no-deps --verbose
+        if: ${{ matrix.toolchain == 'stable' }}
       - uses: actions/upload-pages-artifact@v2
         if: ${{ matrix.toolchain == 'stable' }}
         with:
