@@ -33,3 +33,11 @@ jobs:
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
       - run: cargo build --all-features --verbose
       - run: cargo test --all-features --verbose
+      - run: cargo doc --all-features --no-deps --verbose
+      - uses: actions/upload-pages-artifact@v2
+        if: ${{ matrix.toolchain == 'stable' }}
+        with:
+          name: github-pages
+          path: target/doc
+      - uses: actions/deploy-pages@v2
+        if: ${{ matrix.toolchain == 'stable' }}
