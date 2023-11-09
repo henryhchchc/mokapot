@@ -1,8 +1,11 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
-use crate::elements::instruction::{Instruction, ProgramCounter};
+use itertools::Itertools;
 
-use super::{Expression, Identifier, ValueRef};
+use crate::elements::{
+    instruction::{Instruction, ProgramCounter},
+    ConstantValue,
+};
 
 #[derive(Debug)]
 pub enum MokaInstruction {
@@ -77,6 +80,83 @@ impl Display for MokaInstruction {
                 }
             }
             MokaInstruction::SubRoutineRet { target } => write!(f, "ret {}", target),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ValueRef {
+    Def(Identifier),
+    Phi(HashSet<Identifier>),
+}
+
+impl Display for ValueRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueRef::Def(id) => write!(f, "{}", id),
+            ValueRef::Phi(ids) => {
+                write!(
+                    f,
+                    "Phi({})",
+                    ids.iter().map(|id| format!("{}", id)).join(", ")
+                )
+            }
+        }
+    }
+}
+
+impl From<Identifier> for ValueRef {
+    fn from(value: Identifier) -> Self {
+        Self::Def(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    Const(ConstantValue),
+    ReturnAddress(ProgramCounter),
+    Expr {
+        instruction: Instruction,
+        arguments: Vec<ValueRef>,
+    },
+}
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Expression::*;
+        match self {
+            Const(c) => write!(f, "{:?}", c),
+            ReturnAddress(pc) => write!(f, "{:?}", pc),
+            Expr {
+                instruction,
+                arguments,
+            } => {
+                write!(
+                    f,
+                    "{}({})",
+                    instruction.name(),
+                    arguments.iter().map(|it| it.to_string()).join(", ")
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum Identifier {
+    Val(u16),
+    This,
+    Arg(u8),
+    CaughtException,
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Identifier::*;
+        match self {
+            Val(idx) => write!(f, "v{}", idx),
+            This => write!(f, "this"),
+            Arg(idx) => write!(f, "arg{}", idx),
+            CaughtException => write!(f, "exception"),
         }
     }
 }

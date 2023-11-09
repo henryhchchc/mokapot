@@ -1,7 +1,7 @@
 use std::iter::once;
 
 use crate::{
-    analysis::stack_frame::{ir::MokaInstruction as IR, Expression, Identifier},
+    analysis::moka_ir::moka_instruction::{Expression, Identifier, MokaInstruction as IR},
     elements::{
         instruction::{Instruction, ProgramCounter},
         ConstantValue, ReturnType,
@@ -9,20 +9,20 @@ use crate::{
     types::{FieldType, PrimitiveType},
 };
 
-use super::{StackFrame, StackFrameAnalyzer, StackFrameError};
+use super::{MokaIRGenerationError, MokaIRGenerator, StackFrame};
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
 const LONG_RET_TYPE: ReturnType = ReturnType::Some(LONG_TYPE);
 const DOUBLE_RET_TYPE: ReturnType = ReturnType::Some(DOUBLE_TYPE);
 
-impl StackFrameAnalyzer {
+impl MokaIRGenerator {
     pub(super) fn run_instruction(
         &mut self,
         insn: &Instruction,
         pc: ProgramCounter,
         frame: &mut StackFrame,
-    ) -> Result<(), StackFrameError> {
+    ) -> Result<(), MokaIRGenerationError> {
         use Instruction::*;
         let def_id = Identifier::Val(pc.into());
         let ir_instruction = match insn {
@@ -182,62 +182,62 @@ impl StackFrameAnalyzer {
             }
             IStore(idx) | FStore(idx) | AStore(idx) => {
                 let value = frame.pop_value()?;
-                frame.set_local(*idx, value);
+                frame.set_local(*idx, value)?;
                 IR::Nop
             }
             LStore(idx) | DStore(idx) => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(*idx, value);
-                frame.set_local_padding(*idx + 1);
+                frame.set_local(*idx, value)?;
+                frame.set_local_padding(*idx + 1)?;
                 IR::Nop
             }
             IStore0 | FStore0 | AStore0 => {
                 let value = frame.pop_value()?;
-                frame.set_local(0usize, value);
+                frame.set_local(0usize, value)?;
                 IR::Nop
             }
             IStore1 | FStore1 | AStore1 => {
                 let value = frame.pop_value()?;
-                frame.set_local(1usize, value);
+                frame.set_local(1usize, value)?;
                 IR::Nop
             }
             IStore2 | FStore2 | AStore2 => {
                 let value = frame.pop_value()?;
-                frame.set_local(2usize, value);
+                frame.set_local(2usize, value)?;
                 IR::Nop
             }
             IStore3 | FStore3 | AStore3 => {
                 let value = frame.pop_value()?;
-                frame.set_local(3usize, value);
+                frame.set_local(3usize, value)?;
                 IR::Nop
             }
             LStore0 | DStore0 => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(0usize, value);
-                frame.set_local_padding(1usize as usize);
+                frame.set_local(0usize, value)?;
+                frame.set_local_padding(1usize)?;
                 IR::Nop
             }
             LStore1 | DStore1 => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(1usize, value);
-                frame.set_local_padding(2usize);
+                frame.set_local(1usize, value)?;
+                frame.set_local_padding(2usize)?;
                 IR::Nop
             }
             LStore2 | DStore2 => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(2usize, value);
-                frame.set_local_padding(2usize);
+                frame.set_local(2usize, value)?;
+                frame.set_local_padding(2usize)?;
                 IR::Nop
             }
             LStore3 | DStore3 => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(3usize, value);
-                frame.set_local_padding(4usize);
+                frame.set_local(3usize, value)?;
+                frame.set_local_padding(4usize)?;
                 IR::Nop
             }
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
@@ -411,7 +411,7 @@ impl StackFrameAnalyzer {
             IInc(idx, _) => {
                 let base = frame.get_local(*idx)?;
 
-                frame.set_local(*idx, def_id.into());
+                frame.set_local(*idx, def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
                     rhs: Expression::Expr {
@@ -423,7 +423,7 @@ impl StackFrameAnalyzer {
             WideIInc(idx, _) => {
                 let base = frame.get_local(*idx)?;
 
-                frame.set_local(*idx, def_id.into());
+                frame.set_local(*idx, def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
                     rhs: Expression::Expr {
@@ -796,19 +796,19 @@ impl StackFrameAnalyzer {
             }
             WideIStore(idx) | WideFStore(idx) | WideAStore(idx) => {
                 let value = frame.pop_value()?;
-                frame.set_local(*idx, value);
+                frame.set_local(*idx, value)?;
                 IR::Nop
             }
             WideLStore(idx) | WideDStore(idx) => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-                frame.set_local(*idx, value);
-                frame.set_local_padding(idx + 1);
+                frame.set_local(*idx, value)?;
+                frame.set_local_padding(idx + 1)?;
                 IR::Nop
             }
             Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
         };
-        self.code_map.insert(pc, ir_instruction);
+        self.ir_instructions.insert(pc, ir_instruction);
 
         Ok(())
     }

@@ -1,35 +1,36 @@
-use std::{
-    collections::{BTreeMap, LinkedList},
-    fmt::Debug,
-};
+use std::collections::{BTreeMap, LinkedList};
 
 use crate::elements::{
     instruction::{Instruction, MethodBody, ProgramCounter},
     Method,
 };
 
-pub trait FixedPointAnalyzer<F, E> {
-    fn entry_frame(&self, method: &Method) -> F;
+pub trait FixedPointAnalyzer {
+    type Fact: FixedPointFact;
+    type Error;
+    fn entry_fact(&self, method: &Method) -> Self::Fact;
     fn execute_instruction(
         &mut self,
         body: &MethodBody,
         pc: ProgramCounter,
         insn: &Instruction,
-        fact: &F,
-    ) -> Result<BTreeMap<ProgramCounter, F>, E>;
+        fact: &Self::Fact,
+    ) -> Result<BTreeMap<ProgramCounter, Self::Fact>, Self::Error>;
 }
 
-pub trait FixedPointFact: PartialEq {
-    fn merge(&self, other: Self) -> Self;
+pub trait FixedPointFact: PartialEq + Sized {
+    type MergeError;
+    fn merge(&self, other: Self) -> Result<Self, Self::MergeError>;
 }
 
-pub fn analyze<'a, 'm, A, F, E>(
+pub fn analyze<'a, 'm, A>(
     method: &'m Method,
     analyzer: &'a mut A,
-) -> Result<BTreeMap<ProgramCounter, F>, E>
+) -> Result<BTreeMap<ProgramCounter, A::Fact>, A::Error>
 where
-    A: FixedPointAnalyzer<F, E>,
-    F: FixedPointFact + Debug,
+    A: FixedPointAnalyzer,
+    <A as FixedPointAnalyzer>::Error:
+        From<<<A as FixedPointAnalyzer>::Fact as FixedPointFact>::MergeError>,
 {
     let mut facts_before_insn = BTreeMap::new();
     let mut to_analyze = LinkedList::new();
@@ -38,7 +39,7 @@ where
     let Some((entry_pc, entry_insn)) = body.instructions.first() else {
         return Ok(facts_before_insn);
     };
-    let entry_fact = analyzer.entry_frame(method);
+    let entry_fact = analyzer.entry_fact(method);
     analyzer
         .execute_instruction(body, *entry_pc, entry_insn, &entry_fact)?
         .into_iter()
@@ -51,7 +52,7 @@ where
         let old_fact = facts_before_insn.remove(&pc);
         let (new_fact, fact_changed) = match (old_fact, to_be_merged) {
             (Some(f), nf) => {
-                let new_fact = f.merge(nf);
+                let new_fact = f.merge(nf)?;
                 let changed = new_fact != f;
                 (new_fact, changed)
             }

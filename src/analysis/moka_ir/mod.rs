@@ -1,116 +1,168 @@
 use std::{
-    cmp::{max, min},
+    cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt::{write, Display},
+    fmt::Display,
     iter::once,
     usize,
 };
 
-use itertools::Itertools;
-
-use crate::elements::{
-    instruction::{Instruction, MethodBody, ProgramCounter},
-    ConstantValue, Method, MethodAccessFlags,
+use crate::{
+    elements::{
+        instruction::{Instruction, MethodBody, ProgramCounter},
+        Method, MethodAccessFlags,
+    },
+    utils::try_merge,
 };
 mod execution;
-mod ir;
+mod moka_instruction;
 
-use self::ir::MokaInstruction;
+#[cfg(test)]
+mod test;
+
+use self::moka_instruction::{Identifier, MokaInstruction, ValueRef};
 
 use super::fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
 
-#[derive(PartialEq, Debug, Clone)]
-pub struct StackFrame {
+#[derive(PartialEq, Debug)]
+pub(self) struct StackFrame {
     pub max_locals: u16,
     pub max_stack: u16,
-    pub local_variables: Vec<Option<FrameValue>>,
-    pub operand_stack: Vec<FrameValue>,
+    local_variables: Vec<Option<FrameValue>>,
+    operand_stack: Vec<FrameValue>,
     pub reachable_subroutines: BTreeSet<ProgramCounter>,
 }
 
 impl StackFrame {
-    pub(crate) fn push_raw(&mut self, value: FrameValue) -> Result<(), StackFrameError> {
+    pub(self) fn push_raw(&mut self, value: FrameValue) -> Result<(), MokaIRGenerationError> {
         if self.operand_stack.len() as u16 >= self.max_stack {
-            return Err(StackFrameError::StackOverflow);
+            return Err(MokaIRGenerationError::StackOverflow);
         }
-        self.operand_stack.push(value);
-        Ok(())
+        Ok(self.operand_stack.push(value))
     }
 
-    pub(crate) fn pop_raw(&mut self) -> Result<FrameValue, StackFrameError> {
+    pub(self) fn pop_raw(&mut self) -> Result<FrameValue, MokaIRGenerationError> {
         self.operand_stack
             .pop()
-            .ok_or(StackFrameError::StackUnderflow)
+            .ok_or(MokaIRGenerationError::StackUnderflow)
     }
 
-    pub(crate) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
+    pub(self) fn pop_value(&mut self) -> Result<ValueRef, MokaIRGenerationError> {
         match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Padding => Err(StackFrameError::ValueMismatch),
+            FrameValue::Padding => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 
-    pub(crate) fn pop_padding(&mut self) -> Result<(), StackFrameError> {
+    pub(self) fn pop_padding(&mut self) -> Result<(), MokaIRGenerationError> {
         match self.pop_raw()? {
-            FrameValue::ValueRef(_) => Err(StackFrameError::ValueMismatch),
+            FrameValue::ValueRef(_) => Err(MokaIRGenerationError::ValueMismatch),
             FrameValue::Padding => Ok(()),
         }
     }
 
-    pub(crate) fn push_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
+    pub(self) fn push_value(&mut self, value: ValueRef) -> Result<(), MokaIRGenerationError> {
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(crate) fn push_padding(&mut self) -> Result<(), StackFrameError> {
+    pub(self) fn push_padding(&mut self) -> Result<(), MokaIRGenerationError> {
         self.push_raw(FrameValue::Padding)
     }
 
-    pub(crate) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
+    pub(self) fn get_local(
+        &self,
+        idx: impl Into<usize>,
+    ) -> Result<ValueRef, MokaIRGenerationError> {
         let frame_value = self
             .local_variables
             .get(idx.into())
-            .unwrap()
+            .expect("BUG: `local_variables` is not allocated correctly")
             .clone()
-            .ok_or(StackFrameError::LocalUnset)?;
+            .ok_or(MokaIRGenerationError::LocalUnset)?;
         match frame_value {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Padding => Err(StackFrameError::ValueMismatch),
+            FrameValue::Padding => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 
-    pub(crate) fn set_local(&mut self, idx: impl Into<usize>, value: ValueRef) {
-        self.local_variables
-            .get_mut(idx.into())
-            .expect("Out of index")
-            .replace(FrameValue::ValueRef(value));
+    pub(self) fn set_local(
+        &mut self,
+        idx: impl Into<usize>,
+        value: ValueRef,
+    ) -> Result<(), MokaIRGenerationError> {
+        let idx = idx.into();
+        if idx <= self.max_locals as usize {
+            self.local_variables
+                .get_mut(idx)
+                .expect("BUG: `local_variables` is not allocated correctly")
+                .replace(FrameValue::ValueRef(value));
+            Ok(())
+        } else {
+            Err(MokaIRGenerationError::LocalLimitExceed)
+        }
     }
 
-    pub(crate) fn set_local_padding(&mut self, idx: impl Into<usize>) {
-        self.local_variables
-            .get_mut(idx.into())
-            .expect("Out of index")
-            .replace(FrameValue::Padding);
+    pub(self) fn set_local_padding(
+        &mut self,
+        idx: impl Into<usize>,
+    ) -> Result<(), MokaIRGenerationError> {
+        let idx = idx.into();
+        if idx <= self.max_locals as usize {
+            self.local_variables
+                .get_mut(idx)
+                .expect("BUG: `local_variables` is not allocated correctly")
+                .replace(FrameValue::Padding);
+            Ok(())
+        } else {
+            Err(MokaIRGenerationError::LocalLimitExceed)
+        }
+    }
+
+    pub(self) fn same_frame(&self) -> Self {
+        Self {
+            max_locals: self.max_locals,
+            max_stack: self.max_stack,
+            local_variables: self.local_variables.clone(),
+            operand_stack: self.operand_stack.clone(),
+            reachable_subroutines: self.reachable_subroutines.clone(),
+        }
+    }
+
+    pub(self) fn same_locals_1_stack_item_frame(&self, stack_value: FrameValue) -> Self {
+        let mut operand_stack = Vec::with_capacity(self.max_stack as usize);
+        operand_stack.push(stack_value);
+        Self {
+            max_locals: self.max_locals,
+            max_stack: self.max_stack,
+            local_variables: self.local_variables.clone(),
+            operand_stack,
+            reachable_subroutines: self.reachable_subroutines.clone(),
+        }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum StackFrameError {
+pub enum MokaIRGenerationError {
     #[error("Trying to pop an empty stack")]
     StackUnderflow,
     #[error("The stack size exceeds the max stack size")]
     StackOverflow,
-    #[error("Expected a ValueRef but got Padding")]
+    #[error("Expected a ValueRef but got a Padding or vice versa")]
     ValueMismatch,
+    #[error("The local variable index exceeds the max local variable size")]
+    LocalLimitExceed,
     #[error("The local variable is not initialized")]
     LocalUnset,
 }
 
-pub struct StackFrameAnalyzer {
-    code_map: HashMap<ProgramCounter, MokaInstruction>,
+pub(self) struct MokaIRGenerator {
+    ir_instructions: HashMap<ProgramCounter, MokaInstruction>,
 }
 
-impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
-    fn entry_frame(&self, method: &Method) -> StackFrame {
+impl FixedPointAnalyzer for MokaIRGenerator {
+    type Fact = StackFrame;
+    type Error = MokaIRGenerationError;
+
+    fn entry_fact(&self, method: &Method) -> StackFrame {
         let body = method.body.as_ref().expect("TODO");
         let mut locals = Vec::with_capacity(body.max_locals as usize);
         for _ in 0..body.max_locals {
@@ -140,8 +192,8 @@ impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
         pc: ProgramCounter,
         insn: &Instruction,
         fact: &StackFrame,
-    ) -> Result<BTreeMap<ProgramCounter, StackFrame>, StackFrameError> {
-        let mut frame = fact.clone();
+    ) -> Result<BTreeMap<ProgramCounter, StackFrame>, MokaIRGenerationError> {
+        let mut frame = fact.same_frame();
         let mut dirty_pcs = BTreeMap::new();
         self.run_instruction(insn, pc, &mut frame)?;
         use Instruction::*;
@@ -151,11 +203,11 @@ impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
             | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
             | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => {
                 let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
-                dirty_pcs.insert(*target, frame.clone());
-                dirty_pcs.insert(next_pc, frame.clone());
+                dirty_pcs.insert(*target, frame.same_frame());
+                dirty_pcs.insert(next_pc, frame.same_frame());
             }
             Goto(target) | GotoW(target) => {
-                dirty_pcs.insert(*target, frame.clone());
+                dirty_pcs.insert(*target, frame.same_frame());
             }
             TableSwitch {
                 default,
@@ -163,41 +215,38 @@ impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
                 ..
             } => {
                 jump_targets.iter().for_each(|it| {
-                    dirty_pcs.insert(*it, frame.clone());
+                    dirty_pcs.insert(*it, frame.same_frame());
                 });
-                dirty_pcs.insert(*default, frame.clone());
+                dirty_pcs.insert(*default, frame.same_frame());
             }
             LookupSwitch {
                 default,
                 match_targets,
             } => {
                 match_targets.iter().for_each(|(_, it)| {
-                    dirty_pcs.insert(*it, frame.clone());
+                    dirty_pcs.insert(*it, frame.same_frame());
                 });
-                dirty_pcs.insert(*default, frame.clone());
+                dirty_pcs.insert(*default, frame.same_frame());
             }
             Jsr(target) | JsrW(target) => {
                 frame.reachable_subroutines.insert(*target);
-                dirty_pcs.insert(*target, frame.clone());
+                dirty_pcs.insert(*target, frame.same_frame());
             }
             AThrow => {}
             Ret(_) | WideRet(_) => frame.reachable_subroutines.iter().for_each(|it| {
                 let next_pc = body.next_pc_of(*it).expect("Cannot get next pc");
-                dirty_pcs.insert(next_pc, frame.clone());
+                dirty_pcs.insert(next_pc, frame.same_frame());
             }),
             Return | AReturn | IReturn | LReturn | FReturn | DReturn => {}
             _ => {
                 let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
-                dirty_pcs.insert(next_pc, frame.clone());
+                dirty_pcs.insert(next_pc, frame.same_frame());
             }
         }
         for handler in body.exception_table.iter() {
             if handler.covers(pc) {
-                let mut handler_frame = frame.clone();
-                handler_frame.operand_stack.clear();
-                handler_frame
-                    .operand_stack
-                    .push(Identifier::CaughtException.into());
+                let handler_frame =
+                    frame.same_locals_1_stack_item_frame(Identifier::CaughtException.into());
                 dirty_pcs.insert(handler.handler_pc, handler_frame);
             }
         }
@@ -207,7 +256,9 @@ impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
 }
 
 impl FixedPointFact for StackFrame {
-    fn merge(&self, other: Self) -> Self {
+    type MergeError = MokaIRGenerationError;
+
+    fn merge(&self, other: Self) -> Result<Self, Self::MergeError> {
         let mut other = other;
 
         let max_locals = max(self.max_locals, other.max_locals);
@@ -220,10 +271,7 @@ impl FixedPointFact for StackFrame {
             let self_loc = self.local_variables.get(i).cloned();
             let other_loc = other.local_variables.get(i).cloned();
             local_variables[i] = match (self_loc, other_loc) {
-                (Some(x), Some(y)) => match (x, y) {
-                    (Some(lhs), Some(rhs)) => Some(FrameValue::merge(lhs, rhs)),
-                    (lhs, rhs) => lhs.or(rhs),
-                },
+                (Some(x), Some(y)) => try_merge(x, y, FrameValue::merge)?,
                 (x, y) => x
                     .or(y)
                     .expect("The local variable vec is not allocated correctly"),
@@ -234,87 +282,40 @@ impl FixedPointFact for StackFrame {
             let self_loc = self.operand_stack.get(i).cloned();
             let other_loc = other.operand_stack.get(i).cloned();
             let stack_value = match (self_loc, other_loc) {
-                (Some(x), Some(y)) => FrameValue::merge(x, y),
-                (x, y) => x.or(y).expect("The stack vec is not allocated correctly"),
+                (Some(x), Some(y)) => FrameValue::merge(x, y)?,
+                (x, y) => x.or(y).expect("The stack is not allocated correctly"),
             };
             operand_stack.push(stack_value);
         }
 
-        Self {
+        Ok(Self {
             max_locals,
             max_stack,
             local_variables,
             operand_stack,
             reachable_subroutines,
-        }
+        })
     }
 }
 
-impl Default for StackFrameAnalyzer {
+impl Default for MokaIRGenerator {
     fn default() -> Self {
         Self {
-            code_map: Default::default(),
+            ir_instructions: Default::default(),
         }
     }
 }
 
-impl StackFrameAnalyzer {
-    pub fn moka_ir(
+impl MokaIRGenerator {
+    /// Genreates Moka IR from the given method.
+    /// param `method` is the method to be analyzed.
+    pub fn generate(
         self,
         method: &Method,
-    ) -> Result<HashMap<ProgramCounter, MokaInstruction>, StackFrameError> {
+    ) -> Result<HashMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
         let mut self_mut = self;
         fixed_point::analyze(method, &mut self_mut)?;
-        Ok(self_mut.code_map)
-    }
-}
-
-pub trait AbstractValue {}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum Identifier {
-    Val(u16),
-    This,
-    Arg(u8),
-    CaughtException,
-}
-
-impl Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Identifier::*;
-        match self {
-            Val(idx) => write!(f, "v{}", idx),
-            This => write!(f, "this"),
-            Arg(idx) => write!(f, "arg{}", idx),
-            CaughtException => write!(f, "exception"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ValueRef {
-    Def(Identifier),
-    Phi(HashSet<Identifier>),
-}
-
-impl Display for ValueRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValueRef::Def(id) => write!(f, "{}", id),
-            ValueRef::Phi(ids) => {
-                write!(
-                    f,
-                    "Phi({})",
-                    ids.iter().map(|id| format!("{}", id)).join(", ")
-                )
-            }
-        }
-    }
-}
-
-impl From<Identifier> for ValueRef {
-    fn from(value: Identifier) -> Self {
-        Self::Def(value)
+        Ok(self_mut.ir_instructions)
     }
 }
 
@@ -340,52 +341,22 @@ impl Display for FrameValue {
     }
 }
 
-#[derive(Debug)]
-pub enum Expression {
-    Const(ConstantValue),
-    ReturnAddress(ProgramCounter),
-    Expr {
-        instruction: Instruction,
-        arguments: Vec<ValueRef>,
-    },
-}
-
-impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Expression::*;
-        match self {
-            Const(c) => write!(f, "{:?}", c),
-            ReturnAddress(pc) => write!(f, "{:?}", pc),
-            Expr {
-                instruction,
-                arguments,
-            } => {
-                write!(
-                    f,
-                    "{}({})",
-                    instruction.name(),
-                    arguments.iter().map(|it| it.to_string()).join(", ")
-                )
-            }
-        }
-    }
-}
-
 impl FrameValue {
-    pub fn merge(x: Self, y: Self) -> Self {
+    pub fn merge(x: Self, y: Self) -> Result<Self, MokaIRGenerationError> {
         use ValueRef::*;
         match (x, y) {
-            (lhs, rhs) if lhs == rhs => lhs,
+            (lhs, rhs) if lhs == rhs => Ok(lhs),
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 let result = match (lhs, rhs) {
                     (Def(id_x), Def(id_y)) => Phi(HashSet::from([id_x, id_y])),
-                    (Def(id_x), Phi(ids)) => Phi(ids.into_iter().chain(once(id_x)).collect()),
-                    (Phi(ids), Def(id_y)) => Phi(ids.into_iter().chain(once(id_y)).collect()),
+                    (Def(id), Phi(ids)) | (Phi(ids), Def(id)) => {
+                        Phi(ids.into_iter().chain(once(id)).collect())
+                    }
                     (Phi(ids_x), Phi(ids_y)) => Phi(ids_x.into_iter().chain(ids_y).collect()),
                 };
-                FrameValue::ValueRef(result)
+                Ok(FrameValue::ValueRef(result))
             }
-            _ => panic!(),
+            _ => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::elements::{Class, Method};
 
-use super::stack_frame::StackFrameAnalyzer;
+use super::MokaIRGenerator;
 
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
@@ -27,8 +27,7 @@ fn load_test_method() {
 #[test]
 fn analyze() {
     let method = get_test_method();
-    let analyzer = StackFrameAnalyzer::default();
-    let ir = analyzer.moka_ir(&method).unwrap();
+    let ir = MokaIRGenerator::default().generate(&method).unwrap();
     for (pc, insn) in method.body.unwrap().instructions {
         let ir_insn = ir.get(&pc).unwrap();
         println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
