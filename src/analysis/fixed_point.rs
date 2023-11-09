@@ -1,11 +1,14 @@
-use std::collections::{BTreeMap, LinkedList};
+use std::{
+    collections::{BTreeMap, LinkedList},
+    fmt::Debug,
+};
 
 use crate::elements::{
     instruction::{Instruction, MethodBody, ProgramCounter},
     Method,
 };
 
-pub trait FixedPointAnalyzer<F> {
+pub trait FixedPointAnalyzer<F, E> {
     fn entry_frame(&self, method: &Method) -> F;
     fn execute_instruction(
         &mut self,
@@ -13,28 +16,31 @@ pub trait FixedPointAnalyzer<F> {
         pc: ProgramCounter,
         insn: &Instruction,
         fact: &F,
-    ) -> BTreeMap<ProgramCounter, F>;
+    ) -> Result<BTreeMap<ProgramCounter, F>, E>;
 }
 
 pub trait FixedPointFact: PartialEq {
     fn merge(&self, other: Self) -> Self;
 }
 
-pub fn analyze<'a, 'm, A, F>(method: &'m Method, analyzer: &'a mut A) -> BTreeMap<ProgramCounter, F>
+pub fn analyze<'a, 'm, A, F, E>(
+    method: &'m Method,
+    analyzer: &'a mut A,
+) -> Result<BTreeMap<ProgramCounter, F>, E>
 where
-    A: FixedPointAnalyzer<F>,
-    F: FixedPointFact,
+    A: FixedPointAnalyzer<F, E>,
+    F: FixedPointFact + Debug,
 {
     let mut facts_before_insn = BTreeMap::new();
     let mut to_analyze = LinkedList::new();
     let body = method.body.as_ref().expect("TODO");
 
     let Some((entry_pc, entry_insn)) = body.instructions.first() else {
-        return facts_before_insn;
+        return Ok(facts_before_insn);
     };
     let entry_fact = analyzer.entry_frame(method);
     analyzer
-        .execute_instruction(body, *entry_pc, entry_insn, &entry_fact)
+        .execute_instruction(body, *entry_pc, entry_insn, &entry_fact)?
         .into_iter()
         .for_each(|it| to_analyze.push_back(it));
     facts_before_insn.insert(*entry_pc, entry_fact);
@@ -56,12 +62,12 @@ where
         let fact = facts_before_insn.get(&pc).unwrap();
 
         if fact_changed {
-            let dirty_facts = analyzer.execute_instruction(body, pc, insn, &fact);
+            let dirty_facts = analyzer.execute_instruction(body, pc, insn, &fact)?;
             dirty_facts
                 .into_iter()
                 .for_each(|it| to_analyze.push_back(it));
         }
     }
 
-    facts_before_insn
+    Ok(facts_before_insn)
 }

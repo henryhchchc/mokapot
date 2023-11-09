@@ -1,4 +1,4 @@
-use std::u16;
+use std::fmt::Display;
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ProgramCounter(u16);
@@ -14,6 +14,12 @@ impl ProgramCounter {
         u16::try_from(self.0 as i16 + offset)
             .map(Self)
             .map_err(|_| InvalidOffset::I16(offset))
+    }
+}
+
+impl Display for ProgramCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:05}", self.0)
     }
 }
 

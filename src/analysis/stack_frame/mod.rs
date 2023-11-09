@@ -1,5 +1,5 @@
 use std::{
-    cmp::max,
+    cmp::{max, min},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{write, Display},
     iter::once,
@@ -19,45 +19,50 @@ use self::ir::MokaInstruction;
 
 use super::fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct StackFrame {
     pub max_locals: u16,
     pub max_stack: u16,
     pub local_variables: Vec<Option<FrameValue>>,
     pub operand_stack: Vec<FrameValue>,
     pub reachable_subroutines: BTreeSet<ProgramCounter>,
-    pub preceding_kept_nodes: HashSet<ProgramCounter>,
 }
 
 impl StackFrame {
-    pub(crate) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
-        let value = self
-            .operand_stack
+    pub(crate) fn push_raw(&mut self, value: FrameValue) -> Result<(), StackFrameError> {
+        if self.operand_stack.len() as u16 >= self.max_stack {
+            return Err(StackFrameError::StackOverflow);
+        }
+        self.operand_stack.push(value);
+        Ok(())
+    }
+
+    pub(crate) fn pop_raw(&mut self) -> Result<FrameValue, StackFrameError> {
+        self.operand_stack
             .pop()
-            .ok_or(StackFrameError::StackUnderflow)?;
-        match value {
+            .ok_or(StackFrameError::StackUnderflow)
+    }
+
+    pub(crate) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
+        match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
             FrameValue::Padding => Err(StackFrameError::ValueMismatch),
         }
     }
 
     pub(crate) fn pop_padding(&mut self) -> Result<(), StackFrameError> {
-        let value = self
-            .operand_stack
-            .pop()
-            .ok_or(StackFrameError::StackUnderflow)?;
-        match value {
+        match self.pop_raw()? {
             FrameValue::ValueRef(_) => Err(StackFrameError::ValueMismatch),
             FrameValue::Padding => Ok(()),
         }
     }
 
-    pub(crate) fn push_value(&mut self, value: ValueRef) {
-        self.operand_stack.push(FrameValue::ValueRef(value));
+    pub(crate) fn push_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
+        self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(crate) fn push_padding(&mut self) {
-        self.operand_stack.push(FrameValue::Padding);
+    pub(crate) fn push_padding(&mut self) -> Result<(), StackFrameError> {
+        self.push_raw(FrameValue::Padding)
     }
 
     pub(crate) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
@@ -86,17 +91,14 @@ impl StackFrame {
             .expect("Out of index")
             .replace(FrameValue::Padding);
     }
-
-    pub(crate) fn set_current_node(&mut self, pc: ProgramCounter) {
-        self.preceding_kept_nodes.clear();
-        self.preceding_kept_nodes.insert(pc);
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum StackFrameError {
     #[error("Trying to pop an empty stack")]
     StackUnderflow,
+    #[error("The stack size exceeds the max stack size")]
+    StackOverflow,
     #[error("Expected a ValueRef but got Padding")]
     ValueMismatch,
     #[error("The local variable is not initialized")]
@@ -107,7 +109,7 @@ pub struct StackFrameAnalyzer {
     code_map: HashMap<ProgramCounter, MokaInstruction>,
 }
 
-impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
+impl FixedPointAnalyzer<StackFrame, StackFrameError> for StackFrameAnalyzer {
     fn entry_frame(&self, method: &Method) -> StackFrame {
         let body = method.body.as_ref().expect("TODO");
         let mut locals = Vec::with_capacity(body.max_locals as usize);
@@ -129,7 +131,6 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
             local_variables: locals,
             operand_stack: Vec::with_capacity(body.max_stack as usize),
             reachable_subroutines: BTreeSet::new(),
-            preceding_kept_nodes: HashSet::new(),
         }
     }
 
@@ -139,10 +140,10 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
         pc: ProgramCounter,
         insn: &Instruction,
         fact: &StackFrame,
-    ) -> BTreeMap<ProgramCounter, StackFrame> {
+    ) -> Result<BTreeMap<ProgramCounter, StackFrame>, StackFrameError> {
         let mut frame = fact.clone();
         let mut dirty_pcs = BTreeMap::new();
-        self.run_instruction(insn, pc, &mut frame);
+        self.run_instruction(insn, pc, &mut frame)?;
         use Instruction::*;
         match insn {
             IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
@@ -170,8 +171,8 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
                 default,
                 match_targets,
             } => {
-                match_targets.iter().for_each(|it| {
-                    dirty_pcs.insert(it.1, frame.clone());
+                match_targets.iter().for_each(|(_, it)| {
+                    dirty_pcs.insert(*it, frame.clone());
                 });
                 dirty_pcs.insert(*default, frame.clone());
             }
@@ -201,7 +202,7 @@ impl FixedPointAnalyzer<StackFrame> for StackFrameAnalyzer {
             }
         }
 
-        dirty_pcs
+        Ok(dirty_pcs)
     }
 }
 
@@ -228,7 +229,7 @@ impl FixedPointFact for StackFrame {
                     .expect("The local variable vec is not allocated correctly"),
             }
         }
-        let mut stack = Vec::with_capacity(max_stack as usize);
+        let mut operand_stack = Vec::with_capacity(max_stack as usize);
         for i in 0..max(self.operand_stack.len(), other.operand_stack.len()) as usize {
             let self_loc = self.operand_stack.get(i).cloned();
             let other_loc = other.operand_stack.get(i).cloned();
@@ -236,21 +237,15 @@ impl FixedPointFact for StackFrame {
                 (Some(x), Some(y)) => FrameValue::merge(x, y),
                 (x, y) => x.or(y).expect("The stack vec is not allocated correctly"),
             };
-            stack.push(stack_value);
+            operand_stack.push(stack_value);
         }
-        let prededing_kept_nodes = self
-            .preceding_kept_nodes
-            .union(&other.preceding_kept_nodes)
-            .cloned()
-            .collect();
 
         Self {
             max_locals,
             max_stack,
             local_variables,
-            operand_stack: stack,
+            operand_stack,
             reachable_subroutines,
-            preceding_kept_nodes: prededing_kept_nodes,
         }
     }
 }
@@ -264,10 +259,13 @@ impl Default for StackFrameAnalyzer {
 }
 
 impl StackFrameAnalyzer {
-    pub fn moka_ir(self, method: &Method) -> HashMap<ProgramCounter, MokaInstruction> {
+    pub fn moka_ir(
+        self,
+        method: &Method,
+    ) -> Result<HashMap<ProgramCounter, MokaInstruction>, StackFrameError> {
         let mut self_mut = self;
-        fixed_point::analyze(method, &mut self_mut);
-        self_mut.code_map
+        fixed_point::analyze(method, &mut self_mut)?;
+        Ok(self_mut.code_map)
     }
 }
 
@@ -304,7 +302,11 @@ impl Display for ValueRef {
         match self {
             ValueRef::Def(id) => write!(f, "{}", id),
             ValueRef::Phi(ids) => {
-                write!(f, "Phi({})", ids.iter().map(|it| it.to_string()).join(", "))
+                write!(
+                    f,
+                    "Phi({})",
+                    ids.iter().map(|id| format!("{}", id)).join(", ")
+                )
             }
         }
     }
@@ -376,12 +378,7 @@ impl FrameValue {
             (lhs, rhs) if lhs == rhs => lhs,
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 let result = match (lhs, rhs) {
-                    (Def(id_x), Def(id_y)) => {
-                        let mut values = HashSet::new();
-                        values.insert(id_x);
-                        values.insert(id_y);
-                        Phi(values)
-                    }
+                    (Def(id_x), Def(id_y)) => Phi(HashSet::from([id_x, id_y])),
                     (Def(id_x), Phi(ids)) => Phi(ids.into_iter().chain(once(id_x)).collect()),
                     (Phi(ids), Def(id_y)) => Phi(ids.into_iter().chain(once(id_y)).collect()),
                     (Phi(ids_x), Phi(ids_y)) => Phi(ids_x.into_iter().chain(ids_y).collect()),

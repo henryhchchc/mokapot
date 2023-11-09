@@ -28,8 +28,9 @@ fn load_test_method() {
 fn analyze() {
     let method = get_test_method();
     let analyzer = StackFrameAnalyzer::default();
-    let ir = analyzer.moka_ir(&method);
-    for (loc, expr) in ir {
-        println!("{:?}", expr);
+    let ir = analyzer.moka_ir(&method).unwrap();
+    for (pc, insn) in method.body.unwrap().instructions {
+        let ir_insn = ir.get(&pc).unwrap();
+        println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
     }
 }
