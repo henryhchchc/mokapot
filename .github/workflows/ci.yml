@@ -40,6 +40,7 @@ jobs:
       - run: cargo doc --all-features --no-deps --verbose
         if: ${{ matrix.toolchain == 'stable' }}
       - name: Fix permissions
+        if: ${{ matrix.toolchain == 'stable' }}
         run: |
           chmod -v -R +rX "target/doc/" | while read line; do
             echo "::warning title=Invalid file permissions automatically fixed::$line"
