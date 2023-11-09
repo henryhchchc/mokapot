@@ -39,6 +39,11 @@ jobs:
       - run: cargo test --all-features --verbose
       - run: cargo doc --all-features --no-deps --verbose
         if: ${{ matrix.toolchain == 'stable' }}
+      - name: Fix permissions
+        run: |
+          chmod -v -R +rX "target/doc/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
       - uses: actions/upload-pages-artifact@v2
         if: ${{ matrix.toolchain == 'stable' }}
         with:
