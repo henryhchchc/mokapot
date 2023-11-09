@@ -48,7 +48,6 @@ jobs:
       - uses: actions/upload-pages-artifact@v2
         if: ${{ matrix.toolchain == 'stable' }}
         with:
-          name: github-pages
           path: target/doc
       - uses: actions/deploy-pages@v2
         if: ${{ matrix.toolchain == 'stable' }}
