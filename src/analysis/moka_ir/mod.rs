@@ -16,12 +16,14 @@ use crate::{
 mod execution;
 mod moka_instruction;
 
+pub use moka_instruction::*;
+
 #[cfg(test)]
 mod test;
 
 use self::moka_instruction::{Identifier, MokaInstruction, ValueRef};
 
-use super::fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
+use super::jvm_fixed_point::{self, FixedPointAnalyzer, FixedPointFact};
 
 #[derive(PartialEq, Debug)]
 pub(self) struct StackFrame {
@@ -314,7 +316,7 @@ impl MokaIRGenerator {
         method: &Method,
     ) -> Result<HashMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
         let mut self_mut = self;
-        fixed_point::analyze(method, &mut self_mut)?;
+        jvm_fixed_point::analyze(method, &mut self_mut)?;
         Ok(self_mut.ir_instructions)
     }
 }

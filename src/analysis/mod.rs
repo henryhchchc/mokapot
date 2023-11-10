@@ -1,2 +1,2 @@
-mod fixed_point;
-mod moka_ir;
+pub mod jvm_fixed_point;
+pub mod moka_ir;
