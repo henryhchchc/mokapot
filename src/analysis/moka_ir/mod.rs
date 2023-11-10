@@ -5,9 +5,11 @@ use crate::elements::{
     Method, MethodAccessFlags, MethodDescriptor,
 };
 mod execution;
+mod expression;
 mod moka_instruction;
 mod stack_frame;
 
+pub use expression::*;
 pub use moka_instruction::*;
 
 #[cfg(test)]
@@ -29,6 +31,10 @@ pub enum MokaIRGenerationError {
     LocalLimitExceed,
     #[error("The local variable is not initialized")]
     LocalUnset,
+    #[error("The stack limit mismatch")]
+    StackSizeMismatch,
+    #[error("The local limit mismatch")]
+    LocalLimitMismatch,
 }
 
 struct MokaIRGenerator {

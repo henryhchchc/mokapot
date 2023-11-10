@@ -6,7 +6,7 @@ class TestAnalysis {
     try {
       var a = "233";
       var b = 2;
-      var c = x;
+      var c = x + b;
       if (x < 0) {
         b = 3;
       }
@@ -21,7 +21,7 @@ class TestAnalysis {
     java.util.function.IntUnaryOperator lambda = (n) -> { return 233 + n; };
     var type = lambda.applyAsInt(0);
     var arr = new int[]{0, 1, 2};
-    var b = arr[0];
+    var b = arr[0 + x];
     arr[b] = b;
     return y;
   }

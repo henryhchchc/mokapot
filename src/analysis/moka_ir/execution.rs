@@ -1,9 +1,9 @@
-use std::{f32::consts::E, iter::once};
+use std::iter::once;
 
 use crate::{
     analysis::moka_ir::{
-        moka_instruction::{Expression, Identifier, MokaInstruction as IR},
-        ArrayOperation, FieldAccess,
+        moka_instruction::{Identifier, MokaInstruction as IR},
+        ArrayOperation, Expression, FieldAccess, MathOperation,
     },
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
@@ -12,7 +12,7 @@ use crate::{
     types::{FieldType, PrimitiveType},
 };
 
-use super::{MokaIRGenerationError, MokaIRGenerator, StackFrame};
+use super::{MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
@@ -341,96 +341,64 @@ impl MokaIRGenerator {
                 frame.push_raw(value2)?;
                 IR::Nop
             }
-            IAdd | FAdd | ISub | FSub | IMul | FMul | IDiv | FDiv | IRem | FRem => {
-                let value1 = frame.pop_value()?;
-                let value2 = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1],
-                    },
-                }
-            }
-            LAdd | DAdd | LSub | DSub | LMul | DMul | LDiv | DDiv | LRem | DRem => {
-                let value1_padding = frame.pop_value()?;
-                let value1 = frame.pop_value()?;
-                let value2_padding = frame.pop_value()?;
-                let value2 = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1, value2_padding, value1_padding],
-                    },
-                }
-            }
+            IAdd | FAdd => self.binary_op_math(frame, def_id, MathOperation::Add)?,
+            LAdd | DAdd => self.binary_wide_math(frame, def_id, MathOperation::Add)?,
+            ISub | FSub => self.binary_op_math(frame, def_id, MathOperation::Subtract)?,
+            LSub | DSub => self.binary_wide_math(frame, def_id, MathOperation::Subtract)?,
+            IMul | FMul => self.binary_op_math(frame, def_id, MathOperation::Multiply)?,
+            LMul | DMul => self.binary_wide_math(frame, def_id, MathOperation::Multiply)?,
+            IDiv | FDiv => self.binary_op_math(frame, def_id, MathOperation::Divide)?,
+            LDiv | DDiv => self.binary_wide_math(frame, def_id, MathOperation::Divide)?,
+            IRem | FRem => self.binary_op_math(frame, def_id, MathOperation::Remainder)?,
+            LRem | DRem => self.binary_wide_math(frame, def_id, MathOperation::Remainder)?,
             INeg | FNeg => {
                 let value = frame.pop_value()?;
-
                 frame.push_value(def_id.into())?;
+                let math_op = MathOperation::Negate(value);
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
+                    rhs: Expression::Math(math_op),
                 }
             }
             LNeg | DNeg => {
                 frame.pop_padding()?;
                 let value = frame.pop_value()?;
-
                 frame.push_value(def_id.into())?;
                 frame.push_padding()?;
+                let math_op = MathOperation::Negate(value);
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
+                    rhs: Expression::Math(math_op),
                 }
             }
-            IShl | LShl | IShr | LShr | IUShr | LUShr | IAnd | LAnd | IOr | LOr | IXor | LXor => {
-                let value1 = frame.pop_value()?;
-                let value2 = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value2, value1],
-                    },
-                }
-            }
+            IShl => self.binary_op_math(frame, def_id, MathOperation::ShiftLeft)?,
+            LShl => self.binary_wide_math(frame, def_id, MathOperation::ShiftLeft)?,
+            IShr => self.binary_op_math(frame, def_id, MathOperation::ShiftRight)?,
+            LShr => self.binary_wide_math(frame, def_id, MathOperation::ShiftRight)?,
+            IUShr => self.binary_op_math(frame, def_id, MathOperation::LogicalShiftRight)?,
+            LUShr => self.binary_wide_math(frame, def_id, MathOperation::LogicalShiftRight)?,
+            IAnd => self.binary_op_math(frame, def_id, MathOperation::BitwiseAnd)?,
+            LAnd => self.binary_wide_math(frame, def_id, MathOperation::BitwiseAnd)?,
+            IOr => self.binary_op_math(frame, def_id, MathOperation::BitwiseOr)?,
+            LOr => self.binary_wide_math(frame, def_id, MathOperation::BitwiseOr)?,
+            IXor => self.binary_op_math(frame, def_id, MathOperation::BitwiseXor)?,
+            LXor => self.binary_wide_math(frame, def_id, MathOperation::BitwiseXor)?,
             IInc(idx, _) => {
                 let base = frame.get_local(*idx)?;
-
                 frame.set_local(*idx, def_id.into())?;
+                let math_op = MathOperation::Increment(base);
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![base],
-                    },
+                    rhs: Expression::Math(math_op),
                 }
             }
             WideIInc(idx, _) => {
                 let base = frame.get_local(*idx)?;
-
                 frame.set_local(*idx, def_id.into())?;
+                let math_op = MathOperation::Increment(base);
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![base],
-                    },
+                    rhs: Expression::Math(math_op),
                 }
             }
             I2F | I2B | I2C | I2S | F2I => {
@@ -769,7 +737,7 @@ impl MokaIRGenerator {
                     .map(|_| frame.pop_value())
                     .collect::<Result<_, _>>()?;
                 frame.push_value(def_id.into())?;
-                let array_op = ArrayOperation::NewMD {
+                let array_op = ArrayOperation::NewMultiDim {
                     element_type: element_type.clone(),
                     dimensions: counts,
                 };
@@ -850,4 +818,75 @@ impl MokaIRGenerator {
 
         Ok(())
     }
+
+    fn binary_op_math<M>(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        math: M,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        M: FnOnce(ValueRef, ValueRef) -> MathOperation,
+    {
+        self.binary_op_assignment(frame, def_id, |lhs, rhs| Expression::Math(math(lhs, rhs)))
+    }
+    fn binary_wide_math<M>(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        math: M,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        M: FnOnce(ValueRef, ValueRef) -> MathOperation,
+    {
+        self.binary_wide_op_assignment(frame, def_id, |lhs, rhs| Expression::Math(math(lhs, rhs)))
+    }
+
+    fn binary_op_assignment<E>(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        expr: E,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        E: FnOnce(ValueRef, ValueRef) -> Expression,
+    {
+        let lhs = frame.pop_value()?;
+        let rhs = frame.pop_value()?;
+        frame.push_value(def_id.into())?;
+        Ok(IR::Assignment {
+            lhs: def_id,
+            rhs: expr(lhs, rhs),
+        })
+    }
+
+    fn binary_wide_op_assignment<E>(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        expr: E,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        E: FnOnce(ValueRef, ValueRef) -> Expression,
+    {
+        let lhs = {
+            frame.pop_padding()?;
+            frame.pop_value()?
+        };
+        let rhs = {
+            frame.pop_padding()?;
+            frame.pop_value()?
+        };
+        frame.push_value(def_id.into())?;
+        frame.push_padding()?;
+        Ok(IR::Assignment {
+            lhs: def_id,
+            rhs: expr(lhs, rhs),
+        })
+    }
+}
+
+enum IsWide {
+    Wide,
+    NotWide,
 }

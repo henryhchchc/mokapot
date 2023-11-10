@@ -1,4 +1,4 @@
-use std::{cmp::max, collections::HashSet, fmt::Display, iter::once};
+use std::{collections::HashSet, fmt::Display, iter::once};
 
 use crate::{
     analysis::jvm_fixed_point::FixedPointFact,
@@ -20,10 +20,7 @@ pub(super) struct StackFrame {
 impl StackFrame {
     pub(super) fn new(method: &Method) -> Self {
         let body = method.body.as_ref().expect("TODO");
-        let mut locals = Vec::with_capacity(body.max_locals as usize);
-        for _ in 0..body.max_locals {
-            locals.push(None);
-        }
+        let mut locals = vec![None; body.max_locals.into()];
         let mut local_idx = 0;
         if !method.access_flags.contains(MethodAccessFlags::STATIC) {
             locals[local_idx].replace(Identifier::This.into());
@@ -44,9 +41,10 @@ impl StackFrame {
 
     pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), MokaIRGenerationError> {
         if self.operand_stack.len() as u16 >= self.max_stack {
-            return Err(MokaIRGenerationError::StackOverflow);
+            Err(MokaIRGenerationError::StackOverflow)
+        } else {
+            Ok(self.operand_stack.push(value))
         }
-        Ok(self.operand_stack.push(value))
     }
 
     pub(super) fn pop_raw(&mut self) -> Result<FrameValue, MokaIRGenerationError> {
@@ -81,10 +79,7 @@ impl StackFrame {
         &self,
         idx: impl Into<usize>,
     ) -> Result<ValueRef, MokaIRGenerationError> {
-        let frame_value = self
-            .local_variables
-            .get(idx.into())
-            .expect("BUG: `local_variables` is not allocated correctly")
+        let frame_value = self.local_variables[idx.into()]
             .clone()
             .ok_or(MokaIRGenerationError::LocalUnset)?;
         match frame_value {
@@ -98,12 +93,9 @@ impl StackFrame {
         idx: impl Into<usize>,
         value: ValueRef,
     ) -> Result<(), MokaIRGenerationError> {
-        let idx = idx.into();
+        let idx: usize = idx.into();
         if idx <= self.max_locals as usize {
-            self.local_variables
-                .get_mut(idx)
-                .expect("BUG: `local_variables` is not allocated correctly")
-                .replace(FrameValue::ValueRef(value));
+            self.local_variables[idx].replace(FrameValue::ValueRef(value));
             Ok(())
         } else {
             Err(MokaIRGenerationError::LocalLimitExceed)
@@ -114,12 +106,9 @@ impl StackFrame {
         &mut self,
         idx: impl Into<usize>,
     ) -> Result<(), MokaIRGenerationError> {
-        let idx = idx.into();
+        let idx: usize = idx.into();
         if idx <= self.max_locals as usize {
-            self.local_variables
-                .get_mut(idx)
-                .expect("BUG: `local_variables` is not allocated correctly")
-                .replace(FrameValue::Padding);
+            self.local_variables[idx].replace(FrameValue::Padding);
             Ok(())
         } else {
             Err(MokaIRGenerationError::LocalLimitExceed)
@@ -153,16 +142,20 @@ impl FixedPointFact for StackFrame {
     type MergeError = MokaIRGenerationError;
 
     fn merge(&self, other: &Self) -> Result<Self, Self::MergeError> {
-        let max_locals = max(self.max_locals, other.max_locals);
-        let max_stack = max(self.max_stack, other.max_stack);
+        if self.max_locals != other.max_locals {
+            return Err(MokaIRGenerationError::LocalLimitMismatch);
+        }
+        if self.operand_stack.len() != other.operand_stack.len() {
+            return Err(MokaIRGenerationError::StackSizeMismatch);
+        }
         let reachable_subroutines = self
             .reachable_subroutines
             .clone()
             .into_iter()
             .chain(other.reachable_subroutines.clone())
             .collect();
-        let mut local_variables = Vec::with_capacity(max_locals as usize);
-        for i in 0..max_locals as usize {
+        let mut local_variables = Vec::with_capacity(self.max_locals as usize);
+        for i in 0..self.max_locals as usize {
             local_variables.insert(i, None);
             let self_loc = self.local_variables.get(i).cloned();
             let other_loc = other.local_variables.get(i).cloned();
@@ -173,22 +166,11 @@ impl FixedPointFact for StackFrame {
                     .expect("The local variable vec is not allocated correctly"),
             }
         }
-        let mut operand_stack = Vec::with_capacity(max_stack as usize);
-        for i in 0..max(self.operand_stack.len(), other.operand_stack.len()) as usize {
-            let self_loc = self.operand_stack.get(i).cloned();
-            let other_loc = other.operand_stack.get(i).cloned();
-            let stack_value = match (self_loc, other_loc) {
-                (Some(x), Some(y)) => FrameValue::merge(x, y)?,
-                (x, y) => x.or(y).expect("BUG: The stack is not allocated correctly"),
-            };
-            operand_stack.push(stack_value);
-        }
-
         Ok(Self {
-            max_locals,
-            max_stack,
+            max_locals: self.max_locals,
+            max_stack: self.max_stack,
             local_variables,
-            operand_stack,
+            operand_stack: self.operand_stack.clone(),
             reachable_subroutines,
         })
     }

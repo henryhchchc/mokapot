@@ -54,7 +54,7 @@ pub struct FieldReference {
 
 impl Display for FieldReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.class, self.name)
+        write!(f, "[{}].{}", self.class, self.name)
     }
 }
 
