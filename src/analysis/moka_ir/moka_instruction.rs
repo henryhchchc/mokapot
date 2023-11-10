@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::HashSet,
+    fmt::{Display, Formatter},
+};
 
 use itertools::Itertools;
 
@@ -43,18 +46,18 @@ pub enum MokaInstruction {
 }
 
 impl Display for MokaInstruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MokaInstruction::Nop => write!(f, "nop"),
-            MokaInstruction::Assignment { lhs, rhs } => write!(f, "{} = {}", lhs, rhs),
-            MokaInstruction::SideEffect { rhs: op } => write!(f, "{}", op),
-            MokaInstruction::Jump { target } => write!(f, "goto {}", target),
-            MokaInstruction::UnitaryConditionalJump {
+            Self::Nop => write!(f, "nop"),
+            Self::Assignment { lhs, rhs } => write!(f, "{} = {}", lhs, rhs),
+            Self::SideEffect { rhs: op } => write!(f, "{}", op),
+            Self::Jump { target } => write!(f, "goto {}", target),
+            Self::UnitaryConditionalJump {
                 condition,
                 target,
                 instruction,
             } => write!(f, "{}({}) goto {}", instruction.name(), condition, target),
-            MokaInstruction::BinaryConditionalJump {
+            Self::BinaryConditionalJump {
                 condition,
                 target,
                 instruction,
@@ -68,18 +71,18 @@ impl Display for MokaInstruction {
                     target
                 )
             }
-            MokaInstruction::Switch {
+            Self::Switch {
                 condition,
                 instruction,
             } => write!(f, "{}({})", instruction.name(), condition),
-            MokaInstruction::Return { value } => {
+            Self::Return { value } => {
                 if let Some(value) = value {
                     write!(f, "return {}", value)
                 } else {
                     write!(f, "return")
                 }
             }
-            MokaInstruction::SubRoutineRet { target } => write!(f, "ret {}", target),
+            Self::SubRoutineRet { target } => write!(f, "ret {}", target),
         }
     }
 }
@@ -91,10 +94,10 @@ pub enum ValueRef {
 }
 
 impl Display for ValueRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValueRef::Def(id) => write!(f, "{}", id),
-            ValueRef::Phi(ids) => {
+            Self::Def(id) => write!(f, "{}", id),
+            Self::Phi(ids) => {
                 write!(
                     f,
                     "Phi({})",
@@ -115,18 +118,19 @@ impl From<Identifier> for ValueRef {
 pub enum Expression {
     Const(ConstantValue),
     ReturnAddress(ProgramCounter),
-    Expr {
+    Insn {
         instruction: Instruction,
         arguments: Vec<ValueRef>,
     },
 }
+
 impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Expression::*;
         match self {
             Const(c) => write!(f, "{:?}", c),
             ReturnAddress(pc) => write!(f, "{:?}", pc),
-            Expr {
+            Insn {
                 instruction,
                 arguments,
             } => {
@@ -145,12 +149,12 @@ impl Display for Expression {
 pub enum Identifier {
     Val(u16),
     This,
-    Arg(u8),
+    Arg(u16),
     CaughtException,
 }
 
 impl Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Identifier::*;
         match self {
             Val(idx) => write!(f, "v{}", idx),

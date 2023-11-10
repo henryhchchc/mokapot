@@ -27,7 +27,7 @@ fn load_test_method() {
 #[test]
 fn analyze() {
     let method = get_test_method();
-    let ir = MokaIRGenerator::default().generate(&method).unwrap();
+    let ir = MokaIRGenerator::new().generate(&method).unwrap();
     for (pc, insn) in method.body.unwrap().instructions {
         let ir_insn = ir.get(&pc).unwrap();
         println!("{}: {:16} => {}", pc, insn.name(), ir_insn)

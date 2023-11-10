@@ -46,7 +46,7 @@ pub struct MethodParameter {
 
 bitflags! {
     /// Access flags for a [`Method`].
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct MethodAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
@@ -77,7 +77,7 @@ bitflags! {
 
 bitflags! {
     /// The access flags for a method parameter.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct MethodParameterAccessFlags: u16 {
         /// Declared `final`; may not be assigned to after initialization.
         const FINAL = 0x0010;

@@ -160,7 +160,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref],
                     },
@@ -174,7 +174,7 @@ impl MokaIRGenerator {
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref],
                     },
@@ -247,7 +247,7 @@ impl MokaIRGenerator {
 
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref, value],
                     },
@@ -261,7 +261,7 @@ impl MokaIRGenerator {
 
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![index, arrayref, value],
                     },
@@ -347,7 +347,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1],
                     },
@@ -363,7 +363,7 @@ impl MokaIRGenerator {
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1, value2_padding, value1_padding],
                     },
@@ -375,7 +375,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -389,7 +389,7 @@ impl MokaIRGenerator {
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -402,7 +402,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value2, value1],
                     },
@@ -414,7 +414,7 @@ impl MokaIRGenerator {
                 frame.set_local(*idx, def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![base],
                     },
@@ -426,7 +426,7 @@ impl MokaIRGenerator {
                 frame.set_local(*idx, def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![base],
                     },
@@ -438,7 +438,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -451,7 +451,7 @@ impl MokaIRGenerator {
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -464,7 +464,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -478,7 +478,7 @@ impl MokaIRGenerator {
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -493,7 +493,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value1, value2],
                     },
@@ -566,7 +566,7 @@ impl MokaIRGenerator {
                 }
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![],
                     },
@@ -584,7 +584,7 @@ impl MokaIRGenerator {
                 }
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![objectref],
                     },
@@ -599,7 +599,7 @@ impl MokaIRGenerator {
                 }
                 let value = frame.pop_value()?;
                 IR::SideEffect {
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![value],
                     },
@@ -615,7 +615,7 @@ impl MokaIRGenerator {
                 };
                 let objectref = frame.pop_value()?;
                 IR::SideEffect {
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![objectref, value],
                     },
@@ -631,7 +631,7 @@ impl MokaIRGenerator {
                 let objectref = frame.pop_value()?;
                 let arguments = once(objectref).chain(arguments.into_iter().rev()).collect();
 
-                let rhs = Expression::Expr {
+                let rhs = Expression::Insn {
                     instruction: insn.clone(),
                     arguments,
                 };
@@ -658,7 +658,7 @@ impl MokaIRGenerator {
                 let objectref = frame.pop_value()?;
                 let arguments = once(objectref).chain(arguments.into_iter().rev()).collect();
 
-                let rhs = Expression::Expr {
+                let rhs = Expression::Insn {
                     instruction: insn.clone(),
                     arguments,
                 };
@@ -685,7 +685,7 @@ impl MokaIRGenerator {
 
                 arguments.reverse();
 
-                let rhs = Expression::Expr {
+                let rhs = Expression::Insn {
                     instruction: insn.clone(),
                     arguments,
                 };
@@ -710,7 +710,7 @@ impl MokaIRGenerator {
                     .rev()
                     .collect::<Result<_, _>>()?;
 
-                let rhs = Expression::Expr {
+                let rhs = Expression::Insn {
                     instruction: insn.clone(),
                     arguments,
                 };
@@ -731,7 +731,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![],
                     },
@@ -743,7 +743,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![arrayref],
                     },
@@ -754,7 +754,7 @@ impl MokaIRGenerator {
 
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![exception_ref],
                     },
@@ -766,7 +766,7 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![objectref],
                     },
@@ -777,7 +777,7 @@ impl MokaIRGenerator {
 
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Expr {
+                    rhs: Expression::Insn {
                         instruction: insn.clone(),
                         arguments: vec![objectref],
                     },
