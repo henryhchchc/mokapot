@@ -12,7 +12,7 @@ use crate::{
     types::{FieldType, PrimitiveType},
 };
 
-use super::{MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
+use super::{ConversionOperation, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
@@ -401,58 +401,73 @@ impl MokaIRGenerator {
                     rhs: Expression::Math(math_op),
                 }
             }
-            I2F | I2B | I2C | I2S | F2I => {
-                let value = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
-                }
+            I2F => self.conversion_op::<_, false, false>(
+                frame,
+                def_id,
+                ConversionOperation::Int2Float,
+            )?,
+            I2L => {
+                self.conversion_op::<_, false, true>(frame, def_id, ConversionOperation::Int2Long)?
             }
-            I2L | I2D | F2L | F2D => {
-                let value = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
-                }
+            I2D => self.conversion_op::<_, false, true>(
+                frame,
+                def_id,
+                ConversionOperation::Int2Double,
+            )?,
+            L2I => {
+                self.conversion_op::<_, true, false>(frame, def_id, ConversionOperation::Long2Int)?
             }
-            L2I | L2F | D2I | D2F => {
-                let _padding = frame.pop_value()?;
-                let value = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
-                }
+            L2F => self.conversion_op::<_, true, false>(
+                frame,
+                def_id,
+                ConversionOperation::Long2Float,
+            )?,
+            L2D => self.conversion_op::<_, true, true>(
+                frame,
+                def_id,
+                ConversionOperation::Long2Double,
+            )?,
+            F2I => self.conversion_op::<_, false, false>(
+                frame,
+                def_id,
+                ConversionOperation::Float2Int,
+            )?,
+            F2L => self.conversion_op::<_, false, true>(
+                frame,
+                def_id,
+                ConversionOperation::Float2Long,
+            )?,
+            F2D => self.conversion_op::<_, false, true>(
+                frame,
+                def_id,
+                ConversionOperation::Float2Double,
+            )?,
+            D2I => self.conversion_op::<_, true, false>(
+                frame,
+                def_id,
+                ConversionOperation::Double2Int,
+            )?,
+            D2L => self.conversion_op::<_, true, true>(
+                frame,
+                def_id,
+                ConversionOperation::Double2Long,
+            )?,
+            D2F => self.conversion_op::<_, true, false>(
+                frame,
+                def_id,
+                ConversionOperation::Double2Float,
+            )?,
+            I2B => {
+                self.conversion_op::<_, false, false>(frame, def_id, ConversionOperation::Int2Byte)?
             }
-            L2D | D2L => {
-                let _value_padding = frame.pop_value()?;
-                let value = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
-                }
+            I2C => {
+                self.conversion_op::<_, false, false>(frame, def_id, ConversionOperation::Int2Char)?
             }
+            I2S => self.conversion_op::<_, false, false>(
+                frame,
+                def_id,
+                ConversionOperation::Int2Short,
+            )?,
             LCmp | FCmpL | FCmpG | DCmpL | DCmpG => {
                 frame.pop_padding()?;
                 let value1 = frame.pop_value()?;
@@ -766,17 +781,21 @@ impl MokaIRGenerator {
                     },
                 }
             }
-            CheckCast(_) | InstanceOf(_) => {
-                let object_ref = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![object_ref],
-                    },
-                }
+            CheckCast(TypeReference(target_type)) => {
+                self.conversion_op::<_, false, false>(frame, def_id, |value| {
+                    ConversionOperation::CheckCast {
+                        value,
+                        target_type: target_type.clone(),
+                    }
+                })?
+            }
+            InstanceOf(TypeReference(target_type)) => {
+                self.conversion_op::<_, false, false>(frame, def_id, |value| {
+                    ConversionOperation::InstanceOf {
+                        value,
+                        target_type: target_type.clone(),
+                    }
+                })?
             }
             MonitorEnter | MonitorExit => {
                 let object_ref = frame.pop_value()?;
@@ -817,6 +836,31 @@ impl MokaIRGenerator {
         self.ir_instructions.insert(pc, ir_instruction);
 
         Ok(())
+    }
+
+    fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        conversion: C,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        C: FnOnce(ValueRef) -> ConversionOperation,
+    {
+        let operand = {
+            if OPERAND_WIDE {
+                frame.pop_padding()?;
+            }
+            frame.pop_value()?
+        };
+        frame.push_value(def_id.into())?;
+        if RESULT_WIDE {
+            frame.push_padding()?;
+        }
+        Ok(IR::Assignment {
+            lhs: def_id,
+            rhs: Expression::Conversion(conversion(operand)),
+        })
     }
 
     fn binary_op_math<M>(

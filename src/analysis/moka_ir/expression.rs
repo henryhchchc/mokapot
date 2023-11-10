@@ -19,6 +19,7 @@ pub enum Expression {
     Math(MathOperation),
     Field(FieldAccess),
     Array(ArrayOperation),
+    Conversion(ConversionOperation),
     ReturnAddress(ProgramCounter),
     Insn {
         instruction: Instruction,
@@ -35,6 +36,7 @@ impl Display for Expression {
             Field(field_op) => field_op.fmt(f),
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),
+            Conversion(conv_op) => conv_op.fmt(f),
             Insn {
                 instruction,
                 arguments,
@@ -46,6 +48,56 @@ impl Display for Expression {
                     arguments.iter().map(|it| it.to_string()).join(", ")
                 )
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ConversionOperation {
+    Int2Long(ValueRef),
+    Int2Float(ValueRef),
+    Int2Double(ValueRef),
+    Long2Int(ValueRef),
+    Long2Float(ValueRef),
+    Long2Double(ValueRef),
+    Float2Int(ValueRef),
+    Float2Long(ValueRef),
+    Float2Double(ValueRef),
+    Double2Int(ValueRef),
+    Double2Long(ValueRef),
+    Double2Float(ValueRef),
+    Int2Byte(ValueRef),
+    Int2Char(ValueRef),
+    Int2Short(ValueRef),
+    CheckCast {
+        value: ValueRef,
+        target_type: FieldType,
+    },
+    InstanceOf {
+        value: ValueRef,
+        target_type: FieldType,
+    },
+}
+
+impl Display for ConversionOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use ConversionOperation::*;
+        match self {
+            Int2Long(a) => write!(f, "int2long({})", a),
+            Int2Float(a) => write!(f, "int2float({})", a),
+            Int2Double(a) => write!(f, "int2double({})", a),
+            Long2Int(a) => write!(f, "long2int({})", a),
+            Long2Float(a) => write!(f, "long2float({})", a),
+            Long2Double(a) => write!(f, "long2double({})", a),
+            Float2Int(a) => write!(f, "float2int({})", a),
+            Float2Long(a) => write!(f, "float2long({})", a),
+            Float2Double(a) => write!(f, "float2double({})", a),
+            Double2Int(a) => write!(f, "double2int({})", a),
+            Double2Long(a) => write!(f, "double2long({})", a),
+            Double2Float(a) => write!(f, "double2float({})", a),
+            Int2Byte(a) => write!(f, "int2byte({})", a),
+            Int2Char(a) => write!(f, "int2char({})", a),
+            Int2Short(a) => write!(f, "int2short({})", a),
         }
     }
 }
