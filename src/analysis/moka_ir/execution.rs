@@ -1,9 +1,12 @@
-use std::iter::once;
+use std::{f32::consts::E, iter::once};
 
 use crate::{
-    analysis::moka_ir::moka_instruction::{Expression, Identifier, MokaInstruction as IR},
+    analysis::moka_ir::{
+        moka_instruction::{Expression, Identifier, MokaInstruction as IR},
+        ArrayOperation, FieldAccess,
+    },
     elements::{
-        instruction::{Instruction, ProgramCounter},
+        instruction::{Instruction, ProgramCounter, TypeReference},
         ConstantValue, ReturnType,
     },
     types::{FieldType, PrimitiveType},
@@ -155,29 +158,25 @@ impl MokaIRGenerator {
             }
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
                 let index = frame.pop_value()?;
-                let arrayref = frame.pop_value()?;
+                let array_ref = frame.pop_value()?;
+                let array_op = ArrayOperation::Read { array_ref, index };
 
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref],
-                    },
+                    rhs: Expression::Array(array_op),
                 }
             }
             LALoad | DALoad => {
                 let index = frame.pop_value()?;
-                let arrayref = frame.pop_value()?;
+                let array_ref = frame.pop_value()?;
+                let array_op = ArrayOperation::Read { array_ref, index };
 
                 frame.push_value(def_id.into())?;
                 frame.push_padding()?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref],
-                    },
+                    rhs: Expression::Array(array_op),
                 }
             }
             IStore(idx) | FStore(idx) | AStore(idx) => {
@@ -243,28 +242,30 @@ impl MokaIRGenerator {
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
                 let value = frame.pop_value()?;
                 let index = frame.pop_value()?;
-                let arrayref = frame.pop_value()?;
+                let array_ref = frame.pop_value()?;
+                let array_op = ArrayOperation::Write {
+                    array_ref,
+                    index,
+                    value,
+                };
 
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref, value],
-                    },
+                IR::SideEffect {
+                    rhs: Expression::Array(array_op),
                 }
             }
             LAStore | DAStore => {
                 let _value_padding = frame.pop_value()?;
                 let value = frame.pop_value()?;
                 let index = frame.pop_value()?;
-                let arrayref = frame.pop_value()?;
-
+                let array_ref = frame.pop_value()?;
+                let array_op = ArrayOperation::Write {
+                    array_ref,
+                    index,
+                    value,
+                };
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![index, arrayref, value],
-                    },
+                    rhs: Expression::Array(array_op),
                 }
             }
             Pop => {
@@ -561,48 +562,44 @@ impl MokaIRGenerator {
             Return => IR::Return { value: None },
             GetStatic(field) => {
                 frame.push_value(def_id.into())?;
-                if matches!(field.field_type, LONG_TYPE | DOUBLE_TYPE) {
+                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
                     frame.push_padding()?;
                 }
+                let field_op = FieldAccess::ReadStatic {
+                    field: field.clone(),
+                };
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![],
-                    },
+                    rhs: Expression::Field(field_op),
                 }
             }
             GetField(field) => {
-                let objectref = frame.pop_value()?;
+                let object_ref = frame.pop_value()?;
 
                 frame.push_value(def_id.into())?;
-                match field.field_type {
-                    LONG_TYPE | DOUBLE_TYPE => {
-                        frame.push_padding()?;
-                    }
-                    _ => {}
+                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
+                    frame.push_padding()?;
                 }
+                let field_op = FieldAccess::ReadInstance {
+                    object_ref,
+                    field: field.clone(),
+                };
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![objectref],
-                    },
+                    rhs: Expression::Field(field_op),
                 }
             }
             PutStatic(field) => {
-                match field.field_type {
-                    LONG_TYPE | DOUBLE_TYPE => {
-                        frame.pop_value()?;
-                    }
-                    _ => {}
+                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
+                    frame.pop_value()?;
                 }
                 let value = frame.pop_value()?;
+                let field_op = FieldAccess::WriteStatic {
+                    field: field.clone(),
+                    value,
+                };
                 IR::SideEffect {
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value],
-                    },
+                    rhs: Expression::Field(field_op),
                 }
             }
             PutField(field) => {
@@ -613,12 +610,14 @@ impl MokaIRGenerator {
                     }
                     _ => frame.pop_value()?,
                 };
-                let objectref = frame.pop_value()?;
+                let object_ref = frame.pop_value()?;
+                let field_op = FieldAccess::WriteInstance {
+                    object_ref,
+                    field: field.clone(),
+                    value,
+                };
                 IR::SideEffect {
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![objectref, value],
-                    },
+                    rhs: Expression::Field(field_op),
                 }
             }
             InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
@@ -628,8 +627,10 @@ impl MokaIRGenerator {
                     .iter()
                     .map(|_| frame.pop_value())
                     .collect::<Result<_, _>>()?;
-                let objectref = frame.pop_value()?;
-                let arguments = once(objectref).chain(arguments.into_iter().rev()).collect();
+                let object_ref = frame.pop_value()?;
+                let arguments = once(object_ref)
+                    .chain(arguments.into_iter().rev())
+                    .collect();
 
                 let rhs = Expression::Insn {
                     instruction: insn.clone(),
@@ -655,8 +656,10 @@ impl MokaIRGenerator {
                     .iter()
                     .map(|_| frame.pop_value())
                     .collect::<Result<_, _>>()?;
-                let objectref = frame.pop_value()?;
-                let arguments = once(objectref).chain(arguments.into_iter().rev()).collect();
+                let object_ref = frame.pop_value()?;
+                let arguments = once(object_ref)
+                    .chain(arguments.into_iter().rev())
+                    .collect();
 
                 let rhs = Expression::Insn {
                     instruction: insn.clone(),
@@ -727,7 +730,7 @@ impl MokaIRGenerator {
                     }
                 }
             }
-            New(_) | NewArray(_) | ANewArray(_) | MultiANewArray(_, _) => {
+            New(_) => {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
@@ -737,16 +740,51 @@ impl MokaIRGenerator {
                     },
                 }
             }
-            ArrayLength => {
-                let arrayref = frame.pop_value()?;
-
+            ANewArray(class_ref) => {
+                let count = frame.pop_value()?;
                 frame.push_value(def_id.into())?;
+                let array_op = ArrayOperation::New {
+                    element_type: FieldType::Object(class_ref.clone()),
+                    length: count,
+                };
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![arrayref],
-                    },
+                    rhs: Expression::Array(array_op),
+                }
+            }
+            NewArray(prim_type) => {
+                let count = frame.pop_value()?;
+                frame.push_value(def_id.into())?;
+                let array_op = ArrayOperation::New {
+                    element_type: FieldType::Base(*prim_type),
+                    length: count,
+                };
+                IR::Assignment {
+                    lhs: def_id,
+                    rhs: Expression::Array(array_op),
+                }
+            }
+            MultiANewArray(TypeReference(element_type), dimension) => {
+                let counts: Vec<_> = (0..*dimension)
+                    .map(|_| frame.pop_value())
+                    .collect::<Result<_, _>>()?;
+                frame.push_value(def_id.into())?;
+                let array_op = ArrayOperation::NewMD {
+                    element_type: element_type.clone(),
+                    dimensions: counts,
+                };
+                IR::Assignment {
+                    lhs: def_id,
+                    rhs: Expression::Array(array_op),
+                }
+            }
+            ArrayLength => {
+                let array_ref = frame.pop_value()?;
+                frame.push_value(def_id.into())?;
+                let array_op = ArrayOperation::Length { array_ref };
+                IR::Assignment {
+                    lhs: def_id,
+                    rhs: Expression::Array(array_op),
                 }
             }
             AThrow => {
@@ -761,25 +799,25 @@ impl MokaIRGenerator {
                 }
             }
             CheckCast(_) | InstanceOf(_) => {
-                let objectref = frame.pop_value()?;
+                let object_ref = frame.pop_value()?;
 
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
                     rhs: Expression::Insn {
                         instruction: insn.clone(),
-                        arguments: vec![objectref],
+                        arguments: vec![object_ref],
                     },
                 }
             }
             MonitorEnter | MonitorExit => {
-                let objectref = frame.pop_value()?;
+                let object_ref = frame.pop_value()?;
 
                 IR::Assignment {
                     lhs: def_id,
                     rhs: Expression::Insn {
                         instruction: insn.clone(),
-                        arguments: vec![objectref],
+                        arguments: vec![object_ref],
                     },
                 }
             }

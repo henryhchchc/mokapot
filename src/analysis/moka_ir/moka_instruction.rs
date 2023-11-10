@@ -5,9 +5,13 @@ use std::{
 
 use itertools::Itertools;
 
-use crate::elements::{
-    instruction::{Instruction, ProgramCounter},
-    ConstantValue,
+use crate::{
+    elements::{
+        instruction::{Instruction, ProgramCounter},
+        references::FieldReference,
+        ConstantValue,
+    },
+    types::FieldType,
 };
 
 #[derive(Debug)]
@@ -118,6 +122,8 @@ impl From<Identifier> for ValueRef {
 pub enum Expression {
     Const(ConstantValue),
     ReturnAddress(ProgramCounter),
+    Field(FieldAccess),
+    Array(ArrayOperation),
     Insn {
         instruction: Instruction,
         arguments: Vec<ValueRef>,
@@ -130,6 +136,8 @@ impl Display for Expression {
         match self {
             Const(c) => write!(f, "{:?}", c),
             ReturnAddress(pc) => write!(f, "{:?}", pc),
+            Field(field_op) => field_op.fmt(f),
+            Array(array_op) => array_op.fmt(f),
             Insn {
                 instruction,
                 arguments,
@@ -141,6 +149,96 @@ impl Display for Expression {
                     arguments.iter().map(|it| it.to_string()).join(", ")
                 )
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ArrayOperation {
+    New {
+        element_type: FieldType,
+        length: ValueRef,
+    },
+    NewMD {
+        element_type: FieldType,
+        dimensions: Vec<ValueRef>,
+    },
+    Read {
+        array_ref: ValueRef,
+        index: ValueRef,
+    },
+    Write {
+        array_ref: ValueRef,
+        index: ValueRef,
+        value: ValueRef,
+    },
+    Length {
+        array_ref: ValueRef,
+    },
+}
+
+impl Display for ArrayOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use ArrayOperation::*;
+        match self {
+            New {
+                element_type,
+                length,
+            } => write!(f, "new {}[{}]", element_type.descriptor_string(), length),
+            NewMD {
+                element_type,
+                dimensions,
+            } => {
+                write!(
+                    f,
+                    "new {}[{}]",
+                    element_type.descriptor_string(),
+                    dimensions.iter().map(|it| it.to_string()).join(", ")
+                )
+            }
+            Read { array_ref, index } => write!(f, "{}[{}]", array_ref, index),
+            Write {
+                array_ref,
+                index,
+                value,
+            } => write!(f, "{}[{}] = {}", array_ref, index, value),
+            Length { array_ref } => write!(f, "array_len({})", array_ref),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FieldAccess {
+    ReadStatic {
+        field: FieldReference,
+    },
+    WriteStatic {
+        field: FieldReference,
+        value: ValueRef,
+    },
+    ReadInstance {
+        object_ref: ValueRef,
+        field: FieldReference,
+    },
+    WriteInstance {
+        object_ref: ValueRef,
+        field: FieldReference,
+        value: ValueRef,
+    },
+}
+
+impl Display for FieldAccess {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use FieldAccess::*;
+        match self {
+            ReadStatic { field } => write!(f, "{}", field),
+            WriteStatic { field, value } => write!(f, "{} = {}", field, value),
+            ReadInstance { object_ref, field } => write!(f, "{}.{}", object_ref, field),
+            WriteInstance {
+                object_ref,
+                field,
+                value,
+            } => write!(f, "{}.{} = {}", object_ref, field, value),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::elements::{Class, Method};
 
-use super::MokaIRGenerator;
+use super::MokaIRMethodExt;
 
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
@@ -27,9 +27,9 @@ fn load_test_method() {
 #[test]
 fn analyze() {
     let method = get_test_method();
-    let ir = MokaIRGenerator::new().generate(&method).unwrap();
+    let ir = method.generate_moka_ir().unwrap();
     for (pc, insn) in method.body.unwrap().instructions {
-        let ir_insn = ir.get(&pc).unwrap();
+        let ir_insn = ir.instructions.get(&pc).unwrap();
         println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
     }
 }

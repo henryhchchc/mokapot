@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::types::FieldType;
 
 use super::MethodDescriptor;
@@ -32,6 +34,12 @@ impl ClassReference {
     }
 }
 
+impl Display for ClassReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.binary_name)
+    }
+}
+
 /// A reference to a field.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FieldReference {
@@ -42,6 +50,12 @@ pub struct FieldReference {
 
     /// The type of the field.
     pub field_type: FieldType,
+}
+
+impl Display for FieldReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.class, self.name)
+    }
 }
 
 /// A reference to an interface method.

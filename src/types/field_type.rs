@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::{elements::references::ClassReference, errors::InvalidDescriptor};
 
 /// A primitive type in Java.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum PrimitiveType {
     /// The `boolean` type.
     Boolean,
