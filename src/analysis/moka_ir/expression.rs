@@ -98,6 +98,20 @@ impl Display for ConversionOperation {
             Int2Byte(a) => write!(f, "int2byte({})", a),
             Int2Char(a) => write!(f, "int2char({})", a),
             Int2Short(a) => write!(f, "int2short({})", a),
+            CheckCast { value, target_type } => write!(
+                f,
+                "check_cast({}, {})",
+                value,
+                target_type.descriptor_string()
+            ),
+            InstanceOf { value, target_type } => {
+                write!(
+                    f,
+                    "instance_of({}, {})",
+                    value,
+                    target_type.descriptor_string()
+                )
+            }
         }
     }
 }
