@@ -14,27 +14,27 @@ use super::{Condition, Expression};
 pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,
-    /// Assigns [`rhs`] to [`lhs`].
+    /// Assigns [`rhs`](MokaInstruction::Assignment::rhs) to [`lhs`](MokaInstruction::Assignment::lhs).
     Assignment { lhs: Identifier, rhs: Expression },
-    /// Evaluates [`rhs`] for its side effects.
+    /// Evaluates [`rhs`](MokaInstruction::SideEffect::rhs) for its side effects.
     SideEffect { rhs: Expression },
-    /// Jumps to [`target`] if [`condition`] holds.
-    /// Uncoditional jumps to [`target`] if [`condition`] is `None`.
+    /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
+    /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
         condition: Option<Condition>,
         target: ProgramCounter,
     },
-    /// Jumps to a branch based on the value of [`match_value`].
-    /// If no branch matches, jumps to [`default`].
+    /// Jump to the [`target`](MokaInstruction::Switch::default) corresponding to [`match_value`](MokaInstruction::Switch::match_value).
+    /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
     Switch {
         match_value: ValueRef,
         default: ProgramCounter,
         branches: Vec<(i32, ProgramCounter)>,
     },
-    /// Returns [`value`].
-    /// If [`value`] is `None`, returns `void`.
+    /// Returns from the current method with [`value`](MokaInstruction::Return::value) if [`value`](MokaInstruction::Return::value) is [`Some`].
+    /// Otherwise, returns from the current method with `void`.
     Return { value: Option<ValueRef> },
-    /// Returns from a subroutine jumpping from [`target`].
+    /// Returns from a subroutine jumpping from [`source`](MokaInstruction::SubRoutineRet::source)
     SubRoutineRet { source: ValueRef },
 }
 
