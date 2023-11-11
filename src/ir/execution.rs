@@ -6,16 +6,13 @@ use crate::{
         references::MethodReference,
         ConstantValue, ReturnType,
     },
-    ir::{
-        moka_instruction::{Identifier, MokaInstruction as IR},
-        ArrayOperation, Expression, FieldAccess, LockOperation, MathOperation, NaNTreatment,
-    },
+    ir::moka_instruction::{Identifier, MokaInstruction as IR},
     types::{FieldType, PrimitiveType},
 };
 
-use super::{
-    Condition, ConversionOperation, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef,
-};
+use super::expressions::*;
+use super::Expression;
+use super::{Condition, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);

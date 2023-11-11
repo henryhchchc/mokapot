@@ -6,6 +6,7 @@ use crate::elements::{
 };
 mod execution;
 mod expression;
+pub mod expressions;
 mod moka_instruction;
 mod stack_frame;
 
