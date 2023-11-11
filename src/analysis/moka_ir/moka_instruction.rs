@@ -5,7 +5,7 @@ use std::{
 
 use itertools::Itertools;
 
-use crate::elements::instruction::{Instruction, ProgramCounter};
+use crate::elements::instruction::ProgramCounter;
 
 use super::{Condition, Expression};
 
@@ -25,7 +25,8 @@ pub enum MokaInstruction {
     },
     Switch {
         match_value: ValueRef,
-        instruction: Instruction,
+        default: ProgramCounter,
+        branches: Vec<(i32, ProgramCounter)>,
     },
     Return {
         value: Option<ValueRef>,
@@ -54,9 +55,21 @@ impl Display for MokaInstruction {
                 write!(f, "goto {}", target)
             }
             Self::Switch {
-                match_value: condition,
-                instruction,
-            } => write!(f, "{}({})", instruction.name(), condition),
+                match_value,
+                default,
+                branches,
+            } => {
+                write!(
+                    f,
+                    "switch {} {{ {}, else => {} }}",
+                    match_value,
+                    default,
+                    branches
+                        .iter()
+                        .map(|(key, target)| format!("{} => {}", key, target))
+                        .join(", ")
+                )
+            }
             Self::Return { value } => {
                 if let Some(value) = value {
                     write!(f, "return {}", value)

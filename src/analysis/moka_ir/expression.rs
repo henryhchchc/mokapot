@@ -4,8 +4,8 @@ use itertools::Itertools;
 
 use crate::{
     elements::{
-        instruction::{Instruction, ProgramCounter},
-        method::{self, MethodDescriptor},
+        instruction::ProgramCounter,
+        method::MethodDescriptor,
         references::{ClassReference, FieldReference, MethodReference},
         ConstantValue,
     },
@@ -24,7 +24,7 @@ pub enum Expression {
     Array(ArrayOperation),
     Conversion(ConversionOperation),
     Throw(ValueRef),
-    Monitor(MonitorOperation),
+    Synchronization(LockOperation),
     New(ClassReference),
     ReturnAddress(ProgramCounter),
 }
@@ -39,7 +39,7 @@ impl Display for Expression {
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),
             Throw(value) => write!(f, "throw {}", value),
-            Monitor(monitor_op) => monitor_op.fmt(f),
+            Synchronization(monitor_op) => monitor_op.fmt(f),
             New(class) => write!(f, "new {}", class),
             Conversion(conv_op) => conv_op.fmt(f),
             Call(method, args) => write!(
@@ -102,17 +102,17 @@ impl Display for Condition {
 }
 
 #[derive(Debug)]
-pub enum MonitorOperation {
-    Enter(ValueRef),
-    Exit(ValueRef),
+pub enum LockOperation {
+    Acquire(ValueRef),
+    Release(ValueRef),
 }
 
-impl Display for MonitorOperation {
+impl Display for LockOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use MonitorOperation::*;
+        use LockOperation::*;
         match self {
-            Enter(value) => write!(f, "monitor_enter({})", value),
-            Exit(value) => write!(f, "monitor_exit({})", value),
+            Acquire(lock) => write!(f, "acquire {}", lock),
+            Release(lock) => write!(f, "release {}", lock),
         }
     }
 }
@@ -134,48 +134,34 @@ pub enum ConversionOperation {
     Int2Byte(ValueRef),
     Int2Char(ValueRef),
     Int2Short(ValueRef),
-    CheckCast {
-        value: ValueRef,
-        target_type: FieldType,
-    },
-    InstanceOf {
-        value: ValueRef,
-        target_type: FieldType,
-    },
+    CheckCast(ValueRef, FieldType),
+    InstanceOf(ValueRef, FieldType),
 }
 
 impl Display for ConversionOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use ConversionOperation::*;
         match self {
-            Int2Long(a) => write!(f, "int2long({})", a),
-            Int2Float(a) => write!(f, "int2float({})", a),
-            Int2Double(a) => write!(f, "int2double({})", a),
-            Long2Int(a) => write!(f, "long2int({})", a),
-            Long2Float(a) => write!(f, "long2float({})", a),
-            Long2Double(a) => write!(f, "long2double({})", a),
-            Float2Int(a) => write!(f, "float2int({})", a),
-            Float2Long(a) => write!(f, "float2long({})", a),
-            Float2Double(a) => write!(f, "float2double({})", a),
-            Double2Int(a) => write!(f, "double2int({})", a),
-            Double2Long(a) => write!(f, "double2long({})", a),
-            Double2Float(a) => write!(f, "double2float({})", a),
-            Int2Byte(a) => write!(f, "int2byte({})", a),
-            Int2Char(a) => write!(f, "int2char({})", a),
-            Int2Short(a) => write!(f, "int2short({})", a),
-            CheckCast { value, target_type } => write!(
-                f,
-                "check_cast({}, {})",
-                value,
-                target_type.descriptor_string()
-            ),
-            InstanceOf { value, target_type } => {
-                write!(
-                    f,
-                    "instance_of({}, {})",
-                    value,
-                    target_type.descriptor_string()
-                )
+            Int2Long(operand) => write!(f, "int2long({})", operand),
+            Int2Float(operand) => write!(f, "int2float({})", operand),
+            Int2Double(operand) => write!(f, "int2double({})", operand),
+            Long2Int(operand) => write!(f, "long2int({})", operand),
+            Long2Float(operand) => write!(f, "long2float({})", operand),
+            Long2Double(operand) => write!(f, "long2double({})", operand),
+            Float2Int(operand) => write!(f, "float2int({})", operand),
+            Float2Long(operand) => write!(f, "float2long({})", operand),
+            Float2Double(operand) => write!(f, "float2double({})", operand),
+            Double2Int(operand) => write!(f, "double2int({})", operand),
+            Double2Long(operand) => write!(f, "double2long({})", operand),
+            Double2Float(operand) => write!(f, "double2float({})", operand),
+            Int2Byte(operand) => write!(f, "int2byte({})", operand),
+            Int2Char(operand) => write!(f, "int2char({})", operand),
+            Int2Short(operand) => write!(f, "int2short({})", operand),
+            CheckCast(operand, target_type) => {
+                write!(f, "{} as {}", operand, target_type.descriptor_string())
+            }
+            InstanceOf(operand, target_type) => {
+                write!(f, "{} is {}", operand, target_type.descriptor_string())
             }
         }
     }

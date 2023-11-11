@@ -352,14 +352,14 @@ impl Instruction {
                 let default = read_offset32(reader, &pc)?;
                 let low = read_i32(reader)?;
                 let high = read_i32(reader)?;
+                let range = low..=high;
                 let offset_count = high - low + 1;
                 let jump_targets = (0..offset_count)
                     .map(|_| read_offset32(reader, &pc))
                     .collect::<Result<Vec<_>, _>>()?;
                 TableSwitch {
                     default,
-                    low,
-                    high,
+                    range,
                     jump_targets,
                 }
             }

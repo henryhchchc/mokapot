@@ -3,7 +3,7 @@ use std::iter::once;
 use crate::{
     analysis::moka_ir::{
         moka_instruction::{Identifier, MokaInstruction as IR},
-        ArrayOperation, Expression, FieldAccess, MathOperation, MonitorOperation, NaNTreatment,
+        ArrayOperation, Expression, FieldAccess, LockOperation, MathOperation, NaNTreatment,
     },
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
@@ -33,132 +33,46 @@ impl MokaIRGenerator {
         let def_id = Identifier::Val(pc.into());
         let ir_instruction = match insn {
             Nop => IR::Nop,
-            AConstNull => {
-                let constant = ConstantValue::Null;
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
-            }
-            IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
-                let constant = ConstantValue::Integer((insn.opcode() as i32) - 3);
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
-            }
-            LConst0 | LConst1 => {
-                let constant = ConstantValue::Long((insn.opcode() as i64) - 9);
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
-            }
-            FConst0 | FConst1 | FConst2 => {
-                frame.push_value(def_id.into())?;
-                let constant = ConstantValue::Float((insn.opcode() as f32) - 11.0);
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
-            }
-            DConst0 | DConst1 => {
-                frame.push_value(def_id.into())?;
-                let constant = ConstantValue::Double((insn.opcode() as f64) - 14.0);
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
-            }
+            AConstNull => self.const_assignment(frame, def_id, ConstantValue::Null)?,
+            IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => self
+                .const_assignment(
+                    frame,
+                    def_id,
+                    ConstantValue::Integer((insn.opcode() as i32) - 3),
+                )?,
+            LConst0 | LConst1 => self.wide_const_assignment(
+                frame,
+                def_id,
+                ConstantValue::Long((insn.opcode() as i64) - 9),
+            )?,
+            FConst0 | FConst1 | FConst2 => self.const_assignment(
+                frame,
+                def_id,
+                ConstantValue::Float((insn.opcode() as f32) - 11.0),
+            )?,
+            DConst0 | DConst1 => self.wide_const_assignment(
+                frame,
+                def_id,
+                ConstantValue::Double((insn.opcode() as f64) - 14.0),
+            )?,
             BiPush(value) => {
-                frame.push_value(def_id.into())?;
-                let constant = ConstantValue::Integer(*value as i32);
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(constant),
-                }
+                self.const_assignment(frame, def_id, ConstantValue::Integer(*value as i32))?
             }
             SiPush(value) => {
-                let value = *value as i32;
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(ConstantValue::Integer(value)),
-                }
+                self.const_assignment(frame, def_id, ConstantValue::Integer(*value as i32))?
             }
-            Ldc(value) | LdcW(value) => {
-                frame.push_value(def_id.into())?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(value.clone()),
-                }
-            }
-            Ldc2W(value) => {
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Const(value.clone()),
-                }
-            }
-            ILoad(idx) | FLoad(idx) | ALoad(idx) => {
-                let value = frame.get_local(*idx)?;
-                frame.push_value(value)?;
-                IR::Nop
-            }
-            LLoad(idx) | DLoad(idx) => {
-                let value = frame.get_local(*idx)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
-                IR::Nop
-            }
-            ILoad0 | FLoad0 | ALoad0 => {
-                let value = frame.get_local(0usize)?;
-                frame.push_value(value)?;
-                IR::Nop
-            }
-            ILoad1 | FLoad1 | ALoad1 => {
-                let value = frame.get_local(1usize)?;
-                frame.push_value(value)?;
-                IR::Nop
-            }
-            ILoad2 | FLoad2 | ALoad2 => {
-                let value = frame.get_local(2usize)?;
-                frame.push_value(value)?;
-                IR::Nop
-            }
-            ILoad3 | FLoad3 | ALoad3 => {
-                let value = frame.get_local(3usize)?;
-                frame.push_value(value)?;
-                IR::Nop
-            }
-            LLoad0 | DLoad0 => {
-                let value = frame.get_local(0usize)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
-                IR::Nop
-            }
-            LLoad1 | DLoad1 => {
-                let value = frame.get_local(1usize)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
-                IR::Nop
-            }
-            LLoad2 | DLoad2 => {
-                let value = frame.get_local(2usize)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
-                IR::Nop
-            }
-            LLoad3 | DLoad3 => {
-                let value = frame.get_local(3usize)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
-                IR::Nop
-            }
+            Ldc(value) | LdcW(value) => self.const_assignment(frame, def_id, value.clone())?,
+            Ldc2W(value) => self.wide_const_assignment(frame, def_id, value.clone())?,
+            ILoad(idx) | FLoad(idx) | ALoad(idx) => self.load_local(frame, *idx as u16)?,
+            LLoad(idx) | DLoad(idx) => self.load_wide_local(frame, *idx as u16)?,
+            ILoad0 | FLoad0 | ALoad0 => self.load_local(frame, 0)?,
+            ILoad1 | FLoad1 | ALoad1 => self.load_local(frame, 1)?,
+            ILoad2 | FLoad2 | ALoad2 => self.load_local(frame, 2)?,
+            ILoad3 | FLoad3 | ALoad3 => self.load_local(frame, 3)?,
+            LLoad0 | DLoad0 => self.load_wide_local(frame, 0)?,
+            LLoad1 | DLoad1 => self.load_wide_local(frame, 1)?,
+            LLoad2 | DLoad2 => self.load_wide_local(frame, 2)?,
+            LLoad3 | DLoad3 => self.load_wide_local(frame, 3)?,
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
                 let index = frame.pop_value()?;
                 let array_ref = frame.pop_value()?;
@@ -182,66 +96,16 @@ impl MokaIRGenerator {
                     rhs: Expression::Array(array_op),
                 }
             }
-            IStore(idx) | FStore(idx) | AStore(idx) => {
-                let value = frame.pop_value()?;
-                frame.set_local(*idx, value)?;
-                IR::Nop
-            }
-            LStore(idx) | DStore(idx) => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(*idx, value)?;
-                frame.set_local_padding(*idx + 1)?;
-                IR::Nop
-            }
-            IStore0 | FStore0 | AStore0 => {
-                let value = frame.pop_value()?;
-                frame.set_local(0usize, value)?;
-                IR::Nop
-            }
-            IStore1 | FStore1 | AStore1 => {
-                let value = frame.pop_value()?;
-                frame.set_local(1usize, value)?;
-                IR::Nop
-            }
-            IStore2 | FStore2 | AStore2 => {
-                let value = frame.pop_value()?;
-                frame.set_local(2usize, value)?;
-                IR::Nop
-            }
-            IStore3 | FStore3 | AStore3 => {
-                let value = frame.pop_value()?;
-                frame.set_local(3usize, value)?;
-                IR::Nop
-            }
-            LStore0 | DStore0 => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(0usize, value)?;
-                frame.set_local_padding(1usize)?;
-                IR::Nop
-            }
-            LStore1 | DStore1 => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(1usize, value)?;
-                frame.set_local_padding(2usize)?;
-                IR::Nop
-            }
-            LStore2 | DStore2 => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(2usize, value)?;
-                frame.set_local_padding(2usize)?;
-                IR::Nop
-            }
-            LStore3 | DStore3 => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(3usize, value)?;
-                frame.set_local_padding(4usize)?;
-                IR::Nop
-            }
+            IStore(idx) | FStore(idx) | AStore(idx) => self.store_local(frame, *idx as u16)?,
+            LStore(idx) | DStore(idx) => self.store_wide_local(frame, *idx as u16)?,
+            IStore0 | FStore0 | AStore0 => self.store_local(frame, 0)?,
+            IStore1 | FStore1 | AStore1 => self.store_local(frame, 1)?,
+            IStore2 | FStore2 | AStore2 => self.store_local(frame, 2)?,
+            IStore3 | FStore3 | AStore3 => self.store_local(frame, 3)?,
+            LStore0 | DStore0 => self.store_wide_local(frame, 0)?,
+            LStore1 | DStore1 => self.store_wide_local(frame, 1)?,
+            LStore2 | DStore2 => self.store_wide_local(frame, 2)?,
+            LStore3 | DStore3 => self.store_wide_local(frame, 3)?,
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
                 let value = frame.pop_value()?;
                 let index = frame.pop_value()?;
@@ -364,11 +228,13 @@ impl MokaIRGenerator {
                 }
             }
             LNeg | DNeg => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
+                let operand = {
+                    frame.pop_padding()?;
+                    frame.pop_value()?
+                };
                 frame.push_value(def_id.into())?;
                 frame.push_padding()?;
-                let math_op = MathOperation::Negate(value);
+                let math_op = MathOperation::Negate(operand);
                 IR::Assignment {
                     lhs: def_id,
                     rhs: Expression::Math(math_op),
@@ -564,11 +430,28 @@ impl MokaIRGenerator {
                     target: return_address,
                 }
             }
-            TableSwitch { .. } | LookupSwitch { .. } => {
+            TableSwitch {
+                range,
+                jump_targets,
+                default,
+            } => {
+                let condition = frame.pop_value()?;
+                let branches = range.clone().zip(jump_targets.clone()).collect();
+                IR::Switch {
+                    match_value: condition,
+                    default: *default,
+                    branches,
+                }
+            }
+            LookupSwitch {
+                default,
+                match_targets,
+            } => {
                 let condition = frame.pop_value()?;
                 IR::Switch {
                     match_value: condition,
-                    instruction: insn.clone(),
+                    default: *default,
+                    branches: match_targets.clone(),
                 }
             }
             IReturn | FReturn | AReturn => {
@@ -814,32 +697,26 @@ impl MokaIRGenerator {
             }
             CheckCast(TypeReference(target_type)) => {
                 self.conversion_op::<_, false, false>(frame, def_id, |value| {
-                    ConversionOperation::CheckCast {
-                        value,
-                        target_type: target_type.clone(),
-                    }
+                    ConversionOperation::CheckCast(value, target_type.clone())
                 })?
             }
             InstanceOf(TypeReference(target_type)) => {
                 self.conversion_op::<_, false, false>(frame, def_id, |value| {
-                    ConversionOperation::InstanceOf {
-                        value,
-                        target_type: target_type.clone(),
-                    }
+                    ConversionOperation::InstanceOf(value, target_type.clone())
                 })?
             }
             MonitorEnter => {
                 let object_ref = frame.pop_value()?;
-                let monitor_op = MonitorOperation::Enter(object_ref);
+                let monitor_op = LockOperation::Acquire(object_ref);
                 IR::SideEffect {
-                    rhs: Expression::Monitor(monitor_op),
+                    rhs: Expression::Synchronization(monitor_op),
                 }
             }
             MonitorExit => {
                 let object_ref = frame.pop_value()?;
-                let monitor_op = MonitorOperation::Exit(object_ref);
+                let monitor_op = LockOperation::Release(object_ref);
                 IR::SideEffect {
-                    rhs: Expression::Monitor(monitor_op),
+                    rhs: Expression::Synchronization(monitor_op),
                 }
             }
             WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
@@ -870,6 +747,78 @@ impl MokaIRGenerator {
         self.ir_instructions.insert(pc, ir_instruction);
 
         Ok(())
+    }
+
+    fn store_wide_local(
+        &mut self,
+        frame: &mut StackFrame,
+        idx: u16,
+    ) -> Result<IR, MokaIRGenerationError> {
+        let value = {
+            frame.pop_padding()?;
+            frame.pop_value()?
+        };
+        frame.set_local(idx, value)?;
+        frame.set_local_padding(idx + 1)?;
+        Ok(IR::Nop)
+    }
+
+    fn store_local(
+        &mut self,
+        frame: &mut StackFrame,
+        idx: u16,
+    ) -> Result<IR, MokaIRGenerationError> {
+        let value = frame.pop_value()?;
+        frame.set_local(idx, value)?;
+        Ok(IR::Nop)
+    }
+
+    fn load_wide_local(
+        &mut self,
+        frame: &mut StackFrame,
+        idx: u16,
+    ) -> Result<IR, MokaIRGenerationError> {
+        let value = frame.get_local(idx)?;
+        frame.push_value(value)?;
+        frame.push_padding()?;
+        Ok(IR::Nop)
+    }
+
+    fn load_local(
+        &mut self,
+        frame: &mut StackFrame,
+        idx: u16,
+    ) -> Result<IR, MokaIRGenerationError> {
+        let value = frame.get_local(idx)?;
+        frame.push_value(value)?;
+        Ok(IR::Nop)
+    }
+
+    fn const_assignment(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        constant: ConstantValue,
+    ) -> Result<IR, MokaIRGenerationError> {
+        frame.push_value(def_id.into())?;
+        Ok(IR::Assignment {
+            lhs: def_id,
+            rhs: Expression::Const(constant),
+        })
+    }
+
+    fn wide_const_assignment(
+        &mut self,
+        frame: &mut StackFrame,
+        def_id: Identifier,
+        constant: ConstantValue,
+    ) -> Result<IR, MokaIRGenerationError> {
+        frame.push_value(def_id.into())?;
+        frame.push_padding()?;
+        Ok(IR::Assignment {
+            lhs: def_id,
+            rhs: Expression::Const(constant),
+        })
     }
 
     fn unitary_conditional_jump<C>(

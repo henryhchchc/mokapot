@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use crate::{
     elements::{
         field::ConstantValue,
@@ -197,10 +199,9 @@ pub enum Instruction {
     Jsr(ProgramCounter),
     Ret(u8),
     TableSwitch {
-        default: ProgramCounter,
-        low: i32,
-        high: i32,
+        range: RangeInclusive<i32>,
         jump_targets: Vec<ProgramCounter>,
+        default: ProgramCounter,
     },
     LookupSwitch {
         default: ProgramCounter,
