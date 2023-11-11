@@ -7,19 +7,26 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
 jobs:
   publish_to_crate_io:
     name: Publish to crate.io
     runs-on: ubuntu-latest
     steps:
+      - run: rustup update && rustup default
+        name: Update Rust
       - uses: actions/setup-java@v3
+        name: Setup JDK
         with:
           java-version: 21
           distribution: corretto
       - uses: actions/checkout@v3
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+        name: Checkout source code
       - run: cargo build --all-features --verbose
+        name: Build
       - run: cargo test --all-features --verbose
+        name: Test
       - run: cargo publish --all-features --verbose
+        name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

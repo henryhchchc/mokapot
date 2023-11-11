@@ -29,25 +29,36 @@ jobs:
           - beta
           - nightly
     steps:
+      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+        name: Setup Rust
       - uses: actions/setup-java@v3
+        name: Setup JDK
         with:
           java-version: 21
           distribution: corretto
       - uses: actions/checkout@v3
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+        name: Checkout source code
       - run: cargo build --all-features --verbose
+        name: Build
       - run: cargo test --all-features --verbose
+        name: Test
+          
+  publish_latest_docs:
+    name: MokaPot - docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: Checkout source code
       - run: cargo doc --all-features --no-deps --verbose
-        if: ${{ matrix.toolchain == 'stable' }}
-      - name: Fix permissions
-        if: ${{ matrix.toolchain == 'stable' }}
+        name: Build docs
+      - name: Fix file permissions
         run: |
           chmod -v -R +rX "target/doc/" | while read line; do
             echo "::warning title=Invalid file permissions automatically fixed::$line"
           done
       - uses: actions/upload-pages-artifact@v2
-        if: ${{ matrix.toolchain == 'stable' }}
+        name: Upload docs as github pages artifact
         with:
           path: target/doc
       - uses: actions/deploy-pages@v2
-        if: ${{ matrix.toolchain == 'stable' }}
+        name: Deploy docs to github pages
