@@ -1,14 +1,14 @@
 use std::iter::once;
 
 use crate::{
-    analysis::moka_ir::{
-        moka_instruction::{Identifier, MokaInstruction as IR},
-        ArrayOperation, Expression, FieldAccess, LockOperation, MathOperation, NaNTreatment,
-    },
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
         references::MethodReference,
         ConstantValue, ReturnType,
+    },
+    ir::{
+        moka_instruction::{Identifier, MokaInstruction as IR},
+        ArrayOperation, Expression, FieldAccess, LockOperation, MathOperation, NaNTreatment,
     },
     types::{FieldType, PrimitiveType},
 };

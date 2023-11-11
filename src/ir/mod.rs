@@ -17,7 +17,7 @@ mod test;
 
 use self::stack_frame::StackFrame;
 
-use super::jvm_fixed_point::{self, FixedPointAnalyzer};
+use crate::analysis::jvm_fixed_point::{self, FixedPointAnalyzer};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {

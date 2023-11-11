@@ -14,6 +14,3 @@ repository = "https://github.com/henryhchchc/mokapot"
 bitflags = "2.*"
 itertools = "0.*"
 thiserror = "1.*"
-
-[features]
-experimental = []
