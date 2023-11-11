@@ -2,30 +2,47 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
-use crate::{
-    elements::{
-        instruction::ProgramCounter,
-        method::MethodDescriptor,
-        references::{ClassReference, FieldReference, MethodReference},
-        ConstantValue,
-    },
-    types::FieldType,
+use crate::elements::{
+    instruction::ProgramCounter,
+    method::MethodDescriptor,
+    references::{ClassReference, MethodReference},
+    ConstantValue,
 };
 
 use super::{expressions::*, ValueRef};
 
+/// Represents an expression in the Moka IR.
+/// It may or may not generate a value.
 #[derive(Debug)]
 pub enum Expression {
+    /// A constant value.
     Const(ConstantValue),
+    /// A function call
+    /// See the following documentation for more information:
+    /// - [`invokestatic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokestatic)
+    /// - [`invokevirtual`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokevirtual)
+    /// - [`invokespecial`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokespecial)
+    /// - [`invokeinterface`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokeinterface)
     Call(MethodReference, Vec<ValueRef>),
+    /// A call to a bootstrap method to create a closure.  
+    /// See the following documentation for more information:
+    /// - [`invokedynamic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokedynamic)
     GetClosure(u16, String, Vec<ValueRef>, MethodDescriptor),
+    /// A mathematical operation.
     Math(MathOperation),
+    /// A field access.
     Field(FieldAccess),
+    /// An array operation.
     Array(ArrayOperation),
+    /// A type conversion.
     Conversion(ConversionOperation),
+    /// Throws an exception.
     Throw(ValueRef),
+    /// An operation on a monitor.
     Synchronization(LockOperation),
+    /// Creates a new object.
     New(ClassReference),
+    /// A return address.
     ReturnAddress(ProgramCounter),
 }
 

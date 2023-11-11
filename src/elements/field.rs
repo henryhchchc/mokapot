@@ -22,6 +22,7 @@ pub struct Field {
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 
+/// Denotes a compile-time constant value.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ConstantValue {
     Null,

@@ -418,13 +418,13 @@ impl MokaIRGenerator {
             Ret(idx) => {
                 let return_address = frame.get_local(*idx)?;
                 IR::SubRoutineRet {
-                    target: return_address,
+                    source: return_address,
                 }
             }
             WideRet(idx) => {
                 let return_address = frame.get_local(*idx)?;
                 IR::SubRoutineRet {
-                    target: return_address,
+                    source: return_address,
                 }
             }
             TableSwitch {

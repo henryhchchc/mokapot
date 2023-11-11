@@ -1,15 +1,18 @@
 use std::fmt::Display;
 
+/// Denotes a program counter in an instruction sequence.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
+    /// Creates a new program counter based on the given value with a given offset.
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
         u16::try_from(self.0 as i32 + offset)
             .map(Self)
             .map_err(|_| InvalidOffset::I32(offset))
     }
 
+    /// Creates a new program counter based on the given value with a given offset (in [`i16`]).
     pub fn offset_i16(&self, offset: i16) -> Result<Self, InvalidOffset> {
         u16::try_from(self.0 as i16 + offset)
             .map(Self)
