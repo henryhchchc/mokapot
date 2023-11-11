@@ -18,6 +18,9 @@ class TestAnalysis {
     for (int i = 0; i < y; i++) {
       callMe("233", 0, 0);
     }
+    if (x > 0 ? y > 0 : y < 0) {
+      return 0;
+    }
     java.util.function.IntUnaryOperator lambda = (n) -> { return 233 + n; };
     var type = lambda.applyAsInt(0);
     var arr = new int[]{0, 1, 2};

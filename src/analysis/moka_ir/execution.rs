@@ -3,7 +3,7 @@ use std::iter::once;
 use crate::{
     analysis::moka_ir::{
         moka_instruction::{Identifier, MokaInstruction as IR},
-        ArrayOperation, Expression, FieldAccess, MathOperation,
+        ArrayOperation, Expression, FieldAccess, MathOperation, MonitorOperation, NanTreatment,
     },
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
@@ -12,7 +12,9 @@ use crate::{
     types::{FieldType, PrimitiveType},
 };
 
-use super::{ConversionOperation, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
+use super::{
+    Condition, ConversionOperation, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef,
+};
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
@@ -468,44 +470,78 @@ impl MokaIRGenerator {
                 def_id,
                 ConversionOperation::Int2Short,
             )?,
-            LCmp | FCmpL | FCmpG | DCmpL | DCmpG => {
-                frame.pop_padding()?;
-                let value1 = frame.pop_value()?;
-                frame.pop_padding()?;
-                let value2 = frame.pop_value()?;
-
+            LCmp => {
+                let lhs = {
+                    frame.pop_padding()?;
+                    frame.pop_value()?
+                };
+                let rhs = {
+                    frame.pop_padding()?;
+                    frame.pop_value()?
+                };
                 frame.push_value(def_id.into())?;
+                let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![value1, value2],
-                    },
+                    rhs: Expression::Math(math_op),
                 }
             }
-            IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
-            | IfLe(target) | IfNull(target) | IfNonNull(target) => {
-                let value = frame.pop_value()?;
-                IR::UnitaryConditionalJump {
-                    condition: value,
-                    target: *target,
-                    instruction: insn.clone(),
+            FCmpL | FCmpG | DCmpL | DCmpG => {
+                let lhs = {
+                    frame.pop_padding()?;
+                    frame.pop_value()?
+                };
+                let rhs = {
+                    frame.pop_padding()?;
+                    frame.pop_value()?
+                };
+                frame.push_value(def_id.into())?;
+                let nan_treatment = match insn {
+                    FCmpG | DCmpG => NanTreatment::IsLargest,
+                    FCmpL | DCmpL => NanTreatment::IsSmallest,
+                    _ => unreachable!(),
+                };
+                let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
+                IR::Assignment {
+                    lhs: def_id,
+                    rhs: Expression::Math(math_op),
                 }
             }
-            IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target) | IfICmpGe(target)
-            | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target) | IfACmpNe(target) => {
-                let value1 = frame.pop_value()?;
-                let value2 = frame.pop_value()?;
-                IR::BinaryConditionalJump {
-                    condition: [value1, value2],
-                    target: *target,
-                    instruction: insn.clone(),
-                }
+            IfEq(target) => self.unitary_conditional_jump(frame, *target, Condition::Zero)?,
+            IfNe(target) => self.unitary_conditional_jump(frame, *target, Condition::NonZero)?,
+            IfLt(target) => self.unitary_conditional_jump(frame, *target, Condition::Negative)?,
+            IfGe(target) => {
+                self.unitary_conditional_jump(frame, *target, Condition::NonNegative)?
+            }
+            IfGt(target) => self.unitary_conditional_jump(frame, *target, Condition::Positive)?,
+            IfLe(target) => {
+                self.unitary_conditional_jump(frame, *target, Condition::NonPositive)?
+            }
+            IfNull(target) => self.unitary_conditional_jump(frame, *target, Condition::IsNull)?,
+            IfNonNull(target) => {
+                self.unitary_conditional_jump(frame, *target, Condition::IsNotNull)?
+            }
+            IfICmpEq(target) | IfACmpEq(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::Equal)?
+            }
+            IfICmpNe(target) | IfACmpNe(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::NotEqual)?
+            }
+            IfICmpGe(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::GreaterThanOrEqual)?
+            }
+            IfICmpLt(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::LessThan)?
+            }
+            IfICmpGt(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::GreaterThan)?
+            }
+            IfICmpLe(target) => {
+                self.binary_conditional_jump(frame, *target, Condition::LessThanOrEqual)?
             }
             Goto(target) | GotoW(target) => IR::Jump { target: *target },
             Jsr(_) | JsrW(_) => {
                 let value = Expression::ReturnAddress(pc);
-
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
@@ -527,7 +563,7 @@ impl MokaIRGenerator {
             TableSwitch { .. } | LookupSwitch { .. } => {
                 let condition = frame.pop_value()?;
                 IR::Switch {
-                    condition,
+                    match_value: condition,
                     instruction: insn.clone(),
                 }
             }
@@ -793,15 +829,18 @@ impl MokaIRGenerator {
                     }
                 })?
             }
-            MonitorEnter | MonitorExit => {
+            MonitorEnter => {
                 let object_ref = frame.pop_value()?;
-
-                IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![object_ref],
-                    },
+                let monitor_op = MonitorOperation::Enter(object_ref);
+                IR::SideEffect {
+                    rhs: Expression::Monitor(monitor_op),
+                }
+            }
+            MonitorExit => {
+                let object_ref = frame.pop_value()?;
+                let monitor_op = MonitorOperation::Exit(object_ref);
+                IR::SideEffect {
+                    rhs: Expression::Monitor(monitor_op),
                 }
             }
             WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
@@ -832,6 +871,39 @@ impl MokaIRGenerator {
         self.ir_instructions.insert(pc, ir_instruction);
 
         Ok(())
+    }
+
+    fn unitary_conditional_jump<C>(
+        &mut self,
+        frame: &mut StackFrame,
+        target: ProgramCounter,
+        condition: C,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        C: FnOnce(ValueRef) -> Condition,
+    {
+        let operand = frame.pop_value()?;
+        Ok(IR::ConditionalJump {
+            condition: condition(operand),
+            target,
+        })
+    }
+
+    fn binary_conditional_jump<C>(
+        &mut self,
+        frame: &mut StackFrame,
+        target: ProgramCounter,
+        condition: C,
+    ) -> Result<IR, MokaIRGenerationError>
+    where
+        C: FnOnce(ValueRef, ValueRef) -> Condition,
+    {
+        let lhs = frame.pop_value()?;
+        let rhs = frame.pop_value()?;
+        Ok(IR::ConditionalJump {
+            condition: condition(lhs, rhs),
+            target,
+        })
     }
 
     fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
@@ -924,9 +996,4 @@ impl MokaIRGenerator {
             rhs: expr(lhs, rhs),
         })
     }
-}
-
-enum IsWide {
-    Wide,
-    NotWide,
 }

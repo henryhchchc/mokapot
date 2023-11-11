@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use crate::elements::instruction::{Instruction, ProgramCounter};
 
-use super::Expression;
+use super::{Condition, Expression};
 
 #[derive(Debug)]
 pub enum MokaInstruction {
@@ -22,18 +22,12 @@ pub enum MokaInstruction {
     Jump {
         target: ProgramCounter,
     },
-    UnitaryConditionalJump {
-        condition: ValueRef,
+    ConditionalJump {
+        condition: Condition,
         target: ProgramCounter,
-        instruction: Instruction,
-    },
-    BinaryConditionalJump {
-        condition: [ValueRef; 2],
-        target: ProgramCounter,
-        instruction: Instruction,
     },
     Switch {
-        condition: ValueRef,
+        match_value: ValueRef,
         instruction: Instruction,
     },
     Return {
@@ -51,27 +45,11 @@ impl Display for MokaInstruction {
             Self::Assignment { lhs, rhs } => write!(f, "{} = {}", lhs, rhs),
             Self::SideEffect { rhs: op } => write!(f, "{}", op),
             Self::Jump { target } => write!(f, "goto {}", target),
-            Self::UnitaryConditionalJump {
-                condition,
-                target,
-                instruction,
-            } => write!(f, "{}({}) goto {}", instruction.name(), condition, target),
-            Self::BinaryConditionalJump {
-                condition,
-                target,
-                instruction,
-            } => {
-                write!(
-                    f,
-                    "{}({}, {}) goto {}",
-                    instruction.name(),
-                    condition[0],
-                    condition[1],
-                    target
-                )
+            Self::ConditionalJump { condition, target } => {
+                write!(f, "if {} goto {}", condition, target)
             }
             Self::Switch {
-                condition,
+                match_value: condition,
                 instruction,
             } => write!(f, "{}({})", instruction.name(), condition),
             Self::Return { value } => {

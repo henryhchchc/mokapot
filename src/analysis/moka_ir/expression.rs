@@ -21,7 +21,10 @@ pub enum Expression {
     Array(ArrayOperation),
     Conversion(ConversionOperation),
     Throw(ValueRef),
+    Monitor(MonitorOperation),
     ReturnAddress(ProgramCounter),
+
+    #[deprecated(note = "Migrate to other variants")]
     Insn {
         instruction: Instruction,
         arguments: Vec<ValueRef>,
@@ -38,6 +41,7 @@ impl Display for Expression {
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),
             Throw(value) => write!(f, "throw {}", value),
+            Monitor(monitor_op) => monitor_op.fmt(f),
             Conversion(conv_op) => conv_op.fmt(f),
             Insn {
                 instruction,
@@ -50,6 +54,62 @@ impl Display for Expression {
                     arguments.iter().map(|it| it.to_string()).join(", ")
                 )
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Condition {
+    Equal(ValueRef, ValueRef),
+    NotEqual(ValueRef, ValueRef),
+    LessThan(ValueRef, ValueRef),
+    LessThanOrEqual(ValueRef, ValueRef),
+    GreaterThan(ValueRef, ValueRef),
+    GreaterThanOrEqual(ValueRef, ValueRef),
+    IsNull(ValueRef),
+    IsNotNull(ValueRef),
+    Zero(ValueRef),
+    NonZero(ValueRef),
+    Positive(ValueRef),
+    Negative(ValueRef),
+    NonNegative(ValueRef),
+    NonPositive(ValueRef),
+}
+
+impl Display for Condition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use Condition::*;
+        match self {
+            Equal(a, b) => write!(f, "{} == {}", a, b),
+            NotEqual(a, b) => write!(f, "{} != {}", a, b),
+            LessThan(a, b) => write!(f, "{} < {}", a, b),
+            LessThanOrEqual(a, b) => write!(f, "{} <= {}", a, b),
+            GreaterThan(a, b) => write!(f, "{} > {}", a, b),
+            GreaterThanOrEqual(a, b) => write!(f, "{} >= {}", a, b),
+            IsNull(a) => write!(f, "{} == null", a),
+            IsNotNull(a) => write!(f, "{} != null", a),
+            Zero(a) => write!(f, "{} == 0", a),
+            NonZero(a) => write!(f, "{} != 0", a),
+            Positive(a) => write!(f, "{} > 0", a),
+            Negative(a) => write!(f, "{} < 0", a),
+            NonNegative(a) => write!(f, "{} >= 0", a),
+            NonPositive(a) => write!(f, "{} <= 0", a),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum MonitorOperation {
+    Enter(ValueRef),
+    Exit(ValueRef),
+}
+
+impl Display for MonitorOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use MonitorOperation::*;
+        match self {
+            Enter(value) => write!(f, "monitor_enter({})", value),
+            Exit(value) => write!(f, "monitor_exit({})", value),
         }
     }
 }
@@ -133,6 +193,14 @@ pub enum MathOperation {
     BitwiseAnd(ValueRef, ValueRef),
     BitwiseOr(ValueRef, ValueRef),
     BitwiseXor(ValueRef, ValueRef),
+    LongComparison(ValueRef, ValueRef),
+    FloatingPointComparison(ValueRef, ValueRef, NanTreatment),
+}
+
+#[derive(Debug)]
+pub enum NanTreatment {
+    IsLargest,
+    IsSmallest,
 }
 
 impl Display for MathOperation {
@@ -152,6 +220,13 @@ impl Display for MathOperation {
             BitwiseAnd(a, b) => write!(f, "{} & {}", a, b),
             BitwiseOr(a, b) => write!(f, "{} | {}", a, b),
             BitwiseXor(a, b) => write!(f, "{} ^ {}", a, b),
+            LongComparison(a, b) => write!(f, "cmp({}, {})", a, b),
+            FloatingPointComparison(a, b, NanTreatment::IsLargest) => {
+                write!(f, "cmpg({}, {})", a, b)
+            }
+            FloatingPointComparison(a, b, NanTreatment::IsSmallest) => {
+                write!(f, "cmpl({}, {})", a, b)
+            }
         }
     }
 }
