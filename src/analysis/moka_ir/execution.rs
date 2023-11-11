@@ -3,10 +3,11 @@ use std::iter::once;
 use crate::{
     analysis::moka_ir::{
         moka_instruction::{Identifier, MokaInstruction as IR},
-        ArrayOperation, Expression, FieldAccess, MathOperation, MonitorOperation, NanTreatment,
+        ArrayOperation, Expression, FieldAccess, MathOperation, MonitorOperation, NaNTreatment,
     },
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
+        references::MethodReference,
         ConstantValue, ReturnType,
     },
     types::{FieldType, PrimitiveType},
@@ -497,8 +498,8 @@ impl MokaIRGenerator {
                 };
                 frame.push_value(def_id.into())?;
                 let nan_treatment = match insn {
-                    FCmpG | DCmpG => NanTreatment::IsLargest,
-                    FCmpL | DCmpL => NanTreatment::IsSmallest,
+                    FCmpG | DCmpG => NaNTreatment::IsLargest,
+                    FCmpL | DCmpL => NaNTreatment::IsSmallest,
                     _ => unreachable!(),
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
@@ -654,10 +655,7 @@ impl MokaIRGenerator {
                     .chain(arguments.into_iter().rev())
                     .collect();
 
-                let rhs = Expression::Insn {
-                    instruction: insn.clone(),
-                    arguments,
-                };
+                let rhs = Expression::Call(method_ref.clone(), arguments);
                 match method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect { rhs },
                     LONG_RET_TYPE | DOUBLE_RET_TYPE => {
@@ -683,10 +681,8 @@ impl MokaIRGenerator {
                     .chain(arguments.into_iter().rev())
                     .collect();
 
-                let rhs = Expression::Insn {
-                    instruction: insn.clone(),
-                    arguments,
-                };
+                let rhs =
+                    Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
                 match i_method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect { rhs },
                     LONG_RET_TYPE | DOUBLE_RET_TYPE => {
@@ -710,10 +706,7 @@ impl MokaIRGenerator {
 
                 arguments.reverse();
 
-                let rhs = Expression::Insn {
-                    instruction: insn.clone(),
-                    arguments,
-                };
+                let rhs = Expression::Call(method_ref.clone(), arguments);
                 match method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect { rhs },
                     LONG_RET_TYPE | DOUBLE_RET_TYPE => {
@@ -727,7 +720,11 @@ impl MokaIRGenerator {
                     }
                 }
             }
-            InvokeDynamic { descriptor, .. } => {
+            InvokeDynamic {
+                descriptor,
+                bootstrap_method_index,
+                name,
+            } => {
                 let arguments: Vec<_> = descriptor
                     .parameters_types
                     .iter()
@@ -735,10 +732,12 @@ impl MokaIRGenerator {
                     .rev()
                     .collect::<Result<_, _>>()?;
 
-                let rhs = Expression::Insn {
-                    instruction: insn.clone(),
+                let rhs = Expression::GetClosure(
+                    *bootstrap_method_index,
+                    name.to_owned(),
                     arguments,
-                };
+                    descriptor.to_owned(),
+                );
                 match descriptor.return_type {
                     ReturnType::Void => IR::SideEffect { rhs },
                     LONG_RET_TYPE | DOUBLE_RET_TYPE => {
@@ -752,14 +751,11 @@ impl MokaIRGenerator {
                     }
                 }
             }
-            New(_) => {
+            New(class) => {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![],
-                    },
+                    rhs: Expression::New(class.clone()),
                 }
             }
             ANewArray(class_ref) => {

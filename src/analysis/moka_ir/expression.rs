@@ -5,7 +5,8 @@ use itertools::Itertools;
 use crate::{
     elements::{
         instruction::{Instruction, ProgramCounter},
-        references::FieldReference,
+        method::{self, MethodDescriptor},
+        references::{ClassReference, FieldReference, MethodReference},
         ConstantValue,
     },
     types::FieldType,
@@ -16,19 +17,16 @@ use super::ValueRef;
 #[derive(Debug)]
 pub enum Expression {
     Const(ConstantValue),
+    Call(MethodReference, Vec<ValueRef>),
+    GetClosure(u16, String, Vec<ValueRef>, MethodDescriptor),
     Math(MathOperation),
     Field(FieldAccess),
     Array(ArrayOperation),
     Conversion(ConversionOperation),
     Throw(ValueRef),
     Monitor(MonitorOperation),
+    New(ClassReference),
     ReturnAddress(ProgramCounter),
-
-    #[deprecated(note = "Migrate to other variants")]
-    Insn {
-        instruction: Instruction,
-        arguments: Vec<ValueRef>,
-    },
 }
 
 impl Display for Expression {
@@ -42,18 +40,23 @@ impl Display for Expression {
             Math(math_op) => math_op.fmt(f),
             Throw(value) => write!(f, "throw {}", value),
             Monitor(monitor_op) => monitor_op.fmt(f),
+            New(class) => write!(f, "new {}", class),
             Conversion(conv_op) => conv_op.fmt(f),
-            Insn {
-                instruction,
-                arguments,
-            } => {
-                write!(
-                    f,
-                    "{}({})",
-                    instruction.name(),
-                    arguments.iter().map(|it| it.to_string()).join(", ")
-                )
-            }
+            Call(method, args) => write!(
+                f,
+                "call {}({}) // descriptor: {}",
+                method,
+                args.iter().map(|it| it.to_string()).join(", "),
+                method.descriptor().to_string()
+            ),
+            GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
+                f,
+                "get_closure#{}({}) // {}{}",
+                bootstrap_method_idx,
+                args.iter().map(|it| it.to_string()).join(", "),
+                name,
+                descriptor.to_string()
+            ),
         }
     }
 }
@@ -194,11 +197,11 @@ pub enum MathOperation {
     BitwiseOr(ValueRef, ValueRef),
     BitwiseXor(ValueRef, ValueRef),
     LongComparison(ValueRef, ValueRef),
-    FloatingPointComparison(ValueRef, ValueRef, NanTreatment),
+    FloatingPointComparison(ValueRef, ValueRef, NaNTreatment),
 }
 
 #[derive(Debug)]
-pub enum NanTreatment {
+pub enum NaNTreatment {
     IsLargest,
     IsSmallest,
 }
@@ -221,11 +224,11 @@ impl Display for MathOperation {
             BitwiseOr(a, b) => write!(f, "{} | {}", a, b),
             BitwiseXor(a, b) => write!(f, "{} ^ {}", a, b),
             LongComparison(a, b) => write!(f, "cmp({}, {})", a, b),
-            FloatingPointComparison(a, b, NanTreatment::IsLargest) => {
-                write!(f, "cmpg({}, {})", a, b)
+            FloatingPointComparison(a, b, NaNTreatment::IsLargest) => {
+                write!(f, "cmp({}, {}) nan is largest", a, b)
             }
-            FloatingPointComparison(a, b, NanTreatment::IsSmallest) => {
-                write!(f, "cmpl({}, {})", a, b)
+            FloatingPointComparison(a, b, NaNTreatment::IsSmallest) => {
+                write!(f, "cmp({}, {}) nan is smallest", a, b)
             }
         }
     }
