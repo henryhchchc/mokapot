@@ -539,7 +539,10 @@ impl MokaIRGenerator {
             IfICmpLe(target) => {
                 self.binary_conditional_jump(frame, *target, Condition::LessThanOrEqual)?
             }
-            Goto(target) | GotoW(target) => IR::Jump { target: *target },
+            Goto(target) | GotoW(target) => IR::Jump {
+                condition: None,
+                target: *target,
+            },
             Jsr(_) | JsrW(_) => {
                 let value = Expression::ReturnAddress(pc);
                 frame.push_value(def_id.into())?;
@@ -883,8 +886,8 @@ impl MokaIRGenerator {
         C: FnOnce(ValueRef) -> Condition,
     {
         let operand = frame.pop_value()?;
-        Ok(IR::ConditionalJump {
-            condition: condition(operand),
+        Ok(IR::Jump {
+            condition: Some(condition(operand)),
             target,
         })
     }
@@ -900,8 +903,8 @@ impl MokaIRGenerator {
     {
         let lhs = frame.pop_value()?;
         let rhs = frame.pop_value()?;
-        Ok(IR::ConditionalJump {
-            condition: condition(lhs, rhs),
+        Ok(IR::Jump {
+            condition: Some(condition(lhs, rhs)),
             target,
         })
     }

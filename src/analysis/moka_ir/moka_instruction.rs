@@ -20,10 +20,7 @@ pub enum MokaInstruction {
         rhs: Expression,
     },
     Jump {
-        target: ProgramCounter,
-    },
-    ConditionalJump {
-        condition: Condition,
+        condition: Option<Condition>,
         target: ProgramCounter,
     },
     Switch {
@@ -44,9 +41,17 @@ impl Display for MokaInstruction {
             Self::Nop => write!(f, "nop"),
             Self::Assignment { lhs, rhs } => write!(f, "{} = {}", lhs, rhs),
             Self::SideEffect { rhs: op } => write!(f, "{}", op),
-            Self::Jump { target } => write!(f, "goto {}", target),
-            Self::ConditionalJump { condition, target } => {
+            Self::Jump {
+                condition: Some(condition),
+                target,
+            } => {
                 write!(f, "if {} goto {}", condition, target)
+            }
+            Self::Jump {
+                condition: None,
+                target,
+            } => {
+                write!(f, "goto {}", target)
             }
             Self::Switch {
                 match_value: condition,
