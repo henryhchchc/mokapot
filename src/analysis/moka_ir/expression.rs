@@ -20,6 +20,7 @@ pub enum Expression {
     Field(FieldAccess),
     Array(ArrayOperation),
     Conversion(ConversionOperation),
+    Throw(ValueRef),
     ReturnAddress(ProgramCounter),
     Insn {
         instruction: Instruction,
@@ -36,6 +37,7 @@ impl Display for Expression {
             Field(field_op) => field_op.fmt(f),
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),
+            Throw(value) => write!(f, "throw {}", value),
             Conversion(conv_op) => conv_op.fmt(f),
             Insn {
                 instruction,

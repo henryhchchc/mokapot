@@ -772,13 +772,9 @@ impl MokaIRGenerator {
             }
             AThrow => {
                 let exception_ref = frame.pop_value()?;
-
                 IR::Assignment {
                     lhs: def_id,
-                    rhs: Expression::Insn {
-                        instruction: insn.clone(),
-                        arguments: vec![exception_ref],
-                    },
+                    rhs: Expression::Throw(exception_ref),
                 }
             }
             CheckCast(TypeReference(target_type)) => {
