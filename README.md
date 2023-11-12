@@ -14,7 +14,7 @@ MokaPot is a Java bytecode analysis library written in Rust.
 ## Documentation
 
 The documentation of the stable version is available at [docs.rs](https://docs.rs/mokapot).
-The documentation of the latest commit is available at [github.io](https://henryhchchc.github.io/mokapot/mokapot/
+The documentation of the latest commit is available at [github.io](https://henryhchchc.github.io/mokapot/mokapot/)
 
 
 ## Usage
