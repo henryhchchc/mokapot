@@ -1,1 +1,1 @@
-pub mod jvm_fixed_point;
+pub mod fixed_point;

@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::elements::{
-    instruction::{Instruction, MethodBody, ProgramCounter},
+    instruction::{ExceptionTableEntry, ProgramCounter},
     Method, MethodAccessFlags, MethodDescriptor,
 };
 mod execution;
@@ -16,9 +16,9 @@ pub use moka_instruction::*;
 #[cfg(test)]
 mod test;
 
-use self::stack_frame::StackFrame;
+use self::stack_frame::{FrameValue, StackFrame};
 
-use crate::analysis::jvm_fixed_point::{self, FixedPointAnalyzer};
+use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
@@ -38,95 +38,105 @@ pub enum MokaIRGenerationError {
     LocalLimitMismatch,
 }
 
-struct MokaIRGenerator {
+struct MokaIRGenerator<'m> {
     ir_instructions: HashMap<ProgramCounter, MokaInstruction>,
+    method: &'m Method,
 }
 
-impl FixedPointAnalyzer for MokaIRGenerator {
+impl FixedPointAnalyzer for MokaIRGenerator<'_> {
+    type Location = ProgramCounter;
     type Fact = StackFrame;
     type Error = MokaIRGenerationError;
 
-    fn entry_fact(&self, method: &Method) -> StackFrame {
-        StackFrame::new(method)
+    fn entry_fact(&self) -> Result<(ProgramCounter, StackFrame), MokaIRGenerationError> {
+        let first_pc = self
+            .method
+            .body
+            .as_ref()
+            .expect("TODO")
+            .instructions
+            .first()
+            .expect("TODO")
+            .0;
+        Ok((first_pc, StackFrame::new(self.method)))
     }
 
     fn execute_instruction(
         &mut self,
-        body: &MethodBody,
         pc: ProgramCounter,
-        insn: &Instruction,
         fact: &StackFrame,
-    ) -> Result<BTreeMap<ProgramCounter, StackFrame>, MokaIRGenerationError> {
+    ) -> Result<HashMap<ProgramCounter, StackFrame>, MokaIRGenerationError> {
         let mut frame = fact.same_frame();
-        let mut dirty_pcs = BTreeMap::new();
-        self.run_instruction(insn, pc, &mut frame)?;
-        use Instruction::*;
-        match insn {
-            IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
-            | IfLe(target) | IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target)
-            | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
-            | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => {
+        let mut dirty_nodes = HashMap::new();
+        let body = self.method.body.as_ref().expect("TODO");
+        let insn = body.instruction_at(pc).expect("TODO: Raise error");
+        let ir_instruction = self.run_instruction(insn, pc, &mut frame)?;
+        match &ir_instruction {
+            MokaInstruction::Nop => {
                 let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
-                dirty_pcs.insert(*target, frame.same_frame());
-                dirty_pcs.insert(next_pc, frame.same_frame());
+                dirty_nodes.insert(next_pc, frame.same_frame());
             }
-            Goto(target) | GotoW(target) => {
-                dirty_pcs.insert(*target, frame.same_frame());
+            MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
+                let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
+                dirty_nodes.insert(next_pc, frame.same_frame());
+                self.add_exception_edges(&body.exception_table, pc, &frame, &mut dirty_nodes);
             }
-            TableSwitch {
-                default,
-                jump_targets,
-                ..
+            MokaInstruction::Jump { condition, target } => {
+                if condition.is_some() {
+                    let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
+                    dirty_nodes.insert(next_pc, frame.same_frame());
+                    dirty_nodes.insert(*target, frame.same_frame());
+                } else {
+                    dirty_nodes.insert(*target, frame.same_frame());
+                }
+            }
+            MokaInstruction::Switch {
+                default, branches, ..
             } => {
-                jump_targets.iter().for_each(|it| {
-                    dirty_pcs.insert(*it, frame.same_frame());
+                branches.iter().for_each(|(_, it)| {
+                    dirty_nodes.insert(*it, frame.same_frame());
                 });
-                dirty_pcs.insert(*default, frame.same_frame());
+                dirty_nodes.insert(*default, frame.same_frame());
             }
-            LookupSwitch {
-                default,
-                match_targets,
-            } => {
-                match_targets.iter().for_each(|(_, it)| {
-                    dirty_pcs.insert(*it, frame.same_frame());
-                });
-                dirty_pcs.insert(*default, frame.same_frame());
+            MokaInstruction::Return { .. } => {
+                self.add_exception_edges(&body.exception_table, pc, &frame, &mut dirty_nodes);
             }
-            Jsr(target) | JsrW(target) => {
-                frame.reachable_subroutines.insert(*target);
-                dirty_pcs.insert(*target, frame.same_frame());
-            }
-            AThrow => {}
-            Ret(_) | WideRet(_) => {
+            MokaInstruction::SubRoutineRet { .. } => {
                 let reachable_subroutines = frame.reachable_subroutines;
                 frame.reachable_subroutines = HashSet::new();
                 reachable_subroutines.into_iter().for_each(|it| {
                     let next_pc = body.next_pc_of(it).expect("Cannot get next pc");
-                    dirty_pcs.insert(next_pc, frame.same_frame());
+                    dirty_nodes.insert(next_pc, frame.same_frame());
                 })
             }
-            Return | AReturn | IReturn | LReturn | FReturn | DReturn => {}
-            _ => {
-                let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
-                dirty_pcs.insert(next_pc, frame.same_frame());
-            }
         }
-        for handler in body.exception_table.iter() {
-            if handler.covers(pc) {
-                let handler_frame =
-                    frame.same_locals_1_stack_item_frame(Identifier::CaughtException.into());
-                dirty_pcs.insert(handler.handler_pc, handler_frame);
-            }
-        }
-
-        Ok(dirty_pcs)
+        self.ir_instructions.insert(pc, ir_instruction);
+        Ok(dirty_nodes)
     }
 }
 
-impl MokaIRGenerator {
-    fn new() -> Self {
+impl<'m> MokaIRGenerator<'m> {
+    fn for_method(method: &'m Method) -> Self {
         Self {
             ir_instructions: Default::default(),
+            method,
+        }
+    }
+
+    fn add_exception_edges(
+        &mut self,
+        exception_table: &Vec<ExceptionTableEntry>,
+        pc: ProgramCounter,
+        frame: &StackFrame,
+        dirty_nodes: &mut HashMap<ProgramCounter, StackFrame>,
+    ) {
+        for handler in exception_table.iter() {
+            if handler.covers(pc) {
+                let caught_exception_ref = ValueRef::Def(Identifier::CaughtException);
+                let handler_frame = frame
+                    .same_locals_1_stack_item_frame(FrameValue::ValueRef(caught_exception_ref));
+                dirty_nodes.insert(handler.handler_pc, handler_frame);
+            }
         }
     }
 }
@@ -145,7 +155,7 @@ pub trait MokaIRMethodExt {
 
 impl MokaIRMethodExt for Method {
     fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError> {
-        let instructions = MokaIRGenerator::new().generate(self)?;
+        let instructions = MokaIRGenerator::for_method(self).generate()?;
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),
@@ -155,13 +165,10 @@ impl MokaIRMethodExt for Method {
     }
 }
 
-impl MokaIRGenerator {
-    fn generate(
-        self,
-        method: &Method,
-    ) -> Result<HashMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
+impl MokaIRGenerator<'_> {
+    fn generate(self) -> Result<HashMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
         let mut self_mut = self;
-        jvm_fixed_point::analyze(method, &mut self_mut)?;
+        fixed_point::analyze(&mut self_mut)?;
         Ok(self_mut.ir_instructions)
     }
 }

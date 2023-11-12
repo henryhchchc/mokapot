@@ -14,10 +14,13 @@ use super::{Condition, Expression};
 pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,
-    /// Assigns [`rhs`](MokaInstruction::Assignment::rhs) to [`lhs`](MokaInstruction::Assignment::lhs).
-    Assignment { lhs: Identifier, rhs: Expression },
-    /// Evaluates [`rhs`](MokaInstruction::SideEffect::rhs) for its side effects.
-    SideEffect { rhs: Expression },
+    /// Assigns [`expr`](MokaInstruction::Assignment::expr) to [`def_id`](MokaInstruction::Assignment::def_id).
+    Assignment {
+        def_id: Identifier,
+        expr: Expression,
+    },
+    /// Evaluates an [`Expression`] for its side effects.
+    SideEffect(Expression),
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
@@ -42,8 +45,11 @@ impl Display for MokaInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
-            Self::Assignment { lhs, rhs } => write!(f, "{} = {}", lhs, rhs),
-            Self::SideEffect { rhs: op } => write!(f, "{}", op),
+            Self::Assignment {
+                def_id: lhs,
+                expr: rhs,
+            } => write!(f, "{} = {}", lhs, rhs),
+            Self::SideEffect(op) => write!(f, "{}", op),
             Self::Jump {
                 condition: Some(condition),
                 target,

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt::Display, iter::once};
 
 use crate::{
-    analysis::jvm_fixed_point::FixedPointFact,
+    analysis::fixed_point::FixedPointFact,
     elements::{instruction::ProgramCounter, Method, MethodAccessFlags},
     utils::try_merge,
 };
@@ -10,8 +10,8 @@ use super::{Identifier, MokaIRGenerationError, ValueRef};
 
 #[derive(PartialEq, Debug)]
 pub(super) struct StackFrame {
-    pub max_locals: u16,
-    pub max_stack: u16,
+    max_locals: u16,
+    max_stack: u16,
     local_variables: Vec<Option<FrameValue>>,
     operand_stack: Vec<FrameValue>,
     pub reachable_subroutines: HashSet<ProgramCounter>,
@@ -23,11 +23,13 @@ impl StackFrame {
         let mut locals = vec![None; body.max_locals.into()];
         let mut local_idx = 0;
         if !method.access_flags.contains(MethodAccessFlags::STATIC) {
-            locals[local_idx].replace(Identifier::This.into());
+            let this_ref = ValueRef::Def(Identifier::This);
+            locals[local_idx].replace(FrameValue::ValueRef(this_ref));
             local_idx += 1;
         }
         for i in 0..method.descriptor.parameters_types.len() {
-            locals[local_idx].replace(Identifier::Arg(i as u16).into());
+            let arg_ref = ValueRef::Def(Identifier::Arg(i as u16));
+            locals[local_idx].replace(FrameValue::ValueRef(arg_ref));
             local_idx += 1;
         }
         StackFrame {
@@ -56,14 +58,14 @@ impl StackFrame {
     pub(super) fn pop_value(&mut self) -> Result<ValueRef, MokaIRGenerationError> {
         match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Padding => Err(MokaIRGenerationError::ValueMismatch),
+            FrameValue::Top => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 
-    pub(super) fn pop_padding(&mut self) -> Result<(), MokaIRGenerationError> {
-        match self.pop_raw()? {
-            FrameValue::ValueRef(_) => Err(MokaIRGenerationError::ValueMismatch),
-            FrameValue::Padding => Ok(()),
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, MokaIRGenerationError> {
+        match (self.pop_raw()?, self.pop_raw()?) {
+            (FrameValue::ValueRef(it), FrameValue::Top) => Ok(it),
+            _ => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 
@@ -71,8 +73,12 @@ impl StackFrame {
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn push_padding(&mut self) -> Result<(), MokaIRGenerationError> {
-        self.push_raw(FrameValue::Padding)
+    pub(super) fn push_dual_slot_value(
+        &mut self,
+        value: ValueRef,
+    ) -> Result<(), MokaIRGenerationError> {
+        self.push_raw(FrameValue::ValueRef(value))?;
+        self.push_raw(FrameValue::Top)
     }
 
     pub(super) fn get_local(
@@ -84,7 +90,25 @@ impl StackFrame {
             .ok_or(MokaIRGenerationError::LocalUnset)?;
         match frame_value {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Padding => Err(MokaIRGenerationError::ValueMismatch),
+            FrameValue::Top => Err(MokaIRGenerationError::ValueMismatch),
+        }
+    }
+
+    pub(super) fn get_dual_slot_local(
+        &self,
+        idx: impl Into<usize>,
+    ) -> Result<ValueRef, MokaIRGenerationError> {
+        let idx = idx.into();
+        if idx + 1 >= self.max_locals as usize {
+            return Err(MokaIRGenerationError::LocalLimitExceed);
+        }
+        match (
+            // If panic here then `local_variables` are not allocated correctly
+            self.local_variables[idx].clone(),
+            self.local_variables[idx + 1].clone(),
+        ) {
+            (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it),
+            _ => Err(MokaIRGenerationError::ValueMismatch),
         }
     }
 
@@ -94,7 +118,7 @@ impl StackFrame {
         value: ValueRef,
     ) -> Result<(), MokaIRGenerationError> {
         let idx: usize = idx.into();
-        if idx <= self.max_locals as usize {
+        if idx < self.max_locals as usize {
             self.local_variables[idx].replace(FrameValue::ValueRef(value));
             Ok(())
         } else {
@@ -102,13 +126,16 @@ impl StackFrame {
         }
     }
 
-    pub(super) fn set_local_padding(
+    pub(super) fn set_dual_slot_local(
         &mut self,
         idx: impl Into<usize>,
+        value: ValueRef,
     ) -> Result<(), MokaIRGenerationError> {
         let idx: usize = idx.into();
-        if idx <= self.max_locals as usize {
-            self.local_variables[idx].replace(FrameValue::Padding);
+        if idx + 1 < self.max_locals as usize {
+            // If panic here then `local_variables` are not allocated correctly
+            self.local_variables[idx].replace(FrameValue::ValueRef(value));
+            self.local_variables[idx + 1].replace(FrameValue::Top);
             Ok(())
         } else {
             Err(MokaIRGenerationError::LocalLimitExceed)
@@ -141,9 +168,12 @@ impl StackFrame {
 impl FixedPointFact for StackFrame {
     type MergeError = MokaIRGenerationError;
 
-    fn merge(&self, other: &Self) -> Result<Self, Self::MergeError> {
+    fn merge(&self, other: Self) -> Result<Self, Self::MergeError> {
         if self.max_locals != other.max_locals {
             return Err(MokaIRGenerationError::LocalLimitMismatch);
+        }
+        if self.local_variables.len() != other.local_variables.len() {
+            panic!("BUG: `local_variables` are not allocated correctly")
         }
         if self.operand_stack.len() != other.operand_stack.len() {
             return Err(MokaIRGenerationError::StackSizeMismatch);
@@ -152,20 +182,15 @@ impl FixedPointFact for StackFrame {
             .reachable_subroutines
             .clone()
             .into_iter()
-            .chain(other.reachable_subroutines.clone())
+            .chain(other.reachable_subroutines)
             .collect();
-        let mut local_variables = Vec::with_capacity(self.max_locals as usize);
-        for i in 0..self.max_locals as usize {
-            local_variables.insert(i, None);
-            let self_loc = self.local_variables.get(i).cloned();
-            let other_loc = other.local_variables.get(i).cloned();
-            local_variables[i] = match (self_loc, other_loc) {
-                (Some(x), Some(y)) => try_merge(x, y, FrameValue::merge)?,
-                (x, y) => x
-                    .or(y)
-                    .expect("The local variable vec is not allocated correctly"),
-            }
-        }
+        let local_variables = self
+            .local_variables
+            .clone()
+            .into_iter()
+            .zip(other.local_variables)
+            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, FrameValue::merge))
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             max_locals: self.max_locals,
             max_stack: self.max_stack,
@@ -177,23 +202,17 @@ impl FixedPointFact for StackFrame {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum FrameValue {
+pub(super) enum FrameValue {
     ValueRef(ValueRef),
-    Padding,
-}
-
-impl From<Identifier> for FrameValue {
-    fn from(value: Identifier) -> Self {
-        Self::ValueRef(ValueRef::Def(value))
-    }
+    Top,
 }
 
 impl Display for FrameValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use FrameValue::*;
         match self {
-            ValueRef(id) => write!(f, "{}", id),
-            Padding => write!(f, "Padding"),
+            ValueRef(id) => id.fmt(f),
+            Top => write!(f, "Top"),
         }
     }
 }

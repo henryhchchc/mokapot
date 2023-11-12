@@ -16,16 +16,14 @@ use super::{Condition, MokaIRGenerationError, MokaIRGenerator, StackFrame, Value
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
-const LONG_RET_TYPE: ReturnType = ReturnType::Some(LONG_TYPE);
-const DOUBLE_RET_TYPE: ReturnType = ReturnType::Some(DOUBLE_TYPE);
 
-impl MokaIRGenerator {
+impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
         insn: &Instruction,
         pc: ProgramCounter,
         frame: &mut StackFrame,
-    ) -> Result<(), MokaIRGenerationError> {
+    ) -> Result<IR, MokaIRGenerationError> {
         use Instruction::*;
         let def_id = Identifier::Val(pc.into());
         let ir_instruction = match insn {
@@ -61,15 +59,15 @@ impl MokaIRGenerator {
             Ldc(value) | LdcW(value) => self.const_assignment(frame, def_id, value.clone())?,
             Ldc2W(value) => self.wide_const_assignment(frame, def_id, value.clone())?,
             ILoad(idx) | FLoad(idx) | ALoad(idx) => self.load_local(frame, *idx as u16)?,
-            LLoad(idx) | DLoad(idx) => self.load_wide_local(frame, *idx as u16)?,
+            LLoad(idx) | DLoad(idx) => self.load_dual_slot_local(frame, *idx as u16)?,
             ILoad0 | FLoad0 | ALoad0 => self.load_local(frame, 0)?,
             ILoad1 | FLoad1 | ALoad1 => self.load_local(frame, 1)?,
             ILoad2 | FLoad2 | ALoad2 => self.load_local(frame, 2)?,
             ILoad3 | FLoad3 | ALoad3 => self.load_local(frame, 3)?,
-            LLoad0 | DLoad0 => self.load_wide_local(frame, 0)?,
-            LLoad1 | DLoad1 => self.load_wide_local(frame, 1)?,
-            LLoad2 | DLoad2 => self.load_wide_local(frame, 2)?,
-            LLoad3 | DLoad3 => self.load_wide_local(frame, 3)?,
+            LLoad0 | DLoad0 => self.load_dual_slot_local(frame, 0)?,
+            LLoad1 | DLoad1 => self.load_dual_slot_local(frame, 1)?,
+            LLoad2 | DLoad2 => self.load_dual_slot_local(frame, 2)?,
+            LLoad3 | DLoad3 => self.load_dual_slot_local(frame, 3)?,
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
                 let index = frame.pop_value()?;
                 let array_ref = frame.pop_value()?;
@@ -77,8 +75,8 @@ impl MokaIRGenerator {
 
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             LALoad | DALoad => {
@@ -86,23 +84,22 @@ impl MokaIRGenerator {
                 let array_ref = frame.pop_value()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
+                frame.push_dual_slot_value(def_id.into())?;
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             IStore(idx) | FStore(idx) | AStore(idx) => self.store_local(frame, *idx as u16)?,
-            LStore(idx) | DStore(idx) => self.store_wide_local(frame, *idx as u16)?,
+            LStore(idx) | DStore(idx) => self.store_dual_slot_local(frame, *idx as u16)?,
             IStore0 | FStore0 | AStore0 => self.store_local(frame, 0)?,
             IStore1 | FStore1 | AStore1 => self.store_local(frame, 1)?,
             IStore2 | FStore2 | AStore2 => self.store_local(frame, 2)?,
             IStore3 | FStore3 | AStore3 => self.store_local(frame, 3)?,
-            LStore0 | DStore0 => self.store_wide_local(frame, 0)?,
-            LStore1 | DStore1 => self.store_wide_local(frame, 1)?,
-            LStore2 | DStore2 => self.store_wide_local(frame, 2)?,
-            LStore3 | DStore3 => self.store_wide_local(frame, 3)?,
+            LStore0 | DStore0 => self.store_dual_slot_local(frame, 0)?,
+            LStore1 | DStore1 => self.store_dual_slot_local(frame, 1)?,
+            LStore2 | DStore2 => self.store_dual_slot_local(frame, 2)?,
+            LStore3 | DStore3 => self.store_dual_slot_local(frame, 3)?,
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
                 let value = frame.pop_value()?;
                 let index = frame.pop_value()?;
@@ -113,9 +110,7 @@ impl MokaIRGenerator {
                     value,
                 };
 
-                IR::SideEffect {
-                    rhs: Expression::Array(array_op),
-                }
+                IR::SideEffect(Expression::Array(array_op))
             }
             LAStore | DAStore => {
                 let _value_padding = frame.pop_value()?;
@@ -128,8 +123,8 @@ impl MokaIRGenerator {
                     value,
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             Pop => {
@@ -220,21 +215,17 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 let math_op = MathOperation::Negate(value);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             LNeg | DNeg => {
-                let operand = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
-                frame.push_value(def_id.into())?;
-                frame.push_padding()?;
+                let operand = frame.pop_dual_slot_value()?;
+                frame.push_dual_slot_value(def_id.into())?;
                 let math_op = MathOperation::Negate(operand);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             IShl => self.binary_op_math(frame, def_id, MathOperation::ShiftLeft)?,
@@ -254,8 +245,8 @@ impl MokaIRGenerator {
                 frame.set_local(*idx, def_id.into())?;
                 let math_op = MathOperation::Increment(base);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             WideIInc(idx, _) => {
@@ -263,8 +254,8 @@ impl MokaIRGenerator {
                 frame.set_local(*idx, def_id.into())?;
                 let math_op = MathOperation::Increment(base);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             I2F => self.conversion_op::<_, false, false>(
@@ -335,30 +326,18 @@ impl MokaIRGenerator {
                 ConversionOperation::Int2Short,
             )?,
             LCmp => {
-                let lhs = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
-                let rhs = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
+                let lhs = frame.pop_dual_slot_value()?;
+                let rhs = frame.pop_dual_slot_value()?;
                 frame.push_value(def_id.into())?;
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             FCmpL | FCmpG | DCmpL | DCmpG => {
-                let lhs = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
-                let rhs = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
+                let lhs = frame.pop_dual_slot_value()?;
+                let rhs = frame.pop_dual_slot_value()?;
                 frame.push_value(def_id.into())?;
                 let nan_treatment = match insn {
                     FCmpG | DCmpG => NaNTreatment::IsLargest,
@@ -367,8 +346,8 @@ impl MokaIRGenerator {
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Math(math_op),
+                    def_id,
+                    expr: Expression::Math(math_op),
                 }
             }
             IfEq(target) => self.unitary_conditional_jump(frame, *target, Condition::Zero)?,
@@ -411,8 +390,8 @@ impl MokaIRGenerator {
                 let value = Expression::ReturnAddress(pc);
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: value,
+                    def_id,
+                    expr: value,
                 }
             }
             Ret(idx) => {
@@ -456,40 +435,38 @@ impl MokaIRGenerator {
                 IR::Return { value: Some(value) }
             }
             LReturn | DReturn => {
-                let value = {
-                    frame.pop_padding()?;
-                    frame.pop_value()?
-                };
+                let value = frame.pop_dual_slot_value()?;
                 IR::Return { value: Some(value) }
             }
             Return => IR::Return { value: None },
             GetStatic(field) => {
-                frame.push_value(def_id.into())?;
                 if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.push_padding()?;
+                    frame.push_dual_slot_value(def_id.into())?;
+                } else {
+                    frame.push_value(def_id.into())?;
                 }
                 let field_op = FieldAccess::ReadStatic {
                     field: field.clone(),
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Field(field_op),
+                    def_id,
+                    expr: Expression::Field(field_op),
                 }
             }
             GetField(field) => {
                 let object_ref = frame.pop_value()?;
-
-                frame.push_value(def_id.into())?;
                 if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.push_padding()?;
+                    frame.push_dual_slot_value(def_id.into())?;
+                } else {
+                    frame.push_value(def_id.into())?;
                 }
                 let field_op = FieldAccess::ReadInstance {
                     object_ref,
                     field: field.clone(),
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Field(field_op),
+                    def_id,
+                    expr: Expression::Field(field_op),
                 }
             }
             PutStatic(field) => {
@@ -501,17 +478,13 @@ impl MokaIRGenerator {
                     field: field.clone(),
                     value,
                 };
-                IR::SideEffect {
-                    rhs: Expression::Field(field_op),
-                }
+                IR::SideEffect(Expression::Field(field_op))
             }
             PutField(field) => {
-                let value = match field.field_type {
-                    LONG_TYPE | DOUBLE_TYPE => {
-                        frame.pop_padding()?;
-                        frame.pop_value()?
-                    }
-                    _ => frame.pop_value()?,
+                let value = if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
+                    frame.pop_dual_slot_value()?
+                } else {
+                    frame.pop_value()?
                 };
                 let object_ref = frame.pop_value()?;
                 let field_op = FieldAccess::WriteInstance {
@@ -519,9 +492,7 @@ impl MokaIRGenerator {
                     field: field.clone(),
                     value,
                 };
-                IR::SideEffect {
-                    rhs: Expression::Field(field_op),
-                }
+                IR::SideEffect(Expression::Field(field_op))
             }
             InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
                 let arguments: Vec<_> = method_ref
@@ -537,15 +508,14 @@ impl MokaIRGenerator {
 
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match method_ref.descriptor().return_type {
-                    ReturnType::Void => IR::SideEffect { rhs },
-                    LONG_RET_TYPE | DOUBLE_RET_TYPE => {
-                        frame.push_value(def_id.into())?;
-                        frame.push_padding()?;
-                        IR::Assignment { lhs: def_id, rhs }
+                    ReturnType::Void => IR::SideEffect(rhs),
+                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
+                        frame.push_dual_slot_value(def_id.into())?;
+                        IR::Assignment { def_id, expr: rhs }
                     }
                     _ => {
                         frame.push_value(def_id.into())?;
-                        IR::Assignment { lhs: def_id, rhs }
+                        IR::Assignment { def_id, expr: rhs }
                     }
                 }
             }
@@ -564,15 +534,14 @@ impl MokaIRGenerator {
                 let rhs =
                     Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
                 match i_method_ref.descriptor.return_type {
-                    ReturnType::Void => IR::SideEffect { rhs },
-                    LONG_RET_TYPE | DOUBLE_RET_TYPE => {
-                        frame.push_value(def_id.into())?;
-                        frame.push_padding()?;
-                        IR::Assignment { lhs: def_id, rhs }
+                    ReturnType::Void => IR::SideEffect(rhs),
+                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
+                        frame.push_dual_slot_value(def_id.into())?;
+                        IR::Assignment { def_id, expr: rhs }
                     }
                     _ => {
                         frame.push_value(def_id.into())?;
-                        IR::Assignment { lhs: def_id, rhs }
+                        IR::Assignment { def_id, expr: rhs }
                     }
                 }
             }
@@ -588,15 +557,14 @@ impl MokaIRGenerator {
 
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match method_ref.descriptor().return_type {
-                    ReturnType::Void => IR::SideEffect { rhs },
-                    LONG_RET_TYPE | DOUBLE_RET_TYPE => {
-                        frame.push_value(def_id.into())?;
-                        frame.push_padding()?;
-                        IR::Assignment { lhs: def_id, rhs }
+                    ReturnType::Void => IR::SideEffect(rhs),
+                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
+                        frame.push_dual_slot_value(def_id.into())?;
+                        IR::Assignment { def_id, expr: rhs }
                     }
                     _ => {
                         frame.push_value(def_id.into())?;
-                        IR::Assignment { lhs: def_id, rhs }
+                        IR::Assignment { def_id, expr: rhs }
                     }
                 }
             }
@@ -619,23 +587,22 @@ impl MokaIRGenerator {
                     descriptor.to_owned(),
                 );
                 match descriptor.return_type {
-                    ReturnType::Void => IR::SideEffect { rhs },
-                    LONG_RET_TYPE | DOUBLE_RET_TYPE => {
-                        frame.push_value(def_id.into())?;
-                        frame.push_padding()?;
-                        IR::Assignment { lhs: def_id, rhs }
+                    ReturnType::Void => IR::SideEffect(rhs),
+                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
+                        frame.push_dual_slot_value(def_id.into())?;
+                        IR::Assignment { def_id, expr: rhs }
                     }
                     _ => {
                         frame.push_value(def_id.into())?;
-                        IR::Assignment { lhs: def_id, rhs }
+                        IR::Assignment { def_id, expr: rhs }
                     }
                 }
             }
             New(class) => {
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::New(class.clone()),
+                    def_id,
+                    expr: Expression::New(class.clone()),
                 }
             }
             ANewArray(class_ref) => {
@@ -646,8 +613,8 @@ impl MokaIRGenerator {
                     length: count,
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             NewArray(prim_type) => {
@@ -658,8 +625,8 @@ impl MokaIRGenerator {
                     length: count,
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             MultiANewArray(TypeReference(element_type), dimension) => {
@@ -672,8 +639,8 @@ impl MokaIRGenerator {
                     dimensions: counts,
                 };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             ArrayLength => {
@@ -681,15 +648,15 @@ impl MokaIRGenerator {
                 frame.push_value(def_id.into())?;
                 let array_op = ArrayOperation::Length { array_ref };
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Array(array_op),
+                    def_id,
+                    expr: Expression::Array(array_op),
                 }
             }
             AThrow => {
                 let exception_ref = frame.pop_value()?;
                 IR::Assignment {
-                    lhs: def_id,
-                    rhs: Expression::Throw(exception_ref),
+                    def_id,
+                    expr: Expression::Throw(exception_ref),
                 }
             }
             CheckCast(TypeReference(target_type)) => {
@@ -705,16 +672,12 @@ impl MokaIRGenerator {
             MonitorEnter => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Acquire(object_ref);
-                IR::SideEffect {
-                    rhs: Expression::Synchronization(monitor_op),
-                }
+                IR::SideEffect(Expression::Synchronization(monitor_op))
             }
             MonitorExit => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Release(object_ref);
-                IR::SideEffect {
-                    rhs: Expression::Synchronization(monitor_op),
-                }
+                IR::SideEffect(Expression::Synchronization(monitor_op))
             }
             WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
                 let value = frame.get_local(*idx)?;
@@ -722,9 +685,8 @@ impl MokaIRGenerator {
                 IR::Nop
             }
             WideLLoad(idx) | WideDLoad(idx) => {
-                let value = frame.get_local(*idx)?;
-                frame.push_value(value)?;
-                frame.push_padding()?;
+                let value = frame.get_dual_slot_local(*idx)?;
+                frame.push_dual_slot_value(value)?;
                 IR::Nop
             }
             WideIStore(idx) | WideFStore(idx) | WideAStore(idx) => {
@@ -733,30 +695,22 @@ impl MokaIRGenerator {
                 IR::Nop
             }
             WideLStore(idx) | WideDStore(idx) => {
-                frame.pop_padding()?;
-                let value = frame.pop_value()?;
-                frame.set_local(*idx, value)?;
-                frame.set_local_padding(idx + 1)?;
+                let value = frame.pop_dual_slot_value()?;
+                frame.set_dual_slot_local(*idx, value)?;
                 IR::Nop
             }
             Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
         };
-        self.ir_instructions.insert(pc, ir_instruction);
-
-        Ok(())
+        Ok(ir_instruction)
     }
 
-    fn store_wide_local(
+    fn store_dual_slot_local(
         &mut self,
         frame: &mut StackFrame,
         idx: u16,
     ) -> Result<IR, MokaIRGenerationError> {
-        let value = {
-            frame.pop_padding()?;
-            frame.pop_value()?
-        };
-        frame.set_local(idx, value)?;
-        frame.set_local_padding(idx + 1)?;
+        let value = frame.pop_dual_slot_value()?;
+        frame.set_dual_slot_local(idx, value)?;
         Ok(IR::Nop)
     }
 
@@ -770,14 +724,13 @@ impl MokaIRGenerator {
         Ok(IR::Nop)
     }
 
-    fn load_wide_local(
+    fn load_dual_slot_local(
         &mut self,
         frame: &mut StackFrame,
         idx: u16,
     ) -> Result<IR, MokaIRGenerationError> {
-        let value = frame.get_local(idx)?;
-        frame.push_value(value)?;
-        frame.push_padding()?;
+        let value = frame.get_dual_slot_local(idx)?;
+        frame.push_dual_slot_value(value)?;
         Ok(IR::Nop)
     }
 
@@ -799,8 +752,8 @@ impl MokaIRGenerator {
     ) -> Result<IR, MokaIRGenerationError> {
         frame.push_value(def_id.into())?;
         Ok(IR::Assignment {
-            lhs: def_id,
-            rhs: Expression::Const(constant),
+            def_id,
+            expr: Expression::Const(constant),
         })
     }
 
@@ -810,11 +763,10 @@ impl MokaIRGenerator {
         def_id: Identifier,
         constant: ConstantValue,
     ) -> Result<IR, MokaIRGenerationError> {
-        frame.push_value(def_id.into())?;
-        frame.push_padding()?;
+        frame.push_dual_slot_value(def_id.into())?;
         Ok(IR::Assignment {
-            lhs: def_id,
-            rhs: Expression::Const(constant),
+            def_id,
+            expr: Expression::Const(constant),
         })
     }
 
@@ -860,19 +812,19 @@ impl MokaIRGenerator {
     where
         C: FnOnce(ValueRef) -> ConversionOperation,
     {
-        let operand = {
-            if OPERAND_WIDE {
-                frame.pop_padding()?;
-            }
+        let operand = if OPERAND_WIDE {
+            frame.pop_dual_slot_value()?
+        } else {
             frame.pop_value()?
         };
-        frame.push_value(def_id.into())?;
         if RESULT_WIDE {
-            frame.push_padding()?;
+            frame.push_dual_slot_value(def_id.into())?;
+        } else {
+            frame.push_value(def_id.into())?;
         }
         Ok(IR::Assignment {
-            lhs: def_id,
-            rhs: Expression::Conversion(conversion(operand)),
+            def_id,
+            expr: Expression::Conversion(conversion(operand)),
         })
     }
 
@@ -912,8 +864,8 @@ impl MokaIRGenerator {
         let rhs = frame.pop_value()?;
         frame.push_value(def_id.into())?;
         Ok(IR::Assignment {
-            lhs: def_id,
-            rhs: expr(lhs, rhs),
+            def_id,
+            expr: expr(lhs, rhs),
         })
     }
 
@@ -926,19 +878,12 @@ impl MokaIRGenerator {
     where
         E: FnOnce(ValueRef, ValueRef) -> Expression,
     {
-        let lhs = {
-            frame.pop_padding()?;
-            frame.pop_value()?
-        };
-        let rhs = {
-            frame.pop_padding()?;
-            frame.pop_value()?
-        };
-        frame.push_value(def_id.into())?;
-        frame.push_padding()?;
+        let lhs = frame.pop_dual_slot_value()?;
+        let rhs = frame.pop_dual_slot_value()?;
+        frame.push_dual_slot_value(def_id.into())?;
         Ok(IR::Assignment {
-            lhs: def_id,
-            rhs: expr(lhs, rhs),
+            def_id,
+            expr: expr(lhs, rhs),
         })
     }
 }
