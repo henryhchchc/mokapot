@@ -396,13 +396,13 @@ impl MokaIRGenerator<'_> {
             }
             Ret(idx) => {
                 let return_address = frame.get_local(*idx)?;
-                IR::SubRoutineRet {
+                IR::SubroutineRet {
                     source: return_address,
                 }
             }
             WideRet(idx) => {
                 let return_address = frame.get_local(*idx)?;
-                IR::SubRoutineRet {
+                IR::SubroutineRet {
                     source: return_address,
                 }
             }

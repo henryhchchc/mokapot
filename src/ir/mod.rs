@@ -48,7 +48,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
     type Fact = StackFrame;
     type Error = MokaIRGenerationError;
 
-    fn entry_fact(&self) -> Result<(ProgramCounter, StackFrame), MokaIRGenerationError> {
+    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Error> {
         let first_pc = self
             .method
             .body
@@ -63,27 +63,27 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
 
     fn execute_instruction(
         &mut self,
-        pc: ProgramCounter,
-        fact: &StackFrame,
-    ) -> Result<HashMap<ProgramCounter, StackFrame>, MokaIRGenerationError> {
+        location: Self::Location,
+        fact: &Self::Fact,
+    ) -> Result<HashMap<Self::Location, Self::Fact>, Self::Error> {
         let mut frame = fact.same_frame();
         let mut dirty_nodes = HashMap::new();
         let body = self.method.body.as_ref().expect("TODO");
-        let insn = body.instruction_at(pc).expect("TODO: Raise error");
-        let ir_instruction = self.run_instruction(insn, pc, &mut frame)?;
+        let insn = body.instruction_at(location).expect("TODO: Raise error");
+        let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
         match &ir_instruction {
             MokaInstruction::Nop => {
-                let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
+                let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
                 dirty_nodes.insert(next_pc, frame.same_frame());
             }
             MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
-                let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
+                let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
                 dirty_nodes.insert(next_pc, frame.same_frame());
-                self.add_exception_edges(&body.exception_table, pc, &frame, &mut dirty_nodes);
+                self.add_exception_edges(&body.exception_table, location, &frame, &mut dirty_nodes);
             }
             MokaInstruction::Jump { condition, target } => {
                 if condition.is_some() {
-                    let next_pc = body.next_pc_of(pc).expect("Cannot get next pc");
+                    let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
                     dirty_nodes.insert(next_pc, frame.same_frame());
                     dirty_nodes.insert(*target, frame.same_frame());
                 } else {
@@ -99,9 +99,9 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 dirty_nodes.insert(*default, frame.same_frame());
             }
             MokaInstruction::Return { .. } => {
-                self.add_exception_edges(&body.exception_table, pc, &frame, &mut dirty_nodes);
+                self.add_exception_edges(&body.exception_table, location, &frame, &mut dirty_nodes);
             }
-            MokaInstruction::SubRoutineRet { .. } => {
+            MokaInstruction::SubroutineRet { .. } => {
                 let reachable_subroutines = frame.reachable_subroutines;
                 frame.reachable_subroutines = HashSet::new();
                 reachable_subroutines.into_iter().for_each(|it| {
@@ -110,7 +110,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 })
             }
         }
-        self.ir_instructions.insert(pc, ir_instruction);
+        self.ir_instructions.insert(location, ir_instruction);
         Ok(dirty_nodes)
     }
 }

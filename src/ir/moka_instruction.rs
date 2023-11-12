@@ -38,7 +38,7 @@ pub enum MokaInstruction {
     /// Otherwise, returns from the current method with `void`.
     Return { value: Option<ValueRef> },
     /// Returns from a subroutine jumpping from [`source`](MokaInstruction::SubRoutineRet::source)
-    SubRoutineRet { source: ValueRef },
+    SubroutineRet { source: ValueRef },
 }
 
 impl Display for MokaInstruction {
@@ -85,7 +85,7 @@ impl Display for MokaInstruction {
                     write!(f, "return")
                 }
             }
-            Self::SubRoutineRet { source: target } => write!(f, "ret {}", target),
+            Self::SubroutineRet { source: target } => write!(f, "ret {}", target),
         }
     }
 }
