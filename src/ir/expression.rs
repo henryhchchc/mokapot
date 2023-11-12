@@ -68,10 +68,10 @@ impl Display for Expression {
             ),
             GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
                 f,
-                "get_closure#{}({}) // {}{}",
+                "get_closure#{}[{}]({}) // descriptor: {}",
                 bootstrap_method_idx,
-                args.iter().map(|it| it.to_string()).join(", "),
                 name,
+                args.iter().map(|it| it.to_string()).join(", "),
                 descriptor.to_string()
             ),
         }
