@@ -8,14 +8,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::elements::{
     instruction::{ExceptionTableEntry, ProgramCounter},
-    Method, MethodAccessFlags, MethodDescriptor,
+    Method,
 };
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
 use self::stack_frame::{FrameValue, StackFrame};
 
-use super::{Identifier, MokaInstruction, ValueRef};
+use super::{Identifier, MokaIRMethod, MokaInstruction, ValueRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
@@ -136,13 +136,6 @@ impl<'m> MokaIRGenerator<'m> {
             }
         }
     }
-}
-
-pub struct MokaIRMethod {
-    pub access_flags: MethodAccessFlags,
-    pub name: String,
-    pub descriptor: MethodDescriptor,
-    pub instructions: HashMap<ProgramCounter, MokaInstruction>,
 }
 
 pub trait MokaIRMethodExt {
