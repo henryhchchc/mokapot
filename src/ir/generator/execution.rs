@@ -1,18 +1,18 @@
-use std::iter::once;
-
+use super::{stack_frame::StackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
         references::MethodReference,
         ConstantValue, ReturnType,
     },
-    ir::moka_instruction::{Identifier, MokaInstruction as IR},
+    ir::{
+        expressions::*,
+        moka_instruction::{Identifier, MokaInstruction as IR},
+        Condition, Expression, ValueRef,
+    },
     types::{FieldType, PrimitiveType},
 };
-
-use super::expressions::*;
-use super::Expression;
-use super::{Condition, MokaIRGenerationError, MokaIRGenerator, StackFrame, ValueRef};
+use std::iter::once;
 
 const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
 const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
@@ -396,15 +396,11 @@ impl MokaIRGenerator<'_> {
             }
             Ret(idx) => {
                 let return_address = frame.get_local(*idx)?;
-                IR::SubroutineRet {
-                    source: return_address,
-                }
+                IR::SubroutineRet(return_address)
             }
             WideRet(idx) => {
                 let return_address = frame.get_local(*idx)?;
-                IR::SubroutineRet {
-                    source: return_address,
-                }
+                IR::SubroutineRet(return_address)
             }
             TableSwitch {
                 range,

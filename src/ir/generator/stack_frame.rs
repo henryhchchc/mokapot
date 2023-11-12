@@ -3,10 +3,11 @@ use std::{collections::HashSet, fmt::Display, iter::once};
 use crate::{
     analysis::fixed_point::FixedPointFact,
     elements::{instruction::ProgramCounter, Method, MethodAccessFlags},
+    ir::{Identifier, ValueRef},
     utils::try_merge,
 };
 
-use super::{Identifier, MokaIRGenerationError, ValueRef};
+use super::MokaIRGenerationError;
 
 #[derive(PartialEq, Debug)]
 pub(super) struct StackFrame {

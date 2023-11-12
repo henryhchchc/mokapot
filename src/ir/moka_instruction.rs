@@ -3,11 +3,9 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-use itertools::Itertools;
-
-use crate::elements::instruction::ProgramCounter;
-
 use super::{Condition, Expression};
+use crate::elements::instruction::ProgramCounter;
+use itertools::Itertools;
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug)]
@@ -37,8 +35,8 @@ pub enum MokaInstruction {
     /// Returns from the current method with [`value`](MokaInstruction::Return::value) if [`value`](MokaInstruction::Return::value) is [`Some`].
     /// Otherwise, returns from the current method with `void`.
     Return { value: Option<ValueRef> },
-    /// Returns from a subroutine jumpping from [`source`](MokaInstruction::SubRoutineRet::source)
-    SubroutineRet { source: ValueRef },
+    /// Returns from a subroutine jumpping from [`source`](MokaInstruction::SubroutineRet::source)
+    SubroutineRet(ValueRef),
 }
 
 impl Display for MokaInstruction {
@@ -85,7 +83,7 @@ impl Display for MokaInstruction {
                     write!(f, "return")
                 }
             }
-            Self::SubroutineRet { source: target } => write!(f, "ret {}", target),
+            Self::SubroutineRet(target) => write!(f, "ret {}", target),
         }
     }
 }
@@ -103,14 +101,12 @@ pub enum ValueRef {
 impl Display for ValueRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Def(id) => write!(f, "{}", id),
-            Self::Phi(ids) => {
-                write!(
-                    f,
-                    "Phi({})",
-                    ids.iter().map(|id| format!("{}", id)).join(", ")
-                )
-            }
+            Self::Def(id) => id.fmt(f),
+            Self::Phi(ids) => write!(
+                f,
+                "Phi({})",
+                ids.iter().map(|id| format!("{}", id)).join(", ")
+            ),
         }
     }
 }
