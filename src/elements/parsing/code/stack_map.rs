@@ -1,7 +1,7 @@
 use crate::{
     elements::{
         instruction::{StackMapFrame, VerificationTypeInfo},
-        parsing::constant_pool::ParsingContext,
+        parsing::parsing_context::ParsingContext,
     },
     errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u8},

@@ -10,7 +10,7 @@ use crate::{
     types::FieldType,
 };
 
-use super::constant_pool::ParsingContext;
+use super::parsing_context::ParsingContext;
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {

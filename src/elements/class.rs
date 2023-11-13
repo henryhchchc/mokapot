@@ -38,7 +38,7 @@ pub struct Class {
     pub record: Vec<RecordComponent>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 /// The version of a class file.
 pub struct ClassVersion {
     /// The major version number.

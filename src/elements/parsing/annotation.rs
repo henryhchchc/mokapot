@@ -10,7 +10,7 @@ use crate::{
     types::FieldType,
 };
 
-use super::{attribute::Attribute, constant_pool::ParsingContext};
+use super::{attribute::Attribute, parsing_context::ParsingContext};
 
 impl ElementValue {
     fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>

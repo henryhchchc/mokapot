@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    constant_pool::{ConstantPoolEntry, ParsingContext},
+    parsing_context::{ConstantPoolEntry, ParsingContext},
 };
 
 #[derive(Debug)]

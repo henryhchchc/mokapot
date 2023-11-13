@@ -6,7 +6,7 @@ use crate::{
 
 use super::{
     attribute::{Attribute, AttributeList},
-    constant_pool::ParsingContext,
+    parsing_context::ParsingContext,
 };
 
 impl BootstrapMethod {

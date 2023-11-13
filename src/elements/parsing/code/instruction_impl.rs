@@ -5,7 +5,7 @@ use crate::{
         field::ConstantValue,
         instruction::{Instruction, ProgramCounter},
         method::MethodDescriptor,
-        parsing::constant_pool::{ConstantPoolEntry, ParsingContext},
+        parsing::parsing_context::{ConstantPoolEntry, ParsingContext},
         references::MethodReference,
     },
     errors::ClassFileParsingError,

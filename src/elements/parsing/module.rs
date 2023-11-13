@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     attribute::Attribute,
-    constant_pool::{ConstantPoolEntry, ParsingContext},
+    parsing_context::{ConstantPoolEntry, ParsingContext},
 };
 
 impl ModuleRequire {

@@ -6,7 +6,7 @@ use crate::{
     reader_utils::{read_u16, read_u32},
 };
 
-use super::{attribute::AttributeList, constant_pool::ParsingContext};
+use super::{attribute::AttributeList, parsing_context::ParsingContext};
 
 impl Class {
     pub fn from_reader<R>(reader: R) -> Result<Class, ClassFileParsingError>
