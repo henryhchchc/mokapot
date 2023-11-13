@@ -321,6 +321,21 @@ impl Method {
             }
         }
 
+        if *ctx.class_version()
+            >= (ClassVersion {
+                major: 51,
+                minor: 0,
+            })
+            && name == CLASS_INITIALIZER_NAME
+        {
+            // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
+            if !access_flags.contains(MethodAccessFlags::STATIC)
+                || !descriptor.parameters_types.is_empty()
+            {
+                Err(ClassFileParsingError::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?
+            }
+        }
+
         Ok(Method {
             access_flags,
             name,
