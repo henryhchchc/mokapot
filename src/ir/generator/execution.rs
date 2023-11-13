@@ -14,9 +14,6 @@ use crate::{
 };
 use std::iter::once;
 
-const LONG_TYPE: FieldType = FieldType::Base(PrimitiveType::Long);
-const DOUBLE_TYPE: FieldType = FieldType::Base(PrimitiveType::Double);
-
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
@@ -113,8 +110,7 @@ impl MokaIRGenerator<'_> {
                 IR::SideEffect(Expression::Array(array_op))
             }
             LAStore | DAStore => {
-                let _value_padding = frame.pop_value()?;
-                let value = frame.pop_value()?;
+                let value = frame.pop_dual_slot_value()?;
                 let index = frame.pop_value()?;
                 let array_ref = frame.pop_value()?;
                 let array_op = ArrayOperation::Write {
@@ -335,13 +331,28 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            FCmpL | FCmpG | DCmpL | DCmpG => {
+            FCmpL | FCmpG => {
+                let lhs = frame.pop_value()?;
+                let rhs = frame.pop_value()?;
+                frame.push_value(def_id.into())?;
+                let nan_treatment = match insn {
+                    FCmpG => NaNTreatment::IsLargest,
+                    FCmpL => NaNTreatment::IsSmallest,
+                    _ => unreachable!(),
+                };
+                let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Math(math_op),
+                }
+            }
+            DCmpL | DCmpG => {
                 let lhs = frame.pop_dual_slot_value()?;
                 let rhs = frame.pop_dual_slot_value()?;
                 frame.push_value(def_id.into())?;
                 let nan_treatment = match insn {
-                    FCmpG | DCmpG => NaNTreatment::IsLargest,
-                    FCmpL | DCmpL => NaNTreatment::IsSmallest,
+                    DCmpG => NaNTreatment::IsLargest,
+                    DCmpL => NaNTreatment::IsSmallest,
                     _ => unreachable!(),
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
@@ -436,11 +447,7 @@ impl MokaIRGenerator<'_> {
             }
             Return => IR::Return(None),
             GetStatic(field) => {
-                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.push_dual_slot_value(def_id.into())?;
-                } else {
-                    frame.push_value(def_id.into())?;
-                }
+                frame.typed_push(&field.field_type, def_id.into())?;
                 let field_op = FieldAccess::ReadStatic {
                     field: field.clone(),
                 };
@@ -451,11 +458,7 @@ impl MokaIRGenerator<'_> {
             }
             GetField(field) => {
                 let object_ref = frame.pop_value()?;
-                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.push_dual_slot_value(def_id.into())?;
-                } else {
-                    frame.push_value(def_id.into())?;
-                }
+                frame.typed_push(&field.field_type, def_id.into())?;
                 let field_op = FieldAccess::ReadInstance {
                     object_ref,
                     field: field.clone(),
@@ -466,10 +469,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             PutStatic(field) => {
-                if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.pop_value()?;
-                }
-                let value = frame.pop_value()?;
+                let value = frame.typed_pop(&field.field_type)?;
                 let field_op = FieldAccess::WriteStatic {
                     field: field.clone(),
                     value,
@@ -477,11 +477,7 @@ impl MokaIRGenerator<'_> {
                 IR::SideEffect(Expression::Field(field_op))
             }
             PutField(field) => {
-                let value = if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
-                    frame.pop_dual_slot_value()?
-                } else {
-                    frame.pop_value()?
-                };
+                let value = frame.typed_pop(&field.field_type)?;
                 let object_ref = frame.pop_value()?;
                 let field_op = FieldAccess::WriteInstance {
                     object_ref,
@@ -495,22 +491,17 @@ impl MokaIRGenerator<'_> {
                     .descriptor()
                     .parameters_types
                     .iter()
-                    .map(|_| frame.pop_value())
+                    .rev()
+                    .map(|param_type| frame.typed_pop(param_type))
                     .collect::<Result<_, _>>()?;
                 let object_ref = frame.pop_value()?;
-                let arguments = once(object_ref)
-                    .chain(arguments.into_iter().rev())
-                    .collect();
+                let arguments = once(object_ref).chain(arguments).collect();
 
                 let rhs = Expression::Call(method_ref.clone(), arguments);
-                match method_ref.descriptor().return_type {
+                match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
-                        frame.push_dual_slot_value(def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
-                    _ => {
-                        frame.push_value(def_id.into())?;
+                    ReturnType::Some(return_type) => {
+                        frame.typed_push(return_type, def_id.into())?;
                         IR::Assignment { def_id, expr: rhs }
                     }
                 }
@@ -520,46 +511,36 @@ impl MokaIRGenerator<'_> {
                     .descriptor
                     .parameters_types
                     .iter()
-                    .map(|_| frame.pop_value())
+                    .rev()
+                    .map(|param_type| frame.typed_pop(param_type))
                     .collect::<Result<_, _>>()?;
                 let object_ref = frame.pop_value()?;
-                let arguments = once(object_ref)
-                    .chain(arguments.into_iter().rev())
-                    .collect();
+                let arguments = once(object_ref).chain(arguments).collect();
 
                 let rhs =
                     Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
-                match i_method_ref.descriptor.return_type {
+                match &i_method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
-                        frame.push_dual_slot_value(def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
-                    _ => {
-                        frame.push_value(def_id.into())?;
+                    ReturnType::Some(return_type) => {
+                        frame.typed_push(return_type, def_id.into())?;
                         IR::Assignment { def_id, expr: rhs }
                     }
                 }
             }
             InvokeStatic(method_ref) => {
-                let mut arguments: Vec<_> = method_ref
+                let arguments: Vec<_> = method_ref
                     .descriptor()
                     .parameters_types
                     .iter()
-                    .map(|_| frame.pop_value())
+                    .rev()
+                    .map(|param_type| frame.typed_pop(param_type))
                     .collect::<Result<_, _>>()?;
 
-                arguments.reverse();
-
                 let rhs = Expression::Call(method_ref.clone(), arguments);
-                match method_ref.descriptor().return_type {
+                match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
-                        frame.push_dual_slot_value(def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
-                    _ => {
-                        frame.push_value(def_id.into())?;
+                    ReturnType::Some(return_type) => {
+                        frame.typed_push(return_type, def_id.into())?;
                         IR::Assignment { def_id, expr: rhs }
                     }
                 }
@@ -572,8 +553,8 @@ impl MokaIRGenerator<'_> {
                 let arguments: Vec<_> = descriptor
                     .parameters_types
                     .iter()
-                    .map(|_| frame.pop_value())
                     .rev()
+                    .map(|param_type| frame.typed_pop(param_type))
                     .collect::<Result<_, _>>()?;
 
                 let rhs = Expression::GetClosure(
@@ -582,14 +563,10 @@ impl MokaIRGenerator<'_> {
                     arguments,
                     descriptor.to_owned(),
                 );
-                match descriptor.return_type {
+                match &descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(LONG_TYPE | DOUBLE_TYPE) => {
-                        frame.push_dual_slot_value(def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
-                    _ => {
-                        frame.push_value(def_id.into())?;
+                    ReturnType::Some(return_type) => {
+                        frame.typed_push(return_type, def_id.into())?;
                         IR::Assignment { def_id, expr: rhs }
                     }
                 }

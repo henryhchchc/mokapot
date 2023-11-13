@@ -19,8 +19,10 @@ use super::{Identifier, MokaIRMethod, MokaInstruction, ValueRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
-    #[error("Error then executing bytecode on stack frame: {0}")]
+    #[error("Error when executing bytecode on stack frame: {0}")]
     StackFrameError(#[from] StackFrameError),
+    #[error("Error when merging two stack frames: {0}")]
+    MergeError(StackFrameError),
     #[error("The method does not have a body")]
     NoMethodBody,
     #[error("The method contains malformed control flow")]

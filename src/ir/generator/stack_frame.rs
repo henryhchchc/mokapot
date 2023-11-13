@@ -1,9 +1,12 @@
-use std::{collections::HashSet, fmt::Display, iter::once};
+use std::{backtrace::Backtrace, collections::HashSet, fmt::Display, iter::once};
+
+use itertools::Itertools;
 
 use crate::{
     analysis::fixed_point::FixedPointFact,
-    elements::{instruction::ProgramCounter, Method, MethodAccessFlags, MethodDescriptor},
+    elements::{instruction::ProgramCounter, MethodDescriptor},
     ir::{Identifier, ValueRef},
+    types::{FieldType, PrimitiveType},
     utils::try_merge,
 };
 
@@ -41,22 +44,26 @@ impl StackFrame {
         max_locals: u16,
         max_stack: u16,
     ) -> Self {
-        let mut locals = vec![None; max_locals.into()];
+        let mut local_variables = vec![None; max_locals.into()];
         let mut local_idx = 0;
         if !is_static {
             let this_ref = ValueRef::Def(Identifier::This);
-            locals[local_idx].replace(FrameValue::ValueRef(this_ref));
+            local_variables[local_idx].replace(FrameValue::ValueRef(this_ref));
             local_idx += 1;
         }
-        for i in 0..desc.parameters_types.len() {
-            let arg_ref = ValueRef::Def(Identifier::Arg(i as u16));
-            locals[local_idx].replace(FrameValue::ValueRef(arg_ref));
+        for (idx, local_type) in desc.parameters_types.iter().with_position() {
+            let arg_ref = ValueRef::Def(Identifier::Arg(idx as u16));
+            local_variables[local_idx].replace(FrameValue::ValueRef(arg_ref));
             local_idx += 1;
+            if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
+                local_variables[local_idx].replace(FrameValue::Top);
+                local_idx += 1;
+            }
         }
         StackFrame {
             max_locals,
             max_stack,
-            local_variables: locals,
+            local_variables,
             operand_stack: Vec::with_capacity(max_stack as usize),
             reachable_subroutines: HashSet::new(),
         }
@@ -95,8 +102,8 @@ impl StackFrame {
     }
 
     pub(super) fn push_dual_slot_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
-        self.push_raw(FrameValue::ValueRef(value))?;
-        self.push_raw(FrameValue::Top)
+        self.push_raw(FrameValue::Top)?;
+        self.push_raw(FrameValue::ValueRef(value))
     }
 
     pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
@@ -110,6 +117,31 @@ impl StackFrame {
         }
     }
 
+    pub(super) fn typed_pop(
+        &mut self,
+        value_type: &FieldType,
+    ) -> Result<ValueRef, StackFrameError> {
+        match value_type {
+            FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
+                self.pop_dual_slot_value()
+            }
+            _ => self.pop_value(),
+        }
+    }
+
+    pub(super) fn typed_push(
+        &mut self,
+        value_type: &FieldType,
+        value: ValueRef,
+    ) -> Result<(), StackFrameError> {
+        match value_type {
+            FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
+                self.push_dual_slot_value(value)
+            }
+            _ => self.push_value(value),
+        }
+    }
+
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<usize>,
@@ -120,11 +152,11 @@ impl StackFrame {
         }
         match (
             // If panic here then `local_variables` are not allocated correctly
-            self.local_variables[idx].clone(),
-            self.local_variables[idx + 1].clone(),
+            self.local_variables[idx].as_ref(),
+            self.local_variables[idx + 1].as_ref(),
         ) {
-            (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it),
-            _ => Err(StackFrameError::ValueMismatch.into()),
+            (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it.clone()),
+            _ => Err(StackFrameError::ValueMismatch),
         }
     }
 

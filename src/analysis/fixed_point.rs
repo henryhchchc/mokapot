@@ -34,7 +34,7 @@ where
     while let Some((location, incoming_fact)) = dirty_nodes.pop_front() {
         let (merged_fact, is_fact_updated) = match facts.remove(&location) {
             Some(current_fact) => {
-                let new_fact = current_fact.merge(incoming_fact)?;
+                let new_fact = current_fact.merge(incoming_fact).map_err(A::Error::from)?;
                 let is_changed = new_fact != current_fact;
                 (new_fact, is_changed)
             }
