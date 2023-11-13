@@ -12,7 +12,7 @@ use crate::{
     types::FieldType,
 };
 
-use std::collections::LinkedList;
+use std::{collections::LinkedList, net};
 
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
@@ -424,8 +424,12 @@ impl MokaIRGenerator<'_> {
                 condition: None,
                 target: *target,
             },
-            Jsr(_) | JsrW(_) => {
-                let value = Expression::ReturnAddress(pc);
+            Jsr(target) | JsrW(target) => {
+                let next_pc = self.next_pc_of(pc)?;
+                let value = Expression::Subroutine {
+                    return_address: next_pc,
+                    target: *target,
+                };
                 frame.push_value(def_id.into())?;
                 IR::Assignment {
                     def_id,

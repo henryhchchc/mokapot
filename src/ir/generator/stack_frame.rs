@@ -29,7 +29,7 @@ pub enum StackFrameError {
     LocalLimitExceed,
     #[error("The local variable is not initialized")]
     LocalUnset,
-    #[error("The stack limit mismatch")]
+    #[error("The stack size mismatch")]
     StackSizeMismatch,
     #[error("The local limit mismatch")]
     LocalLimitMismatch,
@@ -168,6 +168,11 @@ impl StackFrame {
         let idx: usize = idx.into();
         if idx < self.max_locals as usize {
             self.local_variables[idx].replace(FrameValue::ValueRef(value));
+            if idx < self.max_locals as usize - 1
+                && matches!(self.local_variables[idx + 1], Some(FrameValue::Top))
+            {
+                self.local_variables[idx + 1].take();
+            }
             Ok(())
         } else {
             Err(StackFrameError::LocalLimitExceed)
@@ -237,8 +242,11 @@ impl FixedPointFact for StackFrame {
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, FrameValue::merge))
-            .collect::<Result<_, _>>()?;
+            .map(|(self_loc, other_loc)| {
+                try_merge(self_loc, other_loc, FrameValue::merge).unwrap_or(None)
+            })
+            .collect();
+        // .collect::<Result<_, _>>()?;
         Ok(Self {
             max_locals: self.max_locals,
             max_stack: self.max_stack,

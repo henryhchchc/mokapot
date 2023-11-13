@@ -43,7 +43,10 @@ pub enum Expression {
     /// Creates a new object.
     New(ClassReference),
     /// A return address.
-    ReturnAddress(ProgramCounter),
+    Subroutine {
+        return_address: ProgramCounter,
+        target: ProgramCounter,
+    },
 }
 
 impl Display for Expression {
@@ -51,7 +54,10 @@ impl Display for Expression {
         use Expression::*;
         match self {
             Const(c) => write!(f, "{:?}", c),
-            ReturnAddress(pc) => write!(f, "{:?}", pc),
+            Subroutine {
+                target,
+                return_address,
+            } => write!(f, "subroutine to {}, return to {}", target, return_address),
             Field(field_op) => field_op.fmt(f),
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),

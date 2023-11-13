@@ -74,7 +74,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         match &ir_instruction {
             MokaInstruction::Nop => {
                 let next_pc = self.next_pc_of(location)?;
-                dirty_nodes.insert(next_pc, frame.same_frame());
+                dirty_nodes.insert(next_pc, frame);
             }
             MokaInstruction::Assignment {
                 expr: Expression::Throw(_),
@@ -86,6 +86,13 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                     &frame,
                     &mut dirty_nodes,
                 );
+            }
+            MokaInstruction::Assignment {
+                expr: Expression::Subroutine { target, .. },
+                ..
+            } => {
+                frame.reachable_subroutines.insert(*target);
+                dirty_nodes.insert(*target, frame);
             }
             MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
                 let next_pc = self.next_pc_of(location)?;
