@@ -281,7 +281,11 @@ impl ParsingContext {
 
     pub(crate) fn get_type_ref(&self, index: u16) -> Result<TypeReference, ClassFileParsingError> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
-        let field_type = FieldType::from_str(name.as_str())?;
+        let field_type = if !name.starts_with('[') {
+            FieldType::Object(ClassReference::new(name))
+        } else {
+            FieldType::from_str(name.as_str())?
+        };
         Ok(TypeReference(field_type.to_owned()))
     }
 }
