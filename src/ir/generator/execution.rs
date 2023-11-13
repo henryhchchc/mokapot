@@ -556,8 +556,6 @@ impl MokaIRGenerator<'_> {
                         let arg = frame.typed_pop(param_type)?;
                         args.push_front(arg);
                     }
-                    let object_ref = frame.pop_value()?;
-                    args.push_front(object_ref);
                     args.into_iter().collect()
                 };
                 let rhs = Expression::GetClosure(
