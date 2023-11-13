@@ -1,4 +1,4 @@
-use std::{backtrace::Backtrace, collections::HashSet, fmt::Display, iter::once};
+use std::{collections::HashSet, fmt::Display, iter::once};
 
 use itertools::Itertools;
 

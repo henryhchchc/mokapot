@@ -225,11 +225,38 @@ impl MokaIRGenerator<'_> {
                 }
             }
             IShl => self.binary_op_math(frame, def_id, MathOperation::ShiftLeft)?,
-            LShl => self.binary_wide_math(frame, def_id, MathOperation::ShiftLeft)?,
             IShr => self.binary_op_math(frame, def_id, MathOperation::ShiftRight)?,
-            LShr => self.binary_wide_math(frame, def_id, MathOperation::ShiftRight)?,
+            LShl => {
+                let shift_amount = frame.pop_value()?;
+                let base = frame.pop_dual_slot_value()?;
+                frame.push_dual_slot_value(def_id.into())?;
+                let math_op = MathOperation::ShiftLeft(base, shift_amount);
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Math(math_op),
+                }
+            }
+            LShr => {
+                let shift_amount = frame.pop_value()?;
+                let base = frame.pop_dual_slot_value()?;
+                frame.push_dual_slot_value(def_id.into())?;
+                let math_op = MathOperation::ShiftRight(base, shift_amount);
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Math(math_op),
+                }
+            }
+            LUShr => {
+                let shift_amount = frame.pop_value()?;
+                let base = frame.pop_dual_slot_value()?;
+                frame.push_dual_slot_value(def_id.into())?;
+                let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Math(math_op),
+                }
+            }
             IUShr => self.binary_op_math(frame, def_id, MathOperation::LogicalShiftRight)?,
-            LUShr => self.binary_wide_math(frame, def_id, MathOperation::LogicalShiftRight)?,
             IAnd => self.binary_op_math(frame, def_id, MathOperation::BitwiseAnd)?,
             LAnd => self.binary_wide_math(frame, def_id, MathOperation::BitwiseAnd)?,
             IOr => self.binary_op_math(frame, def_id, MathOperation::BitwiseOr)?,

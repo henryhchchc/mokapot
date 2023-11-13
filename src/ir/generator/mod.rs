@@ -15,7 +15,7 @@ use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
 use self::stack_frame::{FrameValue, StackFrame, StackFrameError};
 
-use super::{Identifier, MokaIRMethod, MokaInstruction, ValueRef};
+use super::{Expression, Identifier, MokaIRMethod, MokaInstruction, ValueRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
@@ -75,6 +75,17 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             MokaInstruction::Nop => {
                 let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
+            }
+            MokaInstruction::Assignment {
+                expr: Expression::Throw(_),
+                ..
+            } => {
+                self.add_exception_edges(
+                    &self.body.exception_table,
+                    location,
+                    &frame,
+                    &mut dirty_nodes,
+                );
             }
             MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
                 let next_pc = self.next_pc_of(location)?;
