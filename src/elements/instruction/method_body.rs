@@ -31,12 +31,6 @@ impl MethodBody {
             .find(|(it, _)| it == &pc)
             .map(|(_, it)| it)
     }
-    pub fn next_pc_of(&self, this_pc: ProgramCounter) -> Option<ProgramCounter> {
-        let mut iter = self.instructions.iter().skip_while(|(pc, _)| *pc < this_pc);
-        iter.next()
-            .filter(|(pc, _)| *pc == this_pc)
-            .and_then(|_| iter.next().map(|(it, _)| it).cloned())
-    }
 }
 
 #[cfg(test)]
@@ -69,25 +63,6 @@ mod test {
             ..Default::default()
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
-    }
-
-    #[test]
-    fn next_insn() {
-        let body = MethodBody {
-            instructions: vec![
-                (0.into(), Nop),
-                (2.into(), IConst0),
-                (3.into(), IConst1),
-                (5.into(), Nop),
-                (7.into(), IConst0),
-                (9.into(), IConst1),
-            ],
-            ..Default::default()
-        };
-        assert_eq!(None, body.next_pc_of(1.into()));
-        assert_eq!(None, body.next_pc_of(4.into()));
-        assert_eq!(Some(2.into()), body.next_pc_of(0.into()));
-        assert_eq!(Some(7.into()), body.next_pc_of(5.into()));
     }
 }
 

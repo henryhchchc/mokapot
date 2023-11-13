@@ -7,37 +7,31 @@ mod test;
 use std::collections::{HashMap, HashSet};
 
 use crate::elements::{
-    instruction::{ExceptionTableEntry, ProgramCounter},
-    Method,
+    instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
+    Method, MethodAccessFlags,
 };
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
-use self::stack_frame::{FrameValue, StackFrame};
+use self::stack_frame::{FrameValue, StackFrame, StackFrameError};
 
 use super::{Identifier, MokaIRMethod, MokaInstruction, ValueRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
-    #[error("Trying to pop an empty stack")]
-    StackUnderflow,
-    #[error("The stack size exceeds the max stack size")]
-    StackOverflow,
-    #[error("Expected a ValueRef but got a Padding or vice versa")]
-    ValueMismatch,
-    #[error("The local variable index exceeds the max local variable size")]
-    LocalLimitExceed,
-    #[error("The local variable is not initialized")]
-    LocalUnset,
-    #[error("The stack limit mismatch")]
-    StackSizeMismatch,
-    #[error("The local limit mismatch")]
-    LocalLimitMismatch,
+    #[error("Error then executing bytecode on stack frame: {0}")]
+    StackFrameError(#[from] StackFrameError),
+    #[error("The method does not have a body")]
+    NoMethodBody,
+    #[error("The method contains malformed control flow")]
+    MalformedControlFlow,
 }
 
 struct MokaIRGenerator<'m> {
     ir_instructions: HashMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
+    body: &'m MethodBody,
+    next_pc_mapping: HashMap<ProgramCounter, ProgramCounter>,
 }
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
@@ -47,15 +41,20 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
 
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Error> {
         let first_pc = self
-            .method
             .body
-            .as_ref()
-            .expect("TODO")
             .instructions
             .first()
-            .expect("TODO")
+            .ok_or(MokaIRGenerationError::MalformedControlFlow)?
             .0;
-        Ok((first_pc, StackFrame::new(self.method)))
+        Ok((
+            first_pc,
+            StackFrame::new(
+                self.method.access_flags.contains(MethodAccessFlags::STATIC),
+                self.method.descriptor.clone(),
+                self.body.max_locals,
+                self.body.max_stack,
+            ),
+        ))
     }
 
     fn execute_instruction(
@@ -65,22 +64,29 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
     ) -> Result<HashMap<Self::Location, Self::Fact>, Self::Error> {
         let mut frame = fact.same_frame();
         let mut dirty_nodes = HashMap::new();
-        let body = self.method.body.as_ref().expect("TODO");
-        let insn = body.instruction_at(location).expect("TODO: Raise error");
+        let insn = self
+            .body
+            .instruction_at(location)
+            .ok_or(MokaIRGenerationError::MalformedControlFlow)?;
         let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
         match &ir_instruction {
             MokaInstruction::Nop => {
-                let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
+                let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
             }
             MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
-                let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
+                let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
-                self.add_exception_edges(&body.exception_table, location, &frame, &mut dirty_nodes);
+                self.add_exception_edges(
+                    &self.body.exception_table,
+                    location,
+                    &frame,
+                    &mut dirty_nodes,
+                );
             }
             MokaInstruction::Jump { condition, target } => {
                 if condition.is_some() {
-                    let next_pc = body.next_pc_of(location).expect("Cannot get next pc");
+                    let next_pc = self.next_pc_of(location)?;
                     dirty_nodes.insert(next_pc, frame.same_frame());
                     dirty_nodes.insert(*target, frame.same_frame());
                 } else {
@@ -95,16 +101,21 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 });
                 dirty_nodes.insert(*default, frame.same_frame());
             }
-            MokaInstruction::Return { .. } => {
-                self.add_exception_edges(&body.exception_table, location, &frame, &mut dirty_nodes);
+            MokaInstruction::Return(_) => {
+                self.add_exception_edges(
+                    &self.body.exception_table,
+                    location,
+                    &frame,
+                    &mut dirty_nodes,
+                );
             }
             MokaInstruction::SubroutineRet(_) => {
                 let reachable_subroutines = frame.reachable_subroutines;
                 frame.reachable_subroutines = HashSet::new();
-                reachable_subroutines.into_iter().for_each(|it| {
-                    let next_pc = body.next_pc_of(it).expect("Cannot get next pc");
+                for it in reachable_subroutines {
+                    let next_pc = self.next_pc_of(it)?;
                     dirty_nodes.insert(next_pc, frame.same_frame());
-                })
+                }
             }
         }
         self.ir_instructions.insert(location, ir_instruction);
@@ -113,11 +124,34 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
 }
 
 impl<'m> MokaIRGenerator<'m> {
-    fn for_method(method: &'m Method) -> Self {
-        Self {
+    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRGenerationError> {
+        self.next_pc_mapping
+            .get(&pc)
+            .copied()
+            .ok_or(MokaIRGenerationError::MalformedControlFlow)
+    }
+
+    fn for_method(method: &'m Method) -> Result<Self, <Self as FixedPointAnalyzer>::Error> {
+        let body = method
+            .body
+            .as_ref()
+            .ok_or(MokaIRGenerationError::NoMethodBody)?;
+        let current_pc_iter = body.instructions.iter();
+        let next_pc_iter = {
+            let mut it = body.instructions.iter();
+            it.next();
+            it
+        };
+        let next_pc_mapping = current_pc_iter
+            .zip(next_pc_iter)
+            .map(|((c, _), (n, _))| (*c, *n))
+            .collect();
+        Ok(Self {
             ir_instructions: Default::default(),
             method,
-        }
+            body,
+            next_pc_mapping,
+        })
     }
 
     fn add_exception_edges(
@@ -145,7 +179,7 @@ pub trait MokaIRMethodExt {
 
 impl MokaIRMethodExt for Method {
     fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError> {
-        let instructions = MokaIRGenerator::for_method(self).generate()?;
+        let instructions = MokaIRGenerator::for_method(self)?.generate()?;
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),

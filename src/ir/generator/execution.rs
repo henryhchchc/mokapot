@@ -428,13 +428,13 @@ impl MokaIRGenerator<'_> {
             }
             IReturn | FReturn | AReturn => {
                 let value = frame.pop_value()?;
-                IR::Return { value: Some(value) }
+                IR::Return(Some(value))
             }
             LReturn | DReturn => {
                 let value = frame.pop_dual_slot_value()?;
-                IR::Return { value: Some(value) }
+                IR::Return(Some(value))
             }
-            Return => IR::Return { value: None },
+            Return => IR::Return(None),
             GetStatic(field) => {
                 if let LONG_TYPE | DOUBLE_TYPE = field.field_type {
                     frame.push_dual_slot_value(def_id.into())?;

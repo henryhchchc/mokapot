@@ -34,8 +34,8 @@ pub enum MokaInstruction {
     },
     /// Returns from the current method with [`value`](MokaInstruction::Return::value) if [`value`](MokaInstruction::Return::value) is [`Some`].
     /// Otherwise, returns from the current method with `void`.
-    Return { value: Option<ValueRef> },
-    /// Returns from a subroutine jumpping from [`source`](MokaInstruction::SubroutineRet::source)
+    Return(Option<ValueRef>),
+    /// Returns from a subroutine.
     SubroutineRet(ValueRef),
 }
 
@@ -76,7 +76,7 @@ impl Display for MokaInstruction {
                         .join(", ")
                 )
             }
-            Self::Return { value } => {
+            Self::Return(value) => {
                 if let Some(value) = value {
                     write!(f, "return {}", value)
                 } else {

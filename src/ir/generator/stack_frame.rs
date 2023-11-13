@@ -2,12 +2,10 @@ use std::{collections::HashSet, fmt::Display, iter::once};
 
 use crate::{
     analysis::fixed_point::FixedPointFact,
-    elements::{instruction::ProgramCounter, Method, MethodAccessFlags},
+    elements::{instruction::ProgramCounter, Method, MethodAccessFlags, MethodDescriptor},
     ir::{Identifier, ValueRef},
     utils::try_merge,
 };
-
-use super::MokaIRGenerationError;
 
 #[derive(PartialEq, Debug)]
 pub(super) struct StackFrame {
@@ -18,90 +16,107 @@ pub(super) struct StackFrame {
     pub reachable_subroutines: HashSet<ProgramCounter>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum StackFrameError {
+    #[error("Trying to pop an empty stack")]
+    StackUnderflow,
+    #[error("The stack size exceeds the max stack size")]
+    StackOverflow,
+    #[error("The local variable index exceeds the max local variable size")]
+    LocalLimitExceed,
+    #[error("The local variable is not initialized")]
+    LocalUnset,
+    #[error("The stack limit mismatch")]
+    StackSizeMismatch,
+    #[error("The local limit mismatch")]
+    LocalLimitMismatch,
+    #[error("Expected a ValueRef but got a Padding or vice versa")]
+    ValueMismatch,
+}
+
 impl StackFrame {
-    pub(super) fn new(method: &Method) -> Self {
-        let body = method.body.as_ref().expect("TODO");
-        let mut locals = vec![None; body.max_locals.into()];
+    pub(super) fn new(
+        is_static: bool,
+        desc: MethodDescriptor,
+        max_locals: u16,
+        max_stack: u16,
+    ) -> Self {
+        let mut locals = vec![None; max_locals.into()];
         let mut local_idx = 0;
-        if !method.access_flags.contains(MethodAccessFlags::STATIC) {
+        if !is_static {
             let this_ref = ValueRef::Def(Identifier::This);
             locals[local_idx].replace(FrameValue::ValueRef(this_ref));
             local_idx += 1;
         }
-        for i in 0..method.descriptor.parameters_types.len() {
+        for i in 0..desc.parameters_types.len() {
             let arg_ref = ValueRef::Def(Identifier::Arg(i as u16));
             locals[local_idx].replace(FrameValue::ValueRef(arg_ref));
             local_idx += 1;
         }
         StackFrame {
-            max_locals: body.max_locals,
-            max_stack: body.max_stack,
+            max_locals,
+            max_stack,
             local_variables: locals,
-            operand_stack: Vec::with_capacity(body.max_stack as usize),
+            operand_stack: Vec::with_capacity(max_stack as usize),
             reachable_subroutines: HashSet::new(),
         }
     }
 
-    pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), MokaIRGenerationError> {
+    pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), StackFrameError> {
         if self.operand_stack.len() as u16 >= self.max_stack {
-            Err(MokaIRGenerationError::StackOverflow)
+            Err(StackFrameError::StackOverflow)
         } else {
             Ok(self.operand_stack.push(value))
         }
     }
 
-    pub(super) fn pop_raw(&mut self) -> Result<FrameValue, MokaIRGenerationError> {
+    pub(super) fn pop_raw(&mut self) -> Result<FrameValue, StackFrameError> {
         self.operand_stack
             .pop()
-            .ok_or(MokaIRGenerationError::StackUnderflow)
+            .ok_or(StackFrameError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<ValueRef, MokaIRGenerationError> {
+    pub(super) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
         match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(MokaIRGenerationError::ValueMismatch),
+            FrameValue::Top => Err(StackFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, MokaIRGenerationError> {
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, StackFrameError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (FrameValue::ValueRef(it), FrameValue::Top) => Ok(it),
-            _ => Err(MokaIRGenerationError::ValueMismatch),
+            _ => Err(StackFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn push_value(&mut self, value: ValueRef) -> Result<(), MokaIRGenerationError> {
+    pub(super) fn push_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn push_dual_slot_value(
-        &mut self,
-        value: ValueRef,
-    ) -> Result<(), MokaIRGenerationError> {
+    pub(super) fn push_dual_slot_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
         self.push_raw(FrameValue::ValueRef(value))?;
         self.push_raw(FrameValue::Top)
     }
 
-    pub(super) fn get_local(
-        &self,
-        idx: impl Into<usize>,
-    ) -> Result<ValueRef, MokaIRGenerationError> {
-        let frame_value = self.local_variables[idx.into()]
+    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
+        let idx = idx.into();
+        let frame_value = self.local_variables[idx]
             .clone()
-            .ok_or(MokaIRGenerationError::LocalUnset)?;
+            .ok_or(StackFrameError::LocalUnset)?;
         match frame_value {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(MokaIRGenerationError::ValueMismatch),
+            FrameValue::Top => Err(StackFrameError::ValueMismatch),
         }
     }
 
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<usize>,
-    ) -> Result<ValueRef, MokaIRGenerationError> {
+    ) -> Result<ValueRef, StackFrameError> {
         let idx = idx.into();
         if idx + 1 >= self.max_locals as usize {
-            return Err(MokaIRGenerationError::LocalLimitExceed);
+            return Err(StackFrameError::LocalLimitExceed);
         }
         match (
             // If panic here then `local_variables` are not allocated correctly
@@ -109,7 +124,7 @@ impl StackFrame {
             self.local_variables[idx + 1].clone(),
         ) {
             (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it),
-            _ => Err(MokaIRGenerationError::ValueMismatch),
+            _ => Err(StackFrameError::ValueMismatch.into()),
         }
     }
 
@@ -117,13 +132,13 @@ impl StackFrame {
         &mut self,
         idx: impl Into<usize>,
         value: ValueRef,
-    ) -> Result<(), MokaIRGenerationError> {
+    ) -> Result<(), StackFrameError> {
         let idx: usize = idx.into();
         if idx < self.max_locals as usize {
             self.local_variables[idx].replace(FrameValue::ValueRef(value));
             Ok(())
         } else {
-            Err(MokaIRGenerationError::LocalLimitExceed)
+            Err(StackFrameError::LocalLimitExceed)
         }
     }
 
@@ -131,7 +146,7 @@ impl StackFrame {
         &mut self,
         idx: impl Into<usize>,
         value: ValueRef,
-    ) -> Result<(), MokaIRGenerationError> {
+    ) -> Result<(), StackFrameError> {
         let idx: usize = idx.into();
         if idx + 1 < self.max_locals as usize {
             // If panic here then `local_variables` are not allocated correctly
@@ -139,7 +154,7 @@ impl StackFrame {
             self.local_variables[idx + 1].replace(FrameValue::Top);
             Ok(())
         } else {
-            Err(MokaIRGenerationError::LocalLimitExceed)
+            Err(StackFrameError::LocalLimitExceed)
         }
     }
 
@@ -167,17 +182,17 @@ impl StackFrame {
 }
 
 impl FixedPointFact for StackFrame {
-    type MergeError = MokaIRGenerationError;
+    type MergeError = StackFrameError;
 
     fn merge(&self, other: Self) -> Result<Self, Self::MergeError> {
         if self.max_locals != other.max_locals {
-            return Err(MokaIRGenerationError::LocalLimitMismatch);
+            return Err(StackFrameError::LocalLimitMismatch);
         }
         if self.local_variables.len() != other.local_variables.len() {
             panic!("BUG: `local_variables` are not allocated correctly")
         }
         if self.operand_stack.len() != other.operand_stack.len() {
-            return Err(MokaIRGenerationError::StackSizeMismatch);
+            return Err(StackFrameError::StackSizeMismatch);
         }
         let reachable_subroutines = self
             .reachable_subroutines
@@ -219,7 +234,7 @@ impl Display for FrameValue {
 }
 
 impl FrameValue {
-    pub fn merge(x: Self, y: Self) -> Result<Self, MokaIRGenerationError> {
+    pub fn merge(x: Self, y: Self) -> Result<Self, StackFrameError> {
         use ValueRef::*;
         match (x, y) {
             (lhs, rhs) if lhs == rhs => Ok(lhs),
@@ -233,7 +248,7 @@ impl FrameValue {
                 };
                 Ok(FrameValue::ValueRef(result))
             }
-            _ => Err(MokaIRGenerationError::ValueMismatch),
+            _ => Err(StackFrameError::ValueMismatch),
         }
     }
 }
