@@ -6,13 +6,13 @@ use crate::{
         ConstantValue, ReturnType,
     },
     ir::{
-        expressions::*,
-        moka_instruction::{Identifier, MokaInstruction as IR},
-        Condition, Expression, ValueRef,
+        expressions::*, moka_instruction::Identifier, Condition, Expression, MokaInstruction as IR,
+        ValueRef,
     },
-    types::{FieldType, PrimitiveType},
+    types::FieldType,
 };
-use std::iter::once;
+
+use std::collections::LinkedList;
 
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
@@ -487,16 +487,16 @@ impl MokaIRGenerator<'_> {
                 IR::SideEffect(Expression::Field(field_op))
             }
             InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
-                let arguments: Vec<_> = method_ref
-                    .descriptor()
-                    .parameters_types
-                    .iter()
-                    .rev()
-                    .map(|param_type| frame.typed_pop(param_type))
-                    .collect::<Result<_, _>>()?;
-                let object_ref = frame.pop_value()?;
-                let arguments = once(object_ref).chain(arguments).collect();
-
+                let arguments = {
+                    let mut args = LinkedList::new();
+                    for param_type in method_ref.descriptor().parameters_types.iter().rev() {
+                        let arg = frame.typed_pop(param_type)?;
+                        args.push_front(arg);
+                    }
+                    let object_ref = frame.pop_value()?;
+                    args.push_front(object_ref);
+                    args.into_iter().collect()
+                };
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
@@ -507,16 +507,16 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeInterface(i_method_ref, _) => {
-                let arguments: Vec<_> = i_method_ref
-                    .descriptor
-                    .parameters_types
-                    .iter()
-                    .rev()
-                    .map(|param_type| frame.typed_pop(param_type))
-                    .collect::<Result<_, _>>()?;
-                let object_ref = frame.pop_value()?;
-                let arguments = once(object_ref).chain(arguments).collect();
-
+                let arguments = {
+                    let mut args = LinkedList::new();
+                    for param_type in i_method_ref.descriptor.parameters_types.iter().rev() {
+                        let arg = frame.typed_pop(param_type)?;
+                        args.push_front(arg);
+                    }
+                    let object_ref = frame.pop_value()?;
+                    args.push_front(object_ref);
+                    args.into_iter().collect()
+                };
                 let rhs =
                     Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
                 match &i_method_ref.descriptor.return_type {
@@ -528,14 +528,14 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeStatic(method_ref) => {
-                let arguments: Vec<_> = method_ref
-                    .descriptor()
-                    .parameters_types
-                    .iter()
-                    .rev()
-                    .map(|param_type| frame.typed_pop(param_type))
-                    .collect::<Result<_, _>>()?;
-
+                let arguments = {
+                    let mut args = LinkedList::new();
+                    for param_type in method_ref.descriptor().parameters_types.iter().rev() {
+                        let arg = frame.typed_pop(param_type)?;
+                        args.push_front(arg);
+                    }
+                    args.into_iter().collect()
+                };
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
@@ -550,13 +550,16 @@ impl MokaIRGenerator<'_> {
                 bootstrap_method_index,
                 name,
             } => {
-                let arguments: Vec<_> = descriptor
-                    .parameters_types
-                    .iter()
-                    .rev()
-                    .map(|param_type| frame.typed_pop(param_type))
-                    .collect::<Result<_, _>>()?;
-
+                let arguments = {
+                    let mut args = LinkedList::new();
+                    for param_type in descriptor.parameters_types.iter().rev() {
+                        let arg = frame.typed_pop(param_type)?;
+                        args.push_front(arg);
+                    }
+                    let object_ref = frame.pop_value()?;
+                    args.push_front(object_ref);
+                    args.into_iter().collect()
+                };
                 let rhs = Expression::GetClosure(
                     *bootstrap_method_index,
                     name.to_owned(),
