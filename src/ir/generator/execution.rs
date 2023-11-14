@@ -3,7 +3,7 @@ use crate::{
     elements::{
         instruction::{Instruction, ProgramCounter, TypeReference},
         references::MethodReference,
-        ConstantValue, ReturnType,
+        ConstantValue, MethodDescriptor, ReturnType,
     },
     ir::{
         expressions::*, moka_instruction::Identifier, Condition, Expression, MokaInstruction as IR,
@@ -518,16 +518,7 @@ impl MokaIRGenerator<'_> {
                 IR::SideEffect(Expression::Field(field_op))
             }
             InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
-                let arguments = {
-                    let mut args = LinkedList::new();
-                    for param_type in method_ref.descriptor().parameters_types.iter().rev() {
-                        let arg = frame.typed_pop(param_type)?;
-                        args.push_front(arg);
-                    }
-                    let object_ref = frame.pop_value()?;
-                    args.push_front(object_ref);
-                    args.into_iter().collect()
-                };
+                let arguments = self.pop_args::<true>(frame, method_ref.descriptor())?;
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
@@ -538,16 +529,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeInterface(i_method_ref, _) => {
-                let arguments = {
-                    let mut args = LinkedList::new();
-                    for param_type in i_method_ref.descriptor.parameters_types.iter().rev() {
-                        let arg = frame.typed_pop(param_type)?;
-                        args.push_front(arg);
-                    }
-                    let object_ref = frame.pop_value()?;
-                    args.push_front(object_ref);
-                    args.into_iter().collect()
-                };
+                let arguments = self.pop_args::<true>(frame, &i_method_ref.descriptor)?;
                 let rhs =
                     Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
                 match &i_method_ref.descriptor.return_type {
@@ -559,14 +541,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeStatic(method_ref) => {
-                let arguments = {
-                    let mut args = LinkedList::new();
-                    for param_type in method_ref.descriptor().parameters_types.iter().rev() {
-                        let arg = frame.typed_pop(param_type)?;
-                        args.push_front(arg);
-                    }
-                    args.into_iter().collect()
-                };
+                let arguments = self.pop_args::<false>(frame, method_ref.descriptor())?;
                 let rhs = Expression::Call(method_ref.clone(), arguments);
                 match &method_ref.descriptor().return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
@@ -581,14 +556,7 @@ impl MokaIRGenerator<'_> {
                 bootstrap_method_index,
                 name,
             } => {
-                let arguments = {
-                    let mut args = LinkedList::new();
-                    for param_type in descriptor.parameters_types.iter().rev() {
-                        let arg = frame.typed_pop(param_type)?;
-                        args.push_front(arg);
-                    }
-                    args.into_iter().collect()
-                };
+                let arguments = self.pop_args::<false>(frame, descriptor)?;
                 let rhs = Expression::GetClosure(
                     *bootstrap_method_index,
                     name.to_owned(),
@@ -709,6 +677,25 @@ impl MokaIRGenerator<'_> {
         Ok(ir_instruction)
     }
 
+    #[inline]
+    fn pop_args<const OBJECT_REF: bool>(
+        &mut self,
+        frame: &mut StackFrame,
+        descriptor: &MethodDescriptor,
+    ) -> Result<Vec<ValueRef>, MokaIRGenerationError> {
+        let mut args = LinkedList::new();
+        for param_type in descriptor.parameters_types.iter().rev() {
+            let arg = frame.typed_pop(param_type)?;
+            args.push_front(arg);
+        }
+        if OBJECT_REF {
+            let object_ref = frame.pop_value()?;
+            args.push_front(object_ref);
+        }
+        Ok(args.into_iter().collect())
+    }
+
+    #[inline]
     fn store_dual_slot_local(
         &mut self,
         frame: &mut StackFrame,
@@ -719,6 +706,7 @@ impl MokaIRGenerator<'_> {
         Ok(IR::Nop)
     }
 
+    #[inline]
     fn store_local(
         &mut self,
         frame: &mut StackFrame,
@@ -729,6 +717,7 @@ impl MokaIRGenerator<'_> {
         Ok(IR::Nop)
     }
 
+    #[inline]
     fn load_dual_slot_local(
         &mut self,
         frame: &mut StackFrame,
@@ -739,6 +728,7 @@ impl MokaIRGenerator<'_> {
         Ok(IR::Nop)
     }
 
+    #[inline]
     fn load_local(
         &mut self,
         frame: &mut StackFrame,
@@ -749,6 +739,7 @@ impl MokaIRGenerator<'_> {
         Ok(IR::Nop)
     }
 
+    #[inline]
     fn const_assignment(
         &mut self,
         frame: &mut StackFrame,
@@ -762,6 +753,7 @@ impl MokaIRGenerator<'_> {
         })
     }
 
+    #[inline]
     fn wide_const_assignment(
         &mut self,
         frame: &mut StackFrame,
@@ -775,6 +767,7 @@ impl MokaIRGenerator<'_> {
         })
     }
 
+    #[inline]
     fn unitary_conditional_jump<C>(
         &mut self,
         frame: &mut StackFrame,
@@ -791,6 +784,7 @@ impl MokaIRGenerator<'_> {
         })
     }
 
+    #[inline]
     fn binary_conditional_jump<C>(
         &mut self,
         frame: &mut StackFrame,
@@ -808,6 +802,7 @@ impl MokaIRGenerator<'_> {
         })
     }
 
+    #[inline]
     fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
         &mut self,
         frame: &mut StackFrame,
@@ -833,6 +828,7 @@ impl MokaIRGenerator<'_> {
         })
     }
 
+    #[inline]
     fn binary_op_math<M>(
         &mut self,
         frame: &mut StackFrame,
@@ -844,6 +840,8 @@ impl MokaIRGenerator<'_> {
     {
         self.binary_op_assignment(frame, def_id, |lhs, rhs| Expression::Math(math(lhs, rhs)))
     }
+
+    #[inline]
     fn binary_wide_math<M>(
         &mut self,
         frame: &mut StackFrame,
@@ -853,9 +851,12 @@ impl MokaIRGenerator<'_> {
     where
         M: FnOnce(ValueRef, ValueRef) -> MathOperation,
     {
-        self.binary_wide_op_assignment(frame, def_id, |lhs, rhs| Expression::Math(math(lhs, rhs)))
+        self.binary_dual_slot_op_assignment(frame, def_id, |lhs, rhs| {
+            Expression::Math(math(lhs, rhs))
+        })
     }
 
+    #[inline]
     fn binary_op_assignment<E>(
         &mut self,
         frame: &mut StackFrame,
@@ -874,7 +875,8 @@ impl MokaIRGenerator<'_> {
         })
     }
 
-    fn binary_wide_op_assignment<E>(
+    #[inline]
+    fn binary_dual_slot_op_assignment<E>(
         &mut self,
         frame: &mut StackFrame,
         def_id: Identifier,
