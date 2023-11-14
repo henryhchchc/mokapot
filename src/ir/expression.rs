@@ -53,7 +53,7 @@ impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Expression::*;
         match self {
-            Const(c) => write!(f, "{:?}", c),
+            Const(c) => c.fmt(f),
             Subroutine {
                 target,
                 return_address,

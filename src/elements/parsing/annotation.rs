@@ -4,6 +4,7 @@ use crate::{
     elements::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         field::ConstantValue,
+        JavaString,
     },
     errors::ClassFileParsingError,
     reader_utils::{read_u16, read_u32, read_u8},
@@ -36,7 +37,9 @@ impl ElementValue {
             's' => {
                 let utf8_idx = read_u16(reader)?;
                 let str = ctx.get_str(utf8_idx)?;
-                Ok(Self::Constant(ConstantValue::String(str.to_owned())))
+                Ok(Self::Constant(ConstantValue::String(
+                    JavaString::ValidUtf8(str.to_owned()),
+                )))
             }
             'e' => {
                 let enum_type_name_idx = read_u16(reader)?;

@@ -16,6 +16,7 @@ class TestAnalysis {
       System.out.println(e);
     }
     for (int i = 0; i < y; i++) {
+      System.out.println("a\u0002\ud800bcdef");
       callMe("233", 0, 0);
     }
     if (x > 0 ? y > 0 : y < 0) {

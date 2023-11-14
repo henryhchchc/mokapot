@@ -43,8 +43,8 @@ pub enum ClassFileParsingError {
     NotAClassFile,
     #[error("Invalid jump target: {0}")]
     InvalidJumpTarget(#[from] InvalidOffset),
-    #[error("Invalid Cesu8 byte sequence")]
-    BrokenCesu8,
+    #[error("Invalid UTF-8 string")]
+    BrokenUTF8,
 }
 
 #[derive(Debug, thiserror::Error)]

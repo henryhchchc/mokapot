@@ -67,12 +67,12 @@ where
     Ok(i8::from_be_bytes(buf))
 }
 
-/// Reads [len] bytes and advances the reader by [len] bytes.
+/// Reads [len] bytes and advances the reader by [`len`] bytes.
 pub(crate) fn read_bytes_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read,
 {
     let mut buf = vec![0u8; len];
-    reader.read_exact(&mut buf)?;
+    reader.read_exact(buf.as_mut_slice())?;
     Ok(buf)
 }

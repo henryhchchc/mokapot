@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::types::FieldType;
 
 use super::{
@@ -22,6 +24,25 @@ pub struct Field {
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum JavaString {
+    ValidUtf8(String),
+    InvalidUtf8(Vec<u8>),
+}
+
+impl Display for JavaString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JavaString::ValidUtf8(value) => write!(f, "\"{}\"", value),
+            JavaString::InvalidUtf8(value) => write!(
+                f,
+                "\"{}\" // invalid UTF-8",
+                value.iter().map(|it| format!("0x{:02X}", it)).join(" ")
+            ),
+        }
+    }
+}
+
 /// Denotes a compile-time constant value.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ConstantValue {
@@ -30,14 +51,40 @@ pub enum ConstantValue {
     Float(f32),
     Long(i64),
     Double(f64),
-    String(String),
+    String(JavaString),
     Class(ClassReference),
     Handle(Handle),
     MethodType(MethodDescriptor),
     Dynamic(u16, String, FieldType),
 }
 
+impl Display for ConstantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstantValue::Null => write!(f, "null"),
+            ConstantValue::Integer(value) => write!(f, "{}", value),
+            ConstantValue::Float(value) => write!(f, "{}", value),
+            ConstantValue::Long(value) => write!(f, "{}L", value),
+            ConstantValue::Double(value) => write!(f, "{}D", value),
+            ConstantValue::String(value) => value.fmt(f),
+            ConstantValue::Class(value) => write!(f, "{}", value),
+            ConstantValue::Handle(value) => write!(f, "{:?}", value),
+            ConstantValue::MethodType(value) => write!(f, "{:?}", value),
+            ConstantValue::Dynamic(bootstrap_method_attr_index, name, field_type) => {
+                write!(
+                    f,
+                    "Dynamic({}, {}, {})",
+                    bootstrap_method_attr_index,
+                    name,
+                    field_type.descriptor_string()
+                )
+            }
+        }
+    }
+}
+
 use bitflags::bitflags;
+use itertools::Itertools;
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq)]

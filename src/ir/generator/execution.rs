@@ -12,7 +12,7 @@ use crate::{
     types::FieldType,
 };
 
-use std::{collections::LinkedList, net};
+use std::collections::LinkedList;
 
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
