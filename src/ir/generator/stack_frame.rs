@@ -16,7 +16,7 @@ pub(super) struct StackFrame {
     max_stack: u16,
     local_variables: Vec<Option<FrameValue>>,
     operand_stack: Vec<FrameValue>,
-    pub reachable_subroutines: HashSet<ProgramCounter>,
+    pub possible_ret_addresses: HashSet<ProgramCounter>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -65,7 +65,7 @@ impl StackFrame {
             max_stack,
             local_variables,
             operand_stack: Vec::with_capacity(max_stack as usize),
-            reachable_subroutines: HashSet::new(),
+            possible_ret_addresses: HashSet::new(),
         }
     }
 
@@ -201,7 +201,7 @@ impl StackFrame {
             max_stack: self.max_stack,
             local_variables: self.local_variables.clone(),
             operand_stack: self.operand_stack.clone(),
-            reachable_subroutines: self.reachable_subroutines.clone(),
+            possible_ret_addresses: self.possible_ret_addresses.clone(),
         }
     }
 
@@ -213,7 +213,7 @@ impl StackFrame {
             max_stack: self.max_stack,
             local_variables: self.local_variables.clone(),
             operand_stack,
-            reachable_subroutines: self.reachable_subroutines.clone(),
+            possible_ret_addresses: self.possible_ret_addresses.clone(),
         }
     }
 }
@@ -232,27 +232,24 @@ impl FixedPointFact for StackFrame {
             return Err(StackFrameError::StackSizeMismatch);
         }
         let reachable_subroutines = self
-            .reachable_subroutines
+            .possible_ret_addresses
             .clone()
             .into_iter()
-            .chain(other.reachable_subroutines)
+            .chain(other.possible_ret_addresses)
             .collect();
         let local_variables = self
             .local_variables
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(self_loc, other_loc)| {
-                try_merge(self_loc, other_loc, FrameValue::merge).unwrap_or(None)
-            })
-            .collect();
-        // .collect::<Result<_, _>>()?;
+            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, FrameValue::merge))
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             max_locals: self.max_locals,
             max_stack: self.max_stack,
             local_variables,
             operand_stack: self.operand_stack.clone(),
-            reachable_subroutines,
+            possible_ret_addresses: reachable_subroutines,
         })
     }
 }
@@ -277,7 +274,6 @@ impl FrameValue {
     pub fn merge(x: Self, y: Self) -> Result<Self, StackFrameError> {
         use ValueRef::*;
         match (x, y) {
-            (lhs, rhs) if lhs == rhs => Ok(lhs),
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 let result = match (lhs, rhs) {
                     (Def(id_x), Def(id_y)) => Phi(HashSet::from([id_x, id_y])),
@@ -288,7 +284,9 @@ impl FrameValue {
                 };
                 Ok(FrameValue::ValueRef(result))
             }
-            _ => Err(StackFrameError::ValueMismatch),
+            // NOTE: `lhs` and `rhs` are different variants, that means the local variable slot is reused
+            //       In this case, we do not merge it since it will be overridden afterwrds.
+            (lhs, _) => Ok(lhs),
         }
     }
 }

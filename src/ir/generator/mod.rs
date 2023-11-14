@@ -88,10 +88,14 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 );
             }
             MokaInstruction::Assignment {
-                expr: Expression::Subroutine { target, .. },
+                expr:
+                    Expression::Subroutine {
+                        target,
+                        return_address,
+                    },
                 ..
             } => {
-                frame.reachable_subroutines.insert(*target);
+                frame.possible_ret_addresses.insert(*return_address);
                 dirty_nodes.insert(*target, frame);
             }
             MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
@@ -130,11 +134,10 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 );
             }
             MokaInstruction::SubroutineRet(_) => {
-                let reachable_subroutines = frame.reachable_subroutines;
-                frame.reachable_subroutines = HashSet::new();
-                for it in reachable_subroutines {
-                    let next_pc = self.next_pc_of(it)?;
-                    dirty_nodes.insert(next_pc, frame.same_frame());
+                let possible_ret_addresses = frame.possible_ret_addresses;
+                frame.possible_ret_addresses = HashSet::new();
+                for return_address in possible_ret_addresses {
+                    dirty_nodes.insert(return_address, frame.same_frame());
                 }
             }
         }
