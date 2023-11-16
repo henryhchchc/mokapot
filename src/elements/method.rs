@@ -255,4 +255,37 @@ mod test {
         let method_descriptor = MethodDescriptor::from_str(descriptor);
         assert!(method_descriptor.is_err());
     }
+
+    #[test]
+    fn empty_desc() {
+        let descriptor = "";
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
+        assert_eq!(
+            method_descriptor
+                .expect_err("Empty descriptor should be invalid")
+                .0,
+            ""
+        )
+    }
+
+    #[test]
+    fn missing_return_type() {
+        let descriptor = "(I)";
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
+        assert!(method_descriptor.is_err());
+    }
+
+    #[test]
+    fn missing_semicolon() {
+        let descriptor = "(I[Ljava/lang/StringJ)V";
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
+        assert!(method_descriptor.is_err());
+    }
+
+    #[test]
+    fn invalid_primitive() {
+        let descriptor = "(V[Ljava/lang/String;J)V";
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
+        assert!(method_descriptor.is_err());
+    }
 }
