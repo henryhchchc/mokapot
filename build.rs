@@ -15,6 +15,7 @@ fn compile_java_test_data() {
             .collect();
         for java_file in java_source_files {
             Command::new("javac")
+                .arg("-g")
                 .arg("-d")
                 .arg(format!("{}/java_classes", build_path))
                 .arg(java_file.path().to_string_lossy().to_string())
