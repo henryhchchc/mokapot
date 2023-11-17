@@ -29,8 +29,12 @@ jobs:
           - beta
           - nightly
     steps:
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-        name: Setup Rust
+      - name: Setup Rust
+        run: |
+          rustup update ${{ matrix.toolchain }} \
+            && rustup default ${{ matrix.toolchain }} \
+            && rustup component add llvm-tools-preview \
+            && cargo install grcov
       - uses: actions/setup-java@v3
         name: Setup JDK
         with:
@@ -42,6 +46,14 @@ jobs:
         name: Build
       - run: cargo test --all-features --verbose
         name: Test
+      - run: cargo xtask coverage
+        name: Coverage
+      - uses: codecov/codecov-action@v3
+        name: Upload coverage to codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: coverage/*.lcov
           
   publish_latest_docs:
     name: MokaPot - docs
