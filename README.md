@@ -1,8 +1,10 @@
 # MokaPot
 
 [![Cargo Build & Test](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml/badge.svg)](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml)
-![Crates.io](https://img.shields.io/crates/v/mokapot)
-![docs.rs](https://img.shields.io/docsrs/mokapot)
+[![codecov](https://codecov.io/gh/henryhchchc/mokapot/graph/badge.svg?token=6M09J26KSM)](https://codecov.io/gh/henryhchchc/mokapot)
+
+[![Crates.io](https://img.shields.io/crates/v/mokapot)](https://crates.io/crates/mokapot)
+[![docs.rs](https://img.shields.io/docsrs/mokapot)](https://docs.rs/mokapot)
 
 MokaPot is a Java bytecode analysis library written in Rust.
 
