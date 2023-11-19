@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 /// Denotes a program counter in an instruction sequence.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[repr(transparent)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
