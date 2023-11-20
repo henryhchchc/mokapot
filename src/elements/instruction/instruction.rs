@@ -3,10 +3,13 @@ use std::ops::RangeInclusive;
 use crate::{
     elements::{
         field::ConstantValue,
-        references::{ClassReference, FieldReference, InterfaceMethodReference, MethodReference},
+        references::{
+            ClassReference, FieldReference, InterfaceMethodReference, MethodReference,
+            TypeReference,
+        },
         MethodDescriptor,
     },
-    types::{FieldType, PrimitiveType},
+    types::PrimitiveType,
 };
 
 use super::ProgramCounter;
@@ -711,6 +714,3 @@ impl Instruction {
         }
     }
 }
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct TypeReference(pub FieldType);

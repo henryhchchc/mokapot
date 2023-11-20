@@ -1,6 +1,8 @@
 use super::attribute::Attribute;
 use crate::{
-    elements::{field::Field, Class, ClassAccessFlags, ClassVersion, Method},
+    elements::{
+        field::Field, references::ClassReference, Class, ClassAccessFlags, ClassVersion, Method,
+    },
     errors::ClassFileParsingError,
     macros::fill_once,
     reader_utils::{read_u16, read_u32},
@@ -25,10 +27,10 @@ impl Class {
             return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
         let this_class_idx = read_u16(&mut reader)?;
-        let this_class = parsing_context.get_class_ref(this_class_idx)?;
+        let ClassReference { binary_name } = parsing_context.get_class_ref(this_class_idx)?;
         let super_class_idx = read_u16(&mut reader)?;
         let super_class = match super_class_idx {
-            0 if this_class.binary_name == "java/lang/Object" => None,
+            0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
             0 => Err(ClassFileParsingError::MalformedClassFile(
                 "Class must have a super type except for java/lang/Object or a module",
@@ -127,7 +129,7 @@ impl Class {
         Ok(Class {
             version,
             access_flags,
-            this_class,
+            binary_name,
             super_class,
             interfaces,
             fields,
@@ -220,7 +222,7 @@ mod test {
     #[test]
     fn test_class_name() {
         let my_class = parse_my_class().unwrap();
-        assert_eq!(ClassReference::new("org/pkg/MyClass"), my_class.this_class);
+        assert_eq!("org/pkg/MyClass", my_class.binary_name);
     }
 
     #[test]

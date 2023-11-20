@@ -1,8 +1,8 @@
 use super::{stack_frame::StackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     elements::{
-        instruction::{Instruction, ProgramCounter, TypeReference},
-        references::MethodReference,
+        instruction::{Instruction, ProgramCounter},
+        references::{MethodReference, TypeReference},
         ConstantValue, MethodDescriptor, ReturnType,
     },
     ir::{

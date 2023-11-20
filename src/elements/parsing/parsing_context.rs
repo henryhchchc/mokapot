@@ -4,11 +4,10 @@ use crate::{
     elements::{
         class::{ClassVersion, Handle},
         field::ConstantValue,
-        instruction::TypeReference,
         method::MethodDescriptor,
         references::{
             ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
-            MethodReference, ModuleReference, PackageReference,
+            MethodReference, ModuleReference, PackageReference, TypeReference,
         },
         JavaString,
     },

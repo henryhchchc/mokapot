@@ -107,3 +107,6 @@ impl Display for MethodReference {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeReference(pub FieldType);

@@ -12,7 +12,7 @@ use super::{
 pub struct Class {
     pub version: ClassVersion,
     pub access_flags: ClassAccessFlags,
-    pub this_class: ClassReference,
+    pub binary_name: String,
     pub super_class: Option<ClassReference>,
     pub interfaces: Vec<ClassReference>,
     pub fields: Vec<Field>,
