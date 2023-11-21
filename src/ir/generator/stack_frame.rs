@@ -244,11 +244,18 @@ impl FixedPointFact for StackFrame {
             .zip(other.local_variables)
             .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, FrameValue::merge))
             .collect::<Result<_, _>>()?;
+        let operand_stack = self
+            .operand_stack
+            .clone()
+            .into_iter()
+            .zip(other.operand_stack)
+            .map(|(lhs, rhs)| FrameValue::merge(lhs, rhs))
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             max_locals: self.max_locals,
             max_stack: self.max_stack,
             local_variables,
-            operand_stack: self.operand_stack.clone(),
+            operand_stack,
             possible_ret_addresses: reachable_subroutines,
         })
     }
@@ -276,6 +283,7 @@ impl FrameValue {
         match (x, y) {
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 let result = match (lhs, rhs) {
+                    (Def(id_x), Def(id_y)) if id_x == id_y => Def(id_x),
                     (Def(id_x), Def(id_y)) => Phi(HashSet::from([id_x, id_y])),
                     (Def(id), Phi(ids)) | (Phi(ids), Def(id)) => {
                         Phi(ids.into_iter().chain(once(id)).collect())
@@ -288,5 +296,41 @@ impl FrameValue {
             //       In this case, we do not merge it since it will be overridden afterwrds.
             (lhs, _) => Ok(lhs),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashSet;
+
+    use crate::ir::{Identifier, ValueRef};
+
+    use super::FrameValue;
+
+    #[test]
+    fn merge_value_ref() {
+        let lhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
+        let rhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(1)));
+
+        let result = FrameValue::merge(lhs, rhs).unwrap();
+        assert_eq!(
+            result,
+            FrameValue::ValueRef(ValueRef::Phi(HashSet::from([
+                Identifier::Val(0),
+                Identifier::Val(1)
+            ])))
+        );
+    }
+
+    #[test]
+    fn merge_same_value_ref() {
+        let lhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
+        let rhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
+
+        let result = FrameValue::merge(lhs, rhs).unwrap();
+        assert_eq!(
+            result,
+            FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)))
+        );
     }
 }
