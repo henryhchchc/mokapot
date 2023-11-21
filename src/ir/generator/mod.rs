@@ -206,6 +206,7 @@ impl MokaIRMethodExt for Method {
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),
+            owner: self.owner.clone(),
             descriptor: self.descriptor.clone(),
             instructions,
         })
