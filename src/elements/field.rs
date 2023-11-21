@@ -62,12 +62,12 @@ impl Display for ConstantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConstantValue::Null => write!(f, "null"),
-            ConstantValue::Integer(value) => write!(f, "{}", value),
-            ConstantValue::Float(value) => write!(f, "{}", value),
-            ConstantValue::Long(value) => write!(f, "{}L", value),
-            ConstantValue::Double(value) => write!(f, "{}D", value),
+            ConstantValue::Integer(value) => write!(f, "int({})", value),
+            ConstantValue::Float(value) => write!(f, "float({})", value),
+            ConstantValue::Long(value) => write!(f, "long({})", value),
+            ConstantValue::Double(value) => write!(f, "double({})", value),
             ConstantValue::String(value) => value.fmt(f),
-            ConstantValue::Class(value) => write!(f, "{}", value),
+            ConstantValue::Class(value) => write!(f, "{}.class", value),
             ConstantValue::Handle(value) => write!(f, "{:?}", value),
             ConstantValue::MethodType(value) => write!(f, "{:?}", value),
             ConstantValue::Dynamic(bootstrap_method_attr_index, name, field_type) => {
