@@ -6,6 +6,7 @@ use super::{
     method::Method,
     module::Module,
     references::{ClassReference, FieldReference, MethodReference, PackageReference},
+    MethodDescriptor,
 };
 
 #[derive(Debug)]
@@ -36,6 +37,14 @@ pub struct Class {
     pub is_deprecated: bool,
     pub signature: Option<String>,
     pub record: Vec<RecordComponent>,
+}
+
+impl Class {
+    pub fn get_method(&self, name: &str, descriptor: MethodDescriptor) -> Option<&Method> {
+        self.methods
+            .iter()
+            .find(|m| m.name == name && m.descriptor == descriptor)
+    }
 }
 
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]

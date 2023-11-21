@@ -1,4 +1,4 @@
-use super::attribute::Attribute;
+use super::{attribute::Attribute, constant_pool::ConstantPool};
 use crate::{
     elements::{
         field::Field, references::ClassReference, Class, ClassAccessFlags, ClassVersion, Method,
@@ -21,13 +21,13 @@ impl Class {
             return Err(ClassFileParsingError::NotAClassFile);
         }
         let version = ClassVersion::parse(&mut reader)?;
-        let parsing_context = ParsingContext::parse(&mut reader, &version)?;
+        let constant_pool = ConstantPool::parse(&mut reader)?;
         let access = read_u16(&mut reader)?;
         let Some(access_flags) = ClassAccessFlags::from_bits(access) else {
             return Err(ClassFileParsingError::UnknownFlags(access, "class"));
         };
         let this_class_idx = read_u16(&mut reader)?;
-        let ClassReference { binary_name } = parsing_context.get_class_ref(this_class_idx)?;
+        let ClassReference { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
         let super_class_idx = read_u16(&mut reader)?;
         let super_class = match super_class_idx {
             0 if binary_name == "java/lang/Object" => None,
@@ -35,28 +35,34 @@ impl Class {
             0 => Err(ClassFileParsingError::MalformedClassFile(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it @ _ => Some(parsing_context.get_class_ref(it)?),
+            it @ _ => Some(constant_pool.get_class_ref(it)?),
+        };
+
+        let ctx = ParsingContext {
+            constant_pool,
+            class_version: version,
+            current_class_binary_name: binary_name.clone(),
         };
 
         let interfaces_count = read_u16(&mut reader)?;
         let interfaces = (0..interfaces_count)
             .map(|_| {
                 let interface_idx = read_u16(&mut reader)?;
-                parsing_context.get_class_ref(interface_idx)
+                ctx.constant_pool.get_class_ref(interface_idx)
             })
             .collect::<Result<_, ClassFileParsingError>>()?;
         let fields_count = read_u16(&mut reader)?;
         let fields = (0..fields_count)
             .into_iter()
-            .map(|_| Field::parse(&mut reader, &parsing_context))
+            .map(|_| Field::parse(&mut reader, &ctx))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
         let methods_count = read_u16(&mut reader)?;
         let methods = (0..methods_count)
-            .map(|_| Method::parse(&mut reader, &parsing_context))
+            .map(|_| Method::parse(&mut reader, &ctx))
             .collect::<Result<_, ClassFileParsingError>>()?;
 
-        let attributes = AttributeList::parse(&mut reader, &parsing_context)?;
+        let attributes = AttributeList::parse(&mut reader, &ctx)?;
 
         let mut may_remain: [u8; 1] = [0];
         let remain = reader.read(&mut may_remain)?;

@@ -5,7 +5,7 @@ use crate::{
         field::ConstantValue,
         instruction::{Instruction, ProgramCounter},
         method::MethodDescriptor,
-        parsing::parsing_context::{ConstantPoolEntry, ParsingContext},
+        parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
         references::MethodReference,
     },
     errors::ClassFileParsingError,
@@ -48,7 +48,7 @@ impl Instruction {
             0x2d => ALoad3,
             0xbd => {
                 let index = read_u16(reader)?;
-                let element_type = ctx.get_class_ref(index)?;
+                let element_type = ctx.constant_pool.get_class_ref(index)?;
                 ANewArray(element_type)
             }
             0xb0 => AReturn,
@@ -66,7 +66,7 @@ impl Instruction {
             0x55 => CAStore,
             0xc0 => {
                 let type_ref_idx = read_u16(reader)?;
-                let type_ref = ctx.get_type_ref(type_ref_idx)?;
+                let type_ref = ctx.constant_pool.get_type_ref(type_ref_idx)?;
                 CheckCast(type_ref)
             }
             0x90 => D2F,
@@ -130,12 +130,12 @@ impl Instruction {
             0x66 => FSub,
             0xb4 => {
                 let index = read_u16(reader)?;
-                let field = ctx.get_field_ref(index)?;
+                let field = ctx.constant_pool.get_field_ref(index)?;
                 GetField(field)
             }
             0xb2 => {
                 let index = read_u16(reader)?;
-                let field = ctx.get_field_ref(index)?;
+                let field = ctx.constant_pool.get_field_ref(index)?;
                 GetStatic(field)
             }
             0xa7 => Goto(read_offset16(reader, &pc)?),
@@ -184,12 +184,12 @@ impl Instruction {
             0x74 => INeg,
             0xc1 => {
                 let type_ref_idx = read_u16(reader)?;
-                let type_ref = ctx.get_type_ref(type_ref_idx)?;
+                let type_ref = ctx.constant_pool.get_type_ref(type_ref_idx)?;
                 InstanceOf(type_ref)
             }
             0xba => {
                 let index = read_u16(reader)?;
-                let constant_pool_entry = ctx.get_entry(index)?;
+                let constant_pool_entry = ctx.constant_pool.get_entry(index)?;
                 let &ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
@@ -200,7 +200,7 @@ impl Instruction {
                         found: constant_pool_entry.type_name(),
                     })?
                 };
-                let (name, desc_str) = ctx.get_name_and_type(name_and_type_index)?;
+                let (name, desc_str) = ctx.constant_pool.get_name_and_type(name_and_type_index)?;
                 let descriptor = MethodDescriptor::from_str(desc_str)?;
                 let zeros = read_u16(reader)?;
                 if zeros != 0 {
@@ -216,7 +216,9 @@ impl Instruction {
             }
             0xb9 => {
                 let index = read_u16(reader)?;
-                let MethodReference::Interface(method_ref) = ctx.get_method_ref(index)? else {
+                let MethodReference::Interface(method_ref) =
+                    ctx.constant_pool.get_method_ref(index)?
+                else {
                     Err(ClassFileParsingError::MalformedClassFile(
                         "InvokeInterface is not associated with an interfac method",
                     ))?
@@ -232,17 +234,17 @@ impl Instruction {
             }
             0xb7 => {
                 let index = read_u16(reader)?;
-                let method_ref = ctx.get_method_ref(index)?;
+                let method_ref = ctx.constant_pool.get_method_ref(index)?;
                 InvokeSpecial(method_ref)
             }
             0xb8 => {
                 let index = read_u16(reader)?;
-                let method_ref = ctx.get_method_ref(index)?;
+                let method_ref = ctx.constant_pool.get_method_ref(index)?;
                 InvokeStatic(method_ref)
             }
             0xb6 => {
                 let index = read_u16(reader)?;
-                let method_ref = ctx.get_method_ref(index)?;
+                let method_ref = ctx.constant_pool.get_method_ref(index)?;
                 InvokeVirtual(method_ref)
             }
             0x80 => IOr,
@@ -274,7 +276,7 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u8(reader)? as u16;
-                let constant = match ctx.get_constant_value(index)? {
+                let constant = match ctx.constant_pool.get_constant_value(index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
@@ -291,7 +293,7 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
-                let constant = match ctx.get_constant_value(index)? {
+                let constant = match ctx.constant_pool.get_constant_value(index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
@@ -308,7 +310,7 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index = read_u16(reader)?;
-                let constant = match ctx.get_constant_value(index)? {
+                let constant = match ctx.constant_pool.get_constant_value(index)? {
                     it @ (ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
@@ -380,12 +382,12 @@ impl Instruction {
             0xc3 => MonitorExit,
             0xc5 => {
                 let index = read_u16(reader)?;
-                let array_type = ctx.get_type_ref(index)?;
+                let array_type = ctx.constant_pool.get_type_ref(index)?;
                 MultiANewArray(array_type, read_u8(reader)?)
             }
             0xbb => {
                 let index = read_u16(reader)?;
-                let class_ref = ctx.get_class_ref(index)?;
+                let class_ref = ctx.constant_pool.get_class_ref(index)?;
                 New(class_ref)
             }
             0xbc => {
@@ -410,12 +412,12 @@ impl Instruction {
             0x58 => Pop2,
             0xb5 => {
                 let index = read_u16(reader)?;
-                let field = ctx.get_field_ref(index)?;
+                let field = ctx.constant_pool.get_field_ref(index)?;
                 PutField(field)
             }
             0xb3 => {
                 let index = read_u16(reader)?;
-                let field = ctx.get_field_ref(index)?;
+                let field = ctx.constant_pool.get_field_ref(index)?;
                 PutStatic(field)
             }
             0xa9 => Ret(read_u8(reader)?),

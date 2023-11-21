@@ -20,6 +20,7 @@ pub struct Method {
     pub access_flags: MethodAccessFlags,
     pub name: String,
     pub descriptor: MethodDescriptor,
+    pub owner: ClassReference,
     pub body: Option<MethodBody>,
     pub excaptions: Vec<ClassReference>,
     pub runtime_visible_annotations: Vec<Annotation>,

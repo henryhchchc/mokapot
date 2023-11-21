@@ -3,6 +3,7 @@ mod attribute;
 mod class_file;
 mod class_parser;
 pub(crate) mod code;
+mod constant_pool;
 pub mod error;
 mod field_info;
 mod method_info;

@@ -15,12 +15,12 @@ impl BootstrapMethod {
         R: std::io::Read,
     {
         let bootstrap_method_ref = read_u16(reader)?;
-        let method_ref = ctx.get_method_handle(bootstrap_method_ref)?;
+        let method_ref = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
         let num_bootstrap_arguments = read_u16(reader)?;
         let arguments = (0..num_bootstrap_arguments)
             .map(|_| {
                 let arg_idx = read_u16(reader)?;
-                ctx.get_constant_value(arg_idx)
+                ctx.constant_pool.get_constant_value(arg_idx)
             })
             .collect::<Result<_, _>>()?;
         Ok(BootstrapMethod {
@@ -40,7 +40,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let sourcefile_index = read_u16(reader)?;
-        let file_name = ctx.get_str(sourcefile_index)?;
+        let file_name = ctx.constant_pool.get_str(sourcefile_index)?;
         Ok(Self::SourceFile(file_name.to_owned()))
     }
     pub fn parse_innner_classes<R>(
@@ -55,19 +55,19 @@ impl Attribute {
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
             let inner_class_info_index = read_u16(reader)?;
-            let inner_class = ctx.get_class_ref(inner_class_info_index)?;
+            let inner_class = ctx.constant_pool.get_class_ref(inner_class_info_index)?;
             let outer_class_info_index = read_u16(reader)?;
             let outer_class = if outer_class_info_index == 0 {
                 None
             } else {
-                let the_class = ctx.get_class_ref(outer_class_info_index)?;
+                let the_class = ctx.constant_pool.get_class_ref(outer_class_info_index)?;
                 Some(the_class)
             };
             let inner_name_index = read_u16(reader)?;
             let inner_name = if inner_name_index == 0 {
                 None
             } else {
-                Some(ctx.get_str(inner_name_index)?.to_owned())
+                Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
             };
             let inner_class_access_flags = read_u16(reader)?;
             classes.push(InnerClassInfo {
@@ -115,7 +115,7 @@ impl Attribute {
     {
         Self::check_attribute_length(reader, 2)?;
         let nest_host_index = read_u16(reader)?;
-        let host_class = ctx.get_class_ref(nest_host_index)?;
+        let host_class = ctx.constant_pool.get_class_ref(nest_host_index)?;
         Ok(Self::NestHost(host_class))
     }
     pub(super) fn parse_nest_members<R>(
@@ -130,7 +130,7 @@ impl Attribute {
         let classes = (0..number_of_classes)
             .map(|_| {
                 let class_index = read_u16(reader)?;
-                ctx.get_class_ref(class_index)
+                ctx.constant_pool.get_class_ref(class_index)
             })
             .collect::<Result<_, _>>()?;
         Ok(Self::NestMembers(classes))
@@ -147,9 +147,9 @@ impl Attribute {
         let components = (0..component_count)
             .map(|_| {
                 let name_index = read_u16(reader)?;
-                let name = ctx.get_str(name_index)?.to_owned();
+                let name = ctx.constant_pool.get_str(name_index)?.to_owned();
                 let descriptor_index = read_u16(reader)?;
-                let descriptor = ctx.get_str(descriptor_index)?.to_owned();
+                let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
 
                 let attributes = AttributeList::parse(reader, ctx)?;
                 let mut signature = None;
@@ -200,7 +200,7 @@ impl Attribute {
         let classes = (0..number_of_classes)
             .map(|_| {
                 let class_index = read_u16(reader)?;
-                ctx.get_class_ref(class_index)
+                ctx.constant_pool.get_class_ref(class_index)
             })
             .collect::<Result<_, _>>()?;
         Ok(Self::PermittedSubclasses(classes))

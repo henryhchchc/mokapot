@@ -23,7 +23,7 @@ impl ElementValue {
         match tag {
             'B' | 'C' | 'I' | 'S' | 'Z' | 'D' | 'F' | 'J' => {
                 let const_value_index = read_u16(reader)?;
-                let const_value = ctx.get_constant_value(const_value_index)?;
+                let const_value = ctx.constant_pool.get_constant_value(const_value_index)?;
                 match (tag, &const_value) {
                     ('B' | 'C' | 'I' | 'S' | 'Z', ConstantValue::Integer(_))
                     | ('D', ConstantValue::Double(_))
@@ -36,16 +36,16 @@ impl ElementValue {
             }
             's' => {
                 let utf8_idx = read_u16(reader)?;
-                let str = ctx.get_str(utf8_idx)?;
+                let str = ctx.constant_pool.get_str(utf8_idx)?;
                 Ok(Self::Constant(ConstantValue::String(
                     JavaString::ValidUtf8(str.to_owned()),
                 )))
             }
             'e' => {
                 let enum_type_name_idx = read_u16(reader)?;
-                let enum_type = ctx.get_str(enum_type_name_idx)?;
+                let enum_type = ctx.constant_pool.get_str(enum_type_name_idx)?;
                 let const_name_idx = read_u16(reader)?;
-                let const_name = ctx.get_str(const_name_idx)?.to_owned();
+                let const_name = ctx.constant_pool.get_str(const_name_idx)?.to_owned();
                 Ok(Self::EnumConstant {
                     enum_type_name: enum_type.to_owned(),
                     const_name,
@@ -53,7 +53,7 @@ impl ElementValue {
             }
             'c' => {
                 let class_info_idx = read_u16(reader)?;
-                let return_descriptor = ctx.get_str(class_info_idx)?.to_owned();
+                let return_descriptor = ctx.constant_pool.get_str(class_info_idx)?.to_owned();
                 Ok(Self::Class { return_descriptor })
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
@@ -75,13 +75,13 @@ impl Annotation {
         R: std::io::Read,
     {
         let type_idx = read_u16(reader)?;
-        let annotation_type = ctx.get_str(type_idx)?;
+        let annotation_type = ctx.constant_pool.get_str(type_idx)?;
         let annotation_type = FieldType::from_str(annotation_type)?;
         let num_element_value_pairs = read_u16(reader)?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.get_str(element_name_idx)?;
+                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
@@ -149,7 +149,7 @@ impl TypeAnnotation {
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.get_str(element_name_idx)?;
+                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })

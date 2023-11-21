@@ -25,9 +25,9 @@ impl Field {
             return Err(ClassFileParsingError::UnknownFlags(access, "field"));
         };
         let name_index = read_u16(reader)?;
-        let name = ctx.get_str(name_index)?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.get_str(descriptor_index)?;
+        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         let field_type = FieldType::from_str(descriptor)?;
 
         let attributes = AttributeList::parse(reader, ctx)?;
