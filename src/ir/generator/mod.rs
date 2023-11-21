@@ -4,7 +4,7 @@ mod stack_frame;
 #[cfg(test)]
 mod test;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use itertools::Itertools;
 
@@ -32,7 +32,7 @@ pub enum MokaIRGenerationError {
 }
 
 struct MokaIRGenerator<'m> {
-    ir_instructions: HashMap<ProgramCounter, MokaInstruction>,
+    ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
     next_pc_mapping: HashMap<ProgramCounter, ProgramCounter>,
@@ -216,7 +216,7 @@ impl MokaIRMethodExt for Method {
 }
 
 impl MokaIRGenerator<'_> {
-    fn generate(self) -> Result<HashMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
+    fn generate(self) -> Result<BTreeMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
         let mut self_mut = self;
         fixed_point::analyze(&mut self_mut)?;
         Ok(self_mut.ir_instructions)

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, LinkedList};
+use std::collections::{BTreeMap, HashMap, LinkedList};
 
 pub trait FixedPointFact: PartialEq + Sized {
     type MergeError;
@@ -6,7 +6,7 @@ pub trait FixedPointFact: PartialEq + Sized {
 }
 
 pub trait FixedPointAnalyzer {
-    type Location: std::hash::Hash + Eq + Copy;
+    type Location: Ord + Eq + Copy;
     type Fact: FixedPointFact;
     type Error: From<<Self::Fact as FixedPointFact>::MergeError>;
 
@@ -18,11 +18,11 @@ pub trait FixedPointAnalyzer {
     ) -> Result<HashMap<Self::Location, Self::Fact>, Self::Error>;
 }
 
-pub fn analyze<A>(analyzer: &mut A) -> Result<HashMap<A::Location, A::Fact>, A::Error>
+pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Error>
 where
     A: FixedPointAnalyzer,
 {
-    let mut facts = HashMap::new();
+    let mut facts = BTreeMap::new();
     let mut dirty_nodes = LinkedList::new();
     let (entry_pc, entry_fact) = analyzer.entry_fact()?;
     analyzer

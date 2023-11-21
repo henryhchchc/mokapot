@@ -3,7 +3,7 @@ pub mod expressions;
 mod generator;
 mod moka_instruction;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub use expression::*;
 pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
@@ -18,5 +18,5 @@ pub struct MokaIRMethod {
     pub name: String,
     pub descriptor: MethodDescriptor,
     pub owner: ClassReference,
-    pub instructions: HashMap<ProgramCounter, MokaInstruction>,
+    pub instructions: BTreeMap<ProgramCounter, MokaInstruction>,
 }
