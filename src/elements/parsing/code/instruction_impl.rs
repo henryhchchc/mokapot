@@ -1,4 +1,4 @@
-use std::{io::Read, str::FromStr};
+use std::{collections::BTreeMap, io::Read, str::FromStr};
 
 use crate::{
     elements::{
@@ -17,11 +17,11 @@ impl Instruction {
     pub(crate) fn parse_code(
         bytes: Vec<u8>,
         ctx: &ParsingContext,
-    ) -> Result<Vec<(ProgramCounter, Self)>, ClassFileParsingError> {
+    ) -> Result<BTreeMap<ProgramCounter, Self>, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
-        let mut instructions = Vec::new();
+        let mut instructions = BTreeMap::new();
         while let Some((pc, instruction)) = Instruction::parse(&mut cursor, ctx)? {
-            instructions.push((pc, instruction));
+            instructions.insert(pc, instruction);
         }
         Ok(instructions)
     }

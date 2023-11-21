@@ -6,6 +6,8 @@ mod test;
 
 use std::collections::{HashMap, HashSet};
 
+use itertools::Itertools;
+
 use crate::elements::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
     Method, MethodAccessFlags,
@@ -45,9 +47,12 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         let first_pc = self
             .body
             .instructions
+            .keys()
+            .cloned()
+            .collect_vec()
             .first()
             .ok_or(MokaIRGenerationError::MalformedControlFlow)?
-            .0;
+            .to_owned();
         Ok((
             first_pc,
             StackFrame::new(
@@ -159,16 +164,13 @@ impl<'m> MokaIRGenerator<'m> {
             .body
             .as_ref()
             .ok_or(MokaIRGenerationError::NoMethodBody)?;
-        let current_pc_iter = body.instructions.iter();
+        let current_pc_iter = body.instructions.keys().copied();
         let next_pc_iter = {
-            let mut it = body.instructions.iter();
+            let mut it = body.instructions.keys().copied();
             it.next();
             it
         };
-        let next_pc_mapping = current_pc_iter
-            .zip(next_pc_iter)
-            .map(|((c, _), (n, _))| (*c, *n))
-            .collect();
+        let next_pc_mapping = current_pc_iter.zip(next_pc_iter).collect();
         Ok(Self {
             ir_instructions: Default::default(),
             method,

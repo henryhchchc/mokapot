@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     elements::{
@@ -15,7 +15,7 @@ use super::{Instruction, ProgramCounter};
 pub struct MethodBody {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instructions: Vec<(ProgramCounter, Instruction)>,
+    pub instructions: InstructionList,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub line_number_table: Option<Vec<LineNumberTableEntry>>,
     pub local_variable_table: Option<LocalVariableTable>,
@@ -26,15 +26,16 @@ pub struct MethodBody {
 
 impl MethodBody {
     pub fn instruction_at(&self, pc: ProgramCounter) -> Option<&Instruction> {
-        self.instructions
-            .iter()
-            .find(|(it, _)| it == &pc)
-            .map(|(_, it)| it)
+        self.instructions.get(&pc)
     }
 }
 
+type InstructionList = BTreeMap<ProgramCounter, Instruction>;
+
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+
     use crate::elements::instruction::Instruction;
 
     use super::MethodBody;
@@ -59,7 +60,11 @@ mod test {
     #[test]
     fn instruction_at() {
         let body = MethodBody {
-            instructions: vec![(0.into(), Nop), (1.into(), IConst0), (2.into(), IConst1)],
+            instructions: BTreeMap::from([
+                (0.into(), Nop),
+                (1.into(), IConst0),
+                (2.into(), IConst1),
+            ]),
             ..Default::default()
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
