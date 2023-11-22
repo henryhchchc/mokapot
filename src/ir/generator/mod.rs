@@ -6,8 +6,6 @@ mod test;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use itertools::Itertools;
-
 use crate::elements::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
     Method, MethodAccessFlags,
@@ -47,11 +45,9 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         let first_pc = self
             .body
             .instructions
-            .keys()
-            .cloned()
-            .collect_vec()
-            .first()
+            .first_key_value()
             .ok_or(MokaIRGenerationError::MalformedControlFlow)?
+            .0
             .to_owned();
         Ok((
             first_pc,
