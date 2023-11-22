@@ -1,7 +1,5 @@
 use std::{collections::HashSet, fmt::Display, iter::once};
 
-use itertools::Itertools;
-
 use crate::{
     analysis::fixed_point::FixedPointFact,
     elements::{instruction::ProgramCounter, MethodDescriptor},
@@ -51,8 +49,8 @@ impl StackFrame {
             local_variables[local_idx].replace(FrameValue::ValueRef(this_ref));
             local_idx += 1;
         }
-        for (idx, local_type) in desc.parameters_types.iter().with_position() {
-            let arg_ref = ValueRef::Def(Identifier::Arg(idx as u16));
+        for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
+            let arg_ref = ValueRef::Def(Identifier::Arg(arg_idx as u16));
             local_variables[local_idx].replace(FrameValue::ValueRef(arg_ref));
             local_idx += 1;
             if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
