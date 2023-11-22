@@ -54,7 +54,7 @@ pub struct FieldReference {
 
 impl Display for FieldReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}].{}", self.class, self.name)
+        write!(f, "{}.{}", self.class, self.name)
     }
 }
 
@@ -99,11 +99,11 @@ impl Display for MethodReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Class(ClassMethodReference { class, name, .. }) => {
-                write!(f, "[{}]::{}", class, name)
+                write!(f, "{}::{}", class, name)
             }
             Self::Interface(InterfaceMethodReference {
                 interface, name, ..
-            }) => write!(f, "[{}]::{}", interface, name),
+            }) => write!(f, "{}::{}", interface, name),
         }
     }
 }

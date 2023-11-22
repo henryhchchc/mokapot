@@ -156,12 +156,12 @@ impl Display for FieldAccess {
         match self {
             ReadStatic { field } => write!(f, "{}", field),
             WriteStatic { field, value } => write!(f, "{} = {}", field, value),
-            ReadInstance { object_ref, field } => write!(f, "{}.{}", object_ref, field),
+            ReadInstance { object_ref, field } => write!(f, "{}.{}", object_ref, field.name),
             WriteInstance {
                 object_ref,
                 field,
                 value,
-            } => write!(f, "{}.{} = {}", object_ref, field, value),
+            } => write!(f, "{}.{} = {}", object_ref, field.name, value),
         }
     }
 }

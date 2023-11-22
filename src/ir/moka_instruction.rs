@@ -134,10 +134,10 @@ impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Identifier::*;
         match self {
-            Val(idx) => write!(f, "v{}", idx),
-            This => write!(f, "this"),
-            Arg(idx) => write!(f, "arg{}", idx),
-            CaughtException => write!(f, "exception"),
+            Val(idx) => write!(f, "%{}", idx),
+            This => write!(f, "@this"),
+            Arg(idx) => write!(f, "%arg{}", idx),
+            CaughtException => write!(f, "%caught_exception"),
         }
     }
 }

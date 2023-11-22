@@ -67,14 +67,14 @@ impl Display for Expression {
             Conversion(conv_op) => conv_op.fmt(f),
             Call(method, args) => write!(
                 f,
-                "call {}({}) // descriptor: {}",
+                "call {}({}) // desc: {}",
                 method,
                 args.iter().map(|it| it.to_string()).join(", "),
                 method.descriptor().to_string()
             ),
             GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
                 f,
-                "get_closure#{}[{}]({}) // descriptor: {}",
+                "get_closure#{}[{}]({}) // desc: {}",
                 bootstrap_method_idx,
                 name,
                 args.iter().map(|it| it.to_string()).join(", "),

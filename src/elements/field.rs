@@ -33,10 +33,10 @@ pub enum JavaString {
 impl Display for JavaString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JavaString::ValidUtf8(value) => write!(f, "\"{}\"", value),
+            JavaString::ValidUtf8(value) => write!(f, "String(\"{}\")", value),
             JavaString::InvalidUtf8(value) => write!(
                 f,
-                "\"{}\" // invalid UTF-8",
+                "String({}) // Invalid UTF-8",
                 value.iter().map(|it| format!("0x{:02X}", it)).join(" ")
             ),
         }
