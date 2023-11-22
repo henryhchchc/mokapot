@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use crate::{
-    elements::field::{Field, FieldAccessFlags},
+    elements::{
+        field::{Field, FieldAccessFlags},
+        references::ClassReference,
+    },
     errors::ClassFileParsingError,
     reader_utils::read_u16,
     types::FieldType,
@@ -29,6 +32,9 @@ impl Field {
         let descriptor_index = read_u16(reader)?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         let field_type = FieldType::from_str(descriptor)?;
+        let owner = ClassReference {
+            binary_name: ctx.current_class_binary_name.clone(),
+        };
 
         let attributes = AttributeList::parse(reader, ctx)?;
         let mut constant_value = None;
@@ -66,6 +72,7 @@ impl Field {
             access_flags,
             name,
             field_type,
+            owner,
             constant_value,
             is_synthetic,
             is_deperecated,

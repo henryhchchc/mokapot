@@ -6,7 +6,6 @@ use crate::{
         instruction::{Instruction, InstructionList, ProgramCounter},
         method::MethodDescriptor,
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
-        references::MethodReference,
     },
     errors::ClassFileParsingError,
     reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8},
@@ -216,13 +215,7 @@ impl Instruction {
             }
             0xb9 => {
                 let index = read_u16(reader)?;
-                let MethodReference::Interface(method_ref) =
-                    ctx.constant_pool.get_method_ref(index)?
-                else {
-                    Err(ClassFileParsingError::MalformedClassFile(
-                        "InvokeInterface is not associated with an interfac method",
-                    ))?
-                };
+                let method_ref = ctx.constant_pool.get_method_ref(index)?;
                 let count = read_u8(reader)?;
                 let zero = read_u8(reader)?;
                 if zero != 0 {

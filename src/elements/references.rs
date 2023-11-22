@@ -58,53 +58,19 @@ impl Display for FieldReference {
     }
 }
 
-/// A reference to an interface method.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct InterfaceMethodReference {
-    /// The reference to the interface.
-    pub interface: ClassReference,
-    /// The name of the method.
-    pub name: String,
-    /// The descriptor of the method.
-    pub descriptor: MethodDescriptor,
-}
-
-/// A reference to a class method.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct ClassMethodReference {
+pub struct MethodReference {
     /// The reference to the class.
-    pub class: ClassReference,
+    pub owner: ClassReference,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum MethodReference {
-    Class(ClassMethodReference),
-    Interface(InterfaceMethodReference),
-}
-
-impl MethodReference {
-    pub fn descriptor(&self) -> &MethodDescriptor {
-        match self {
-            Self::Class(ClassMethodReference { descriptor, .. }) => descriptor,
-            Self::Interface(InterfaceMethodReference { descriptor, .. }) => descriptor,
-        }
-    }
 }
 
 impl Display for MethodReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Class(ClassMethodReference { class, name, .. }) => {
-                write!(f, "{}::{}", class, name)
-            }
-            Self::Interface(InterfaceMethodReference {
-                interface, name, ..
-            }) => write!(f, "{}::{}", interface, name),
-        }
+        write!(f, "{}::{}", self.owner, self.name)
     }
 }
 

@@ -3,8 +3,8 @@ use std::{collections::HashMap, str::FromStr};
 use crate::{
     elements::{
         references::{
-            ClassMethodReference, ClassReference, FieldReference, InterfaceMethodReference,
-            MethodReference, ModuleReference, PackageReference, TypeReference,
+            ClassReference, FieldReference, MethodReference, ModuleReference, PackageReference,
+            TypeReference,
         },
         ConstantValue, Handle, JavaString, MethodDescriptor,
     },
@@ -216,24 +216,11 @@ impl ConstantPool {
                 let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
                 let name = name.to_owned();
                 let descriptor = MethodDescriptor::from_str(descriptor_str)?;
-                let result = match entry {
-                    ConstantPoolEntry::MethodRef { .. } => {
-                        MethodReference::Class(ClassMethodReference {
-                            class: class_or_interface,
-                            name,
-                            descriptor,
-                        })
-                    }
-                    ConstantPoolEntry::InterfaceMethodRef { .. } => {
-                        MethodReference::Interface(InterfaceMethodReference {
-                            interface: class_or_interface,
-                            name,
-                            descriptor,
-                        })
-                    }
-                    _ => unreachable!(),
-                };
-                Ok(result)
+                Ok(MethodReference {
+                    owner: class_or_interface,
+                    name,
+                    descriptor,
+                })
             }
             _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "MethodRef | InterfaceMethodRef",

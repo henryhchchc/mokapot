@@ -3,10 +3,7 @@ use std::ops::RangeInclusive;
 use crate::{
     elements::{
         field::ConstantValue,
-        references::{
-            ClassReference, FieldReference, InterfaceMethodReference, MethodReference,
-            TypeReference,
-        },
+        references::{ClassReference, FieldReference, MethodReference, TypeReference},
         MethodDescriptor,
     },
     types::PrimitiveType,
@@ -225,7 +222,7 @@ pub enum Instruction {
     InvokeVirtual(MethodReference),
     InvokeSpecial(MethodReference),
     InvokeStatic(MethodReference),
-    InvokeInterface(InterfaceMethodReference, u8),
+    InvokeInterface(MethodReference, u8),
     InvokeDynamic {
         bootstrap_method_index: u16,
         name: String,

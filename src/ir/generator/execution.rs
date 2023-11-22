@@ -2,7 +2,7 @@ use super::{stack_frame::StackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     elements::{
         instruction::{Instruction, ProgramCounter},
-        references::{MethodReference, TypeReference},
+        references::TypeReference,
         ConstantValue, MethodDescriptor, ReturnType,
     },
     ir::{
@@ -517,22 +517,12 @@ impl MokaIRGenerator<'_> {
                 };
                 IR::SideEffect(Expression::Field(field_op))
             }
-            InvokeVirtual(method_ref) | InvokeSpecial(method_ref) => {
-                let arguments = self.pop_args::<true>(frame, method_ref.descriptor())?;
+            InvokeVirtual(method_ref)
+            | InvokeSpecial(method_ref)
+            | InvokeInterface(method_ref, _) => {
+                let arguments = self.pop_args::<true>(frame, &method_ref.descriptor)?;
                 let rhs = Expression::Call(method_ref.clone(), arguments);
-                match &method_ref.descriptor().return_type {
-                    ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(return_type) => {
-                        frame.typed_push(return_type, def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
-                }
-            }
-            InvokeInterface(i_method_ref, _) => {
-                let arguments = self.pop_args::<true>(frame, &i_method_ref.descriptor)?;
-                let rhs =
-                    Expression::Call(MethodReference::Interface(i_method_ref.clone()), arguments);
-                match &i_method_ref.descriptor.return_type {
+                match &method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
                     ReturnType::Some(return_type) => {
                         frame.typed_push(return_type, def_id.into())?;
@@ -541,9 +531,9 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeStatic(method_ref) => {
-                let arguments = self.pop_args::<false>(frame, method_ref.descriptor())?;
+                let arguments = self.pop_args::<false>(frame, &method_ref.descriptor)?;
                 let rhs = Expression::Call(method_ref.clone(), arguments);
-                match &method_ref.descriptor().return_type {
+                match &method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
                     ReturnType::Some(return_type) => {
                         frame.typed_push(return_type, def_id.into())?;

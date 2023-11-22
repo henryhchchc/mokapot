@@ -6,13 +6,14 @@ use super::{
     annotation::{Annotation, TypeAnnotation},
     class::Handle,
     method::MethodDescriptor,
-    references::ClassReference,
+    references::{ClassReference, FieldReference},
 };
 
 #[derive(Debug)]
 pub struct Field {
     pub access_flags: FieldAccessFlags,
     pub name: String,
+    pub owner: ClassReference,
     pub field_type: FieldType,
     pub constant_value: Option<ConstantValue>,
     pub is_synthetic: bool,
@@ -22,6 +23,16 @@ pub struct Field {
     pub runtime_invisible_annotations: Vec<Annotation>,
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+}
+
+impl Field {
+    pub fn make_reference(&self) -> FieldReference {
+        FieldReference {
+            class: self.owner.clone(),
+            name: self.name.clone(),
+            field_type: self.field_type.clone(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

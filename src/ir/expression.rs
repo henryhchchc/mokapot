@@ -70,7 +70,7 @@ impl Display for Expression {
                 "call {}({}) // desc: {}",
                 method,
                 args.iter().map(|it| it.to_string()).join(", "),
-                method.descriptor().to_string()
+                method.descriptor.to_string()
             ),
             GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
                 f,
