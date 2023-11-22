@@ -1,9 +1,9 @@
-use std::{collections::BTreeMap, io::Read, str::FromStr};
+use std::{io::Read, str::FromStr};
 
 use crate::{
     elements::{
         field::ConstantValue,
-        instruction::{Instruction, ProgramCounter},
+        instruction::{Instruction, InstructionList, ProgramCounter},
         method::MethodDescriptor,
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
         references::MethodReference,
@@ -17,9 +17,9 @@ impl Instruction {
     pub(crate) fn parse_code(
         bytes: Vec<u8>,
         ctx: &ParsingContext,
-    ) -> Result<BTreeMap<ProgramCounter, Self>, ClassFileParsingError> {
+    ) -> Result<InstructionList, ClassFileParsingError> {
         let mut cursor = std::io::Cursor::new(bytes);
-        let mut instructions = BTreeMap::new();
+        let mut instructions = InstructionList::new();
         while let Some((pc, instruction)) = Instruction::parse(&mut cursor, ctx)? {
             instructions.insert(pc, instruction);
         }

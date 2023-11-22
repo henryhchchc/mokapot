@@ -30,7 +30,7 @@ impl MethodBody {
     }
 }
 
-type InstructionList = BTreeMap<ProgramCounter, Instruction>;
+pub type InstructionList = BTreeMap<ProgramCounter, Instruction>;
 
 #[cfg(test)]
 mod test {
