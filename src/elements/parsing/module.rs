@@ -4,7 +4,7 @@ use crate::{
         ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u32},
+    reader_utils::read_u16,
 };
 
 use super::{
@@ -147,7 +147,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let module_info_idx = read_u16(reader)?;
         let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
         let &ConstantPoolEntry::Module { name_index } = module_info_entry else {
@@ -200,7 +199,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let package_count = read_u16(reader)?;
         let mut packages = Vec::with_capacity(package_count as usize);
         for _ in 0..package_count {
@@ -217,7 +215,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 2)?;
         let main_class_index = read_u16(reader)?;
         let main_class = ctx.constant_pool.get_class_ref(main_class_index)?;
         Ok(Self::ModuleMainClass(main_class))

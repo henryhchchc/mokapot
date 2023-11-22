@@ -58,7 +58,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let line_number_table_len = read_u16(reader)?;
         let mut line_number_table = Vec::with_capacity(line_number_table_len as usize);
         for _ in 0..line_number_table_len {
@@ -75,7 +74,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let max_stack = read_u16(reader)?;
         let max_locals = read_u16(reader)?;
         let code_length = read_u32(reader)?;
@@ -141,7 +139,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let table_len = read_u16(reader)?;
         let mut local_variable_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
@@ -158,7 +155,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let table_len = read_u16(reader)?;
         let mut local_variable_type_table = Vec::with_capacity(table_len as usize);
         for _ in 0..table_len {
@@ -175,7 +171,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let num_entries = read_u16(reader)?;
         let mut stack_map_table = Vec::with_capacity(num_entries as usize);
         for _ in 0..num_entries {
@@ -191,7 +186,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let number_of_exceptions = read_u16(reader)?;
         let mut exceptions = Vec::with_capacity(number_of_exceptions as usize);
         for _ in 0..number_of_exceptions {
@@ -209,7 +203,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let parameters_count = read_u8(reader)?;
         let mut parameters = Vec::with_capacity(parameters_count as usize);
         for _ in 0..parameters_count {

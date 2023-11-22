@@ -9,7 +9,7 @@ use crate::{
         references::{ClassReference, PackageReference},
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u32},
+    reader_utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{
@@ -125,72 +125,59 @@ impl Attribute {
     {
         let name_idx = read_u16(reader)?;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        match name {
-            "ConstantValue" => Self::parse_constant_value(reader, ctx),
-            "Code" => Self::parse_code(reader, ctx),
-            "StackMapTable" => Self::parse_stack_map_table(reader, ctx),
-            "Exceptions" => Self::parse_exceptions(reader, ctx),
-            "InnerClasses" => Self::parse_innner_classes(reader, ctx),
-            "EnclosingMethod" => Self::parse_enclosing_method(reader, ctx),
-            "Synthetic" => Self::parse_synthetic(reader, ctx),
-            "Signature" => Self::parse_signature(reader, ctx),
-            "SourceFile" => Self::parse_source_file(reader, ctx),
-            "SourceDebugExtension" => Self::parse_source_debug_extension(reader, ctx),
-            "LineNumberTable" => Self::parse_line_no_table(reader, ctx),
-            "LocalVariableTable" => Self::parse_local_variable_table(reader, ctx),
-            "LocalVariableTypeTable" => Self::parse_local_variable_type_table(reader, ctx),
-            "Deprecated" => Self::parse_deprecated(reader, ctx),
+        let attribute_length = read_u32(reader)?;
+        let attribute_bytes = read_bytes_vec(reader, attribute_length as usize)?;
+        let attr_reader = &mut std::io::Cursor::new(attribute_bytes);
+        let result = match name {
+            "ConstantValue" => Self::parse_constant_value(attr_reader, ctx),
+            "Code" => Self::parse_code(attr_reader, ctx),
+            "StackMapTable" => Self::parse_stack_map_table(attr_reader, ctx),
+            "Exceptions" => Self::parse_exceptions(attr_reader, ctx),
+            "InnerClasses" => Self::parse_innner_classes(attr_reader, ctx),
+            "EnclosingMethod" => Self::parse_enclosing_method(attr_reader, ctx),
+            "Synthetic" => Self::parse_synthetic(attr_reader, ctx),
+            "Signature" => Self::parse_signature(attr_reader, ctx),
+            "SourceFile" => Self::parse_source_file(attr_reader, ctx),
+            "SourceDebugExtension" => Self::parse_source_debug_extension(attr_reader, ctx),
+            "LineNumberTable" => Self::parse_line_no_table(attr_reader, ctx),
+            "LocalVariableTable" => Self::parse_local_variable_table(attr_reader, ctx),
+            "LocalVariableTypeTable" => Self::parse_local_variable_type_table(attr_reader, ctx),
+            "Deprecated" => Self::parse_deprecated(attr_reader, ctx),
             "RuntimeVisibleAnnotations" => {
-                let attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, ctx, Some(attribute_length))
-                    .map(Self::RuntimeVisibleAnnotations)
+                Self::parse_annotations(attr_reader, ctx).map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                let attribute_length = read_u32(reader)?;
-                Self::parse_annotations(reader, ctx, Some(attribute_length))
-                    .map(Self::RuntimeInvisibleAnnotations)
+                Self::parse_annotations(attr_reader, ctx).map(Self::RuntimeInvisibleAnnotations)
             }
-            "RuntimeVisibleParameterAnnotations" => Self::parse_parameter_annotations(reader, ctx)
-                .map(Self::RuntimeVisibleParameterAnnotations),
+            "RuntimeVisibleParameterAnnotations" => {
+                Self::parse_parameter_annotations(attr_reader, ctx)
+                    .map(Self::RuntimeVisibleParameterAnnotations)
+            }
             "RuntimeInvisibleParameterAnnotations" => {
-                Self::parse_parameter_annotations(reader, ctx)
+                Self::parse_parameter_annotations(attr_reader, ctx)
                     .map(Self::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => {
-                Self::parse_type_annotations(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
-            }
-            "RuntimeInvisibleTypeAnnotations" => {
-                Self::parse_type_annotations(reader, ctx).map(Self::RuntimeInvisibleTypeAnnotations)
-            }
-            "AnnotationDefault" => Self::parse_annotation_default(reader, ctx),
-            "BootstrapMethods" => Self::parse_bootstrap_methods(reader, ctx),
-            "MethodParameters" => Self::parse_method_parameters(reader, ctx),
-            "Module" => Self::parse_module(reader, ctx),
-            "ModulePackages" => Self::parse_module_packages(reader, ctx),
-            "ModuleMainClass" => Self::parse_module_main_class(reader, ctx),
-            "NestHost" => Self::parse_nest_host(reader, ctx),
-            "NestMembers" => Self::parse_nest_members(reader, ctx),
-            "Record" => Self::parse_record(reader, ctx),
-            "PermittedSubclasses" => Self::parse_permitted_subclasses(reader, ctx),
+            "RuntimeVisibleTypeAnnotations" => Self::parse_type_annotations(attr_reader, ctx)
+                .map(Self::RuntimeVisibleTypeAnnotations),
+            "RuntimeInvisibleTypeAnnotations" => Self::parse_type_annotations(attr_reader, ctx)
+                .map(Self::RuntimeInvisibleTypeAnnotations),
+            "AnnotationDefault" => Self::parse_annotation_default(attr_reader, ctx),
+            "BootstrapMethods" => Self::parse_bootstrap_methods(attr_reader, ctx),
+            "MethodParameters" => Self::parse_method_parameters(attr_reader, ctx),
+            "Module" => Self::parse_module(attr_reader, ctx),
+            "ModulePackages" => Self::parse_module_packages(attr_reader, ctx),
+            "ModuleMainClass" => Self::parse_module_main_class(attr_reader, ctx),
+            "NestHost" => Self::parse_nest_host(attr_reader, ctx),
+            "NestMembers" => Self::parse_nest_members(attr_reader, ctx),
+            "Record" => Self::parse_record(attr_reader, ctx),
+            "PermittedSubclasses" => Self::parse_permitted_subclasses(attr_reader, ctx),
             _ => Err(ClassFileParsingError::UnknownAttribute(name.to_owned())),
+        };
+        if attr_reader.position() == attribute_length as u64 {
+            result
+        } else {
+            Err(ClassFileParsingError::UnexpectedData)
         }
-    }
-
-    pub fn check_attribute_length<R>(
-        reader: &mut R,
-        expected: u32,
-    ) -> Result<(), ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let attribute_length = read_u32(reader)?;
-        if attribute_length != expected {
-            return Err(ClassFileParsingError::InvalidAttributeLength {
-                expected,
-                actual: attribute_length,
-            });
-        }
-        Ok(())
     }
 
     fn parse_constant_value<R>(
@@ -200,31 +187,28 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 2)?;
         let value_index = read_u16(reader)?;
         let value = ctx.constant_pool.get_constant_value(value_index)?;
         Ok(Self::ConstantValue(value))
     }
 
     fn parse_synthetic<R>(
-        reader: &mut R,
+        _reader: &mut R,
         _ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 0)?;
         Ok(Self::Synthetic)
     }
 
     fn parse_deprecated<R>(
-        reader: &mut R,
+        _reader: &mut R,
         _ctx: &ParsingContext,
     ) -> Result<Attribute, ClassFileParsingError>
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 0)?;
         Ok(Self::Deprecated)
     }
 
@@ -235,7 +219,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 4)?;
         let class_index = read_u16(reader)?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = read_u16(reader)?;
@@ -270,7 +253,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 2)?;
         let signature_index = read_u16(reader)?;
         let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
         Ok(Self::Signature(signature))

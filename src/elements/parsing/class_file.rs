@@ -38,7 +38,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 2)?;
         let sourcefile_index = read_u16(reader)?;
         let file_name = ctx.constant_pool.get_str(sourcefile_index)?;
         Ok(Self::SourceFile(file_name.to_owned()))
@@ -50,7 +49,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let number_of_classes = read_u16(reader)?;
         let mut classes = Vec::with_capacity(number_of_classes as usize);
         for _ in 0..number_of_classes {
@@ -99,7 +97,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let num_bootstrap_methods = read_u16(reader)?;
         let bootstrap_methods = (0..num_bootstrap_methods)
             .map(|_| BootstrapMethod::parse(reader, ctx))
@@ -113,7 +110,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        Self::check_attribute_length(reader, 2)?;
         let nest_host_index = read_u16(reader)?;
         let host_class = ctx.constant_pool.get_class_ref(nest_host_index)?;
         Ok(Self::NestHost(host_class))
@@ -125,7 +121,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let number_of_classes = read_u16(reader)?;
         let classes = (0..number_of_classes)
             .map(|_| {
@@ -142,7 +137,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let component_count = read_u16(reader)?;
         let components = (0..component_count)
             .map(|_| {
@@ -195,7 +189,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let number_of_classes = read_u16(reader)?;
         let classes = (0..number_of_classes)
             .map(|_| {

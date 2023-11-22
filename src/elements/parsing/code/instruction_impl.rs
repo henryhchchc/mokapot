@@ -138,8 +138,8 @@ impl Instruction {
                 let field = ctx.constant_pool.get_field_ref(index)?;
                 GetStatic(field)
             }
-            0xa7 => Goto(read_offset16(reader, &pc)?),
-            0xc8 => GotoW(read_offset32(reader, &pc)?),
+            0xa7 => Goto(read_offset16(reader, pc)?),
+            0xc8 => GotoW(read_offset32(reader, pc)?),
             0x91 => I2B,
             0x92 => I2C,
             0x87 => I2D,
@@ -158,22 +158,22 @@ impl Instruction {
             0x07 => IConst4,
             0x08 => IConst5,
             0x6c => IDiv,
-            0xa5 => IfACmpEq(read_offset16(reader, &pc)?),
-            0xa6 => IfACmpNe(read_offset16(reader, &pc)?),
-            0x9f => IfICmpEq(read_offset16(reader, &pc)?),
-            0xa0 => IfICmpNe(read_offset16(reader, &pc)?),
-            0xa1 => IfICmpLt(read_offset16(reader, &pc)?),
-            0xa2 => IfICmpGe(read_offset16(reader, &pc)?),
-            0xa3 => IfICmpGt(read_offset16(reader, &pc)?),
-            0xa4 => IfICmpLe(read_offset16(reader, &pc)?),
-            0x99 => IfEq(read_offset16(reader, &pc)?),
-            0x9a => IfNe(read_offset16(reader, &pc)?),
-            0x9b => IfLt(read_offset16(reader, &pc)?),
-            0x9c => IfGe(read_offset16(reader, &pc)?),
-            0x9d => IfGt(read_offset16(reader, &pc)?),
-            0x9e => IfLe(read_offset16(reader, &pc)?),
-            0xc7 => IfNonNull(read_offset16(reader, &pc)?),
-            0xc6 => IfNull(read_offset16(reader, &pc)?),
+            0xa5 => IfACmpEq(read_offset16(reader, pc)?),
+            0xa6 => IfACmpNe(read_offset16(reader, pc)?),
+            0x9f => IfICmpEq(read_offset16(reader, pc)?),
+            0xa0 => IfICmpNe(read_offset16(reader, pc)?),
+            0xa1 => IfICmpLt(read_offset16(reader, pc)?),
+            0xa2 => IfICmpGe(read_offset16(reader, pc)?),
+            0xa3 => IfICmpGt(read_offset16(reader, pc)?),
+            0xa4 => IfICmpLe(read_offset16(reader, pc)?),
+            0x99 => IfEq(read_offset16(reader, pc)?),
+            0x9a => IfNe(read_offset16(reader, pc)?),
+            0x9b => IfLt(read_offset16(reader, pc)?),
+            0x9c => IfGe(read_offset16(reader, pc)?),
+            0x9d => IfGt(read_offset16(reader, pc)?),
+            0x9e => IfLe(read_offset16(reader, pc)?),
+            0xc7 => IfNonNull(read_offset16(reader, pc)?),
+            0xc6 => IfNull(read_offset16(reader, pc)?),
             0x84 => IInc(read_u8(reader)?, read_i8(reader)?),
             0x15 => ILoad(read_u8(reader)?),
             0x1a => ILoad0,
@@ -260,8 +260,8 @@ impl Instruction {
             0x64 => ISub,
             0x7c => IUShr,
             0x82 => IXor,
-            0xa8 => Jsr(read_offset16(reader, &pc)?),
-            0xc9 => JsrW(read_offset32(reader, &pc)?),
+            0xa8 => Jsr(read_offset16(reader, pc)?),
+            0xc9 => JsrW(read_offset32(reader, pc)?),
             0x8a => L2D,
             0x89 => L2F,
             0x88 => L2I,
@@ -333,12 +333,12 @@ impl Instruction {
                 while reader.position() % 4 != 0 {
                     let _padding_byte = read_u8(reader)?;
                 }
-                let default = read_offset32(reader, &pc)?;
+                let default = read_offset32(reader, pc)?;
                 let npairs = read_i32(reader)?;
                 let match_targets = (0..npairs)
                     .map(|_| {
                         let match_value = read_i32(reader)?;
-                        let offset = read_offset32(reader, &pc)?;
+                        let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
                     .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
@@ -351,13 +351,13 @@ impl Instruction {
                 while reader.position() % 4 != 0 {
                     let _padding_byte = read_u8(reader)?;
                 }
-                let default = read_offset32(reader, &pc)?;
+                let default = read_offset32(reader, pc)?;
                 let low = read_i32(reader)?;
                 let high = read_i32(reader)?;
                 let range = low..=high;
                 let offset_count = high - low + 1;
                 let jump_targets = (0..offset_count)
-                    .map(|_| read_offset32(reader, &pc))
+                    .map(|_| read_offset32(reader, pc))
                     .collect::<Result<Vec<_>, _>>()?;
                 TableSwitch {
                     default,
@@ -453,7 +453,7 @@ impl Instruction {
 /// Reads an i32 offset form the reader, advances the reader by 4 bytes, and applies the offset to [current_pc].
 pub(crate) fn read_offset32<R>(
     reader: &mut R,
-    current_pc: &ProgramCounter,
+    current_pc: ProgramCounter,
 ) -> Result<ProgramCounter, ClassFileParsingError>
 where
     R: Read,
@@ -465,7 +465,7 @@ where
 /// Reads an i16 offset form the reader, advances the reader by 2 bytes, and applies the offset to [current_pc].
 pub(crate) fn read_offset16<R>(
     reader: &mut R,
-    current_pc: &ProgramCounter,
+    current_pc: ProgramCounter,
 ) -> Result<ProgramCounter, ClassFileParsingError>
 where
     R: Read,

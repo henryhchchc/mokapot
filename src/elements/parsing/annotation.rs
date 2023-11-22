@@ -7,7 +7,7 @@ use crate::{
         JavaString,
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u32, read_u8},
+    reader_utils::{read_u16, read_u8},
     types::FieldType,
 };
 
@@ -167,7 +167,6 @@ impl Attribute {
     pub(super) fn parse_annotations<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-        _attribute_length: Option<u32>,
     ) -> Result<Vec<Annotation>, ClassFileParsingError>
     where
         R: std::io::Read,
@@ -187,10 +186,9 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let num_parameters = read_u8(reader)?;
         let parameter_annotations = (0..num_parameters)
-            .map(|_| Self::parse_annotations(reader, ctx, None))
+            .map(|_| Self::parse_annotations(reader, ctx))
             .collect::<Result<_, _>>()?;
         Ok(parameter_annotations)
     }
@@ -202,7 +200,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let num_annotations = read_u16(reader)?;
         let annotations = (0..num_annotations)
             .map(|_| TypeAnnotation::parse(reader, ctx))
@@ -217,7 +214,6 @@ impl Attribute {
     where
         R: std::io::Read,
     {
-        let _attribute_length = read_u32(reader)?;
         let value = ElementValue::parse(reader, ctx)?;
         Ok(Self::AnnotationDefault(value))
     }
