@@ -135,7 +135,7 @@ impl Display for Identifier {
         use Identifier::*;
         match self {
             Val(idx) => write!(f, "%{}", idx),
-            This => write!(f, "@this"),
+            This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{}", idx),
             CaughtException => write!(f, "%caught_exception"),
         }
