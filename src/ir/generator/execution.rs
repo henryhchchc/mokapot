@@ -520,8 +520,9 @@ impl MokaIRGenerator<'_> {
             InvokeVirtual(method_ref)
             | InvokeSpecial(method_ref)
             | InvokeInterface(method_ref, _) => {
-                let arguments = self.pop_args::<true>(frame, &method_ref.descriptor)?;
-                let rhs = Expression::Call(method_ref.clone(), arguments);
+                let arguments = self.pop_args(frame, &method_ref.descriptor)?;
+                let object_ref = frame.pop_value()?;
+                let rhs = Expression::Call(method_ref.clone(), Some(object_ref), arguments);
                 match &method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
                     ReturnType::Some(return_type) => {
@@ -531,8 +532,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             InvokeStatic(method_ref) => {
-                let arguments = self.pop_args::<false>(frame, &method_ref.descriptor)?;
-                let rhs = Expression::Call(method_ref.clone(), arguments);
+                let arguments = self.pop_args(frame, &method_ref.descriptor)?;
+                let rhs = Expression::Call(method_ref.clone(), None, arguments);
                 match &method_ref.descriptor.return_type {
                     ReturnType::Void => IR::SideEffect(rhs),
                     ReturnType::Some(return_type) => {
@@ -546,7 +547,7 @@ impl MokaIRGenerator<'_> {
                 bootstrap_method_index,
                 name,
             } => {
-                let arguments = self.pop_args::<false>(frame, descriptor)?;
+                let arguments = self.pop_args(frame, descriptor)?;
                 let rhs = Expression::GetClosure(
                     *bootstrap_method_index,
                     name.to_owned(),
@@ -668,7 +669,7 @@ impl MokaIRGenerator<'_> {
     }
 
     #[inline]
-    fn pop_args<const OBJECT_REF: bool>(
+    fn pop_args(
         &mut self,
         frame: &mut StackFrame,
         descriptor: &MethodDescriptor,
@@ -677,10 +678,6 @@ impl MokaIRGenerator<'_> {
         for param_type in descriptor.parameters_types.iter().rev() {
             let arg = frame.typed_pop(param_type)?;
             args.push_front(arg);
-        }
-        if OBJECT_REF {
-            let object_ref = frame.pop_value()?;
-            args.push_front(object_ref);
         }
         Ok(args.into_iter().collect())
     }

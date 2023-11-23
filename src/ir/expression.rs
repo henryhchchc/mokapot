@@ -23,7 +23,7 @@ pub enum Expression {
     /// - [`invokevirtual`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokevirtual)
     /// - [`invokespecial`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokespecial)
     /// - [`invokeinterface`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokeinterface)
-    Call(MethodReference, Vec<ValueRef>),
+    Call(MethodReference, Option<ValueRef>, Vec<ValueRef>),
     /// A call to a bootstrap method to create a closure.  
     /// See the following documentation for more information:
     /// - [`invokedynamic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokedynamic)
@@ -65,11 +65,20 @@ impl Display for Expression {
             Synchronization(monitor_op) => monitor_op.fmt(f),
             New(class) => write!(f, "new {}", class),
             Conversion(conv_op) => conv_op.fmt(f),
-            Call(method, args) => write!(
+            Call(method, None, args) => write!(
                 f,
                 "call {}({}) // desc: {}",
                 method,
                 args.iter().map(|it| it.to_string()).join(", "),
+                method.descriptor.to_string()
+            ),
+            Call(method, Some(receiver), args) => write!(
+                f,
+                "call {}::{}({}) // owner: {}, desc: {}",
+                receiver,
+                method.name,
+                args.iter().map(|it| it.to_string()).join(", "),
+                method.owner.binary_name,
                 method.descriptor.to_string()
             ),
             GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
