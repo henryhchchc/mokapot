@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeSet,
     fmt::{Display, Formatter},
+    ops::BitOr,
 };
 
 use super::{Condition, Expression};
@@ -117,6 +118,40 @@ impl From<Identifier> for ValueRef {
     }
 }
 
+impl BitOr for ValueRef {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        use ValueRef::*;
+        match (self, rhs) {
+            (Def(lhs), Def(rhs)) if lhs == rhs => Def(lhs),
+            (Def(lhs), Def(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
+            (Def(id), Phi(mut ids)) | (Phi(mut ids), Def(id)) => {
+                ids.insert(id);
+                Phi(ids)
+            }
+            (Phi(mut lhs), Phi(mut rhs)) => {
+                lhs.append(&mut rhs);
+                Phi(lhs)
+            }
+        }
+    }
+}
+
+impl IntoIterator for ValueRef {
+    type Item = Identifier;
+
+    type IntoIter = std::collections::btree_set::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        use ValueRef::*;
+        match self {
+            Def(id) => BTreeSet::from([id]).into_iter(),
+            Phi(ids) => ids.into_iter(),
+        }
+    }
+}
+
 /// Represents an identifier of a value in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Identifier {
@@ -139,5 +174,58 @@ impl Display for Identifier {
             Val(idx) => write!(f, "%{}", idx),
             CaughtException => write!(f, "%caught_exception"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn value_ref_merge() {
+        use super::Identifier::*;
+        use super::ValueRef::*;
+        use std::collections::BTreeSet;
+
+        assert_eq!(Def(This) | Def(This), Def(This));
+        assert_eq!(Def(This) | Def(Arg(0)), Phi(BTreeSet::from([This, Arg(0)])));
+        assert_eq!(Def(Arg(0)) | Def(This), Phi(BTreeSet::from([This, Arg(0)])));
+        assert_eq!(
+            Def(Arg(0)) | Def(Arg(1)),
+            Phi(BTreeSet::from([Arg(0), Arg(1)]))
+        );
+        assert_eq!(
+            Def(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
+            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
+        );
+        assert_eq!(
+            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Def(Arg(0)),
+            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
+        );
+        assert_eq!(
+            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Phi(BTreeSet::from([Arg(0), Arg(3)])),
+            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
+        );
+    }
+
+    #[test]
+    fn value_ref_iter() {
+        use super::Identifier::*;
+        use super::ValueRef::*;
+        use std::collections::BTreeSet;
+
+        assert_eq!(
+            Def(This).into_iter().collect::<BTreeSet<_>>(),
+            BTreeSet::from([This])
+        );
+        assert_eq!(
+            Def(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
+            BTreeSet::from([Arg(0)])
+        );
+        assert_eq!(
+            Phi(BTreeSet::from([Arg(0), Arg(1)]))
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([Arg(0), Arg(1)])
+        );
     }
 }

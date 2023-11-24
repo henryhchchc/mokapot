@@ -277,18 +277,9 @@ impl Display for FrameValue {
 
 impl FrameValue {
     pub fn merge(x: Self, y: Self) -> Result<Self, StackFrameError> {
-        use ValueRef::*;
         match (x, y) {
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
-                let result = match (lhs, rhs) {
-                    (Def(id_x), Def(id_y)) if id_x == id_y => Def(id_x),
-                    (Def(id_x), Def(id_y)) => Phi(BTreeSet::from([id_x, id_y])),
-                    (Def(id), Phi(ids)) | (Phi(ids), Def(id)) => {
-                        Phi(ids.into_iter().chain(once(id)).collect())
-                    }
-                    (Phi(ids_x), Phi(ids_y)) => Phi(ids_x.into_iter().chain(ids_y).collect()),
-                };
-                Ok(FrameValue::ValueRef(result))
+                Ok(FrameValue::ValueRef(lhs | rhs))
             }
             // NOTE: `lhs` and `rhs` are different variants, that means the local variable slot is reused
             //       In this case, we do not merge it since it will be overridden afterwrds.
