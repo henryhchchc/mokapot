@@ -1,12 +1,13 @@
 use std::{
     collections::BTreeSet,
     fmt::{Display, Formatter},
+    iter::Once,
     ops::BitOr,
 };
 
 use super::{Condition, Expression};
 use crate::elements::instruction::ProgramCounter;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug)]
@@ -140,14 +141,26 @@ impl BitOr for ValueRef {
 
 impl IntoIterator for ValueRef {
     type Item = Identifier;
-
-    type IntoIter = std::collections::btree_set::IntoIter<Self::Item>;
+    type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
         use ValueRef::*;
         match self {
-            Def(id) => BTreeSet::from([id]).into_iter(),
-            Phi(ids) => ids.into_iter(),
+            Def(id) => Either::Left(std::iter::once(id)),
+            Phi(ids) => Either::Right(ids.into_iter()),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a ValueRef {
+    type Item = &'a Identifier;
+    type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::Iter<'a, Identifier>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        use ValueRef::*;
+        match self {
+            Def(id) => Either::Left(std::iter::once(id)),
+            Phi(ids) => Either::Right(ids.into_iter()),
         }
     }
 }
@@ -202,7 +215,7 @@ mod test {
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Phi(BTreeSet::from([Arg(0), Arg(3)])),
+            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Phi(BTreeSet::from([Arg(0), Arg(1), Arg(3)])),
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
         );
     }
@@ -226,6 +239,28 @@ mod test {
                 .into_iter()
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([Arg(0), Arg(1)])
+        );
+    }
+
+    #[test]
+    fn value_ref_iter_over_refs() {
+        use super::Identifier::*;
+        use super::ValueRef::*;
+        use std::collections::BTreeSet;
+
+        assert_eq!(
+            (&Def(This)).into_iter().collect::<BTreeSet<_>>(),
+            BTreeSet::from([&This])
+        );
+        assert_eq!(
+            (&Def(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
+            BTreeSet::from([&Arg(0)])
+        );
+        assert_eq!(
+            (&Phi(BTreeSet::from([Arg(0), Arg(1)])))
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([&Arg(0), &Arg(1)])
         );
     }
 }
