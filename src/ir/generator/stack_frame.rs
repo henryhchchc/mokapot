@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Display, iter::once};
+use std::{collections::BTreeSet, fmt::Display};
 
 use crate::{
     analysis::fixed_point::FixedPointFact,
