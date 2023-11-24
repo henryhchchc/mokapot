@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::BTreeSet,
     fmt::{Display, Formatter},
 };
 
@@ -32,7 +32,7 @@ pub enum MokaInstruction {
         default: ProgramCounter,
         branches: Vec<(i32, ProgramCounter)>,
     },
-    /// Returns from the current method with [`value`](MokaInstruction::Return::value) if [`value`](MokaInstruction::Return::value) is [`Some`].
+    /// Returns from the current method with a value if it is [`Some`].
     /// Otherwise, returns from the current method with `void`.
     Return(Option<ValueRef>),
     /// Returns from a subroutine.
@@ -95,7 +95,7 @@ pub enum ValueRef {
     Def(Identifier),
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
-    Phi(HashSet<Identifier>),
+    Phi(BTreeSet<Identifier>),
 }
 
 impl Display for ValueRef {
@@ -118,14 +118,14 @@ impl From<Identifier> for ValueRef {
 }
 
 /// Represents an identifier of a value in the current scope.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Identifier {
-    /// A locally defined value.
-    Val(u16),
     /// The `this` value in an instance method.
     This,
     /// An argument of the current method.
     Arg(u16),
+    /// A locally defined value.
+    Val(u16),
     /// The exception caught by a `catch` block.
     CaughtException,
 }
@@ -134,9 +134,9 @@ impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Identifier::*;
         match self {
-            Val(idx) => write!(f, "%{}", idx),
             This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{}", idx),
+            Val(idx) => write!(f, "%{}", idx),
             CaughtException => write!(f, "%caught_exception"),
         }
     }

@@ -4,7 +4,7 @@ mod stack_frame;
 #[cfg(test)]
 mod test;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::elements::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
@@ -33,15 +33,15 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    next_pc_mapping: HashMap<ProgramCounter, ProgramCounter>,
+    next_pc_mapping: BTreeMap<ProgramCounter, ProgramCounter>,
 }
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
     type Fact = StackFrame;
-    type Error = MokaIRGenerationError;
+    type Err = MokaIRGenerationError;
 
-    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Error> {
+    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
         let first_pc = self
             .body
             .instructions
@@ -64,9 +64,9 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         &mut self,
         location: Self::Location,
         fact: &Self::Fact,
-    ) -> Result<HashMap<Self::Location, Self::Fact>, Self::Error> {
+    ) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err> {
         let mut frame = fact.same_frame();
-        let mut dirty_nodes = HashMap::new();
+        let mut dirty_nodes = BTreeMap::new();
         let insn = self
             .body
             .instruction_at(location)
@@ -136,7 +136,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             }
             MokaInstruction::SubroutineRet(_) => {
                 let possible_ret_addresses = frame.possible_ret_addresses;
-                frame.possible_ret_addresses = HashSet::new();
+                frame.possible_ret_addresses = BTreeSet::new();
                 for return_address in possible_ret_addresses {
                     dirty_nodes.insert(return_address, frame.same_frame());
                 }
@@ -155,7 +155,7 @@ impl<'m> MokaIRGenerator<'m> {
             .ok_or(MokaIRGenerationError::MalformedControlFlow)
     }
 
-    fn for_method(method: &'m Method) -> Result<Self, <Self as FixedPointAnalyzer>::Error> {
+    fn for_method(method: &'m Method) -> Result<Self, <Self as FixedPointAnalyzer>::Err> {
         let body = method
             .body
             .as_ref()
@@ -180,7 +180,7 @@ impl<'m> MokaIRGenerator<'m> {
         exception_table: &Vec<ExceptionTableEntry>,
         pc: ProgramCounter,
         frame: &StackFrame,
-        dirty_nodes: &mut HashMap<ProgramCounter, StackFrame>,
+        dirty_nodes: &mut BTreeMap<ProgramCounter, StackFrame>,
     ) {
         for handler in exception_table.iter() {
             if handler.covers(pc) {

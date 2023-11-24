@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display, iter::once};
+use std::{collections::BTreeSet, fmt::Display, iter::once};
 
 use crate::{
     analysis::fixed_point::FixedPointFact,
@@ -14,7 +14,7 @@ pub(super) struct StackFrame {
     max_stack: u16,
     local_variables: Vec<Option<FrameValue>>,
     operand_stack: Vec<FrameValue>,
-    pub possible_ret_addresses: HashSet<ProgramCounter>,
+    pub possible_ret_addresses: BTreeSet<ProgramCounter>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,7 +63,7 @@ impl StackFrame {
             max_stack,
             local_variables,
             operand_stack: Vec::with_capacity(max_stack as usize),
-            possible_ret_addresses: HashSet::new(),
+            possible_ret_addresses: BTreeSet::new(),
         }
     }
 
@@ -217,9 +217,9 @@ impl StackFrame {
 }
 
 impl FixedPointFact for StackFrame {
-    type MergeError = StackFrameError;
+    type MergeErr = StackFrameError;
 
-    fn merge(&self, other: Self) -> Result<Self, Self::MergeError> {
+    fn merge(&self, other: Self) -> Result<Self, Self::MergeErr> {
         if self.max_locals != other.max_locals {
             return Err(StackFrameError::LocalLimitMismatch);
         }
@@ -282,7 +282,7 @@ impl FrameValue {
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 let result = match (lhs, rhs) {
                     (Def(id_x), Def(id_y)) if id_x == id_y => Def(id_x),
-                    (Def(id_x), Def(id_y)) => Phi(HashSet::from([id_x, id_y])),
+                    (Def(id_x), Def(id_y)) => Phi(BTreeSet::from([id_x, id_y])),
                     (Def(id), Phi(ids)) | (Phi(ids), Def(id)) => {
                         Phi(ids.into_iter().chain(once(id)).collect())
                     }
@@ -299,7 +299,7 @@ impl FrameValue {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     use crate::ir::{Identifier, ValueRef};
 
@@ -313,7 +313,7 @@ mod test {
         let result = FrameValue::merge(lhs, rhs).unwrap();
         assert_eq!(
             result,
-            FrameValue::ValueRef(ValueRef::Phi(HashSet::from([
+            FrameValue::ValueRef(ValueRef::Phi(BTreeSet::from([
                 Identifier::Val(0),
                 Identifier::Val(1)
             ])))
