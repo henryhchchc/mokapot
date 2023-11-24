@@ -1,5 +1,5 @@
 mod execution;
-mod stack_frame;
+mod jvm_frame;
 
 #[cfg(test)]
 mod test;
@@ -13,16 +13,18 @@ use crate::elements::{
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
-use self::stack_frame::{FrameValue, StackFrame, StackFrameError};
+use self::jvm_frame::{FrameValue, JvmFrame};
+
+pub use jvm_frame::JvmFrameError;
 
 use super::{Expression, Identifier, MokaIRMethod, MokaInstruction, ValueRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
-    #[error("Error when executing bytecode on stack frame: {0}")]
-    StackFrameError(#[from] StackFrameError),
+    #[error("Error when executing bytecode on a JVM frame: {0}")]
+    ExecutionError(#[from] JvmFrameError),
     #[error("Error when merging two stack frames: {0}")]
-    MergeError(StackFrameError),
+    MergeError(JvmFrameError),
     #[error("The method does not have a body")]
     NoMethodBody,
     #[error("The method contains malformed control flow")]
@@ -38,7 +40,7 @@ struct MokaIRGenerator<'m> {
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
-    type Fact = StackFrame;
+    type Fact = JvmFrame;
     type Err = MokaIRGenerationError;
 
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
@@ -51,7 +53,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             .to_owned();
         Ok((
             first_pc,
-            StackFrame::new(
+            JvmFrame::new(
                 self.method.access_flags.contains(MethodAccessFlags::STATIC),
                 self.method.descriptor.clone(),
                 self.body.max_locals,
@@ -179,8 +181,8 @@ impl<'m> MokaIRGenerator<'m> {
         &mut self,
         exception_table: &Vec<ExceptionTableEntry>,
         pc: ProgramCounter,
-        frame: &StackFrame,
-        dirty_nodes: &mut BTreeMap<ProgramCounter, StackFrame>,
+        frame: &JvmFrame,
+        dirty_nodes: &mut BTreeMap<ProgramCounter, JvmFrame>,
     ) {
         for handler in exception_table.iter() {
             if handler.covers(pc) {

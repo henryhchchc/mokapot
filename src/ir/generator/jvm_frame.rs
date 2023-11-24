@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(PartialEq, Debug)]
-pub(super) struct StackFrame {
+pub(super) struct JvmFrame {
     max_locals: u16,
     max_stack: u16,
     local_variables: Vec<Option<FrameValue>>,
@@ -18,7 +18,7 @@ pub(super) struct StackFrame {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum StackFrameError {
+pub enum JvmFrameError {
     #[error("Trying to pop an empty stack")]
     StackUnderflow,
     #[error("The stack size exceeds the max stack size")]
@@ -35,7 +35,7 @@ pub enum StackFrameError {
     ValueMismatch,
 }
 
-impl StackFrame {
+impl JvmFrame {
     pub(super) fn new(
         is_static: bool,
         desc: MethodDescriptor,
@@ -58,7 +58,7 @@ impl StackFrame {
                 local_idx += 1;
             }
         }
-        StackFrame {
+        JvmFrame {
             max_locals,
             max_stack,
             local_variables,
@@ -67,58 +67,55 @@ impl StackFrame {
         }
     }
 
-    pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), StackFrameError> {
+    pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), JvmFrameError> {
         if self.operand_stack.len() as u16 >= self.max_stack {
-            Err(StackFrameError::StackOverflow)
+            Err(JvmFrameError::StackOverflow)
         } else {
             Ok(self.operand_stack.push(value))
         }
     }
 
-    pub(super) fn pop_raw(&mut self) -> Result<FrameValue, StackFrameError> {
+    pub(super) fn pop_raw(&mut self) -> Result<FrameValue, JvmFrameError> {
         self.operand_stack
             .pop()
-            .ok_or(StackFrameError::StackUnderflow)
+            .ok_or(JvmFrameError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<ValueRef, StackFrameError> {
+    pub(super) fn pop_value(&mut self) -> Result<ValueRef, JvmFrameError> {
         match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(StackFrameError::ValueMismatch),
+            FrameValue::Top => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, StackFrameError> {
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, JvmFrameError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (FrameValue::ValueRef(it), FrameValue::Top) => Ok(it),
-            _ => Err(StackFrameError::ValueMismatch),
+            _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn push_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
+    pub(super) fn push_value(&mut self, value: ValueRef) -> Result<(), JvmFrameError> {
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn push_dual_slot_value(&mut self, value: ValueRef) -> Result<(), StackFrameError> {
+    pub(super) fn push_dual_slot_value(&mut self, value: ValueRef) -> Result<(), JvmFrameError> {
         self.push_raw(FrameValue::Top)?;
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, StackFrameError> {
+    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, JvmFrameError> {
         let idx = idx.into();
         let frame_value = self.local_variables[idx]
             .clone()
-            .ok_or(StackFrameError::LocalUnset)?;
+            .ok_or(JvmFrameError::LocalUnset)?;
         match frame_value {
             FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(StackFrameError::ValueMismatch),
+            FrameValue::Top => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn typed_pop(
-        &mut self,
-        value_type: &FieldType,
-    ) -> Result<ValueRef, StackFrameError> {
+    pub(super) fn typed_pop(&mut self, value_type: &FieldType) -> Result<ValueRef, JvmFrameError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
                 self.pop_dual_slot_value()
@@ -131,7 +128,7 @@ impl StackFrame {
         &mut self,
         value_type: &FieldType,
         value: ValueRef,
-    ) -> Result<(), StackFrameError> {
+    ) -> Result<(), JvmFrameError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
                 self.push_dual_slot_value(value)
@@ -143,10 +140,10 @@ impl StackFrame {
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<usize>,
-    ) -> Result<ValueRef, StackFrameError> {
+    ) -> Result<ValueRef, JvmFrameError> {
         let idx = idx.into();
         if idx + 1 >= self.max_locals as usize {
-            return Err(StackFrameError::LocalLimitExceed);
+            return Err(JvmFrameError::LocalLimitExceed);
         }
         match (
             // If panic here then `local_variables` are not allocated correctly
@@ -154,7 +151,7 @@ impl StackFrame {
             self.local_variables[idx + 1].as_ref(),
         ) {
             (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it.clone()),
-            _ => Err(StackFrameError::ValueMismatch),
+            _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
@@ -162,7 +159,7 @@ impl StackFrame {
         &mut self,
         idx: impl Into<usize>,
         value: ValueRef,
-    ) -> Result<(), StackFrameError> {
+    ) -> Result<(), JvmFrameError> {
         let idx: usize = idx.into();
         if idx < self.max_locals as usize {
             self.local_variables[idx].replace(FrameValue::ValueRef(value));
@@ -173,7 +170,7 @@ impl StackFrame {
             }
             Ok(())
         } else {
-            Err(StackFrameError::LocalLimitExceed)
+            Err(JvmFrameError::LocalLimitExceed)
         }
     }
 
@@ -181,7 +178,7 @@ impl StackFrame {
         &mut self,
         idx: impl Into<usize>,
         value: ValueRef,
-    ) -> Result<(), StackFrameError> {
+    ) -> Result<(), JvmFrameError> {
         let idx: usize = idx.into();
         if idx + 1 < self.max_locals as usize {
             // If panic here then `local_variables` are not allocated correctly
@@ -189,7 +186,7 @@ impl StackFrame {
             self.local_variables[idx + 1].replace(FrameValue::Top);
             Ok(())
         } else {
-            Err(StackFrameError::LocalLimitExceed)
+            Err(JvmFrameError::LocalLimitExceed)
         }
     }
 
@@ -216,18 +213,18 @@ impl StackFrame {
     }
 }
 
-impl FixedPointFact for StackFrame {
-    type MergeErr = StackFrameError;
+impl FixedPointFact for JvmFrame {
+    type MergeErr = JvmFrameError;
 
     fn merge(&self, other: Self) -> Result<Self, Self::MergeErr> {
         if self.max_locals != other.max_locals {
-            return Err(StackFrameError::LocalLimitMismatch);
+            return Err(JvmFrameError::LocalLimitMismatch);
         }
         if self.local_variables.len() != other.local_variables.len() {
             panic!("BUG: `local_variables` are not allocated correctly")
         }
         if self.operand_stack.len() != other.operand_stack.len() {
-            return Err(StackFrameError::StackSizeMismatch);
+            return Err(JvmFrameError::StackSizeMismatch);
         }
         let reachable_subroutines = self
             .possible_ret_addresses
@@ -276,7 +273,7 @@ impl Display for FrameValue {
 }
 
 impl FrameValue {
-    pub fn merge(x: Self, y: Self) -> Result<Self, StackFrameError> {
+    pub fn merge(x: Self, y: Self) -> Result<Self, JvmFrameError> {
         match (x, y) {
             (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
                 Ok(FrameValue::ValueRef(lhs | rhs))

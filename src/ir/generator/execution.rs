@@ -1,4 +1,4 @@
-use super::{stack_frame::StackFrame, MokaIRGenerationError, MokaIRGenerator};
+use super::{jvm_frame::JvmFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     elements::{
         instruction::{Instruction, ProgramCounter},
@@ -19,7 +19,7 @@ impl MokaIRGenerator<'_> {
         &mut self,
         insn: &Instruction,
         pc: ProgramCounter,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
     ) -> Result<IR, MokaIRGenerationError> {
         use Instruction::*;
         let def_id = Identifier::Val(pc.into());
@@ -671,7 +671,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn pop_args(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         descriptor: &MethodDescriptor,
     ) -> Result<Vec<ValueRef>, MokaIRGenerationError> {
         let mut args = LinkedList::new();
@@ -685,7 +685,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn store_dual_slot_local(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         idx: u16,
     ) -> Result<IR, MokaIRGenerationError> {
         let value = frame.pop_dual_slot_value()?;
@@ -694,11 +694,7 @@ impl MokaIRGenerator<'_> {
     }
 
     #[inline]
-    fn store_local(
-        &mut self,
-        frame: &mut StackFrame,
-        idx: u16,
-    ) -> Result<IR, MokaIRGenerationError> {
+    fn store_local(&mut self, frame: &mut JvmFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
         let value = frame.pop_value()?;
         frame.set_local(idx, value)?;
         Ok(IR::Nop)
@@ -707,7 +703,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn load_dual_slot_local(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         idx: u16,
     ) -> Result<IR, MokaIRGenerationError> {
         let value = frame.get_dual_slot_local(idx)?;
@@ -716,11 +712,7 @@ impl MokaIRGenerator<'_> {
     }
 
     #[inline]
-    fn load_local(
-        &mut self,
-        frame: &mut StackFrame,
-        idx: u16,
-    ) -> Result<IR, MokaIRGenerationError> {
+    fn load_local(&mut self, frame: &mut JvmFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
         let value = frame.get_local(idx)?;
         frame.push_value(value)?;
         Ok(IR::Nop)
@@ -729,7 +721,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn const_assignment(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         constant: ConstantValue,
     ) -> Result<IR, MokaIRGenerationError> {
@@ -743,7 +735,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn wide_const_assignment(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         constant: ConstantValue,
     ) -> Result<IR, MokaIRGenerationError> {
@@ -757,7 +749,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn unitary_conditional_jump<C>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         target: ProgramCounter,
         condition: C,
     ) -> Result<IR, MokaIRGenerationError>
@@ -774,7 +766,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn binary_conditional_jump<C>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         target: ProgramCounter,
         condition: C,
     ) -> Result<IR, MokaIRGenerationError>
@@ -792,7 +784,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         conversion: C,
     ) -> Result<IR, MokaIRGenerationError>
@@ -818,7 +810,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn binary_op_math<M>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         math: M,
     ) -> Result<IR, MokaIRGenerationError>
@@ -831,7 +823,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn binary_wide_math<M>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         math: M,
     ) -> Result<IR, MokaIRGenerationError>
@@ -846,7 +838,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn binary_op_assignment<E>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         expr: E,
     ) -> Result<IR, MokaIRGenerationError>
@@ -865,7 +857,7 @@ impl MokaIRGenerator<'_> {
     #[inline]
     fn binary_dual_slot_op_assignment<E>(
         &mut self,
-        frame: &mut StackFrame,
+        frame: &mut JvmFrame,
         def_id: Identifier,
         expr: E,
     ) -> Result<IR, MokaIRGenerationError>
