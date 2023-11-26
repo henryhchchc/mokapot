@@ -4,7 +4,10 @@ mod jvm_frame;
 #[cfg(test)]
 mod test;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::{Bound, RangeBounds},
+};
 
 use crate::elements::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
@@ -35,7 +38,6 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    next_pc_mapping: BTreeMap<ProgramCounter, ProgramCounter>,
 }
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
@@ -151,9 +153,11 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
 
 impl<'m> MokaIRGenerator<'m> {
     fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRGenerationError> {
-        self.next_pc_mapping
-            .get(&pc)
-            .copied()
+        self.body
+            .instructions
+            .range((Bound::Excluded(pc), Bound::Unbounded))
+            .next()
+            .map(|(k, _)| *k)
             .ok_or(MokaIRGenerationError::MalformedControlFlow)
     }
 
@@ -162,18 +166,10 @@ impl<'m> MokaIRGenerator<'m> {
             .body
             .as_ref()
             .ok_or(MokaIRGenerationError::NoMethodBody)?;
-        let current_pc_iter = body.instructions.keys().copied();
-        let next_pc_iter = {
-            let mut it = body.instructions.keys().copied();
-            it.next();
-            it
-        };
-        let next_pc_mapping = current_pc_iter.zip(next_pc_iter).collect();
         Ok(Self {
             ir_instructions: Default::default(),
             method,
             body,
-            next_pc_mapping,
         })
     }
 
