@@ -6,7 +6,7 @@ mod test;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ops::{Bound, RangeBounds},
+    ops::Bound,
 };
 
 use crate::elements::{
