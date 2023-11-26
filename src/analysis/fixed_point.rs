@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, LinkedList};
+use std::collections::{BTreeMap, VecDeque};
 
 pub trait FixedPointFact: PartialEq + Sized {
     type MergeErr;
@@ -23,7 +23,7 @@ where
     A: FixedPointAnalyzer,
 {
     let mut facts = BTreeMap::new();
-    let mut dirty_nodes = LinkedList::new();
+    let mut dirty_nodes = VecDeque::new();
     let (entry_pc, entry_fact) = analyzer.entry_fact()?;
     analyzer
         .execute_instruction(entry_pc.clone(), &entry_fact)?
