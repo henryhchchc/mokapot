@@ -16,12 +16,12 @@ use crate::{
     },
     errors::ClassFileParsingError,
     macros::fill_once,
-    reader_utils::{read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
 use super::{
-    attribute::{Attribute, AttributeList},
+    attribute::Attribute,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+    reader_utils::{parse_multiple, read_bytes_vec, read_u16, read_u32, read_u8},
 };
 
 impl ExceptionTableEntry {
@@ -89,7 +89,7 @@ impl Attribute {
             exception_table.push(entry);
         }
 
-        let attributes = AttributeList::parse(reader, ctx)?;
+        let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
         let mut line_number_table = None;
         let mut local_variable_table = None;
         let mut stack_map_table = None;
@@ -242,7 +242,7 @@ impl Method {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes = AttributeList::parse(reader, ctx)?;
+        let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
         let mut body = None;
         let mut exceptions = None;
         let mut rt_visible_anno = None;

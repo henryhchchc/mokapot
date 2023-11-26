@@ -6,13 +6,13 @@ use crate::{
         references::ClassReference,
     },
     errors::ClassFileParsingError,
-    reader_utils::read_u16,
     types::FieldType,
 };
 
 use super::{
-    attribute::{Attribute, AttributeList},
+    attribute::Attribute,
     parsing_context::ParsingContext,
+    reader_utils::{parse_multiple, read_u16},
 };
 
 impl Field {
@@ -36,7 +36,6 @@ impl Field {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes = AttributeList::parse(reader, ctx)?;
         let mut constant_value = None;
         let mut is_synthetic = false;
         let mut is_deperecated = false;
@@ -45,6 +44,8 @@ impl Field {
         let mut runtime_invisible_annotations = None;
         let mut runtime_visible_type_annotations = None;
         let mut runtime_invisible_type_annotations = None;
+
+        let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
         for attr in attributes.into_iter() {
             match attr {
                 Attribute::ConstantValue(v) => constant_value = Some(v),

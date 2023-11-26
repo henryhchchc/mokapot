@@ -1,10 +1,10 @@
+use super::super::reader_utils::{read_u16, read_u8};
 use crate::{
     elements::{
         instruction::{StackMapFrame, VerificationTypeInfo},
         parsing::parsing_context::ParsingContext,
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u8},
 };
 
 impl StackMapFrame {

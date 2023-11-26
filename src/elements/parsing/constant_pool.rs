@@ -1,5 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
+use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
 use crate::{
     elements::{
         references::{
@@ -9,7 +10,6 @@ use crate::{
         ConstantValue, Handle, JavaString, MethodDescriptor,
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8},
     types::FieldType,
 };
 

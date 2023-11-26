@@ -6,11 +6,13 @@ use std::str::FromStr;
 use crate::{
     elements::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u8},
     types::FieldType,
 };
 
-use super::parsing_context::ParsingContext;
+use super::{
+    parsing_context::ParsingContext,
+    reader_utils::{read_u16, read_u8},
+};
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {

@@ -7,11 +7,14 @@ use crate::{
         JavaString,
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_u16, read_u8},
     types::FieldType,
 };
 
-use super::{attribute::Attribute, parsing_context::ParsingContext};
+use super::{
+    attribute::Attribute,
+    parsing_context::ParsingContext,
+    reader_utils::{read_u16, read_u8},
+};
 
 impl ElementValue {
     fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>

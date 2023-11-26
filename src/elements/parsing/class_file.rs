@@ -1,12 +1,12 @@
 use crate::{
     elements::class::{BootstrapMethod, InnerClassInfo, RecordComponent},
     errors::ClassFileParsingError,
-    reader_utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{
-    attribute::{Attribute, AttributeList},
+    attribute::Attribute,
     parsing_context::ParsingContext,
+    reader_utils::{parse_multiple, read_bytes_vec, read_u16, read_u32},
 };
 
 impl BootstrapMethod {
@@ -145,7 +145,7 @@ impl Attribute {
                 let descriptor_index = read_u16(reader)?;
                 let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
 
-                let attributes = AttributeList::parse(reader, ctx)?;
+                let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
                 let mut signature = None;
                 let mut rt_visible_anno = None;
                 let mut rt_invisible_anno = None;

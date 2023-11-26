@@ -4,11 +4,11 @@ use crate::{
         ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
     errors::ClassFileParsingError,
-    reader_utils::read_u16,
 };
 
 use super::{
     attribute::Attribute, constant_pool::ConstantPoolEntry, parsing_context::ParsingContext,
+    reader_utils::read_u16,
 };
 
 impl ModuleRequire {

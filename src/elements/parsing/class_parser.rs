@@ -5,10 +5,12 @@ use crate::{
     },
     errors::ClassFileParsingError,
     macros::fill_once,
-    reader_utils::{read_u16, read_u32},
 };
 
-use super::{attribute::AttributeList, parsing_context::ParsingContext};
+use super::{
+    parsing_context::ParsingContext,
+    reader_utils::{parse_multiple, read_u16, read_u32},
+};
 
 impl Class {
     pub fn from_reader<R>(reader: R) -> Result<Class, ClassFileParsingError>
@@ -44,25 +46,14 @@ impl Class {
             current_class_binary_name: binary_name.clone(),
         };
 
-        let interfaces_count = read_u16(&mut reader)?;
-        let interfaces = (0..interfaces_count)
-            .map(|_| {
-                let interface_idx = read_u16(&mut reader)?;
-                ctx.constant_pool.get_class_ref(interface_idx)
-            })
-            .collect::<Result<_, ClassFileParsingError>>()?;
-        let fields_count = read_u16(&mut reader)?;
-        let fields = (0..fields_count)
-            .into_iter()
-            .map(|_| Field::parse(&mut reader, &ctx))
-            .collect::<Result<_, ClassFileParsingError>>()?;
+        let interfaces = parse_multiple(&mut reader, &ctx, |reader, ctx| {
+            let interface_idx = read_u16(reader)?;
+            ctx.constant_pool.get_class_ref(interface_idx)
+        })?;
+        let fields = parse_multiple(&mut reader, &ctx, Field::parse)?;
+        let methods = parse_multiple(&mut reader, &ctx, Method::parse)?;
 
-        let methods_count = read_u16(&mut reader)?;
-        let methods = (0..methods_count)
-            .map(|_| Method::parse(&mut reader, &ctx))
-            .collect::<Result<_, ClassFileParsingError>>()?;
-
-        let attributes = AttributeList::parse(&mut reader, &ctx)?;
+        let attributes = parse_multiple(&mut reader, &ctx, Attribute::parse)?;
 
         let mut may_remain: [u8; 1] = [0];
         let remain = reader.read(&mut may_remain)?;

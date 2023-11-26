@@ -1,10 +1,9 @@
-use std::{
-    io::{Read, Result},
-    usize,
-};
+use std::{io::Read, usize};
+
+use super::parsing_context::ParsingContext;
 
 /// Reads [N] bytes and advances the reader by [N] bytes.
-pub(crate) fn read_bytes<R, const N: usize>(reader: &mut R) -> Result<[u8; N]>
+pub(crate) fn read_bytes<R, const N: usize>(reader: &mut R) -> std::io::Result<[u8; N]>
 where
     R: Read,
 {
@@ -14,7 +13,7 @@ where
 }
 
 /// Reads a u32 and advances the reader by 4 bytes.
-pub(crate) fn read_u32<R>(reader: &mut R) -> Result<u32>
+pub(crate) fn read_u32<R>(reader: &mut R) -> std::io::Result<u32>
 where
     R: Read,
 {
@@ -23,7 +22,7 @@ where
 }
 
 /// Reads a i32 and advances the reader by 4 bytes.
-pub(crate) fn read_i32<R>(reader: &mut R) -> Result<i32>
+pub(crate) fn read_i32<R>(reader: &mut R) -> std::io::Result<i32>
 where
     R: Read,
 {
@@ -32,7 +31,7 @@ where
 }
 
 /// Reada a u16 and advances the reader by 2 bytes.
-pub(crate) fn read_u16<R>(reader: &mut R) -> Result<u16>
+pub(crate) fn read_u16<R>(reader: &mut R) -> std::io::Result<u16>
 where
     R: Read,
 {
@@ -41,7 +40,7 @@ where
 }
 
 /// Reads a i16 and advances the reader by 2 bytes.
-pub(crate) fn read_i16<R>(reader: &mut R) -> Result<i16>
+pub(crate) fn read_i16<R>(reader: &mut R) -> std::io::Result<i16>
 where
     R: Read,
 {
@@ -50,7 +49,7 @@ where
 }
 
 /// Reads a u8 and advances the reader by 1 byte.
-pub(crate) fn read_u8<R>(reader: &mut R) -> Result<u8>
+pub(crate) fn read_u8<R>(reader: &mut R) -> std::io::Result<u8>
 where
     R: Read,
 {
@@ -59,7 +58,7 @@ where
 }
 
 /// Reads a i8 and advances the reader by 1 byte.
-pub(crate) fn read_i8<R>(reader: &mut R) -> Result<i8>
+pub(crate) fn read_i8<R>(reader: &mut R) -> std::io::Result<i8>
 where
     R: Read,
 {
@@ -68,13 +67,30 @@ where
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_bytes_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
+pub(crate) fn read_bytes_vec<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
 where
     R: Read,
 {
     let mut buf = vec![0u8; len];
     reader.read_exact(buf.as_mut_slice())?;
     Ok(buf)
+}
+
+pub(crate) fn parse_multiple<R, T, P>(
+    reader: &mut R,
+    ctx: &ParsingContext,
+    parse: P,
+) -> Result<Vec<T>, crate::errors::ClassFileParsingError>
+where
+    R: std::io::Read,
+    P: Fn(&mut R, &ParsingContext) -> Result<T, crate::errors::ClassFileParsingError>,
+{
+    use std::iter::repeat_with;
+
+    let count = read_u16(reader)?;
+    repeat_with(|| parse(reader, ctx))
+        .take(count as usize)
+        .collect::<Result<_, _>>()
 }
 
 #[cfg(test)]

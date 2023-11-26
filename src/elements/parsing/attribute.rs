@@ -9,45 +9,14 @@ use crate::{
         references::{ClassReference, PackageReference},
     },
     errors::ClassFileParsingError,
-    reader_utils::{read_bytes_vec, read_u16, read_u32},
 };
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     constant_pool::ConstantPoolEntry,
     parsing_context::ParsingContext,
+    reader_utils::{read_bytes_vec, read_u16, read_u32},
 };
-
-#[derive(Debug)]
-pub(crate) struct AttributeList {
-    entries: Vec<Attribute>,
-}
-
-impl IntoIterator for AttributeList {
-    type Item = Attribute;
-
-    type IntoIter = <Vec<Attribute> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.entries.into_iter()
-    }
-}
-
-impl AttributeList {
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
-    where
-        R: std::io::Read,
-    {
-        let attributes_count = read_u16(reader)?;
-        let entries = (0..attributes_count)
-            .map(|_| Attribute::parse(reader, ctx))
-            .collect::<Result<_, ClassFileParsingError>>()?;
-        Ok(Self { entries })
-    }
-}
 
 #[derive(Debug)]
 pub(crate) enum Attribute {
@@ -119,7 +88,10 @@ impl Attribute {
         }
     }
 
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    pub(crate) fn parse<R>(
+        reader: &mut R,
+        ctx: &ParsingContext,
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
