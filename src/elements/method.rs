@@ -12,7 +12,7 @@ use crate::{
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     instruction::MethodBody,
-    references::ClassReference,
+    references::{ClassReference, MethodReference},
 };
 
 #[derive(Debug)]
@@ -38,6 +38,27 @@ pub struct Method {
 
 pub const CLASS_INITIALIZER_NAME: &str = "<clinit>";
 pub const CONSTRUCTOR_NAME: &str = "<init>";
+
+impl Method {
+    /// Checks if the method is a constructor.
+    pub fn is_constructor(&self) -> bool {
+        self.name == CONSTRUCTOR_NAME
+    }
+
+    /// Checks if the method is a static initializer block.
+    pub fn is_static_initializer_block(&self) -> bool {
+        self.name == CLASS_INITIALIZER_NAME
+    }
+
+    /// Creates a [`MethodReference`] pointting to this method.
+    pub fn make_refernece(&self) -> MethodReference {
+        MethodReference {
+            owner: self.owner.clone(),
+            name: self.name.clone(),
+            descriptor: self.descriptor.clone(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct MethodParameter {
