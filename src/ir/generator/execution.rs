@@ -107,7 +107,10 @@ impl MokaIRGenerator<'_> {
                     value,
                 };
 
-                IR::SideEffect(Expression::Array(array_op))
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Array(array_op),
+                }
             }
             LAStore | DAStore => {
                 let value = frame.pop_dual_slot_value()?;
@@ -505,7 +508,10 @@ impl MokaIRGenerator<'_> {
                     field: field.clone(),
                     value,
                 };
-                IR::SideEffect(Expression::Field(field_op))
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Field(field_op),
+                }
             }
             PutField(field) => {
                 let value = frame.typed_pop(&field.field_type)?;
@@ -515,7 +521,10 @@ impl MokaIRGenerator<'_> {
                     field: field.clone(),
                     value,
                 };
-                IR::SideEffect(Expression::Field(field_op))
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Field(field_op),
+                }
             }
             InvokeVirtual(method_ref)
             | InvokeSpecial(method_ref)
@@ -523,24 +532,18 @@ impl MokaIRGenerator<'_> {
                 let arguments = self.pop_args(frame, &method_ref.descriptor)?;
                 let object_ref = frame.pop_value()?;
                 let rhs = Expression::Call(method_ref.clone(), Some(object_ref), arguments);
-                match &method_ref.descriptor.return_type {
-                    ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(return_type) => {
-                        frame.typed_push(return_type, def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
+                if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
+                    frame.typed_push(return_type, def_id.into())?;
                 }
+                IR::Assignment { def_id, expr: rhs }
             }
             InvokeStatic(method_ref) => {
                 let arguments = self.pop_args(frame, &method_ref.descriptor)?;
                 let rhs = Expression::Call(method_ref.clone(), None, arguments);
-                match &method_ref.descriptor.return_type {
-                    ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(return_type) => {
-                        frame.typed_push(return_type, def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
+                if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
+                    frame.typed_push(return_type, def_id.into())?;
                 }
+                IR::Assignment { def_id, expr: rhs }
             }
             InvokeDynamic {
                 descriptor,
@@ -554,13 +557,10 @@ impl MokaIRGenerator<'_> {
                     arguments,
                     descriptor.to_owned(),
                 );
-                match &descriptor.return_type {
-                    ReturnType::Void => IR::SideEffect(rhs),
-                    ReturnType::Some(return_type) => {
-                        frame.typed_push(return_type, def_id.into())?;
-                        IR::Assignment { def_id, expr: rhs }
-                    }
+                if let ReturnType::Some(return_type) = &descriptor.return_type {
+                    frame.typed_push(&return_type, def_id.into())?;
                 }
+                IR::Assignment { def_id, expr: rhs }
             }
             New(class) => {
                 frame.push_value(def_id.into())?;
@@ -636,12 +636,18 @@ impl MokaIRGenerator<'_> {
             MonitorEnter => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Acquire(object_ref);
-                IR::SideEffect(Expression::Synchronization(monitor_op))
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Synchronization(monitor_op),
+                }
             }
             MonitorExit => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Release(object_ref);
-                IR::SideEffect(Expression::Synchronization(monitor_op))
+                IR::Assignment {
+                    def_id,
+                    expr: Expression::Synchronization(monitor_op),
+                }
             }
             WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
                 let value = frame.get_local(*idx)?;

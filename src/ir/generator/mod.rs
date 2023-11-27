@@ -103,7 +103,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 frame.possible_ret_addresses.insert(*return_address);
                 dirty_nodes.insert(*target, frame);
             }
-            MokaInstruction::Assignment { .. } | MokaInstruction::SideEffect(_) => {
+            MokaInstruction::Assignment { .. } => {
                 let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
                 self.add_exception_edges(

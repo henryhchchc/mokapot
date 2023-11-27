@@ -19,8 +19,6 @@ pub enum MokaInstruction {
         def_id: Identifier,
         expr: Expression,
     },
-    /// Evaluates an [`Expression`] for its side effects.
-    SideEffect(Expression),
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
@@ -49,7 +47,6 @@ impl Display for MokaInstruction {
                 def_id: lhs,
                 expr: rhs,
             } => write!(f, "{} = {}", lhs, rhs),
-            Self::SideEffect(op) => write!(f, "{}", op),
             Self::Jump {
                 condition: Some(condition),
                 target,
