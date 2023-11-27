@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::ir::ValueRef;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MathOperation {
     Add(ValueRef, ValueRef),
     Subtract(ValueRef, ValueRef),
@@ -21,7 +21,7 @@ pub enum MathOperation {
     FloatingPointComparison(ValueRef, ValueRef, NaNTreatment),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NaNTreatment {
     IsLargest,
     IsSmallest,

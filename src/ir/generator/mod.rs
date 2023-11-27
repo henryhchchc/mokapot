@@ -205,6 +205,7 @@ impl MokaIRMethodExt for Method {
             owner: self.owner.clone(),
             descriptor: self.descriptor.clone(),
             instructions,
+            exception_table: self.body.as_ref().unwrap().exception_table.clone(),
         })
     }
 }

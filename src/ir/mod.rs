@@ -10,7 +10,9 @@ pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
 use crate::elements::{
-    instruction::ProgramCounter, references::ClassReference, MethodAccessFlags, MethodDescriptor,
+    instruction::{ExceptionTableEntry, ProgramCounter},
+    references::ClassReference,
+    MethodAccessFlags, MethodDescriptor,
 };
 
 pub struct MokaIRMethod {
@@ -19,4 +21,5 @@ pub struct MokaIRMethod {
     pub descriptor: MethodDescriptor,
     pub owner: ClassReference,
     pub instructions: BTreeMap<ProgramCounter, MokaInstruction>,
+    pub exception_table: Vec<ExceptionTableEntry>,
 }

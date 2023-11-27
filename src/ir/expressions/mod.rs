@@ -10,7 +10,7 @@ mod math;
 
 pub use math::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LockOperation {
     Acquire(ValueRef),
     Release(ValueRef),
@@ -26,7 +26,7 @@ impl Display for LockOperation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionOperation {
     Int2Long(ValueRef),
     Int2Float(ValueRef),
@@ -76,7 +76,7 @@ impl Display for ConversionOperation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArrayOperation {
     New {
         element_type: FieldType,
@@ -130,7 +130,7 @@ impl Display for ArrayOperation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FieldAccess {
     ReadStatic {
         field: FieldReference,

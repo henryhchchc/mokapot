@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ops::RangeInclusive,
+};
 
 use crate::{
     elements::{
@@ -71,17 +74,16 @@ mod test {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExceptionTableEntry {
-    pub start_pc: ProgramCounter,
-    pub end_pc: ProgramCounter,
+    pub covered_pc: RangeInclusive<ProgramCounter>,
     pub handler_pc: ProgramCounter,
     pub catch_type: Option<ClassReference>,
 }
 
 impl ExceptionTableEntry {
     pub fn covers(&self, pc: ProgramCounter) -> bool {
-        self.start_pc <= pc && pc <= self.end_pc
+        self.covered_pc.contains(&pc)
     }
 }
 

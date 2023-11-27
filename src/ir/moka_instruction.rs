@@ -10,7 +10,7 @@ use crate::elements::instruction::ProgramCounter;
 use itertools::{Either, Itertools};
 
 /// Represents a single instruction in the Moka IR.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,

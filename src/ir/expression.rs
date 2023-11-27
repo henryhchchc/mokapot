@@ -13,7 +13,7 @@ use super::{expressions::*, ValueRef};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),
@@ -93,7 +93,7 @@ impl Display for Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Condition {
     Equal(ValueRef, ValueRef),
     NotEqual(ValueRef, ValueRef),
