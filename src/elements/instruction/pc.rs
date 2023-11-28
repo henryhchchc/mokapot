@@ -25,6 +25,13 @@ impl ProgramCounter {
     }
 }
 
+impl ProgramCounter {
+    /// Checks if the program counter is an entry point.
+    pub fn is_entry_point(&self) -> bool {
+        self.0 == 0
+    }
+}
+
 impl Display for ProgramCounter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "#{:05}", self.0)
@@ -60,6 +67,12 @@ pub enum InvalidOffset {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_entry_point() {
+        assert!(ProgramCounter::from(0).is_entry_point());
+        assert!(!ProgramCounter::from(1).is_entry_point());
+    }
 
     #[test]
     fn test_offset() {
