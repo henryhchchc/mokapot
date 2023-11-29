@@ -26,6 +26,9 @@ impl ProgramCounter {
 }
 
 impl ProgramCounter {
+    /// Denotes the entry point of a program.
+    pub const ZERO: Self = Self(0);
+
     /// Checks if the program counter is an entry point.
     pub fn is_entry_point(&self) -> bool {
         self.0 == 0
@@ -70,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_entry_point() {
-        assert!(ProgramCounter::from(0).is_entry_point());
+        assert!(ProgramCounter::ZERO.is_entry_point());
         assert!(!ProgramCounter::from(1).is_entry_point());
     }
 
