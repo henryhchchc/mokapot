@@ -9,11 +9,11 @@ use crate::{
 };
 
 #[derive(PartialEq, Debug)]
-pub(super) struct JvmFrame {
+pub(super) struct JvmStackFrame {
     max_locals: u16,
     max_stack: u16,
-    local_variables: Vec<Option<FrameValue>>,
-    operand_stack: Vec<FrameValue>,
+    local_variables: Vec<Option<Entry>>,
+    operand_stack: Vec<Entry>,
     pub possible_ret_addresses: BTreeSet<ProgramCounter>,
 }
 
@@ -35,7 +35,7 @@ pub enum JvmFrameError {
     ValueMismatch,
 }
 
-impl JvmFrame {
+impl JvmStackFrame {
     pub(super) fn new(
         is_static: bool,
         desc: MethodDescriptor,
@@ -46,19 +46,19 @@ impl JvmFrame {
         let mut local_idx = 0;
         if !is_static {
             let this_ref = Argument::Id(Identifier::This);
-            local_variables[local_idx].replace(FrameValue::ValueRef(this_ref));
+            local_variables[local_idx].replace(Entry::Value(this_ref));
             local_idx += 1;
         }
         for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
             let arg_ref = Argument::Id(Identifier::Arg(arg_idx as u16));
-            local_variables[local_idx].replace(FrameValue::ValueRef(arg_ref));
+            local_variables[local_idx].replace(Entry::Value(arg_ref));
             local_idx += 1;
             if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
-                local_variables[local_idx].replace(FrameValue::Top);
+                local_variables[local_idx].replace(Entry::Top);
                 local_idx += 1;
             }
         }
-        JvmFrame {
+        JvmStackFrame {
             max_locals,
             max_stack,
             local_variables,
@@ -67,7 +67,8 @@ impl JvmFrame {
         }
     }
 
-    pub(super) fn push_raw(&mut self, value: FrameValue) -> Result<(), JvmFrameError> {
+    #[inline]
+    fn push_raw(&mut self, value: Entry) -> Result<(), JvmFrameError> {
         if self.operand_stack.len() as u16 >= self.max_stack {
             Err(JvmFrameError::StackOverflow)
         } else {
@@ -75,7 +76,8 @@ impl JvmFrame {
         }
     }
 
-    pub(super) fn pop_raw(&mut self) -> Result<FrameValue, JvmFrameError> {
+    #[inline]
+    fn pop_raw(&mut self) -> Result<Entry, JvmFrameError> {
         self.operand_stack
             .pop()
             .ok_or(JvmFrameError::StackUnderflow)
@@ -83,25 +85,25 @@ impl JvmFrame {
 
     pub(super) fn pop_value(&mut self) -> Result<Argument, JvmFrameError> {
         match self.pop_raw()? {
-            FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(JvmFrameError::ValueMismatch),
+            Entry::Value(it) => Ok(it),
+            Entry::Top => Err(JvmFrameError::ValueMismatch),
         }
     }
 
     pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, JvmFrameError> {
         match (self.pop_raw()?, self.pop_raw()?) {
-            (FrameValue::ValueRef(it), FrameValue::Top) => Ok(it),
+            (Entry::Value(it), Entry::Top) => Ok(it),
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
     pub(super) fn push_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
-        self.push_raw(FrameValue::ValueRef(value))
+        self.push_raw(Entry::Value(value))
     }
 
     pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
-        self.push_raw(FrameValue::Top)?;
-        self.push_raw(FrameValue::ValueRef(value))
+        self.push_raw(Entry::Top)?;
+        self.push_raw(Entry::Value(value))
     }
 
     pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<Argument, JvmFrameError> {
@@ -110,18 +112,28 @@ impl JvmFrame {
             .clone()
             .ok_or(JvmFrameError::LocalUnset)?;
         match frame_value {
-            FrameValue::ValueRef(it) => Ok(it),
-            FrameValue::Top => Err(JvmFrameError::ValueMismatch),
+            Entry::Value(it) => Ok(it),
+            Entry::Top => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn typed_pop(&mut self, value_type: &FieldType) -> Result<Argument, JvmFrameError> {
-        match value_type {
-            FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
-                self.pop_dual_slot_value()
-            }
-            _ => self.pop_value(),
+    pub(super) fn pop_args(
+        &mut self,
+        descriptor: &MethodDescriptor,
+    ) -> Result<Vec<Argument>, JvmFrameError> {
+        use FieldType::Base;
+        use PrimitiveType::{Double, Long};
+        let mut args = Vec::with_capacity(descriptor.parameters_types.len());
+        for param_type in descriptor.parameters_types.iter().rev() {
+            let arg = if let Base(Long | Double) = param_type {
+                self.pop_dual_slot_value()?
+            } else {
+                self.pop_value()?
+            };
+            args.push(arg);
         }
+        args.reverse();
+        Ok(args)
     }
 
     pub(super) fn typed_push(
@@ -150,7 +162,7 @@ impl JvmFrame {
             self.local_variables[idx].as_ref(),
             self.local_variables[idx + 1].as_ref(),
         ) {
-            (Some(FrameValue::ValueRef(it)), Some(FrameValue::Top)) => Ok(it.clone()),
+            (Some(Entry::Value(it)), Some(Entry::Top)) => Ok(it.clone()),
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
@@ -162,9 +174,9 @@ impl JvmFrame {
     ) -> Result<(), JvmFrameError> {
         let idx: usize = idx.into();
         if idx < self.max_locals as usize {
-            self.local_variables[idx].replace(FrameValue::ValueRef(value));
+            self.local_variables[idx].replace(Entry::Value(value));
             if idx < self.max_locals as usize - 1
-                && matches!(self.local_variables[idx + 1], Some(FrameValue::Top))
+                && matches!(self.local_variables[idx + 1], Some(Entry::Top))
             {
                 self.local_variables[idx + 1].take();
             }
@@ -182,8 +194,8 @@ impl JvmFrame {
         let idx: usize = idx.into();
         if idx + 1 < self.max_locals as usize {
             // If panic here then `local_variables` are not allocated correctly
-            self.local_variables[idx].replace(FrameValue::ValueRef(value));
-            self.local_variables[idx + 1].replace(FrameValue::Top);
+            self.local_variables[idx].replace(Entry::Value(value));
+            self.local_variables[idx + 1].replace(Entry::Top);
             Ok(())
         } else {
             Err(JvmFrameError::LocalLimitExceed)
@@ -200,7 +212,7 @@ impl JvmFrame {
         }
     }
 
-    pub(super) fn same_locals_1_stack_item_frame(&self, stack_value: FrameValue) -> Self {
+    pub(super) fn same_locals_1_stack_item_frame(&self, stack_value: Entry) -> Self {
         let mut operand_stack = Vec::with_capacity(self.max_stack as usize);
         operand_stack.push(stack_value);
         Self {
@@ -213,7 +225,92 @@ impl JvmFrame {
     }
 }
 
-impl FixedPointFact for JvmFrame {
+/// Implementations of JVM stack frame instructions.
+impl JvmStackFrame {
+    pub(super) fn pop(&mut self) -> Result<(), JvmFrameError> {
+        let _top_element = self.pop_raw()?;
+        Ok(())
+    }
+
+    pub(super) fn pop2(&mut self) -> Result<(), JvmFrameError> {
+        let _top_element = self.pop_raw()?;
+        let _top_element = self.pop_raw()?;
+        Ok(())
+    }
+
+    pub(super) fn dup(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn dup_x1(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(second_element)?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn dup_x2(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        let third_element = self.pop_raw()?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(third_element)?;
+        self.push_raw(second_element)?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn dup2(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        self.push_raw(second_element.clone())?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(second_element)?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn dup2_x1(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        let third_element = self.pop_raw()?;
+        self.push_raw(second_element.clone())?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(third_element)?;
+        self.push_raw(second_element)?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn dup2_x2(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        let third_element = self.pop_raw()?;
+        let fourth_element = self.pop_raw()?;
+        self.push_raw(second_element.clone())?;
+        self.push_raw(top_element.clone())?;
+        self.push_raw(fourth_element)?;
+        self.push_raw(third_element)?;
+        self.push_raw(second_element)?;
+        self.push_raw(top_element)?;
+        Ok(())
+    }
+
+    pub(super) fn swap(&mut self) -> Result<(), JvmFrameError> {
+        let top_element = self.pop_raw()?;
+        let second_element = self.pop_raw()?;
+        self.push_raw(top_element)?;
+        self.push_raw(second_element)?;
+        Ok(())
+    }
+}
+
+impl FixedPointFact for JvmStackFrame {
     type MergeErr = JvmFrameError;
 
     fn merge(&self, other: Self) -> Result<Self, Self::MergeErr> {
@@ -237,14 +334,14 @@ impl FixedPointFact for JvmFrame {
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, FrameValue::merge))
+            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, Entry::merge))
             .collect::<Result<_, _>>()?;
         let operand_stack = self
             .operand_stack
             .clone()
             .into_iter()
             .zip(other.operand_stack)
-            .map(|(lhs, rhs)| FrameValue::merge(lhs, rhs))
+            .map(|(lhs, rhs)| Entry::merge(lhs, rhs))
             .collect::<Result<_, _>>()?;
         Ok(Self {
             max_locals: self.max_locals,
@@ -257,27 +354,25 @@ impl FixedPointFact for JvmFrame {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(super) enum FrameValue {
-    ValueRef(Argument),
+pub(super) enum Entry {
+    Value(Argument),
     Top,
 }
 
-impl Display for FrameValue {
+impl Display for Entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use FrameValue::*;
+        use Entry::*;
         match self {
-            ValueRef(id) => id.fmt(f),
+            Value(id) => id.fmt(f),
             Top => write!(f, "Top"),
         }
     }
 }
 
-impl FrameValue {
+impl Entry {
     pub fn merge(x: Self, y: Self) -> Result<Self, JvmFrameError> {
         match (x, y) {
-            (FrameValue::ValueRef(lhs), FrameValue::ValueRef(rhs)) => {
-                Ok(FrameValue::ValueRef(lhs | rhs))
-            }
+            (Entry::Value(lhs), Entry::Value(rhs)) => Ok(Entry::Value(lhs | rhs)),
             // NOTE: `lhs` and `rhs` are different variants, that means the local variable slot is reused
             //       In this case, we do not merge it since it will be overridden afterwrds.
             (lhs, _) => Ok(lhs),
@@ -291,32 +386,32 @@ mod test {
 
     use crate::ir::{Argument, Identifier, LocalDef};
 
-    use super::FrameValue;
+    use super::Entry;
 
     #[test]
     fn merge_value_ref() {
-        let lhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
-        let rhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(1))));
+        let lhs = Entry::Value(Argument::Id(Identifier::Def(LocalDef::new(0))));
+        let rhs = Entry::Value(Argument::Id(Identifier::Def(LocalDef::new(1))));
 
-        let result = FrameValue::merge(lhs, rhs).unwrap();
+        let result = Entry::merge(lhs, rhs).unwrap();
         assert_eq!(
             result,
-            FrameValue::ValueRef(Argument::Phi(BTreeSet::from([
-                Identifier::Val(LocalDef::new(0)),
-                Identifier::Val(LocalDef::new(1))
+            Entry::Value(Argument::Phi(BTreeSet::from([
+                Identifier::Def(LocalDef::new(0)),
+                Identifier::Def(LocalDef::new(1))
             ])))
         );
     }
 
     #[test]
     fn merge_same_value_ref() {
-        let lhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
-        let rhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
+        let lhs = Entry::Value(Argument::Id(Identifier::Def(LocalDef::new(0))));
+        let rhs = Entry::Value(Argument::Id(Identifier::Def(LocalDef::new(0))));
 
-        let result = FrameValue::merge(lhs, rhs).unwrap();
+        let result = Entry::merge(lhs, rhs).unwrap();
         assert_eq!(
             result,
-            FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))))
+            Entry::Value(Argument::Id(Identifier::Def(LocalDef::new(0))))
         );
     }
 }

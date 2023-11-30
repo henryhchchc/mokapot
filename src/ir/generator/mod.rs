@@ -16,7 +16,7 @@ use crate::elements::{
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
-use self::jvm_frame::{FrameValue, JvmFrame};
+use self::jvm_frame::{Entry, JvmStackFrame};
 
 pub use jvm_frame::JvmFrameError;
 
@@ -42,7 +42,7 @@ struct MokaIRGenerator<'m> {
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
-    type Fact = JvmFrame;
+    type Fact = JvmStackFrame;
     type Err = MokaIRGenerationError;
 
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
@@ -55,7 +55,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             .to_owned();
         Ok((
             first_pc,
-            JvmFrame::new(
+            JvmStackFrame::new(
                 self.method.access_flags.contains(MethodAccessFlags::STATIC),
                 self.method.descriptor.clone(),
                 self.body.max_locals,
@@ -177,14 +177,14 @@ impl<'m> MokaIRGenerator<'m> {
         &mut self,
         exception_table: &Vec<ExceptionTableEntry>,
         pc: ProgramCounter,
-        frame: &JvmFrame,
-        dirty_nodes: &mut BTreeMap<ProgramCounter, JvmFrame>,
+        frame: &JvmStackFrame,
+        dirty_nodes: &mut BTreeMap<ProgramCounter, JvmStackFrame>,
     ) {
         for handler in exception_table.iter() {
             if handler.covers(pc) {
                 let caught_exception_ref = Argument::Id(Identifier::CaughtException);
-                let handler_frame = frame
-                    .same_locals_1_stack_item_frame(FrameValue::ValueRef(caught_exception_ref));
+                let handler_frame =
+                    frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
                 dirty_nodes.insert(handler.handler_pc, handler_frame);
             }
         }

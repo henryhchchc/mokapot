@@ -15,7 +15,7 @@ pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,
     /// Creates a definition by evaluating an [`Expression`].
-    Definition { def_id: LocalDef, expr: Expression },
+    Definition { def: LocalDef, expr: Expression },
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
@@ -40,7 +40,7 @@ impl Display for MokaInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
-            Self::Definition { def_id, expr } => write!(f, "{} := {}", def_id, expr),
+            Self::Definition { def: def_id, expr } => write!(f, "{} := {}", def_id, expr),
             Self::Jump {
                 condition: Some(condition),
                 target,
@@ -163,8 +163,8 @@ impl LocalDef {
     pub fn new(id: u16) -> Self {
         Self(id)
     }
-    pub fn into_value_ref(self) -> Argument {
-        Argument::Id(self.into())
+    pub fn as_argument(&self) -> Argument {
+        Argument::Id(self.clone().into())
     }
 }
 
@@ -182,7 +182,7 @@ pub enum Identifier {
     /// An argument of the current method.
     Arg(u16),
     /// A locally defined value.
-    Val(LocalDef),
+    Def(LocalDef),
     /// The exception caught by a `catch` block.
     CaughtException,
 }
@@ -193,7 +193,7 @@ impl Display for Identifier {
         match self {
             This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{}", idx),
-            Val(idx) => idx.fmt(f),
+            Def(idx) => idx.fmt(f),
             CaughtException => write!(f, "%caught_exception"),
         }
     }
@@ -201,7 +201,7 @@ impl Display for Identifier {
 
 impl From<LocalDef> for Identifier {
     fn from(value: LocalDef) -> Self {
-        Self::Val(value)
+        Self::Def(value)
     }
 }
 
