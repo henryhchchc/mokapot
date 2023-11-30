@@ -22,36 +22,22 @@ pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A:
 where
     A: FixedPointAnalyzer,
 {
-    let mut facts = BTreeMap::new();
-    let mut dirty_nodes = VecDeque::new();
-    let (entry_pc, entry_fact) = analyzer.entry_fact()?;
-    analyzer
-        .execute_instruction(entry_pc.clone(), &entry_fact)?
-        .into_iter()
-        .for_each(|it| dirty_nodes.push_back(it));
-    facts.insert(entry_pc, entry_fact);
+    let mut facts: BTreeMap<A::Location, A::Fact> = BTreeMap::new();
+    let entry_node = analyzer.entry_fact()?;
+    let mut dirty_nodes = VecDeque::from([entry_node]);
 
     while let Some((location, incoming_fact)) = dirty_nodes.pop_front() {
-        let (merged_fact, is_fact_updated) = match facts.remove(&location) {
+        let maybe_updated_fact = match facts.get(&location) {
             Some(current_fact) => {
-                let new_fact = current_fact.merge(incoming_fact).map_err(A::Err::from)?;
-                let is_changed = new_fact != current_fact;
-                (new_fact, is_changed)
+                let merged_fact = current_fact.merge(incoming_fact).map_err(A::Err::from)?;
+                Some(merged_fact).filter(|it| it.ne(current_fact))
             }
-            None => (incoming_fact, true),
+            None => Some(incoming_fact),
         };
 
-        debug_assert!(
-            !facts.contains_key(&location),
-            "The fact of the location being analyzed should not be in the facts map.",
-        );
-        let fact: &_ = facts.entry(location.clone()).or_insert(merged_fact);
-
-        if is_fact_updated {
-            let subsequent_nodes = analyzer.execute_instruction(location, &fact)?;
-            subsequent_nodes
-                .into_iter()
-                .for_each(|it| dirty_nodes.push_back(it));
+        if let Some(fact) = maybe_updated_fact {
+            dirty_nodes.extend(analyzer.execute_instruction(location.clone(), &fact)?);
+            facts.insert(location, fact);
         }
     }
 
