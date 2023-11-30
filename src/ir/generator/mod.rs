@@ -20,7 +20,7 @@ use self::jvm_frame::{FrameValue, JvmFrame};
 
 pub use jvm_frame::JvmFrameError;
 
-use super::{Expression, Identifier, MokaIRMethod, MokaInstruction, ValueRef};
+use super::{Argument, Expression, Identifier, MokaIRMethod, MokaInstruction};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
@@ -81,7 +81,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame);
             }
-            MokaInstruction::Assignment {
+            MokaInstruction::Definition {
                 expr: Expression::Throw(_),
                 ..
             } => {
@@ -92,7 +92,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                     &mut dirty_nodes,
                 );
             }
-            MokaInstruction::Assignment {
+            MokaInstruction::Definition {
                 expr:
                     Expression::Subroutine {
                         target,
@@ -103,7 +103,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 frame.possible_ret_addresses.insert(*return_address);
                 dirty_nodes.insert(*target, frame);
             }
-            MokaInstruction::Assignment { .. } => {
+            MokaInstruction::Definition { .. } => {
                 let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
                 self.add_exception_edges(
@@ -182,7 +182,7 @@ impl<'m> MokaIRGenerator<'m> {
     ) {
         for handler in exception_table.iter() {
             if handler.covers(pc) {
-                let caught_exception_ref = ValueRef::Def(Identifier::CaughtException);
+                let caught_exception_ref = Argument::Id(Identifier::CaughtException);
                 let handler_frame = frame
                     .same_locals_1_stack_item_frame(FrameValue::ValueRef(caught_exception_ref));
                 dirty_nodes.insert(handler.handler_pc, handler_frame);

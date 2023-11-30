@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::{elements::references::FieldReference, types::FieldType};
 
-use super::ValueRef;
+use super::Argument;
 
 mod math;
 
@@ -12,8 +12,8 @@ pub use math::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LockOperation {
-    Acquire(ValueRef),
-    Release(ValueRef),
+    Acquire(Argument),
+    Release(Argument),
 }
 
 impl Display for LockOperation {
@@ -28,23 +28,23 @@ impl Display for LockOperation {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionOperation {
-    Int2Long(ValueRef),
-    Int2Float(ValueRef),
-    Int2Double(ValueRef),
-    Long2Int(ValueRef),
-    Long2Float(ValueRef),
-    Long2Double(ValueRef),
-    Float2Int(ValueRef),
-    Float2Long(ValueRef),
-    Float2Double(ValueRef),
-    Double2Int(ValueRef),
-    Double2Long(ValueRef),
-    Double2Float(ValueRef),
-    Int2Byte(ValueRef),
-    Int2Char(ValueRef),
-    Int2Short(ValueRef),
-    CheckCast(ValueRef, FieldType),
-    InstanceOf(ValueRef, FieldType),
+    Int2Long(Argument),
+    Int2Float(Argument),
+    Int2Double(Argument),
+    Long2Int(Argument),
+    Long2Float(Argument),
+    Long2Double(Argument),
+    Float2Int(Argument),
+    Float2Long(Argument),
+    Float2Double(Argument),
+    Double2Int(Argument),
+    Double2Long(Argument),
+    Double2Float(Argument),
+    Int2Byte(Argument),
+    Int2Char(Argument),
+    Int2Short(Argument),
+    CheckCast(Argument, FieldType),
+    InstanceOf(Argument, FieldType),
 }
 
 impl Display for ConversionOperation {
@@ -80,23 +80,23 @@ impl Display for ConversionOperation {
 pub enum ArrayOperation {
     New {
         element_type: FieldType,
-        length: ValueRef,
+        length: Argument,
     },
     NewMultiDim {
         element_type: FieldType,
-        dimensions: Vec<ValueRef>,
+        dimensions: Vec<Argument>,
     },
     Read {
-        array_ref: ValueRef,
-        index: ValueRef,
+        array_ref: Argument,
+        index: Argument,
     },
     Write {
-        array_ref: ValueRef,
-        index: ValueRef,
-        value: ValueRef,
+        array_ref: Argument,
+        index: Argument,
+        value: Argument,
     },
     Length {
-        array_ref: ValueRef,
+        array_ref: Argument,
     },
 }
 
@@ -137,16 +137,16 @@ pub enum FieldAccess {
     },
     WriteStatic {
         field: FieldReference,
-        value: ValueRef,
+        value: Argument,
     },
     ReadInstance {
-        object_ref: ValueRef,
+        object_ref: Argument,
         field: FieldReference,
     },
     WriteInstance {
-        object_ref: ValueRef,
+        object_ref: Argument,
         field: FieldReference,
-        value: ValueRef,
+        value: Argument,
     },
 }
 
@@ -155,13 +155,13 @@ impl Display for FieldAccess {
         use FieldAccess::*;
         match self {
             ReadStatic { field } => write!(f, "{}", field),
-            WriteStatic { field, value } => write!(f, "{} = {}", field, value),
+            WriteStatic { field, value } => write!(f, "{} <- {}", field, value),
             ReadInstance { object_ref, field } => write!(f, "{}.{}", object_ref, field.name),
             WriteInstance {
                 object_ref,
                 field,
                 value,
-            } => write!(f, "{}.{} = {}", object_ref, field.name, value),
+            } => write!(f, "{}.{} <- {}", object_ref, field.name, value),
         }
     }
 }

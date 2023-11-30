@@ -14,11 +14,8 @@ use itertools::{Either, Itertools};
 pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,
-    /// Assigns [`expr`](MokaInstruction::Assignment::expr) to [`def_id`](MokaInstruction::Assignment::def_id).
-    Assignment {
-        def_id: Identifier,
-        expr: Expression,
-    },
+    /// Creates a definition by evaluating an [`Expression`].
+    Definition { def_id: LocalDef, expr: Expression },
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
@@ -28,25 +25,22 @@ pub enum MokaInstruction {
     /// Jump to the [`target`](MokaInstruction::Switch::default) corresponding to [`match_value`](MokaInstruction::Switch::match_value).
     /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
     Switch {
-        match_value: ValueRef,
+        match_value: Argument,
         default: ProgramCounter,
         branches: Vec<(i32, ProgramCounter)>,
     },
     /// Returns from the current method with a value if it is [`Some`].
     /// Otherwise, returns from the current method with `void`.
-    Return(Option<ValueRef>),
+    Return(Option<Argument>),
     /// Returns from a subroutine.
-    SubroutineRet(ValueRef),
+    SubroutineRet(Argument),
 }
 
 impl Display for MokaInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
-            Self::Assignment {
-                def_id: lhs,
-                expr: rhs,
-            } => write!(f, "{} = {}", lhs, rhs),
+            Self::Definition { def_id, expr } => write!(f, "{} := {}", def_id, expr),
             Self::Jump {
                 condition: Some(condition),
                 target,
@@ -75,32 +69,27 @@ impl Display for MokaInstruction {
                         .join(", ")
                 )
             }
-            Self::Return(value) => {
-                if let Some(value) = value {
-                    write!(f, "return {}", value)
-                } else {
-                    write!(f, "return")
-                }
-            }
-            Self::SubroutineRet(target) => write!(f, "ret {}", target),
+            Self::Return(Some(value)) => write!(f, "return {}", value),
+            Self::Return(None) => write!(f, "return"),
+            Self::SubroutineRet(target) => write!(f, "subroutine_ret {}", target),
         }
     }
 }
 
 /// Represents a reference to a value in the Moka IR.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ValueRef {
+pub enum Argument {
     /// A reference to a value defined in the current scope.
-    Def(Identifier),
+    Id(Identifier),
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
     Phi(BTreeSet<Identifier>),
 }
 
-impl Display for ValueRef {
+impl Display for Argument {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Def(id) => id.fmt(f),
+            Self::Id(id) => id.fmt(f),
             Self::Phi(ids) => write!(
                 f,
                 "Phi({})",
@@ -110,21 +99,21 @@ impl Display for ValueRef {
     }
 }
 
-impl From<Identifier> for ValueRef {
+impl From<Identifier> for Argument {
     fn from(value: Identifier) -> Self {
-        Self::Def(value)
+        Self::Id(value)
     }
 }
 
-impl BitOr for ValueRef {
+impl BitOr for Argument {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        use ValueRef::*;
+        use Argument::*;
         match (self, rhs) {
-            (Def(lhs), Def(rhs)) if lhs == rhs => Def(lhs),
-            (Def(lhs), Def(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
-            (Def(id), Phi(mut ids)) | (Phi(mut ids), Def(id)) => {
+            (Id(lhs), Id(rhs)) if lhs == rhs => Id(lhs),
+            (Id(lhs), Id(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
+            (Id(id), Phi(mut ids)) | (Phi(mut ids), Id(id)) => {
                 ids.insert(id);
                 Phi(ids)
             }
@@ -136,29 +125,52 @@ impl BitOr for ValueRef {
     }
 }
 
-impl IntoIterator for ValueRef {
+impl IntoIterator for Argument {
     type Item = Identifier;
+
+    // NOTE: Change to opaque type when it's stable. See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use ValueRef::*;
+        use Argument::*;
         match self {
-            Def(id) => Either::Left(std::iter::once(id)),
+            Id(id) => Either::Left(std::iter::once(id)),
             Phi(ids) => Either::Right(ids.into_iter()),
         }
     }
 }
 
-impl<'a> IntoIterator for &'a ValueRef {
+impl<'a> IntoIterator for &'a Argument {
     type Item = &'a Identifier;
+
+    // NOTE: Change to opaque type when it's stable. See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use ValueRef::*;
+        use Argument::*;
         match self {
-            Def(id) => Either::Left(std::iter::once(id)),
+            Id(id) => Either::Left(std::iter::once(id)),
             Phi(ids) => Either::Right(ids.into_iter()),
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[repr(transparent)]
+pub struct LocalDef(u16);
+
+impl LocalDef {
+    pub fn new(id: u16) -> Self {
+        Self(id)
+    }
+    pub fn into_value_ref(self) -> Argument {
+        Argument::Id(self.into())
+    }
+}
+
+impl Display for LocalDef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "%{}", self.0)
     }
 }
 
@@ -170,7 +182,7 @@ pub enum Identifier {
     /// An argument of the current method.
     Arg(u16),
     /// A locally defined value.
-    Val(u16),
+    Val(LocalDef),
     /// The exception caught by a `catch` block.
     CaughtException,
 }
@@ -181,9 +193,15 @@ impl Display for Identifier {
         match self {
             This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{}", idx),
-            Val(idx) => write!(f, "%{}", idx),
+            Val(idx) => idx.fmt(f),
             CaughtException => write!(f, "%caught_exception"),
         }
+    }
+}
+
+impl From<LocalDef> for Identifier {
+    fn from(value: LocalDef) -> Self {
+        Self::Val(value)
     }
 }
 
@@ -192,23 +210,23 @@ mod test {
 
     #[test]
     fn value_ref_merge() {
+        use super::Argument::*;
         use super::Identifier::*;
-        use super::ValueRef::*;
         use std::collections::BTreeSet;
 
-        assert_eq!(Def(This) | Def(This), Def(This));
-        assert_eq!(Def(This) | Def(Arg(0)), Phi(BTreeSet::from([This, Arg(0)])));
-        assert_eq!(Def(Arg(0)) | Def(This), Phi(BTreeSet::from([This, Arg(0)])));
+        assert_eq!(Id(This) | Id(This), Id(This));
+        assert_eq!(Id(This) | Id(Arg(0)), Phi(BTreeSet::from([This, Arg(0)])));
+        assert_eq!(Id(Arg(0)) | Id(This), Phi(BTreeSet::from([This, Arg(0)])));
         assert_eq!(
-            Def(Arg(0)) | Def(Arg(1)),
+            Id(Arg(0)) | Id(Arg(1)),
             Phi(BTreeSet::from([Arg(0), Arg(1)]))
         );
         assert_eq!(
-            Def(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
+            Id(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Def(Arg(0)),
+            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Id(Arg(0)),
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
@@ -219,16 +237,16 @@ mod test {
 
     #[test]
     fn value_ref_iter() {
+        use super::Argument::*;
         use super::Identifier::*;
-        use super::ValueRef::*;
         use std::collections::BTreeSet;
 
         assert_eq!(
-            Def(This).into_iter().collect::<BTreeSet<_>>(),
+            Id(This).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([This])
         );
         assert_eq!(
-            Def(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
+            Id(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([Arg(0)])
         );
         assert_eq!(
@@ -241,16 +259,16 @@ mod test {
 
     #[test]
     fn value_ref_iter_over_refs() {
+        use super::Argument::*;
         use super::Identifier::*;
-        use super::ValueRef::*;
         use std::collections::BTreeSet;
 
         assert_eq!(
-            (&Def(This)).into_iter().collect::<BTreeSet<_>>(),
+            (&Id(This)).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([&This])
         );
         assert_eq!(
-            (&Def(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
+            (&Id(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([&Arg(0)])
         );
         assert_eq!(

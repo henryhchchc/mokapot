@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fmt::Display};
 use crate::{
     analysis::fixed_point::FixedPointFact,
     elements::{instruction::ProgramCounter, MethodDescriptor},
-    ir::{Identifier, ValueRef},
+    ir::{Argument, Identifier},
     types::{FieldType, PrimitiveType},
     utils::try_merge,
 };
@@ -45,12 +45,12 @@ impl JvmFrame {
         let mut local_variables = vec![None; max_locals.into()];
         let mut local_idx = 0;
         if !is_static {
-            let this_ref = ValueRef::Def(Identifier::This);
+            let this_ref = Argument::Id(Identifier::This);
             local_variables[local_idx].replace(FrameValue::ValueRef(this_ref));
             local_idx += 1;
         }
         for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
-            let arg_ref = ValueRef::Def(Identifier::Arg(arg_idx as u16));
+            let arg_ref = Argument::Id(Identifier::Arg(arg_idx as u16));
             local_variables[local_idx].replace(FrameValue::ValueRef(arg_ref));
             local_idx += 1;
             if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
@@ -81,30 +81,30 @@ impl JvmFrame {
             .ok_or(JvmFrameError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<ValueRef, JvmFrameError> {
+    pub(super) fn pop_value(&mut self) -> Result<Argument, JvmFrameError> {
         match self.pop_raw()? {
             FrameValue::ValueRef(it) => Ok(it),
             FrameValue::Top => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<ValueRef, JvmFrameError> {
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, JvmFrameError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (FrameValue::ValueRef(it), FrameValue::Top) => Ok(it),
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
-    pub(super) fn push_value(&mut self, value: ValueRef) -> Result<(), JvmFrameError> {
+    pub(super) fn push_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn push_dual_slot_value(&mut self, value: ValueRef) -> Result<(), JvmFrameError> {
+    pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
         self.push_raw(FrameValue::Top)?;
         self.push_raw(FrameValue::ValueRef(value))
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<ValueRef, JvmFrameError> {
+    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
         let frame_value = self.local_variables[idx]
             .clone()
@@ -115,7 +115,7 @@ impl JvmFrame {
         }
     }
 
-    pub(super) fn typed_pop(&mut self, value_type: &FieldType) -> Result<ValueRef, JvmFrameError> {
+    pub(super) fn typed_pop(&mut self, value_type: &FieldType) -> Result<Argument, JvmFrameError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
                 self.pop_dual_slot_value()
@@ -127,7 +127,7 @@ impl JvmFrame {
     pub(super) fn typed_push(
         &mut self,
         value_type: &FieldType,
-        value: ValueRef,
+        value: Argument,
     ) -> Result<(), JvmFrameError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
@@ -140,7 +140,7 @@ impl JvmFrame {
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<usize>,
-    ) -> Result<ValueRef, JvmFrameError> {
+    ) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
         if idx + 1 >= self.max_locals as usize {
             return Err(JvmFrameError::LocalLimitExceed);
@@ -158,7 +158,7 @@ impl JvmFrame {
     pub(super) fn set_local(
         &mut self,
         idx: impl Into<usize>,
-        value: ValueRef,
+        value: Argument,
     ) -> Result<(), JvmFrameError> {
         let idx: usize = idx.into();
         if idx < self.max_locals as usize {
@@ -177,7 +177,7 @@ impl JvmFrame {
     pub(super) fn set_dual_slot_local(
         &mut self,
         idx: impl Into<usize>,
-        value: ValueRef,
+        value: Argument,
     ) -> Result<(), JvmFrameError> {
         let idx: usize = idx.into();
         if idx + 1 < self.max_locals as usize {
@@ -258,7 +258,7 @@ impl FixedPointFact for JvmFrame {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(super) enum FrameValue {
-    ValueRef(ValueRef),
+    ValueRef(Argument),
     Top,
 }
 
@@ -289,34 +289,34 @@ impl FrameValue {
 mod test {
     use std::collections::BTreeSet;
 
-    use crate::ir::{Identifier, ValueRef};
+    use crate::ir::{Argument, Identifier, LocalDef};
 
     use super::FrameValue;
 
     #[test]
     fn merge_value_ref() {
-        let lhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
-        let rhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(1)));
+        let lhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
+        let rhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(1))));
 
         let result = FrameValue::merge(lhs, rhs).unwrap();
         assert_eq!(
             result,
-            FrameValue::ValueRef(ValueRef::Phi(BTreeSet::from([
-                Identifier::Val(0),
-                Identifier::Val(1)
+            FrameValue::ValueRef(Argument::Phi(BTreeSet::from([
+                Identifier::Val(LocalDef::new(0)),
+                Identifier::Val(LocalDef::new(1))
             ])))
         );
     }
 
     #[test]
     fn merge_same_value_ref() {
-        let lhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
-        let rhs = FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)));
+        let lhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
+        let rhs = FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))));
 
         let result = FrameValue::merge(lhs, rhs).unwrap();
         assert_eq!(
             result,
-            FrameValue::ValueRef(ValueRef::Def(Identifier::Val(0)))
+            FrameValue::ValueRef(Argument::Id(Identifier::Val(LocalDef::new(0))))
         );
     }
 }

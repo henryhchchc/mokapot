@@ -1,24 +1,24 @@
 use std::fmt::{Display, Formatter};
 
-use crate::ir::ValueRef;
+use crate::ir::Argument;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MathOperation {
-    Add(ValueRef, ValueRef),
-    Subtract(ValueRef, ValueRef),
-    Multiply(ValueRef, ValueRef),
-    Divide(ValueRef, ValueRef),
-    Remainder(ValueRef, ValueRef),
-    Negate(ValueRef),
-    Increment(ValueRef),
-    ShiftLeft(ValueRef, ValueRef),
-    ShiftRight(ValueRef, ValueRef),
-    LogicalShiftRight(ValueRef, ValueRef),
-    BitwiseAnd(ValueRef, ValueRef),
-    BitwiseOr(ValueRef, ValueRef),
-    BitwiseXor(ValueRef, ValueRef),
-    LongComparison(ValueRef, ValueRef),
-    FloatingPointComparison(ValueRef, ValueRef, NaNTreatment),
+    Add(Argument, Argument),
+    Subtract(Argument, Argument),
+    Multiply(Argument, Argument),
+    Divide(Argument, Argument),
+    Remainder(Argument, Argument),
+    Negate(Argument),
+    Increment(Argument),
+    ShiftLeft(Argument, Argument),
+    ShiftRight(Argument, Argument),
+    LogicalShiftRight(Argument, Argument),
+    BitwiseAnd(Argument, Argument),
+    BitwiseOr(Argument, Argument),
+    BitwiseXor(Argument, Argument),
+    LongComparison(Argument, Argument),
+    FloatingPointComparison(Argument, Argument, NaNTreatment),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

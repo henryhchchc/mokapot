@@ -9,7 +9,7 @@ use crate::elements::{
     ConstantValue,
 };
 
-use super::{expressions::*, ValueRef};
+use super::{expressions::*, Argument};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
@@ -23,11 +23,11 @@ pub enum Expression {
     /// - [`invokevirtual`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokevirtual)
     /// - [`invokespecial`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokespecial)
     /// - [`invokeinterface`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokeinterface)
-    Call(MethodReference, Option<ValueRef>, Vec<ValueRef>),
+    Call(MethodReference, Option<Argument>, Vec<Argument>),
     /// A call to a bootstrap method to create a closure.  
     /// See the following documentation for more information:
     /// - [`invokedynamic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokedynamic)
-    GetClosure(u16, String, Vec<ValueRef>, MethodDescriptor),
+    GetClosure(u16, String, Vec<Argument>, MethodDescriptor),
     /// A mathematical operation.
     Math(MathOperation),
     /// A field access.
@@ -37,7 +37,7 @@ pub enum Expression {
     /// A type conversion.
     Conversion(ConversionOperation),
     /// Throws an exception.
-    Throw(ValueRef),
+    Throw(Argument),
     /// An operation on a monitor.
     Synchronization(LockOperation),
     /// Creates a new object.
@@ -95,20 +95,20 @@ impl Display for Expression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Condition {
-    Equal(ValueRef, ValueRef),
-    NotEqual(ValueRef, ValueRef),
-    LessThan(ValueRef, ValueRef),
-    LessThanOrEqual(ValueRef, ValueRef),
-    GreaterThan(ValueRef, ValueRef),
-    GreaterThanOrEqual(ValueRef, ValueRef),
-    IsNull(ValueRef),
-    IsNotNull(ValueRef),
-    Zero(ValueRef),
-    NonZero(ValueRef),
-    Positive(ValueRef),
-    Negative(ValueRef),
-    NonNegative(ValueRef),
-    NonPositive(ValueRef),
+    Equal(Argument, Argument),
+    NotEqual(Argument, Argument),
+    LessThan(Argument, Argument),
+    LessThanOrEqual(Argument, Argument),
+    GreaterThan(Argument, Argument),
+    GreaterThanOrEqual(Argument, Argument),
+    IsNull(Argument),
+    IsNotNull(Argument),
+    Zero(Argument),
+    NonZero(Argument),
+    Positive(Argument),
+    Negative(Argument),
+    NonNegative(Argument),
+    NonPositive(Argument),
 }
 
 impl Display for Condition {
