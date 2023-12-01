@@ -3,19 +3,19 @@ use std::collections::{BTreeMap, VecDeque};
 /// A trait for fixed-point analysis.
 pub trait FixedPointAnalyzer {
     /// The type of the location in the control flow graph.
-    type Location: Ord + Eq + Clone;
+    type Location: Ord + Eq;
     /// The type of the fact that is propagated through the control flow graph.
-    type Fact: PartialEq + Sized;
+    type Fact: PartialEq;
     /// The type of the error that can occur during the analysis.
     type Err;
 
     /// Creates the fact at the entry point of the method being analyzed.
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err>;
 
-    /// Executes the instruction at the given location with the given fact.
-    fn execute_instruction(
+    /// Executes the method at the given location with the given fact, and returns a map of the affected locations and the corresponding facts.
+    fn analyze_location(
         &mut self,
-        location: Self::Location,
+        location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>;
 
@@ -27,7 +27,7 @@ pub trait FixedPointAnalyzer {
     ) -> Result<Self::Fact, Self::Err>;
 }
 
-/// Runs fixed-point analysis on a given analyzer.
+/// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points) for each location in the control flow graph.
 pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Err>
 where
     A: FixedPointAnalyzer,
@@ -46,7 +46,7 @@ where
         };
 
         if let Some(fact) = maybe_updated_fact {
-            dirty_nodes.extend(analyzer.execute_instruction(location.clone(), &fact)?);
+            dirty_nodes.extend(analyzer.analyze_location(&location, &fact)?);
             facts.insert(location, fact);
         }
     }

@@ -65,11 +65,12 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         ))
     }
 
-    fn execute_instruction(
+    fn analyze_location(
         &mut self,
-        location: Self::Location,
+        location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err> {
+        let location = location.to_owned();
         let mut frame = fact.same_frame();
         let mut dirty_nodes = BTreeMap::new();
         let insn = self
