@@ -231,7 +231,7 @@ mod test {
     use std::str::FromStr;
 
     use crate::{
-        elements::{method::ReturnType, references::ClassReference},
+        jvm::{method::ReturnType, references::ClassReference},
         types::FieldType,
         types::PrimitiveType::*,
     };

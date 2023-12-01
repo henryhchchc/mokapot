@@ -37,7 +37,7 @@ mokapot = { git = "https://github.com/henryhchchc/mokapot.git" }
 ### Parsing a class
 
 ```rust
-use mokapot::elements::Class;
+use mokapot::jvm::Class;
 
 let reader: std::io::Read = todo!("Some reader for the byte code");
 let class = Class::from_reader(reader)?;
@@ -65,84 +65,87 @@ This because we intented to maintain a bijection between the original bytecode a
 Such a bijection facilitates the analysis involving dynamic execution - the runtime information (e.g., coverage) can be applied to Moka IR without needing any remapping.
 
 ```text
-#00000: ldc              => v0 = String("233")
+#00000: ldc              => %0 := String("233")
 #00002: astore_3         => nop
-#00003: iconst_2         => v3 = Integer(2)
+#00003: iconst_2         => %3 := int(2)
 #00004: istore           => nop
 #00006: iload_1          => nop
 #00007: iload            => nop
-#00009: iadd             => v9 = v3 + arg0
+#00009: iadd             => %9 := %3 + %arg0
 #00010: istore           => nop
 #00012: iload_1          => nop
-#00013: ifge             => if arg0 >= 0 goto #00019
-#00016: iconst_3         => v16 = Integer(3)
+#00013: ifge             => if %arg0 >= 0 goto #00019
+#00016: iconst_3         => %16 := int(3)
 #00017: istore           => nop
 #00019: aload_0          => nop
 #00020: aload_3          => nop
 #00021: iload            => nop
 #00023: iload_2          => nop
-#00024: invokevirtual    => v24 = call [org/mokapot/test/TestAnalysis]::callMe(this, v0, v3, arg1) // descriptor: (Ljava/lang/String;II)I
+#00024: invokevirtual    => %24 := call %this::callMe(%0, Phi(%3, %16), %arg1) // owner: org/mokapot/test/TestAnalysis, desc: (Ljava/lang/String;II)I
 #00027: istore           => nop
 #00029: iload            => nop
-#00031: ireturn          => return v24
+#00031: ireturn          => return %24
 #00032: astore_3         => nop
-#00033: getstatic        => v33 = [java/lang/System].out
+#00033: getstatic        => %33 := java/lang/System.out
 #00036: aload_3          => nop
-#00037: invokevirtual    => call [java/io/PrintStream]::println(v33, exception) // descriptor: (Ljava/lang/Object;)V
-#00040: iconst_0         => v40 = Integer(0)
+#00037: invokevirtual    => %37 := call %33::println(%caught_exception) // owner: java/io/PrintStream, desc: (Ljava/lang/Object;)V
+#00040: iconst_0         => %40 := int(0)
 #00041: istore_3         => nop
 #00042: iload_3          => nop
 #00043: iload_2          => nop
-#00044: if_icmpge        => if arg1 >= v40 goto #00062
-#00047: aload_0          => nop
-#00048: ldc              => v48 = String("233")
-#00050: iconst_0         => v50 = Integer(0)
-#00051: iconst_0         => v51 = Integer(0)
-#00052: invokevirtual    => v52 = call [org/mokapot/test/TestAnalysis]::callMe(this, v48, v50, v51) // descriptor: (Ljava/lang/String;II)I
-#00055: pop              => nop
-#00056: iinc             => v56 = Phi(v40, v56) + 1
-#00059: goto             => goto #00042
-#00062: iload_1          => nop
-#00063: ifle             => if arg0 <= 0 goto #00073
-#00066: iload_2          => nop
-#00067: ifle             => if arg1 <= 0 goto #00079
-#00070: goto             => goto #00077
-#00073: iload_2          => nop
-#00074: ifge             => if arg1 >= 0 goto #00079
-#00077: iconst_0         => v77 = Integer(0)
-#00078: ireturn          => return v77
-#00079: iload_1          => nop
-#00080: invokedynamic    => v80 = get_closure#0[applyAsInt](arg0) // descriptor: (I)Ljava/util/function/IntUnaryOperator;
-#00085: astore_3         => nop
-#00086: aload_3          => nop
-#00087: iconst_0         => v87 = Integer(0)
-#00088: invokeinterface  => v88 = call [java/util/function/IntUnaryOperator]::applyAsInt(v80, v87) // descriptor: (I)I
-#00093: istore           => nop
-#00095: iconst_3         => v95 = Integer(3)
-#00096: newarray         => v96 = new I[v95]
-#00098: dup              => nop
-#00099: iconst_0         => v99 = Integer(0)
-#00100: iconst_0         => v100 = Integer(0)
-#00101: iastore          => v96[v99] = v100
-#00102: dup              => nop
-#00103: iconst_1         => v103 = Integer(1)
-#00104: iconst_1         => v104 = Integer(1)
-#00105: iastore          => v96[v103] = v104
+#00044: if_icmpge        => if %arg1 >= Phi(%40, %64) goto #00070
+#00047: getstatic        => %47 := java/lang/System.out
+#00050: ldc              => %50 := String(0x61 0x02 0xED 0xA0 0x80 0x62 0x63 0x64 0x65 0x66) // Invalid UTF-8
+#00052: invokevirtual    => %52 := call %47::println(%50) // owner: java/io/PrintStream, desc: (Ljava/lang/String;)V
+#00055: aload_0          => nop
+#00056: ldc              => %56 := String("233")
+#00058: iconst_0         => %58 := int(0)
+#00059: iconst_0         => %59 := int(0)
+#00060: invokevirtual    => %60 := call %this::callMe(%56, %58, %59) // owner: org/mokapot/test/TestAnalysis, desc: (Ljava/lang/String;II)I
+#00063: pop              => nop
+#00064: iinc             => %64 := Phi(%40, %64) + 1
+#00067: goto             => goto #00042
+#00070: iload_1          => nop
+#00071: ifle             => if %arg0 <= 0 goto #00081
+#00074: iload_2          => nop
+#00075: ifle             => if %arg1 <= 0 goto #00087
+#00078: goto             => goto #00085
+#00081: iload_2          => nop
+#00082: ifge             => if %arg1 >= 0 goto #00087
+#00085: iconst_0         => %85 := int(0)
+#00086: ireturn          => return %85
+#00087: iload_1          => nop
+#00088: invokedynamic    => %88 := get_closure#0[applyAsInt](%arg0) // desc: (I)Ljava/util/function/IntUnaryOperator;
+#00093: astore_3         => nop
+#00094: aload_3          => nop
+#00095: iconst_0         => %95 := int(0)
+#00096: invokeinterface  => %96 := call %88::applyAsInt(%95) // owner: java/util/function/IntUnaryOperator, desc: (I)I
+#00101: istore           => nop
+#00103: iconst_3         => %103 := int(3)
+#00104: newarray         => %104 := new I[%103]
 #00106: dup              => nop
-#00107: iconst_2         => v107 = Integer(2)
-#00108: iconst_2         => v108 = Integer(2)
-#00109: iastore          => v96[v107] = v108
-#00110: astore           => nop
-#00112: aload            => nop
-#00114: iconst_0         => v114 = Integer(0)
-#00115: iload_1          => nop
-#00116: iadd             => v116 = arg0 + v114
-#00117: iaload           => v117 = v96[v116]
-#00118: istore           => nop
+#00107: iconst_0         => %107 := int(0)
+#00108: iconst_0         => %108 := int(0)
+#00109: iastore          => %109 := %104[%107] = %108
+#00110: dup              => nop
+#00111: iconst_1         => %111 := int(1)
+#00112: iconst_1         => %112 := int(1)
+#00113: iastore          => %113 := %104[%111] = %112
+#00114: dup              => nop
+#00115: iconst_2         => %115 := int(2)
+#00116: iconst_2         => %116 := int(2)
+#00117: iastore          => %117 := %104[%115] = %116
+#00118: astore           => nop
 #00120: aload            => nop
-#00122: iload            => nop
-#00124: iload            => nop
-#00126: iastore          => v96[v117] = v117
-#00127: iload_2          => nop
-#00128: ireturn          => return arg1
+#00122: iconst_0         => %122 := int(0)
+#00123: iload_1          => nop
+#00124: iadd             => %124 := %arg0 + %122
+#00125: iaload           => %125 := %104[%124]
+#00126: istore           => nop
+#00128: aload            => nop
+#00130: iload            => nop
+#00132: iload            => nop
+#00134: iastore          => %134 := %104[%125] = %125
+#00135: iload_2          => nop
+#00136: ireturn          => return %arg1
 ```

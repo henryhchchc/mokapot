@@ -1,7 +1,7 @@
 use std::ops::RangeInclusive;
 
 use crate::{
-    elements::{
+    jvm::{
         field::ConstantValue,
         references::{ClassReference, FieldReference, MethodReference, TypeReference},
         MethodDescriptor,

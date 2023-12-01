@@ -1,9 +1,9 @@
 use super::{attribute::Attribute, constant_pool::ConstantPool};
 use crate::{
-    elements::{
+    errors::ClassFileParsingError,
+    jvm::{
         field::Field, references::ClassReference, Class, ClassAccessFlags, ClassVersion, Method,
     },
-    errors::ClassFileParsingError,
     macros::fill_once,
 };
 
@@ -176,12 +176,12 @@ mod test {
     use std::io::BufReader;
 
     use crate::{
-        elements::{
+        errors::ClassFileParsingError,
+        jvm::{
             class::{Class, ClassAccessFlags},
             method::ReturnType,
             references::ClassReference,
         },
-        errors::ClassFileParsingError,
         types::{FieldType, PrimitiveType},
     };
 

@@ -8,7 +8,7 @@ pub use expression::*;
 pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
-use crate::elements::{
+use crate::jvm::{
     instruction::{ExceptionTableEntry, ProgramCounter},
     references::ClassReference,
     MethodAccessFlags, MethodDescriptor,

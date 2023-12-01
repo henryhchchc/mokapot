@@ -2,13 +2,13 @@ use std::{io::Read, str::FromStr};
 
 use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
-    elements::{
+    errors::ClassFileParsingError,
+    jvm::{
         field::ConstantValue,
         instruction::{Instruction, InstructionList, ProgramCounter},
         method::MethodDescriptor,
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
     },
-    errors::ClassFileParsingError,
     types::{FieldType, PrimitiveType},
 };
 

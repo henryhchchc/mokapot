@@ -1,11 +1,11 @@
 use super::{jvm_frame::JvmStackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
-    elements::{
+    ir::{expression::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
+    jvm::{
         instruction::{Instruction, ProgramCounter},
         references::TypeReference,
         ConstantValue, ReturnType,
     },
-    ir::{expression::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
     types::{FieldType, PrimitiveType},
 };
 

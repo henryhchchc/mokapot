@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use crate::{
-    elements::{
+    errors::ClassFileParsingError,
+    jvm::{
         instruction::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
             StackMapFrame,
@@ -14,7 +15,6 @@ use crate::{
         references::ClassReference,
         ClassVersion,
     },
-    errors::ClassFileParsingError,
     macros::fill_once,
 };
 

@@ -9,7 +9,7 @@ use std::{
     ops::Bound,
 };
 
-use crate::elements::{
+use crate::jvm::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
     Method, MethodAccessFlags,
 };

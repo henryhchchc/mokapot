@@ -1,4 +1,4 @@
-use crate::elements::class::ClassVersion;
+use crate::jvm::class::ClassVersion;
 
 use super::constant_pool::ConstantPool;
 

@@ -1,5 +1,6 @@
 use crate::{
-    elements::{
+    errors::ClassFileParsingError,
+    jvm::{
         annotation::{Annotation, ElementValue, TypeAnnotation},
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         field::ConstantValue,
@@ -8,7 +9,6 @@ use crate::{
         module::Module,
         references::{ClassReference, PackageReference},
     },
-    errors::ClassFileParsingError,
 };
 
 use super::{

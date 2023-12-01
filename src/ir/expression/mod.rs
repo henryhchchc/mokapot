@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use super::Argument;
 
-use crate::elements::{
+use crate::jvm::{
     instruction::ProgramCounter,
     method::MethodDescriptor,
     references::{ClassReference, MethodReference},

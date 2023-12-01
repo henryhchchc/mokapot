@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    elements::{
+    jvm::{
         annotation::TypeAnnotation,
         parsing::code::{LocalVariableDescAttr, LocalVariableTypeAttr},
         references::ClassReference,
@@ -39,7 +39,7 @@ pub type InstructionList = BTreeMap<ProgramCounter, Instruction>;
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::elements::instruction::Instruction;
+    use crate::jvm::instruction::Instruction;
 
     use super::MethodBody;
     use Instruction::*;

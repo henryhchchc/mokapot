@@ -4,8 +4,8 @@ pub(super) mod stack_map;
 use std::str::FromStr;
 
 use crate::{
-    elements::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     errors::ClassFileParsingError,
+    jvm::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     types::FieldType,
 };
 

@@ -2,8 +2,8 @@ use std::{collections::BTreeSet, fmt::Display};
 
 use crate::{
     analysis::fixed_point::FixedPointFact,
-    elements::{instruction::ProgramCounter, MethodDescriptor},
     ir::{Argument, Identifier},
+    jvm::{instruction::ProgramCounter, MethodDescriptor},
     types::{FieldType, PrimitiveType},
     utils::try_merge,
 };

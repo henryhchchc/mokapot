@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{Condition, Expression};
-use crate::elements::instruction::ProgramCounter;
+use crate::jvm::instruction::ProgramCounter;
 use itertools::{Either, Itertools};
 
 /// Represents a single instruction in the Moka IR.

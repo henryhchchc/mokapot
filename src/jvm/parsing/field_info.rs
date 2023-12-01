@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use crate::{
-    elements::{
+    errors::ClassFileParsingError,
+    jvm::{
         field::{Field, FieldAccessFlags},
         references::ClassReference,
     },
-    errors::ClassFileParsingError,
     types::FieldType,
 };
 

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 
-use crate::{elements::references::ClassReference, errors::InvalidDescriptor};
+use crate::{errors::InvalidDescriptor, jvm::references::ClassReference};
 
 /// A primitive type in Java.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]

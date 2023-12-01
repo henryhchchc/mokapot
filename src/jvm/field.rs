@@ -126,7 +126,7 @@ mod test {
 
     use std::str::FromStr;
 
-    use crate::elements::references::ClassReference;
+    use crate::jvm::references::ClassReference;
     use crate::types::PrimitiveType::*;
     use crate::types::{FieldType, PrimitiveType};
 
