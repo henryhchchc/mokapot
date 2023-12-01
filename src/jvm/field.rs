@@ -4,7 +4,7 @@ use crate::types::FieldType;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    class::{ClassReference, Handle},
+    class::{ClassReference, MethodHandle},
     method::MethodDescriptor,
 };
 
@@ -63,7 +63,7 @@ pub enum ConstantValue {
     Double(f64),
     String(JavaString),
     Class(ClassReference),
-    Handle(Handle),
+    Handle(MethodHandle),
     MethodType(MethodDescriptor),
     Dynamic(u16, String, FieldType),
 }

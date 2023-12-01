@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
     field::ConstantValue,
     instruction::{LineNumberTableEntry, MethodBody, StackMapFrame},
-    method::MethodParameter,
+    method::{MethodDescriptor, MethodParameter},
     module::{Module, PackageReference},
     ClassFileParsingError,
 };
@@ -206,7 +208,8 @@ impl Attribute {
                 });
             };
             let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-            let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
+            let descriptor_str = ctx.constant_pool.get_str(descriptor_index)?;
+            let descriptor = MethodDescriptor::from_str(descriptor_str)?;
             Some((name, descriptor))
         };
         Ok(Self::EnclosingMethod(EnclosingMethod {

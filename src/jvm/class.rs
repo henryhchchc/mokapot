@@ -36,7 +36,7 @@ pub struct Class {
     pub is_synthetic: bool,
     pub is_deprecated: bool,
     pub signature: Option<String>,
-    pub record: Vec<RecordComponent>,
+    pub record: Option<Vec<RecordComponent>>,
 }
 
 impl Class {
@@ -83,23 +83,23 @@ pub struct InnerClassInfo {
     pub inner_class: ClassReference,
     pub outer_class: Option<ClassReference>,
     pub inner_name: Option<String>,
-    pub inner_class_access_flags: u16,
+    pub inner_class_access_flags: NestedClassAccessFlags,
 }
 
 #[derive(Debug)]
 pub struct EnclosingMethod {
     pub class: ClassReference,
-    pub method_name_and_desc: Option<(String, String)>,
+    pub method_name_and_desc: Option<(String, MethodDescriptor)>,
 }
 
 #[derive(Debug)]
 pub struct BootstrapMethod {
-    pub method: Handle,
+    pub method: MethodHandle,
     pub arguments: Vec<ConstantValue>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Handle {
+pub enum MethodHandle {
     RefGetField(FieldReference),
     RefGetStatic(FieldReference),
     RefPutField(FieldReference),
@@ -143,5 +143,32 @@ bitflags! {
         const ENUM = 0x4000;
         /// Is a module, not a class or interface.
         const MODULE = 0x8000;
+    }
+}
+
+bitflags! {
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct NestedClassAccessFlags: u16 {
+        /// Marked or implicitly `public` in source.
+        const PUBLIC = 0x0001;
+        /// Marked `private` in source.
+        const PRIVATE = 0x0002;
+        /// Marked `protected` in source.
+        const PROTECTED = 0x0004;
+        /// Marked or implicitly `static` in source.
+        const STATIC = 0x0008;
+        /// Marked `final` in source.
+        const FINAL = 0x0010;
+        /// Was an `interface` in source.
+        const INTERFACE = 0x0200;
+        /// Marked or implicitly `abstract` in source.
+        const ABSTRACT = 0x0400;
+        /// Declared `synthetic`; not present in the source code.
+        const SYNTHETIC = 0x1000;
+        /// Declared as an annotation interface.
+        const ANNOTATION = 0x2000;
+        /// Declared as an enum class.
+        const ENUM = 0x4000;
     }
 }

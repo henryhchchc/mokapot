@@ -1,5 +1,5 @@
 use crate::{
-    jvm::class::{BootstrapMethod, InnerClassInfo, RecordComponent},
+    jvm::class::{BootstrapMethod, InnerClassInfo, NestedClassAccessFlags, RecordComponent},
     jvm::ClassFileParsingError,
 };
 
@@ -67,7 +67,14 @@ impl Attribute {
             } else {
                 Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
             };
-            let inner_class_access_flags = read_u16(reader)?;
+            let access_flags = read_u16(reader)?;
+            let Some(inner_class_access_flags) = NestedClassAccessFlags::from_bits(access_flags)
+            else {
+                return Err(ClassFileParsingError::UnknownFlags(
+                    access_flags,
+                    "inner class",
+                ));
+            };
             classes.push(InnerClassInfo {
                 inner_class,
                 outer_class,

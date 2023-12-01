@@ -4,7 +4,7 @@ use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
 use crate::{
     jvm::ClassFileParsingError,
     jvm::{
-        class::{ClassReference, Handle},
+        class::{ClassReference, MethodHandle},
         field::{ConstantValue, FieldReference, JavaString},
         method::{MethodDescriptor, MethodReference},
         module::{ModuleReference, PackageReference},
@@ -228,8 +228,11 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_method_handle(&self, index: u16) -> Result<Handle, ClassFileParsingError> {
-        use Handle::*;
+    pub(crate) fn get_method_handle(
+        &self,
+        index: u16,
+    ) -> Result<MethodHandle, ClassFileParsingError> {
+        use MethodHandle::*;
 
         let entry = self.get_entry(index)?;
         let &ConstantPoolEntry::MethodHandle {

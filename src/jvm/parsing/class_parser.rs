@@ -151,7 +151,7 @@ impl Class {
             is_synthetic,
             is_deprecated,
             signature,
-            record: record.unwrap_or_default(),
+            record,
         })
     }
 }
