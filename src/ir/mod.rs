@@ -4,7 +4,6 @@ mod moka_instruction;
 
 use std::collections::BTreeMap;
 
-pub use expression::*;
 pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
 pub use moka_instruction::*;
 

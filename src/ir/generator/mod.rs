@@ -20,7 +20,8 @@ use self::jvm_frame::{Entry, JvmStackFrame};
 
 pub use jvm_frame::JvmFrameError;
 
-use super::{Argument, Expression, Identifier, MokaIRMethod, MokaInstruction};
+use super::expression::Expression;
+use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {

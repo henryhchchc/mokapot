@@ -1,6 +1,12 @@
 use super::{jvm_frame::JvmStackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
-    ir::{expression::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
+    ir::{
+        expression::{
+            ArrayOperation, Condition, ConversionOperation, Expression, FieldAccess, LockOperation,
+            MathOperation, NaNTreatment,
+        },
+        Argument, LocalDef, MokaInstruction as IR,
+    },
     jvm::{
         code::{Instruction, ProgramCounter},
         field::ConstantValue,

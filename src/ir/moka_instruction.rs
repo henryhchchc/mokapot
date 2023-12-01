@@ -5,9 +5,10 @@ use std::{
     ops::BitOr,
 };
 
-use super::{Condition, Expression};
 use crate::jvm::code::ProgramCounter;
 use itertools::{Either, Itertools};
+
+use super::expression::{Condition, Expression};
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug, Clone, PartialEq)]
