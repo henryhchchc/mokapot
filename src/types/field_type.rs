@@ -94,7 +94,7 @@ impl FromStr for FieldType {
                 }
             }
             Some(c) => match chars.next() {
-                None => PrimitiveType::try_from(c).map(|it| Self::Base(it)),
+                None => PrimitiveType::try_from(c).map(Self::Base),
                 _ => Err(InvalidDescriptor(descriptor.to_owned())),
             },
             None => Err(InvalidDescriptor(descriptor.to_owned())),

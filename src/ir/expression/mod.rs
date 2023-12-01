@@ -6,8 +6,8 @@ use super::Argument;
 
 use crate::jvm::{
     class::ClassReference,
+    code::ProgramCounter,
     field::ConstantValue,
-    instruction::ProgramCounter,
     method::{MethodDescriptor, MethodReference},
 };
 

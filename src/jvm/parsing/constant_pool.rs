@@ -30,7 +30,7 @@ impl ConstantPool {
 
     pub fn get_entry(&self, index: u16) -> Result<&ConstantPoolEntry, ClassFileParsingError> {
         let Some(entry) = self.entries.get(&index) else {
-            return Err(ClassFileParsingError::BadConstantPoolIndex(index.clone()));
+            return Err(ClassFileParsingError::BadConstantPoolIndex(index));
         };
         Ok(entry)
     }
@@ -177,10 +177,10 @@ impl ConstantPool {
         })
     }
 
-    pub(crate) fn get_name_and_type<'a>(
-        &'a self,
+    pub(crate) fn get_name_and_type(
+        &self,
         index: u16,
-    ) -> Result<(&'a str, &'a str), ClassFileParsingError> {
+    ) -> Result<(&str, &str), ClassFileParsingError> {
         let entry = self.get_entry(index)?;
         if let &ConstantPoolEntry::NameAndType {
             name_index,

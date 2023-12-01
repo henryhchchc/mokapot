@@ -4,7 +4,7 @@ pub(super) mod stack_map;
 use std::str::FromStr;
 
 use crate::{
-    jvm::instruction::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
+    jvm::code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
     jvm::ClassFileParsingError,
     types::FieldType,
 };
@@ -16,13 +16,13 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {
-    pub key: LocalVariableId,
+    pub id: LocalVariableId,
     pub field_type: FieldType,
 }
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableTypeAttr {
-    pub key: LocalVariableId,
+    pub id: LocalVariableId,
     pub signature: String,
 }
 
@@ -44,7 +44,7 @@ impl LocalVariableDescAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<LocalVariableDescAttr, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -56,13 +56,13 @@ impl LocalVariableDescAttr {
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         let field_type = FieldType::from_str(descriptor)?;
         let index = read_u16(reader)?;
-        let key = LocalVariableId {
+        let id = LocalVariableId {
             start_pc,
             length,
             index,
             name,
         };
-        Ok(LocalVariableDescAttr { key, field_type })
+        Ok(LocalVariableDescAttr { id, field_type })
     }
 }
 
@@ -70,7 +70,7 @@ impl LocalVariableTypeAttr {
     pub(super) fn parse<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<LocalVariableTypeAttr, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -81,13 +81,13 @@ impl LocalVariableTypeAttr {
         let signature_index = read_u16(reader)?;
         let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
         let index = read_u16(reader)?;
-        let key = LocalVariableId {
+        let id = LocalVariableId {
             start_pc,
             length,
             name,
             index,
         };
-        Ok(LocalVariableTypeAttr { key, signature })
+        Ok(LocalVariableTypeAttr { id, signature })
     }
 }
 
@@ -95,7 +95,7 @@ impl VerificationTypeInfo {
     pub(super) fn parse<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<VerificationTypeInfo, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {

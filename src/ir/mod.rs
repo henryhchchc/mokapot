@@ -10,7 +10,7 @@ pub use moka_instruction::*;
 
 use crate::jvm::{
     class::ClassReference,
-    instruction::{ExceptionTableEntry, ProgramCounter},
+    code::{ExceptionTableEntry, ProgramCounter},
     method::{MethodAccessFlags, MethodDescriptor},
 };
 

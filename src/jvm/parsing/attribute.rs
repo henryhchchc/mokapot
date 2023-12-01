@@ -3,8 +3,8 @@ use std::str::FromStr;
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
+    code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
-    instruction::{LineNumberTableEntry, MethodBody, StackMapFrame},
     method::{MethodDescriptor, MethodParameter},
     module::{Module, PackageReference},
     ClassFileParsingError,
@@ -52,7 +52,7 @@ pub(crate) enum Attribute {
 }
 
 impl Attribute {
-    pub fn name<'a>(&self) -> &'a str {
+    pub const fn name<'a>(&self) -> &'a str {
         match self {
             Self::ConstantValue(_) => "ConstantValue",
             Self::Code(_) => "Code",
@@ -154,7 +154,7 @@ impl Attribute {
     fn parse_constant_value<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -166,7 +166,7 @@ impl Attribute {
     fn parse_synthetic<R>(
         _reader: &mut R,
         _ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -176,7 +176,7 @@ impl Attribute {
     fn parse_deprecated<R>(
         _reader: &mut R,
         _ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -186,7 +186,7 @@ impl Attribute {
     fn parse_enclosing_method<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -221,7 +221,7 @@ impl Attribute {
     fn parse_signature<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {

@@ -4,7 +4,7 @@ use crate::{
     jvm::ClassFileParsingError,
     jvm::{
         class::{ClassReference, ClassVersion},
-        instruction::{
+        code::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
             StackMapFrame,
         },
@@ -24,10 +24,7 @@ use super::{
 };
 
 impl ExceptionTableEntry {
-    fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<ExceptionTableEntry, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -53,7 +50,7 @@ impl Attribute {
     pub(super) fn parse_line_no_table<R>(
         reader: &mut R,
         _ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -69,7 +66,7 @@ impl Attribute {
     pub(super) fn parse_code<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -88,7 +85,7 @@ impl Attribute {
             exception_table.push(entry);
         }
 
-        let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
+        let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" by {
@@ -97,10 +94,16 @@ impl Attribute {
                 let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
                 let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
                 match Attribute::LocalVariableTable(it) => {
-                    local_variable_table.get_or_insert(LocalVariableTable::new()).merge_desc_attr(it)
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::new());
+                    it.into_iter().for_each(|LocalVariableDescAttr { id, field_type }| {
+                        table.merge_type(id, field_type);
+                    });
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
-                    local_variable_table.get_or_insert(LocalVariableTable::new()).merge_type_attr(it)
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::new());
+                    it.into_iter().for_each(|LocalVariableTypeAttr { id, signature }| {
+                        table.merge_signature(id, signature);
+                    });
                 },
             }
         }
@@ -121,7 +124,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -137,7 +140,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_type_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -153,7 +156,7 @@ impl Attribute {
     pub(super) fn parse_stack_map_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -168,7 +171,7 @@ impl Attribute {
     pub(super) fn parse_exceptions<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Attribute, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {

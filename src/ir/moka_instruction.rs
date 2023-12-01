@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{Condition, Expression};
-use crate::jvm::instruction::ProgramCounter;
+use crate::jvm::code::ProgramCounter;
 use itertools::{Either, Itertools};
 
 /// Represents a single instruction in the Moka IR.
@@ -150,7 +150,7 @@ impl<'a> IntoIterator for &'a Argument {
         use Argument::*;
         match self {
             Id(id) => Either::Left(std::iter::once(id)),
-            Phi(ids) => Either::Right(ids.into_iter()),
+            Phi(ids) => Either::Right(ids.iter()),
         }
     }
 }
@@ -160,11 +160,11 @@ impl<'a> IntoIterator for &'a Argument {
 pub struct LocalDef(u16);
 
 impl LocalDef {
-    pub fn new(id: u16) -> Self {
+    pub const fn new(id: u16) -> Self {
         Self(id)
     }
     pub fn as_argument(&self) -> Argument {
-        Argument::Id(self.clone().into())
+        Argument::Id((*self).into())
     }
 }
 

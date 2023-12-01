@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::jvm::{
-    instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
+    code::{ExceptionTableEntry, MethodBody, ProgramCounter},
     method::{Method, MethodAccessFlags},
 };
 
@@ -175,12 +175,12 @@ impl<'m> MokaIRGenerator<'m> {
 
     fn add_exception_edges(
         &mut self,
-        exception_table: &Vec<ExceptionTableEntry>,
+        exception_table: &[ExceptionTableEntry],
         pc: ProgramCounter,
         frame: &JvmStackFrame,
         dirty_nodes: &mut BTreeMap<ProgramCounter, JvmStackFrame>,
     ) {
-        for handler in exception_table.iter() {
+        for handler in exception_table {
             if handler.covers(pc) {
                 let caught_exception_ref = Argument::Id(Identifier::CaughtException);
                 let handler_frame =

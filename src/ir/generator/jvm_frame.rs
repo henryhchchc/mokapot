@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fmt::Display};
 use crate::{
     analysis::fixed_point::FixedPointFact,
     ir::{Argument, Identifier},
-    jvm::{instruction::ProgramCounter, method::MethodDescriptor},
+    jvm::{code::ProgramCounter, method::MethodDescriptor},
     types::{FieldType, PrimitiveType},
     utils::try_merge,
 };
@@ -72,7 +72,8 @@ impl JvmStackFrame {
         if self.operand_stack.len() as u16 >= self.max_stack {
             Err(JvmFrameError::StackOverflow)
         } else {
-            Ok(self.operand_stack.push(value))
+            self.operand_stack.push(value);
+            Ok(())
         }
     }
 

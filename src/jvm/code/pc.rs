@@ -3,6 +3,7 @@ use std::fmt::Display;
 /// Denotes a program counter in an instruction sequence.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(transparent)]
+#[derive(Default)]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
@@ -30,7 +31,7 @@ impl ProgramCounter {
     pub const ZERO: Self = Self(0);
 
     /// Checks if the program counter is an entry point.
-    pub fn is_entry_point(&self) -> bool {
+    pub const fn is_entry_point(&self) -> bool {
         self.0 == 0
     }
 }
@@ -47,17 +48,13 @@ impl From<u16> for ProgramCounter {
     }
 }
 
-impl Into<u16> for ProgramCounter {
-    fn into(self) -> u16 {
-        self.0
+impl From<ProgramCounter> for u16 {
+    fn from(val: ProgramCounter) -> Self {
+        val.0
     }
 }
 
-impl Default for ProgramCounter {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum InvalidOffset {

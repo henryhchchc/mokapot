@@ -265,7 +265,7 @@ pub enum Instruction {
 
 impl Instruction {
     /// Gets the opcode of the [Instruction].
-    pub fn opcode(&self) -> u8 {
+    pub const fn opcode(&self) -> u8 {
         use Instruction::*;
         match self {
             AALoad => 0x32,
@@ -489,7 +489,7 @@ impl Instruction {
     }
 
     /// Gets the name of the [Instruction].
-    pub fn name<'a>(&self) -> &'a str {
+    pub const fn name<'a>(&self) -> &'a str {
         use Instruction::*;
         match self {
             AALoad => "aaload",

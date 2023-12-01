@@ -4,11 +4,7 @@ use std::{
 };
 
 use crate::{
-    jvm::{
-        annotation::TypeAnnotation,
-        class::ClassReference,
-        parsing::code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    },
+    jvm::{annotation::TypeAnnotation, class::ClassReference},
     types::FieldType,
 };
 
@@ -39,7 +35,7 @@ pub type InstructionList = BTreeMap<ProgramCounter, Instruction>;
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::jvm::instruction::Instruction;
+    use crate::jvm::code::Instruction;
 
     use super::MethodBody;
     use Instruction::*;
@@ -98,6 +94,12 @@ pub struct LocalVariableTable {
     entries: HashMap<LocalVariableId, LocalVariableTableEntry>,
 }
 
+impl Default for LocalVariableTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LocalVariableTable {
     pub fn new() -> Self {
         Self {
@@ -105,17 +107,14 @@ impl LocalVariableTable {
         }
     }
 
-    pub(crate) fn merge_desc_attr(&mut self, attrs: Vec<LocalVariableDescAttr>) {
-        for LocalVariableDescAttr { key, field_type } in attrs.into_iter() {
-            let entry = self.entries.entry(key).or_default();
-            entry.var_type = Some(field_type);
-        }
+    pub(crate) fn merge_type(&mut self, key: LocalVariableId, field_type: FieldType) {
+        let entry = self.entries.entry(key).or_default();
+        entry.var_type = Some(field_type);
     }
-    pub(crate) fn merge_type_attr(&mut self, attrs: Vec<LocalVariableTypeAttr>) {
-        for LocalVariableTypeAttr { key, signature } in attrs.into_iter() {
-            let entry = self.entries.entry(key).or_default();
-            entry.signature = Some(signature);
-        }
+
+    pub(crate) fn merge_signature(&mut self, key: LocalVariableId, signature: String) {
+        let entry = self.entries.entry(key).or_default();
+        entry.signature = Some(signature);
     }
 }
 

@@ -153,7 +153,7 @@ impl Attribute {
                 let descriptor_index = read_u16(reader)?;
                 let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
 
-                let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
+                let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
                 extract_attributes! {
                     for attributes in "record_component" by {
                         let signature <= Signature,

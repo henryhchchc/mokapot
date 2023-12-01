@@ -2,8 +2,8 @@ use super::{jvm_frame::JvmStackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     ir::{expression::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
     jvm::{
+        code::{Instruction, ProgramCounter},
         field::ConstantValue,
-        instruction::{Instruction, ProgramCounter},
         method::ReturnType,
     },
     types::{FieldType, PrimitiveType, TypeReference},
@@ -51,12 +51,12 @@ impl MokaIRGenerator<'_> {
             }
             BiPush(value) => {
                 frame.push_value(def.as_argument())?;
-                let expr = Expression::Const(ConstantValue::Integer(value.clone() as i32));
+                let expr = Expression::Const(ConstantValue::Integer(*value as i32));
                 IR::Definition { def, expr }
             }
             SiPush(value) => {
                 frame.push_value(def.as_argument())?;
-                let expr = Expression::Const(ConstantValue::Integer(value.clone() as i32));
+                let expr = Expression::Const(ConstantValue::Integer(*value as i32));
                 IR::Definition { def, expr }
             }
             Ldc(value) | LdcW(value) => {
@@ -480,7 +480,7 @@ impl MokaIRGenerator<'_> {
                     descriptor.to_owned(),
                 );
                 if let ReturnType::Some(return_type) = &descriptor.return_type {
-                    frame.typed_push(&return_type, def.as_argument())?;
+                    frame.typed_push(return_type, def.as_argument())?;
                 }
                 IR::Definition { def, expr: rhs }
             }

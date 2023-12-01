@@ -19,7 +19,7 @@ impl Field {
     pub(crate) fn parse<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Field, ClassFileParsingError>
+    ) -> Result<Self, ClassFileParsingError>
     where
         R: std::io::Read,
     {
@@ -36,7 +36,7 @@ impl Field {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
+        let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
         extract_attributes! {
             for attributes in "field_info" by {
                 let constant_value <= ConstantValue,

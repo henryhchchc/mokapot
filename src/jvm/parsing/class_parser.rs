@@ -39,7 +39,7 @@ impl Class {
             0 => Err(ClassFileParsingError::MalformedClassFile(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it @ _ => Some(constant_pool.get_class_ref(it)?),
+            it => Some(constant_pool.get_class_ref(it)?),
         };
 
         let ctx = ParsingContext {

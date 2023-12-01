@@ -2,7 +2,7 @@ mod annotation;
 mod attribute;
 mod class_file;
 mod class_parser;
-pub(crate) mod code;
+mod code;
 mod constant_pool;
 pub(super) mod errors;
 mod field_info;

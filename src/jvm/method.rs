@@ -12,7 +12,7 @@ use crate::types::{FieldType, PrimitiveType};
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::ClassReference,
-    instruction::MethodBody,
+    code::MethodBody,
 };
 
 #[derive(Debug)]
