@@ -1,6 +1,6 @@
 use std::{io::Read, usize};
 
-use super::parsing_context::ParsingContext;
+use super::{errors::ClassFileParsingError, parsing_context::ParsingContext};
 
 /// Reads [N] bytes and advances the reader by [N] bytes.
 pub(crate) fn read_bytes<R, const N: usize>(reader: &mut R) -> std::io::Result<[u8; N]>
@@ -80,10 +80,10 @@ pub(crate) fn parse_multiple<R, T, P>(
     reader: &mut R,
     ctx: &ParsingContext,
     parse: P,
-) -> Result<Vec<T>, crate::jvm::ClassFileParsingError>
+) -> Result<Vec<T>, ClassFileParsingError>
 where
     R: std::io::Read,
-    P: Fn(&mut R, &ParsingContext) -> Result<T, crate::jvm::ClassFileParsingError>,
+    P: Fn(&mut R, &ParsingContext) -> Result<T, ClassFileParsingError>,
 {
     use std::iter::repeat_with;
 

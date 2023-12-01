@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::{
-    jvm::ClassFileParsingError,
+    jvm::class::ClassFileParsingError,
     jvm::{
         class::ClassReference,
         field::{Field, FieldAccessFlags},

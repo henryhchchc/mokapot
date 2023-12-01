@@ -4,8 +4,10 @@ pub(super) mod stack_map;
 use std::str::FromStr;
 
 use crate::{
-    jvm::code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
-    jvm::ClassFileParsingError,
+    jvm::{
+        class::ClassFileParsingError,
+        code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
+    },
     types::FieldType,
 };
 

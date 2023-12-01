@@ -1,6 +1,8 @@
 use crate::{
-    jvm::class::{BootstrapMethod, InnerClassInfo, NestedClassAccessFlags, RecordComponent},
-    jvm::ClassFileParsingError,
+    jvm::class::{
+        BootstrapMethod, ClassFileParsingError, InnerClassInfo, NestedClassAccessFlags,
+        RecordComponent,
+    },
     macros::extract_attributes,
 };
 

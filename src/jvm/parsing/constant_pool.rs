@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
 use crate::{
-    jvm::ClassFileParsingError,
+    jvm::class::ClassFileParsingError,
     jvm::{
         class::{ClassReference, MethodHandle},
         field::{ConstantValue, FieldReference, JavaString},

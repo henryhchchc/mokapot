@@ -54,8 +54,6 @@ impl From<ProgramCounter> for u16 {
     }
 }
 
-
-
 #[derive(thiserror::Error, Debug)]
 pub enum InvalidOffset {
     #[error("Invalid i16 offset {0}")]

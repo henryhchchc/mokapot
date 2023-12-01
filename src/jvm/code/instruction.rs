@@ -11,6 +11,8 @@ use crate::{
 
 use super::ProgramCounter;
 
+/// A JVM instruction.
+/// See [the JVM specification](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5) for more information.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
     // Constants

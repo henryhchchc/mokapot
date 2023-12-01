@@ -1,6 +1,6 @@
 use super::constant_pool::ConstantPool;
 use crate::{
-    jvm::ClassFileParsingError,
+    jvm::class::ClassFileParsingError,
     jvm::{
         class::{Class, ClassAccessFlags, ClassReference, ClassVersion},
         field::Field,
@@ -140,7 +140,7 @@ mod test {
     use std::io::BufReader;
 
     use crate::{
-        jvm::ClassFileParsingError,
+        jvm::class::ClassFileParsingError,
         jvm::{
             class::{Class, ClassAccessFlags, ClassReference},
             method::ReturnType,

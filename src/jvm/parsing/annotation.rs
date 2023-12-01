@@ -3,8 +3,8 @@ use std::str::FromStr;
 use crate::{
     jvm::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+        class::ClassFileParsingError,
         field::{ConstantValue, JavaString},
-        ClassFileParsingError,
     },
     types::FieldType,
 };

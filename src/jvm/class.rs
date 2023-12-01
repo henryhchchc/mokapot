@@ -9,6 +9,8 @@ use super::{
     module::{Module, PackageReference},
 };
 
+pub use super::parsing::errors::ClassFileParsingError;
+
 #[derive(Debug)]
 pub struct Class {
     pub version: ClassVersion,

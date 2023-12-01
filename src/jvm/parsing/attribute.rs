@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
+    class::ClassFileParsingError,
     class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
     method::{MethodDescriptor, MethodParameter},
     module::{Module, PackageReference},
-    ClassFileParsingError,
 };
 
 use super::{
