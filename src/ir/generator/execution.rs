@@ -5,7 +5,7 @@ use crate::{
         references::TypeReference,
         ConstantValue, ReturnType,
     },
-    ir::{expressions::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
+    ir::{expression::*, Argument, Condition, Expression, LocalDef, MokaInstruction as IR},
     types::{FieldType, PrimitiveType},
 };
 

@@ -1,5 +1,4 @@
-mod expression;
-pub mod expressions;
+pub mod expression;
 mod generator;
 mod moka_instruction;
 

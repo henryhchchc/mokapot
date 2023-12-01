@@ -2,6 +2,8 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
+use super::Argument;
+
 use crate::elements::{
     instruction::ProgramCounter,
     method::MethodDescriptor,
@@ -9,7 +11,14 @@ use crate::elements::{
     ConstantValue,
 };
 
-use super::{expressions::*, Argument};
+mod array;
+mod condition;
+mod conversion;
+mod field;
+mod lock;
+mod math;
+
+pub use {array::*, condition::*, conversion::*, field::*, lock::*, math::*};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
@@ -89,46 +98,6 @@ impl Display for Expression {
                 args.iter().map(|it| it.to_string()).join(", "),
                 descriptor.to_string()
             ),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Condition {
-    Equal(Argument, Argument),
-    NotEqual(Argument, Argument),
-    LessThan(Argument, Argument),
-    LessThanOrEqual(Argument, Argument),
-    GreaterThan(Argument, Argument),
-    GreaterThanOrEqual(Argument, Argument),
-    IsNull(Argument),
-    IsNotNull(Argument),
-    Zero(Argument),
-    NonZero(Argument),
-    Positive(Argument),
-    Negative(Argument),
-    NonNegative(Argument),
-    NonPositive(Argument),
-}
-
-impl Display for Condition {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Condition::*;
-        match self {
-            Equal(a, b) => write!(f, "{} == {}", a, b),
-            NotEqual(a, b) => write!(f, "{} != {}", a, b),
-            LessThan(a, b) => write!(f, "{} < {}", a, b),
-            LessThanOrEqual(a, b) => write!(f, "{} <= {}", a, b),
-            GreaterThan(a, b) => write!(f, "{} > {}", a, b),
-            GreaterThanOrEqual(a, b) => write!(f, "{} >= {}", a, b),
-            IsNull(a) => write!(f, "{} == null", a),
-            IsNotNull(a) => write!(f, "{} != null", a),
-            Zero(a) => write!(f, "{} == 0", a),
-            NonZero(a) => write!(f, "{} != 0", a),
-            Positive(a) => write!(f, "{} > 0", a),
-            Negative(a) => write!(f, "{} < 0", a),
-            NonNegative(a) => write!(f, "{} >= 0", a),
-            NonPositive(a) => write!(f, "{} <= 0", a),
         }
     }
 }
