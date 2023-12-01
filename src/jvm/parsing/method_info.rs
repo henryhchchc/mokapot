@@ -14,7 +14,7 @@ use crate::{
         },
         parsing::parsing_context::ParsingContext,
     },
-    macros::fill_once,
+    macros::extract_attributes,
 };
 
 use super::{
@@ -89,33 +89,20 @@ impl Attribute {
         }
 
         let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
-        let mut line_number_table = None;
         let mut local_variable_table = None;
-        let mut stack_map_table = None;
-        let mut runtime_visible_type_annotations = None;
-        let mut runtime_invisible_type_annotations = None;
-
-        for attr in attributes.into_iter() {
-            match attr {
-                Attribute::LineNumberTable(it) => line_number_table = Some(it),
-                Attribute::LocalVariableTable(it) => local_variable_table
-                    .get_or_insert(LocalVariableTable::new())
-                    .merge_desc_attr(it),
-                Attribute::LocalVariableTypeTable(it) => local_variable_table
-                    .get_or_insert(LocalVariableTable::new())
-                    .merge_type_attr(it),
-                Attribute::StackMapTable(it) => stack_map_table = Some(it),
-                Attribute::RuntimeVisibleTypeAnnotations(it) => {
-                    runtime_visible_type_annotations = Some(it)
-                }
-                Attribute::RuntimeInvisibleTypeAnnotations(it) => {
-                    runtime_invisible_type_annotations = Some(it)
-                }
-                it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    it.name(),
-                    "code",
-                ))?,
-            };
+        extract_attributes! {
+            for attributes in "code" by {
+                let line_number_table <= LineNumberTable,
+                let stack_map_table <= StackMapTable,
+                let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
+                let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
+                match Attribute::LocalVariableTable(it) => {
+                    local_variable_table.get_or_insert(LocalVariableTable::new()).merge_desc_attr(it)
+                },
+                match Attribute::LocalVariableTypeTable(it) => {
+                    local_variable_table.get_or_insert(LocalVariableTable::new()).merge_type_attr(it)
+                },
+            }
         }
 
         Ok(Attribute::Code(MethodBody {
@@ -242,59 +229,23 @@ impl Method {
         };
 
         let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
-        let mut body = None;
-        let mut exceptions = None;
-        let mut rt_visible_anno = None;
-        let mut rt_invisible_anno = None;
-        let mut rt_visible_type_anno = None;
-        let mut rt_invisible_type_anno = None;
-        let mut rt_visible_param_anno = None;
-        let mut rt_invisible_param_anno = None;
-        let mut annotation_default = None;
-        let mut method_parameters = None;
-        let mut is_synthetic = false;
-        let mut is_deprecated = false;
-        let mut signature = None;
-        for attr in attributes.into_iter() {
-            use Attribute::*;
-            match attr {
-                Code(b) => fill_once!(body, b, "code"),
-                Exceptions(ex) => fill_once!(exceptions, ex, "exception table"),
-                RuntimeVisibleAnnotations(it) => {
-                    fill_once!(rt_visible_anno, it, "RuntimeVisibleAnnotations")
-                }
-                RuntimeInvisibleAnnotations(it) => {
-                    fill_once!(rt_invisible_anno, it, "RuntimeInvisibleAnnotations")
-                }
-                RuntimeVisibleTypeAnnotations(it) => {
-                    fill_once!(rt_visible_type_anno, it, "RuntimeVisibleTypeAnnotations")
-                }
-                RuntimeInvisibleTypeAnnotations(it) => fill_once!(
-                    rt_invisible_type_anno,
-                    it,
-                    "RuntimeInvisibleTypeAnnotations"
-                ),
-                RuntimeVisibleParameterAnnotations(it) => fill_once!(
-                    rt_visible_param_anno,
-                    it,
-                    "RuntimeVisibleParameterAnnotations"
-                ),
-                RuntimeInvisibleParameterAnnotations(it) => fill_once!(
-                    rt_invisible_param_anno,
-                    it,
-                    "RuntimeInvisibleParameterAnnotations"
-                ),
-                AnnotationDefault(it) => fill_once!(annotation_default, it, "AnnotationDefault"),
-                MethodParameters(mp) => fill_once!(method_parameters, mp, "method parameter table"),
-                Synthetic => is_synthetic = true,
-                Deprecated => is_deprecated = true,
-                Signature(sig) => fill_once!(signature, sig, "signagure"),
-                it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    it.name(),
-                    "method_info",
-                ))?,
+        extract_attributes! {
+            for attributes in "method_info" by {
+                let body <= Code,
+                let exceptions <= Exceptions,
+                let rt_visible_anno <= RuntimeVisibleAnnotations,
+                let rt_invisible_anno <= RuntimeInvisibleAnnotations,
+                let rt_visible_type_anno <= RuntimeVisibleTypeAnnotations,
+                let rt_invisible_type_anno <= RuntimeInvisibleTypeAnnotations,
+                let rt_visible_param_anno <= RuntimeVisibleParameterAnnotations,
+                let rt_invisible_param_anno <= RuntimeInvisibleParameterAnnotations,
+                let annotation_default <= AnnotationDefault,
+                let method_parameters <= MethodParameters,
+                let signature <= Signature,
+                if Synthetic => is_synthetic = true,
+                if Deprecated => is_deprecated = true,
             }
-        }
+        };
 
         // JVM specification 4.7.3
         // If the method is either `native` or `abstract`, and is not a class or interface initialization method

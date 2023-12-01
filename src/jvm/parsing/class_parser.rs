@@ -1,4 +1,4 @@
-use super::{attribute::Attribute, constant_pool::ConstantPool};
+use super::constant_pool::ConstantPool;
 use crate::{
     jvm::ClassFileParsingError,
     jvm::{
@@ -6,7 +6,7 @@ use crate::{
         field::Field,
         method::Method,
     },
-    macros::fill_once,
+    macros::extract_attributes,
 };
 
 use super::{
@@ -63,67 +63,29 @@ impl Class {
             return Err(ClassFileParsingError::UnexpectedData);
         }
 
-        let mut source_file = None;
-        let mut inner_classes = None;
-        let mut enclosing_method = None;
-        let mut source_debug_extension = None;
-        let mut rt_visible_anno = None;
-        let mut rt_invisible_anno = None;
-        let mut rt_visible_type_anno = None;
-        let mut rt_invisible_type_anno = None;
-        let mut bootstrap_methods = None;
-        let mut module = None;
-        let mut module_packages = None;
-        let mut module_main_class = None;
-        let mut nest_host = None;
-        let mut nest_members = None;
-        let mut permitted_subclasses = None;
-        let mut is_synthetic = false;
-        let mut is_deprecated = false;
-        let mut signature = None;
-        let mut record = None;
-        for attr in attributes.into_iter() {
-            use Attribute::*;
-            match attr {
-                SourceFile(it) => fill_once!(source_file, it, "SourceFile"),
-                InnerClasses(it) => fill_once!(inner_classes, it, "InnerClasses"),
-                EnclosingMethod(it) => fill_once!(enclosing_method, it, "EnclosingMethod"),
-                SourceDebugExtension(it) => {
-                    fill_once!(source_debug_extension, it, "SourceDebugExtension")
-                }
-                RuntimeVisibleAnnotations(it) => {
-                    fill_once!(rt_visible_anno, it, "RuntimeVisibleAnnotations")
-                }
-                RuntimeInvisibleAnnotations(it) => {
-                    fill_once!(rt_invisible_anno, it, "RuntimeInvisibleAnnotations")
-                }
-                RuntimeVisibleTypeAnnotations(it) => {
-                    fill_once!(rt_visible_type_anno, it, "RuntimeVisibleTypeAnnotations")
-                }
-                RuntimeInvisibleTypeAnnotations(it) => fill_once!(
-                    rt_invisible_type_anno,
-                    it,
-                    "RuntimeInvisibleTypeAnnotations"
-                ),
-                BootstrapMethods(bm) => fill_once!(bootstrap_methods, bm, "BootstrapMethods"),
-                Module(it) => fill_once!(module, it, "Module"),
-                ModulePackages(mp) => fill_once!(module_packages, mp, "ModulePackages"),
-                ModuleMainClass(mmc) => fill_once!(module_main_class, mmc, "ModuleMainClass"),
-                NestHost(nh) => fill_once!(nest_host, nh, "NestHost"),
-                NestMembers(nm) => fill_once!(nest_members, nm, "NestMembers"),
-                PermittedSubclasses(ps) => {
-                    fill_once!(permitted_subclasses, ps, "PermittedSubclasses")
-                }
-                Synthetic => is_synthetic = true,
-                Deprecated => is_deprecated = true,
-                Signature(sig) => fill_once!(signature, sig, "Signature"),
-                Record(rec) => fill_once!(record, rec, "Recoed"),
-                unexpected => Err(ClassFileParsingError::UnexpectedAttribute(
-                    unexpected.name(),
-                    "class_file",
-                ))?,
+        extract_attributes! {
+            for attributes in "class_file" by {
+                let source_file <= SourceFile,
+                let inner_classes <= InnerClasses,
+                let enclosing_method <= EnclosingMethod,
+                let source_debug_extension <= SourceDebugExtension,
+                let rt_visible_anno <= RuntimeVisibleAnnotations,
+                let rt_invisible_anno <= RuntimeInvisibleAnnotations,
+                let rt_visible_type_anno <= RuntimeVisibleTypeAnnotations,
+                let rt_invisible_type_anno <= RuntimeInvisibleTypeAnnotations,
+                let bootstrap_methods <= BootstrapMethods,
+                let module <= Module,
+                let module_packages <= ModulePackages,
+                let module_main_class <= ModuleMainClass,
+                let nest_host <= NestHost,
+                let nest_members <= NestMembers,
+                let permitted_subclasses <= PermittedSubclasses,
+                let signature <= Signature,
+                let record <= Record,
+                if Synthetic => is_synthetic = true,
+                if Deprecated => is_deprecated = true,
             }
-        }
+        };
 
         Ok(Class {
             version,

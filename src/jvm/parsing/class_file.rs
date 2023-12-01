@@ -1,6 +1,7 @@
 use crate::{
     jvm::class::{BootstrapMethod, InnerClassInfo, NestedClassAccessFlags, RecordComponent},
     jvm::ClassFileParsingError,
+    macros::extract_attributes,
 };
 
 use super::{
@@ -153,36 +154,24 @@ impl Attribute {
                 let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
 
                 let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
-                let mut signature = None;
-                let mut rt_visible_anno = None;
-                let mut rt_invisible_anno = None;
-                let mut rt_visible_type_anno = None;
-                let mut rt_invisible_type_anno = None;
-                for attr in attributes.into_iter() {
-                    match attr {
-                        Attribute::Signature(sig) => signature = Some(sig),
-                        Attribute::RuntimeVisibleAnnotations(it) => rt_visible_anno = Some(it),
-                        Attribute::RuntimeInvisibleAnnotations(it) => rt_invisible_anno = Some(it),
-                        Attribute::RuntimeVisibleTypeAnnotations(it) => {
-                            rt_visible_type_anno = Some(it)
-                        }
-                        Attribute::RuntimeInvisibleTypeAnnotations(it) => {
-                            rt_invisible_type_anno = Some(it)
-                        }
-                        it => Err(ClassFileParsingError::UnexpectedAttribute(
-                            it.name(),
-                            "record",
-                        ))?,
+                extract_attributes! {
+                    for attributes in "record_component" by {
+                        let signature <= Signature,
+                        let rt_visible_anno <= RuntimeVisibleAnnotations,
+                        let rt_invisible_anno <= RuntimeInvisibleAnnotations,
+                        let rt_visible_type_anno <= RuntimeVisibleTypeAnnotations,
+                        let rt_invisible_type_anno <= RuntimeInvisibleTypeAnnotations,
                     }
                 }
+
                 Ok(RecordComponent {
                     name,
                     descriptor,
                     signature,
-                    runtime_visible_annotations: rt_visible_anno.unwrap_or(vec![]),
-                    runtime_invisible_annotations: rt_invisible_anno.unwrap_or(vec![]),
-                    runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or(vec![]),
-                    runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or(vec![]),
+                    runtime_visible_annotations: rt_visible_anno.unwrap_or_default(),
+                    runtime_invisible_annotations: rt_invisible_anno.unwrap_or_default(),
+                    runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or_default(),
+                    runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
                 })
             })
             .collect::<Result<_, ClassFileParsingError>>()?;

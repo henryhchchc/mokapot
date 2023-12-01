@@ -1,12 +1,38 @@
-macro_rules! fill_once {
-    ($container:ident, $with:ident, $what:literal) => {
-        if $container.replace($with).is_some() {
-            Err(ClassFileParsingError::MalformedClassFile(concat!(
-                "There should be at most one ",
-                $what
-            )))?
+macro_rules! extract_attributes {
+    (for $attrs: ident in $env:literal by {
+         $( let $var: ident <= $attr: ident,)*
+         $( if $attr_true: ident => $var_true: ident = true,)*
+         $( match $attr_custom: pat => $var_custom: block,)*
+    }) => {
+        use crate::jvm::parsing::attribute::Attribute;
+        $( let mut $var = None;)*
+        $( let mut $var_true = false;)*
+        {
+            for attr in $attrs {
+                match attr {
+                $(
+                    Attribute::$attr(it) => if $var.replace(it).is_some() {
+                        return Err(ClassFileParsingError::MalformedClassFile(concat!(
+                            "There should be at most one ",
+                            stringify!($attr),
+                            " in a ",
+                            $env
+                        )))
+                    },
+                )*
+                $(
+                    Attribute::$attr_true => {
+                        $var_true = true;
+                    },
+                )*
+                $($attr_custom => $var_custom,)*
+                    unexpected => return Err(
+                        ClassFileParsingError::UnexpectedAttribute(unexpected.name(), $env)
+                    )
+                }
+            }
         }
     };
 }
 
-pub(crate) use fill_once;
+pub(crate) use extract_attributes;

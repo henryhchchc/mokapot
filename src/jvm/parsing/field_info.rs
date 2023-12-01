@@ -6,11 +6,11 @@ use crate::{
         class::ClassReference,
         field::{Field, FieldAccessFlags},
     },
+    macros::extract_attributes,
     types::FieldType,
 };
 
 use super::{
-    attribute::Attribute,
     parsing_context::ParsingContext,
     reader_utils::{parse_multiple, read_u16},
 };
@@ -36,36 +36,17 @@ impl Field {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let mut constant_value = None;
-        let mut is_synthetic = false;
-        let mut is_deperecated = false;
-        let mut signature = None;
-        let mut runtime_visible_annotations = None;
-        let mut runtime_invisible_annotations = None;
-        let mut runtime_visible_type_annotations = None;
-        let mut runtime_invisible_type_annotations = None;
-
         let attributes = parse_multiple(reader, &ctx, Attribute::parse)?;
-        for attr in attributes.into_iter() {
-            match attr {
-                Attribute::ConstantValue(v) => constant_value = Some(v),
-                Attribute::Synthetic => is_synthetic = true,
-                Attribute::Deprecated => is_deperecated = true,
-                Attribute::Signature(s) => signature = Some(s),
-                Attribute::RuntimeVisibleAnnotations(a) => runtime_visible_annotations = Some(a),
-                Attribute::RuntimeInvisibleAnnotations(a) => {
-                    runtime_invisible_annotations = Some(a)
-                }
-                Attribute::RuntimeVisibleTypeAnnotations(a) => {
-                    runtime_visible_type_annotations = Some(a)
-                }
-                Attribute::RuntimeInvisibleTypeAnnotations(a) => {
-                    runtime_invisible_type_annotations = Some(a)
-                }
-                it => Err(ClassFileParsingError::UnexpectedAttribute(
-                    it.name(),
-                    "field_info",
-                ))?,
+        extract_attributes! {
+            for attributes in "field_info" by {
+                let constant_value <= ConstantValue,
+                let signature <= Signature,
+                let runtime_visible_annotations <= RuntimeVisibleAnnotations,
+                let runtime_invisible_annotations <= RuntimeInvisibleAnnotations,
+                let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
+                let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
+                if Synthetic => is_synthetic = true,
+                if Deprecated => is_deperecated = true,
             }
         }
 
