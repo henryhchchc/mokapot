@@ -1,7 +1,6 @@
 use std::{collections::BTreeSet, fmt::Display};
 
 use crate::{
-    analysis::fixed_point::FixedPointFact,
     ir::{Argument, Identifier},
     jvm::{code::ProgramCounter, method::MethodDescriptor},
     types::{FieldType, PrimitiveType},
@@ -311,10 +310,8 @@ impl JvmStackFrame {
     }
 }
 
-impl FixedPointFact for JvmStackFrame {
-    type MergeErr = JvmFrameError;
-
-    fn merge(&self, other: Self) -> Result<Self, Self::MergeErr> {
+impl JvmStackFrame {
+    pub(super) fn merge(&self, other: Self) -> Result<Self, JvmFrameError> {
         if self.max_locals != other.max_locals {
             return Err(JvmFrameError::LocalLimitMismatch);
         }

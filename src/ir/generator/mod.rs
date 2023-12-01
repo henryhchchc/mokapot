@@ -150,6 +150,16 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         self.ir_instructions.insert(location, ir_instruction);
         Ok(dirty_nodes)
     }
+
+    fn merge_facts(
+        &self,
+        current_fact: &Self::Fact,
+        incoming_fact: Self::Fact,
+    ) -> Result<Self::Fact, Self::Err> {
+        current_fact
+            .merge(incoming_fact)
+            .map_err(MokaIRGenerationError::MergeError)
+    }
 }
 
 impl<'m> MokaIRGenerator<'m> {
