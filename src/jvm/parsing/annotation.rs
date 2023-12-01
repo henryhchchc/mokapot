@@ -1,11 +1,10 @@
 use std::str::FromStr;
 
 use crate::{
-    errors::ClassFileParsingError,
     jvm::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-        field::ConstantValue,
-        JavaString,
+        field::{ConstantValue, JavaString},
+        ClassFileParsingError,
     },
     types::FieldType,
 };

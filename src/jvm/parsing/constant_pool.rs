@@ -2,15 +2,14 @@ use std::{collections::HashMap, str::FromStr};
 
 use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
 use crate::{
-    errors::ClassFileParsingError,
+    jvm::ClassFileParsingError,
     jvm::{
-        references::{
-            ClassReference, FieldReference, MethodReference, ModuleReference, PackageReference,
-            TypeReference,
-        },
-        ConstantValue, Handle, JavaString, MethodDescriptor,
+        class::{ClassReference, Handle},
+        field::{ConstantValue, FieldReference, JavaString},
+        method::{MethodDescriptor, MethodReference},
+        module::{ModuleReference, PackageReference},
     },
-    types::FieldType,
+    types::{FieldType, TypeReference},
 };
 
 #[derive(Debug)]

@@ -1,6 +1,5 @@
 pub mod analysis;
 
-pub mod errors;
 pub mod ir;
 pub mod jvm;
 pub(crate) mod macros;

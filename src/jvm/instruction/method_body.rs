@@ -6,8 +6,8 @@ use std::{
 use crate::{
     jvm::{
         annotation::TypeAnnotation,
+        class::ClassReference,
         parsing::code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-        references::ClassReference,
     },
     types::FieldType,
 };

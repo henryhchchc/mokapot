@@ -1,5 +1,6 @@
-use super::references::{ClassReference, ModuleReference, PackageReference};
 use bitflags::bitflags;
+
+use super::class::ClassReference;
 
 #[derive(Debug)]
 pub struct Module {
@@ -81,4 +82,18 @@ bitflags! {
         /// Indicates that this opening was implicitly declared in the source of the module declaration.
         const MANDATED = 0x8000;
     }
+}
+
+/// A reference to a module in the binary format.
+#[derive(Debug)]
+pub struct ModuleReference {
+    /// The name of the module.
+    pub name: String,
+}
+
+/// A reference to a package in the binary format.
+#[derive(Debug)]
+pub struct PackageReference {
+    /// The binary name of the package.
+    pub binary_name: String,
 }

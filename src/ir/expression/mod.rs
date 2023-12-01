@@ -5,10 +5,10 @@ use itertools::Itertools;
 use super::Argument;
 
 use crate::jvm::{
+    class::ClassReference,
+    field::ConstantValue,
     instruction::ProgramCounter,
-    method::MethodDescriptor,
-    references::{ClassReference, MethodReference},
-    ConstantValue,
+    method::{MethodDescriptor, MethodReference},
 };
 
 mod array;

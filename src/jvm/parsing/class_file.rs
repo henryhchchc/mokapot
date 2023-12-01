@@ -1,6 +1,6 @@
 use crate::{
-    errors::ClassFileParsingError,
     jvm::class::{BootstrapMethod, InnerClassInfo, RecordComponent},
+    jvm::ClassFileParsingError,
 };
 
 use super::{

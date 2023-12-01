@@ -1,18 +1,18 @@
 use core::str;
-use std::str::{Chars, FromStr};
+use std::{
+    fmt::Display,
+    str::{Chars, FromStr},
+};
 
 use bitflags::bitflags;
 use itertools::Itertools;
 
-use crate::{
-    errors::InvalidDescriptor,
-    types::{FieldType, PrimitiveType},
-};
+use crate::types::{FieldType, PrimitiveType};
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
+    class::ClassReference,
     instruction::MethodBody,
-    references::{ClassReference, MethodReference},
 };
 
 #[derive(Debug)]
@@ -206,6 +206,10 @@ impl FromStr for MethodDescriptor {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("Invalid descriptor: {0}")]
+pub struct InvalidDescriptor(pub String);
+
 impl FromStr for ReturnType {
     type Err = InvalidDescriptor;
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
@@ -226,17 +230,45 @@ impl ReturnType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct MethodReference {
+    /// The reference to the class.
+    pub owner: ClassReference,
+    /// The name of the method.
+    pub name: String,
+    /// The descriptor of the method.
+    pub descriptor: MethodDescriptor,
+}
+
+impl MethodReference {
+    /// Checks if the method reference refers to a constructor.
+    pub fn is_constructor(&self) -> bool {
+        self.name == CONSTRUCTOR_NAME && matches!(self.descriptor.return_type, ReturnType::Void)
+    }
+
+    /// Checks if the method reference refers to a static initializer block.
+    pub fn is_static_initializer_block(&self) -> bool {
+        self.name == CLASS_INITIALIZER_NAME
+            && self.descriptor.parameters_types.is_empty()
+            && matches!(self.descriptor.return_type, ReturnType::Void)
+    }
+}
+
+impl Display for MethodReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.owner, self.name)
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use super::*;
 
     use crate::{
-        jvm::{method::ReturnType, references::ClassReference},
+        jvm::method::{MethodReference, ReturnType},
         types::FieldType,
         types::PrimitiveType::*,
     };
-
-    use super::MethodDescriptor;
 
     #[test]
     fn single_param() {
@@ -309,5 +341,27 @@ mod test {
         let descriptor = "(V[Ljava/lang/String;J)V";
         let method_descriptor = MethodDescriptor::from_str(descriptor);
         assert!(method_descriptor.is_err());
+    }
+
+    #[test]
+    fn test_is_constructor() {
+        let method = MethodReference {
+            owner: ClassReference::new("test"),
+            name: CONSTRUCTOR_NAME.to_string(),
+            descriptor: MethodDescriptor::from_str("()V").unwrap(),
+        };
+
+        assert!(method.is_constructor());
+    }
+
+    #[test]
+    fn test_is_static_initializer_bolck() {
+        let method = MethodReference {
+            owner: ClassReference::new("test"),
+            name: CLASS_INITIALIZER_NAME.to_string(),
+            descriptor: MethodDescriptor::from_str("()V").unwrap(),
+        };
+
+        assert!(method.is_static_initializer_block());
     }
 }

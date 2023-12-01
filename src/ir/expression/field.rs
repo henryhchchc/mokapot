@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{ir::Argument, jvm::references::FieldReference};
+use crate::{ir::Argument, jvm::field::FieldReference};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FieldAccess {

@@ -1,4 +1,4 @@
-use crate::jvm::instruction::InvalidOffset;
+use crate::jvm::{instruction::InvalidOffset, method::InvalidDescriptor};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {
@@ -46,7 +46,3 @@ pub enum ClassFileParsingError {
     #[error("Invalid UTF-8 string")]
     BrokenUTF8,
 }
-
-#[derive(Debug, thiserror::Error)]
-#[error("Invalid descriptor: {0}")]
-pub struct InvalidDescriptor(pub String);

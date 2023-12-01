@@ -4,9 +4,8 @@ use crate::types::FieldType;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    class::Handle,
+    class::{ClassReference, Handle},
     method::MethodDescriptor,
-    references::{ClassReference, FieldReference},
 };
 
 #[derive(Debug)]
@@ -121,12 +120,30 @@ bitflags! {
     }
 }
 
+/// A reference to a field.
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct FieldReference {
+    /// A reference to the class that contains the field.
+    pub class: ClassReference,
+    /// The name of the field.
+    pub name: String,
+
+    /// The type of the field.
+    pub field_type: FieldType,
+}
+
+impl Display for FieldReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.class, self.name)
+    }
+}
+
 #[cfg(test)]
 mod test {
 
     use std::str::FromStr;
 
-    use crate::jvm::references::ClassReference;
+    use crate::jvm::class::ClassReference;
     use crate::types::PrimitiveType::*;
     use crate::types::{FieldType, PrimitiveType};
 

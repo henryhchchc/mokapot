@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 
-use crate::{errors::InvalidDescriptor, jvm::references::ClassReference};
+use crate::jvm::{class::ClassReference, method::InvalidDescriptor};
 
 /// A primitive type in Java.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -117,3 +117,6 @@ impl FieldType {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeReference(pub FieldType);

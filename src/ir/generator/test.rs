@@ -1,4 +1,4 @@
-use crate::jvm::{Class, Method};
+use crate::jvm::{class::Class, method::Method};
 
 use super::MokaIRMethodExt;
 

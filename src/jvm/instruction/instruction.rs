@@ -2,11 +2,11 @@ use std::ops::RangeInclusive;
 
 use crate::{
     jvm::{
-        field::ConstantValue,
-        references::{ClassReference, FieldReference, MethodReference, TypeReference},
-        MethodDescriptor,
+        class::ClassReference,
+        field::{ConstantValue, FieldReference},
+        method::{MethodDescriptor, MethodReference},
     },
-    types::PrimitiveType,
+    types::{PrimitiveType, TypeReference},
 };
 
 use super::ProgramCounter;

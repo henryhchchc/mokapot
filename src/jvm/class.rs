@@ -1,12 +1,12 @@
+use std::fmt::Display;
+
 use bitflags::bitflags;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    field::{ConstantValue, Field},
-    method::Method,
-    module::Module,
-    references::{ClassReference, FieldReference, MethodReference, PackageReference},
-    MethodDescriptor,
+    field::{ConstantValue, Field, FieldReference},
+    method::{Method, MethodDescriptor, MethodReference},
+    module::{Module, PackageReference},
 };
 
 #[derive(Debug)]
@@ -54,6 +54,28 @@ pub struct ClassVersion {
     pub major: u16,
     /// the minor version number.
     pub minor: u16,
+}
+
+/// A reference to a class in the binary format.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct ClassReference {
+    /// The binary name of the class.
+    pub binary_name: String,
+}
+
+impl ClassReference {
+    /// Creates a new class reference.
+    pub fn new<S: Into<String>>(binary_name: S) -> Self {
+        ClassReference {
+            binary_name: binary_name.into(),
+        }
+    }
+}
+
+impl Display for ClassReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.binary_name)
+    }
 }
 
 #[derive(Debug)]

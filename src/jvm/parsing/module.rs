@@ -1,9 +1,9 @@
 use crate::{
-    errors::ClassFileParsingError,
     jvm::module::{
         Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
         ModuleProvide, ModuleRequire, ModuleRequireFlags,
     },
+    jvm::ClassFileParsingError,
 };
 
 use super::{

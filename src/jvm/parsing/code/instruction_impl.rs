@@ -2,7 +2,7 @@ use std::{io::Read, str::FromStr};
 
 use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
-    errors::ClassFileParsingError,
+    jvm::ClassFileParsingError,
     jvm::{
         field::ConstantValue,
         instruction::{Instruction, InstructionList, ProgramCounter},

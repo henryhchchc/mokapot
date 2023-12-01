@@ -11,7 +11,7 @@ use std::{
 
 use crate::jvm::{
     instruction::{ExceptionTableEntry, MethodBody, ProgramCounter},
-    Method, MethodAccessFlags,
+    method::{Method, MethodAccessFlags},
 };
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};

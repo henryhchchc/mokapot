@@ -1,8 +1,10 @@
 use super::{attribute::Attribute, constant_pool::ConstantPool};
 use crate::{
-    errors::ClassFileParsingError,
+    jvm::ClassFileParsingError,
     jvm::{
-        field::Field, references::ClassReference, Class, ClassAccessFlags, ClassVersion, Method,
+        class::{Class, ClassAccessFlags, ClassReference, ClassVersion},
+        field::Field,
+        method::Method,
     },
     macros::fill_once,
 };
@@ -176,11 +178,10 @@ mod test {
     use std::io::BufReader;
 
     use crate::{
-        errors::ClassFileParsingError,
+        jvm::ClassFileParsingError,
         jvm::{
-            class::{Class, ClassAccessFlags},
+            class::{Class, ClassAccessFlags, ClassReference},
             method::ReturnType,
-            references::ClassReference,
         },
         types::{FieldType, PrimitiveType},
     };

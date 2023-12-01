@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
 use crate::{
-    errors::ClassFileParsingError,
+    jvm::ClassFileParsingError,
     jvm::{
+        class::{ClassReference, ClassVersion},
         instruction::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
             StackMapFrame,
@@ -12,8 +13,6 @@ use crate::{
             MethodParameterAccessFlags, CLASS_INITIALIZER_NAME,
         },
         parsing::parsing_context::ParsingContext,
-        references::ClassReference,
-        ClassVersion,
     },
     macros::fill_once,
 };

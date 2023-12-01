@@ -1,14 +1,11 @@
-use crate::{
-    errors::ClassFileParsingError,
-    jvm::{
-        annotation::{Annotation, ElementValue, TypeAnnotation},
-        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
-        field::ConstantValue,
-        instruction::{LineNumberTableEntry, MethodBody, StackMapFrame},
-        method::MethodParameter,
-        module::Module,
-        references::{ClassReference, PackageReference},
-    },
+use crate::jvm::{
+    annotation::{Annotation, ElementValue, TypeAnnotation},
+    class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
+    field::ConstantValue,
+    instruction::{LineNumberTableEntry, MethodBody, StackMapFrame},
+    method::MethodParameter,
+    module::{Module, PackageReference},
+    ClassFileParsingError,
 };
 
 use super::{

@@ -1,6 +1,6 @@
 use super::super::reader_utils::{read_u16, read_u8};
 use crate::{
-    errors::ClassFileParsingError,
+    jvm::ClassFileParsingError,
     jvm::{
         instruction::{StackMapFrame, VerificationTypeInfo},
         parsing::parsing_context::ParsingContext,

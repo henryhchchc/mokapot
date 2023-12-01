@@ -80,10 +80,10 @@ pub(crate) fn parse_multiple<R, T, P>(
     reader: &mut R,
     ctx: &ParsingContext,
     parse: P,
-) -> Result<Vec<T>, crate::errors::ClassFileParsingError>
+) -> Result<Vec<T>, crate::jvm::ClassFileParsingError>
 where
     R: std::io::Read,
-    P: Fn(&mut R, &ParsingContext) -> Result<T, crate::errors::ClassFileParsingError>,
+    P: Fn(&mut R, &ParsingContext) -> Result<T, crate::jvm::ClassFileParsingError>,
 {
     use std::iter::repeat_with;
 

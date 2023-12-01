@@ -4,7 +4,7 @@ mod class_file;
 mod class_parser;
 pub(crate) mod code;
 mod constant_pool;
-pub mod error;
+pub(super) mod errors;
 mod field_info;
 mod method_info;
 mod module;

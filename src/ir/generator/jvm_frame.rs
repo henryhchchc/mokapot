@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fmt::Display};
 use crate::{
     analysis::fixed_point::FixedPointFact,
     ir::{Argument, Identifier},
-    jvm::{instruction::ProgramCounter, MethodDescriptor},
+    jvm::{instruction::ProgramCounter, method::MethodDescriptor},
     types::{FieldType, PrimitiveType},
     utils::try_merge,
 };

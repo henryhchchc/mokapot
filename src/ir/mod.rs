@@ -9,9 +9,9 @@ pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
 use crate::jvm::{
+    class::ClassReference,
     instruction::{ExceptionTableEntry, ProgramCounter},
-    references::ClassReference,
-    MethodAccessFlags, MethodDescriptor,
+    method::{MethodAccessFlags, MethodDescriptor},
 };
 
 pub struct MokaIRMethod {
