@@ -1,3 +1,4 @@
+//! Module for fixed point analysis
 use std::collections::{BTreeMap, VecDeque};
 
 /// A trait for fixed-point analysis.

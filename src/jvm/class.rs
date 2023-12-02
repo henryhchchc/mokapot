@@ -1,3 +1,4 @@
+//! Module for the APIs for the class in JVM.
 use std::fmt::Display;
 
 use bitflags::bitflags;

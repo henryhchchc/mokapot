@@ -1,3 +1,4 @@
+//! Module for the APIs for the executable code in JVM.
 mod instruction;
 mod method_body;
 mod pc;

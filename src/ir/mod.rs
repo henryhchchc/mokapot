@@ -1,4 +1,4 @@
-/// A module for the expressions in Moka IR.
+//! Module containing the APIs for the Moka IR.
 pub mod expression;
 mod generator;
 mod moka_instruction;

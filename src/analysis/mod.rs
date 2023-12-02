@@ -1,2 +1,2 @@
-/// Module for fixed point analysis
+//! Module containing the APIs for static analysis.
 pub mod fixed_point;

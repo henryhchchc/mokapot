@@ -1,3 +1,4 @@
+//! Module for the expressions in Moka IR.
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;

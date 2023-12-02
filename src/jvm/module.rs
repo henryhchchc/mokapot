@@ -1,3 +1,4 @@
+//! Module for the APIs for the JPMS modules in JVM.
 use bitflags::bitflags;
 
 use super::class::ClassReference;
