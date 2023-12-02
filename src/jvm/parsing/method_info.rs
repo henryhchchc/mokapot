@@ -10,7 +10,7 @@ use crate::{
         },
         method::{
             Method, MethodAccessFlags, MethodDescriptor, MethodParameter,
-            MethodParameterAccessFlags, CLASS_INITIALIZER_NAME,
+            MethodParameterAccessFlags,
         },
         parsing::parsing_context::ParsingContext,
     },
@@ -94,13 +94,13 @@ impl Attribute {
                 let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
                 let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
                 match Attribute::LocalVariableTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::new());
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
                     for LocalVariableDescAttr { id, name, field_type } in it {
                         table.merge_type(id, name, field_type)?;
                     }
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::new());
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
                     for LocalVariableTypeAttr { id, name, signature } in it {
                         table.merge_signature(id, name, signature)?;
                     }
@@ -254,7 +254,7 @@ impl Method {
         // If the method is either `native` or `abstract`, and is not a class or interface initialization method
         if (access_flags.contains(MethodAccessFlags::NATIVE)
             || access_flags.contains(MethodAccessFlags::ABSTRACT))
-            && name != CLASS_INITIALIZER_NAME
+            && name != Method::CLASS_INITIALIZER_NAME
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
@@ -276,7 +276,7 @@ impl Method {
                 major: 51,
                 minor: 0,
             })
-            && name == CLASS_INITIALIZER_NAME
+            && name == Method::CLASS_INITIALIZER_NAME
         {
             // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
             if !access_flags.contains(MethodAccessFlags::STATIC)

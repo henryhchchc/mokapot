@@ -20,11 +20,17 @@ impl StackMapFrame {
             0..=63 => Self::SameFrame {
                 offset_delta: frame_type as u16,
             },
-            64..=127 => Self::SameLocals1StackItemFrame(VerificationTypeInfo::parse(reader, ctx)?),
+            64..=127 => Self::SameLocals1StackItemFrame {
+                offset_delta: frame_type as u16 - 64,
+                stack: VerificationTypeInfo::parse(reader, ctx)?,
+            },
             247 => {
                 let offset_delta = read_u16(reader)?;
                 let stack = VerificationTypeInfo::parse(reader, ctx)?;
-                Self::Semantics1StackItemFrameExtended(offset_delta, stack)
+                Self::SameLocals1StackItemFrame {
+                    offset_delta,
+                    stack,
+                }
             }
             248..=250 => {
                 let chop_count = 251 - frame_type;
@@ -36,7 +42,7 @@ impl StackMapFrame {
             }
             251 => {
                 let offset_delta = read_u16(reader)?;
-                Self::SameFrameExtended { offset_delta }
+                Self::SameFrame { offset_delta }
             }
             252..=254 => {
                 let offset_delta = read_u16(reader)?;

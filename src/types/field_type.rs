@@ -70,10 +70,14 @@ impl FromStr for PrimitiveType {
     }
 }
 
+/// A field type (non-generic) in Java.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum FieldType {
+    /// A primitive type.
     Base(PrimitiveType),
+    /// A reference type (except arrays).
     Object(ClassReference),
+    /// An array type.
     Array(Box<FieldType>),
 }
 
@@ -103,6 +107,7 @@ impl FromStr for FieldType {
 }
 
 impl FieldType {
+    /// Creates an array type with the given type as its elements.
     pub fn make_array_type(&self) -> Self {
         Self::Array(Box::new(self.clone()))
     }
@@ -118,5 +123,6 @@ impl FieldType {
     }
 }
 
+/// A reference to a [`FieldType`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct TypeReference(pub FieldType);

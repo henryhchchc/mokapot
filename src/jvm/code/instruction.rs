@@ -1,4 +1,4 @@
-use std::{ops::RangeInclusive, collections::BTreeMap};
+use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use crate::{
     jvm::{
@@ -14,6 +14,7 @@ use super::ProgramCounter;
 /// A JVM instruction.
 /// See [the JVM specification](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5) for more information.
 #[derive(Debug, PartialEq, Clone)]
+#[allow(missing_docs)]
 pub enum Instruction {
     // Constants
     Nop,

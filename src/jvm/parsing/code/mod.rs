@@ -124,7 +124,7 @@ impl VerificationTypeInfo {
                 Self::ObjectVariable(class_ref)
             }
             8 => {
-                let offset = read_u16(reader)?;
+                let offset = read_u16(reader)?.into();
                 Self::UninitializedVariable { offset }
             }
             _ => Err(ClassFileParsingError::InvalidVerificationTypeInfoTag(tag))?,

@@ -15,6 +15,7 @@ use super::{
 };
 
 impl Class {
+    /// Parses a class file from the given reader.
     pub fn from_reader<R>(reader: R) -> Result<Class, ClassFileParsingError>
     where
         R: std::io::Read,

@@ -54,10 +54,13 @@ impl From<ProgramCounter> for u16 {
     }
 }
 
+/// An error occurring when trying to offset a program counter.
 #[derive(thiserror::Error, Debug)]
 pub enum InvalidOffset {
+    /// When the offset is given as an [`i16`].
     #[error("Invalid i16 offset {0}")]
     I16(i16),
+    /// When the offset is given as an [`i32`].
     #[error("Invalid i32 offset {0}")]
     I32(i32),
 }

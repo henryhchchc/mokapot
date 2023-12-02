@@ -2,6 +2,8 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
+use crate::types::FieldType;
+
 use super::{
     annotation::{Annotation, TypeAnnotation},
     field::{ConstantValue, Field, FieldReference},
@@ -12,6 +14,7 @@ use super::{
 pub use super::parsing::errors::ClassFileParsingError;
 
 /// A JVM class
+/// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
 #[derive(Debug)]
 pub struct Class {
     /// The version of the class file.
@@ -109,47 +112,77 @@ impl Display for ClassReference {
     }
 }
 
+/// The information of an inner class.
 #[derive(Debug)]
 pub struct InnerClassInfo {
+    /// The inner class.
     pub inner_class: ClassReference,
+    /// The outer class.
     pub outer_class: Option<ClassReference>,
+    /// The name of the inner class.
     pub inner_name: Option<String>,
+    /// The access flags of the inner class.
     pub inner_class_access_flags: NestedClassAccessFlags,
 }
 
+/// The information of an enclosing method of a [`Class`].
 #[derive(Debug)]
 pub struct EnclosingMethod {
+    /// The class being enclosed.
     pub class: ClassReference,
+    /// The name and descriptor of the enclosing method.
     pub method_name_and_desc: Option<(String, MethodDescriptor)>,
 }
 
+/// The information of a bootstrap method.
 #[derive(Debug)]
 pub struct BootstrapMethod {
+    /// The method handle of the bootstrap method.
     pub method: MethodHandle,
+    /// The argument that are passed to the bootstrap method.
     pub arguments: Vec<ConstantValue>,
 }
 
+/// A method handle.
+/// See the [JVM Specification §4.4.8](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.8) for more information.
 #[derive(Debug, PartialEq, Clone)]
 pub enum MethodHandle {
+    /// Get an instance field.
     RefGetField(FieldReference),
+    /// Get a static field.
     RefGetStatic(FieldReference),
+    /// Writes to an instance field.
     RefPutField(FieldReference),
+    /// Writes to a static field.
     RefPutStatic(FieldReference),
+    /// Invoke an instance method.
     RefInvokeVirtual(MethodReference),
+    /// Invoke a static method.
     RefInvokeStatic(MethodReference),
+    /// Invoke a special method (e.g., a constructor).
     RefInvokeSpecial(MethodReference),
+    /// The new version a special method (e.g., a constructor).
     RefNewInvokeSpecial(MethodReference),
+    /// Invoke an interface method.
     RefInvokeInterface(MethodReference),
 }
 
+/// The record components of a [`Class`] that represents a `record`.
 #[derive(Debug)]
 pub struct RecordComponent {
+    /// The name of the component.
     pub name: String,
-    pub descriptor: String,
+    /// The type of the component.
+    pub component_type: FieldType,
+    /// The generic signature of the component.
     pub signature: Option<String>,
+    /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
+    /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
+    /// The runtime visible type annotations.
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
 }
 

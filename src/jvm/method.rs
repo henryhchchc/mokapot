@@ -15,39 +15,60 @@ use super::{
     code::MethodBody,
 };
 
+/// A JVM method.
+/// See the [JVM Specification §4.6](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.6) for more information.
 #[derive(Debug)]
 pub struct Method {
+    /// The access flags of the method.
     pub access_flags: MethodAccessFlags,
+    /// The name of the method.
     pub name: String,
+    /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
+    /// The class containing the method.
     pub owner: ClassReference,
+    /// The body of the method if it is not `abstract`` or `native`.
     pub body: Option<MethodBody>,
+    /// The checked exceptions that may be thrown by the method.
     pub excaptions: Vec<ClassReference>,
+    /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
+    /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
+    /// The runtime visible type annotations.
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// The runtime visible parameter annotations.
     pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
+    /// The runtime invisible parameter annotations.
     pub runtime_invisible_parameter_annotations: Vec<Vec<Annotation>>,
+    /// The default value of the annotation.
     pub annotation_default: Option<ElementValue>,
+    /// The parameters of the method.
     pub parameters: Vec<MethodParameter>,
+    /// Indicates if the method is synthesized by the compiler.
     pub is_synthetic: bool,
+    /// Indicates if the method is deprecated.
     pub is_deprecated: bool,
+    /// The generic signature.
     pub signature: Option<String>,
 }
 
-pub const CLASS_INITIALIZER_NAME: &str = "<clinit>";
-pub const CONSTRUCTOR_NAME: &str = "<init>";
-
 impl Method {
+    /// The method of a static initializer block.
+    pub const CLASS_INITIALIZER_NAME: &'static str = "<clinit>";
+    /// The method of a constructor.
+    pub const CONSTRUCTOR_NAME: &'static str = "<init>";
+
     /// Checks if the method is a constructor.
     pub fn is_constructor(&self) -> bool {
-        self.name == CONSTRUCTOR_NAME
+        self.name == Self::CONSTRUCTOR_NAME
     }
 
     /// Checks if the method is a static initializer block.
     pub fn is_static_initializer_block(&self) -> bool {
-        self.name == CLASS_INITIALIZER_NAME
+        self.name == Self::CLASS_INITIALIZER_NAME
     }
 
     /// Creates a [`MethodReference`] pointting to this method.
@@ -60,9 +81,12 @@ impl Method {
     }
 }
 
+/// The information of a method parameter.
 #[derive(Debug)]
 pub struct MethodParameter {
+    /// The name of the parameter.
     pub name: String,
+    /// The access flags of the parameter.
     pub access_flags: MethodParameterAccessFlags,
 }
 
@@ -159,12 +183,12 @@ impl MethodDescriptor {
     /// ````
     fn parse_single_param(
         prefix: char,
-        remaining: &mut Chars,
+        remaining: &mut Chars<'_>,
     ) -> Result<FieldType, InvalidDescriptor> {
         if let Ok(p) = PrimitiveType::try_from(prefix) {
             return Ok(FieldType::Base(p));
         }
-        let build_err = |rem: &Chars| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
+        let build_err = |rem: &Chars<'_>| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
         match prefix {
             'L' => {
                 let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
@@ -206,6 +230,7 @@ impl FromStr for MethodDescriptor {
     }
 }
 
+/// An error indicating that the descriptor string is invalid.
 #[derive(Debug, thiserror::Error)]
 #[error("Invalid descriptor: {0}")]
 pub struct InvalidDescriptor(pub String);
@@ -230,9 +255,10 @@ impl ReturnType {
     }
 }
 
+/// A reference to a method.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MethodReference {
-    /// The reference to the class.
+    /// The reference to the class containing the method.
     pub owner: ClassReference,
     /// The name of the method.
     pub name: String,
@@ -243,12 +269,13 @@ pub struct MethodReference {
 impl MethodReference {
     /// Checks if the method reference refers to a constructor.
     pub fn is_constructor(&self) -> bool {
-        self.name == CONSTRUCTOR_NAME && matches!(self.descriptor.return_type, ReturnType::Void)
+        self.name == Method::CONSTRUCTOR_NAME
+            && matches!(self.descriptor.return_type, ReturnType::Void)
     }
 
     /// Checks if the method reference refers to a static initializer block.
     pub fn is_static_initializer_block(&self) -> bool {
-        self.name == CLASS_INITIALIZER_NAME
+        self.name == Method::CLASS_INITIALIZER_NAME
             && self.descriptor.parameters_types.is_empty()
             && matches!(self.descriptor.return_type, ReturnType::Void)
     }
@@ -347,7 +374,7 @@ mod test {
     fn test_is_constructor() {
         let method = MethodReference {
             owner: ClassReference::new("test"),
-            name: CONSTRUCTOR_NAME.to_string(),
+            name: Method::CONSTRUCTOR_NAME.to_string(),
             descriptor: MethodDescriptor::from_str("()V").unwrap(),
         };
 
@@ -358,7 +385,7 @@ mod test {
     fn test_is_static_initializer_bolck() {
         let method = MethodReference {
             owner: ClassReference::new("test"),
-            name: CLASS_INITIALIZER_NAME.to_string(),
+            name: Method::CLASS_INITIALIZER_NAME.to_string(),
             descriptor: MethodDescriptor::from_str("()V").unwrap(),
         };
 

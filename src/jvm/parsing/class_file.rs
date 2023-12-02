@@ -1,9 +1,12 @@
+use std::str::FromStr;
+
 use crate::{
     jvm::class::{
         BootstrapMethod, ClassFileParsingError, InnerClassInfo, NestedClassAccessFlags,
         RecordComponent,
     },
     macros::extract_attributes,
+    types::FieldType,
 };
 
 use super::{
@@ -153,7 +156,8 @@ impl Attribute {
                 let name_index = read_u16(reader)?;
                 let name = ctx.constant_pool.get_str(name_index)?.to_owned();
                 let descriptor_index = read_u16(reader)?;
-                let descriptor = ctx.constant_pool.get_str(descriptor_index)?.to_owned();
+                let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
+                let component_type = FieldType::from_str(descriptor)?;
 
                 let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
                 extract_attributes! {
@@ -168,7 +172,7 @@ impl Attribute {
 
                 Ok(RecordComponent {
                     name,
-                    descriptor,
+                    component_type,
                     signature,
                     runtime_visible_annotations: rt_visible_anno.unwrap_or_default(),
                     runtime_invisible_annotations: rt_invisible_anno.unwrap_or_default(),

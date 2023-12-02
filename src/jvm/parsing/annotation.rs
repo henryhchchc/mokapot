@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     jvm::{
-        annotation::{self, Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         class::ClassFileParsingError,
         code::LocalVariableId,
         field::{ConstantValue, JavaString},
