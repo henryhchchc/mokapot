@@ -23,14 +23,19 @@ pub use jvm_frame::JvmFrameError;
 use super::expression::Expression;
 use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
+/// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
 pub enum MokaIRGenerationError {
+    /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]
     ExecutionError(#[from] JvmFrameError),
+    /// An error that occurs when merging two stack frames.
     #[error("Error when merging two stack frames: {0}")]
     MergeError(JvmFrameError),
+    /// An error that occurs when a method does not have a body.
     #[error("The method does not have a body")]
     NoMethodBody,
+    /// An error that occurs when the method contains malformed control flow.
     #[error("The method contains malformed control flow")]
     MalformedControlFlow,
 }
@@ -203,6 +208,7 @@ impl<'m> MokaIRGenerator<'m> {
     }
 }
 
+/// An extension trait for [`Method`] that generates Moka IR.
 pub trait MokaIRMethodExt {
     /// Genreates Moka IR for the method.
     fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError>;

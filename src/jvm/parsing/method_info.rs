@@ -95,15 +95,15 @@ impl Attribute {
                 let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
                 match Attribute::LocalVariableTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTable::new());
-                    it.into_iter().for_each(|LocalVariableDescAttr { id, field_type }| {
-                        table.merge_type(id, field_type);
-                    });
+                    for LocalVariableDescAttr { id, name, field_type } in it {
+                        table.merge_type(id, name, field_type)?;
+                    }
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTable::new());
-                    it.into_iter().for_each(|LocalVariableTypeAttr { id, signature }| {
-                        table.merge_signature(id, signature);
-                    });
+                    for LocalVariableTypeAttr { id, name, signature } in it {
+                        table.merge_signature(id, name, signature)?;
+                    }
                 },
             }
         }

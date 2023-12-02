@@ -11,37 +11,66 @@ use super::{
 
 pub use super::parsing::errors::ClassFileParsingError;
 
+/// A JVM class
 #[derive(Debug)]
 pub struct Class {
+    /// The version of the class file.
     pub version: ClassVersion,
+    /// The access modifiers of the class.
     pub access_flags: ClassAccessFlags,
+    /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
     pub binary_name: String,
+    /// A reference to the superclass of the class.
+    /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
     pub super_class: Option<ClassReference>,
+    /// The interfaces implemented by the class.
     pub interfaces: Vec<ClassReference>,
+    /// The fields declared the class.
     pub fields: Vec<Field>,
+    /// The methods declared in the class.
     pub methods: Vec<Method>,
+    /// The path to the source file of the class.
     pub source_file: Option<String>,
+    /// The inner classes.
     pub inner_classes: Vec<InnerClassInfo>,
+    /// The outer class and method of the class.
     pub enclosing_method: Option<EnclosingMethod>,
+    /// The source debug extension.
     pub source_debug_extension: Vec<u8>,
+    /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
+    /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
+    /// The runtime visible type annotations.
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// The bootstrap methods of the class, which are used to generate dynamic callsites.
     pub bootstrap_methods: Vec<BootstrapMethod>,
+    /// The infomation of the module if the class is `module-info`.
     pub module: Option<Module>,
+    /// The packages of the module.
     pub module_packages: Vec<PackageReference>,
+    /// The main class of the module.
     pub module_main_class: Option<ClassReference>,
+    /// The nearest outer class of the class.
     pub nest_host: Option<ClassReference>,
+    /// The nested classes of the class.
     pub nest_members: Vec<ClassReference>,
+    /// The permitted subclasses of the class if the class is `sealed`.
     pub permitted_subclasses: Vec<ClassReference>,
+    /// Indicates whether the class is synthesized by the compiler.
     pub is_synthetic: bool,
+    /// Indicates whether the class is deprecated.
     pub is_deprecated: bool,
+    /// The generic signature of the class.
     pub signature: Option<String>,
+    /// The record components of the class if the class is `record`.
     pub record: Option<Vec<RecordComponent>>,
 }
 
 impl Class {
+    /// Gets a method of the class by its name and descriptor.
     pub fn get_method(&self, name: &str, descriptor: MethodDescriptor) -> Option<&Method> {
         self.methods
             .iter()
@@ -125,6 +154,7 @@ pub struct RecordComponent {
 }
 
 bitflags! {
+    /// The access flags of a [`Class`].
     #[derive(Debug, PartialEq, Eq)]
     pub struct ClassAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
@@ -149,7 +179,7 @@ bitflags! {
 }
 
 bitflags! {
-
+    /// The access flags of a nested class.
     #[derive(Debug, PartialEq, Eq)]
     pub struct NestedClassAccessFlags: u16 {
         /// Marked or implicitly `public` in source.

@@ -2,9 +2,11 @@ use std::str::FromStr;
 
 use crate::{
     jvm::{
-        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+        annotation::{self, Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
         class::ClassFileParsingError,
+        code::LocalVariableId,
         field::{ConstantValue, JavaString},
+        method::ReturnType,
     },
     types::FieldType,
 };
@@ -55,7 +57,8 @@ impl ElementValue {
             }
             'c' => {
                 let class_info_idx = read_u16(reader)?;
-                let return_descriptor = ctx.constant_pool.get_str(class_info_idx)?.to_owned();
+                let return_descriptor_str = ctx.constant_pool.get_str(class_info_idx)?.to_owned();
+                let return_descriptor = ReturnType::from_str(&return_descriptor_str)?;
                 Ok(Self::Class { return_descriptor })
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
@@ -119,27 +122,47 @@ impl TypeAnnotation {
     {
         let target_type = read_u8(reader)?;
         let target_info = match target_type {
-            0x00 | 0x01 => TargetInfo::TypeParameter(read_u8(reader)?),
-            0x10 => TargetInfo::SuperType(read_u16(reader)?),
-            0x11 | 0x12 => TargetInfo::TypeParameterBound(read_u8(reader)?, read_u8(reader)?),
+            0x00 | 0x01 => TargetInfo::TypeParameter {
+                index: read_u8(reader)?,
+            },
+            0x10 => TargetInfo::SuperType {
+                index: read_u16(reader)?,
+            },
+            0x11 | 0x12 => TargetInfo::TypeParameterBound {
+                type_parameter_index: read_u8(reader)?,
+                bound_index: read_u8(reader)?,
+            },
             0x13..=0x15 => TargetInfo::Empty,
-            0x16 => TargetInfo::FormalParameter(read_u8(reader)?),
-            0x17 => TargetInfo::Throws(read_u16(reader)?),
+            0x16 => TargetInfo::FormalParameter {
+                index: read_u8(reader)?,
+            },
+            0x17 => TargetInfo::Throws {
+                index: read_u16(reader)?,
+            },
             0x40 | 0x41 => {
                 let table_length = read_u16(reader)?;
                 let table = (0..table_length)
                     .map(|_| {
                         let start_pc = read_u16(reader)?;
                         let length = read_u16(reader)?;
+                        let effective_range = start_pc.into()..(start_pc + length).into();
                         let index = read_u16(reader)?;
-                        Ok((start_pc, length, index))
+                        Ok(LocalVariableId {
+                            effective_range,
+                            index,
+                        })
                     })
                     .collect::<Result<_, ClassFileParsingError>>()?;
                 TargetInfo::LocalVar(table)
             }
-            0x42 => TargetInfo::Catch(read_u16(reader)?),
+            0x42 => TargetInfo::Catch {
+                index: read_u16(reader)?,
+            },
             0x43..=0x46 => TargetInfo::Offset(read_u16(reader)?),
-            0x47..=0x4B => TargetInfo::TypeArgument(read_u16(reader)?, read_u8(reader)?),
+            0x47..=0x4B => TargetInfo::TypeArgument {
+                offset: read_u16(reader)?.into(),
+                index: read_u8(reader)?,
+            },
             _ => Err(ClassFileParsingError::InvalidTargetType(target_type))?,
         };
         let path_length = read_u8(reader)?;
@@ -147,6 +170,8 @@ impl TypeAnnotation {
             .map(|_| TypePathElement::parse(reader))
             .collect::<Result<_, _>>()?;
         let type_index = read_u16(reader)?;
+        let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
+        let annotation_type = FieldType::from_str(annotation_type_str)?;
         let num_element_value_pairs = read_u16(reader)?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
@@ -159,7 +184,7 @@ impl TypeAnnotation {
         Ok(TypeAnnotation {
             target_info,
             target_path,
-            type_index,
+            annotation_type,
             element_value_pairs,
         })
     }

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, BTreeMap},
     fmt::{Display, Formatter},
     iter::Once,
     ops::BitOr,
@@ -16,19 +16,30 @@ pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,
     /// Creates a definition by evaluating an [`Expression`].
-    Definition { def: LocalDef, expr: Expression },
+    Definition {
+        /// The identifier of the definition.
+        def: LocalDef,
+        /// The expression that defines the value.
+        expr: Expression,
+    },
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
     Jump {
+        /// The condition that must hold for the jump to occur.
+        /// It denotes an Unconditional jump if it is [`None`].
         condition: Option<Condition>,
+        /// The target of the jump.
         target: ProgramCounter,
     },
     /// Jump to the [`target`](MokaInstruction::Switch::default) corresponding to [`match_value`](MokaInstruction::Switch::match_value).
     /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
     Switch {
+        /// The value to match against the branches.
         match_value: Argument,
+        /// The branches of the switch.
+        branches: BTreeMap<i32, ProgramCounter>,
+        /// The target of the switch if no branches match.
         default: ProgramCounter,
-        branches: Vec<(i32, ProgramCounter)>,
     },
     /// Returns from the current method with a value if it is [`Some`].
     /// Otherwise, returns from the current method with `void`.
@@ -156,14 +167,18 @@ impl<'a> IntoIterator for &'a Argument {
     }
 }
 
+/// A unique identifier of a value defined in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(transparent)]
 pub struct LocalDef(u16);
 
 impl LocalDef {
+    /// Creates a new [`LocalDef`] with the given ID.
     pub const fn new(id: u16) -> Self {
         Self(id)
     }
+
+    /// Create an [`Argument`] by referencing this [`LocalDef`].
     pub fn as_argument(&self) -> Argument {
         Argument::Id((*self).into())
     }

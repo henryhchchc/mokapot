@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, collections::BTreeMap};
 
 use crate::{
     jvm::{
@@ -207,7 +207,7 @@ pub enum Instruction {
     },
     LookupSwitch {
         default: ProgramCounter,
-        match_targets: Vec<(i32, ProgramCounter)>,
+        match_targets: BTreeMap<i32, ProgramCounter>,
     },
     IReturn,
     LReturn,

@@ -6,24 +6,42 @@ use crate::types::FieldType;
 
 use super::super::Argument;
 
+/// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionOperation {
+    /// Converts an `int` to a `long`.
     Int2Long(Argument),
+    /// Converts an `int` to a `float`.
     Int2Float(Argument),
+    /// Converts an `int` to a `double`.
     Int2Double(Argument),
+    /// Converts a `long` to an `int`.
     Long2Int(Argument),
+    /// Converts a `long` to a `float`.
     Long2Float(Argument),
+    /// Converts a `long` to a `double`.
     Long2Double(Argument),
+    /// Converts a `float` to an `int`.
     Float2Int(Argument),
+    /// Converts a `float` to a `long`.
     Float2Long(Argument),
+    /// Converts a `float` to a `double`.
     Float2Double(Argument),
+    /// Converts a `double` to an `int`.
     Double2Int(Argument),
+    /// Converts a `double` to a `long`.
     Double2Long(Argument),
+    /// Converts a `double` to a `float`.
     Double2Float(Argument),
+    /// Converts an `int` to a `byte`.
     Int2Byte(Argument),
+    /// Converts an `int` to a `char`.
     Int2Char(Argument),
+    /// Converts an `int` to a `short`.
     Int2Short(Argument),
+    /// Checks if an object is an instance of a given type, and casts it to that type if so.
     CheckCast(Argument, FieldType),
+    /// Checks whether an object is an instance of a given type.
     InstanceOf(Argument, FieldType),
 }
 
@@ -31,21 +49,15 @@ impl Display for ConversionOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use ConversionOperation::*;
         match self {
-            Int2Long(operand) => write!(f, "int2long({})", operand),
-            Int2Float(operand) => write!(f, "int2float({})", operand),
-            Int2Double(operand) => write!(f, "int2double({})", operand),
-            Long2Int(operand) => write!(f, "long2int({})", operand),
-            Long2Float(operand) => write!(f, "long2float({})", operand),
-            Long2Double(operand) => write!(f, "long2double({})", operand),
-            Float2Int(operand) => write!(f, "float2int({})", operand),
-            Float2Long(operand) => write!(f, "float2long({})", operand),
-            Float2Double(operand) => write!(f, "float2double({})", operand),
-            Double2Int(operand) => write!(f, "double2int({})", operand),
-            Double2Long(operand) => write!(f, "double2long({})", operand),
-            Double2Float(operand) => write!(f, "double2float({})", operand),
-            Int2Byte(operand) => write!(f, "int2byte({})", operand),
-            Int2Char(operand) => write!(f, "int2char({})", operand),
-            Int2Short(operand) => write!(f, "int2short({})", operand),
+            Int2Long(arg) | Float2Long(arg) | Double2Long(arg) => write!(f, "{} as long", arg),
+            Long2Int(arg) | Float2Int(arg) | Double2Int(arg) => write!(f, "{} as int", arg),
+            Int2Float(arg) | Long2Float(arg) | Double2Float(arg) => write!(f, "{} as float", arg),
+            Int2Double(arg) | Long2Double(arg) | Float2Double(arg) => {
+                write!(f, "{} as double", arg)
+            }
+            Int2Byte(operand) => write!(f, "{} as byte", operand),
+            Int2Char(operand) => write!(f, "{} as char", operand),
+            Int2Short(operand) => write!(f, "{} as short", operand),
             CheckCast(operand, target_type) => {
                 write!(f, "{} as {}", operand, target_type.descriptor_string())
             }

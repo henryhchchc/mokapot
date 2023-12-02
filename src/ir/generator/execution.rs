@@ -322,12 +322,12 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            IfEq(target) => unitary_conditional_jump(frame, *target, Condition::Zero)?,
-            IfNe(target) => unitary_conditional_jump(frame, *target, Condition::NonZero)?,
-            IfLt(target) => unitary_conditional_jump(frame, *target, Condition::Negative)?,
-            IfGe(target) => unitary_conditional_jump(frame, *target, Condition::NonNegative)?,
-            IfGt(target) => unitary_conditional_jump(frame, *target, Condition::Positive)?,
-            IfLe(target) => unitary_conditional_jump(frame, *target, Condition::NonPositive)?,
+            IfEq(target) => unitary_conditional_jump(frame, *target, Condition::IsZero)?,
+            IfNe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonZero)?,
+            IfLt(target) => unitary_conditional_jump(frame, *target, Condition::IsNegative)?,
+            IfGe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonNegative)?,
+            IfGt(target) => unitary_conditional_jump(frame, *target, Condition::IsPositive)?,
+            IfLe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonPositive)?,
             IfNull(target) => unitary_conditional_jump(frame, *target, Condition::IsNull)?,
             IfNonNull(target) => unitary_conditional_jump(frame, *target, Condition::IsNotNull)?,
             IfICmpEq(target) | IfACmpEq(target) => {

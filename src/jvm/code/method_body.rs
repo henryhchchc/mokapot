@@ -1,10 +1,13 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    ops::RangeInclusive,
+    ops::{Range, RangeInclusive},
 };
 
 use crate::{
-    jvm::{annotation::TypeAnnotation, class::ClassReference},
+    jvm::{
+        annotation::TypeAnnotation,
+        class::{ClassFileParsingError, ClassReference},
+    },
     types::FieldType,
 };
 
@@ -107,27 +110,42 @@ impl LocalVariableTable {
         }
     }
 
-    pub(crate) fn merge_type(&mut self, key: LocalVariableId, field_type: FieldType) {
+    pub(crate) fn merge_type(
+        &mut self,
+        key: LocalVariableId,
+        name: String,
+        field_type: FieldType,
+    ) -> Result<(), ClassFileParsingError> {
         let entry = self.entries.entry(key).or_default();
+        // TODO: check if the name matches the existing one
+        entry.name = Some(name);
         entry.var_type = Some(field_type);
+        Ok(())
     }
 
-    pub(crate) fn merge_signature(&mut self, key: LocalVariableId, signature: String) {
+    pub(crate) fn merge_signature(
+        &mut self,
+        key: LocalVariableId,
+        name: String,
+        signature: String,
+    ) -> Result<(), ClassFileParsingError> {
         let entry = self.entries.entry(key).or_default();
+        // TODO: check if the name matches the existing one
+        entry.name = Some(name);
         entry.signature = Some(signature);
+        Ok(())
     }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct LocalVariableId {
-    pub start_pc: ProgramCounter,
-    pub length: ProgramCounter,
+    pub effective_range: Range<ProgramCounter>,
     pub index: u16,
-    pub name: String,
 }
 
 #[derive(Debug, Default)]
 pub struct LocalVariableTableEntry {
+    pub name: Option<String>,
     pub var_type: Option<FieldType>,
     pub signature: Option<String>,
 }

@@ -4,26 +4,42 @@ use itertools::Itertools;
 
 use crate::{ir::Argument, types::FieldType};
 
+/// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArrayOperation {
+    /// Create a new array.
     New {
+        /// The type of the elements in the array.
         element_type: FieldType,
+        /// The length of the array.
         length: Argument,
     },
+    /// Create a new multidimensional array.
     NewMultiDim {
+        /// The type of the elements in the array.
         element_type: FieldType,
+        /// The legths of each of the dimensions of the array.
         dimensions: Vec<Argument>,
     },
+    /// Gets an element from an array.
     Read {
+        /// The array to read from.
         array_ref: Argument,
+        /// The index of the element to read.
         index: Argument,
     },
+    /// Sets an element in an array.
     Write {
+        /// The array to write to.
         array_ref: Argument,
+        /// The index of the element to write.
         index: Argument,
+        /// The value to be written.
         value: Argument,
     },
+    /// Gets the length of an array.
     Length {
+        /// The array to get the length of.
         array_ref: Argument,
     },
 }

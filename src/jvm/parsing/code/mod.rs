@@ -19,12 +19,14 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {
     pub id: LocalVariableId,
+    pub name: String,
     pub field_type: FieldType,
 }
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableTypeAttr {
     pub id: LocalVariableId,
+    pub name: String,
     pub signature: String,
 }
 
@@ -50,8 +52,9 @@ impl LocalVariableDescAttr {
     where
         R: std::io::Read,
     {
-        let start_pc = read_u16(reader)?.into();
-        let length = read_u16(reader)?.into();
+        let start_pc = read_u16(reader)?;
+        let length = read_u16(reader)?;
+        let effective_range = start_pc.into()..(start_pc + length).into();
         let name_index = read_u16(reader)?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
@@ -59,12 +62,14 @@ impl LocalVariableDescAttr {
         let field_type = FieldType::from_str(descriptor)?;
         let index = read_u16(reader)?;
         let id = LocalVariableId {
-            start_pc,
-            length,
+            effective_range,
             index,
-            name,
         };
-        Ok(LocalVariableDescAttr { id, field_type })
+        Ok(LocalVariableDescAttr {
+            id,
+            name,
+            field_type,
+        })
     }
 }
 
@@ -76,20 +81,23 @@ impl LocalVariableTypeAttr {
     where
         R: std::io::Read,
     {
-        let start_pc = read_u16(reader)?.into();
-        let length = read_u16(reader)?.into();
+        let start_pc = read_u16(reader)?;
+        let length = read_u16(reader)?;
+        let effective_range = start_pc.into()..(start_pc + length).into();
         let name_index = read_u16(reader)?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let signature_index = read_u16(reader)?;
         let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
         let index = read_u16(reader)?;
         let id = LocalVariableId {
-            start_pc,
-            length,
-            name,
+            effective_range,
             index,
         };
-        Ok(LocalVariableTypeAttr { id, signature })
+        Ok(LocalVariableTypeAttr {
+            id,
+            name,
+            signature,
+        })
     }
 }
 

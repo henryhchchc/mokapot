@@ -53,7 +53,9 @@ pub enum Expression {
     New(ClassReference),
     /// A return address.
     Subroutine {
+        /// The address to return to.
         return_address: ProgramCounter,
+        /// The address where the subroutine starts.
         target: ProgramCounter,
     },
 }

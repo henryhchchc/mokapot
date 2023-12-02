@@ -1,4 +1,4 @@
-use std::{io::Read, str::FromStr};
+use std::{io::Read, str::FromStr, collections::BTreeMap};
 
 use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
@@ -334,7 +334,7 @@ impl Instruction {
                         let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
-                    .collect::<Result<Vec<_>, ClassFileParsingError>>()?;
+                    .collect::<Result<BTreeMap<_,_>, ClassFileParsingError>>()?;
                 LookupSwitch {
                     default,
                     match_targets,
