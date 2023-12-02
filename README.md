@@ -37,7 +37,7 @@ mokapot = { git = "https://github.com/henryhchchc/mokapot.git" }
 ### Parsing a class
 
 ```rust
-use mokapot::jvm::Class;
+use mokapot::jvm::class::Class;
 
 let reader: std::io::Read = todo!("Some reader for the byte code");
 let class = Class::from_reader(reader)?;
