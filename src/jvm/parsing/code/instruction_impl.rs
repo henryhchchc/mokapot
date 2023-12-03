@@ -1,10 +1,10 @@
-use std::{io::Read, str::FromStr, collections::BTreeMap};
+use std::{collections::BTreeMap, io::Read, str::FromStr};
 
 use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
     jvm::{
         class::ClassFileParsingError,
-        code::{Instruction, InstructionList, ProgramCounter},
+        code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         field::ConstantValue,
         method::MethodDescriptor,
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
@@ -334,7 +334,7 @@ impl Instruction {
                         let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
-                    .collect::<Result<BTreeMap<_,_>, ClassFileParsingError>>()?;
+                    .collect::<Result<BTreeMap<_, _>, ClassFileParsingError>>()?;
                 LookupSwitch {
                     default,
                     match_targets,
@@ -421,21 +421,22 @@ impl Instruction {
             0x5f => Swap,
             0xc4 => {
                 let wide_opcode = read_u8(reader)?;
-                match wide_opcode {
-                    0x15 => WideILoad(read_u16(reader)?),
-                    0x16 => WideLLoad(read_u16(reader)?),
-                    0x17 => WideFLoad(read_u16(reader)?),
-                    0x18 => WideDLoad(read_u16(reader)?),
-                    0x19 => WideALoad(read_u16(reader)?),
-                    0x36 => WideIStore(read_u16(reader)?),
-                    0x37 => WideLStore(read_u16(reader)?),
-                    0x38 => WideFStore(read_u16(reader)?),
-                    0x39 => WideDStore(read_u16(reader)?),
-                    0x3a => WideAStore(read_u16(reader)?),
-                    0xa9 => WideRet(read_u16(reader)?),
-                    0x84 => WideIInc(read_u16(reader)?, read_i16(reader)?),
+                let wide_insn = match wide_opcode {
+                    0x15 => WideInstruction::ILoad(read_u16(reader)?),
+                    0x16 => WideInstruction::LLoad(read_u16(reader)?),
+                    0x17 => WideInstruction::FLoad(read_u16(reader)?),
+                    0x18 => WideInstruction::DLoad(read_u16(reader)?),
+                    0x19 => WideInstruction::ALoad(read_u16(reader)?),
+                    0x36 => WideInstruction::IStore(read_u16(reader)?),
+                    0x37 => WideInstruction::LStore(read_u16(reader)?),
+                    0x38 => WideInstruction::FStore(read_u16(reader)?),
+                    0x39 => WideInstruction::DStore(read_u16(reader)?),
+                    0x3a => WideInstruction::AStore(read_u16(reader)?),
+                    0xa9 => WideInstruction::Ret(read_u16(reader)?),
+                    0x84 => WideInstruction::IInc(read_u16(reader)?, read_i16(reader)?),
                     it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
-                }
+                };
+                Wide(wide_insn)
             }
             it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
         };

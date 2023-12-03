@@ -8,7 +8,7 @@ use crate::{
         Argument, LocalDef, MokaInstruction as IR,
     },
     jvm::{
-        code::{Instruction, ProgramCounter},
+        code::{Instruction, ProgramCounter, WideInstruction},
         field::ConstantValue,
         method::ReturnType,
     },
@@ -258,7 +258,7 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            WideIInc(idx, _) => {
+            Wide(WideInstruction::IInc(idx, _)) => {
                 let base = frame.get_local(*idx)?;
                 frame.set_local(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base);
@@ -361,7 +361,7 @@ impl MokaIRGenerator<'_> {
                 let return_address = frame.get_local(*idx)?;
                 IR::SubroutineRet(return_address)
             }
-            WideRet(idx) => {
+            Wide(WideInstruction::Ret(idx)) => {
                 let return_address = frame.get_local(*idx)?;
                 IR::SubroutineRet(return_address)
             }
@@ -565,22 +565,30 @@ impl MokaIRGenerator<'_> {
                 let expr = Expression::Synchronization(monitor_op);
                 IR::Definition { def, expr }
             }
-            WideILoad(idx) | WideFLoad(idx) | WideALoad(idx) => {
+            Wide(
+                WideInstruction::ILoad(idx)
+                | WideInstruction::FLoad(idx)
+                | WideInstruction::ALoad(idx),
+            ) => {
                 let value = frame.get_local(*idx)?;
                 frame.push_value(value)?;
                 IR::Nop
             }
-            WideLLoad(idx) | WideDLoad(idx) => {
+            Wide(WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx)) => {
                 let value = frame.get_dual_slot_local(*idx)?;
                 frame.push_dual_slot_value(value)?;
                 IR::Nop
             }
-            WideIStore(idx) | WideFStore(idx) | WideAStore(idx) => {
+            Wide(
+                WideInstruction::IStore(idx)
+                | WideInstruction::FStore(idx)
+                | WideInstruction::AStore(idx),
+            ) => {
                 let value = frame.pop_value()?;
                 frame.set_local(*idx, value)?;
                 IR::Nop
             }
-            WideLStore(idx) | WideDStore(idx) => {
+            Wide(WideInstruction::LStore(idx) | WideInstruction::DStore(idx)) => {
                 let value = frame.pop_dual_slot_value()?;
                 frame.set_dual_slot_local(*idx, value)?;
                 IR::Nop
