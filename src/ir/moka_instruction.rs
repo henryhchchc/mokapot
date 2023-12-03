@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, BTreeMap},
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     iter::Once,
     ops::BitOr,
@@ -17,8 +17,8 @@ pub enum MokaInstruction {
     Nop,
     /// Creates a definition by evaluating an [`Expression`].
     Definition {
-        /// The identifier of the definition.
-        def: LocalDef,
+        /// The value defined by the expression.
+        value: Value,
         /// The expression that defines the value.
         expr: Expression,
     },
@@ -52,7 +52,10 @@ impl Display for MokaInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
-            Self::Definition { def: def_id, expr } => write!(f, "{} := {}", def_id, expr),
+            Self::Definition {
+                value: def_id,
+                expr,
+            } => write!(f, "{} := {}", def_id, expr),
             Self::Jump {
                 condition: Some(condition),
                 target,
@@ -170,9 +173,9 @@ impl<'a> IntoIterator for &'a Argument {
 /// A unique identifier of a value defined in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(transparent)]
-pub struct LocalDef(u16);
+pub struct Value(u16);
 
-impl LocalDef {
+impl Value {
     /// Creates a new [`LocalDef`] with the given ID.
     pub const fn new(id: u16) -> Self {
         Self(id)
@@ -184,7 +187,7 @@ impl LocalDef {
     }
 }
 
-impl Display for LocalDef {
+impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "%{}", self.0)
     }
@@ -198,7 +201,7 @@ pub enum Identifier {
     /// An argument of the current method.
     Arg(u16),
     /// A locally defined value.
-    Def(LocalDef),
+    Value(Value),
     /// The exception caught by a `catch` block.
     CaughtException,
 }
@@ -209,15 +212,15 @@ impl Display for Identifier {
         match self {
             This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{}", idx),
-            Def(idx) => idx.fmt(f),
+            Value(idx) => idx.fmt(f),
             CaughtException => write!(f, "%caught_exception"),
         }
     }
 }
 
-impl From<LocalDef> for Identifier {
-    fn from(value: LocalDef) -> Self {
-        Self::Def(value)
+impl From<Value> for Identifier {
+    fn from(value: Value) -> Self {
+        Self::Value(value)
     }
 }
 

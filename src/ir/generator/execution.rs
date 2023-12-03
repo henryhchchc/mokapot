@@ -5,7 +5,7 @@ use crate::{
             ArrayOperation, Condition, ConversionOperation, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
-        Argument, LocalDef, MokaInstruction as IR,
+        Argument, MokaInstruction as IR, Value,
     },
     jvm::{
         code::{Instruction, ProgramCounter, WideInstruction},
@@ -23,57 +23,57 @@ impl MokaIRGenerator<'_> {
         frame: &mut JvmStackFrame,
     ) -> Result<IR, MokaIRGenerationError> {
         use Instruction::*;
-        let def = LocalDef::new(pc.into());
+        let def = Value::new(pc.into());
         let ir_instruction = match insn {
             Nop => IR::Nop,
             AConstNull => {
                 frame.push_value(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Null);
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
                 frame.push_value(def.as_argument())?;
                 let int_value = (insn.opcode() as i32) - 3;
                 let expr = Expression::Const(ConstantValue::Integer(int_value));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             LConst0 | LConst1 => {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let long_value = (insn.opcode() as i64) - 9;
                 let expr = Expression::Const(ConstantValue::Long(long_value));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             FConst0 | FConst1 | FConst2 => {
                 frame.push_value(def.as_argument())?;
                 let float_value = (insn.opcode() as f32) - 11.0;
                 let expr = Expression::Const(ConstantValue::Float(float_value));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             DConst0 | DConst1 => {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let double_value = (insn.opcode() as f64) - 14.0;
                 let expr = Expression::Const(ConstantValue::Double(double_value));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             BiPush(value) => {
                 frame.push_value(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Integer(*value as i32));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             SiPush(value) => {
                 frame.push_value(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Integer(*value as i32));
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             Ldc(value) | LdcW(value) => {
                 frame.push_value(def.as_argument())?;
                 let expr = Expression::Const(value.clone());
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             Ldc2W(value) => {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let expr = Expression::Const(value.clone());
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local(frame, *idx as u16)?,
             LLoad(idx) | DLoad(idx) => load_dual_slot_local(frame, *idx as u16)?,
@@ -92,7 +92,7 @@ impl MokaIRGenerator<'_> {
 
                 frame.push_value(Argument::Id(def.into()))?;
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -103,7 +103,7 @@ impl MokaIRGenerator<'_> {
 
                 frame.push_dual_slot_value(Argument::Id(def.into()))?;
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -128,7 +128,7 @@ impl MokaIRGenerator<'_> {
                 };
 
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -142,7 +142,7 @@ impl MokaIRGenerator<'_> {
                     value,
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -197,7 +197,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_value(def.as_argument())?;
                 let math_op = MathOperation::Negate(value);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -206,7 +206,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let math_op = MathOperation::Negate(operand);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -218,7 +218,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let math_op = MathOperation::ShiftLeft(base, shift_amount);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -228,7 +228,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let math_op = MathOperation::ShiftRight(base, shift_amount);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -238,7 +238,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_dual_slot_value(def.as_argument())?;
                 let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -254,7 +254,7 @@ impl MokaIRGenerator<'_> {
                 frame.set_local(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -263,7 +263,7 @@ impl MokaIRGenerator<'_> {
                 frame.set_local(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -288,7 +288,7 @@ impl MokaIRGenerator<'_> {
                 frame.push_value(def.as_argument())?;
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -303,7 +303,7 @@ impl MokaIRGenerator<'_> {
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -318,7 +318,7 @@ impl MokaIRGenerator<'_> {
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Math(math_op),
                 }
             }
@@ -355,7 +355,10 @@ impl MokaIRGenerator<'_> {
                     target: *target,
                 };
                 frame.push_value(def.as_argument())?;
-                IR::Definition { def, expr: value }
+                IR::Definition {
+                    value: def,
+                    expr: value,
+                }
             }
             Ret(idx) => {
                 let return_address = frame.get_local(*idx)?;
@@ -404,7 +407,7 @@ impl MokaIRGenerator<'_> {
                     field: field.clone(),
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Field(field_op),
                 }
             }
@@ -416,7 +419,7 @@ impl MokaIRGenerator<'_> {
                     field: field.clone(),
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Field(field_op),
                 }
             }
@@ -432,7 +435,7 @@ impl MokaIRGenerator<'_> {
                     value,
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Field(field_op),
                 }
             }
@@ -450,7 +453,7 @@ impl MokaIRGenerator<'_> {
                     value,
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Field(field_op),
                 }
             }
@@ -463,7 +466,10 @@ impl MokaIRGenerator<'_> {
                 if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
-                IR::Definition { def, expr: rhs }
+                IR::Definition {
+                    value: def,
+                    expr: rhs,
+                }
             }
             InvokeStatic(method_ref) => {
                 let arguments = frame.pop_args(&method_ref.descriptor)?;
@@ -471,7 +477,10 @@ impl MokaIRGenerator<'_> {
                 if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
-                IR::Definition { def, expr: rhs }
+                IR::Definition {
+                    value: def,
+                    expr: rhs,
+                }
             }
             InvokeDynamic {
                 descriptor,
@@ -488,12 +497,15 @@ impl MokaIRGenerator<'_> {
                 if let ReturnType::Some(return_type) = &descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
-                IR::Definition { def, expr: rhs }
+                IR::Definition {
+                    value: def,
+                    expr: rhs,
+                }
             }
             New(class) => {
                 frame.push_value(def.as_argument())?;
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::New(class.clone()),
                 }
             }
@@ -505,7 +517,7 @@ impl MokaIRGenerator<'_> {
                     length: count,
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -517,7 +529,7 @@ impl MokaIRGenerator<'_> {
                     length: count,
                 };
                 IR::Definition {
-                    def,
+                    value: def,
                     expr: Expression::Array(array_op),
                 }
             }
@@ -530,18 +542,18 @@ impl MokaIRGenerator<'_> {
                     element_type: element_type.clone(),
                     dimensions: counts,
                 });
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             ArrayLength => {
                 let array_ref = frame.pop_value()?;
                 frame.push_value(def.as_argument())?;
                 let expr = Expression::Array(ArrayOperation::Length { array_ref });
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             AThrow => {
                 let exception_ref = frame.pop_value()?;
                 let expr = Expression::Throw(exception_ref);
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             CheckCast(TypeReference(target_type)) => {
                 conversion_op::<_, false, false>(frame, def, |value| {
@@ -557,13 +569,13 @@ impl MokaIRGenerator<'_> {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Acquire(object_ref);
                 let expr = Expression::Synchronization(monitor_op);
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             MonitorExit => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Release(object_ref);
                 let expr = Expression::Synchronization(monitor_op);
-                IR::Definition { def, expr }
+                IR::Definition { value: def, expr }
             }
             Wide(
                 WideInstruction::ILoad(idx)
@@ -663,7 +675,7 @@ where
 #[inline]
 fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
     frame: &mut JvmStackFrame,
-    def_id: LocalDef,
+    def_id: Value,
     conversion: C,
 ) -> Result<IR, MokaIRGenerationError>
 where
@@ -680,7 +692,7 @@ where
         frame.push_value(def_id.as_argument())?;
     }
     Ok(IR::Definition {
-        def: def_id,
+        value: def_id,
         expr: Expression::Conversion(conversion(operand)),
     })
 }
@@ -688,7 +700,7 @@ where
 #[inline]
 fn binary_op_math<M>(
     frame: &mut JvmStackFrame,
-    def_id: LocalDef,
+    def_id: Value,
     math: M,
 ) -> Result<IR, MokaIRGenerationError>
 where
@@ -698,13 +710,16 @@ where
     let rhs = frame.pop_value()?;
     frame.push_value(def_id.as_argument())?;
     let expr = Expression::Math(math(lhs, rhs));
-    Ok(IR::Definition { def: def_id, expr })
+    Ok(IR::Definition {
+        value: def_id,
+        expr,
+    })
 }
 
 #[inline]
 fn binary_wide_math<M>(
     frame: &mut JvmStackFrame,
-    def_id: LocalDef,
+    def_id: Value,
     math: M,
 ) -> Result<IR, MokaIRGenerationError>
 where
@@ -714,5 +729,8 @@ where
     let rhs = frame.pop_dual_slot_value()?;
     frame.push_dual_slot_value(def_id.as_argument())?;
     let expr = Expression::Math(math(lhs, rhs));
-    Ok(IR::Definition { def: def_id, expr })
+    Ok(IR::Definition {
+        value: def_id,
+        expr,
+    })
 }
