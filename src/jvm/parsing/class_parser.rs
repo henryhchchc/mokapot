@@ -1,10 +1,10 @@
 use super::constant_pool::ConstantPool;
 use crate::{
-    jvm::class::ClassFileParsingError,
     jvm::{
         class::{Class, ClassAccessFlags, ClassReference, ClassVersion},
         field::Field,
         method::Method,
+        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
 };
@@ -16,7 +16,7 @@ use super::{
 
 impl Class {
     /// Parses a class file from the given reader.
-    pub fn from_reader<R>(reader: R) -> Result<Class, ClassFileParsingError>
+    pub fn from_reader<R>(reader: R) -> ClassFileParsingResult<Class>
     where
         R: std::io::Read,
     {
@@ -141,17 +141,17 @@ mod test {
     use std::io::BufReader;
 
     use crate::{
-        jvm::class::ClassFileParsingError,
         jvm::{
             class::{Class, ClassAccessFlags, ClassReference},
             method::ReturnType,
+            ClassFileParsingError, ClassFileParsingResult,
         },
         types::{FieldType, PrimitiveType},
     };
 
     /// Parses the class file compiled from `MyClass.java` from the `test_data` directory.
     /// The source code ot the class files is as follows.
-    fn parse_my_class() -> Result<Class, ClassFileParsingError> {
+    fn parse_my_class() -> ClassFileParsingResult<Class> {
         let bytes = include_bytes!(concat!(
             env!("OUT_DIR"),
             "/java_classes/org/pkg/MyClass.class"

@@ -5,8 +5,8 @@ use std::str::FromStr;
 
 use crate::{
     jvm::{
-        class::ClassFileParsingError,
         code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
+        ClassFileParsingError, ClassFileParsingResult,
     },
     types::FieldType,
 };
@@ -31,7 +31,7 @@ pub(crate) struct LocalVariableTypeAttr {
 }
 
 impl LineNumberTableEntry {
-    pub(super) fn parse<R>(reader: &mut R) -> Result<LineNumberTableEntry, ClassFileParsingError>
+    pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<LineNumberTableEntry>
     where
         R: std::io::Read,
     {
@@ -45,10 +45,7 @@ impl LineNumberTableEntry {
 }
 
 impl LocalVariableDescAttr {
-    pub(super) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -74,10 +71,7 @@ impl LocalVariableDescAttr {
 }
 
 impl LocalVariableTypeAttr {
-    pub(super) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -102,10 +96,7 @@ impl LocalVariableTypeAttr {
 }
 
 impl VerificationTypeInfo {
-    pub(super) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

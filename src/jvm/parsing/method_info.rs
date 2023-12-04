@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use crate::{
-    jvm::class::ClassFileParsingError,
     jvm::{
         class::{ClassReference, ClassVersion},
         code::{
@@ -13,6 +12,7 @@ use crate::{
             MethodParameterAccessFlags,
         },
         parsing::parsing_context::ParsingContext,
+        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
 };
@@ -24,7 +24,7 @@ use super::{
 };
 
 impl ExceptionTableEntry {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -50,7 +50,7 @@ impl Attribute {
     pub(super) fn parse_line_no_table<R>(
         reader: &mut R,
         _ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -66,7 +66,7 @@ impl Attribute {
     pub(super) fn parse_code<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -124,7 +124,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -140,7 +140,7 @@ impl Attribute {
     pub(super) fn parse_local_variable_type_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -156,7 +156,7 @@ impl Attribute {
     pub(super) fn parse_stack_map_table<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -171,7 +171,7 @@ impl Attribute {
     pub(super) fn parse_exceptions<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -188,7 +188,7 @@ impl Attribute {
     pub(super) fn parse_method_parameters<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -211,10 +211,7 @@ impl Attribute {
 }
 
 impl Method {
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

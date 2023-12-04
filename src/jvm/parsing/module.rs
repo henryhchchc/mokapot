@@ -1,8 +1,11 @@
 use crate::{
-    jvm::class::ClassFileParsingError,
-    jvm::module::{
-        Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
-        ModuleProvide, ModuleRequire, ModuleRequireFlags,
+    jvm::ClassFileParsingError,
+    jvm::{
+        module::{
+            Module, ModuleExport, ModuleExportFlags, ModuleFlags, ModuleOpen, ModuleOpenFlags,
+            ModuleProvide, ModuleRequire, ModuleRequireFlags,
+        },
+        ClassFileParsingResult,
     },
 };
 
@@ -16,7 +19,7 @@ impl ModuleRequire {
         reader: &mut R,
         requires_count: u16,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
@@ -43,7 +46,7 @@ impl ModuleRequire {
                     version,
                 })
             })
-            .collect::<Result<_, ClassFileParsingError>>()
+            .collect::<ClassFileParsingResult<_>>()
     }
 }
 
@@ -52,7 +55,7 @@ impl ModuleExport {
         reader: &mut R,
         count: u16,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
@@ -76,7 +79,7 @@ impl ModuleExport {
                 }
                 Ok(ModuleExport { package, flags, to })
             })
-            .collect::<Result<_, ClassFileParsingError>>()
+            .collect::<ClassFileParsingResult<_>>()
     }
 }
 
@@ -85,7 +88,7 @@ impl ModuleOpen {
         reader: &mut R,
         count: u16,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
@@ -109,7 +112,7 @@ impl ModuleOpen {
                 }
                 Ok(ModuleOpen { package, flags, to })
             })
-            .collect::<Result<_, ClassFileParsingError>>()
+            .collect::<ClassFileParsingResult<_>>()
     }
 }
 
@@ -118,7 +121,7 @@ impl ModuleProvide {
         reader: &mut R,
         count: u16,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Self>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Self>>
     where
         R: std::io::Read,
     {
@@ -135,7 +138,7 @@ impl ModuleProvide {
                 }
                 Ok(ModuleProvide { service, with })
             })
-            .collect::<Result<_, ClassFileParsingError>>()
+            .collect::<ClassFileParsingResult<_>>()
     }
 }
 
@@ -143,7 +146,7 @@ impl Attribute {
     pub(super) fn parse_module<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -195,7 +198,7 @@ impl Attribute {
     pub(super) fn parse_module_packages<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -211,7 +214,7 @@ impl Attribute {
     pub(super) fn parse_module_main_class<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

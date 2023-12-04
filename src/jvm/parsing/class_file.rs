@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use crate::{
-    jvm::class::{
-        BootstrapMethod, ClassFileParsingError, InnerClassInfo, NestedClassAccessFlags,
-        RecordComponent,
+    jvm::{
+        class::{BootstrapMethod, InnerClassInfo, NestedClassAccessFlags, RecordComponent},
+        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
     types::FieldType,
@@ -16,7 +16,7 @@ use super::{
 };
 
 impl BootstrapMethod {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -40,7 +40,7 @@ impl Attribute {
     pub fn parse_source_file<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -51,7 +51,7 @@ impl Attribute {
     pub fn parse_innner_classes<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -94,7 +94,7 @@ impl Attribute {
     pub(super) fn parse_source_debug_extension<R>(
         reader: &mut R,
         _ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -106,7 +106,7 @@ impl Attribute {
     pub(super) fn parse_bootstrap_methods<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -119,7 +119,7 @@ impl Attribute {
     pub(super) fn parse_nest_host<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -130,7 +130,7 @@ impl Attribute {
     pub(super) fn parse_nest_members<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -146,7 +146,7 @@ impl Attribute {
     pub(super) fn parse_record<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -180,14 +180,14 @@ impl Attribute {
                     runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
                 })
             })
-            .collect::<Result<_, ClassFileParsingError>>()?;
+            .collect::<ClassFileParsingResult<_>>()?;
         Ok(Self::Record(components))
     }
 
     pub(super) fn parse_permitted_subclasses<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

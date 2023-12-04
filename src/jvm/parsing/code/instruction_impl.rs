@@ -3,11 +3,11 @@ use std::{collections::BTreeMap, io::Read, str::FromStr};
 use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
     jvm::{
-        class::ClassFileParsingError,
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         field::ConstantValue,
         method::MethodDescriptor,
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
+        ClassFileParsingError, ClassFileParsingResult,
     },
     types::{FieldType, PrimitiveType},
 };
@@ -16,7 +16,7 @@ impl Instruction {
     pub(crate) fn parse_code(
         bytes: Vec<u8>,
         ctx: &ParsingContext,
-    ) -> Result<InstructionList, ClassFileParsingError> {
+    ) -> ClassFileParsingResult<InstructionList> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut instructions = InstructionList::new();
         while let Some((pc, instruction)) = Instruction::parse(&mut cursor, ctx)? {
@@ -28,7 +28,7 @@ impl Instruction {
     pub(crate) fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
         ctx: &ParsingContext,
-    ) -> Result<Option<(ProgramCounter, Self)>, ClassFileParsingError> {
+    ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {
         let pc = (reader.position() as u16).into();
         let opcode = match read_u8(reader) {
             Ok(it) => it,
@@ -334,7 +334,7 @@ impl Instruction {
                         let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
-                    .collect::<Result<BTreeMap<_, _>, ClassFileParsingError>>()?;
+                    .collect::<ClassFileParsingResult<BTreeMap<_, _>>>()?;
                 LookupSwitch {
                     default,
                     match_targets,
@@ -448,7 +448,7 @@ impl Instruction {
 pub(crate) fn read_offset32<R>(
     reader: &mut R,
     current_pc: ProgramCounter,
-) -> Result<ProgramCounter, ClassFileParsingError>
+) -> ClassFileParsingResult<ProgramCounter>
 where
     R: Read,
 {
@@ -460,7 +460,7 @@ where
 pub(crate) fn read_offset16<R>(
     reader: &mut R,
     current_pc: ProgramCounter,
-) -> Result<ProgramCounter, ClassFileParsingError>
+) -> ClassFileParsingResult<ProgramCounter>
 where
     R: Read,
 {

@@ -1,17 +1,12 @@
 use super::super::reader_utils::{read_u16, read_u8};
-use crate::{
-    jvm::class::ClassFileParsingError,
-    jvm::{
-        code::{StackMapFrame, VerificationTypeInfo},
-        parsing::parsing_context::ParsingContext,
-    },
+use crate::jvm::{
+    code::{StackMapFrame, VerificationTypeInfo},
+    parsing::parsing_context::ParsingContext,
+    ClassFileParsingError, ClassFileParsingResult,
 };
 
 impl StackMapFrame {
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

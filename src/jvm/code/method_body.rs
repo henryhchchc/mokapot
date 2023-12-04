@@ -4,10 +4,7 @@ use std::{
 };
 
 use crate::{
-    jvm::{
-        annotation::TypeAnnotation,
-        class::{ClassFileParsingError, ClassReference},
-    },
+    jvm::{annotation::TypeAnnotation, class::ClassReference, ClassFileParsingResult},
     types::FieldType,
 };
 
@@ -125,7 +122,7 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         field_type: FieldType,
-    ) -> Result<(), ClassFileParsingError> {
+    ) -> ClassFileParsingResult<()> {
         let entry = self.entries.entry(key).or_default();
         // TODO: check if the name matches the existing one
         entry.name = Some(name);
@@ -138,7 +135,7 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         signature: String,
-    ) -> Result<(), ClassFileParsingError> {
+    ) -> ClassFileParsingResult<()> {
         let entry = self.entries.entry(key).or_default();
         // TODO: check if the name matches the existing one
         entry.name = Some(name);

@@ -3,10 +3,10 @@ use std::str::FromStr;
 use crate::{
     jvm::{
         annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-        class::ClassFileParsingError,
         code::LocalVariableId,
         field::{ConstantValue, JavaString},
         method::ReturnType,
+        ClassFileParsingError, ClassFileParsingResult,
     },
     types::FieldType,
 };
@@ -18,7 +18,7 @@ use super::{
 };
 
 impl ElementValue {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -66,7 +66,7 @@ impl ElementValue {
                 let num_values = read_u16(reader)?;
                 let values = (0..num_values)
                     .map(|_| Self::parse(reader, ctx))
-                    .collect::<Result<_, ClassFileParsingError>>()?;
+                    .collect::<ClassFileParsingResult<_>>()?;
                 Ok(Self::Array(values))
             }
             _ => Err(ClassFileParsingError::InvalidElementValueTag(tag as char)),
@@ -75,7 +75,7 @@ impl ElementValue {
 }
 
 impl Annotation {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -90,7 +90,7 @@ impl Annotation {
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, ClassFileParsingError>>()?;
+            .collect::<ClassFileParsingResult<_>>()?;
         Ok(Annotation {
             annotation_type,
             element_value_pairs,
@@ -99,7 +99,7 @@ impl Annotation {
 }
 
 impl TypePathElement {
-    fn parse<R>(reader: &mut R) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -116,7 +116,7 @@ impl TypePathElement {
 }
 
 impl TypeAnnotation {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, ClassFileParsingError>
+    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -152,7 +152,7 @@ impl TypeAnnotation {
                             index,
                         })
                     })
-                    .collect::<Result<_, ClassFileParsingError>>()?;
+                    .collect::<ClassFileParsingResult<_>>()?;
                 TargetInfo::LocalVar(table)
             }
             0x42 => TargetInfo::Catch {
@@ -180,7 +180,7 @@ impl TypeAnnotation {
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, ClassFileParsingError>>()?;
+            .collect::<ClassFileParsingResult<_>>()?;
         Ok(TypeAnnotation {
             target_info,
             target_path,
@@ -194,7 +194,7 @@ impl Attribute {
     pub(super) fn parse_annotations<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Annotation>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Annotation>>
     where
         R: std::io::Read,
     {
@@ -209,7 +209,7 @@ impl Attribute {
     pub(super) fn parse_parameter_annotations<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Vec<Vec<Annotation>>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<Vec<Annotation>>>
     where
         R: std::io::Read,
     {
@@ -223,7 +223,7 @@ impl Attribute {
     pub(super) fn parse_type_annotations<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Vec<TypeAnnotation>, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Vec<TypeAnnotation>>
     where
         R: std::io::Read,
     {
@@ -237,7 +237,7 @@ impl Attribute {
     pub(super) fn parse_annotation_default<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

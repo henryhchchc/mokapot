@@ -7,3 +7,8 @@ pub mod field;
 pub mod method;
 pub mod module;
 pub(crate) mod parsing;
+
+pub use parsing::errors::ClassFileParsingError;
+
+/// A [`Result`] type for parsing a class file.
+pub type ClassFileParsingResult<T> = Result<T, ClassFileParsingError>;

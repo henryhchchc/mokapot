@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
-    class::ClassFileParsingError,
     class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
     method::{MethodDescriptor, MethodParameter},
     module::{Module, PackageReference},
+    ClassFileParsingError, ClassFileParsingResult,
 };
 
 use super::{
@@ -87,10 +87,7 @@ impl Attribute {
         }
     }
 
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -151,10 +148,7 @@ impl Attribute {
         }
     }
 
-    fn parse_constant_value<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    fn parse_constant_value<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -163,20 +157,14 @@ impl Attribute {
         Ok(Self::ConstantValue(value))
     }
 
-    fn parse_synthetic<R>(
-        _reader: &mut R,
-        _ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    fn parse_synthetic<R>(_reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
         Ok(Self::Synthetic)
     }
 
-    fn parse_deprecated<R>(
-        _reader: &mut R,
-        _ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    fn parse_deprecated<R>(_reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -186,7 +174,7 @@ impl Attribute {
     fn parse_enclosing_method<R>(
         reader: &mut R,
         ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    ) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -218,10 +206,7 @@ impl Attribute {
         }))
     }
 
-    fn parse_signature<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    fn parse_signature<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {

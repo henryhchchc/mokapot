@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use crate::{
-    jvm::class::ClassFileParsingError,
     jvm::{
         class::ClassReference,
         field::{Field, FieldAccessFlags},
+        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
     types::FieldType,
@@ -16,10 +16,7 @@ use super::{
 };
 
 impl Field {
-    pub(crate) fn parse<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Self, ClassFileParsingError>
+    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
