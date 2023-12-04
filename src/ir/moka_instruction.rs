@@ -55,7 +55,7 @@ impl Display for MokaInstruction {
             Self::Definition {
                 value: def_id,
                 expr,
-            } => write!(f, "{} := {}", def_id, expr),
+            } => write!(f, "{} = {}", def_id, expr),
             Self::Jump {
                 condition: Some(condition),
                 target,

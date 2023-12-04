@@ -462,7 +462,11 @@ impl MokaIRGenerator<'_> {
             | InvokeInterface(method_ref, _) => {
                 let arguments = frame.pop_args(&method_ref.descriptor)?;
                 let object_ref = frame.pop_value()?;
-                let rhs = Expression::Call(method_ref.clone(), Some(object_ref), arguments);
+                let rhs = Expression::Call {
+                    method: method_ref.clone(),
+                    this: Some(object_ref),
+                    args: arguments,
+                };
                 if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
@@ -473,7 +477,11 @@ impl MokaIRGenerator<'_> {
             }
             InvokeStatic(method_ref) => {
                 let arguments = frame.pop_args(&method_ref.descriptor)?;
-                let rhs = Expression::Call(method_ref.clone(), None, arguments);
+                let rhs = Expression::Call {
+                    method: method_ref.clone(),
+                    this: None,
+                    args: arguments,
+                };
                 if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
@@ -488,12 +496,12 @@ impl MokaIRGenerator<'_> {
                 name,
             } => {
                 let arguments = frame.pop_args(descriptor)?;
-                let rhs = Expression::GetClosure(
-                    *bootstrap_method_index,
-                    name.to_owned(),
-                    arguments,
-                    descriptor.to_owned(),
-                );
+                let rhs = Expression::Closure {
+                    bootstrap_method_index: *bootstrap_method_index,
+                    name: name.to_owned(),
+                    captures: arguments,
+                    closure_descriptor: descriptor.to_owned(),
+                };
                 if let ReturnType::Some(return_type) = &descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }

@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use itertools::Itertools;
 
@@ -36,6 +36,21 @@ impl PrimitiveType {
             Self::Short => "S",
             Self::Int => "I",
             Self::Long => "J",
+        }
+    }
+}
+
+impl Display for PrimitiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Boolean => write!(f, "boolean"),
+            Self::Char => write!(f, "char"),
+            Self::Float => write!(f, "float"),
+            Self::Double => write!(f, "double"),
+            Self::Byte => write!(f, "byte"),
+            Self::Short => write!(f, "short"),
+            Self::Int => write!(f, "int"),
+            Self::Long => write!(f, "long"),
         }
     }
 }
@@ -79,6 +94,16 @@ pub enum FieldType {
     Object(ClassReference),
     /// An array type.
     Array(Box<FieldType>),
+}
+
+impl Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Base(it) => it.fmt(f),
+            Self::Object(it) => it.fmt(f),
+            Self::Array(it) => write!(f, "{}[]", it),
+        }
+    }
 }
 
 impl FromStr for FieldType {

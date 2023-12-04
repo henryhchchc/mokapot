@@ -154,6 +154,15 @@ pub enum ReturnType {
     Void,
 }
 
+impl Display for ReturnType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReturnType::Some(t) => t.fmt(f),
+            ReturnType::Void => write!(f, "void"),
+        }
+    }
+}
+
 impl ToString for MethodDescriptor {
     fn to_string(&self) -> String {
         let mut result = String::new();

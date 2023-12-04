@@ -39,14 +39,16 @@ impl Display for FieldAccess {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use FieldAccess::*;
         match self {
-            ReadStatic { field } => write!(f, "{}", field),
-            WriteStatic { field, value } => write!(f, "{} <- {}", field, value),
-            ReadInstance { object_ref, field } => write!(f, "{}.{}", object_ref, field.name),
+            ReadStatic { field } => write!(f, "read {}", field),
+            WriteStatic { field, value } => write!(f, "write {}, {}", field, value),
+            ReadInstance { object_ref, field } => {
+                write!(f, "write {}.{}", object_ref, field.name)
+            }
             WriteInstance {
                 object_ref,
                 field,
                 value,
-            } => write!(f, "{}.{} <- {}", object_ref, field.name, value),
+            } => write!(f, "write {}.{}, {}", object_ref, field.name, value),
         }
     }
 }

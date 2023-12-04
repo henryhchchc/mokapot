@@ -33,11 +33,28 @@ pub enum Expression {
     /// - [`invokevirtual`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokevirtual)
     /// - [`invokespecial`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokespecial)
     /// - [`invokeinterface`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokeinterface)
-    Call(MethodReference, Option<Argument>, Vec<Argument>),
+    Call {
+        /// The method being called.
+        method: MethodReference,
+        /// [`Some`] argument for the `this` object if the method is an instance method.
+        /// [`None`] if the method is `static` or `native`.
+        this: Option<Argument>,
+        /// A list of arguments.
+        args: Vec<Argument>,
+    },
     /// A call to a bootstrap method to create a closure.  
     /// See the following documentation for more information:
     /// - [`invokedynamic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokedynamic)
-    GetClosure(u16, String, Vec<Argument>, MethodDescriptor),
+    Closure {
+        /// The name of the closure.
+        name: String,
+        /// The arguments captured by the closure.
+        captures: Vec<Argument>,
+        /// The index of the bootstrap method.
+        bootstrap_method_index: u16,
+        /// The descriptor of the closure generation.
+        closure_descriptor: MethodDescriptor,
+    },
     /// A mathematical operation.
     Math(MathOperation),
     /// A field access.
@@ -69,7 +86,7 @@ impl Display for Expression {
             Subroutine {
                 target,
                 return_address,
-            } => write!(f, "subroutine to {}, return to {}", target, return_address),
+            } => write!(f, "subroutine {}, return to {}", target, return_address),
             Field(field_op) => field_op.fmt(f),
             Array(array_op) => array_op.fmt(f),
             Math(math_op) => math_op.fmt(f),
@@ -77,29 +94,42 @@ impl Display for Expression {
             Synchronization(monitor_op) => monitor_op.fmt(f),
             New(class) => write!(f, "new {}", class),
             Conversion(conv_op) => conv_op.fmt(f),
-            Call(method, None, args) => write!(
+            Call {
+                method,
+                this: None,
+                args,
+            } => write!(
                 f,
-                "call {}({}) // desc: {}",
+                "call {} {}({})",
+                method.descriptor.return_type,
                 method,
                 args.iter().map(|it| it.to_string()).join(", "),
-                method.descriptor.to_string()
             ),
-            Call(method, Some(receiver), args) => write!(
+            Call {
+                method,
+                this: Some(receiver),
+                args,
+            } => write!(
                 f,
-                "call {}::{}({}) // owner: {}, desc: {}",
+                "call {} {}@{}::{}({})",
+                method.descriptor.return_type,
                 receiver,
+                method.owner,
                 method.name,
                 args.iter().map(|it| it.to_string()).join(", "),
-                method.owner.binary_name,
-                method.descriptor.to_string()
             ),
-            GetClosure(bootstrap_method_idx, name, args, descriptor) => write!(
-                f,
-                "get_closure#{}[{}]({}) // desc: {}",
-                bootstrap_method_idx,
+            Closure {
+                bootstrap_method_index,
                 name,
-                args.iter().map(|it| it.to_string()).join(", "),
-                descriptor.to_string()
+                captures,
+                closure_descriptor,
+            } => write!(
+                f,
+                "closure {} {}#{}({})",
+                closure_descriptor.return_type,
+                name,
+                bootstrap_method_index,
+                captures.iter().map(|it| it.to_string()).join(", "),
             ),
         }
     }
