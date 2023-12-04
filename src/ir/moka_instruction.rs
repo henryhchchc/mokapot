@@ -176,12 +176,12 @@ impl<'a> IntoIterator for &'a Argument {
 pub struct Value(u16);
 
 impl Value {
-    /// Creates a new [`LocalDef`] with the given ID.
+    /// Creates a new [`Value`] with the given ID.
     pub const fn new(id: u16) -> Self {
         Self(id)
     }
 
-    /// Create an [`Argument`] by referencing this [`LocalDef`].
+    /// Create an [`Argument`] by referencing this [`Value`].
     pub fn as_argument(&self) -> Argument {
         Argument::Id((*self).into())
     }

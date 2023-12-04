@@ -9,7 +9,7 @@ use super::{
     method::MethodDescriptor,
 };
 
-/// A field declared in a [`Class`].
+/// A JVM field.
 /// See the [JVM Specification §4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.5) for more information.
 #[derive(Debug)]
 pub struct Field {

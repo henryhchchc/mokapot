@@ -209,7 +209,7 @@ pub enum StackMapFrame {
         /// The type of the one entry in the operand stack.
         stack: VerificationTypeInfo,
     },
-    /// Indicates that the frame has the same local variables as the previous frame except that the last [`chop_count`] local
+    /// Indicates that the frame has the same local variables as the previous frame except that the last few local
     /// variables are absent, and that the operand stack is empty.
     /// Corresponds to `chop_frame`.
     ChopFrame {
