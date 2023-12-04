@@ -14,7 +14,7 @@ repository = "https://github.com/henryhchchc/mokapot"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitflags = "2.*"
-itertools = "0.*"
-thiserror = "1.*"
-cesu8 = "1.*"
+bitflags = "2.4"
+itertools = "0.12"
+thiserror = "1.0"
+cesu8 = "1.1"
