@@ -69,7 +69,7 @@ impl ElementValue {
                     .collect::<ClassFileParsingResult<_>>()?;
                 Ok(Self::Array(values))
             }
-            _ => Err(ClassFileParsingError::InvalidElementValueTag(tag as char)),
+            unexpected => Err(ClassFileParsingError::InvalidElementValueTag(unexpected)),
         }
     }
 }
@@ -163,7 +163,7 @@ impl TypeAnnotation {
                 offset: read_u16(reader)?.into(),
                 index: read_u8(reader)?,
             },
-            _ => Err(ClassFileParsingError::InvalidTargetType(target_type))?,
+            unexpected => Err(ClassFileParsingError::InvalidTargetType(unexpected))?,
         };
         let path_length = read_u8(reader)?;
         let target_path = (0..path_length)

@@ -107,9 +107,9 @@ impl ConstantPool {
                 descriptor,
             ))
         }
-        _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType{
+        unexpected => Err(ClassFileParsingError::MismatchedConstantPoolEntryType{
             expected: "Integer | Long | Float | Double | String | MethodType | Class | MethodHandle | Dynamic",
-            found: entry.type_name(),
+            found: unexpected.type_name(),
         })
     }
     }
@@ -351,11 +351,11 @@ impl ConstantPoolEntry {
             18 => Self::parse_invoke_dynamic(reader),
             19 => Self::parse_module(reader),
             20 => Self::parse_package(reader),
-            _ => Err(ClassFileParsingError::UnexpectedConstantPoolTag(tag)),
+            it => Err(ClassFileParsingError::UnexpectedConstantPoolTag(it)),
         }
     }
 
-    pub(crate) fn type_name(&self) -> &'static str {
+    pub(crate) const fn type_name<'a>(&self) -> &'a str {
         match self {
             Self::Utf8(_) => "Utf8",
             Self::Integer(_) => "Integer",

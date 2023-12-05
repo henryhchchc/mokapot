@@ -139,7 +139,9 @@ impl Attribute {
             "NestMembers" => Self::parse_nest_members(attr_reader, ctx),
             "Record" => Self::parse_record(attr_reader, ctx),
             "PermittedSubclasses" => Self::parse_permitted_subclasses(attr_reader, ctx),
-            _ => Err(ClassFileParsingError::UnknownAttribute(name.to_owned())),
+            unexpected => Err(ClassFileParsingError::UnknownAttribute(
+                unexpected.to_owned(),
+            )),
         };
         if attr_reader.position() == attribute_length as u64 {
             result

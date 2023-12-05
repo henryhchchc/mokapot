@@ -68,7 +68,7 @@ impl TryFrom<char> for PrimitiveType {
             'S' => Ok(Self::Short),
             'I' => Ok(Self::Int),
             'J' => Ok(Self::Long),
-            _ => Err(InvalidDescriptor(descriptor.to_string())),
+            unexpected => Err(InvalidDescriptor(unexpected.to_string())),
         }
     }
 }
