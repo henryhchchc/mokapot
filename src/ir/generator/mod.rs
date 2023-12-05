@@ -1,9 +1,6 @@
 mod execution;
 mod jvm_frame;
 
-#[cfg(test)]
-mod test;
-
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Bound,

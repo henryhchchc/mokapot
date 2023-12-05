@@ -1,6 +1,7 @@
-use crate::jvm::{class::Class, method::Method};
-
-use super::MokaIRMethodExt;
+use mokapot::{
+    ir::MokaIRMethodExt,
+    jvm::{class::Class, method::Method},
+};
 
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
