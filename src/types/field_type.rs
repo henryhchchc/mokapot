@@ -40,6 +40,18 @@ impl PrimitiveType {
     }
 }
 
+#[test]
+fn primitive_type_descriptor_str() {
+    assert_eq!(PrimitiveType::Boolean.descriptor_str(), "Z");
+    assert_eq!(PrimitiveType::Char.descriptor_str(), "C");
+    assert_eq!(PrimitiveType::Float.descriptor_str(), "F");
+    assert_eq!(PrimitiveType::Double.descriptor_str(), "D");
+    assert_eq!(PrimitiveType::Byte.descriptor_str(), "B");
+    assert_eq!(PrimitiveType::Short.descriptor_str(), "S");
+    assert_eq!(PrimitiveType::Int.descriptor_str(), "I");
+    assert_eq!(PrimitiveType::Long.descriptor_str(), "J");
+}
+
 impl Display for PrimitiveType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -53,6 +65,18 @@ impl Display for PrimitiveType {
             Self::Long => write!(f, "long"),
         }
     }
+}
+
+#[test]
+fn primitive_type_display() {
+    assert_eq!(PrimitiveType::Boolean.to_string(), "boolean");
+    assert_eq!(PrimitiveType::Char.to_string(), "char");
+    assert_eq!(PrimitiveType::Float.to_string(), "float");
+    assert_eq!(PrimitiveType::Double.to_string(), "double");
+    assert_eq!(PrimitiveType::Byte.to_string(), "byte");
+    assert_eq!(PrimitiveType::Short.to_string(), "short");
+    assert_eq!(PrimitiveType::Int.to_string(), "int");
+    assert_eq!(PrimitiveType::Long.to_string(), "long");
 }
 
 impl TryFrom<char> for PrimitiveType {
@@ -85,6 +109,27 @@ impl FromStr for PrimitiveType {
     }
 }
 
+#[test]
+fn primitive_type_from_str() {
+    assert_eq!(
+        PrimitiveType::from_str("Z").unwrap(),
+        PrimitiveType::Boolean
+    );
+    assert_eq!(PrimitiveType::from_str("C").unwrap(), PrimitiveType::Char);
+    assert_eq!(PrimitiveType::from_str("F").unwrap(), PrimitiveType::Float);
+    assert_eq!(PrimitiveType::from_str("D").unwrap(), PrimitiveType::Double);
+    assert_eq!(PrimitiveType::from_str("B").unwrap(), PrimitiveType::Byte);
+    assert_eq!(PrimitiveType::from_str("S").unwrap(), PrimitiveType::Short);
+    assert_eq!(PrimitiveType::from_str("I").unwrap(), PrimitiveType::Int);
+    assert_eq!(PrimitiveType::from_str("J").unwrap(), PrimitiveType::Long);
+    assert_eq!(
+        PrimitiveType::from_str("Z").unwrap(),
+        PrimitiveType::Boolean
+    );
+    assert!(PrimitiveType::from_str("X").is_err());
+    assert!(PrimitiveType::from_str("FF").is_err());
+}
+
 /// A field type (non-generic) in Java.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum FieldType {
@@ -104,6 +149,37 @@ impl Display for FieldType {
             Self::Array(it) => write!(f, "{}[]", it),
         }
     }
+}
+
+#[test]
+fn field_type_display() {
+    assert_eq!(
+        FieldType::Base(PrimitiveType::Boolean).to_string(),
+        "boolean"
+    );
+    assert_eq!(FieldType::Base(PrimitiveType::Char).to_string(), "char");
+    assert_eq!(FieldType::Base(PrimitiveType::Float).to_string(), "float");
+    assert_eq!(FieldType::Base(PrimitiveType::Double).to_string(), "double");
+    assert_eq!(FieldType::Base(PrimitiveType::Byte).to_string(), "byte");
+    assert_eq!(FieldType::Base(PrimitiveType::Short).to_string(), "short");
+    assert_eq!(FieldType::Base(PrimitiveType::Int).to_string(), "int");
+    assert_eq!(FieldType::Base(PrimitiveType::Long).to_string(), "long");
+    assert_eq!(
+        FieldType::Object(ClassReference::new("java/lang/Object")).to_string(),
+        "java/lang/Object"
+    );
+    assert_eq!(
+        FieldType::Base(PrimitiveType::Int)
+            .make_array_type()
+            .to_string(),
+        "int[]"
+    );
+    assert_eq!(
+        FieldType::Object(ClassReference::new("java/lang/Object"))
+            .make_array_type()
+            .to_string(),
+        "java/lang/Object[]"
+    );
 }
 
 impl FromStr for FieldType {
@@ -146,6 +222,60 @@ impl FieldType {
             FieldType::Array(inner) => format!("[{}", inner.descriptor_string()),
         }
     }
+}
+
+#[test]
+fn field_type_from_str() {
+    assert_eq!(
+        FieldType::from_str("Z").unwrap(),
+        FieldType::Base(PrimitiveType::Boolean)
+    );
+    assert_eq!(
+        FieldType::from_str("C").unwrap(),
+        FieldType::Base(PrimitiveType::Char)
+    );
+    assert_eq!(
+        FieldType::from_str("F").unwrap(),
+        FieldType::Base(PrimitiveType::Float)
+    );
+    assert_eq!(
+        FieldType::from_str("D").unwrap(),
+        FieldType::Base(PrimitiveType::Double)
+    );
+    assert_eq!(
+        FieldType::from_str("B").unwrap(),
+        FieldType::Base(PrimitiveType::Byte)
+    );
+    assert_eq!(
+        FieldType::from_str("S").unwrap(),
+        FieldType::Base(PrimitiveType::Short)
+    );
+    assert_eq!(
+        FieldType::from_str("I").unwrap(),
+        FieldType::Base(PrimitiveType::Int)
+    );
+    assert_eq!(
+        FieldType::from_str("J").unwrap(),
+        FieldType::Base(PrimitiveType::Long)
+    );
+    assert_eq!(
+        FieldType::from_str("Z").unwrap(),
+        FieldType::Base(PrimitiveType::Boolean)
+    );
+    assert_eq!(
+        FieldType::from_str("Ljava/lang/Object;").unwrap(),
+        FieldType::Object(ClassReference::new("java/lang/Object"))
+    );
+    assert_eq!(
+        FieldType::from_str("[I").unwrap(),
+        FieldType::Base(PrimitiveType::Int).make_array_type()
+    );
+    assert_eq!(
+        FieldType::from_str("[Ljava/lang/Object;").unwrap(),
+        FieldType::Object(ClassReference::new("java/lang/Object")).make_array_type()
+    );
+    assert!(FieldType::from_str("X").is_err());
+    assert!(FieldType::from_str("FF").is_err());
 }
 
 /// A reference to a [`FieldType`].
