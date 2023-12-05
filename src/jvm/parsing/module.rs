@@ -151,11 +151,11 @@ impl Attribute {
         R: std::io::Read,
     {
         let module_info_idx = read_u16(reader)?;
-        let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
+        let module_info_entry = ctx.constant_pool.get_entry_internal(module_info_idx)?;
         let &ConstantPoolEntry::Module { name_index } = module_info_entry else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Module",
-                found: module_info_entry.type_name(),
+                found: module_info_entry.constant_kind(),
             })?
         };
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();

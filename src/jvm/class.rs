@@ -12,6 +12,8 @@ use super::{
     module::{Module, PackageReference},
 };
 
+pub use super::parsing::constant_pool::{ConstantPool, ConstantPoolEntry};
+
 /// A JVM class
 /// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
 #[derive(Debug)]

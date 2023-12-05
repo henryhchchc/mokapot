@@ -188,7 +188,7 @@ impl Instruction {
             }
             0xba => {
                 let index = read_u16(reader)?;
-                let constant_pool_entry = ctx.constant_pool.get_entry(index)?;
+                let constant_pool_entry = ctx.constant_pool.get_entry_internal(index)?;
                 let &ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
@@ -196,7 +196,7 @@ impl Instruction {
                 else {
                     Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                         expected: "InvokeDynamic",
-                        found: constant_pool_entry.type_name(),
+                        found: constant_pool_entry.constant_kind(),
                     })?
                 };
                 let (name, desc_str) = ctx.constant_pool.get_name_and_type(name_and_type_index)?;

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
 use crate::{
@@ -13,13 +13,15 @@ use crate::{
     types::{FieldType, TypeReference},
 };
 
+/// A JVM constant pool.
+/// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
 #[derive(Debug)]
 pub struct ConstantPool {
-    entries: HashMap<u16, ConstantPoolEntry>,
+    entries: Vec<Option<ConstantPoolEntry>>,
 }
 
 impl ConstantPool {
-    pub fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
@@ -29,15 +31,23 @@ impl ConstantPool {
         Ok(Self { entries })
     }
 
-    pub fn get_entry(&self, index: u16) -> ClassFileParsingResult<&ConstantPoolEntry> {
-        let Some(entry) = self.entries.get(&index) else {
+    /// Gets the constant pool entry at the given index.
+    pub fn get_entry(&self, index: u16) -> Option<&ConstantPoolEntry> {
+        self.entries.get(index as usize).and_then(|it| it.as_ref())
+    }
+
+    pub(crate) fn get_entry_internal(
+        &self,
+        index: u16,
+    ) -> ClassFileParsingResult<&ConstantPoolEntry> {
+        let Some(entry) = self.get_entry(index) else {
             return Err(ClassFileParsingError::BadConstantPoolIndex(index));
         };
         Ok(entry)
     }
 
-    pub fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
-        let entry = self.get_entry(index)?;
+    pub(crate) fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
+        let entry = self.get_entry_internal(index)?;
         match entry {
             ConstantPoolEntry::Utf8(JavaString::ValidUtf8(string)) => Ok(string),
             ConstantPoolEntry::Utf8(JavaString::InvalidUtf8(_)) => {
@@ -45,17 +55,17 @@ impl ConstantPool {
             }
             _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Utf8",
-                found: entry.type_name(),
+                found: entry.constant_kind(),
             }),
         }
     }
 
-    pub fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
-        let entry = self.get_entry(index)?;
+    pub(crate) fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
+        let entry = self.get_entry_internal(index)?;
         let &ConstantPoolEntry::Class { name_index } = entry else {
             return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Class",
-                found: entry.type_name(),
+                found: entry.constant_kind(),
             });
         };
         let name = self.get_str(name_index)?;
@@ -66,19 +76,19 @@ impl ConstantPool {
         &self,
         value_index: u16,
     ) -> ClassFileParsingResult<ConstantValue> {
-        let entry = self.get_entry(value_index)?;
+        let entry = self.get_entry_internal(value_index)?;
         match entry {
         &ConstantPoolEntry::Integer(it) => Ok(ConstantValue::Integer(it)),
         &ConstantPoolEntry::Long(it) => Ok(ConstantValue::Long(it)),
         &ConstantPoolEntry::Float(it) => Ok(ConstantValue::Float(it)),
         &ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(it)),
         &ConstantPoolEntry::String { string_index } => {
-            if let ConstantPoolEntry::Utf8(java_str) = self.get_entry(string_index)? {
+            if let ConstantPoolEntry::Utf8(java_str) = self.get_entry_internal(string_index)? {
              Ok(ConstantValue::String(java_str.clone()))
             } else {
                 Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                     expected: "Utf8",
-                    found: entry.type_name(),
+                    found: entry.constant_kind(),
                 })
             }
         }
@@ -109,25 +119,25 @@ impl ConstantPool {
         }
         unexpected => Err(ClassFileParsingError::MismatchedConstantPoolEntryType{
             expected: "Integer | Long | Float | Double | String | MethodType | Class | MethodHandle | Dynamic",
-            found: unexpected.type_name(),
+            found: unexpected.constant_kind(),
         })
     }
     }
 
     pub(crate) fn get_module_ref(&self, index: u16) -> ClassFileParsingResult<ModuleReference> {
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         if let &ConstantPoolEntry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
             return Ok(ModuleReference { name });
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "Module",
-            found: entry.type_name(),
+            found: entry.constant_kind(),
         })
     }
 
     pub(crate) fn get_package_ref(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         if let &ConstantPoolEntry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
             return Ok(PackageReference {
@@ -136,12 +146,12 @@ impl ConstantPool {
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "Package",
-            found: entry.type_name(),
+            found: entry.constant_kind(),
         })
     }
 
     pub(crate) fn get_field_ref(&self, index: u16) -> ClassFileParsingResult<FieldReference> {
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         if let &ConstantPoolEntry::FieldRef {
             class_index,
             name_and_type_index,
@@ -151,7 +161,7 @@ impl ConstantPool {
             if let &ConstantPoolEntry::NameAndType {
                 name_index,
                 descriptor_index,
-            } = self.get_entry(name_and_type_index)?
+            } = self.get_entry_internal(name_and_type_index)?
             {
                 let name = self.get_str(name_index)?.to_owned();
                 let descriptor = self.get_str(descriptor_index)?;
@@ -165,12 +175,12 @@ impl ConstantPool {
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "Field",
-            found: entry.type_name(),
+            found: entry.constant_kind(),
         })
     }
 
     pub(crate) fn get_name_and_type(&self, index: u16) -> ClassFileParsingResult<(&str, &str)> {
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         if let &ConstantPoolEntry::NameAndType {
             name_index,
             descriptor_index,
@@ -182,12 +192,12 @@ impl ConstantPool {
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "NameAndType",
-            found: entry.type_name(),
+            found: entry.constant_kind(),
         })?
     }
 
     pub(crate) fn get_method_ref(&self, index: u16) -> ClassFileParsingResult<MethodReference> {
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         match entry {
             &ConstantPoolEntry::MethodRef {
                 class_index,
@@ -209,7 +219,7 @@ impl ConstantPool {
             }
             _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "MethodRef | InterfaceMethodRef",
-                found: entry.type_name(),
+                found: entry.constant_kind(),
             }),
         }
     }
@@ -217,7 +227,7 @@ impl ConstantPool {
     pub(crate) fn get_method_handle(&self, index: u16) -> ClassFileParsingResult<MethodHandle> {
         use MethodHandle::*;
 
-        let entry = self.get_entry(index)?;
+        let entry = self.get_entry_internal(index)?;
         let &ConstantPoolEntry::MethodHandle {
             reference_kind,
             reference_index: idx,
@@ -225,7 +235,7 @@ impl ConstantPool {
         else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "MethodHandle",
-                found: entry.type_name(),
+                found: entry.constant_kind(),
             })?
         };
 
@@ -257,72 +267,125 @@ impl ConstantPool {
     }
 }
 
+/// An entry in the [`ConstantPool`].
 #[derive(Debug, Clone)]
 pub enum ConstantPoolEntry {
+    /// A UTF-8 string.
+    /// See the [JVM Specification §4.4.7](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.7) for more information.
     Utf8(JavaString),
+    /// An integer.
+    /// See the [JVM Specification §4.4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.4) for more information.
     Integer(i32),
+    /// A float.
+    /// See the [JVM Specification §4.4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.4) for more information.
     Float(f32),
+    /// A long.
+    /// See the [JVM Specification §4.4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.5) for more information.
     Long(i64),
+    /// A double.
+    /// See the [JVM Specification §4.4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.5) for more information.
     Double(f64),
+    /// A class.
+    /// See the [JVM Specification §4.4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.1) for more information.
     Class {
+        /// The index in the constant pool of its binary name.
         name_index: u16,
     },
+    /// A string.
+    /// See the [JVM Specification §4.4.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.3) for more information.
     String {
+        /// The index in the constant pool of its UTF-8 value.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         string_index: u16,
     },
+    /// A field reference.
+    /// See the [JVM Specification §4.4.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.2) for more information.
     FieldRef {
+        /// The index in the constant pool of the class containing the field.
+        /// The entry at that index must be a [`ConstantPoolEntry::Class`].
         class_index: u16,
+        /// The index in the constant pool of the name and type of the field.
+        /// The entry at that index must be a [`ConstantPoolEntry::NameAndType`].
         name_and_type_index: u16,
     },
+    /// A method reference.
+    /// See the [JVM Specification §4.4.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.2) for more information.
     MethodRef {
+        /// The index in the constant pool of the class containing the method.
         class_index: u16,
+        /// The index in the constant pool of the name and type of the method.
         name_and_type_index: u16,
     },
+    /// An interface method reference.
     InterfaceMethodRef {
+        /// The index in the constant pool of the interface containing the method.
         class_index: u16,
+        /// The index in the constant pool of the name and type of the method.
         name_and_type_index: u16,
     },
+    /// A name and type.
     NameAndType {
+        /// The index in the constant pool of the UTF-8 string containing the name.
         name_index: u16,
+        /// The index in the constant pool of the UTF-8 string containing the descriptor.
         descriptor_index: u16,
     },
+    /// A method handle.
     MethodHandle {
+        /// The kind of method handle.
         reference_kind: u8,
+        /// The index in the constant pool of the method handle.
         reference_index: u16,
     },
+    /// A method type.
+    /// See the [JVM Specification §4.4.9](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.9) for more information.
     MethodType {
+        /// The index in the constant pool of the UTF-8 string containing the descriptor.
         descriptor_index: u16,
     },
+    /// A dynamically computed constant.
     Dynamic {
+        /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
+        /// The index in the constant pool of the name and type of the constant.
         name_and_type_index: u16,
     },
+    /// An invokedynamic instruction.
+    /// See the [JVM Specification §4.4.10](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.10) for more information.
     InvokeDynamic {
+        /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
+        /// The index in the constant pool of the name and type of the constant.
         name_and_type_index: u16,
     },
+    /// A module.
+    /// See the [JVM Specification §4.4.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.11) for more information.
     Module {
+        /// The index in the constant pool of the UTF-8 string containing the name.
         name_index: u16,
     },
+    /// A package.
+    /// See the [JVM Specification §4.4.12](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.12) for more information.
     Package {
+        /// The index in the constant pool of the UTF-8 string containing the name.
         name_index: u16,
     },
 }
 
 impl ConstantPoolEntry {
-    fn parse_multiple<R>(reader: &mut R, count: u16) -> ClassFileParsingResult<HashMap<u16, Self>>
+    fn parse_multiple<R>(reader: &mut R, count: u16) -> ClassFileParsingResult<Vec<Option<Self>>>
     where
         R: std::io::Read,
     {
         let mut counter: u16 = 1;
-        let mut result = HashMap::with_capacity(count as usize);
+        let mut result = vec![None; count as usize];
         while counter < count {
             let entry = Self::parse(reader)?;
             let increment = match entry {
                 ConstantPoolEntry::Long(_) | ConstantPoolEntry::Double(_) => 2,
                 _ => 1,
             };
-            result.insert(counter, entry);
+            result[counter as usize] = Some(entry);
             counter += increment;
         }
         Ok(result)
@@ -355,25 +418,26 @@ impl ConstantPoolEntry {
         }
     }
 
-    pub(crate) const fn type_name<'a>(&self) -> &'a str {
+    /// Gets the kind of this constant pool entry.
+    pub const fn constant_kind<'a>(&self) -> &'a str {
         match self {
-            Self::Utf8(_) => "Utf8",
-            Self::Integer(_) => "Integer",
-            Self::Float(_) => "Float",
-            Self::Long(_) => "Long",
-            Self::Double(_) => "Double",
-            Self::Class { .. } => "Class",
-            Self::String { .. } => "String",
-            Self::FieldRef { .. } => "FieldRef",
-            Self::MethodRef { .. } => "MethodRef",
-            Self::InterfaceMethodRef { .. } => "InterfaceMethodRef",
-            Self::NameAndType { .. } => "NameAndType",
-            Self::MethodHandle { .. } => "MethodHandle",
-            Self::MethodType { .. } => "MethodType",
-            Self::Dynamic { .. } => "Dynamic",
-            Self::InvokeDynamic { .. } => "InvokeDynamic",
-            Self::Module { .. } => "Module",
-            Self::Package { .. } => "Package",
+            Self::Utf8(_) => "CONSTANT_Utf8",
+            Self::Integer(_) => "CONSTANT_Integer",
+            Self::Float(_) => "CONSTANT_Float",
+            Self::Long(_) => "CONSTANT_Long",
+            Self::Double(_) => "CONSTANT_Double",
+            Self::Class { .. } => "CONSTANT_Class",
+            Self::String { .. } => "CONSTANT_String",
+            Self::FieldRef { .. } => "CONSTANT_Fieldref",
+            Self::MethodRef { .. } => "CONSTANT_Methodref",
+            Self::InterfaceMethodRef { .. } => "CONSTANT_InterfaceMethodref",
+            Self::NameAndType { .. } => "CONSTANT_NameAndType",
+            Self::MethodHandle { .. } => "CONSTANT_MethodHandle",
+            Self::MethodType { .. } => "CONSTANT_MethodType",
+            Self::Dynamic { .. } => "CONSTANT_Dynamic",
+            Self::InvokeDynamic { .. } => "CONSTANT_InvokeDynamic",
+            Self::Module { .. } => "CONSTANT_Module",
+            Self::Package { .. } => "CONSTANT_Package",
         }
     }
 

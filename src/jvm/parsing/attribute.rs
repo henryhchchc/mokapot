@@ -186,7 +186,7 @@ impl Attribute {
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
-            let entry = ctx.constant_pool.get_entry(method_index)?;
+            let entry = ctx.constant_pool.get_entry_internal(method_index)?;
             let &ConstantPoolEntry::NameAndType {
                 name_index,
                 descriptor_index,
@@ -194,7 +194,7 @@ impl Attribute {
             else {
                 return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                     expected: "NameAndType",
-                    found: entry.type_name(),
+                    found: entry.constant_kind(),
                 });
             };
             let name = ctx.constant_pool.get_str(name_index)?.to_owned();

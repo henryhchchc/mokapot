@@ -3,7 +3,7 @@ mod attribute;
 mod class_file;
 mod class_parser;
 mod code;
-mod constant_pool;
+pub(super) mod constant_pool;
 pub(super) mod errors;
 mod field_info;
 mod method_info;
