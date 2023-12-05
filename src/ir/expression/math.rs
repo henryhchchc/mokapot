@@ -54,7 +54,7 @@ impl Display for MathOperation {
             Subtract(a, b) => write!(f, "{} - {}", a, b),
             Multiply(a, b) => write!(f, "{} * {}", a, b),
             Divide(a, b) => write!(f, "{} / {}", a, b),
-            Remainder(a, b) => write!(f, "{} % {}", a, b),
+            Remainder(a, b) => write!(f, "{} mod {}", a, b),
             Negate(a) => write!(f, "-{}", a),
             Increment(a) => write!(f, "{} + 1", a),
             ShiftLeft(a, b) => write!(f, "{} << {}", a, b),
