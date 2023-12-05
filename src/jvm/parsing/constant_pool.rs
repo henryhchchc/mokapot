@@ -312,22 +312,28 @@ pub enum ConstantPoolEntry {
     /// See the [JVM Specification §4.4.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.2) for more information.
     MethodRef {
         /// The index in the constant pool of the class containing the method.
+        /// The entry at that index must be a [`ConstantPoolEntry::Class`].
         class_index: u16,
         /// The index in the constant pool of the name and type of the method.
+        /// The entry at that index must be a [`ConstantPoolEntry::NameAndType`].
         name_and_type_index: u16,
     },
     /// An interface method reference.
     InterfaceMethodRef {
         /// The index in the constant pool of the interface containing the method.
+        /// The entry at that index must be a [`ConstantPoolEntry::Class`].
         class_index: u16,
         /// The index in the constant pool of the name and type of the method.
+        /// The entry at that index must be a [`ConstantPoolEntry::NameAndType`].
         name_and_type_index: u16,
     },
     /// A name and type.
     NameAndType {
         /// The index in the constant pool of the UTF-8 string containing the name.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         name_index: u16,
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         descriptor_index: u16,
     },
     /// A method handle.
@@ -335,12 +341,14 @@ pub enum ConstantPoolEntry {
         /// The kind of method handle.
         reference_kind: u8,
         /// The index in the constant pool of the method handle.
+        /// The entry at that index must be a [`ConstantPoolEntry::MethodRef`], [`ConstantPoolEntry::InterfaceMethodRef`] or [`ConstantPoolEntry::FieldRef`].
         reference_index: u16,
     },
     /// A method type.
     /// See the [JVM Specification §4.4.9](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.9) for more information.
     MethodType {
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         descriptor_index: u16,
     },
     /// A dynamically computed constant.
@@ -348,6 +356,7 @@ pub enum ConstantPoolEntry {
         /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
         /// The index in the constant pool of the name and type of the constant.
+        /// The entry at that index must be a [`ConstantPoolEntry::NameAndType`].
         name_and_type_index: u16,
     },
     /// An invokedynamic instruction.
@@ -356,18 +365,21 @@ pub enum ConstantPoolEntry {
         /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
         /// The index in the constant pool of the name and type of the constant.
+        /// The entry at that index must be a [`ConstantPoolEntry::NameAndType`].
         name_and_type_index: u16,
     },
     /// A module.
     /// See the [JVM Specification §4.4.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.11) for more information.
     Module {
         /// The index in the constant pool of the UTF-8 string containing the name.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         name_index: u16,
     },
     /// A package.
     /// See the [JVM Specification §4.4.12](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.12) for more information.
     Package {
         /// The index in the constant pool of the UTF-8 string containing the name.
+        /// The entry at that index must be a [`ConstantPoolEntry::Utf8`].
         name_index: u16,
     },
 }
