@@ -8,7 +8,7 @@ use crate::{
         code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::FieldType,
+    types::field_type::FieldType,
 };
 
 use super::{

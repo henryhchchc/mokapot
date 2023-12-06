@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
-use crate::types::FieldType;
+use crate::types::field_type::FieldType;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},

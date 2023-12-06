@@ -12,7 +12,7 @@ use crate::{
         field::ConstantValue,
         method::ReturnType,
     },
-    types::{FieldType, PrimitiveType, TypeReference},
+    types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
 impl MokaIRGenerator<'_> {

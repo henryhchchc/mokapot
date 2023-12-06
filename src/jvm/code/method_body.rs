@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     jvm::{annotation::TypeAnnotation, class::ClassReference, ClassFileParsingResult},
-    types::FieldType,
+    types::field_type::FieldType,
 };
 
 use super::{Instruction, ProgramCounter};

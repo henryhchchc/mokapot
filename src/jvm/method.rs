@@ -8,7 +8,7 @@ use std::{
 use bitflags::bitflags;
 use itertools::Itertools;
 
-use crate::types::{FieldType, PrimitiveType};
+use crate::types::field_type::{FieldType, PrimitiveType};
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -303,8 +303,8 @@ mod test {
 
     use crate::{
         jvm::method::{MethodReference, ReturnType},
-        types::FieldType,
-        types::PrimitiveType::*,
+        types::field_type::FieldType,
+        types::field_type::PrimitiveType::*,
     };
 
     #[test]

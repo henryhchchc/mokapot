@@ -2,7 +2,7 @@ use std::fmt::Formatter;
 
 use std::fmt::Display;
 
-use crate::types::FieldType;
+use crate::types::field_type::FieldType;
 
 use super::super::Argument;
 

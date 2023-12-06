@@ -6,7 +6,7 @@ use crate::{
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
-    types::FieldType,
+    types::field_type::FieldType,
 };
 
 use super::{

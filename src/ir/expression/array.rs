@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use itertools::Itertools;
 
-use crate::{ir::Argument, types::FieldType};
+use crate::{ir::Argument, types::field_type::FieldType};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq)]

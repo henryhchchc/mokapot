@@ -1,7 +1,7 @@
 //! Module for the APIs for the constant pool in JVM.
 use std::fmt::Display;
 
-use crate::types::FieldType;
+use crate::types::field_type::FieldType;
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
@@ -175,8 +175,10 @@ mod test {
     use std::str::FromStr;
 
     use crate::jvm::class::ClassReference;
-    use crate::types::PrimitiveType::*;
-    use crate::types::{FieldType, PrimitiveType};
+    use crate::types::field_type::{
+        FieldType,
+        PrimitiveType::{self, *},
+    };
 
     #[test]
     fn parse_primitive_types() {

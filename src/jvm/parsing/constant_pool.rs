@@ -10,7 +10,7 @@ use crate::{
         module::{ModuleReference, PackageReference},
         ClassFileParsingResult,
     },
-    types::{FieldType, TypeReference},
+    types::field_type::{FieldType, TypeReference},
 };
 
 /// A JVM constant pool.

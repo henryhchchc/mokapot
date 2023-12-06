@@ -6,7 +6,7 @@ use mokapot::{
         method::ReturnType,
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::{FieldType, PrimitiveType},
+    types::field_type::{FieldType, PrimitiveType},
 };
 
 /// Parses the class file compiled from `MyClass.java` from the `test_data` directory.

@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fmt::Display};
 use crate::{
     ir::{Argument, Identifier},
     jvm::{code::ProgramCounter, method::MethodDescriptor},
-    types::{FieldType, PrimitiveType},
+    types::field_type::{FieldType, PrimitiveType},
     utils::try_merge,
 };
 

@@ -8,7 +8,7 @@ use crate::{
         method::ReturnType,
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::FieldType,
+    types::field_type::FieldType,
 };
 
 use super::{

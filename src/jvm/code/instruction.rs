@@ -6,7 +6,7 @@ use crate::{
         field::{ConstantValue, FieldReference},
         method::{MethodDescriptor, MethodReference},
     },
-    types::{PrimitiveType, TypeReference},
+    types::field_type::{PrimitiveType, TypeReference},
 };
 
 use super::ProgramCounter;

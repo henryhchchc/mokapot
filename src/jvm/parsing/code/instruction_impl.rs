@@ -9,7 +9,7 @@ use crate::{
         parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::{FieldType, PrimitiveType},
+    types::field_type::{FieldType, PrimitiveType},
 };
 
 impl Instruction {

@@ -1,3 +1,4 @@
+//! JVM non-generic type system
 use std::{fmt::Display, str::FromStr};
 
 use itertools::Itertools;
