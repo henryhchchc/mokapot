@@ -42,7 +42,7 @@ impl Display for FieldAccess {
             ReadStatic { field } => write!(f, "read {}", field),
             WriteStatic { field, value } => write!(f, "write {}, {}", field, value),
             ReadInstance { object_ref, field } => {
-                write!(f, "write {}.{}", object_ref, field.name)
+                write!(f, "read {}.{}", object_ref, field.name)
             }
             WriteInstance {
                 object_ref,
