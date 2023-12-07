@@ -1,7 +1,6 @@
 mod annotation;
 mod attribute;
 mod class_file;
-mod class_parser;
 mod code;
 pub(super) mod constant_pool;
 pub(super) mod errors;

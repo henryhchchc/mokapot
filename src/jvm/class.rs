@@ -13,6 +13,7 @@ use super::{
     field::{ConstantValue, Field, FieldReference},
     method::{Method, MethodDescriptor, MethodReference},
     module::{Module, PackageReference},
+    ClassFileParsingResult,
 };
 
 pub use super::parsing::constant_pool::{ConstantPool, ConstantPoolEntry};
@@ -77,6 +78,15 @@ pub struct Class {
 }
 
 impl Class {
+    /// Parses a class file from the given reader.
+    pub fn from_reader<R>(reader: R) -> ClassFileParsingResult<Class>
+    where
+        R: std::io::Read,
+    {
+        let mut reader = reader;
+        Class::parse(&mut reader)
+    }
+
     /// Gets a method of the class by its name and descriptor.
     pub fn get_method(&self, name: &str, descriptor: MethodDescriptor) -> Option<&Method> {
         self.methods
@@ -92,6 +102,12 @@ pub struct ClassVersion {
     pub major: u16,
     /// the minor version number.
     pub minor: u16,
+}
+impl ClassVersion {
+    /// Returns `true` if this class file is compiled with `--enable-preview`.
+    pub fn is_preview_enabled(&self) -> bool {
+        self.minor == 65535
+    }
 }
 
 /// A reference to a class in the binary format.
