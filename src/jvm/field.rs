@@ -1,7 +1,7 @@
 //! Module for the APIs for the constant pool in JVM.
 use std::fmt::Display;
 
-use crate::types::field_type::FieldType;
+use crate::types::{field_type::FieldType, signitures::FieldSignature};
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
@@ -28,7 +28,7 @@ pub struct Field {
     /// Indicates if the field is deprecated.
     pub is_deperecated: bool,
     /// The generic signature.
-    pub signature: Option<String>,
+    pub signature: Option<FieldSignature>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.

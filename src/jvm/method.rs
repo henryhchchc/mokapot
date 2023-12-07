@@ -8,7 +8,10 @@ use std::{
 use bitflags::bitflags;
 use itertools::Itertools;
 
-use crate::types::field_type::{FieldType, PrimitiveType};
+use crate::types::{
+    field_type::{FieldType, PrimitiveType},
+    signitures::MethodSignature,
+};
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -53,7 +56,7 @@ pub struct Method {
     /// Indicates if the method is deprecated.
     pub is_deprecated: bool,
     /// The generic signature.
-    pub signature: Option<String>,
+    pub signature: Option<MethodSignature>,
 }
 
 impl Method {

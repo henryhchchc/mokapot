@@ -9,7 +9,6 @@ pub enum ClassFileParsingError {
     /// The format of the class file is invalid.
     #[error("MalformedClassFile: {0}")]
     MalformedClassFile(&'static str),
-
     /// The constant pool index does not point to a desired entry.
     #[error("Mismatched constant pool entry, expected {expected}, but found {found}")]
     MismatchedConstantPoolEntryType {

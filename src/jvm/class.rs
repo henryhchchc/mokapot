@@ -3,7 +3,10 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
-use crate::types::field_type::FieldType;
+use crate::types::{
+    field_type::FieldType,
+    signitures::{ClassSignature, FieldSignature},
+};
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
@@ -68,7 +71,7 @@ pub struct Class {
     /// Indicates whether the class is deprecated.
     pub is_deprecated: bool,
     /// The generic signature of the class.
-    pub signature: Option<String>,
+    pub signature: Option<ClassSignature>,
     /// The record components of the class if the class is `record`.
     pub record: Option<Vec<RecordComponent>>,
 }
@@ -176,7 +179,7 @@ pub struct RecordComponent {
     /// The type of the component.
     pub component_type: FieldType,
     /// The generic signature of the component.
-    pub signature: Option<String>,
+    pub signature: Option<FieldSignature>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
