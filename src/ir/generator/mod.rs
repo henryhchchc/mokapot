@@ -1,10 +1,7 @@
 mod execution;
 mod jvm_frame;
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Bound,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::jvm::{
     code::{ExceptionTableEntry, MethodBody, ProgramCounter},
@@ -52,7 +49,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         let first_pc = self
             .body
             .instructions
-            .first_key_value()
+            .entry_point()
             .ok_or(MokaIRGenerationError::MalformedControlFlow)?
             .0
             .to_owned();
@@ -169,9 +166,7 @@ impl<'m> MokaIRGenerator<'m> {
     fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRGenerationError> {
         self.body
             .instructions
-            .range((Bound::Excluded(pc), Bound::Unbounded))
-            .next()
-            .map(|(k, _)| *k)
+            .next_pc_of(&pc)
             .ok_or(MokaIRGenerationError::MalformedControlFlow)
     }
 

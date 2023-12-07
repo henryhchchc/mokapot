@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{io::Read, str::FromStr};
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -13,8 +13,9 @@ use crate::jvm::{
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     constant_pool::ConstantPoolEntry,
+    jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::{read_bytes_vec, read_u16, read_u32},
+    reader_utils::{read_byte_chunk, read_u16, read_u32},
 };
 
 #[derive(Debug)]
@@ -86,100 +87,85 @@ impl Attribute {
             Self::PermittedSubclasses(_) => "PermittedSubclasses",
         }
     }
+}
 
-    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let name_idx = read_u16(reader)?;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let attribute_length = read_u32(reader)?;
-        let attribute_bytes = read_bytes_vec(reader, attribute_length as usize)?;
-        let attr_reader = &mut std::io::Cursor::new(attribute_bytes);
+        let attribute_bytes = read_byte_chunk(reader, attribute_length as usize)?;
+        let reader = &mut std::io::Cursor::new(attribute_bytes);
         let result = match name {
-            "ConstantValue" => Self::parse_constant_value(attr_reader, ctx),
-            "Code" => Self::parse_code(attr_reader, ctx),
-            "StackMapTable" => Self::parse_stack_map_table(attr_reader, ctx),
-            "Exceptions" => Self::parse_exceptions(attr_reader, ctx),
-            "InnerClasses" => Self::parse_innner_classes(attr_reader, ctx),
-            "EnclosingMethod" => Self::parse_enclosing_method(attr_reader, ctx),
-            "Synthetic" => Self::parse_synthetic(attr_reader, ctx),
-            "Signature" => Self::parse_signature(attr_reader, ctx),
-            "SourceFile" => Self::parse_source_file(attr_reader, ctx),
-            "SourceDebugExtension" => Self::parse_source_debug_extension(attr_reader, ctx),
-            "LineNumberTable" => Self::parse_line_no_table(attr_reader, ctx),
-            "LocalVariableTable" => Self::parse_local_variable_table(attr_reader, ctx),
-            "LocalVariableTypeTable" => Self::parse_local_variable_type_table(attr_reader, ctx),
-            "Deprecated" => Self::parse_deprecated(attr_reader, ctx),
+            "ConstantValue" => parse_jvm_element(reader, ctx).map(Self::ConstantValue),
+            "Code" => parse_jvm_element(reader, ctx).map(Self::Code),
+            "StackMapTable" => parse_jvm_element(reader, ctx).map(Self::StackMapTable),
+            "Exceptions" => parse_jvm_element(reader, ctx).map(Self::Exceptions),
+            "InnerClasses" => parse_jvm_element(reader, ctx).map(Self::InnerClasses),
+            "EnclosingMethod" => parse_jvm_element(reader, ctx).map(Self::EnclosingMethod),
+            "Synthetic" => Ok(Attribute::Synthetic),
+            "Deprecated" => Ok(Attribute::Deprecated),
+            "Signature" => parse_jvm_element(reader, ctx).map(Self::Signature),
+            "SourceFile" => parse_jvm_element(reader, ctx).map(Self::SourceFile),
+            "SourceDebugExtension" => {
+                let mut debug_extension = Vec::new();
+                reader.read_to_end(&mut debug_extension)?;
+                Ok(Attribute::SourceDebugExtension(debug_extension))
+            }
+            "LineNumberTable" => parse_jvm_element(reader, ctx).map(Self::LineNumberTable),
+            "LocalVariableTable" => parse_jvm_element(reader, ctx).map(Self::LocalVariableTable),
+            "LocalVariableTypeTable" => {
+                parse_jvm_element(reader, ctx).map(Self::LocalVariableTypeTable)
+            }
             "RuntimeVisibleAnnotations" => {
-                Self::parse_annotations(attr_reader, ctx).map(Self::RuntimeVisibleAnnotations)
+                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                Self::parse_annotations(attr_reader, ctx).map(Self::RuntimeInvisibleAnnotations)
+                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                Self::parse_parameter_annotations(attr_reader, ctx)
-                    .map(Self::RuntimeVisibleParameterAnnotations)
+                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                Self::parse_parameter_annotations(attr_reader, ctx)
-                    .map(Self::RuntimeInvisibleParameterAnnotations)
+                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => Self::parse_type_annotations(attr_reader, ctx)
-                .map(Self::RuntimeVisibleTypeAnnotations),
-            "RuntimeInvisibleTypeAnnotations" => Self::parse_type_annotations(attr_reader, ctx)
-                .map(Self::RuntimeInvisibleTypeAnnotations),
-            "AnnotationDefault" => Self::parse_annotation_default(attr_reader, ctx),
-            "BootstrapMethods" => Self::parse_bootstrap_methods(attr_reader, ctx),
-            "MethodParameters" => Self::parse_method_parameters(attr_reader, ctx),
-            "Module" => Self::parse_module(attr_reader, ctx),
-            "ModulePackages" => Self::parse_module_packages(attr_reader, ctx),
-            "ModuleMainClass" => Self::parse_module_main_class(attr_reader, ctx),
-            "NestHost" => Self::parse_nest_host(attr_reader, ctx),
-            "NestMembers" => Self::parse_nest_members(attr_reader, ctx),
-            "Record" => Self::parse_record(attr_reader, ctx),
-            "PermittedSubclasses" => Self::parse_permitted_subclasses(attr_reader, ctx),
+            "RuntimeVisibleTypeAnnotations" => {
+                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
+            }
+            "RuntimeInvisibleTypeAnnotations" => {
+                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleTypeAnnotations)
+            }
+            "AnnotationDefault" => parse_jvm_element(reader, ctx).map(Self::AnnotationDefault),
+            "BootstrapMethods" => parse_jvm_element(reader, ctx).map(Self::BootstrapMethods),
+            "MethodParameters" => parse_jvm_element(reader, ctx).map(Self::MethodParameters),
+            "Module" => parse_jvm_element(reader, ctx).map(Self::Module),
+            "ModulePackages" => parse_jvm_element(reader, ctx).map(Self::ModulePackages),
+            "ModuleMainClass" => parse_jvm_element(reader, ctx).map(Self::ModuleMainClass),
+            "NestHost" => parse_jvm_element(reader, ctx).map(Self::NestHost),
+            "NestMembers" => parse_jvm_element(reader, ctx).map(Self::NestMembers),
+            "Record" => parse_jvm_element(reader, ctx).map(Self::Record),
+            "PermittedSubclasses" => parse_jvm_element(reader, ctx).map(Self::PermittedSubclasses),
             unexpected => Err(ClassFileParsingError::UnknownAttribute(
                 unexpected.to_owned(),
             )),
         };
-        if attr_reader.position() == attribute_length as u64 {
+        if reader.position() == attribute_length as u64 {
             result
         } else {
             Err(ClassFileParsingError::UnexpectedData)
         }
     }
+}
 
-    fn parse_constant_value<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for ConstantValue {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let value_index = read_u16(reader)?;
-        let value = ctx.constant_pool.get_constant_value(value_index)?;
-        Ok(Self::ConstantValue(value))
+        ctx.constant_pool.get_constant_value(value_index)
     }
+}
 
-    fn parse_synthetic<R>(_reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        Ok(Self::Synthetic)
-    }
-
-    fn parse_deprecated<R>(_reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        Ok(Self::Deprecated)
-    }
-
-    fn parse_enclosing_method<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for EnclosingMethod {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let class_index = read_u16(reader)?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = read_u16(reader)?;
@@ -202,18 +188,9 @@ impl Attribute {
             let descriptor = MethodDescriptor::from_str(descriptor_str)?;
             Some((name, descriptor))
         };
-        Ok(Self::EnclosingMethod(EnclosingMethod {
+        Ok(EnclosingMethod {
             class,
             method_name_and_desc,
-        }))
-    }
-
-    fn parse_signature<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let signature_index = read_u16(reader)?;
-        let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
-        Ok(Self::Signature(signature))
+        })
     }
 }

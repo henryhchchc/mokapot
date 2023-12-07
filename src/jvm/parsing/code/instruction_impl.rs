@@ -14,18 +14,18 @@ use crate::{
 
 impl Instruction {
     pub(crate) fn parse_code(
-        bytes: Vec<u8>,
+        reader: Vec<u8>,
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<InstructionList> {
-        let mut cursor = std::io::Cursor::new(bytes);
-        let mut instructions = InstructionList::new();
+        let mut cursor = std::io::Cursor::new(reader);
+        let mut inner = BTreeMap::new();
         while let Some((pc, instruction)) = Instruction::parse(&mut cursor, ctx)? {
-            instructions.insert(pc, instruction);
+            inner.insert(pc, instruction);
         }
-        Ok(instructions)
+        Ok(InstructionList::from(inner))
     }
 
-    pub(crate) fn parse(
+    fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::reader_utils::{read_bytes, read_bytes_vec, read_u16, read_u8};
+use super::reader_utils::{read_byte_chunk, read_bytes, read_u16, read_u8};
 use crate::{
     jvm::ClassFileParsingError,
     jvm::{
@@ -458,7 +458,7 @@ impl ConstantPoolEntry {
         R: std::io::Read,
     {
         let length = read_u16(reader)?;
-        let cesu8_content = read_bytes_vec(reader, length as usize)?;
+        let cesu8_content = read_byte_chunk(reader, length as usize)?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {
             Ok(result) => Ok(Self::Utf8(JavaString::ValidUtf8(result.into_owned()))),
             Err(_) => Ok(Self::Utf8(JavaString::InvalidUtf8(cesu8_content))),

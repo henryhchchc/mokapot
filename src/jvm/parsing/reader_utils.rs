@@ -1,9 +1,5 @@
 use std::{io::Read, usize};
 
-use crate::jvm::ClassFileParsingResult;
-
-use super::parsing_context::ParsingContext;
-
 /// Reads [N] bytes and advances the reader by [N] bytes.
 pub(crate) fn read_bytes<R, const N: usize>(reader: &mut R) -> std::io::Result<[u8; N]>
 where
@@ -69,30 +65,13 @@ where
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_bytes_vec<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
+pub(crate) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
 where
     R: Read,
 {
     let mut buf = vec![0u8; len];
     reader.read_exact(buf.as_mut_slice())?;
     Ok(buf)
-}
-
-pub(crate) fn parse_multiple<R, T, P>(
-    reader: &mut R,
-    ctx: &ParsingContext,
-    parse: P,
-) -> ClassFileParsingResult<Vec<T>>
-where
-    R: std::io::Read,
-    P: Fn(&mut R, &ParsingContext) -> ClassFileParsingResult<T>,
-{
-    use std::iter::repeat_with;
-
-    let count = read_u16(reader)?;
-    repeat_with(|| parse(reader, ctx))
-        .take(count as usize)
-        .collect::<Result<_, _>>()
 }
 
 #[cfg(test)]
@@ -213,7 +192,7 @@ mod test {
     #[test]
     fn read_bytes_vec_success() {
         let mut reader = [0x01u8, 0x02, 0x03, 0x04].as_slice();
-        let buf: Vec<u8> = super::read_bytes_vec(&mut reader, 3).unwrap();
+        let buf: Vec<u8> = super::read_byte_chunk(&mut reader, 3).unwrap();
         assert_eq!(buf, [0x01, 0x02, 0x03]);
         assert_eq!(reader, [0x04u8]);
     }
@@ -221,7 +200,7 @@ mod test {
     #[test]
     fn read_bytes_vec_failed() {
         let mut reader = [0x01u8, 0x02].as_slice();
-        let err = super::read_bytes_vec(&mut reader, 3).unwrap_err();
+        let err = super::read_byte_chunk(&mut reader, 3).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
         assert_eq!(reader, [0x01u8, 0x02]);
     }

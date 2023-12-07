@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    ops::{Range, RangeInclusive},
+    ops::{Bound, Range, RangeInclusive},
 };
 
 use crate::{
@@ -42,13 +42,53 @@ impl MethodBody {
 }
 
 /// A list of instructions.
-pub type InstructionList = BTreeMap<ProgramCounter, Instruction>;
+#[derive(Debug, Default)]
+pub struct InstructionList(BTreeMap<ProgramCounter, Instruction>);
+
+impl From<BTreeMap<ProgramCounter, Instruction>> for InstructionList {
+    fn from(map: BTreeMap<ProgramCounter, Instruction>) -> Self {
+        Self(map)
+    }
+}
+
+impl<const N: usize> From<[(ProgramCounter, Instruction); N]> for InstructionList {
+    fn from(value: [(ProgramCounter, Instruction); N]) -> Self {
+        Self::from(BTreeMap::from(value))
+    }
+}
+
+impl IntoIterator for InstructionList {
+    type Item = (ProgramCounter, Instruction);
+    type IntoIter = <BTreeMap<ProgramCounter, Instruction> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl InstructionList {
+    /// Returns the instruction at the given program counter.
+    pub fn get(&self, pc: &ProgramCounter) -> Option<&Instruction> {
+        self.0.get(pc)
+    }
+
+    /// Returns the first instruction in the list.
+    pub fn entry_point(&self) -> Option<(&ProgramCounter, &Instruction)> {
+        self.0.first_key_value()
+    }
+
+    /// Returns the program counter of the next instruction after the given one.
+    pub fn next_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
+        self.0
+            .range((Bound::Excluded(pc), Bound::Unbounded))
+            .next()
+            .map(|(k, _)| *k)
+    }
+}
 
 #[cfg(test)]
 mod test {
-    use std::collections::BTreeMap;
-
-    use crate::jvm::code::Instruction;
+    use crate::jvm::code::{Instruction, InstructionList};
 
     use super::MethodBody;
     use Instruction::*;
@@ -72,7 +112,7 @@ mod test {
     #[test]
     fn instruction_at() {
         let body = MethodBody {
-            instructions: BTreeMap::from([
+            instructions: InstructionList::from([
                 (0.into(), Nop),
                 (1.into(), IConst0),
                 (2.into(), IConst1),

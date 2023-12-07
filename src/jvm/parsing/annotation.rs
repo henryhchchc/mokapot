@@ -12,16 +12,116 @@ use crate::{
 };
 
 use super::{
-    attribute::Attribute,
+    jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::{read_u16, read_u8},
 };
 
-impl ElementValue {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for TypePathElement {
+    fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let kind = read_u8(reader)?;
+        let argument_index = read_u8(reader)?;
+        match (kind, argument_index) {
+            (0, 0) => Ok(Self::Array),
+            (1, 0) => Ok(Self::Nested),
+            (2, 0) => Ok(Self::Bound),
+            (3, idx) => Ok(Self::TypeArgument(idx)),
+            _ => Err(ClassFileParsingError::InvalidTypePathKind),
+        }
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let type_idx = read_u16(reader)?;
+        let annotation_type = ctx.constant_pool.get_str(type_idx)?;
+        let annotation_type = FieldType::from_str(annotation_type)?;
+        let num_element_value_pairs = read_u16(reader)?;
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_idx = read_u16(reader)?;
+                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
+                let element_value = ElementValue::parse(reader, ctx)?;
+                Ok((element_name.to_owned(), element_value))
+            })
+            .collect::<ClassFileParsingResult<_>>()?;
+        Ok(Annotation {
+            annotation_type,
+            element_value_pairs,
+        })
+    }
+}
+impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let target_type = read_u8(reader)?;
+        let target_info = match target_type {
+            0x00 | 0x01 => TargetInfo::TypeParameter {
+                index: read_u8(reader)?,
+            },
+            0x10 => TargetInfo::SuperType {
+                index: read_u16(reader)?,
+            },
+            0x11 | 0x12 => TargetInfo::TypeParameterBound {
+                type_parameter_index: read_u8(reader)?,
+                bound_index: read_u8(reader)?,
+            },
+            0x13..=0x15 => TargetInfo::Empty,
+            0x16 => TargetInfo::FormalParameter {
+                index: read_u8(reader)?,
+            },
+            0x17 => TargetInfo::Throws {
+                index: read_u16(reader)?,
+            },
+            0x40 | 0x41 => {
+                let table_length = read_u16(reader)?;
+                let table = (0..table_length)
+                    .map(|_| {
+                        let start_pc = read_u16(reader)?;
+                        let length = read_u16(reader)?;
+                        let effective_range = start_pc.into()..(start_pc + length).into();
+                        let index = read_u16(reader)?;
+                        Ok(LocalVariableId {
+                            effective_range,
+                            index,
+                        })
+                    })
+                    .collect::<ClassFileParsingResult<_>>()?;
+                TargetInfo::LocalVar(table)
+            }
+            0x42 => TargetInfo::Catch {
+                index: read_u16(reader)?,
+            },
+            0x43..=0x46 => TargetInfo::Offset(read_u16(reader)?),
+            0x47..=0x4B => TargetInfo::TypeArgument {
+                offset: read_u16(reader)?.into(),
+                index: read_u8(reader)?,
+            },
+            unexpected => Err(ClassFileParsingError::InvalidTargetType(unexpected))?,
+        };
+        let target_path = parse_jvm_element(reader, ctx)?;
+        let type_index = read_u16(reader)?;
+        let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
+        let annotation_type = FieldType::from_str(annotation_type_str)?;
+        let num_element_value_pairs = read_u16(reader)?;
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_idx = read_u16(reader)?;
+                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
+                let element_value = ElementValue::parse(reader, ctx)?;
+                Ok((element_name.to_owned(), element_value))
+            })
+            .collect::<ClassFileParsingResult<_>>()?;
+        Ok(TypeAnnotation {
+            target_info,
+            target_path,
+            annotation_type,
+            element_value_pairs,
+        })
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let tag = read_u8(reader)? as char;
 
         match tag {
@@ -71,177 +171,5 @@ impl ElementValue {
             }
             unexpected => Err(ClassFileParsingError::InvalidElementValueTag(unexpected)),
         }
-    }
-}
-
-impl Annotation {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let type_idx = read_u16(reader)?;
-        let annotation_type = ctx.constant_pool.get_str(type_idx)?;
-        let annotation_type = FieldType::from_str(annotation_type)?;
-        let num_element_value_pairs = read_u16(reader)?;
-        let element_value_pairs = (0..num_element_value_pairs)
-            .map(|_| {
-                let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
-                let element_value = ElementValue::parse(reader, ctx)?;
-                Ok((element_name.to_owned(), element_value))
-            })
-            .collect::<ClassFileParsingResult<_>>()?;
-        Ok(Annotation {
-            annotation_type,
-            element_value_pairs,
-        })
-    }
-}
-
-impl TypePathElement {
-    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let kind = read_u8(reader)?;
-        let argument_index = read_u8(reader)?;
-        match (kind, argument_index) {
-            (0, 0) => Ok(Self::Array),
-            (1, 0) => Ok(Self::Nested),
-            (2, 0) => Ok(Self::Bound),
-            (3, idx) => Ok(Self::TypeArgument(idx)),
-            _ => Err(ClassFileParsingError::InvalidTypePathKind),
-        }
-    }
-}
-
-impl TypeAnnotation {
-    fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let target_type = read_u8(reader)?;
-        let target_info = match target_type {
-            0x00 | 0x01 => TargetInfo::TypeParameter {
-                index: read_u8(reader)?,
-            },
-            0x10 => TargetInfo::SuperType {
-                index: read_u16(reader)?,
-            },
-            0x11 | 0x12 => TargetInfo::TypeParameterBound {
-                type_parameter_index: read_u8(reader)?,
-                bound_index: read_u8(reader)?,
-            },
-            0x13..=0x15 => TargetInfo::Empty,
-            0x16 => TargetInfo::FormalParameter {
-                index: read_u8(reader)?,
-            },
-            0x17 => TargetInfo::Throws {
-                index: read_u16(reader)?,
-            },
-            0x40 | 0x41 => {
-                let table_length = read_u16(reader)?;
-                let table = (0..table_length)
-                    .map(|_| {
-                        let start_pc = read_u16(reader)?;
-                        let length = read_u16(reader)?;
-                        let effective_range = start_pc.into()..(start_pc + length).into();
-                        let index = read_u16(reader)?;
-                        Ok(LocalVariableId {
-                            effective_range,
-                            index,
-                        })
-                    })
-                    .collect::<ClassFileParsingResult<_>>()?;
-                TargetInfo::LocalVar(table)
-            }
-            0x42 => TargetInfo::Catch {
-                index: read_u16(reader)?,
-            },
-            0x43..=0x46 => TargetInfo::Offset(read_u16(reader)?),
-            0x47..=0x4B => TargetInfo::TypeArgument {
-                offset: read_u16(reader)?.into(),
-                index: read_u8(reader)?,
-            },
-            unexpected => Err(ClassFileParsingError::InvalidTargetType(unexpected))?,
-        };
-        let path_length = read_u8(reader)?;
-        let target_path = (0..path_length)
-            .map(|_| TypePathElement::parse(reader))
-            .collect::<Result<_, _>>()?;
-        let type_index = read_u16(reader)?;
-        let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
-        let annotation_type = FieldType::from_str(annotation_type_str)?;
-        let num_element_value_pairs = read_u16(reader)?;
-        let element_value_pairs = (0..num_element_value_pairs)
-            .map(|_| {
-                let element_name_idx = read_u16(reader)?;
-                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
-                let element_value = ElementValue::parse(reader, ctx)?;
-                Ok((element_name.to_owned(), element_value))
-            })
-            .collect::<ClassFileParsingResult<_>>()?;
-        Ok(TypeAnnotation {
-            target_info,
-            target_path,
-            annotation_type,
-            element_value_pairs,
-        })
-    }
-}
-
-impl Attribute {
-    pub(super) fn parse_annotations<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<Vec<Annotation>>
-    where
-        R: std::io::Read,
-    {
-        // Attribute length is to be checked outside.
-        let num_annotations = read_u16(reader)?;
-        let annotations = (0..num_annotations)
-            .map(|_| Annotation::parse(reader, ctx))
-            .collect::<Result<_, _>>()?;
-        Ok(annotations)
-    }
-
-    pub(super) fn parse_parameter_annotations<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<Vec<Vec<Annotation>>>
-    where
-        R: std::io::Read,
-    {
-        let num_parameters = read_u8(reader)?;
-        let parameter_annotations = (0..num_parameters)
-            .map(|_| Self::parse_annotations(reader, ctx))
-            .collect::<Result<_, _>>()?;
-        Ok(parameter_annotations)
-    }
-
-    pub(super) fn parse_type_annotations<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<Vec<TypeAnnotation>>
-    where
-        R: std::io::Read,
-    {
-        let num_annotations = read_u16(reader)?;
-        let annotations = (0..num_annotations)
-            .map(|_| TypeAnnotation::parse(reader, ctx))
-            .collect::<Result<_, _>>()?;
-        Ok(annotations)
-    }
-
-    pub(super) fn parse_annotation_default<R>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let value = ElementValue::parse(reader, ctx)?;
-        Ok(Self::AnnotationDefault(value))
     }
 }

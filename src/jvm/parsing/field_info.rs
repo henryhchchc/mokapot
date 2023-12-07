@@ -3,7 +3,8 @@ use std::str::FromStr;
 use crate::{
     jvm::{
         class::ClassReference,
-        field::{Field, FieldAccessFlags},
+        field::Field,
+        parsing::jvm_element_parser::{parse_flags, parse_jvm_element},
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
@@ -11,19 +12,12 @@ use crate::{
 };
 
 use super::{
-    parsing_context::ParsingContext,
-    reader_utils::{parse_multiple, read_u16},
+    jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, reader_utils::read_u16,
 };
 
-impl Field {
-    pub(crate) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let access = read_u16(reader)?;
-        let Some(access_flags) = FieldAccessFlags::from_bits(access) else {
-            return Err(ClassFileParsingError::UnknownFlags(access, "field"));
-        };
+impl<R: std::io::Read> ParseJvmElement<R> for Field {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let access_flags = parse_flags(reader)?;
         let name_index = read_u16(reader)?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor_index = read_u16(reader)?;
@@ -33,7 +27,7 @@ impl Field {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes = parse_multiple(reader, ctx, Attribute::parse)?;
+        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
         extract_attributes! {
             for attributes in "field_info" by {
                 let constant_value <= ConstantValue,

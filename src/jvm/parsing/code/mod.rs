@@ -5,15 +5,25 @@ use std::str::FromStr;
 
 use crate::{
     jvm::{
-        code::{LineNumberTableEntry, LocalVariableId, VerificationTypeInfo},
+        code::{
+            ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableId,
+            LocalVariableTable, MethodBody,
+        },
+        method::MethodParameter,
+        parsing::{
+            jvm_element_parser::parse_jvm_element,
+            reader_utils::{read_byte_chunk, read_u32},
+        },
         ClassFileParsingError, ClassFileParsingResult,
     },
+    macros::extract_attributes,
     types::field_type::FieldType,
 };
 
 use super::{
+    jvm_element_parser::{parse_flags, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::{read_u16, read_u8},
+    reader_utils::read_u16,
 };
 
 #[derive(Debug)]
@@ -30,25 +40,39 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl LineNumberTableEntry {
-    pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<LineNumberTableEntry>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
+    fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let start_pc = read_u16(reader)?.into();
         let line_number = read_u16(reader)?;
-        Ok(LineNumberTableEntry {
+        Ok(Self {
             start_pc,
             line_number,
         })
     }
 }
 
-impl LocalVariableDescAttr {
-    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let start_pc = read_u16(reader)?.into();
+        let end_pc = read_u16(reader)?.into();
+        let covered_pc = start_pc..=end_pc;
+        let handler_pc = read_u16(reader)?.into();
+        let catch_type_idx = read_u16(reader)?;
+        let catch_type = if catch_type_idx == 0 {
+            None
+        } else {
+            Some(ctx.constant_pool.get_class_ref(catch_type_idx)?)
+        };
+        Ok(ExceptionTableEntry {
+            covered_pc,
+            handler_pc,
+            catch_type,
+        })
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let effective_range = start_pc.into()..(start_pc + length).into();
@@ -69,12 +93,8 @@ impl LocalVariableDescAttr {
         })
     }
 }
-
-impl LocalVariableTypeAttr {
-    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
+impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let start_pc = read_u16(reader)?;
         let length = read_u16(reader)?;
         let effective_range = start_pc.into()..(start_pc + length).into();
@@ -94,34 +114,59 @@ impl LocalVariableTypeAttr {
         })
     }
 }
+impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let name_index = read_u16(reader)?;
+        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let access_flags = parse_flags(reader)?;
+        Ok(MethodParameter { name, access_flags })
+    }
+}
 
-impl VerificationTypeInfo {
-    pub(super) fn parse<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>
-    where
-        R: std::io::Read,
-    {
-        let tag = read_u8(reader)?;
-        let result = match tag {
-            0 => Self::TopVariable,
-            1 => Self::IntegerVariable,
-            2 => Self::FloatVariable,
-            3 => Self::DoubleVariable,
-            4 => Self::LongVariable,
-            5 => Self::NullVariable,
-            6 => Self::UninitializedThisVariable,
-            7 => {
-                let cpool_index = read_u16(reader)?;
-                let class_ref = ctx.constant_pool.get_class_ref(cpool_index)?;
-                Self::ObjectVariable(class_ref)
+impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let max_stack = read_u16(reader)?;
+        let max_locals = read_u16(reader)?;
+        let code_length = read_u32(reader)?;
+
+        let code = read_byte_chunk(reader, code_length as usize)?;
+        let instructions = Instruction::parse_code(code, ctx)?;
+
+        let exception_table = parse_jvm_element(reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let mut local_variable_table = None;
+        extract_attributes! {
+            for attributes in "code" by {
+                let line_number_table <= LineNumberTable,
+                let stack_map_table <= StackMapTable,
+                let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
+                let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
+                match Attribute::LocalVariableTable(it) => {
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    for LocalVariableDescAttr { id, name, field_type } in it {
+                        table.merge_type(id, name, field_type)?;
+                    }
+                },
+                match Attribute::LocalVariableTypeTable(it) => {
+                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    for LocalVariableTypeAttr { id, name, signature } in it {
+                        table.merge_signature(id, name, signature)?;
+                    }
+                },
             }
-            8 => {
-                let offset = read_u16(reader)?.into();
-                Self::UninitializedVariable { offset }
-            }
-            unexpected => Err(ClassFileParsingError::InvalidVerificationTypeInfoTag(
-                unexpected,
-            ))?,
-        };
-        Ok(result)
+        }
+
+        Ok(Self {
+            max_stack,
+            max_locals,
+            exception_table,
+            instructions,
+            line_number_table,
+            local_variable_table,
+            stack_map_table,
+            runtime_visible_type_annotations: runtime_visible_type_annotations.unwrap_or_default(),
+            runtime_invisible_type_annotations: runtime_invisible_type_annotations
+                .unwrap_or_default(),
+        })
     }
 }

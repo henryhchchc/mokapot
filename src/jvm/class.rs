@@ -44,7 +44,7 @@ pub struct Class {
     /// The outer class and method of the class.
     pub enclosing_method: Option<EnclosingMethod>,
     /// The source debug extension.
-    pub source_debug_extension: Vec<u8>,
+    pub source_debug_extension: Option<Vec<u8>>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
