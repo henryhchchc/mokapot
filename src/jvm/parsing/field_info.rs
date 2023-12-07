@@ -32,12 +32,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
             for attributes in "field_info" by {
                 let constant_value <= ConstantValue,
                 let signature <= Signature,
-                let runtime_visible_annotations <= RuntimeVisibleAnnotations,
-                let runtime_invisible_annotations <= RuntimeInvisibleAnnotations,
-                let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
-                let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
-                if Synthetic => is_synthetic = true,
-                if Deprecated => is_deperecated = true,
+                let runtime_visible_annotations unwrap_or_default <= RuntimeVisibleAnnotations,
+                let runtime_invisible_annotations unwrap_or_default <= RuntimeInvisibleAnnotations,
+                let runtime_visible_type_annotations unwrap_or_default <= RuntimeVisibleTypeAnnotations,
+                let runtime_invisible_type_annotations unwrap_or_default <= RuntimeInvisibleTypeAnnotations,
+                if Synthetic => let is_synthetic = true,
+                if Deprecated => let is_deperecated = true,
             }
         }
 
@@ -50,11 +50,10 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
             is_synthetic,
             is_deperecated,
             signature,
-            runtime_visible_annotations: runtime_visible_annotations.unwrap_or_default(),
-            runtime_invisible_annotations: runtime_invisible_annotations.unwrap_or_default(),
-            runtime_visible_type_annotations: runtime_visible_type_annotations.unwrap_or_default(),
-            runtime_invisible_type_annotations: runtime_invisible_type_annotations
-                .unwrap_or_default(),
+            runtime_visible_annotations,
+            runtime_invisible_annotations,
+            runtime_visible_type_annotations,
+            runtime_invisible_type_annotations,
         })
     }
 }

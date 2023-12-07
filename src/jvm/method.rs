@@ -34,7 +34,7 @@ pub struct Method {
     /// The body of the method if it is not `abstract`` or `native`.
     pub body: Option<MethodBody>,
     /// The checked exceptions that may be thrown by the method.
-    pub excaptions: Vec<ClassReference>,
+    pub exceptions: Vec<ClassReference>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
