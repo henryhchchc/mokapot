@@ -1,4 +1,10 @@
-#![warn(missing_debug_implementations, rust_2018_idioms, missing_docs)]
+#![warn(
+    missing_debug_implementations,
+    rust_2018_idioms,
+    missing_docs,
+    rust_2021_compatibility,
+    future_incompatible
+)]
 //! # MokaPot
 //! MokaPot is a Java bytecode analysis library written in Rust.
 
