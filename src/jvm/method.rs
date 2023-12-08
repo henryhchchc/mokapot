@@ -21,7 +21,7 @@ use super::{
 
 /// A JVM method.
 /// See the [JVM Specification §4.6](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.6) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Method {
     /// The access flags of the method.
     pub access_flags: MethodAccessFlags,
@@ -86,7 +86,7 @@ impl Method {
 }
 
 /// The information of a method parameter.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodParameter {
     /// The name of the parameter.
     pub name: String,

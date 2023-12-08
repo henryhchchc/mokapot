@@ -20,7 +20,7 @@ pub use super::parsing::constant_pool::{ConstantPool, ConstantPoolEntry};
 
 /// A JVM class
 /// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Class {
     /// The version of the class file.
     pub version: ClassVersion,
@@ -133,7 +133,7 @@ impl Display for ClassReference {
 }
 
 /// The information of an inner class.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InnerClassInfo {
     /// The inner class.
     pub inner_class: ClassReference,
@@ -146,7 +146,7 @@ pub struct InnerClassInfo {
 }
 
 /// The information of an enclosing method of a [`Class`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnclosingMethod {
     /// The class being enclosed.
     pub class: ClassReference,
@@ -155,7 +155,7 @@ pub struct EnclosingMethod {
 }
 
 /// The information of a bootstrap method.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BootstrapMethod {
     /// The method handle of the bootstrap method.
     pub method: MethodHandle,
@@ -165,7 +165,7 @@ pub struct BootstrapMethod {
 
 /// The source debug extension.
 /// See the [JVM Specification §4.7.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.11) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceDebugExtension(Vec<u8>);
 
 impl SourceDebugExtension {
@@ -205,7 +205,7 @@ pub enum MethodHandle {
 }
 
 /// The record components of a [`Class`] that represents a `record`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RecordComponent {
     /// The name of the component.
     pub name: String,
@@ -225,7 +225,7 @@ pub struct RecordComponent {
 
 bitflags! {
     /// The access flags of a [`Class`].
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct ClassAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
@@ -250,7 +250,7 @@ bitflags! {
 
 bitflags! {
     /// The access flags of a nested class.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct NestedClassAccessFlags: u16 {
         /// Marked or implicitly `public` in source.
         const PUBLIC = 0x0001;

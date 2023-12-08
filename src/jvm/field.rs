@@ -11,7 +11,7 @@ use super::{
 
 /// A JVM field.
 /// See the [JVM Specification §4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.5) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Field {
     /// The access modifiers of the field.
     pub access_flags: FieldAccessFlags,
@@ -128,7 +128,7 @@ use itertools::Itertools;
 
 bitflags! {
     /// The access flags of a field.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct FieldAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;

@@ -9,7 +9,7 @@ use super::{
 
 /// An annotation on a class, field, method, or parameter.
 /// See the [JVM Specification §4.7.16](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.16) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Annotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
@@ -19,7 +19,7 @@ pub struct Annotation {
 
 /// A value of an annotation field.
 /// See the [JVM Specification §4.7.16.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.16.1) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ElementValue {
     /// A constant value.
     Constant(ConstantValue),
@@ -43,7 +43,7 @@ pub enum ElementValue {
 
 /// Information about the target of a [`TypeAnnotation`].
 /// See the [JVM Specification §4.7.20.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.1) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TargetInfo {
     /// Idicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
     TypeParameter {
@@ -103,7 +103,7 @@ pub enum TargetInfo {
 
 /// Identifies a part of a type that is annotated.
 /// See the [JVM Specification §4.7.20.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.2) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypePathElement {
     /// Annotation is deeper in an array type.
     Array,
@@ -117,7 +117,7 @@ pub enum TypePathElement {
 
 /// An type annotation on a class, field, method, or parameter.
 /// See the [JVM Specification §4.7.20](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeAnnotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,

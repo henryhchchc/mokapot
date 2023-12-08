@@ -5,7 +5,7 @@ use super::class::ClassReference;
 
 /// A JVM module.
 /// See the [JVM Specification §4.7.25](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.25) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Module {
     /// The name of the module.
     pub name: String,
@@ -27,7 +27,7 @@ pub struct Module {
 
 /// A service provided by a module.
 /// See the [JVM Specification §4.7.25](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.25) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleProvide {
     /// The reference to a class which is provided as a service.
     pub service: ClassReference,
@@ -36,7 +36,7 @@ pub struct ModuleProvide {
 }
 
 /// A module opening.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleOpen {
     /// The reference to the package which is opened.
     pub package: PackageReference,
@@ -47,7 +47,7 @@ pub struct ModuleOpen {
 }
 
 /// A module export.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleExport {
     /// The reference to the package which is exported.
     pub package: PackageReference,
@@ -58,7 +58,7 @@ pub struct ModuleExport {
 }
 
 /// A module require.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleRequire {
     /// The reference to the module which is required.
     pub module: ModuleReference,
@@ -70,7 +70,7 @@ pub struct ModuleRequire {
 
 bitflags! {
     /// The flags of a module.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ModuleFlags: u16 {
         /// Indicates that this module is open.
         const OPEN = 0x0020;
@@ -83,7 +83,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module require.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ModuleRequireFlags: u16 {
         /// Indicates that any module which depends on the current module, implicitly declares a dependence on the module indicated by this entry.
         const TRANSITIVE = 0x0020;
@@ -98,7 +98,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module export.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ModuleExportFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
         const SYNTHETIC = 0x1000;
@@ -109,7 +109,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module open.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ModuleOpenFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
         const SYNTHETIC = 0x1000;
@@ -119,14 +119,14 @@ bitflags! {
 }
 
 /// A reference to a module in the binary format.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleReference {
     /// The name of the module.
     pub name: String,
 }
 
 /// A reference to a package in the binary format.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PackageReference {
     /// The binary name of the package.
     pub binary_name: String,

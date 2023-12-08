@@ -1,4 +1,5 @@
 use std::{
+    clone,
     collections::{BTreeMap, HashMap},
     ops::{Bound, Range, RangeInclusive},
 };
@@ -12,7 +13,7 @@ use super::{Instruction, ProgramCounter};
 
 /// The body of a method.
 /// See the [JVM Specification §4.7.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.3) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodBody {
     /// The maximum number of values on the operand stack of the method.
     pub max_stack: u16,
@@ -42,7 +43,7 @@ impl MethodBody {
 }
 
 /// A list of instructions.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct InstructionList(BTreeMap<ProgramCounter, Instruction>);
 
 impl From<BTreeMap<ProgramCounter, Instruction>> for InstructionList {
@@ -151,7 +152,7 @@ impl ExceptionTableEntry {
 }
 
 /// An entry in the line number table.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LineNumberTableEntry {
     /// The program counter of the first instruction in the line.
     pub start_pc: ProgramCounter,
@@ -160,7 +161,7 @@ pub struct LineNumberTableEntry {
 }
 
 /// A local variable table.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LocalVariableTable {
     entries: HashMap<LocalVariableId, LocalVariableTableEntry>,
 }
@@ -203,7 +204,7 @@ pub struct LocalVariableId {
 }
 
 /// An entry in the local variable table.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LocalVariableTableEntry {
     /// The name of the variable.
     pub name: Option<String>,
@@ -215,7 +216,7 @@ pub struct LocalVariableTableEntry {
 
 /// The type of a value in the stack map table for verification.
 /// See the [JVM Specification §4.7.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.4) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VerificationTypeInfo {
     /// Indicates that the local variable has the verification type `top`.
     TopVariable,
@@ -242,7 +243,7 @@ pub enum VerificationTypeInfo {
 
 /// A stack map frame for verification.
 /// See the [JVM Specification §4.7.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.4) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StackMapFrame {
     /// Indicates that the frame has exactly the same locals as the previous frame and that the operand stack is empty.
     /// Corresponds to the `same_frame` and `same_frame_extended`.
