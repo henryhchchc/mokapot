@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{iter::repeat_with, str::FromStr};
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -18,7 +18,7 @@ use super::{
     constant_pool::ConstantPoolEntry,
     jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::{read_byte_chunk, read_u16, read_u32},
+    reader_utils::{read_byte_chunk, read_u16, read_u32, read_u8},
 };
 
 #[derive(Debug)]
@@ -106,8 +106,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             "Exceptions" => parse_jvm_element(reader, ctx).map(Self::Exceptions),
             "InnerClasses" => parse_jvm_element(reader, ctx).map(Self::InnerClasses),
             "EnclosingMethod" => parse_jvm_element(reader, ctx).map(Self::EnclosingMethod),
-            "Synthetic" => Ok(Attribute::Synthetic),
-            "Deprecated" => Ok(Attribute::Deprecated),
+            "Synthetic" => match attribute_length {
+                0 => Ok(Attribute::Synthetic),
+                _ => Err(ClassFileParsingError::UnexpectedData),
+            },
+            "Deprecated" => match attribute_length {
+                0 => Ok(Attribute::Deprecated),
+                _ => Err(ClassFileParsingError::UnexpectedData),
+            },
             "Signature" => parse_jvm_element(reader, ctx).map(Self::Signature),
             "SourceFile" => parse_jvm_element(reader, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
@@ -125,10 +131,20 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
                 parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleParameterAnnotations)
+                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
+                let num_parameters = read_u8(reader)?;
+                let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
+                    .take(num_parameters as usize)
+                    .collect::<Result<_, _>>()?;
+                Ok(Self::RuntimeVisibleParameterAnnotations(param_annos))
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleParameterAnnotations)
+                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
+                let num_parameters = read_u8(reader)?;
+                let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
+                    .take(num_parameters as usize)
+                    .collect::<Result<_, _>>()?;
+                Ok(Self::RuntimeInvisibleParameterAnnotations(param_annos))
             }
             "RuntimeVisibleTypeAnnotations" => {
                 parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
@@ -150,11 +166,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
                 unexpected.to_owned(),
             )),
         };
-        if reader.position() == attribute_length as u64 {
-            result
-        } else {
-            Err(ClassFileParsingError::UnexpectedData)
-        }
+        result.and_then(|attribute| {
+            if reader.position() == attribute_length as u64 {
+                Ok(attribute)
+            } else {
+                Err(ClassFileParsingError::UnexpectedData)
+            }
+        })
     }
 }
 
