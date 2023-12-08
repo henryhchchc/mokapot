@@ -1,8 +1,11 @@
-use std::{io::Read, str::FromStr};
+use std::str::FromStr;
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
-    class::{BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent},
+    class::{
+        BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent,
+        SourceDebugExtension,
+    },
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
     method::{MethodDescriptor, MethodParameter},
@@ -31,7 +34,7 @@ pub(crate) enum Attribute {
     Deprecated,
     EnclosingMethod(EnclosingMethod),
     Signature(String),
-    SourceDebugExtension(Vec<u8>),
+    SourceDebugExtension(SourceDebugExtension),
     LocalVariableTable(Vec<LocalVariableDescAttr>),
     LocalVariableTypeTable(Vec<LocalVariableTypeAttr>),
     RuntimeVisibleAnnotations(Vec<Annotation>),
@@ -108,9 +111,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             "Signature" => parse_jvm_element(reader, ctx).map(Self::Signature),
             "SourceFile" => parse_jvm_element(reader, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
-                let mut debug_extension = Vec::new();
-                reader.read_to_end(&mut debug_extension)?;
-                Ok(Attribute::SourceDebugExtension(debug_extension))
+                parse_jvm_element(reader, ctx).map(Self::SourceDebugExtension)
             }
             "LineNumberTable" => parse_jvm_element(reader, ctx).map(Self::LineNumberTable),
             "LocalVariableTable" => parse_jvm_element(reader, ctx).map(Self::LocalVariableTable),

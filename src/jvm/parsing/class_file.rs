@@ -1,16 +1,15 @@
-use std::{iter::repeat_with, str::FromStr};
+use std::iter::repeat_with;
 
 use crate::{
     jvm::{
         class::{
             BootstrapMethod, Class, ClassAccessFlags, ClassReference, ClassVersion, ConstantPool,
-            InnerClassInfo, RecordComponent,
+            InnerClassInfo, RecordComponent, SourceDebugExtension,
         },
         parsing::jvm_element_parser::{parse_flags, parse_jvm_element},
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
-    types::field_type::FieldType,
 };
 
 use super::{
@@ -130,7 +129,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
         })
         .take(num_bootstrap_arguments as usize)
         .collect::<Result<_, _>>()?;
-        Ok(BootstrapMethod {
+        Ok(Self {
             method: method_ref,
             arguments,
         })
@@ -139,8 +138,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
 
 impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let inner_class_info_index = read_u16(reader)?;
-        let inner_class = ctx.constant_pool.get_class_ref(inner_class_info_index)?;
+        let inner_class = parse_jvm_element(reader, ctx)?;
         let outer_class_info_index = read_u16(reader)?;
         let outer_class = if outer_class_info_index == 0 {
             None
@@ -166,11 +164,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
 
 impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let name_index = read_u16(reader)?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        let component_type = FieldType::from_str(descriptor)?;
+        let name = parse_jvm_element(reader, ctx)?;
+        let component_type = parse_jvm_element(reader, ctx)?;
 
         let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
         extract_attributes! {
@@ -210,5 +205,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for ClassReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let class_info_idx = read_u16(reader)?;
         ctx.constant_pool.get_class_ref(class_info_idx)
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for SourceDebugExtension {
+    fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let mut content = Vec::new();
+        reader.read_to_end(&mut content)?;
+        Ok(Self::new(content))
     }
 }

@@ -44,7 +44,7 @@ pub struct Class {
     /// The outer class and method of the class.
     pub enclosing_method: Option<EnclosingMethod>,
     /// The source debug extension.
-    pub source_debug_extension: Option<Vec<u8>>,
+    pub source_debug_extension: Option<SourceDebugExtension>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
@@ -161,6 +161,23 @@ pub struct BootstrapMethod {
     pub method: MethodHandle,
     /// The argument that are passed to the bootstrap method.
     pub arguments: Vec<ConstantValue>,
+}
+
+/// The source debug extension.
+/// See the [JVM Specification §4.7.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.11) for more information.
+#[derive(Debug)]
+pub struct SourceDebugExtension(Vec<u8>);
+
+impl SourceDebugExtension {
+    /// Creates a new source debug extension.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        SourceDebugExtension(bytes)
+    }
+
+    /// Gets the bytes of the source debug extension.
+    pub fn bytes(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 /// A method handle.

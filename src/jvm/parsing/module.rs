@@ -44,8 +44,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleRequire {
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleExport {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let package_index = read_u16(reader)?;
-        let package = ctx.constant_pool.get_package_ref(package_index)?;
+        let package = parse_jvm_element(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let to = parse_jvm_element(reader, ctx)?;
         Ok(ModuleExport { package, flags, to })
@@ -63,8 +62,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleOpen {
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleProvide {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let service_index = read_u16(reader)?;
-        let service = ctx.constant_pool.get_class_ref(service_index)?;
+        let service = parse_jvm_element(reader, ctx)?;
         let with = parse_jvm_element(reader, ctx)?;
         Ok(ModuleProvide { service, with })
     }

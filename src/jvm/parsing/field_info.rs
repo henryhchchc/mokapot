@@ -18,15 +18,11 @@ use super::{
 impl<R: std::io::Read> ParseJvmElement<R> for Field {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let access_flags = parse_flags(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        let field_type = FieldType::from_str(descriptor)?;
+        let name = parse_jvm_element(reader, ctx)?;
+        let field_type = parse_jvm_element(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
-
         let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
         extract_attributes! {
             for attributes in "field_info" by {
@@ -55,5 +51,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
         })
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for FieldType {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let descriptor_index = read_u16(reader)?;
+        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
+        FieldType::from_str(descriptor).map_err(ClassFileParsingError::from)
     }
 }

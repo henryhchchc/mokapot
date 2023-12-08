@@ -14,18 +14,19 @@ where
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self>;
 }
 
+#[inline]
 pub(crate) fn parse_jvm_element<R, T>(
     reader: &mut R,
     ctx: &ParsingContext,
 ) -> ClassFileParsingResult<T>
 where
-    R: std::io::Read,
+    R: Read,
     T: ParseJvmElement<R>,
 {
     T::parse(reader, ctx)
 }
 
-impl<T, R: std::io::Read> ParseJvmElement<R> for Vec<T>
+impl<T, R: Read> ParseJvmElement<R> for Vec<T>
 where
     T: ParseJvmElement<R>,
 {
@@ -39,16 +40,17 @@ where
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for String {
+impl<R: Read> ParseJvmElement<R> for String {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let utf_8_index = read_u16(reader)?;
         ctx.constant_pool.get_str(utf_8_index).map(str::to_owned)
     }
 }
 
+#[inline]
 pub(crate) fn parse_flags<F, R>(reader: &mut R) -> ClassFileParsingResult<F>
 where
-    R: std::io::Read,
+    R: Read,
     F: Flags<Bits = u16>,
 {
     let flag_bits = read_u16(reader)?;

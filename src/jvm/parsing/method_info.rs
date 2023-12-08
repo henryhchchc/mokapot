@@ -18,11 +18,8 @@ use super::{jvm_element_parser::ParseJvmElement, reader_utils::read_u16};
 impl<R: std::io::Read> ParseJvmElement<R> for Method {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
-        let name_index = read_u16(reader)?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor_index = read_u16(reader)?;
-        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        let descriptor = MethodDescriptor::from_str(descriptor)?;
+        let name = parse_jvm_element(reader, ctx)?;
+        let descriptor: MethodDescriptor = parse_jvm_element(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
@@ -101,5 +98,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
             is_deprecated,
             signature,
         })
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for MethodDescriptor {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let descriptor_index = read_u16(reader)?;
+        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
+        MethodDescriptor::from_str(descriptor).map_err(ClassFileParsingError::from)
     }
 }

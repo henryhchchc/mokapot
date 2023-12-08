@@ -4,12 +4,16 @@ use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8}
 use crate::{
     jvm::{
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
-        field::ConstantValue,
-        method::MethodDescriptor,
-        parsing::{constant_pool::ConstantPoolEntry, parsing_context::ParsingContext},
+        field::{ConstantValue, FieldReference},
+        method::{MethodDescriptor, MethodReference},
+        parsing::{
+            constant_pool::ConstantPoolEntry,
+            jvm_element_parser::{parse_jvm_element, ParseJvmElement},
+            parsing_context::ParsingContext,
+        },
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::field_type::{FieldType, PrimitiveType},
+    types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
 impl Instruction {
@@ -46,8 +50,7 @@ impl Instruction {
             0x2c => ALoad2,
             0x2d => ALoad3,
             0xbd => {
-                let index = read_u16(reader)?;
-                let element_type = ctx.constant_pool.get_class_ref(index)?;
+                let element_type = parse_jvm_element(reader, ctx)?;
                 ANewArray(element_type)
             }
             0xb0 => AReturn,
@@ -64,8 +67,7 @@ impl Instruction {
             0x34 => CALoad,
             0x55 => CAStore,
             0xc0 => {
-                let type_ref_idx = read_u16(reader)?;
-                let type_ref = ctx.constant_pool.get_type_ref(type_ref_idx)?;
+                let type_ref = parse_jvm_element(reader, ctx)?;
                 CheckCast(type_ref)
             }
             0x90 => D2F,
@@ -128,13 +130,11 @@ impl Instruction {
             0x46 => FStore3,
             0x66 => FSub,
             0xb4 => {
-                let index = read_u16(reader)?;
-                let field = ctx.constant_pool.get_field_ref(index)?;
+                let field = parse_jvm_element(reader, ctx)?;
                 GetField(field)
             }
             0xb2 => {
-                let index = read_u16(reader)?;
-                let field = ctx.constant_pool.get_field_ref(index)?;
+                let field = parse_jvm_element(reader, ctx)?;
                 GetStatic(field)
             }
             0xa7 => Goto(read_offset16(reader, pc)?),
@@ -182,8 +182,7 @@ impl Instruction {
             0x68 => IMul,
             0x74 => INeg,
             0xc1 => {
-                let type_ref_idx = read_u16(reader)?;
-                let type_ref = ctx.constant_pool.get_type_ref(type_ref_idx)?;
+                let type_ref = parse_jvm_element(reader, ctx)?;
                 InstanceOf(type_ref)
             }
             0xba => {
@@ -214,8 +213,7 @@ impl Instruction {
                 }
             }
             0xb9 => {
-                let index = read_u16(reader)?;
-                let method_ref = ctx.constant_pool.get_method_ref(index)?;
+                let method_ref = parse_jvm_element(reader, ctx)?;
                 let count = read_u8(reader)?;
                 let zero = read_u8(reader)?;
                 if zero != 0 {
@@ -226,18 +224,15 @@ impl Instruction {
                 InvokeInterface(method_ref, count)
             }
             0xb7 => {
-                let index = read_u16(reader)?;
-                let method_ref = ctx.constant_pool.get_method_ref(index)?;
+                let method_ref = parse_jvm_element(reader, ctx)?;
                 InvokeSpecial(method_ref)
             }
             0xb8 => {
-                let index = read_u16(reader)?;
-                let method_ref = ctx.constant_pool.get_method_ref(index)?;
+                let method_ref = parse_jvm_element(reader, ctx)?;
                 InvokeStatic(method_ref)
             }
             0xb6 => {
-                let index = read_u16(reader)?;
-                let method_ref = ctx.constant_pool.get_method_ref(index)?;
+                let method_ref = parse_jvm_element(reader, ctx)?;
                 InvokeVirtual(method_ref)
             }
             0x80 => IOr,
@@ -374,13 +369,11 @@ impl Instruction {
             0xc2 => MonitorEnter,
             0xc3 => MonitorExit,
             0xc5 => {
-                let index = read_u16(reader)?;
-                let array_type = ctx.constant_pool.get_type_ref(index)?;
+                let array_type = parse_jvm_element(reader, ctx)?;
                 MultiANewArray(array_type, read_u8(reader)?)
             }
             0xbb => {
-                let index = read_u16(reader)?;
-                let class_ref = ctx.constant_pool.get_class_ref(index)?;
+                let class_ref = parse_jvm_element(reader, ctx)?;
                 New(class_ref)
             }
             0xbc => {
@@ -404,13 +397,11 @@ impl Instruction {
             0x57 => Pop,
             0x58 => Pop2,
             0xb5 => {
-                let index = read_u16(reader)?;
-                let field = ctx.constant_pool.get_field_ref(index)?;
+                let field = parse_jvm_element(reader, ctx)?;
                 PutField(field)
             }
             0xb3 => {
-                let index = read_u16(reader)?;
-                let field = ctx.constant_pool.get_field_ref(index)?;
+                let field = parse_jvm_element(reader, ctx)?;
                 PutStatic(field)
             }
             0xa9 => Ret(read_u8(reader)?),
@@ -466,4 +457,25 @@ where
 {
     let offset = read_i16(reader)?;
     Ok(current_pc.offset_i16(offset)?)
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for TypeReference {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let index = read_u16(reader)?;
+        ctx.constant_pool.get_type_ref(index)
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for FieldReference {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let index = read_u16(reader)?;
+        ctx.constant_pool.get_field_ref(index)
+    }
+}
+
+impl<R: std::io::Read> ParseJvmElement<R> for MethodReference {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+        let index = read_u16(reader)?;
+        ctx.constant_pool.get_method_ref(index)
+    }
 }
