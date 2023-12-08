@@ -11,7 +11,7 @@ where
         T::read_from_reader(self)
     }
 }
-pub(crate) trait ReadFromReader<R> {
+pub(crate) trait ReadFromReader<R: Read> {
     fn read_from_reader(reader: &mut R) -> std::io::Result<Self>
     where
         Self: Sized;

@@ -95,6 +95,40 @@ fn test_methods() {
     );
 }
 
+fn parse_complicated_class() -> Class {
+    let bytes = include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/java_classes/org/mokapot/test/ComplicatedClass.class"
+    ));
+    let reader = BufReader::new(&bytes[..]);
+    Class::from_reader(reader).unwrap()
+}
+
+fn parse_complicated_inner_class() -> Class {
+    let bytes = include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/java_classes/org/mokapot/test/ComplicatedClass$InnerClass.class"
+    ));
+    let reader = BufReader::new(&bytes[..]);
+    Class::from_reader(reader).unwrap()
+}
+
+fn parse_complicated_in_method_class() -> Class {
+    let bytes = include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/java_classes/org/mokapot/test/ComplicatedClass$1Test.class"
+    ));
+    let reader = BufReader::new(&bytes[..]);
+    Class::from_reader(reader).unwrap()
+}
+
+#[test]
+fn parse_complicated_class_works() {
+    parse_complicated_class();
+    parse_complicated_inner_class();
+    parse_complicated_in_method_class();
+}
+
 #[test]
 fn not_a_class_file() {
     let bytes = include_bytes!(concat!(

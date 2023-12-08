@@ -106,14 +106,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             "Exceptions" => parse_jvm_element(reader, ctx).map(Self::Exceptions),
             "InnerClasses" => parse_jvm_element(reader, ctx).map(Self::InnerClasses),
             "EnclosingMethod" => parse_jvm_element(reader, ctx).map(Self::EnclosingMethod),
-            "Synthetic" => match attribute_length {
-                0 => Ok(Attribute::Synthetic),
-                _ => Err(ClassFileParsingError::UnexpectedData),
-            },
-            "Deprecated" => match attribute_length {
-                0 => Ok(Attribute::Deprecated),
-                _ => Err(ClassFileParsingError::UnexpectedData),
-            },
+            "Synthetic" => Ok(Attribute::Synthetic),
+            "Deprecated" => Ok(Attribute::Deprecated),
             "Signature" => parse_jvm_element(reader, ctx).map(Self::Signature),
             "SourceFile" => parse_jvm_element(reader, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
@@ -133,18 +127,18 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             "RuntimeVisibleParameterAnnotations" => {
                 // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
                 let num_parameters: u8 = reader.read_value()?;
-                let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
+                repeat_with(|| parse_jvm_element(reader, ctx))
                     .take(num_parameters as usize)
-                    .collect::<Result<_, _>>()?;
-                Ok(Self::RuntimeVisibleParameterAnnotations(param_annos))
+                    .collect::<Result<_, _>>()
+                    .map(Self::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
                 // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
                 let num_parameters: u8 = reader.read_value()?;
-                let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
+                repeat_with(|| parse_jvm_element(reader, ctx))
                     .take(num_parameters as usize)
-                    .collect::<Result<_, _>>()?;
-                Ok(Self::RuntimeInvisibleParameterAnnotations(param_annos))
+                    .collect::<Result<_, _>>()
+                    .map(Self::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
                 parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
@@ -154,7 +148,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             }
             "AnnotationDefault" => parse_jvm_element(reader, ctx).map(Self::AnnotationDefault),
             "BootstrapMethods" => parse_jvm_element(reader, ctx).map(Self::BootstrapMethods),
-            "MethodParameters" => parse_jvm_element(reader, ctx).map(Self::MethodParameters),
+            "MethodParameters" => {
+                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
+                let parameters_count: u8 = reader.read_value()?;
+                repeat_with(|| parse_jvm_element(reader, ctx))
+                    .take(parameters_count as usize)
+                    .collect::<Result<_, _>>()
+                    .map(Self::MethodParameters)
+            }
             "Module" => parse_jvm_element(reader, ctx).map(Self::Module),
             "ModulePackages" => parse_jvm_element(reader, ctx).map(Self::ModulePackages),
             "ModuleMainClass" => parse_jvm_element(reader, ctx).map(Self::ModuleMainClass),

@@ -89,7 +89,7 @@ impl Method {
 #[derive(Debug, Clone)]
 pub struct MethodParameter {
     /// The name of the parameter.
-    pub name: String,
+    pub name: Option<String>,
     /// The access flags of the parameter.
     pub access_flags: MethodParameterAccessFlags,
 }

@@ -114,7 +114,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
 impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let name_index = reader.read_value()?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let name = if name_index == 0 {
+            None
+        } else {
+            Some(ctx.constant_pool.get_str(name_index)?.to_owned())
+        };
         let access_flags = parse_flags(reader)?;
         Ok(MethodParameter { name, access_flags })
     }
