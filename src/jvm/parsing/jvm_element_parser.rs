@@ -31,7 +31,7 @@ where
     T: ParseJvmElement<R>,
 {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let count = reader.read_value()?;
+        let count: u16 = reader.read_value()?;
         let mut result = Vec::with_capacity(count as usize);
         for _ in 0..count {
             result.push(parse_jvm_element(reader, ctx)?);

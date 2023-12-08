@@ -36,7 +36,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
         let type_idx = reader.read_value()?;
         let annotation_type = ctx.constant_pool.get_str(type_idx)?;
         let annotation_type = FieldType::from_str(annotation_type)?;
-        let num_element_value_pairs = reader.read_value()?;
+        let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = reader.read_value()?;
@@ -73,7 +73,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
                 index: reader.read_value()?,
             },
             0x40 | 0x41 => {
-                let table_length = reader.read_value()?;
+                let table_length: u16 = reader.read_value()?;
                 let table = (0..table_length)
                     .map(|_| {
                         let start_pc = reader.read_value::<u16>()?;
@@ -102,7 +102,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
         let type_index = reader.read_value()?;
         let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
         let annotation_type = FieldType::from_str(annotation_type_str)?;
-        let num_element_value_pairs = reader.read_value()?;
+        let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
                 let element_name_idx = reader.read_value()?;
@@ -163,10 +163,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
             '[' => {
-                let num_values = reader.read_value()?;
-                let values = (0..num_values)
-                    .map(|_| Self::parse(reader, ctx))
-                    .collect::<ClassFileParsingResult<_>>()?;
+                let values = parse_jvm_element(reader, ctx)?;
                 Ok(Self::Array(values))
             }
             unexpected => Err(ClassFileParsingError::InvalidElementValueTag(unexpected)),

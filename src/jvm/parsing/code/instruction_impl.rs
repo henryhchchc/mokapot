@@ -370,14 +370,15 @@ impl Instruction {
             0xc3 => MonitorExit,
             0xc5 => {
                 let array_type = parse_jvm_element(reader, ctx)?;
-                MultiANewArray(array_type, reader.read_value()?)
+                let dimension = reader.read_value()?;
+                MultiANewArray(array_type, dimension)
             }
             0xbb => {
                 let class_ref = parse_jvm_element(reader, ctx)?;
                 New(class_ref)
             }
             0xbc => {
-                let type_id = reader.read_value()?;
+                let type_id: u8 = reader.read_value()?;
                 let arr_type = match type_id {
                     4 => PrimitiveType::Boolean,
                     5 => PrimitiveType::Char,

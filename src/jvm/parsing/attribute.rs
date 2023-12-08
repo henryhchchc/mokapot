@@ -96,7 +96,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let name_idx = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let attribute_length = reader.read_value()?;
+        let attribute_length: u32 = reader.read_value()?;
         let attribute_bytes = read_byte_chunk(reader, attribute_length as usize)?;
         let reader = &mut std::io::Cursor::new(attribute_bytes);
         let result = match name {

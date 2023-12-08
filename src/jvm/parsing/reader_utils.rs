@@ -19,19 +19,18 @@ pub(crate) trait ReadFromReader<R> {
 
 impl<T> ClassReader for T where T: Read + Sized {}
 
-impl<R: Read> ReadFromReader<R> for u8 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let mut buf = [0u8; 1];
-        reader.read_exact(&mut buf)?;
-        Ok(buf[0])
-    }
-}
-
 impl<R: Read, const N: usize> ReadFromReader<R> for [u8; N] {
     fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
+    }
+}
+
+impl<R: Read> ReadFromReader<R> for u8 {
+    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
+        let buf = reader.read_value()?;
+        Ok(Self::from_be_bytes(buf))
     }
 }
 
@@ -203,7 +202,7 @@ mod test {
     #[test]
     fn read_i8_success() {
         let mut reader = [0x01u8].as_slice();
-        let buf: u32 = reader.read_value().unwrap();
+        let buf: i8 = reader.read_value().unwrap();
         assert_eq!(buf, 0x01);
         assert!(reader.is_empty());
     }

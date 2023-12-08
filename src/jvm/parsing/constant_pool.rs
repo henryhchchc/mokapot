@@ -84,7 +84,7 @@ impl ConstantPool {
         &ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(it)),
         &ConstantPoolEntry::String { string_index } => {
             if let ConstantPoolEntry::Utf8(java_str) = self.get_entry_internal(string_index)? {
-             Ok(ConstantValue::String(java_str.clone()))
+                Ok(ConstantValue::String(java_str.clone()))
             } else {
                 Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                     expected: "Utf8",
