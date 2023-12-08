@@ -12,10 +12,11 @@ impl ProgramCounter {
     /// - [`InvalidOffset::I32`] If the resulting value is too large to fit into a [`ProgramCounter`].
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
         let self_i32 = i32::from(self.0);
-        let result = self_i32 + offset;
-        u16::try_from(result)
+        self_i32
+            .checked_add(offset)
+            .and_then(|it| u16::try_from(it).ok())
             .map(Self)
-            .map_err(|_| InvalidOffset::I32(offset))
+            .ok_or(InvalidOffset::I32(offset))
     }
 
     /// Creates a new program counter based on the given value with a given offset (in [`i16`]).
@@ -24,10 +25,11 @@ impl ProgramCounter {
     pub fn offset_i16(&self, offset: i16) -> Result<Self, InvalidOffset> {
         let self_i32 = i32::from(self.0);
         let offset_i32 = i32::from(offset);
-        let result = self_i32 + offset_i32;
-        u16::try_from(result)
+        self_i32
+            .checked_add(offset_i32)
+            .and_then(|it| u16::try_from(it).ok())
             .map(Self)
-            .map_err(|_| InvalidOffset::I16(offset))
+            .ok_or(InvalidOffset::I16(offset))
     }
 }
 
@@ -91,9 +93,15 @@ mod tests {
 
     #[test]
     fn test_offset_i16() {
-        let pc = ProgramCounter::from(10);
-        assert_eq!(pc.offset_i16(5).unwrap(), ProgramCounter::from(15));
-        assert_eq!(pc.offset_i16(-5).unwrap(), ProgramCounter::from(5));
+        let pc = ProgramCounter::from(u16::MAX - 10);
+        assert_eq!(
+            pc.offset_i16(5).unwrap(),
+            ProgramCounter::from(u16::MAX - 5)
+        );
+        assert_eq!(
+            pc.offset_i16(-5).unwrap(),
+            ProgramCounter::from(u16::MAX - 15)
+        );
         assert!(pc.offset_i16(i16::MAX).is_err());
     }
 
