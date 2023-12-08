@@ -13,14 +13,14 @@ use super::{
     constant_pool::ConstantPoolEntry,
     jvm_element_parser::{parse_flags, parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::read_u16,
+    reader_utils::ClassReader,
 };
 
 fn parse_version<R>(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Option<String>>
 where
     R: std::io::Read,
 {
-    let version_index = read_u16(reader)?;
+    let version_index = reader.read_value()?;
     let result = if version_index > 0 {
         Some(ctx.constant_pool.get_str(version_index)?.to_owned())
     } else {
@@ -70,7 +70,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleProvide {
 
 impl<R: std::io::Read> ParseJvmElement<R> for Module {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let module_info_idx = read_u16(reader)?;
+        let module_info_idx = reader.read_value()?;
         let module_info_entry = ctx.constant_pool.get_entry_internal(module_info_idx)?;
         let &ConstantPoolEntry::Module { name_index } = module_info_entry else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
@@ -96,14 +96,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for Module {
 
 impl<R: std::io::Read> ParseJvmElement<R> for PackageReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let package_index = read_u16(reader)?;
+        let package_index = reader.read_value()?;
         ctx.constant_pool.get_package_ref(package_index)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let module_ref_idx = read_u16(reader)?;
+        let module_ref_idx = reader.read_value()?;
         ctx.constant_pool.get_module_ref(module_ref_idx)
     }
 }

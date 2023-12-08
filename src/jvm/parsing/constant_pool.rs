@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::reader_utils::{read_byte_chunk, read_bytes, read_u16, read_u8};
+use super::reader_utils::{read_byte_chunk, ClassReader};
 use crate::{
     jvm::ClassFileParsingError,
     jvm::{
@@ -25,7 +25,7 @@ impl ConstantPool {
     where
         R: std::io::Read,
     {
-        let constant_pool_count = read_u16(reader)?;
+        let constant_pool_count = reader.read_value()?;
         let entries = ConstantPoolEntry::parse_multiple(reader, constant_pool_count)?;
 
         Ok(Self { entries })
@@ -407,7 +407,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let tag = read_u8(reader)?;
+        let tag = reader.read_value()?;
         match tag {
             1 => Self::parse_utf8(reader),
             3 => Self::parse_integer(reader),
@@ -457,7 +457,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let length = read_u16(reader)?;
+        let length: u16 = reader.read_value()?;
         let cesu8_content = read_byte_chunk(reader, length as usize)?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {
             Ok(result) => Ok(Self::Utf8(JavaString::ValidUtf8(result.into_owned()))),
@@ -469,39 +469,35 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let bytes = read_bytes(reader)?;
-        Ok(Self::Integer(i32::from_be_bytes(bytes)))
+        Ok(Self::Integer(reader.read_value()?))
     }
 
     fn parse_float<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let bytes = read_bytes(reader)?;
-        Ok(Self::Float(f32::from_be_bytes(bytes)))
+        Ok(Self::Float(reader.read_value()?))
     }
 
     fn parse_long<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let bytes = read_bytes(reader)?;
-        Ok(Self::Long(i64::from_be_bytes(bytes)))
+        Ok(Self::Long(reader.read_value()?))
     }
 
     fn parse_double<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let bytes = read_bytes(reader)?;
-        Ok(Self::Double(f64::from_be_bytes(bytes)))
+        Ok(Self::Double(reader.read_value()?))
     }
 
     fn parse_class<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         Ok(Self::Class { name_index })
     }
 
@@ -509,7 +505,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let string_index = read_u16(reader)?;
+        let string_index = reader.read_value()?;
         Ok(Self::String { string_index })
     }
 
@@ -517,8 +513,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let class_index = read_u16(reader)?;
-        let name_and_type_index = read_u16(reader)?;
+        let class_index = reader.read_value()?;
+        let name_and_type_index = reader.read_value()?;
         Ok(Self::FieldRef {
             class_index,
             name_and_type_index,
@@ -529,8 +525,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let class_index = read_u16(reader)?;
-        let name_and_type_index = read_u16(reader)?;
+        let class_index = reader.read_value()?;
+        let name_and_type_index = reader.read_value()?;
         Ok(Self::MethodRef {
             class_index,
             name_and_type_index,
@@ -541,8 +537,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let class_index = read_u16(reader)?;
-        let name_and_type_index = read_u16(reader)?;
+        let class_index = reader.read_value()?;
+        let name_and_type_index = reader.read_value()?;
         Ok(Self::InterfaceMethodRef {
             class_index,
             name_and_type_index,
@@ -553,8 +549,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let name_index = read_u16(reader)?;
-        let descriptor_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
+        let descriptor_index = reader.read_value()?;
         Ok(Self::NameAndType {
             name_index,
             descriptor_index,
@@ -565,8 +561,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let reference_kind = read_u8(reader)?;
-        let reference_index = read_u16(reader)?;
+        let reference_kind = reader.read_value()?;
+        let reference_index = reader.read_value()?;
         Ok(Self::MethodHandle {
             reference_kind,
             reference_index,
@@ -577,7 +573,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let descriptor_index = read_u16(reader)?;
+        let descriptor_index = reader.read_value()?;
         Ok(Self::MethodType { descriptor_index })
     }
 
@@ -585,8 +581,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let bootstrap_method_attr_index = read_u16(reader)?;
-        let name_and_type_index = read_u16(reader)?;
+        let bootstrap_method_attr_index = reader.read_value()?;
+        let name_and_type_index = reader.read_value()?;
         Ok(Self::Dynamic {
             bootstrap_method_attr_index,
             name_and_type_index,
@@ -597,8 +593,8 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let bootstrap_method_attr_index = read_u16(reader)?;
-        let name_and_type_index = read_u16(reader)?;
+        let bootstrap_method_attr_index = reader.read_value()?;
+        let name_and_type_index = reader.read_value()?;
         Ok(Self::InvokeDynamic {
             bootstrap_method_attr_index,
             name_and_type_index,
@@ -609,7 +605,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         Ok(Self::Module { name_index })
     }
 
@@ -617,7 +613,7 @@ impl ConstantPoolEntry {
     where
         R: std::io::Read,
     {
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         Ok(Self::Package { name_index })
     }
 }

@@ -13,7 +13,7 @@ use crate::{
     macros::extract_attributes,
 };
 
-use super::{jvm_element_parser::ParseJvmElement, reader_utils::read_u16};
+use super::{jvm_element_parser::ParseJvmElement, reader_utils::ClassReader};
 
 impl<R: std::io::Read> ParseJvmElement<R> for Method {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
@@ -103,7 +103,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
 
 impl<R: std::io::Read> ParseJvmElement<R> for MethodDescriptor {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let descriptor_index = read_u16(reader)?;
+        let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         MethodDescriptor::from_str(descriptor).map_err(ClassFileParsingError::from)
     }

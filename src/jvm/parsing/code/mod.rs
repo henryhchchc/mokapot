@@ -10,10 +10,7 @@ use crate::{
             LocalVariableTable, MethodBody,
         },
         method::MethodParameter,
-        parsing::{
-            jvm_element_parser::parse_jvm_element,
-            reader_utils::{read_byte_chunk, read_u32},
-        },
+        parsing::{jvm_element_parser::parse_jvm_element, reader_utils::read_byte_chunk},
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
@@ -23,7 +20,7 @@ use crate::{
 use super::{
     jvm_element_parser::{parse_flags, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::read_u16,
+    reader_utils::ClassReader,
 };
 
 #[derive(Debug)]
@@ -42,8 +39,8 @@ pub(crate) struct LocalVariableTypeAttr {
 
 impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
     fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let start_pc = read_u16(reader)?.into();
-        let line_number = read_u16(reader)?;
+        let start_pc = reader.read_value::<u16>()?.into();
+        let line_number = reader.read_value()?;
         Ok(Self {
             start_pc,
             line_number,
@@ -53,11 +50,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
 
 impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let start_pc = read_u16(reader)?.into();
-        let end_pc = read_u16(reader)?.into();
+        let start_pc = reader.read_value::<u16>()?.into();
+        let end_pc = reader.read_value::<u16>()?.into();
         let covered_pc = start_pc..=end_pc;
-        let handler_pc = read_u16(reader)?.into();
-        let catch_type_idx = read_u16(reader)?;
+        let handler_pc = reader.read_value::<u16>()?.into();
+        let catch_type_idx = reader.read_value()?;
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
@@ -73,15 +70,15 @@ impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
 
 impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
+        let start_pc = reader.read_value::<u16>()?;
+        let length = reader.read_value::<u16>()?;
         let effective_range = start_pc.into()..(start_pc + length).into();
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor_index = read_u16(reader)?;
+        let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         let field_type = FieldType::from_str(descriptor)?;
-        let index = read_u16(reader)?;
+        let index = reader.read_value()?;
         let id = LocalVariableId {
             effective_range,
             index,
@@ -95,14 +92,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
 }
 impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let start_pc = read_u16(reader)?;
-        let length = read_u16(reader)?;
+        let start_pc = reader.read_value::<u16>()?;
+        let length = reader.read_value::<u16>()?;
         let effective_range = start_pc.into()..(start_pc + length).into();
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let signature_index = read_u16(reader)?;
+        let signature_index = reader.read_value()?;
         let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
-        let index = read_u16(reader)?;
+        let index = reader.read_value()?;
         let id = LocalVariableId {
             effective_range,
             index,
@@ -116,7 +113,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
 }
 impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let name_index = read_u16(reader)?;
+        let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let access_flags = parse_flags(reader)?;
         Ok(MethodParameter { name, access_flags })
@@ -125,9 +122,9 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
 
 impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let max_stack = read_u16(reader)?;
-        let max_locals = read_u16(reader)?;
-        let code_length = read_u32(reader)?;
+        let max_stack = reader.read_value()?;
+        let max_locals = reader.read_value()?;
+        let code_length: u32 = reader.read_value()?;
 
         let code = read_byte_chunk(reader, code_length as usize)?;
         let instructions = Instruction::parse_code(code, ctx)?;

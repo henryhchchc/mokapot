@@ -1,18 +1,18 @@
 use std::iter::repeat_with;
 
-use super::super::reader_utils::{read_u16, read_u8};
 use crate::jvm::{
     code::{StackMapFrame, VerificationTypeInfo},
     parsing::{
         jvm_element_parser::{parse_jvm_element, ParseJvmElement},
         parsing_context::ParsingContext,
+        reader_utils::ClassReader,
     },
     ClassFileParsingError, ClassFileParsingResult,
 };
 
 impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let frame_type = read_u8(reader)?;
+        let frame_type: u8 = reader.read_value()?;
         let result = match frame_type {
             it @ 0..=63 => Self::SameFrame {
                 offset_delta: it as u16,
@@ -22,7 +22,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
                 stack: parse_jvm_element(reader, ctx)?,
             },
             247 => {
-                let offset_delta = read_u16(reader)?;
+                let offset_delta = reader.read_value()?;
                 let stack = parse_jvm_element(reader, ctx)?;
                 Self::SameLocals1StackItemFrame {
                     offset_delta,
@@ -31,18 +31,18 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
             }
             it @ 248..=250 => {
                 let chop_count = 251 - it;
-                let offset_delta = read_u16(reader)?;
+                let offset_delta = reader.read_value()?;
                 Self::ChopFrame {
                     chop_count,
                     offset_delta,
                 }
             }
             251 => {
-                let offset_delta = read_u16(reader)?;
+                let offset_delta = reader.read_value()?;
                 Self::SameFrame { offset_delta }
             }
             it @ 252..=254 => {
-                let offset_delta = read_u16(reader)?;
+                let offset_delta = reader.read_value()?;
                 let locals_count = it - 251;
                 let locals = repeat_with(|| parse_jvm_element(reader, ctx))
                     .take(locals_count as usize)
@@ -53,7 +53,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
                 }
             }
             255 => {
-                let offset_delta = read_u16(reader)?;
+                let offset_delta = reader.read_value()?;
                 Self::FullFrame {
                     offset_delta,
                     locals: parse_jvm_element(reader, ctx)?,
@@ -68,7 +68,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
 
 impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let tag = read_u8(reader)?;
+        let tag: u8 = reader.read_value()?;
         let result = match tag {
             0 => Self::TopVariable,
             1 => Self::IntegerVariable,
@@ -78,12 +78,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
             5 => Self::NullVariable,
             6 => Self::UninitializedThisVariable,
             7 => {
-                let cpool_index = read_u16(reader)?;
+                let cpool_index = reader.read_value()?;
                 let class_ref = ctx.constant_pool.get_class_ref(cpool_index)?;
                 Self::ObjectVariable(class_ref)
             }
             8 => {
-                let offset = read_u16(reader)?.into();
+                let offset = reader.read_value::<u16>()?.into();
                 Self::UninitializedVariable { offset }
             }
             unexpected => Err(ClassFileParsingError::InvalidVerificationTypeInfoTag(

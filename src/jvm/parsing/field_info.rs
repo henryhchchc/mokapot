@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, reader_utils::read_u16,
+    jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, reader_utils::ClassReader,
 };
 
 impl<R: std::io::Read> ParseJvmElement<R> for Field {
@@ -56,7 +56,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
 
 impl<R: std::io::Read> ParseJvmElement<R> for FieldType {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let descriptor_index = read_u16(reader)?;
+        let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         FieldType::from_str(descriptor).map_err(ClassFileParsingError::from)
     }

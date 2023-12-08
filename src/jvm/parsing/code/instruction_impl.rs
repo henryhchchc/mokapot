@@ -1,6 +1,5 @@
-use std::{collections::BTreeMap, io::Read, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr};
 
-use super::super::reader_utils::{read_i16, read_i32, read_i8, read_u16, read_u8};
 use crate::{
     jvm::{
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
@@ -10,6 +9,7 @@ use crate::{
             constant_pool::ConstantPoolEntry,
             jvm_element_parser::{parse_jvm_element, ParseJvmElement},
             parsing_context::ParsingContext,
+            reader_utils::ClassReader,
         },
         ClassFileParsingError, ClassFileParsingResult,
     },
@@ -34,7 +34,7 @@ impl Instruction {
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {
         let pc = (reader.position() as u16).into();
-        let opcode = match read_u8(reader) {
+        let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => Err(ClassFileParsingError::ReadFail(e))?,
@@ -44,7 +44,7 @@ impl Instruction {
             0x32 => AALoad,
             0x53 => AAStore,
             0x01 => AConstNull,
-            0x19 => ALoad(read_u8(reader)?),
+            0x19 => ALoad(reader.read_value()?),
             0x2a => ALoad0,
             0x2b => ALoad1,
             0x2c => ALoad2,
@@ -55,7 +55,7 @@ impl Instruction {
             }
             0xb0 => AReturn,
             0xbe => ArrayLength,
-            0x3a => AStore(read_u8(reader)?),
+            0x3a => AStore(reader.read_value()?),
             0x4b => AStore0,
             0x4c => AStore1,
             0x4d => AStore2,
@@ -63,7 +63,7 @@ impl Instruction {
             0xbf => AThrow,
             0x33 => BALoad,
             0x54 => BAStore,
-            0x10 => BiPush(read_u8(reader)?),
+            0x10 => BiPush(reader.read_value()?),
             0x34 => CALoad,
             0x55 => CAStore,
             0xc0 => {
@@ -81,7 +81,7 @@ impl Instruction {
             0x0e => DConst0,
             0x0f => DConst1,
             0x6f => DDiv,
-            0x18 => DLoad(read_u8(reader)?),
+            0x18 => DLoad(reader.read_value()?),
             0x26 => DLoad0,
             0x27 => DLoad1,
             0x28 => DLoad2,
@@ -90,7 +90,7 @@ impl Instruction {
             0x77 => DNeg,
             0x73 => DRem,
             0xaf => DReturn,
-            0x39 => DStore(read_u8(reader)?),
+            0x39 => DStore(reader.read_value()?),
             0x47 => DStore0,
             0x48 => DStore1,
             0x49 => DStore2,
@@ -114,7 +114,7 @@ impl Instruction {
             0x0c => FConst1,
             0x0d => FConst2,
             0x6e => FDiv,
-            0x17 => FLoad(read_u8(reader)?),
+            0x17 => FLoad(reader.read_value()?),
             0x22 => FLoad0,
             0x23 => FLoad1,
             0x24 => FLoad2,
@@ -123,7 +123,7 @@ impl Instruction {
             0x76 => FNeg,
             0x72 => FRem,
             0xae => FReturn,
-            0x38 => FStore(read_u8(reader)?),
+            0x38 => FStore(reader.read_value()?),
             0x43 => FStore0,
             0x44 => FStore1,
             0x45 => FStore2,
@@ -173,8 +173,8 @@ impl Instruction {
             0x9e => IfLe(read_offset16(reader, pc)?),
             0xc7 => IfNonNull(read_offset16(reader, pc)?),
             0xc6 => IfNull(read_offset16(reader, pc)?),
-            0x84 => IInc(read_u8(reader)?, read_i8(reader)?),
-            0x15 => ILoad(read_u8(reader)?),
+            0x84 => IInc(reader.read_value()?, reader.read_value()?),
+            0x15 => ILoad(reader.read_value()?),
             0x1a => ILoad0,
             0x1b => ILoad1,
             0x1c => ILoad2,
@@ -186,7 +186,7 @@ impl Instruction {
                 InstanceOf(type_ref)
             }
             0xba => {
-                let index = read_u16(reader)?;
+                let index = reader.read_value()?;
                 let constant_pool_entry = ctx.constant_pool.get_entry_internal(index)?;
                 let &ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
@@ -200,7 +200,7 @@ impl Instruction {
                 };
                 let (name, desc_str) = ctx.constant_pool.get_name_and_type(name_and_type_index)?;
                 let descriptor = MethodDescriptor::from_str(desc_str)?;
-                let zeros = read_u16(reader)?;
+                let zeros: u16 = reader.read_value()?;
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(
                         "Zero paddings are not zero",
@@ -214,8 +214,8 @@ impl Instruction {
             }
             0xb9 => {
                 let method_ref = parse_jvm_element(reader, ctx)?;
-                let count = read_u8(reader)?;
-                let zero = read_u8(reader)?;
+                let count: u8 = reader.read_value()?;
+                let zero: u8 = reader.read_value()?;
                 if zero != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(
                         "Zero paddings are not zero",
@@ -240,7 +240,7 @@ impl Instruction {
             0xac => IReturn,
             0x78 => IShl,
             0x7a => IShr,
-            0x36 => IStore(read_u8(reader)?),
+            0x36 => IStore(reader.read_value()?),
             0x3b => IStore0,
             0x3c => IStore1,
             0x3d => IStore2,
@@ -263,8 +263,8 @@ impl Instruction {
             0x12 => {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
-                let index = read_u8(reader)? as u16;
-                let constant = match ctx.constant_pool.get_constant_value(index)? {
+                let index: u8 = reader.read_value()?;
+                let constant = match ctx.constant_pool.get_constant_value(index as u16)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
                     | ConstantValue::Dynamic(_, _, Base(Long))
@@ -280,7 +280,7 @@ impl Instruction {
             0x13 => {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
-                let index = read_u16(reader)?;
+                let index = reader.read_value()?;
                 let constant = match ctx.constant_pool.get_constant_value(index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
@@ -297,7 +297,7 @@ impl Instruction {
             0x14 => {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
-                let index = read_u16(reader)?;
+                let index = reader.read_value()?;
                 let constant = match ctx.constant_pool.get_constant_value(index)? {
                     it @ (ConstantValue::Long(_)
                     | ConstantValue::Double(_)
@@ -310,7 +310,7 @@ impl Instruction {
                 Self::Ldc2W(constant)
             }
             0x6d => LDiv,
-            0x16 => LLoad(read_u8(reader)?),
+            0x16 => LLoad(reader.read_value()?),
             0x1e => LLoad0,
             0x1f => LLoad1,
             0x20 => LLoad2,
@@ -319,13 +319,13 @@ impl Instruction {
             0x75 => LNeg,
             0xab => {
                 while reader.position() % 4 != 0 {
-                    let _padding_byte = read_u8(reader)?;
+                    let _padding_byte: u8 = reader.read_value()?;
                 }
                 let default = read_offset32(reader, pc)?;
-                let npairs = read_i32(reader)?;
+                let npairs = reader.read_value()?;
                 let match_targets = (0..npairs)
                     .map(|_| {
-                        let match_value = read_i32(reader)?;
+                        let match_value = reader.read_value()?;
                         let offset = read_offset32(reader, pc)?;
                         Ok((match_value, offset))
                     })
@@ -337,11 +337,11 @@ impl Instruction {
             }
             0xaa => {
                 while reader.position() % 4 != 0 {
-                    let _padding_byte = read_u8(reader)?;
+                    let _padding_byte: u8 = reader.read_value()?;
                 }
                 let default = read_offset32(reader, pc)?;
-                let low = read_i32(reader)?;
-                let high = read_i32(reader)?;
+                let low = reader.read_value()?;
+                let high = reader.read_value()?;
                 let range = low..=high;
                 let offset_count = high - low + 1;
                 let jump_targets = (0..offset_count)
@@ -358,7 +358,7 @@ impl Instruction {
             0xad => LReturn,
             0x79 => LShl,
             0x7b => LShr,
-            0x37 => LStore(read_u8(reader)?),
+            0x37 => LStore(reader.read_value()?),
             0x3f => LStore0,
             0x40 => LStore1,
             0x41 => LStore2,
@@ -370,14 +370,14 @@ impl Instruction {
             0xc3 => MonitorExit,
             0xc5 => {
                 let array_type = parse_jvm_element(reader, ctx)?;
-                MultiANewArray(array_type, read_u8(reader)?)
+                MultiANewArray(array_type, reader.read_value()?)
             }
             0xbb => {
                 let class_ref = parse_jvm_element(reader, ctx)?;
                 New(class_ref)
             }
             0xbc => {
-                let type_id = read_u8(reader)?;
+                let type_id = reader.read_value()?;
                 let arr_type = match type_id {
                     4 => PrimitiveType::Boolean,
                     5 => PrimitiveType::Char,
@@ -404,27 +404,27 @@ impl Instruction {
                 let field = parse_jvm_element(reader, ctx)?;
                 PutStatic(field)
             }
-            0xa9 => Ret(read_u8(reader)?),
+            0xa9 => Ret(reader.read_value()?),
             0xb1 => Return,
             0x35 => SALoad,
             0x56 => SAStore,
-            0x11 => SiPush(read_u16(reader)?),
+            0x11 => SiPush(reader.read_value()?),
             0x5f => Swap,
             0xc4 => {
-                let wide_opcode = read_u8(reader)?;
+                let wide_opcode = reader.read_value()?;
                 let wide_insn = match wide_opcode {
-                    0x15 => WideInstruction::ILoad(read_u16(reader)?),
-                    0x16 => WideInstruction::LLoad(read_u16(reader)?),
-                    0x17 => WideInstruction::FLoad(read_u16(reader)?),
-                    0x18 => WideInstruction::DLoad(read_u16(reader)?),
-                    0x19 => WideInstruction::ALoad(read_u16(reader)?),
-                    0x36 => WideInstruction::IStore(read_u16(reader)?),
-                    0x37 => WideInstruction::LStore(read_u16(reader)?),
-                    0x38 => WideInstruction::FStore(read_u16(reader)?),
-                    0x39 => WideInstruction::DStore(read_u16(reader)?),
-                    0x3a => WideInstruction::AStore(read_u16(reader)?),
-                    0xa9 => WideInstruction::Ret(read_u16(reader)?),
-                    0x84 => WideInstruction::IInc(read_u16(reader)?, read_i16(reader)?),
+                    0x15 => WideInstruction::ILoad(reader.read_value()?),
+                    0x16 => WideInstruction::LLoad(reader.read_value()?),
+                    0x17 => WideInstruction::FLoad(reader.read_value()?),
+                    0x18 => WideInstruction::DLoad(reader.read_value()?),
+                    0x19 => WideInstruction::ALoad(reader.read_value()?),
+                    0x36 => WideInstruction::IStore(reader.read_value()?),
+                    0x37 => WideInstruction::LStore(reader.read_value()?),
+                    0x38 => WideInstruction::FStore(reader.read_value()?),
+                    0x39 => WideInstruction::DStore(reader.read_value()?),
+                    0x3a => WideInstruction::AStore(reader.read_value()?),
+                    0xa9 => WideInstruction::Ret(reader.read_value()?),
+                    0x84 => WideInstruction::IInc(reader.read_value()?, reader.read_value()?),
                     it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
                 };
                 Wide(wide_insn)
@@ -441,9 +441,9 @@ pub(crate) fn read_offset32<R>(
     current_pc: ProgramCounter,
 ) -> ClassFileParsingResult<ProgramCounter>
 where
-    R: Read,
+    R: std::io::Read,
 {
-    let offset = read_i32(reader)?;
+    let offset = reader.read_value()?;
     Ok(current_pc.offset(offset)?)
 }
 
@@ -453,29 +453,29 @@ pub(crate) fn read_offset16<R>(
     current_pc: ProgramCounter,
 ) -> ClassFileParsingResult<ProgramCounter>
 where
-    R: Read,
+    R: std::io::Read,
 {
-    let offset = read_i16(reader)?;
+    let offset = reader.read_value()?;
     Ok(current_pc.offset_i16(offset)?)
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for TypeReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = read_u16(reader)?;
+        let index = reader.read_value()?;
         ctx.constant_pool.get_type_ref(index)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for FieldReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = read_u16(reader)?;
+        let index = reader.read_value()?;
         ctx.constant_pool.get_field_ref(index)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for MethodReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = read_u16(reader)?;
+        let index = reader.read_value()?;
         ctx.constant_pool.get_method_ref(index)
     }
 }

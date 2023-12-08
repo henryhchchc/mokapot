@@ -6,17 +6,16 @@ use crate::{
             BootstrapMethod, Class, ClassAccessFlags, ClassReference, ClassVersion, ConstantPool,
             InnerClassInfo, RecordComponent, SourceDebugExtension,
         },
-        parsing::jvm_element_parser::{parse_flags, parse_jvm_element},
+        parsing::{
+            jvm_element_parser::{parse_flags, parse_jvm_element},
+            reader_utils::ClassReader,
+        },
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
 };
 
-use super::{
-    jvm_element_parser::ParseJvmElement,
-    parsing_context::ParsingContext,
-    reader_utils::{read_u16, read_u32},
-};
+use super::{jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext};
 
 impl Class {
     const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
@@ -25,16 +24,16 @@ impl Class {
     where
         R: std::io::Read,
     {
-        let magic = read_u32(reader)?;
+        let magic: u32 = reader.read_value()?;
         if magic != Self::JAVA_CLASS_MAIGC {
             return Err(ClassFileParsingError::NotAClassFile);
         }
         let version = ClassVersion::parse(reader)?;
         let constant_pool = ConstantPool::parse(reader)?;
         let access_flags: ClassAccessFlags = parse_flags(reader)?;
-        let this_class_idx = read_u16(reader)?;
+        let this_class_idx = reader.read_value()?;
         let ClassReference { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
-        let super_class_idx = read_u16(reader)?;
+        let super_class_idx = reader.read_value()?;
         let super_class = match super_class_idx {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
@@ -58,7 +57,7 @@ impl Class {
         let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
 
         let mut may_remain: [u8; 1] = [0];
-        let remain = reader.read(&mut may_remain)?;
+        let remain = std::io::Read::read(reader, &mut may_remain)?;
         if remain == 1 {
             return Err(ClassFileParsingError::UnexpectedData);
         }
@@ -120,11 +119,11 @@ impl Class {
 
 impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let bootstrap_method_ref = read_u16(reader)?;
+        let bootstrap_method_ref = reader.read_value()?;
         let method_ref = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
-        let num_bootstrap_arguments = read_u16(reader)?;
+        let num_bootstrap_arguments: u16 = reader.read_value()?;
         let arguments = repeat_with(|| {
-            let arg_idx = read_u16(reader)?;
+            let arg_idx = reader.read_value()?;
             ctx.constant_pool.get_constant_value(arg_idx)
         })
         .take(num_bootstrap_arguments as usize)
@@ -139,14 +138,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
 impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let inner_class = parse_jvm_element(reader, ctx)?;
-        let outer_class_info_index = read_u16(reader)?;
+        let outer_class_info_index = reader.read_value()?;
         let outer_class = if outer_class_info_index == 0 {
             None
         } else {
             let the_class = ctx.constant_pool.get_class_ref(outer_class_info_index)?;
             Some(the_class)
         };
-        let inner_name_index = read_u16(reader)?;
+        let inner_name_index = reader.read_value()?;
         let inner_name = if inner_name_index == 0 {
             None
         } else {
@@ -195,15 +194,15 @@ impl ClassVersion {
     where
         R: std::io::Read,
     {
-        let minor = read_u16(reader)?;
-        let major = read_u16(reader)?;
+        let minor = reader.read_value()?;
+        let major = reader.read_value()?;
         Ok(Self { major, minor })
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ClassReference {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let class_info_idx = read_u16(reader)?;
+        let class_info_idx = reader.read_value()?;
         ctx.constant_pool.get_class_ref(class_info_idx)
     }
 }

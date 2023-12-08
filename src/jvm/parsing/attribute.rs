@@ -18,7 +18,7 @@ use super::{
     constant_pool::ConstantPoolEntry,
     jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::{read_byte_chunk, read_u16, read_u32, read_u8},
+    reader_utils::{read_byte_chunk, ClassReader},
 };
 
 #[derive(Debug)]
@@ -94,9 +94,9 @@ impl Attribute {
 
 impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let name_idx = read_u16(reader)?;
+        let name_idx = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let attribute_length = read_u32(reader)?;
+        let attribute_length = reader.read_value()?;
         let attribute_bytes = read_byte_chunk(reader, attribute_length as usize)?;
         let reader = &mut std::io::Cursor::new(attribute_bytes);
         let result = match name {
@@ -132,7 +132,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             }
             "RuntimeVisibleParameterAnnotations" => {
                 // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
-                let num_parameters = read_u8(reader)?;
+                let num_parameters: u8 = reader.read_value()?;
                 let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
                     .take(num_parameters as usize)
                     .collect::<Result<_, _>>()?;
@@ -140,7 +140,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             }
             "RuntimeInvisibleParameterAnnotations" => {
                 // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
-                let num_parameters = read_u8(reader)?;
+                let num_parameters: u8 = reader.read_value()?;
                 let param_annos = repeat_with(|| parse_jvm_element(reader, ctx))
                     .take(num_parameters as usize)
                     .collect::<Result<_, _>>()?;
@@ -178,16 +178,16 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
 
 impl<R: std::io::Read> ParseJvmElement<R> for ConstantValue {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let value_index = read_u16(reader)?;
+        let value_index = reader.read_value()?;
         ctx.constant_pool.get_constant_value(value_index)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for EnclosingMethod {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let class_index = read_u16(reader)?;
+        let class_index = reader.read_value()?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
-        let method_index = read_u16(reader)?;
+        let method_index = reader.read_value()?;
         let method_name_and_desc = if method_index == 0 {
             None
         } else {
