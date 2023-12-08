@@ -12,6 +12,5 @@ pub mod analysis;
 pub mod ir;
 pub mod jvm;
 pub(crate) mod macros;
-/// Module containing the APIs for the JVM type system.
 pub mod types;
 pub(crate) mod utils;
