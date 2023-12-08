@@ -66,6 +66,15 @@ impl IntoIterator for InstructionList {
     }
 }
 
+impl<'i> IntoIterator for &'i InstructionList {
+    type Item = (&'i ProgramCounter, &'i Instruction);
+    type IntoIter = <&'i BTreeMap<ProgramCounter, Instruction> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 impl InstructionList {
     /// Returns the instruction at the given program counter.
     pub fn get(&self, pc: &ProgramCounter) -> Option<&Instruction> {
