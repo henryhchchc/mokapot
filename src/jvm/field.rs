@@ -41,7 +41,8 @@ pub struct Field {
 
 impl Field {
     /// Creates a [`FieldReference`] referring to the field.
-    #[must_use] pub fn make_reference(&self) -> FieldReference {
+    #[must_use]
+    pub fn make_reference(&self) -> FieldReference {
         FieldReference {
             class: self.owner.clone(),
             name: self.name.clone(),

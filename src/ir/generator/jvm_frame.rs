@@ -4,7 +4,6 @@ use crate::{
     ir::{Argument, Identifier},
     jvm::{code::ProgramCounter, method::MethodDescriptor},
     types::field_type::{FieldType, PrimitiveType},
-    utils::try_merge,
 };
 
 #[derive(PartialEq, Debug)]
@@ -49,7 +48,9 @@ impl JvmStackFrame {
             local_idx += 1;
         }
         for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
-            let arg_ref = Argument::Id(Identifier::Arg(arg_idx as u16));
+            let arg_ref = Argument::Id(Identifier::Arg(
+                u16::try_from(arg_idx).expect("The number of args should be within u16"),
+            ));
             local_variables[local_idx].replace(Entry::Value(arg_ref));
             local_idx += 1;
             if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
@@ -68,7 +69,9 @@ impl JvmStackFrame {
 
     #[inline]
     fn push_raw(&mut self, value: Entry) -> Result<(), JvmFrameError> {
-        if self.operand_stack.len() as u16 >= self.max_stack {
+        if u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16")
+            >= self.max_stack
+        {
             Err(JvmFrameError::StackOverflow)
         } else {
             self.operand_stack.push(value);
@@ -333,15 +336,18 @@ impl JvmStackFrame {
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(self_loc, other_loc)| try_merge(self_loc, other_loc, Entry::merge))
-            .collect::<Result<_, _>>()?;
+            .map(|(self_loc, other_loc)| match (self_loc, other_loc) {
+                (Some(self_loc), Some(other_loc)) => Some(Entry::merge(self_loc, other_loc)),
+                (lhs, rhs) => lhs.or(rhs),
+            })
+            .collect();
         let operand_stack = self
             .operand_stack
             .clone()
             .into_iter()
             .zip(other.operand_stack)
             .map(|(lhs, rhs)| Entry::merge(lhs, rhs))
-            .collect::<Result<_, _>>()?;
+            .collect();
         Ok(Self {
             max_locals: self.max_locals,
             max_stack: self.max_stack,
@@ -368,12 +374,12 @@ impl Display for Entry {
 }
 
 impl Entry {
-    pub fn merge(x: Self, y: Self) -> Result<Self, JvmFrameError> {
+    pub fn merge(x: Self, y: Self) -> Self {
         match (x, y) {
-            (Entry::Value(lhs), Entry::Value(rhs)) => Ok(Entry::Value(lhs | rhs)),
+            (Entry::Value(lhs), Entry::Value(rhs)) => Entry::Value(lhs | rhs),
             // NOTE: `lhs` and `rhs` are different variants, that means the local variable slot is reused
             //       In this case, we do not merge it since it will be overridden afterwrds.
-            (lhs, _) => Ok(lhs),
+            (lhs, _) => lhs,
         }
     }
 }
@@ -391,7 +397,7 @@ mod test {
         let lhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
         let rhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(1))));
 
-        let result = Entry::merge(lhs, rhs).unwrap();
+        let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
             Entry::Value(Argument::Phi(BTreeSet::from([
@@ -406,7 +412,7 @@ mod test {
         let lhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
         let rhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
 
-        let result = Entry::merge(lhs, rhs).unwrap();
+        let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
             Entry::Value(Argument::Id(Identifier::Value(Value::new(0))))

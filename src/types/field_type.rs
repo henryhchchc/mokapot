@@ -27,7 +27,7 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    fn descriptor_str(&self) -> &'static str {
+    fn descriptor_str(self) -> &'static str {
         match self {
             Self::Boolean => "Z",
             Self::Char => "C",
@@ -210,6 +210,7 @@ impl FromStr for FieldType {
 
 impl FieldType {
     /// Creates an array type with the given type as its elements.
+    #[must_use]
     pub fn make_array_type(&self) -> Self {
         Self::Array(Box::new(self.clone()))
     }

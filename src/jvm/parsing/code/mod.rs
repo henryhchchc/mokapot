@@ -9,7 +9,7 @@ use crate::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableId,
             LocalVariableTable, MethodBody,
         },
-        method::MethodParameter,
+        method::ParameterInfo,
         parsing::{jvm_element_parser::parse_jvm_element, reader_utils::read_byte_chunk},
         ClassFileParsingError, ClassFileParsingResult,
     },
@@ -111,7 +111,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
         })
     }
 }
-impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
+impl<R: std::io::Read> ParseJvmElement<R> for ParameterInfo {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let name_index = reader.read_value()?;
         let name = if name_index == 0 {
@@ -120,7 +120,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodParameter {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
         let access_flags = parse_flags(reader)?;
-        Ok(MethodParameter { name, access_flags })
+        Ok(ParameterInfo { name, access_flags })
     }
 }
 

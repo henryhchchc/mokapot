@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    jvm::{annotation::TypeAnnotation, class::ClassReference, ClassFileParsingResult},
+    jvm::{
+        annotation::TypeAnnotation, class::ClassReference, ClassFileParsingError,
+        ClassFileParsingResult,
+    },
     types::field_type::FieldType,
 };
 
@@ -36,6 +39,7 @@ pub struct MethodBody {
 
 impl MethodBody {
     /// Returns the instruction at the given program counter.
+    #[must_use]
     pub fn instruction_at(&self, pc: ProgramCounter) -> Option<&Instruction> {
         self.instructions.get(&pc)
     }
@@ -77,16 +81,19 @@ impl<'i> IntoIterator for &'i InstructionList {
 
 impl InstructionList {
     /// Returns the instruction at the given program counter.
+    #[must_use]
     pub fn get(&self, pc: &ProgramCounter) -> Option<&Instruction> {
         self.0.get(pc)
     }
 
     /// Returns the first instruction in the list.
+    #[must_use]
     pub fn entry_point(&self) -> Option<(&ProgramCounter, &Instruction)> {
         self.0.first_key_value()
     }
 
     /// Returns the program counter of the next instruction after the given one.
+    #[must_use]
     pub fn next_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
         self.0
             .range((Bound::Excluded(pc), Bound::Unbounded))
@@ -129,6 +136,7 @@ pub struct ExceptionTableEntry {
 
 impl ExceptionTableEntry {
     /// Checks whether the given program counter is covered by this exception handler.
+    #[must_use]
     pub fn covers(&self, pc: ProgramCounter) -> bool {
         self.covered_pc.contains(&pc)
     }
@@ -157,7 +165,13 @@ impl LocalVariableTable {
         field_type: FieldType,
     ) -> ClassFileParsingResult<()> {
         let entry = self.entries.entry(key).or_default();
-        // TODO: check if the name matches the existing one
+        if let Some(existing_name) = entry.name.as_ref() {
+            if existing_name != &name {
+                Err(ClassFileParsingError::MalformedClassFile(
+                    "Name of local variable does not match",
+                ))?;
+            }
+        }
         entry.name = Some(name);
         entry.var_type = Some(field_type);
         Ok(())
@@ -170,7 +184,13 @@ impl LocalVariableTable {
         signature: String,
     ) -> ClassFileParsingResult<()> {
         let entry = self.entries.entry(key).or_default();
-        // TODO: check if the name matches the existing one
+        if let Some(existing_name) = entry.name.as_ref() {
+            if existing_name != &name {
+                Err(ClassFileParsingError::MalformedClassFile(
+                    "Name of local variable does not match",
+                ))?;
+            }
+        }
         entry.name = Some(name);
         entry.signature = Some(signature);
         Ok(())

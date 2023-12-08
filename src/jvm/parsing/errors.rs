@@ -65,4 +65,7 @@ pub enum ClassFileParsingError {
     /// Tries to reads a string for constructing JVM components (e.g., class name) but got an invalid UTF-8 string.
     #[error("Invalid UTF-8 string")]
     BrokenUTF8,
+    /// The instruction list is too long.
+    #[error("The instruction list is too long, it should be at most 65536 bytes")]
+    TooLongInstructionList,
 }

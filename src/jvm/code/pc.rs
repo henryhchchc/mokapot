@@ -8,21 +8,26 @@ pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
     /// Creates a new program counter based on the given value with a given offset.
+    /// # Errors
+    /// - [`InvalidOffset::I32`] If the resulting value is too large to fit into a [`ProgramCounter`].
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
-        offset
-            .checked_add(i32::from(self.0))
-            .ok_or(InvalidOffset::I32(offset))
-            .map(|it| it as u16)
+        let self_i32 = i32::from(self.0);
+        let result = self_i32 + offset;
+        u16::try_from(result)
             .map(Self)
+            .map_err(|_| InvalidOffset::I32(offset))
     }
 
     /// Creates a new program counter based on the given value with a given offset (in [`i16`]).
+    /// # Errors
+    /// - [`InvalidOffset::I16`] If the resulting value is too large to fit into a [`ProgramCounter`].
     pub fn offset_i16(&self, offset: i16) -> Result<Self, InvalidOffset> {
-        offset
-            .checked_add(self.0 as i16)
-            .ok_or(InvalidOffset::I16(offset))
-            .map(|it| it as u16)
+        let self_i32 = i32::from(self.0);
+        let offset_i32 = i32::from(offset);
+        let result = self_i32 + offset_i32;
+        u16::try_from(result)
             .map(Self)
+            .map_err(|_| InvalidOffset::I16(offset))
     }
 }
 
@@ -31,6 +36,7 @@ impl ProgramCounter {
     pub const ZERO: Self = Self(0);
 
     /// Checks if the program counter is an entry point.
+    #[must_use]
     pub const fn is_entry_point(&self) -> bool {
         self.0 == 0
     }

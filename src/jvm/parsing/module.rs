@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    constant_pool::ConstantPoolEntry,
+    constant_pool::Entry,
     jvm_element_parser::{parse_flags, parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::ClassReader,
@@ -72,7 +72,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Module {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let module_info_idx = reader.read_value()?;
         let module_info_entry = ctx.constant_pool.get_entry_internal(module_info_idx)?;
-        let &ConstantPoolEntry::Module { name_index } = module_info_entry else {
+        let &Entry::Module { name_index } = module_info_entry else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Module",
                 found: module_info_entry.constant_kind(),

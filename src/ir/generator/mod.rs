@@ -85,8 +85,9 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             MokaInstruction::Definition {
                 expr: Expression::Throw(_),
                 ..
-            } => {
-                self.add_exception_edges(
+            }
+            | MokaInstruction::Return(_) => {
+                Self::add_exception_edges(
                     &self.body.exception_table,
                     location,
                     &frame,
@@ -107,7 +108,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             MokaInstruction::Definition { .. } => {
                 let next_pc = self.next_pc_of(location)?;
                 dirty_nodes.insert(next_pc, frame.same_frame());
-                self.add_exception_edges(
+                Self::add_exception_edges(
                     &self.body.exception_table,
                     location,
                     &frame,
@@ -126,18 +127,10 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             MokaInstruction::Switch {
                 default, branches, ..
             } => {
-                for (_, it) in branches {
+                for it in branches.values() {
                     dirty_nodes.insert(*it, frame.same_frame());
                 }
                 dirty_nodes.insert(*default, frame.same_frame());
-            }
-            MokaInstruction::Return(_) => {
-                self.add_exception_edges(
-                    &self.body.exception_table,
-                    location,
-                    &frame,
-                    &mut dirty_nodes,
-                );
             }
             MokaInstruction::SubroutineRet(_) => {
                 let possible_ret_addresses = frame.possible_ret_addresses;
@@ -176,14 +169,13 @@ impl<'m> MokaIRGenerator<'m> {
             .as_ref()
             .ok_or(MokaIRGenerationError::NoMethodBody)?;
         Ok(Self {
-            ir_instructions: Default::default(),
+            ir_instructions: BTreeMap::default(),
             method,
             body,
         })
     }
 
     fn add_exception_edges(
-        &mut self,
         exception_table: &[ExceptionTableEntry],
         pc: ProgramCounter,
         frame: &JvmStackFrame,
@@ -203,6 +195,8 @@ impl<'m> MokaIRGenerator<'m> {
 /// An extension trait for [`Method`] that generates Moka IR.
 pub trait MokaIRMethodExt {
     /// Genreates Moka IR for the method.
+    /// # Errors
+    /// See [`MokaIRGenerationError`] for more information.
     fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError>;
 }
 

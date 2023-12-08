@@ -8,14 +8,14 @@ use crate::jvm::{
     },
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
-    method::{MethodDescriptor, MethodParameter},
+    method::{MethodDescriptor, ParameterInfo},
     module::{Module, PackageReference},
     ClassFileParsingError, ClassFileParsingResult,
 };
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    constant_pool::ConstantPoolEntry,
+    constant_pool::Entry,
     jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::{read_byte_chunk, ClassReader},
@@ -45,7 +45,7 @@ pub(crate) enum Attribute {
     RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation>),
     AnnotationDefault(ElementValue),
     BootstrapMethods(Vec<BootstrapMethod>),
-    MethodParameters(Vec<MethodParameter>),
+    MethodParameters(Vec<ParameterInfo>),
     Module(Module),
     ModulePackages(Vec<PackageReference>),
     ModuleMainClass(ClassReference),
@@ -193,7 +193,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for EnclosingMethod {
             None
         } else {
             let entry = ctx.constant_pool.get_entry_internal(method_index)?;
-            let &ConstantPoolEntry::NameAndType {
+            let &Entry::NameAndType {
                 name_index,
                 descriptor_index,
             } = entry

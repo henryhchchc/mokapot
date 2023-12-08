@@ -16,7 +16,7 @@ use super::{
     ClassFileParsingResult,
 };
 
-pub use super::parsing::constant_pool::{ConstantPool, ConstantPoolEntry};
+pub use super::parsing::constant_pool::{ConstantPool, Entry};
 
 /// A JVM class
 /// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
@@ -79,6 +79,10 @@ pub struct Class {
 
 impl Class {
     /// Parses a class file from the given reader.
+    /// # Errors
+    /// - [`ClassFileParsingError::ReadFail`](crate::jvm::parsing::errors::ClassFileParsingError::ReadFail) If the reader fails to read.
+    /// Other errors may be returned if the class file is malformed.
+    /// See [`ClassFileParsingError`] for more information.
     pub fn from_reader<R>(reader: R) -> ClassFileParsingResult<Class>
     where
         R: std::io::Read,
@@ -88,15 +92,16 @@ impl Class {
     }
 
     /// Gets a method of the class by its name and descriptor.
-    pub fn get_method(&self, name: &str, descriptor: MethodDescriptor) -> Option<&Method> {
+    #[must_use]
+    pub fn get_method(&self, name: &str, descriptor: &MethodDescriptor) -> Option<&Method> {
         self.methods
             .iter()
-            .find(|m| m.name == name && m.descriptor == descriptor)
+            .find(|m| m.name == name && &m.descriptor == descriptor)
     }
 }
 
-#[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 /// The version of a class file.
+#[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 pub struct ClassVersion {
     /// The major version number.
     pub major: u16,
@@ -105,6 +110,7 @@ pub struct ClassVersion {
 }
 impl ClassVersion {
     /// Returns `true` if this class file is compiled with `--enable-preview`.
+    #[must_use]
     pub fn is_preview_enabled(&self) -> bool {
         self.minor == 65535
     }
@@ -170,11 +176,13 @@ pub struct SourceDebugExtension(Vec<u8>);
 
 impl SourceDebugExtension {
     /// Creates a new source debug extension.
+    #[must_use]
     pub fn new(bytes: Vec<u8>) -> Self {
         SourceDebugExtension(bytes)
     }
 
     /// Gets the bytes of the source debug extension.
+    #[must_use]
     pub fn bytes(&self) -> &[u8] {
         &self.0
     }

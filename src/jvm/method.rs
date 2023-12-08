@@ -50,7 +50,7 @@ pub struct Method {
     /// The default value of the annotation.
     pub annotation_default: Option<ElementValue>,
     /// The parameters of the method.
-    pub parameters: Vec<MethodParameter>,
+    pub parameters: Vec<ParameterInfo>,
     /// Indicates if the method is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates if the method is deprecated.
@@ -66,16 +66,19 @@ impl Method {
     pub const CONSTRUCTOR_NAME: &'static str = "<init>";
 
     /// Checks if the method is a constructor.
+    #[must_use]
     pub fn is_constructor(&self) -> bool {
         self.name == Self::CONSTRUCTOR_NAME
     }
 
     /// Checks if the method is a static initializer block.
+    #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
         self.name == Self::CLASS_INITIALIZER_NAME
     }
 
     /// Creates a [`MethodReference`] pointting to this method.
+    #[must_use]
     pub fn make_refernece(&self) -> MethodReference {
         MethodReference {
             owner: self.owner.clone(),
@@ -87,7 +90,7 @@ impl Method {
 
 /// The information of a method parameter.
 #[derive(Debug, Clone)]
-pub struct MethodParameter {
+pub struct ParameterInfo {
     /// The name of the parameter.
     pub name: Option<String>,
     /// The access flags of the parameter.
@@ -281,12 +284,14 @@ pub struct MethodReference {
 
 impl MethodReference {
     /// Checks if the method reference refers to a constructor.
+    #[must_use]
     pub fn is_constructor(&self) -> bool {
         self.name == Method::CONSTRUCTOR_NAME
             && matches!(self.descriptor.return_type, ReturnType::Void)
     }
 
     /// Checks if the method reference refers to a static initializer block.
+    #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
         self.name == Method::CLASS_INITIALIZER_NAME
             && self.descriptor.parameters_types.is_empty()

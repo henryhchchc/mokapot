@@ -17,7 +17,7 @@ use crate::{
 /// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
 #[derive(Debug)]
 pub struct ConstantPool {
-    entries: Vec<Option<ConstantPoolEntry>>,
+    entries: Vec<Option<Entry>>,
 }
 
 impl ConstantPool {
@@ -26,20 +26,18 @@ impl ConstantPool {
         R: std::io::Read,
     {
         let constant_pool_count = reader.read_value()?;
-        let entries = ConstantPoolEntry::parse_multiple(reader, constant_pool_count)?;
+        let entries = Entry::parse_multiple(reader, constant_pool_count)?;
 
         Ok(Self { entries })
     }
 
     /// Gets the constant pool entry at the given index.
-    pub fn get_entry(&self, index: u16) -> Option<&ConstantPoolEntry> {
+    #[must_use]
+    pub fn get_entry(&self, index: u16) -> Option<&Entry> {
         self.entries.get(index as usize).and_then(|it| it.as_ref())
     }
 
-    pub(crate) fn get_entry_internal(
-        &self,
-        index: u16,
-    ) -> ClassFileParsingResult<&ConstantPoolEntry> {
+    pub(crate) fn get_entry_internal(&self, index: u16) -> ClassFileParsingResult<&Entry> {
         let Some(entry) = self.get_entry(index) else {
             return Err(ClassFileParsingError::BadConstantPoolIndex(index));
         };
@@ -49,10 +47,8 @@ impl ConstantPool {
     pub(crate) fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
         let entry = self.get_entry_internal(index)?;
         match entry {
-            ConstantPoolEntry::Utf8(JavaString::ValidUtf8(string)) => Ok(string),
-            ConstantPoolEntry::Utf8(JavaString::InvalidUtf8(_)) => {
-                Err(ClassFileParsingError::BrokenUTF8)
-            }
+            Entry::Utf8(JavaString::ValidUtf8(string)) => Ok(string),
+            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ClassFileParsingError::BrokenUTF8),
             _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Utf8",
                 found: entry.constant_kind(),
@@ -62,7 +58,7 @@ impl ConstantPool {
 
     pub(crate) fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
         let entry = self.get_entry_internal(index)?;
-        let &ConstantPoolEntry::Class { name_index } = entry else {
+        let &Entry::Class { name_index } = entry else {
             return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Class",
                 found: entry.constant_kind(),
@@ -78,12 +74,12 @@ impl ConstantPool {
     ) -> ClassFileParsingResult<ConstantValue> {
         let entry = self.get_entry_internal(value_index)?;
         match entry {
-        &ConstantPoolEntry::Integer(it) => Ok(ConstantValue::Integer(it)),
-        &ConstantPoolEntry::Long(it) => Ok(ConstantValue::Long(it)),
-        &ConstantPoolEntry::Float(it) => Ok(ConstantValue::Float(it)),
-        &ConstantPoolEntry::Double(it) => Ok(ConstantValue::Double(it)),
-        &ConstantPoolEntry::String { string_index } => {
-            if let ConstantPoolEntry::Utf8(java_str) = self.get_entry_internal(string_index)? {
+        &Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
+        &Entry::Long(it) => Ok(ConstantValue::Long(it)),
+        &Entry::Float(it) => Ok(ConstantValue::Float(it)),
+        &Entry::Double(it) => Ok(ConstantValue::Double(it)),
+        &Entry::String { string_index } => {
+            if let Entry::Utf8(java_str) = self.get_entry_internal(string_index)? {
                 Ok(ConstantValue::String(java_str.clone()))
             } else {
                 Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
@@ -92,20 +88,20 @@ impl ConstantPool {
                 })
             }
         }
-        &ConstantPoolEntry::MethodType { descriptor_index } => {
+        &Entry::MethodType { descriptor_index } => {
             let descriptor_str = self.get_str(descriptor_index)?;
             let descriptor = MethodDescriptor::from_str(descriptor_str)?;
             Ok(ConstantValue::MethodType(descriptor))
         }
-        ConstantPoolEntry::Class { .. } => {
+        Entry::Class { .. } => {
             let class = self.get_class_ref(value_index)?;
             Ok(ConstantValue::Class(class))
         }
-        ConstantPoolEntry::MethodHandle { .. } => {
+        Entry::MethodHandle { .. } => {
             let method_handle = self.get_method_handle(value_index)?;
             Ok(ConstantValue::Handle(method_handle))
         }
-        &ConstantPoolEntry::Dynamic {
+        &Entry::Dynamic {
             bootstrap_method_attr_index,
             name_and_type_index,
         } => {
@@ -126,7 +122,7 @@ impl ConstantPool {
 
     pub(crate) fn get_module_ref(&self, index: u16) -> ClassFileParsingResult<ModuleReference> {
         let entry = self.get_entry_internal(index)?;
-        if let &ConstantPoolEntry::Module { name_index } = entry {
+        if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
             return Ok(ModuleReference { name });
         }
@@ -138,7 +134,7 @@ impl ConstantPool {
 
     pub(crate) fn get_package_ref(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
         let entry = self.get_entry_internal(index)?;
-        if let &ConstantPoolEntry::Package { name_index } = entry {
+        if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
             return Ok(PackageReference {
                 binary_name: name.to_owned(),
@@ -152,13 +148,13 @@ impl ConstantPool {
 
     pub(crate) fn get_field_ref(&self, index: u16) -> ClassFileParsingResult<FieldReference> {
         let entry = self.get_entry_internal(index)?;
-        if let &ConstantPoolEntry::FieldRef {
+        if let &Entry::FieldRef {
             class_index,
             name_and_type_index,
         } = entry
         {
             let class = self.get_class_ref(class_index)?;
-            if let &ConstantPoolEntry::NameAndType {
+            if let &Entry::NameAndType {
                 name_index,
                 descriptor_index,
             } = self.get_entry_internal(name_and_type_index)?
@@ -181,7 +177,7 @@ impl ConstantPool {
 
     pub(crate) fn get_name_and_type(&self, index: u16) -> ClassFileParsingResult<(&str, &str)> {
         let entry = self.get_entry_internal(index)?;
-        if let &ConstantPoolEntry::NameAndType {
+        if let &Entry::NameAndType {
             name_index,
             descriptor_index,
         } = entry
@@ -199,11 +195,11 @@ impl ConstantPool {
     pub(crate) fn get_method_ref(&self, index: u16) -> ClassFileParsingResult<MethodReference> {
         let entry = self.get_entry_internal(index)?;
         match entry {
-            &ConstantPoolEntry::MethodRef {
+            &Entry::MethodRef {
                 class_index,
                 name_and_type_index,
             }
-            | &ConstantPoolEntry::InterfaceMethodRef {
+            | &Entry::InterfaceMethodRef {
                 class_index,
                 name_and_type_index,
             } => {
@@ -231,7 +227,7 @@ impl ConstantPool {
         };
 
         let entry = self.get_entry_internal(index)?;
-        let &ConstantPoolEntry::MethodHandle {
+        let &Entry::MethodHandle {
             reference_kind,
             reference_index: idx,
         } = entry
@@ -261,10 +257,10 @@ impl ConstantPool {
 
     pub(crate) fn get_type_ref(&self, index: u16) -> ClassFileParsingResult<TypeReference> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
-        let field_type = if !name.starts_with('[') {
-            FieldType::Object(ClassReference::new(name))
-        } else {
+        let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?
+        } else {
+            FieldType::Object(ClassReference::new(name))
         };
         Ok(TypeReference(field_type.clone()))
     }
@@ -272,7 +268,7 @@ impl ConstantPool {
 
 /// An entry in the [`ConstantPool`].
 #[derive(Debug, Clone)]
-pub enum ConstantPoolEntry {
+pub enum Entry {
     /// A UTF-8 string.
     /// See the [JVM Specification §4.4.7](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.7) for more information.
     Utf8(JavaString),
@@ -387,7 +383,7 @@ pub enum ConstantPoolEntry {
     },
 }
 
-impl ConstantPoolEntry {
+impl Entry {
     fn parse_multiple<R>(reader: &mut R, count: u16) -> ClassFileParsingResult<Vec<Option<Self>>>
     where
         R: std::io::Read,
@@ -397,7 +393,7 @@ impl ConstantPoolEntry {
         while counter < count {
             let entry = Self::parse(reader)?;
             let increment = match entry {
-                ConstantPoolEntry::Long(_) | ConstantPoolEntry::Double(_) => 2,
+                Entry::Long(_) | Entry::Double(_) => 2,
                 _ => 1,
             };
             result[counter as usize] = Some(entry);
@@ -434,6 +430,7 @@ impl ConstantPoolEntry {
     }
 
     /// Gets the kind of this constant pool entry.
+    #[must_use]
     pub const fn constant_kind<'a>(&self) -> &'a str {
         match self {
             Self::Utf8(_) => "CONSTANT_Utf8",
