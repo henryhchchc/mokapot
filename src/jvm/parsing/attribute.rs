@@ -168,7 +168,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             )),
         };
         result.and_then(|attribute| {
-            if reader.position() == attribute_length as u64 {
+            if reader.position() == u64::from(attribute_length) {
                 Ok(attribute)
             } else {
                 Err(ClassFileParsingError::UnexpectedData)

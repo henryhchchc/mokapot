@@ -112,9 +112,9 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
             })
             .collect::<ClassFileParsingResult<_>>()?;
         Ok(TypeAnnotation {
+            annotation_type,
             target_info,
             target_path,
-            annotation_type,
             element_value_pairs,
         })
     }

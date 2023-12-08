@@ -18,7 +18,7 @@ use crate::{
 use super::{jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext};
 
 impl Class {
-    const JAVA_CLASS_MAIGC: u32 = 0xCAFEBABE;
+    const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
 
     pub(crate) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where

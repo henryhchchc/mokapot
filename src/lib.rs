@@ -3,10 +3,11 @@
     rust_2018_idioms,
     missing_docs,
     rust_2021_compatibility,
-    future_incompatible
+    future_incompatible,
+    clippy::pedantic
 )]
-//! # MokaPot
-//! MokaPot is a Java bytecode analysis library written in Rust.
+//! # `MokaPot`
+//! `MokaPot` is a Java bytecode analysis library written in Rust.
 
 pub mod analysis;
 pub mod ir;

@@ -225,7 +225,10 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_method_handle(&self, index: u16) -> ClassFileParsingResult<MethodHandle> {
-        use MethodHandle::*;
+        use MethodHandle::{
+            RefGetField, RefGetStatic, RefInvokeInterface, RefInvokeSpecial, RefInvokeStatic,
+            RefInvokeVirtual, RefNewInvokeSpecial, RefPutField, RefPutStatic,
+        };
 
         let entry = self.get_entry_internal(index)?;
         let &ConstantPoolEntry::MethodHandle {
@@ -263,7 +266,7 @@ impl ConstantPool {
         } else {
             FieldType::from_str(name.as_str())?
         };
-        Ok(TypeReference(field_type.to_owned()))
+        Ok(TypeReference(field_type.clone()))
     }
 }
 

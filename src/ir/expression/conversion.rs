@@ -47,21 +47,26 @@ pub enum ConversionOperation {
 
 impl Display for ConversionOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use ConversionOperation::*;
         match self {
-            Int2Long(arg) | Float2Long(arg) | Double2Long(arg) => write!(f, "{} as long", arg),
-            Long2Int(arg) | Float2Int(arg) | Double2Int(arg) => write!(f, "{} as int", arg),
-            Int2Float(arg) | Long2Float(arg) | Double2Float(arg) => write!(f, "{} as float", arg),
-            Int2Double(arg) | Long2Double(arg) | Float2Double(arg) => {
-                write!(f, "{} as double", arg)
+            Self::Int2Long(arg) | Self::Float2Long(arg) | Self::Double2Long(arg) => {
+                write!(f, "{arg} as long")
             }
-            Int2Byte(operand) => write!(f, "{} as byte", operand),
-            Int2Char(operand) => write!(f, "{} as char", operand),
-            Int2Short(operand) => write!(f, "{} as short", operand),
-            CheckCast(operand, target_type) => {
+            Self::Long2Int(arg) | Self::Float2Int(arg) | Self::Double2Int(arg) => {
+                write!(f, "{arg} as int")
+            }
+            Self::Int2Float(arg) | Self::Long2Float(arg) | Self::Double2Float(arg) => {
+                write!(f, "{arg} as float")
+            }
+            Self::Int2Double(arg) | Self::Long2Double(arg) | Self::Float2Double(arg) => {
+                write!(f, "{arg} as double")
+            }
+            Self::Int2Byte(operand) => write!(f, "{operand} as byte"),
+            Self::Int2Char(operand) => write!(f, "{operand} as char"),
+            Self::Int2Short(operand) => write!(f, "{operand} as short"),
+            Self::CheckCast(operand, target_type) => {
                 write!(f, "{} as {}", operand, target_type.descriptor_string())
             }
-            InstanceOf(operand, target_type) => {
+            Self::InstanceOf(operand, target_type) => {
                 write!(f, "{} is {}", operand, target_type.descriptor_string())
             }
         }

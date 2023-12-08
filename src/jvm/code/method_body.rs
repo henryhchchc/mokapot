@@ -12,7 +12,7 @@ use super::{Instruction, ProgramCounter};
 
 /// The body of a method.
 /// See the [JVM Specification §4.7.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.3) for more information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MethodBody {
     /// The maximum number of values on the operand stack of the method.
     pub max_stack: u16,
@@ -101,22 +101,6 @@ mod test {
 
     use super::MethodBody;
     use Instruction::*;
-
-    impl Default for MethodBody {
-        fn default() -> Self {
-            Self {
-                max_stack: Default::default(),
-                max_locals: Default::default(),
-                instructions: Default::default(),
-                exception_table: Default::default(),
-                line_number_table: Default::default(),
-                local_variable_table: Default::default(),
-                stack_map_table: Default::default(),
-                runtime_visible_type_annotations: Default::default(),
-                runtime_invisible_type_annotations: Default::default(),
-            }
-        }
-    }
 
     #[test]
     fn instruction_at() {

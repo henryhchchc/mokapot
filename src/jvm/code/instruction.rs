@@ -274,6 +274,7 @@ pub enum WideInstruction {
     Ret(u16),
 }
 
+#[allow(clippy::wildcard_imports)]
 impl Instruction {
     /// Gets the opcode of the [Instruction].
     pub fn opcode(&self) -> u8 {
@@ -283,6 +284,7 @@ impl Instruction {
 
     /// Gets the name of the [Instruction].
     pub const fn name<'a>(&self) -> &'a str {
+        #[allow(clippy::wildcard_imports)]
         use Instruction::*;
         match self {
             AALoad => "aaload",

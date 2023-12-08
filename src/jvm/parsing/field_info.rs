@@ -40,8 +40,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
         Ok(Field {
             access_flags,
             name,
-            field_type,
             owner,
+            field_type,
             constant_value,
             is_synthetic,
             is_deperecated,

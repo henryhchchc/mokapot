@@ -69,12 +69,7 @@ fn test_interfaces() {
 fn test_fields() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(2, my_class.fields.len());
-    let test_field = &my_class
-        .fields
-        .iter()
-        .filter(|f| f.name == "test")
-        .next()
-        .unwrap();
+    let test_field = &my_class.fields.iter().find(|f| f.name == "test").unwrap();
     assert_eq!(FieldType::Base(PrimitiveType::Long), test_field.field_type);
 }
 
@@ -85,8 +80,7 @@ fn test_methods() {
     let main_method = &my_class
         .methods
         .iter()
-        .filter(|f| f.name == "main")
-        .next()
+        .find(|f| f.name == "main")
         .expect("main method not found");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(

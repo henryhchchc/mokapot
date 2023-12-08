@@ -10,7 +10,7 @@ impl ProgramCounter {
     /// Creates a new program counter based on the given value with a given offset.
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
         offset
-            .checked_add(self.0 as i32)
+            .checked_add(i32::from(self.0))
             .ok_or(InvalidOffset::I32(offset))
             .map(|it| it as u16)
             .map(Self)
@@ -99,6 +99,6 @@ mod tests {
     #[test]
     fn test_display() {
         let pc = ProgramCounter::from(10);
-        assert_eq!(format!("{}", pc), "#00010");
+        assert_eq!(format!("{pc}"), "#00010");
     }
 }

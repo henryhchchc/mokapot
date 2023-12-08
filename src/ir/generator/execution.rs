@@ -15,6 +15,7 @@ use crate::{
     types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
+#[allow(clippy::wildcard_imports)]
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
@@ -33,36 +34,36 @@ impl MokaIRGenerator<'_> {
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
                 frame.push_value(def.as_argument())?;
-                let int_value = (insn.opcode() as i32) - 3;
+                let int_value = i32::from(insn.opcode()) - 3;
                 let expr = Expression::Const(ConstantValue::Integer(int_value));
                 IR::Definition { value: def, expr }
             }
             LConst0 | LConst1 => {
                 frame.push_dual_slot_value(def.as_argument())?;
-                let long_value = (insn.opcode() as i64) - 9;
+                let long_value = i64::from(insn.opcode()) - 9;
                 let expr = Expression::Const(ConstantValue::Long(long_value));
                 IR::Definition { value: def, expr }
             }
             FConst0 | FConst1 | FConst2 => {
                 frame.push_value(def.as_argument())?;
-                let float_value = (insn.opcode() as f32) - 11.0;
+                let float_value = f32::from(insn.opcode()) - 11.0;
                 let expr = Expression::Const(ConstantValue::Float(float_value));
                 IR::Definition { value: def, expr }
             }
             DConst0 | DConst1 => {
                 frame.push_dual_slot_value(def.as_argument())?;
-                let double_value = (insn.opcode() as f64) - 14.0;
+                let double_value = f64::from(insn.opcode()) - 14.0;
                 let expr = Expression::Const(ConstantValue::Double(double_value));
                 IR::Definition { value: def, expr }
             }
             BiPush(value) => {
                 frame.push_value(def.as_argument())?;
-                let expr = Expression::Const(ConstantValue::Integer(*value as i32));
+                let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             SiPush(value) => {
                 frame.push_value(def.as_argument())?;
-                let expr = Expression::Const(ConstantValue::Integer(*value as i32));
+                let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             Ldc(value) | LdcW(value) => {
@@ -75,8 +76,8 @@ impl MokaIRGenerator<'_> {
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
-            ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local(frame, *idx as u16)?,
-            LLoad(idx) | DLoad(idx) => load_dual_slot_local(frame, *idx as u16)?,
+            ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local(frame, u16::from(*idx))?,
+            LLoad(idx) | DLoad(idx) => load_dual_slot_local(frame, u16::from(*idx))?,
             ILoad0 | FLoad0 | ALoad0 => load_local(frame, 0)?,
             ILoad1 | FLoad1 | ALoad1 => load_local(frame, 1)?,
             ILoad2 | FLoad2 | ALoad2 => load_local(frame, 2)?,
@@ -107,8 +108,8 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Array(array_op),
                 }
             }
-            IStore(idx) | FStore(idx) | AStore(idx) => store_local(frame, *idx as u16)?,
-            LStore(idx) | DStore(idx) => store_dual_slot_local(frame, *idx as u16)?,
+            IStore(idx) | FStore(idx) | AStore(idx) => store_local(frame, u16::from(*idx))?,
+            LStore(idx) | DStore(idx) => store_dual_slot_local(frame, u16::from(*idx))?,
             IStore0 | FStore0 | AStore0 => store_local(frame, 0)?,
             IStore1 | FStore1 | AStore1 => store_local(frame, 1)?,
             IStore2 | FStore2 | AStore2 => store_local(frame, 2)?,
@@ -424,7 +425,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             PutStatic(field) => {
-                use PrimitiveType::*;
+                use PrimitiveType::{Double, Long};
                 let value = if let FieldType::Base(Double | Long) = field.field_type {
                     frame.pop_dual_slot_value()?
                 } else {
@@ -440,7 +441,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             PutField(field) => {
-                use PrimitiveType::*;
+                use PrimitiveType::{Double, Long};
                 let value = if let FieldType::Base(Double | Long) = field.field_type {
                     frame.pop_dual_slot_value()?
                 } else {

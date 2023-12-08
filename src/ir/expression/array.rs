@@ -46,13 +46,12 @@ pub enum ArrayOperation {
 
 impl Display for ArrayOperation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ArrayOperation::*;
         match self {
-            New {
+            Self::New {
                 element_type,
                 length,
             } => write!(f, "new {}[{}]", element_type.descriptor_string(), length),
-            NewMultiDim {
+            Self::NewMultiDim {
                 element_type,
                 dimensions,
             } => {
@@ -60,16 +59,19 @@ impl Display for ArrayOperation {
                     f,
                     "new {}[{}]",
                     element_type.descriptor_string(),
-                    dimensions.iter().map(|it| it.to_string()).join(", ")
+                    dimensions
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .join(", ")
                 )
             }
-            Read { array_ref, index } => write!(f, "{}[{}]", array_ref, index),
-            Write {
+            Self::Read { array_ref, index } => write!(f, "{array_ref}[{index}]"),
+            Self::Write {
                 array_ref,
                 index,
                 value,
-            } => write!(f, "{}[{}] = {}", array_ref, index, value),
-            Length { array_ref } => write!(f, "array_len({})", array_ref),
+            } => write!(f, "{array_ref}[{index}] = {value}"),
+            Self::Length { array_ref } => write!(f, "array_len({array_ref})"),
         }
     }
 }

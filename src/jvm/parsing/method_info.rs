@@ -53,14 +53,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
             if body.is_some() {
                 Err(ClassFileParsingError::MalformedClassFile(
                     "Unexpected code attribute",
-                ))?
+                ))?;
             }
         } else {
             // Otherwise, its method_info structure must have exactly one Code attribute in its attributes table
             if body.is_none() {
                 Err(ClassFileParsingError::MalformedClassFile(
                     "The method must have a body",
-                ))?
+                ))?;
             }
         }
 
@@ -75,7 +75,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
             if !access_flags.contains(MethodAccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
-                Err(ClassFileParsingError::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?
+                Err(ClassFileParsingError::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?;
             }
         }
 

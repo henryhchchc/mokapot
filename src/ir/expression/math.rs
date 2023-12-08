@@ -48,27 +48,26 @@ pub enum NaNTreatment {
 
 impl Display for MathOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use MathOperation::*;
         match self {
-            Add(a, b) => write!(f, "{} + {}", a, b),
-            Subtract(a, b) => write!(f, "{} - {}", a, b),
-            Multiply(a, b) => write!(f, "{} * {}", a, b),
-            Divide(a, b) => write!(f, "{} / {}", a, b),
-            Remainder(a, b) => write!(f, "{} mod {}", a, b),
-            Negate(a) => write!(f, "-{}", a),
-            Increment(a) => write!(f, "{} + 1", a),
-            ShiftLeft(a, b) => write!(f, "{} << {}", a, b),
-            ShiftRight(a, b) => write!(f, "{} >> {}", a, b),
-            LogicalShiftRight(a, b) => write!(f, "{} >>> {}", a, b),
-            BitwiseAnd(a, b) => write!(f, "{} & {}", a, b),
-            BitwiseOr(a, b) => write!(f, "{} | {}", a, b),
-            BitwiseXor(a, b) => write!(f, "{} ^ {}", a, b),
-            LongComparison(a, b) => write!(f, "cmp({}, {})", a, b),
-            FloatingPointComparison(a, b, NaNTreatment::IsLargest) => {
-                write!(f, "cmp({}, {}) nan is largest", a, b)
+            Self::Add(a, b) => write!(f, "{a} + {b}"),
+            Self::Subtract(a, b) => write!(f, "{a} - {b}"),
+            Self::Multiply(a, b) => write!(f, "{a} * {b}"),
+            Self::Divide(a, b) => write!(f, "{a} / {b}"),
+            Self::Remainder(a, b) => write!(f, "{a} mod {b}"),
+            Self::Negate(a) => write!(f, "-{a}"),
+            Self::Increment(a) => write!(f, "{a} + 1"),
+            Self::ShiftLeft(a, b) => write!(f, "{a} << {b}"),
+            Self::ShiftRight(a, b) => write!(f, "{a} >> {b}"),
+            Self::LogicalShiftRight(a, b) => write!(f, "{a} >>> {b}"),
+            Self::BitwiseAnd(a, b) => write!(f, "{a} & {b}"),
+            Self::BitwiseOr(a, b) => write!(f, "{a} | {b}"),
+            Self::BitwiseXor(a, b) => write!(f, "{a} ^ {b}"),
+            Self::LongComparison(a, b) => write!(f, "cmp({a}, {b})"),
+            Self::FloatingPointComparison(a, b, NaNTreatment::IsLargest) => {
+                write!(f, "cmp({a}, {b}) nan is largest")
             }
-            FloatingPointComparison(a, b, NaNTreatment::IsSmallest) => {
-                write!(f, "cmp({}, {}) nan is smallest", a, b)
+            Self::FloatingPointComparison(a, b, NaNTreatment::IsSmallest) => {
+                write!(f, "cmp({a}, {b}) nan is smallest")
             }
         }
     }

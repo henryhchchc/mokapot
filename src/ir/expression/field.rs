@@ -37,14 +37,13 @@ pub enum FieldAccess {
 
 impl Display for FieldAccess {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use FieldAccess::*;
         match self {
-            ReadStatic { field } => write!(f, "read {}", field),
-            WriteStatic { field, value } => write!(f, "write {}, {}", field, value),
-            ReadInstance { object_ref, field } => {
+            Self::ReadStatic { field } => write!(f, "read {field}"),
+            Self::WriteStatic { field, value } => write!(f, "write {field}, {value}"),
+            Self::ReadInstance { object_ref, field } => {
                 write!(f, "read {}.{}", object_ref, field.name)
             }
-            WriteInstance {
+            Self::WriteInstance {
                 object_ref,
                 field,
                 value,

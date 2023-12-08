@@ -55,18 +55,18 @@ impl Display for MokaInstruction {
             Self::Definition {
                 value: def_id,
                 expr,
-            } => write!(f, "{} = {}", def_id, expr),
+            } => write!(f, "{def_id} = {expr}"),
             Self::Jump {
                 condition: Some(condition),
                 target,
             } => {
-                write!(f, "if {} goto {}", condition, target)
+                write!(f, "if {condition} goto {target}")
             }
             Self::Jump {
                 condition: None,
                 target,
             } => {
-                write!(f, "goto {}", target)
+                write!(f, "goto {target}")
             }
             Self::Switch {
                 match_value,
@@ -80,13 +80,13 @@ impl Display for MokaInstruction {
                     default,
                     branches
                         .iter()
-                        .map(|(key, target)| format!("{} => {}", key, target))
+                        .map(|(key, target)| format!("{key} => {target}"))
                         .join(", ")
                 )
             }
-            Self::Return(Some(value)) => write!(f, "return {}", value),
+            Self::Return(Some(value)) => write!(f, "return {value}"),
             Self::Return(None) => write!(f, "return"),
-            Self::SubroutineRet(target) => write!(f, "subroutine_ret {}", target),
+            Self::SubroutineRet(target) => write!(f, "subroutine_ret {target}"),
         }
     }
 }
@@ -108,7 +108,7 @@ impl Display for Argument {
             Self::Phi(ids) => write!(
                 f,
                 "Phi({})",
-                ids.iter().map(|id| format!("{}", id)).join(", ")
+                ids.iter().map(|id| format!("{id}")).join(", ")
             ),
         }
     }
@@ -124,7 +124,7 @@ impl BitOr for Argument {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        use Argument::*;
+        use Argument::{Id, Phi};
         match (self, rhs) {
             (Id(lhs), Id(rhs)) if lhs == rhs => Id(lhs),
             (Id(lhs), Id(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
@@ -147,7 +147,7 @@ impl IntoIterator for Argument {
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Argument::*;
+        use Argument::{Id, Phi};
         match self {
             Id(id) => Either::Left(std::iter::once(id)),
             Phi(ids) => Either::Right(ids.into_iter()),
@@ -162,7 +162,7 @@ impl<'a> IntoIterator for &'a Argument {
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Argument::*;
+        use Argument::{Id, Phi};
         match self {
             Id(id) => Either::Left(std::iter::once(id)),
             Phi(ids) => Either::Right(ids.iter()),
@@ -208,10 +208,10 @@ pub enum Identifier {
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Identifier::*;
+        use Identifier::{Arg, CaughtException, This, Value};
         match self {
             This => write!(f, "%this"),
-            Arg(idx) => write!(f, "%arg{}", idx),
+            Arg(idx) => write!(f, "%arg{idx}"),
             Value(idx) => idx.fmt(f),
             CaughtException => write!(f, "%caught_exception"),
         }

@@ -315,9 +315,10 @@ impl JvmStackFrame {
         if self.max_locals != other.max_locals {
             return Err(JvmFrameError::LocalLimitMismatch);
         }
-        if self.local_variables.len() != other.local_variables.len() {
-            panic!("BUG: `local_variables` are not allocated correctly")
-        }
+        assert!(
+            self.local_variables.len() == other.local_variables.len(),
+            "BUG: `local_variables` are not allocated correctly"
+        );
         if self.operand_stack.len() != other.operand_stack.len() {
             return Err(JvmFrameError::StackSizeMismatch);
         }
@@ -359,10 +360,9 @@ pub(super) enum Entry {
 
 impl Display for Entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Entry::*;
         match self {
-            Value(id) => id.fmt(f),
-            Top => write!(f, "Top"),
+            Self::Value(id) => id.fmt(f),
+            Self::Top => write!(f, "Top"),
         }
     }
 }

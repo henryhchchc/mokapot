@@ -41,7 +41,7 @@ pub struct Field {
 
 impl Field {
     /// Creates a [`FieldReference`] referring to the field.
-    pub fn make_reference(&self) -> FieldReference {
+    #[must_use] pub fn make_reference(&self) -> FieldReference {
         FieldReference {
             class: self.owner.clone(),
             name: self.name.clone(),
@@ -62,11 +62,11 @@ pub enum JavaString {
 impl Display for JavaString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JavaString::ValidUtf8(value) => write!(f, "String(\"{}\")", value),
+            JavaString::ValidUtf8(value) => write!(f, "String(\"{value}\")"),
             JavaString::InvalidUtf8(value) => write!(
                 f,
                 "String({}) // Invalid UTF-8",
-                value.iter().map(|it| format!("0x{:02X}", it)).join(" ")
+                value.iter().map(|it| format!("0x{it:02X}")).join(" ")
             ),
         }
     }
@@ -102,14 +102,14 @@ impl Display for ConstantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConstantValue::Null => write!(f, "null"),
-            ConstantValue::Integer(value) => write!(f, "int({})", value),
-            ConstantValue::Float(value) => write!(f, "float({})", value),
-            ConstantValue::Long(value) => write!(f, "long({})", value),
-            ConstantValue::Double(value) => write!(f, "double({})", value),
+            ConstantValue::Integer(value) => write!(f, "int({value})"),
+            ConstantValue::Float(value) => write!(f, "float({value})"),
+            ConstantValue::Long(value) => write!(f, "long({value})"),
+            ConstantValue::Double(value) => write!(f, "double({value})"),
             ConstantValue::String(value) => value.fmt(f),
-            ConstantValue::Class(value) => write!(f, "{}.class", value),
-            ConstantValue::Handle(value) => write!(f, "{:?}", value),
-            ConstantValue::MethodType(value) => write!(f, "{:?}", value),
+            ConstantValue::Class(value) => write!(f, "{value}.class"),
+            ConstantValue::Handle(value) => write!(f, "{value:?}"),
+            ConstantValue::MethodType(value) => write!(f, "{value:?}"),
             ConstantValue::Dynamic(bootstrap_method_attr_index, name, field_type) => {
                 write!(
                     f,
@@ -185,7 +185,7 @@ mod test {
         let descs = vec!['Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J'];
         let mut types = descs
             .into_iter()
-            .map(|d| PrimitiveType::try_from(d))
+            .map(PrimitiveType::try_from)
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse primitive types")
             .into_iter();
@@ -201,7 +201,7 @@ mod test {
 
     #[test]
     fn parse_invalid_primitive_type() {
-        assert!(PrimitiveType::try_from('A').is_err())
+        assert!(PrimitiveType::try_from('A').is_err());
     }
 
     #[test]
@@ -221,7 +221,7 @@ mod test {
         ];
         let mut types = descriptors
             .into_iter()
-            .map(|it| FieldType::from_str(it))
+            .map(FieldType::from_str)
             .collect::<Result<Vec<_>, _>>()
             .expect("Failed to parse field types")
             .into_iter();
@@ -247,12 +247,12 @@ mod test {
     #[test]
     fn missing_semicolon() {
         let descriptor = "Ljava/lang/String";
-        assert!(FieldType::from_str(descriptor).is_err())
+        assert!(FieldType::from_str(descriptor).is_err());
     }
 
     #[test]
     fn tailing_chars() {
         let descriptor = "Ljava/lang/String;A";
-        assert!(FieldType::from_str(descriptor).is_err())
+        assert!(FieldType::from_str(descriptor).is_err());
     }
 }

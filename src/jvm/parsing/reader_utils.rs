@@ -123,7 +123,7 @@ mod test {
     fn read_u32_success() {
         let mut reader = [0x01u8, 0x02, 0x03, 0x04].as_slice();
         let buf: u32 = reader.read_value().unwrap();
-        assert_eq!(buf, 0x01020304);
+        assert_eq!(buf, 0x0102_0304);
         assert!(reader.is_empty());
     }
 
@@ -139,7 +139,7 @@ mod test {
     fn read_i32_success() {
         let mut reader = [0x01u8, 0x02, 0x03, 0x04].as_slice();
         let buf: i32 = reader.read_value().unwrap();
-        assert_eq!(buf, 0x01020304);
+        assert_eq!(buf, 0x0102_0304);
         assert!(reader.is_empty());
     }
 

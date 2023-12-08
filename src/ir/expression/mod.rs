@@ -80,21 +80,20 @@ pub enum Expression {
 
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Expression::*;
         match self {
-            Const(c) => c.fmt(f),
-            Subroutine {
+            Self::Const(c) => c.fmt(f),
+            Self::Subroutine {
                 target,
                 return_address,
-            } => write!(f, "subroutine {}, return to {}", target, return_address),
-            Field(field_op) => field_op.fmt(f),
-            Array(array_op) => array_op.fmt(f),
-            Math(math_op) => math_op.fmt(f),
-            Throw(value) => write!(f, "throw {}", value),
-            Synchronization(monitor_op) => monitor_op.fmt(f),
-            New(class) => write!(f, "new {}", class),
-            Conversion(conv_op) => conv_op.fmt(f),
-            Call {
+            } => write!(f, "subroutine {target}, return to {return_address}"),
+            Self::Field(field_op) => field_op.fmt(f),
+            Self::Array(array_op) => array_op.fmt(f),
+            Self::Math(math_op) => math_op.fmt(f),
+            Self::Throw(value) => write!(f, "throw {value}"),
+            Self::Synchronization(monitor_op) => monitor_op.fmt(f),
+            Self::New(class) => write!(f, "new {class}"),
+            Self::Conversion(conv_op) => conv_op.fmt(f),
+            Self::Call {
                 method,
                 this: None,
                 args,
@@ -103,9 +102,9 @@ impl Display for Expression {
                 "call {} {}({})",
                 method.descriptor.return_type,
                 method,
-                args.iter().map(|it| it.to_string()).join(", "),
+                args.iter().map(std::string::ToString::to_string).join(", "),
             ),
-            Call {
+            Self::Call {
                 method,
                 this: Some(receiver),
                 args,
@@ -116,9 +115,9 @@ impl Display for Expression {
                 receiver,
                 method.owner,
                 method.name,
-                args.iter().map(|it| it.to_string()).join(", "),
+                args.iter().map(std::string::ToString::to_string).join(", "),
             ),
-            Closure {
+            Self::Closure {
                 bootstrap_method_index,
                 name,
                 captures,
@@ -129,7 +128,10 @@ impl Display for Expression {
                 closure_descriptor.return_type,
                 name,
                 bootstrap_method_index,
-                captures.iter().map(|it| it.to_string()).join(", "),
+                captures
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .join(", "),
             ),
         }
     }

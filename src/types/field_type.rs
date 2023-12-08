@@ -147,7 +147,7 @@ impl Display for FieldType {
         match self {
             Self::Base(it) => it.fmt(f),
             Self::Object(it) => it.fmt(f),
-            Self::Array(it) => write!(f, "{}[]", it),
+            Self::Array(it) => write!(f, "{it}[]"),
         }
     }
 }
@@ -218,7 +218,7 @@ impl FieldType {
         match self {
             FieldType::Base(it) => it.descriptor_str().to_owned(),
             FieldType::Object(ClassReference { binary_name }) => {
-                format!("L{};", binary_name)
+                format!("L{binary_name};")
             }
             FieldType::Array(inner) => format!("[{}", inner.descriptor_string()),
         }

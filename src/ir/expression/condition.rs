@@ -37,22 +37,21 @@ pub enum Condition {
 
 impl Display for Condition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Condition::*;
         match self {
-            Equal(a, b) => write!(f, "{} == {}", a, b),
-            NotEqual(a, b) => write!(f, "{} != {}", a, b),
-            LessThan(a, b) => write!(f, "{} < {}", a, b),
-            LessThanOrEqual(a, b) => write!(f, "{} <= {}", a, b),
-            GreaterThan(a, b) => write!(f, "{} > {}", a, b),
-            GreaterThanOrEqual(a, b) => write!(f, "{} >= {}", a, b),
-            IsNull(a) => write!(f, "{} == null", a),
-            IsNotNull(a) => write!(f, "{} != null", a),
-            IsZero(a) => write!(f, "{} == 0", a),
-            IsNonZero(a) => write!(f, "{} != 0", a),
-            IsPositive(a) => write!(f, "{} > 0", a),
-            IsNegative(a) => write!(f, "{} < 0", a),
-            IsNonNegative(a) => write!(f, "{} >= 0", a),
-            IsNonPositive(a) => write!(f, "{} <= 0", a),
+            Self::Equal(a, b) => write!(f, "{a} == {b}"),
+            Self::NotEqual(a, b) => write!(f, "{a} != {b}"),
+            Self::LessThan(a, b) => write!(f, "{a} < {b}"),
+            Self::LessThanOrEqual(a, b) => write!(f, "{a} <= {b}"),
+            Self::GreaterThan(a, b) => write!(f, "{a} > {b}"),
+            Self::GreaterThanOrEqual(a, b) => write!(f, "{a} >= {b}"),
+            Self::IsNull(a) => write!(f, "{a} == null"),
+            Self::IsNotNull(a) => write!(f, "{a} != null"),
+            Self::IsZero(a) => write!(f, "{a} == 0"),
+            Self::IsNonZero(a) => write!(f, "{a} != 0"),
+            Self::IsPositive(a) => write!(f, "{a} > 0"),
+            Self::IsNegative(a) => write!(f, "{a} < 0"),
+            Self::IsNonNegative(a) => write!(f, "{a} >= 0"),
+            Self::IsNonPositive(a) => write!(f, "{a} <= 0"),
         }
     }
 }

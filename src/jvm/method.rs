@@ -359,7 +359,7 @@ mod test {
                 .expect_err("Empty descriptor should be invalid")
                 .0,
             ""
-        )
+        );
     }
 
     #[test]

@@ -126,9 +126,9 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             MokaInstruction::Switch {
                 default, branches, ..
             } => {
-                branches.iter().for_each(|(_, it)| {
+                for (_, it) in branches {
                     dirty_nodes.insert(*it, frame.same_frame());
-                });
+                }
                 dirty_nodes.insert(*default, frame.same_frame());
             }
             MokaInstruction::Return(_) => {

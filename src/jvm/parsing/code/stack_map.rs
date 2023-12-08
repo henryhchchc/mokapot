@@ -15,10 +15,10 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
         let frame_type: u8 = reader.read_value()?;
         let result = match frame_type {
             it @ 0..=63 => Self::SameFrame {
-                offset_delta: it as u16,
+                offset_delta: u16::from(it),
             },
             it @ 64..=127 => Self::SameLocals1StackItemFrame {
-                offset_delta: it as u16 - 64,
+                offset_delta: u16::from(it) - 64,
                 stack: parse_jvm_element(reader, ctx)?,
             },
             247 => {

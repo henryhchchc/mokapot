@@ -16,6 +16,7 @@ use crate::{
     types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
+#[allow(clippy::wildcard_imports)]
 impl Instruction {
     pub(crate) fn parse_code(
         reader: Vec<u8>,
@@ -33,13 +34,13 @@ impl Instruction {
         reader: &mut std::io::Cursor<Vec<u8>>,
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {
+        use Instruction::*;
         let pc = (reader.position() as u16).into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => Err(ClassFileParsingError::ReadFail(e))?,
         };
-        use Instruction::*;
         let instruction = match opcode {
             0x32 => AALoad,
             0x53 => AAStore,
@@ -204,7 +205,7 @@ impl Instruction {
                 if zeros != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(
                         "Zero paddings are not zero",
-                    ))?
+                    ))?;
                 }
                 InvokeDynamic {
                     bootstrap_method_index,
@@ -219,7 +220,7 @@ impl Instruction {
                 if zero != 0 {
                     Err(ClassFileParsingError::MalformedClassFile(
                         "Zero paddings are not zero",
-                    ))?
+                    ))?;
                 }
                 InvokeInterface(method_ref, count)
             }
@@ -264,11 +265,10 @@ impl Instruction {
                 use FieldType::Base;
                 use PrimitiveType::{Double, Long};
                 let index: u8 = reader.read_value()?;
-                let constant = match ctx.constant_pool.get_constant_value(index as u16)? {
+                let constant = match ctx.constant_pool.get_constant_value(u16::from(index))? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
-                    | ConstantValue::Dynamic(_, _, Base(Long))
-                    | ConstantValue::Dynamic(_, _, Base(Double)) => {
+                    | ConstantValue::Dynamic(_, _, Base(Long | Double)) => {
                         Err(ClassFileParsingError::MalformedClassFile(
                             "Ldc must not load wide data types",
                         ))?
@@ -284,8 +284,7 @@ impl Instruction {
                 let constant = match ctx.constant_pool.get_constant_value(index)? {
                     ConstantValue::Long(_)
                     | ConstantValue::Double(_)
-                    | ConstantValue::Dynamic(_, _, Base(Long))
-                    | ConstantValue::Dynamic(_, _, Base(Double)) => {
+                    | ConstantValue::Dynamic(_, _, Base(Long | Double)) => {
                         Err(ClassFileParsingError::MalformedClassFile(
                             "LdcW must not load wide data types",
                         ))?
@@ -301,8 +300,7 @@ impl Instruction {
                 let constant = match ctx.constant_pool.get_constant_value(index)? {
                     it @ (ConstantValue::Long(_)
                     | ConstantValue::Double(_)
-                    | ConstantValue::Dynamic(_, _, Base(Long))
-                    | ConstantValue::Dynamic(_, _, Base(Double))) => it,
+                    | ConstantValue::Dynamic(_, _, Base(Long | Double))) => it,
                     _ => Err(ClassFileParsingError::MalformedClassFile(
                         "Ldc2W must load wide data types",
                     ))?,
@@ -436,7 +434,7 @@ impl Instruction {
     }
 }
 
-/// Reads an i32 offset form the reader, advances the reader by 4 bytes, and applies the offset to [current_pc].
+/// Reads an i32 offset form the reader, advances the reader by 4 bytes, and applies the offset to [`current_pc`].
 pub(crate) fn read_offset32<R>(
     reader: &mut R,
     current_pc: ProgramCounter,
@@ -448,7 +446,7 @@ where
     Ok(current_pc.offset(offset)?)
 }
 
-/// Reads an i16 offset form the reader, advances the reader by 2 bytes, and applies the offset to [current_pc].
+/// Reads an i16 offset form the reader, advances the reader by 2 bytes, and applies the offset to [`current_pc`].
 pub(crate) fn read_offset16<R>(
     reader: &mut R,
     current_pc: ProgramCounter,
