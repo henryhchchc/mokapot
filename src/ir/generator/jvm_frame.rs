@@ -158,7 +158,7 @@ impl JvmStackFrame {
     ) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
         if idx + 1 >= self.max_locals as usize {
-            return Err(JvmFrameError::LocalLimitExceed);
+            Err(JvmFrameError::LocalLimitExceed)?;
         }
         match (
             // If panic here then `local_variables` are not allocated correctly
@@ -316,14 +316,14 @@ impl JvmStackFrame {
 impl JvmStackFrame {
     pub(super) fn merge(&self, other: Self) -> Result<Self, JvmFrameError> {
         if self.max_locals != other.max_locals {
-            return Err(JvmFrameError::LocalLimitMismatch);
+            Err(JvmFrameError::LocalLimitMismatch)?;
         }
         assert!(
             self.local_variables.len() == other.local_variables.len(),
             "BUG: `local_variables` are not allocated correctly"
         );
         if self.operand_stack.len() != other.operand_stack.len() {
-            return Err(JvmFrameError::StackSizeMismatch);
+            Err(JvmFrameError::StackSizeMismatch)?;
         }
         let reachable_subroutines = self
             .possible_ret_addresses

@@ -38,10 +38,11 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_entry_internal(&self, index: u16) -> ClassFileParsingResult<&Entry> {
-        let Some(entry) = self.get_entry(index) else {
-            return Err(ClassFileParsingError::BadConstantPoolIndex(index));
-        };
-        Ok(entry)
+        if let Some(entry) = self.get_entry(index) {
+            Ok(entry)
+        } else {
+            Err(ClassFileParsingError::BadConstantPoolIndex(index))
+        }
     }
 
     pub(crate) fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
@@ -58,14 +59,15 @@ impl ConstantPool {
 
     pub(crate) fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
         let entry = self.get_entry_internal(index)?;
-        let &Entry::Class { name_index } = entry else {
-            return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+        if let &Entry::Class { name_index } = entry {
+            let name = self.get_str(name_index)?;
+            Ok(ClassReference::new(name))
+        } else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Class",
                 found: entry.constant_kind(),
-            });
-        };
-        let name = self.get_str(name_index)?;
-        Ok(ClassReference::new(name))
+            })
+        }
     }
 
     pub(crate) fn get_constant_value(
@@ -124,26 +126,28 @@ impl ConstantPool {
         let entry = self.get_entry_internal(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
-            return Ok(ModuleReference { name });
+            Ok(ModuleReference { name })
+        } else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Module",
+                found: entry.constant_kind(),
+            })
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
-            expected: "Module",
-            found: entry.constant_kind(),
-        })
     }
 
     pub(crate) fn get_package_ref(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
         let entry = self.get_entry_internal(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
-            return Ok(PackageReference {
+            Ok(PackageReference {
                 binary_name: name.to_owned(),
-            });
+            })
+        } else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "Package",
+                found: entry.constant_kind(),
+            })
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
-            expected: "Package",
-            found: entry.constant_kind(),
-        })
     }
 
     pub(crate) fn get_field_ref(&self, index: u16) -> ClassFileParsingResult<FieldReference> {
@@ -184,12 +188,13 @@ impl ConstantPool {
         {
             let name = self.get_str(name_index)?;
             let descriptor = self.get_str(descriptor_index)?;
-            return Ok((name, descriptor));
+            Ok((name, descriptor))
+        } else {
+            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                expected: "NameAndType",
+                found: entry.constant_kind(),
+            })
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
-            expected: "NameAndType",
-            found: entry.constant_kind(),
-        })?
     }
 
     pub(crate) fn get_method_ref(&self, index: u16) -> ClassFileParsingResult<MethodReference> {

@@ -201,23 +201,24 @@ impl MethodDescriptor {
         prefix: char,
         remaining: &mut Chars<'_>,
     ) -> Result<FieldType, InvalidDescriptor> {
+        let build_err = |rem: &Chars<'_>| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
         if let Ok(p) = PrimitiveType::try_from(prefix) {
             return Ok(FieldType::Base(p));
-        }
-        let build_err = |rem: &Chars<'_>| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
-        match prefix {
-            'L' => {
-                let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
-                match remaining.next() {
-                    Some(';') => Ok(FieldType::Object(ClassReference::new(binary_name))),
-                    _ => Err(build_err(remaining)),
+        } else {
+            match prefix {
+                'L' => {
+                    let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
+                    match remaining.next() {
+                        Some(';') => Ok(FieldType::Object(ClassReference::new(binary_name))),
+                        _ => Err(build_err(remaining)),
+                    }
                 }
+                '[' => {
+                    let next_prefix = remaining.next().ok_or_else(|| build_err(remaining))?;
+                    Self::parse_single_param(next_prefix, remaining).map(|p| p.make_array_type())
+                }
+                _ => Err(build_err(remaining)),
             }
-            '[' => {
-                let next_prefix = remaining.next().ok_or_else(|| build_err(remaining))?;
-                Self::parse_single_param(next_prefix, remaining).map(|p| p.make_array_type())
-            }
-            _ => Err(build_err(remaining)),
         }
     }
 }
