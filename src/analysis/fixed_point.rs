@@ -13,12 +13,12 @@ pub trait FixedPointAnalyzer {
 
     /// Creates the fact at the entry point of the method being analyzed.
     /// # Errors
-    /// - [`A::Err`] If the fail to create the entry fact.
+    /// - [`Err`] If the fail to create the entry fact.
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err>;
 
     /// Executes the method at the given location with the given fact, and returns a map of the affected locations and the corresponding facts.
     /// # Errors
-    /// - [`A::Err`] If the analysis fails.
+    /// - [`Err`] If the analysis fails.
     fn analyze_location(
         &mut self,
         location: &Self::Location,
@@ -27,7 +27,7 @@ pub trait FixedPointAnalyzer {
 
     /// Merges two facts where the control flow joins.
     /// # Errors
-    /// - [`A::Err`] If an error occurred during merging two facts
+    /// - [`Err`] If an error occurred during merging two facts
     fn merge_facts(
         &self,
         current_fact: &Self::Fact,

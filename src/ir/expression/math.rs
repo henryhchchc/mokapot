@@ -17,8 +17,8 @@ pub enum MathOperation {
     Remainder(Argument, Argument),
     /// Negates the argument (i.e., `-arg`).
     Negate(Argument),
-    /// Increments the argument by one (i.e., `arg + 1`).
-    Increment(Argument),
+    /// Increments the argument by a constant (i.e., `arg + N`).
+    Increment(Argument, i32),
     /// Shifts the first argument left by the second (i.e., `lhs << rhs`).
     ShiftLeft(Argument, Argument),
     /// Shifts the first argument right by the second (i.e., `lhs >> rhs`).
@@ -55,7 +55,7 @@ impl Display for MathOperation {
             Self::Divide(a, b) => write!(f, "{a} / {b}"),
             Self::Remainder(a, b) => write!(f, "{a} mod {b}"),
             Self::Negate(a) => write!(f, "-{a}"),
-            Self::Increment(a) => write!(f, "{a} + 1"),
+            Self::Increment(a, n) => write!(f, "{a} + {n}"),
             Self::ShiftLeft(a, b) => write!(f, "{a} << {b}"),
             Self::ShiftRight(a, b) => write!(f, "{a} >> {b}"),
             Self::LogicalShiftRight(a, b) => write!(f, "{a} >>> {b}"),

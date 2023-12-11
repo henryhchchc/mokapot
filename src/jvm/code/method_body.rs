@@ -15,14 +15,14 @@ use super::{Instruction, ProgramCounter};
 
 /// The body of a method.
 /// See the [JVM Specification §4.7.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.3) for more information.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MethodBody {
     /// The maximum number of values on the operand stack of the method.
     pub max_stack: u16,
     /// The maximum number of local variables in the method.
     pub max_locals: u16,
     /// The executable instructions.
-    pub instructions: InstructionList,
+    pub instructions: InstructionList<Instruction>,
     /// The exception handlers table.
     pub exception_table: Vec<ExceptionTableEntry>,
     /// The line number table.
@@ -46,49 +46,49 @@ impl MethodBody {
 }
 
 /// A list of instructions.
-#[derive(Debug, Clone, Default)]
-pub struct InstructionList(BTreeMap<ProgramCounter, Instruction>);
+#[derive(Debug, Clone)]
+pub struct InstructionList<I>(BTreeMap<ProgramCounter, I>);
 
-impl From<BTreeMap<ProgramCounter, Instruction>> for InstructionList {
-    fn from(map: BTreeMap<ProgramCounter, Instruction>) -> Self {
+impl<I> From<BTreeMap<ProgramCounter, I>> for InstructionList<I> {
+    fn from(map: BTreeMap<ProgramCounter, I>) -> Self {
         Self(map)
     }
 }
 
-impl<const N: usize> From<[(ProgramCounter, Instruction); N]> for InstructionList {
-    fn from(value: [(ProgramCounter, Instruction); N]) -> Self {
+impl<I, const N: usize> From<[(ProgramCounter, I); N]> for InstructionList<I> {
+    fn from(value: [(ProgramCounter, I); N]) -> Self {
         Self::from(BTreeMap::from(value))
     }
 }
 
-impl IntoIterator for InstructionList {
-    type Item = (ProgramCounter, Instruction);
-    type IntoIter = <BTreeMap<ProgramCounter, Instruction> as IntoIterator>::IntoIter;
+impl<I> IntoIterator for InstructionList<I> {
+    type Item = (ProgramCounter, I);
+    type IntoIter = <BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<'i> IntoIterator for &'i InstructionList {
-    type Item = (&'i ProgramCounter, &'i Instruction);
-    type IntoIter = <&'i BTreeMap<ProgramCounter, Instruction> as IntoIterator>::IntoIter;
+impl<'i, I> IntoIterator for &'i InstructionList<I> {
+    type Item = (&'i ProgramCounter, &'i I);
+    type IntoIter = <&'i BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
 }
 
-impl InstructionList {
+impl<I> InstructionList<I> {
     /// Returns the instruction at the given program counter.
     #[must_use]
-    pub fn get(&self, pc: &ProgramCounter) -> Option<&Instruction> {
+    pub fn get(&self, pc: &ProgramCounter) -> Option<&I> {
         self.0.get(pc)
     }
 
     /// Returns the first instruction in the list.
     #[must_use]
-    pub fn entry_point(&self) -> Option<(&ProgramCounter, &Instruction)> {
+    pub fn entry_point(&self) -> Option<(&ProgramCounter, &I)> {
         self.0.first_key_value()
     }
 
@@ -117,7 +117,14 @@ mod test {
                 (1.into(), IConst0),
                 (2.into(), IConst1),
             ]),
-            ..Default::default()
+            max_stack: 0,
+            max_locals: 0,
+            exception_table: vec![],
+            line_number_table: None,
+            local_variable_table: None,
+            stack_map_table: None,
+            runtime_visible_type_annotations: vec![],
+            runtime_invisible_type_annotations: vec![],
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
     }

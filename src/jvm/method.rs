@@ -203,7 +203,7 @@ impl MethodDescriptor {
     ) -> Result<FieldType, InvalidDescriptor> {
         let build_err = |rem: &Chars<'_>| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
         if let Ok(p) = PrimitiveType::try_from(prefix) {
-            return Ok(FieldType::Base(p));
+            Ok(FieldType::Base(p))
         } else {
             match prefix {
                 'L' => {

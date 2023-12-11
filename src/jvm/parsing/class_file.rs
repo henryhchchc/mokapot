@@ -3,8 +3,8 @@ use std::iter::repeat_with;
 use crate::{
     jvm::{
         class::{
-            BootstrapMethod, Class, ClassAccessFlags, ClassReference, ClassVersion, ConstantPool,
-            InnerClassInfo, RecordComponent, SourceDebugExtension,
+            constant_pool::ConstantPool, BootstrapMethod, Class, ClassAccessFlags, ClassReference,
+            ClassVersion, InnerClassInfo, RecordComponent, SourceDebugExtension,
         },
         parsing::{
             jvm_element_parser::{parse_flags, parse_jvm_element},

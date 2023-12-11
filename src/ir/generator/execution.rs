@@ -15,7 +15,7 @@ use crate::{
     types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::enum_glob_use, clippy::too_many_lines)]
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
@@ -23,28 +23,7 @@ impl MokaIRGenerator<'_> {
         pc: ProgramCounter,
         frame: &mut JvmStackFrame,
     ) -> Result<IR, MokaIRGenerationError> {
-        use Instruction::{
-            AALoad, AAStore, AConstNull, ALoad, ALoad0, ALoad1, ALoad2, ALoad3, ANewArray, AReturn,
-            AStore, AStore0, AStore1, AStore2, AStore3, AThrow, ArrayLength, BALoad, BAStore,
-            BiPush, Breakpoint, CALoad, CAStore, CheckCast, DALoad, DAStore, DAdd, DCmpG, DCmpL,
-            DConst0, DConst1, DDiv, DLoad, DLoad0, DLoad1, DLoad2, DLoad3, DMul, DNeg, DRem,
-            DReturn, DStore, DStore0, DStore1, DStore2, DStore3, DSub, Dup, Dup2, Dup2X1, Dup2X2,
-            DupX1, DupX2, FALoad, FAStore, FAdd, FCmpG, FCmpL, FConst0, FConst1, FConst2, FDiv,
-            FLoad, FLoad0, FLoad1, FLoad2, FLoad3, FMul, FNeg, FRem, FReturn, FStore, FStore0,
-            FStore1, FStore2, FStore3, FSub, GetField, GetStatic, Goto, GotoW, IALoad, IAStore,
-            IAdd, IAnd, IConst0, IConst1, IConst2, IConst3, IConst4, IConst5, IConstM1, IDiv, IInc,
-            ILoad, ILoad0, ILoad1, ILoad2, ILoad3, IMul, INeg, IOr, IRem, IReturn, IShl, IShr,
-            IStore, IStore0, IStore1, IStore2, IStore3, ISub, IUShr, IXor, IfACmpEq, IfACmpNe,
-            IfEq, IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe,
-            IfLt, IfNe, IfNonNull, IfNull, ImpDep1, ImpDep2, InstanceOf, InvokeDynamic,
-            InvokeInterface, InvokeSpecial, InvokeStatic, InvokeVirtual, Jsr, JsrW, LALoad,
-            LAStore, LAdd, LAnd, LCmp, LConst0, LConst1, LDiv, LLoad, LLoad0, LLoad1, LLoad2,
-            LLoad3, LMul, LNeg, LOr, LRem, LReturn, LShl, LShr, LStore, LStore0, LStore1, LStore2,
-            LStore3, LSub, LUShr, LXor, Ldc, Ldc2W, LdcW, LookupSwitch, MonitorEnter, MonitorExit,
-            MultiANewArray, New, NewArray, Nop, Pop, Pop2, PutField, PutStatic, Ret, Return,
-            SALoad, SAStore, SiPush, Swap, TableSwitch, Wide, D2F, D2I, D2L, F2D, F2I, F2L, I2B,
-            I2C, I2D, I2F, I2L, I2S, L2D, L2F, L2I,
-        };
+        use Instruction::*;
         let def = Value::new(pc.into());
         let ir_instruction = match insn {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
@@ -271,19 +250,19 @@ impl MokaIRGenerator<'_> {
             LOr => binary_wide_math(frame, def, MathOperation::BitwiseOr)?,
             IXor => binary_op_math(frame, def, MathOperation::BitwiseXor)?,
             LXor => binary_wide_math(frame, def, MathOperation::BitwiseXor)?,
-            IInc(idx, _) => {
+            IInc(idx, constant) => {
                 let base = frame.get_local(*idx)?;
                 frame.set_local(*idx, def.as_argument())?;
-                let math_op = MathOperation::Increment(base);
+                let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
                     expr: Expression::Math(math_op),
                 }
             }
-            Wide(WideInstruction::IInc(idx, _)) => {
+            Wide(WideInstruction::IInc(idx, constant)) => {
                 let base = frame.get_local(*idx)?;
                 frame.set_local(*idx, def.as_argument())?;
-                let math_op = MathOperation::Increment(base);
+                let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
                     expr: Expression::Math(math_op),

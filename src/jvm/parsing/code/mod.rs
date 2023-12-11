@@ -1,4 +1,5 @@
 pub(super) mod instruction_impl;
+pub(super) mod raw_instruction;
 pub(super) mod stack_map;
 
 use std::str::FromStr;

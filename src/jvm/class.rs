@@ -16,7 +16,11 @@ use super::{
     ClassFileParsingResult,
 };
 
-pub use super::parsing::constant_pool::{ConstantPool, Entry};
+/// APIs for the constant pool in JVM.
+pub mod constant_pool {
+    pub use super::super::parsing::constant_pool::ConstantPool;
+    pub use super::super::parsing::constant_pool::Entry as ConstantPoolEntry;
+}
 
 /// A JVM class
 /// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
@@ -82,7 +86,7 @@ impl Class {
     /// # Errors
     /// - [`ClassFileParsingError::ReadFail`](crate::jvm::parsing::errors::ClassFileParsingError::ReadFail) If the reader fails to read.
     /// Other errors may be returned if the class file is malformed.
-    /// See [`ClassFileParsingError`] for more information.
+    /// See [`ClassFileParsingError`](crate::jvm::parsing::errors::ClassFileParsingError) for more information.
     pub fn from_reader<R>(reader: R) -> ClassFileParsingResult<Class>
     where
         R: std::io::Read,
