@@ -5,13 +5,14 @@ use std::{
 
 use crate::{
     jvm::{
-        annotation::TypeAnnotation, class::ClassReference, ClassFileParsingError,
-        ClassFileParsingResult,
+        annotation::TypeAnnotation,
+        class::{constant_pool::ConstantPool, ClassReference},
+        ClassFileParsingError, ClassFileParsingResult,
     },
     types::field_type::FieldType,
 };
 
-use super::{Instruction, ProgramCounter};
+use super::{Instruction, ProgramCounter, RawInstruction};
 
 /// The body of a method.
 /// See the [JVM Specification §4.7.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.3) for more information.
@@ -99,6 +100,24 @@ impl<I> InstructionList<I> {
             .range((Bound::Excluded(pc), Bound::Unbounded))
             .next()
             .map(|(k, _)| *k)
+    }
+}
+
+impl InstructionList<RawInstruction> {
+    /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
+    /// # Errors
+    /// See [`ClassFileParsingError`] for possible errors.
+    pub fn lift(
+        self,
+        constant_pool: &ConstantPool,
+    ) -> ClassFileParsingResult<InstructionList<Instruction>> {
+        let mut instructions = BTreeMap::new();
+        for (pc, raw_instruction) in self {
+            let instruction =
+                Instruction::from_raw_instruction(raw_instruction, pc, constant_pool)?;
+            instructions.insert(pc, instruction);
+        }
+        Ok(InstructionList(instructions))
     }
 }
 

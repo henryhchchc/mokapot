@@ -342,5 +342,5 @@ pub enum RawWideInstruction {
     DStore { index: u16 } = 0x39,
     AStore { index: u16 } = 0x3A,
     Ret { index: u16 } = 0xA9,
-    IInc { index: u16, constant: i16 } = 0x84,
+    IInc { index: u16, increment: i16 } = 0x84,
 }

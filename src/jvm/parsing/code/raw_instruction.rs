@@ -7,9 +7,10 @@ use crate::jvm::{
 };
 
 impl RawInstruction {
-    pub(crate) fn parse_code(
-        bytes: Vec<u8>,
-    ) -> ClassFileParsingResult<InstructionList<RawInstruction>> {
+    /// Parses a list of [`RawInstruction`]s from the given bytes.
+    /// # Errors
+    /// See [`ClassFileParsingError`] for more information.
+    pub fn from_bytes(bytes: Vec<u8>) -> ClassFileParsingResult<InstructionList<RawInstruction>> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut inner = BTreeMap::new();
         while let Some((pc, instruction)) = RawInstruction::parse(&mut cursor)? {
@@ -425,7 +426,7 @@ impl RawInstruction {
                     },
                     0x84 => RawWideInstruction::IInc {
                         index: reader.read_value()?,
-                        constant: reader.read_value()?,
+                        increment: reader.read_value()?,
                     },
                     0xa9 => RawWideInstruction::Ret {
                         index: reader.read_value()?,

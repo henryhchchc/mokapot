@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, str::FromStr};
 
+use itertools::Itertools;
+
 use crate::{
     jvm::{
         class::constant_pool::{ConstantPool, ConstantPoolEntry},
@@ -7,15 +9,11 @@ use crate::{
             Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
             WideInstruction,
         },
-        field::FieldReference,
-        method::{MethodDescriptor, MethodReference},
-        parsing::{
-            jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext,
-            reader_utils::ClassReader,
-        },
+        method::MethodDescriptor,
+        parsing::parsing_context::ParsingContext,
         ClassFileParsingError, ClassFileParsingResult,
     },
-    types::field_type::{PrimitiveType, TypeReference},
+    types::field_type::PrimitiveType,
 };
 
 impl Instruction {
@@ -23,19 +21,19 @@ impl Instruction {
         reader: Vec<u8>,
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<InstructionList<Instruction>> {
-        let raw_instructions = RawInstruction::parse_code(reader)?;
+        let raw_instructions = RawInstruction::from_bytes(reader)?;
         let inner: BTreeMap<ProgramCounter, Self> = raw_instructions
             .into_iter()
             .map(|(pc, raw_insn)| {
-                Self::from_raw_instruction(&raw_insn, pc, &ctx.constant_pool).map(|it| (pc, it))
+                Self::from_raw_instruction(raw_insn, pc, &ctx.constant_pool).map(|it| (pc, it))
             })
             .collect::<ClassFileParsingResult<_>>()?;
         Ok(InstructionList::from(inner))
     }
 
     #[allow(clippy::enum_glob_use, clippy::too_many_lines)]
-    fn from_raw_instruction(
-        raw_instruction: &RawInstruction,
+    pub(crate) fn from_raw_instruction(
+        raw_instruction: RawInstruction,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Self> {
@@ -58,27 +56,27 @@ impl Instruction {
             FConst2 => Self::FConst2,
             DConst0 => Self::DConst0,
             DConst1 => Self::DConst1,
-            BiPush { value } => Self::BiPush(*value),
-            SiPush { value } => Self::SiPush(*value),
+            BiPush { value } => Self::BiPush(value),
+            SiPush { value } => Self::SiPush(value),
             Ldc { const_index } => {
-                let constant = constant_pool.get_constant_value(u16::from(*const_index))?;
+                let constant = constant_pool.get_constant_value(u16::from(const_index))?;
                 Self::Ldc(constant)
             }
             LdcW { const_index } => {
-                let constant = constant_pool.get_constant_value(*const_index)?;
+                let constant = constant_pool.get_constant_value(const_index)?;
                 Self::LdcW(constant)
             }
             Ldc2W { const_index } => {
-                let constant = constant_pool.get_constant_value(*const_index)?;
+                let constant = constant_pool.get_constant_value(const_index)?;
                 Self::Ldc2W(constant)
             }
 
             // Loads
-            ILoad { index } => Self::ILoad(*index),
-            LLoad { index } => Self::LLoad(*index),
-            FLoad { index } => Self::FLoad(*index),
-            DLoad { index } => Self::DLoad(*index),
-            ALoad { index } => Self::ALoad(*index),
+            ILoad { index } => Self::ILoad(index),
+            LLoad { index } => Self::LLoad(index),
+            FLoad { index } => Self::FLoad(index),
+            DLoad { index } => Self::DLoad(index),
+            ALoad { index } => Self::ALoad(index),
             ILoad0 => Self::ILoad0,
             ILoad1 => Self::ILoad1,
             ILoad2 => Self::ILoad2,
@@ -109,11 +107,11 @@ impl Instruction {
             SALoad => Self::SALoad,
 
             // Stores
-            IStore { index } => Self::IStore(*index),
-            LStore { index } => Self::LStore(*index),
-            FStore { index } => Self::FStore(*index),
-            DStore { index } => Self::DStore(*index),
-            AStore { index } => Self::AStore(*index),
+            IStore { index } => Self::IStore(index),
+            LStore { index } => Self::LStore(index),
+            FStore { index } => Self::FStore(index),
+            DStore { index } => Self::DStore(index),
+            AStore { index } => Self::AStore(index),
             IStore0 => Self::IStore0,
             IStore1 => Self::IStore1,
             IStore2 => Self::IStore2,
@@ -191,7 +189,7 @@ impl Instruction {
             LOr => Self::LOr,
             IXor => Self::IXor,
             LXor => Self::LXor,
-            IInc { index, constant } => Self::IInc(*index, i32::from(*constant)),
+            IInc { index, constant } => Self::IInc(index, i32::from(constant)),
 
             // Conversions
             I2L => Self::I2L,
@@ -217,70 +215,70 @@ impl Instruction {
             DCmpL => Self::DCmpL,
             DCmpG => Self::DCmpG,
             IfEq { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfEq(target)
             }
             IfNe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfNe(target)
             }
             IfLt { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfLt(target)
             }
             IfGe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfGe(target)
             }
             IfGt { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfGt(target)
             }
             IfLe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfLe(target)
             }
             IfICmpEq { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpEq(target)
             }
             IfICmpNe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpNe(target)
             }
             IfICmpLt { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpLt(target)
             }
             IfICmpGe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpGe(target)
             }
             IfICmpGt { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpGt(target)
             }
             IfICmpLe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfICmpLe(target)
             }
             IfACmpEq { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfACmpEq(target)
             }
             IfACmpNe { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfACmpNe(target)
             }
             Goto { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::Goto(target)
             }
             Jsr { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::Jsr(target)
             }
-            Ret { index } => Self::Ret(*index),
+            Ret { index } => Self::Ret(index),
             TableSwitch {
                 default,
                 low,
@@ -288,12 +286,12 @@ impl Instruction {
                 jump_offsets,
             } => {
                 let targets = jump_offsets
-                    .iter()
-                    .map(|offset| pc.offset(*offset))
-                    .collect::<Result<_, _>>()?;
+                    .into_iter()
+                    .map(|offset| pc.offset(offset))
+                    .try_collect()?;
                 Self::TableSwitch {
-                    default: pc.offset(*default)?,
-                    range: *low..=*high,
+                    default: pc.offset(default)?,
+                    range: low..=high,
                     jump_targets: targets,
                 }
             }
@@ -302,11 +300,11 @@ impl Instruction {
                 match_offsets,
             } => {
                 let targets = match_offsets
-                    .iter()
-                    .map(|(value, offset)| pc.offset(*offset).map(|target| (*value, target)))
-                    .collect::<Result<_, _>>()?;
+                    .into_iter()
+                    .map(|(value, offset)| pc.offset(offset).map(|target| (value, target)))
+                    .try_collect()?;
                 Self::LookupSwitch {
-                    default: pc.offset(*default)?,
+                    default: pc.offset(default)?,
                     match_targets: targets,
                 }
             }
@@ -319,42 +317,42 @@ impl Instruction {
 
             // References
             GetStatic { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(*field_ref_index)?;
+                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
                 Self::GetStatic(field_ref)
             }
             PutStatic { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(*field_ref_index)?;
+                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
                 Self::PutStatic(field_ref)
             }
             GetField { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(*field_ref_index)?;
+                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
                 Self::GetField(field_ref)
             }
             PutField { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(*field_ref_index)?;
+                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
                 Self::PutField(field_ref)
             }
             InvokeVirtual { method_index } => {
-                let method_ref = constant_pool.get_method_ref(*method_index)?;
+                let method_ref = constant_pool.get_method_ref(method_index)?;
                 Self::InvokeVirtual(method_ref)
             }
             InvokeSpecial { method_index } => {
-                let method_ref = constant_pool.get_method_ref(*method_index)?;
+                let method_ref = constant_pool.get_method_ref(method_index)?;
                 Self::InvokeSpecial(method_ref)
             }
             InvokeStatic { method_index } => {
-                let method_ref = constant_pool.get_method_ref(*method_index)?;
+                let method_ref = constant_pool.get_method_ref(method_index)?;
                 Self::InvokeStatic(method_ref)
             }
             InvokeInterface {
                 method_index,
                 count,
             } => {
-                let method_ref = constant_pool.get_method_ref(*method_index)?;
-                Self::InvokeInterface(method_ref, *count)
+                let method_ref = constant_pool.get_method_ref(method_index)?;
+                Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
-                let entry = constant_pool.get_entry_internal(*dynamic_index)?;
+                let entry = constant_pool.get_entry_internal(dynamic_index)?;
                 let &ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
@@ -374,7 +372,7 @@ impl Instruction {
                 }
             }
             New { index } => {
-                let class_ref = constant_pool.get_class_ref(*index)?;
+                let class_ref = constant_pool.get_class_ref(index)?;
                 Self::New(class_ref)
             }
             NewArray { atype } => {
@@ -394,65 +392,57 @@ impl Instruction {
                 Self::NewArray(element_type)
             }
             ANewArray { index } => {
-                let element_type = constant_pool.get_class_ref(*index)?;
+                let element_type = constant_pool.get_class_ref(index)?;
                 Self::ANewArray(element_type)
             }
             ArrayLength => Self::ArrayLength,
             AThrow => Self::AThrow,
             CheckCast { target_type_index } => {
-                let class_ref = constant_pool.get_type_ref(*target_type_index)?;
+                let class_ref = constant_pool.get_type_ref(target_type_index)?;
                 Self::CheckCast(class_ref)
             }
             InstanceOf { target_type_index } => {
-                let class_ref = constant_pool.get_type_ref(*target_type_index)?;
+                let class_ref = constant_pool.get_type_ref(target_type_index)?;
                 Self::InstanceOf(class_ref)
             }
             MonitorEnter => Self::MonitorEnter,
             MonitorExit => Self::MonitorExit,
 
             // Extended
-            Wide(RawWideInstruction::ILoad { index }) => Self::Wide(WideInstruction::ILoad(*index)),
-            Wide(RawWideInstruction::LLoad { index }) => Self::Wide(WideInstruction::LLoad(*index)),
-            Wide(RawWideInstruction::FLoad { index }) => Self::Wide(WideInstruction::FLoad(*index)),
-            Wide(RawWideInstruction::DLoad { index }) => Self::Wide(WideInstruction::DLoad(*index)),
-            Wide(RawWideInstruction::ALoad { index }) => Self::Wide(WideInstruction::ALoad(*index)),
-            Wide(RawWideInstruction::IStore { index }) => {
-                Self::Wide(WideInstruction::IStore(*index))
-            }
-            Wide(RawWideInstruction::LStore { index }) => {
-                Self::Wide(WideInstruction::LStore(*index))
-            }
-            Wide(RawWideInstruction::FStore { index }) => {
-                Self::Wide(WideInstruction::FStore(*index))
-            }
-            Wide(RawWideInstruction::DStore { index }) => {
-                Self::Wide(WideInstruction::DStore(*index))
-            }
-            Wide(RawWideInstruction::AStore { index }) => {
-                Self::Wide(WideInstruction::AStore(*index))
-            }
-            Wide(RawWideInstruction::IInc { index, constant }) => {
-                Self::Wide(WideInstruction::IInc(*index, i32::from(*constant)))
-            }
-            Wide(RawWideInstruction::Ret { index }) => Self::Wide(WideInstruction::Ret(*index)),
+            Wide(raw_wide) => Self::Wide(match raw_wide {
+                RawWideInstruction::ILoad { index } => WideInstruction::ILoad(index),
+                RawWideInstruction::LLoad { index } => WideInstruction::LLoad(index),
+                RawWideInstruction::FLoad { index } => WideInstruction::FLoad(index),
+                RawWideInstruction::DLoad { index } => WideInstruction::DLoad(index),
+                RawWideInstruction::ALoad { index } => WideInstruction::ALoad(index),
+                RawWideInstruction::IStore { index } => WideInstruction::IStore(index),
+                RawWideInstruction::LStore { index } => WideInstruction::LStore(index),
+                RawWideInstruction::FStore { index } => WideInstruction::FStore(index),
+                RawWideInstruction::DStore { index } => WideInstruction::DStore(index),
+                RawWideInstruction::AStore { index } => WideInstruction::AStore(index),
+                RawWideInstruction::IInc { index, increment } => {
+                    WideInstruction::IInc(index, i32::from(increment))
+                }
+                RawWideInstruction::Ret { index } => WideInstruction::Ret(index),
+            }),
             MultiANewArray { index, dimensions } => {
-                let class_ref = constant_pool.get_type_ref(*index)?;
-                Self::MultiANewArray(class_ref, *dimensions)
+                let class_ref = constant_pool.get_type_ref(index)?;
+                Self::MultiANewArray(class_ref, dimensions)
             }
             IfNull { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfNull(target)
             }
             IfNonNull { offset } => {
-                let target = pc.offset_i16(*offset)?;
+                let target = pc.offset_i16(offset)?;
                 Self::IfNonNull(target)
             }
             GotoW { offset } => {
-                let target = pc.offset(*offset)?;
+                let target = pc.offset(offset)?;
                 Self::GotoW(target)
             }
             JsrW { offset } => {
-                let target = pc.offset(*offset)?;
+                let target = pc.offset(offset)?;
                 Self::JsrW(target)
             }
 
@@ -463,26 +453,5 @@ impl Instruction {
         };
 
         Ok(result)
-    }
-}
-
-impl<R: std::io::Read> ParseJvmElement<R> for TypeReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = reader.read_value()?;
-        ctx.constant_pool.get_type_ref(index)
-    }
-}
-
-impl<R: std::io::Read> ParseJvmElement<R> for FieldReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = reader.read_value()?;
-        ctx.constant_pool.get_field_ref(index)
-    }
-}
-
-impl<R: std::io::Read> ParseJvmElement<R> for MethodReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let index = reader.read_value()?;
-        ctx.constant_pool.get_method_ref(index)
     }
 }
