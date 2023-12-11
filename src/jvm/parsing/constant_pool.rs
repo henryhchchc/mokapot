@@ -15,7 +15,7 @@ use crate::{
 
 /// A JVM constant pool.
 /// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConstantPool {
     entries: Vec<Option<Entry>>,
 }

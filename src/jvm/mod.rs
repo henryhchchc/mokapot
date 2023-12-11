@@ -6,7 +6,7 @@ pub mod code;
 pub mod field;
 pub mod method;
 pub mod module;
-pub(crate) mod parsing;
+pub mod parsing;
 
 pub use parsing::errors::ClassFileParsingError;
 
