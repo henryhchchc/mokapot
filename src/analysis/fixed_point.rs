@@ -37,7 +37,7 @@ pub trait FixedPointAnalyzer {
 
 /// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points) for each location in the control flow graph.
 /// # Errors
-/// - [`A::Err`] If the analysis fails.
+/// - [`A::Err`](FixedPointAnalyzer::Err) If the analysis fails.
 pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Err>
 where
     A: FixedPointAnalyzer,
