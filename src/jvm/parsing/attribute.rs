@@ -15,7 +15,6 @@ use crate::jvm::{
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    constant_pool::Entry,
     jvm_element_parser::{parse_jvm_element, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::{read_byte_chunk, ClassReader},
@@ -189,24 +188,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for EnclosingMethod {
         let class_index = reader.read_value()?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = reader.read_value()?;
-        let method_name_and_desc = if method_index == 0 {
-            None
+        let method_name_and_desc = if method_index > 0 {
+            let (name, descriptor) = ctx.constant_pool.get_name_and_type(method_index)?;
+            let descriptor = MethodDescriptor::from_str(descriptor)?;
+            Some((name.to_owned(), descriptor))
         } else {
-            let entry = ctx.constant_pool.get_entry_internal(method_index)?;
-            let &Entry::NameAndType {
-                name_index,
-                descriptor_index,
-            } = entry
-            else {
-                return Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
-                    expected: "NameAndType",
-                    found: entry.constant_kind(),
-                });
-            };
-            let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-            let descriptor_str = ctx.constant_pool.get_str(descriptor_index)?;
-            let descriptor = MethodDescriptor::from_str(descriptor_str)?;
-            Some((name, descriptor))
+            None
         };
         Ok(EnclosingMethod {
             class,

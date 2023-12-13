@@ -158,20 +158,13 @@ impl ConstantPool {
         } = entry
         {
             let class = self.get_class_ref(class_index)?;
-            if let &Entry::NameAndType {
-                name_index,
-                descriptor_index,
-            } = self.get_entry_internal(name_and_type_index)?
-            {
-                let name = self.get_str(name_index)?.to_owned();
-                let descriptor = self.get_str(descriptor_index)?;
-                let field_type = FieldType::from_str(descriptor)?;
-                return Ok(FieldReference {
-                    class,
-                    name,
-                    field_type,
-                });
-            }
+            let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
+            let field_type = FieldType::from_str(descriptor)?;
+            return Ok(FieldReference {
+                class,
+                name: name.to_owned(),
+                field_type,
+            });
         }
         Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
             expected: "Field",
@@ -208,12 +201,12 @@ impl ConstantPool {
                 class_index,
                 name_and_type_index,
             } => {
-                let class_or_interface = self.get_class_ref(class_index)?;
+                let owner = self.get_class_ref(class_index)?;
                 let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
                 let name = name.to_owned();
                 let descriptor = MethodDescriptor::from_str(descriptor_str)?;
                 Ok(MethodReference {
-                    owner: class_or_interface,
+                    owner,
                     name,
                     descriptor,
                 })
