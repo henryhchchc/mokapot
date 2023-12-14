@@ -18,6 +18,7 @@ use super::{
 
 /// APIs for the constant pool in JVM.
 pub mod constant_pool {
+    pub use super::super::parsing::constant_pool::BadConstantPoolIndex;
     pub use super::super::parsing::constant_pool::ConstantPool;
     pub use super::super::parsing::constant_pool::Entry as ConstantPoolEntry;
 }

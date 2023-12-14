@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use thiserror::Error;
+
 use super::reader_utils::{read_byte_chunk, ClassReader};
 use crate::{
     jvm::ClassFileParsingError,
@@ -20,6 +22,11 @@ pub struct ConstantPool {
     entries: Vec<Option<Entry>>,
 }
 
+/// An error when getting an entry from the constant pool with an invalid index.
+#[derive(Debug, Error)]
+#[error("Bad constant pool index: {0}")]
+pub struct BadConstantPoolIndex(pub u16);
+
 impl ConstantPool {
     pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
     where
@@ -32,21 +39,17 @@ impl ConstantPool {
     }
 
     /// Gets the constant pool entry at the given index.
-    #[must_use]
-    pub fn get_entry(&self, index: u16) -> Option<&Entry> {
-        self.entries.get(index as usize).and_then(|it| it.as_ref())
-    }
-
-    pub(crate) fn get_entry_internal(&self, index: u16) -> ClassFileParsingResult<&Entry> {
-        if let Some(entry) = self.get_entry(index) {
-            Ok(entry)
-        } else {
-            Err(ClassFileParsingError::BadConstantPoolIndex(index))
+    /// # Errors
+    /// - [`BadConstantPoolIndex`] if [`index`] does not point to a valid entry.
+    pub fn get_entry(&self, index: u16) -> Result<&Entry, BadConstantPoolIndex> {
+        match self.entries.get(index as usize) {
+            Some(Some(entry)) => Ok(entry),
+            _ => Err(BadConstantPoolIndex(index)),
         }
     }
 
     pub(crate) fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         match entry {
             Entry::Utf8(JavaString::ValidUtf8(string)) => Ok(string),
             Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ClassFileParsingError::BrokenUTF8),
@@ -58,7 +61,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
             Ok(ClassReference::new(name))
@@ -74,14 +77,14 @@ impl ConstantPool {
         &self,
         value_index: u16,
     ) -> ClassFileParsingResult<ConstantValue> {
-        let entry = self.get_entry_internal(value_index)?;
+        let entry = self.get_entry(value_index)?;
         match entry {
         &Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
         &Entry::Long(it) => Ok(ConstantValue::Long(it)),
         &Entry::Float(it) => Ok(ConstantValue::Float(it)),
         &Entry::Double(it) => Ok(ConstantValue::Double(it)),
         &Entry::String { string_index } => {
-            if let Entry::Utf8(java_str) = self.get_entry_internal(string_index)? {
+            if let Entry::Utf8(java_str) = self.get_entry(string_index)? {
                 Ok(ConstantValue::String(java_str.clone()))
             } else {
                 Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
@@ -123,7 +126,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_module_ref(&self, index: u16) -> ClassFileParsingResult<ModuleReference> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
             Ok(ModuleReference { name })
@@ -136,7 +139,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_package_ref(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
             Ok(PackageReference {
@@ -151,7 +154,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_field_ref(&self, index: u16) -> ClassFileParsingResult<FieldReference> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         if let &Entry::FieldRef {
             class_index,
             name_and_type_index,
@@ -173,7 +176,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_name_and_type(&self, index: u16) -> ClassFileParsingResult<(&str, &str)> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         if let &Entry::NameAndType {
             name_index,
             descriptor_index,
@@ -191,7 +194,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_method_ref(&self, index: u16) -> ClassFileParsingResult<MethodReference> {
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         match entry {
             &Entry::MethodRef {
                 class_index,
@@ -224,7 +227,7 @@ impl ConstantPool {
             RefInvokeVirtual, RefNewInvokeSpecial, RefPutField, RefPutStatic,
         };
 
-        let entry = self.get_entry_internal(index)?;
+        let entry = self.get_entry(index)?;
         let &Entry::MethodHandle {
             reference_kind,
             reference_index: idx,
@@ -386,6 +389,7 @@ impl Entry {
     where
         R: std::io::Read,
     {
+        // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
         let mut counter: u16 = 1;
         let mut result = vec![None; count as usize];
         while counter < count {
