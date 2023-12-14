@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{iter::repeat_with, str::FromStr};
 
 use crate::{
     jvm::{
@@ -98,7 +98,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
             },
             unexpected => Err(ClassFileParsingError::InvalidTargetType(unexpected))?,
         };
-        let target_path = parse_jvm_element(reader, ctx)?;
+        // The length of target path is represented by a single byte.
+        let target_path_length: u8 = reader.read_value()?;
+        let target_path = repeat_with(|| parse_jvm_element(reader, ctx))
+            .take(target_path_length as usize)
+            .collect::<ClassFileParsingResult<_>>()?;
         let type_index = reader.read_value()?;
         let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
         let annotation_type = FieldType::from_str(annotation_type_str)?;
