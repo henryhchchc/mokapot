@@ -71,7 +71,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleProvide {
 impl<R: std::io::Read> ParseJvmElement<R> for Module {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let module_info_idx = reader.read_value()?;
-        let module_info_entry = ctx.constant_pool.get_entry_internal(module_info_idx)?;
+        let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
         let &Entry::Module { name_index } = module_info_entry else {
             Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
                 expected: "Module",

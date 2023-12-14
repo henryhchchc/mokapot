@@ -19,11 +19,13 @@ impl RawInstruction {
         Ok(InstructionList::from(inner))
     }
 
-    #[allow(clippy::enum_glob_use, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
     ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {
+        #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
+
         let pc = u16::try_from(reader.position())
             .map_err(|_| ClassFileParsingError::TooLongInstructionList)?
             .into();

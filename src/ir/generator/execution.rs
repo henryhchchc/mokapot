@@ -15,7 +15,7 @@ use crate::{
     types::field_type::{FieldType, PrimitiveType, TypeReference},
 };
 
-#[allow(clippy::enum_glob_use, clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)]
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
@@ -23,7 +23,9 @@ impl MokaIRGenerator<'_> {
         pc: ProgramCounter,
         frame: &mut JvmStackFrame,
     ) -> Result<IR, MokaIRGenerationError> {
+        #[allow(clippy::enum_glob_use)]
         use Instruction::*;
+
         let def = Value::new(pc.into());
         let ir_instruction = match insn {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,

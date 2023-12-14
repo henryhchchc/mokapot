@@ -284,9 +284,11 @@ impl Instruction {
 
     /// Gets the name of the [Instruction].
     #[must_use]
-    #[allow(clippy::enum_glob_use, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     pub const fn name<'a>(&self) -> &'a str {
+        #[allow(clippy::enum_glob_use)]
         use Instruction::*;
+
         match self {
             AALoad => "aaload",
             AAStore => "aastore",

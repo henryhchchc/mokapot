@@ -1,5 +1,7 @@
 use crate::jvm::{code::InvalidOffset, method::InvalidDescriptor};
 
+use super::constant_pool::BadConstantPoolIndex;
+
 /// An error that occurs when parsing a Java class file.
 #[derive(Debug, thiserror::Error)]
 pub enum ClassFileParsingError {
@@ -18,8 +20,8 @@ pub enum ClassFileParsingError {
         found: &'static str,
     },
     /// The constant pool index does not point to an entry.
-    #[error("Cannot find entry #{0} in the constant pool")]
-    BadConstantPoolIndex(u16),
+    #[error("Error when accessing constant pool: {0}")]
+    BadConstantPoolIndex(#[from] BadConstantPoolIndex),
     /// The attribute table contains an attribute whose name cannot be recognized.
     #[error("Unknown attribute: {0}")]
     UnknownAttribute(String),

@@ -31,13 +31,15 @@ impl Instruction {
         Ok(InstructionList::from(inner))
     }
 
-    #[allow(clippy::enum_glob_use, clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn from_raw_instruction(
         raw_instruction: RawInstruction,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
     ) -> ClassFileParsingResult<Self> {
+        #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
+
         let result = match raw_instruction {
             // Constants
             Nop => Self::Nop,
@@ -352,7 +354,7 @@ impl Instruction {
                 Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
-                let entry = constant_pool.get_entry_internal(dynamic_index)?;
+                let entry = constant_pool.get_entry(dynamic_index)?;
                 let &ConstantPoolEntry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,

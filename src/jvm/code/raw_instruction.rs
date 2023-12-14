@@ -327,7 +327,7 @@ pub enum RawInstruction {
 }
 
 /// A wide instruction.
-#[allow(missing_docs, clippy::module_name_repetitions)]
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(u8)]
 pub enum RawWideInstruction {
