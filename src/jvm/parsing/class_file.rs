@@ -29,7 +29,9 @@ impl Class {
             return Err(ClassFileParsingError::NotAClassFile);
         }
         let version = ClassVersion::parse(reader)?;
-        let constant_pool = ConstantPool::parse(reader)?;
+        let constant_pool_count: u16 = reader.read_value()?;
+        let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
+
         let access_flags: ClassAccessFlags = parse_flags(reader)?;
         let this_class_idx = reader.read_value()?;
         let ClassReference { binary_name } = constant_pool.get_class_ref(this_class_idx)?;

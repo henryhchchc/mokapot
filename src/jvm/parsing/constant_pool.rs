@@ -28,13 +28,15 @@ pub struct ConstantPool {
 pub struct BadConstantPoolIndex(pub u16);
 
 impl ConstantPool {
-    pub(super) fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    /// Parses a constant pool from the given bytes.
+    /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one. See the [JVM Specification §4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.1) for more information.
+    /// # Errors
+    /// See [`ClassFileParsingError`] for more information.
+    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> ClassFileParsingResult<Self>
     where
         R: std::io::Read,
     {
-        let constant_pool_count = reader.read_value()?;
         let entries = Entry::parse_multiple(reader, constant_pool_count)?;
-
         Ok(Self { entries })
     }
 
