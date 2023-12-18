@@ -344,3 +344,14 @@ pub enum RawWideInstruction {
     Ret { index: u16 } = 0xA9,
     IInc { index: u16, increment: i16 } = 0x84,
 }
+impl RawInstruction {
+    /// Gets the opcode.
+    #[must_use]
+    pub const fn opcode(&self) -> u8 {
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
+        unsafe { *(self as *const Self).cast::<u8>() }
+    }
+}

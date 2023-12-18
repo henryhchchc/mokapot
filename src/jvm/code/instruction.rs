@@ -275,11 +275,14 @@ pub enum WideInstruction {
 }
 
 impl Instruction {
-    /// Gets the opcode of the [Instruction].
+    /// Gets the opcode.
     #[must_use]
-    pub fn opcode(&self) -> u8 {
-        // NOTE: See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
-        unsafe { *<*const _>::from(self).cast::<u8>() }
+    pub const fn opcode(&self) -> u8 {
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
+        unsafe { *(self as *const Self).cast::<u8>() }
     }
 
     /// Gets the name of the [Instruction].
@@ -508,5 +511,6 @@ mod test {
         assert_eq!(Nop.opcode(), 0x00);
         assert_eq!(AConstNull.opcode(), 0x01);
         assert_eq!(IConstM1.opcode(), 0x02);
+        assert_eq!(ILoad(233).opcode(), 0x15);
     }
 }
