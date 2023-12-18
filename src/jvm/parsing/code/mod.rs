@@ -11,7 +11,7 @@ use crate::{
             LocalVariableTable, MethodBody,
         },
         method::ParameterInfo,
-        parsing::{jvm_element_parser::parse_jvm_element, reader_utils::read_byte_chunk},
+        parsing::{jvm_element_parser::parse_jvm, reader_utils::read_byte_chunk},
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
@@ -134,8 +134,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
         let code = read_byte_chunk(reader, code_length as usize)?;
         let instructions = Instruction::parse_code(code, ctx)?;
 
-        let exception_table = parse_jvm_element(reader, ctx)?;
-        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let exception_table = parse_jvm!(u16, reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" by {

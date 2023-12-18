@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::{parse_jvm_element, ParseJvmElement},
+    jvm_element_parser::{parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::ClassReader,
 };
@@ -100,7 +100,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
         };
         // The length of target path is represented by a single byte.
         let target_path_length: u8 = reader.read_value()?;
-        let target_path = repeat_with(|| parse_jvm_element(reader, ctx))
+        let target_path = repeat_with(|| parse_jvm!(reader, ctx))
             .take(target_path_length as usize)
             .collect::<ClassFileParsingResult<_>>()?;
         let type_index = reader.read_value()?;
@@ -167,7 +167,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
             '[' => {
-                let values = parse_jvm_element(reader, ctx)?;
+                let values = parse_jvm!(u16, reader, ctx)?;
                 Ok(Self::Array(values))
             }
             unexpected => Err(ClassFileParsingError::InvalidElementValueTag(unexpected)),

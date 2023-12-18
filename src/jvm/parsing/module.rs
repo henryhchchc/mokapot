@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     constant_pool::Entry,
-    jvm_element_parser::{parse_flags, parse_jvm_element, ParseJvmElement},
+    jvm_element_parser::{parse_flags, parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::ClassReader,
 };
@@ -31,7 +31,7 @@ where
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleRequire {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let module = parse_jvm_element(reader, ctx)?;
+        let module = parse_jvm!(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let version = parse_version(reader, ctx)?;
         Ok(ModuleRequire {
@@ -44,26 +44,26 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleRequire {
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleExport {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let package = parse_jvm_element(reader, ctx)?;
+        let package = parse_jvm!(reader, ctx)?;
         let flags = parse_flags(reader)?;
-        let to = parse_jvm_element(reader, ctx)?;
+        let to = parse_jvm!(u16, reader, ctx)?;
         Ok(ModuleExport { package, flags, to })
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleOpen {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let package = parse_jvm_element(reader, ctx)?;
+        let package = parse_jvm!(reader, ctx)?;
         let flags = parse_flags(reader)?;
-        let to = parse_jvm_element(reader, ctx)?;
+        let to = parse_jvm!(u16, reader, ctx)?;
         Ok(ModuleOpen { package, flags, to })
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ModuleProvide {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let service = parse_jvm_element(reader, ctx)?;
-        let with = parse_jvm_element(reader, ctx)?;
+        let service = parse_jvm!(reader, ctx)?;
+        let with = parse_jvm!(u16, reader, ctx)?;
         Ok(ModuleProvide { service, with })
     }
 }
@@ -85,11 +85,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for Module {
             name,
             flags,
             version,
-            requires: parse_jvm_element(reader, ctx)?,
-            exports: parse_jvm_element(reader, ctx)?,
-            opens: parse_jvm_element(reader, ctx)?,
-            uses: parse_jvm_element(reader, ctx)?,
-            provides: parse_jvm_element(reader, ctx)?,
+            requires: parse_jvm!(u16, reader, ctx)?,
+            exports: parse_jvm!(u16, reader, ctx)?,
+            opens: parse_jvm!(u16, reader, ctx)?,
+            uses: parse_jvm!(u16, reader, ctx)?,
+            provides: parse_jvm!(u16, reader, ctx)?,
         })
     }
 }

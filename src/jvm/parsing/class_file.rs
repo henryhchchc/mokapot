@@ -7,7 +7,7 @@ use crate::{
             ClassVersion, InnerClassInfo, RecordComponent, SourceDebugExtension,
         },
         parsing::{
-            jvm_element_parser::{parse_flags, parse_jvm_element},
+            jvm_element_parser::{parse_flags, parse_jvm},
             reader_utils::ClassReader,
         },
         ClassFileParsingError, ClassFileParsingResult,
@@ -51,10 +51,10 @@ impl Class {
 
         let ctx = &parsing_context;
 
-        let interfaces = parse_jvm_element(reader, ctx)?;
-        let fields = parse_jvm_element(reader, ctx)?;
-        let methods = parse_jvm_element(reader, ctx)?;
-        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let interfaces = parse_jvm!(u16, reader, ctx)?;
+        let fields = parse_jvm!(u16, reader, ctx)?;
+        let methods = parse_jvm!(u16, reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
 
         let mut may_remain: [u8; 1] = [0];
         let remain = std::io::Read::read(reader, &mut may_remain)?;
@@ -137,7 +137,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
 
 impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let inner_class = parse_jvm_element(reader, ctx)?;
+        let inner_class = parse_jvm!(reader, ctx)?;
         let outer_class_info_index = reader.read_value()?;
         let outer_class = if outer_class_info_index == 0 {
             None
@@ -163,10 +163,10 @@ impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
 
 impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
-        let name = parse_jvm_element(reader, ctx)?;
-        let component_type = parse_jvm_element(reader, ctx)?;
+        let name = parse_jvm!(reader, ctx)?;
+        let component_type = parse_jvm!(reader, ctx)?;
 
-        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "record_component" by {
                 let signature <= Signature,

@@ -15,7 +15,7 @@ use crate::jvm::{
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    jvm_element_parser::{parse_jvm_element, ParseJvmElement},
+    jvm_element_parser::{parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::{read_byte_chunk, ClassReader},
 };
@@ -99,69 +99,58 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
         let attribute_bytes = read_byte_chunk(reader, attribute_length as usize)?;
         let reader = &mut std::io::Cursor::new(attribute_bytes);
         let result = match name {
-            "ConstantValue" => parse_jvm_element(reader, ctx).map(Self::ConstantValue),
-            "Code" => parse_jvm_element(reader, ctx).map(Self::Code),
-            "StackMapTable" => parse_jvm_element(reader, ctx).map(Self::StackMapTable),
-            "Exceptions" => parse_jvm_element(reader, ctx).map(Self::Exceptions),
-            "InnerClasses" => parse_jvm_element(reader, ctx).map(Self::InnerClasses),
-            "EnclosingMethod" => parse_jvm_element(reader, ctx).map(Self::EnclosingMethod),
+            "ConstantValue" => parse_jvm!(reader, ctx).map(Self::ConstantValue),
+            "Code" => parse_jvm!(reader, ctx).map(Self::Code),
+            "StackMapTable" => parse_jvm!(u16, reader, ctx).map(Self::StackMapTable),
+            "Exceptions" => parse_jvm!(u16, reader, ctx).map(Self::Exceptions),
+            "InnerClasses" => parse_jvm!(u16, reader, ctx).map(Self::InnerClasses),
+            "EnclosingMethod" => parse_jvm!(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => parse_jvm_element(reader, ctx).map(Self::Signature),
-            "SourceFile" => parse_jvm_element(reader, ctx).map(Self::SourceFile),
-            "SourceDebugExtension" => {
-                parse_jvm_element(reader, ctx).map(Self::SourceDebugExtension)
-            }
-            "LineNumberTable" => parse_jvm_element(reader, ctx).map(Self::LineNumberTable),
-            "LocalVariableTable" => parse_jvm_element(reader, ctx).map(Self::LocalVariableTable),
+            "Signature" => parse_jvm!(reader, ctx).map(Self::Signature),
+            "SourceFile" => parse_jvm!(reader, ctx).map(Self::SourceFile),
+            "SourceDebugExtension" => parse_jvm!(reader, ctx).map(Self::SourceDebugExtension),
+            "LineNumberTable" => parse_jvm!(u16, reader, ctx).map(Self::LineNumberTable),
+            "LocalVariableTable" => parse_jvm!(u16, reader, ctx).map(Self::LocalVariableTable),
             "LocalVariableTypeTable" => {
-                parse_jvm_element(reader, ctx).map(Self::LocalVariableTypeTable)
+                parse_jvm!(u16, reader, ctx).map(Self::LocalVariableTypeTable)
             }
             "RuntimeVisibleAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleAnnotations)
+                parse_jvm!(u16, reader, ctx).map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleAnnotations)
+                parse_jvm!(u16, reader, ctx).map(Self::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
                 let num_parameters: u8 = reader.read_value()?;
-                repeat_with(|| parse_jvm_element(reader, ctx))
+                repeat_with(|| parse_jvm!(u16, reader, ctx))
                     .take(num_parameters as usize)
                     .collect::<Result<_, _>>()
                     .map(Self::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
                 let num_parameters: u8 = reader.read_value()?;
-                repeat_with(|| parse_jvm_element(reader, ctx))
+                repeat_with(|| parse_jvm!(u16, reader, ctx))
                     .take(num_parameters as usize)
                     .collect::<Result<_, _>>()
                     .map(Self::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
+                parse_jvm!(u16, reader, ctx).map(Self::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                parse_jvm_element(reader, ctx).map(Self::RuntimeInvisibleTypeAnnotations)
+                parse_jvm!(u16, reader, ctx).map(Self::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => parse_jvm_element(reader, ctx).map(Self::AnnotationDefault),
-            "BootstrapMethods" => parse_jvm_element(reader, ctx).map(Self::BootstrapMethods),
-            "MethodParameters" => {
-                // NOTE: Unlike other attributes, the number of parameters is stored in a u8.
-                let parameters_count: u8 = reader.read_value()?;
-                repeat_with(|| parse_jvm_element(reader, ctx))
-                    .take(parameters_count as usize)
-                    .collect::<Result<_, _>>()
-                    .map(Self::MethodParameters)
-            }
-            "Module" => parse_jvm_element(reader, ctx).map(Self::Module),
-            "ModulePackages" => parse_jvm_element(reader, ctx).map(Self::ModulePackages),
-            "ModuleMainClass" => parse_jvm_element(reader, ctx).map(Self::ModuleMainClass),
-            "NestHost" => parse_jvm_element(reader, ctx).map(Self::NestHost),
-            "NestMembers" => parse_jvm_element(reader, ctx).map(Self::NestMembers),
-            "Record" => parse_jvm_element(reader, ctx).map(Self::Record),
-            "PermittedSubclasses" => parse_jvm_element(reader, ctx).map(Self::PermittedSubclasses),
+            "AnnotationDefault" => parse_jvm!(reader, ctx).map(Self::AnnotationDefault),
+            "BootstrapMethods" => parse_jvm!(u16, reader, ctx).map(Self::BootstrapMethods),
+            "MethodParameters" => parse_jvm!(u8, reader, ctx).map(Self::MethodParameters),
+            "Module" => parse_jvm!(reader, ctx).map(Self::Module),
+            "ModulePackages" => parse_jvm!(u16, reader, ctx).map(Self::ModulePackages),
+            "ModuleMainClass" => parse_jvm!(reader, ctx).map(Self::ModuleMainClass),
+            "NestHost" => parse_jvm!(reader, ctx).map(Self::NestHost),
+            "NestMembers" => parse_jvm!(u16, reader, ctx).map(Self::NestMembers),
+            "Record" => parse_jvm!(u16, reader, ctx).map(Self::Record),
+            "PermittedSubclasses" => parse_jvm!(u16, reader, ctx).map(Self::PermittedSubclasses),
             unexpected => Err(ClassFileParsingError::UnknownAttribute(
                 unexpected.to_owned(),
             )),

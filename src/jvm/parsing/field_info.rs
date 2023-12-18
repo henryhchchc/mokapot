@@ -4,7 +4,7 @@ use crate::{
     jvm::{
         class::ClassReference,
         field::Field,
-        parsing::jvm_element_parser::{parse_flags, parse_jvm_element},
+        parsing::jvm_element_parser::{parse_flags, parse_jvm},
         ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
@@ -18,12 +18,12 @@ use super::{
 impl<R: std::io::Read> ParseJvmElement<R> for Field {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let access_flags = parse_flags(reader)?;
-        let name = parse_jvm_element(reader, ctx)?;
-        let field_type = parse_jvm_element(reader, ctx)?;
+        let name = parse_jvm!(reader, ctx)?;
+        let field_type = parse_jvm!(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
-        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "field_info" by {
                 let constant_value <= ConstantValue,

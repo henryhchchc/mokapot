@@ -3,7 +3,7 @@ use std::iter::repeat_with;
 use crate::jvm::{
     code::{StackMapFrame, VerificationTypeInfo},
     parsing::{
-        jvm_element_parser::{parse_jvm_element, ParseJvmElement},
+        jvm_element_parser::{parse_jvm, ParseJvmElement},
         parsing_context::ParsingContext,
         reader_utils::ClassReader,
     },
@@ -19,11 +19,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
             },
             it @ 64..=127 => Self::SameLocals1StackItemFrame {
                 offset_delta: u16::from(it) - 64,
-                stack: parse_jvm_element(reader, ctx)?,
+                stack: parse_jvm!(reader, ctx)?,
             },
             247 => {
                 let offset_delta = reader.read_value()?;
-                let stack = parse_jvm_element(reader, ctx)?;
+                let stack = parse_jvm!(reader, ctx)?;
                 Self::SameLocals1StackItemFrame {
                     offset_delta,
                     stack,
@@ -44,7 +44,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
             it @ 252..=254 => {
                 let offset_delta = reader.read_value()?;
                 let locals_count = it - 251;
-                let locals = repeat_with(|| parse_jvm_element(reader, ctx))
+                let locals = repeat_with(|| parse_jvm!(reader, ctx))
                     .take(locals_count as usize)
                     .collect::<Result<_, _>>()?;
                 Self::AppendFrame {
@@ -56,8 +56,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
                 let offset_delta = reader.read_value()?;
                 Self::FullFrame {
                     offset_delta,
-                    locals: parse_jvm_element(reader, ctx)?,
-                    stack: parse_jvm_element(reader, ctx)?,
+                    locals: parse_jvm!(u16, reader, ctx)?,
+                    stack: parse_jvm!(u16, reader, ctx)?,
                 }
             }
             _ => Err(ClassFileParsingError::UnknownStackMapFrameType(frame_type))?,

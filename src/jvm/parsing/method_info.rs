@@ -5,7 +5,7 @@ use crate::{
         class::{ClassReference, ClassVersion},
         method::{Method, MethodAccessFlags, MethodDescriptor},
         parsing::{
-            jvm_element_parser::{parse_flags, parse_jvm_element},
+            jvm_element_parser::{parse_flags, parse_jvm},
             parsing_context::ParsingContext,
         },
         ClassFileParsingError, ClassFileParsingResult,
@@ -18,13 +18,13 @@ use super::{jvm_element_parser::ParseJvmElement, reader_utils::ClassReader};
 impl<R: std::io::Read> ParseJvmElement<R> for Method {
     fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
-        let name = parse_jvm_element(reader, ctx)?;
-        let descriptor: MethodDescriptor = parse_jvm_element(reader, ctx)?;
+        let name = parse_jvm!(reader, ctx)?;
+        let descriptor: MethodDescriptor = parse_jvm!(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes: Vec<Attribute> = parse_jvm_element(reader, ctx)?;
+        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "method_info" by {
                 let body <= Code,
