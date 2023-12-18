@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, str::FromStr};
+use std::str::FromStr;
 
 use itertools::Itertools;
 
@@ -22,13 +22,8 @@ impl Instruction {
         ctx: &ParsingContext,
     ) -> ClassFileParsingResult<InstructionList<Instruction>> {
         let raw_instructions = RawInstruction::from_bytes(reader)?;
-        let inner: BTreeMap<ProgramCounter, Self> = raw_instructions
-            .into_iter()
-            .map(|(pc, raw_insn)| {
-                Self::from_raw_instruction(raw_insn, pc, &ctx.constant_pool).map(|it| (pc, it))
-            })
-            .collect::<ClassFileParsingResult<_>>()?;
-        Ok(InstructionList::from(inner))
+        let result = raw_instructions.lift(&ctx.constant_pool)?;
+        Ok(result)
     }
 
     #[allow(clippy::too_many_lines)]
