@@ -42,7 +42,7 @@ impl ConstantPool {
 
     /// Gets the constant pool entry at the given index.
     /// # Errors
-    /// - [`BadConstantPoolIndex`] if [`index`] does not point to a valid entry.
+    /// - [`BadConstantPoolIndex`] if `index` does not point to a valid entry.
     pub fn get_entry(&self, index: u16) -> Result<&Entry, BadConstantPoolIndex> {
         match self.entries.get(index as usize) {
             Some(Some(entry)) => Ok(entry),
