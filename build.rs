@@ -13,7 +13,7 @@ fn compile_java_test_data() {
             .filter_map(|it| it.ok())
             .filter(|it| it.file_name().to_string_lossy().ends_with(".java"))
             .collect();
-        for java_file in java_source_files {
+        java_source_files.into_iter().for_each(|java_file| {
             Command::new("javac")
                 .arg("-g")
                 .arg("-d")
@@ -21,6 +21,6 @@ fn compile_java_test_data() {
                 .arg(java_file.path().to_string_lossy().to_string())
                 .status()
                 .unwrap();
-        }
+        });
     }
 }

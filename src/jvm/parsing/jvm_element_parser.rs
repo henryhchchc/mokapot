@@ -1,6 +1,7 @@
-use std::io::Read;
+use std::{io::Read, iter::repeat_with};
 
 use bitflags::Flags;
+use itertools::Itertools;
 
 use crate::jvm::{ClassFileParsingError, ClassFileParsingResult};
 
@@ -41,11 +42,9 @@ where
 {
     let count: C = reader.read_value()?;
     let count: usize = count.into();
-    let mut result = Vec::with_capacity(count);
-    for _ in 0..count {
-        result.push(parse_jvm_element(reader, ctx)?);
-    }
-    Ok(result)
+    repeat_with(|| parse_jvm_element(reader, ctx))
+        .take(count)
+        .try_collect()
 }
 
 macro_rules! parse_jvm {

@@ -6,7 +6,7 @@ use crate::{
     types::field_type::{FieldType, PrimitiveType},
 };
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub(super) struct JvmStackFrame {
     max_locals: u16,
     max_stack: u16,
@@ -206,13 +206,7 @@ impl JvmStackFrame {
     }
 
     pub(super) fn same_frame(&self) -> Self {
-        Self {
-            max_locals: self.max_locals,
-            max_stack: self.max_stack,
-            local_variables: self.local_variables.clone(),
-            operand_stack: self.operand_stack.clone(),
-            possible_ret_addresses: self.possible_ret_addresses.clone(),
-        }
+        self.clone()
     }
 
     pub(super) fn same_locals_1_stack_item_frame(&self, stack_value: Entry) -> Self {

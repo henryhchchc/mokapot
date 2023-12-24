@@ -2,6 +2,7 @@
 use core::str;
 use std::{
     fmt::Display,
+    iter::once,
     str::{Chars, FromStr},
 };
 
@@ -171,14 +172,15 @@ impl Display for ReturnType {
 
 impl ToString for MethodDescriptor {
     fn to_string(&self) -> String {
-        let mut result = String::new();
-        result.push('(');
-        for param in &self.parameters_types {
-            result.push_str(&param.descriptor_string());
-        }
-        result.push(')');
-        result.push_str(&self.return_type.descriptor_string());
-        result
+        once("(".to_string())
+            .chain(
+                self.parameters_types
+                    .iter()
+                    .map(FieldType::descriptor_string),
+            )
+            .chain(once(")".to_string()))
+            .chain(once(self.return_type.descriptor_string()))
+            .collect()
     }
 }
 

@@ -1,7 +1,7 @@
 mod execution;
 mod jvm_frame;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::BTreeMap, iter::once, mem};
 
 use crate::jvm::{
     code::{ExceptionTableEntry, MethodBody, ProgramCounter},
@@ -126,19 +126,14 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             }
             MokaInstruction::Switch {
                 default, branches, ..
-            } => {
-                for it in branches.values() {
-                    dirty_nodes.insert(*it, frame.same_frame());
-                }
-                dirty_nodes.insert(*default, frame.same_frame());
-            }
-            MokaInstruction::SubroutineRet(_) => {
-                let possible_ret_addresses = frame.possible_ret_addresses;
-                frame.possible_ret_addresses = BTreeSet::new();
-                for return_address in possible_ret_addresses {
+            } => branches.values().chain(once(default)).for_each(|&it| {
+                dirty_nodes.insert(it, frame.same_frame());
+            }),
+            MokaInstruction::SubroutineRet(_) => mem::take(&mut frame.possible_ret_addresses)
+                .into_iter()
+                .for_each(|return_address| {
                     dirty_nodes.insert(return_address, frame.same_frame());
-                }
-            }
+                }),
         }
         self.ir_instructions.insert(location, ir_instruction);
         Ok(dirty_nodes)
