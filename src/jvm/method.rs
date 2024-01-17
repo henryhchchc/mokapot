@@ -250,7 +250,7 @@ impl FromStr for MethodDescriptor {
 }
 
 /// An error indicating that the descriptor string is invalid.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 #[error("Invalid descriptor: {0}")]
 pub struct InvalidDescriptor(pub String);
 
@@ -371,6 +371,13 @@ mod test {
     }
 
     #[test]
+    fn incomplete_return_type() {
+        let descriptor = "()Ljava/lang";
+        let method_descriptor = MethodDescriptor::from_str(descriptor);
+        assert!(method_descriptor.is_err());
+    }
+
+    #[test]
     fn missing_return_type() {
         let descriptor = "(I)";
         let method_descriptor = MethodDescriptor::from_str(descriptor);
@@ -396,7 +403,7 @@ mod test {
         let method = MethodReference {
             owner: ClassReference::new("test"),
             name: Method::CONSTRUCTOR_NAME.to_string(),
-            descriptor: MethodDescriptor::from_str("()V").unwrap(),
+            descriptor: "()V".parse().unwrap(),
         };
 
         assert!(method.is_constructor());
@@ -407,7 +414,7 @@ mod test {
         let method = MethodReference {
             owner: ClassReference::new("test"),
             name: Method::CLASS_INITIALIZER_NAME.to_string(),
-            descriptor: MethodDescriptor::from_str("()V").unwrap(),
+            descriptor: "()V".parse().unwrap(),
         };
 
         assert!(method.is_static_initializer_block());

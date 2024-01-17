@@ -182,78 +182,57 @@ mod test {
     };
 
     #[test]
-    fn parse_primitive_types() {
-        let descs = vec!['Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J'];
-        let mut types = descs
-            .into_iter()
-            .map(PrimitiveType::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .expect("Failed to parse primitive types")
-            .into_iter();
-        assert_eq!(types.next(), Some(Boolean));
-        assert_eq!(types.next(), Some(Char));
-        assert_eq!(types.next(), Some(Float));
-        assert_eq!(types.next(), Some(Double));
-        assert_eq!(types.next(), Some(Byte));
-        assert_eq!(types.next(), Some(Short));
-        assert_eq!(types.next(), Some(Int));
-        assert_eq!(types.next(), Some(Long));
-    }
-
-    #[test]
-    fn parse_invalid_primitive_type() {
-        assert!(PrimitiveType::try_from('A').is_err());
+    fn parse_primitive() {
+        assert_eq!(PrimitiveType::try_from('Z'), Ok(Boolean));
+        assert_eq!(PrimitiveType::try_from('C'), Ok(Char));
+        assert_eq!(PrimitiveType::try_from('F'), Ok(Float));
+        assert_eq!(PrimitiveType::try_from('D'), Ok(Double));
+        assert_eq!(PrimitiveType::try_from('B'), Ok(Byte));
+        assert_eq!(PrimitiveType::try_from('S'), Ok(Short));
+        assert_eq!(PrimitiveType::try_from('I'), Ok(Int));
+        assert_eq!(PrimitiveType::try_from('J'), Ok(Long));
     }
 
     #[test]
     fn prase_field_type() {
-        let descriptors = vec![
-            "Z",
-            "C",
-            "F",
-            "D",
-            "B",
-            "S",
-            "I",
-            "J",
-            "Ljava/lang/String;",
-            "[I",
-            "[[Ljava/lang/String;",
-        ];
-        let mut types = descriptors
-            .into_iter()
-            .map(FieldType::from_str)
-            .collect::<Result<Vec<_>, _>>()
-            .expect("Failed to parse field types")
-            .into_iter();
-
-        let string_type = FieldType::Object(ClassReference::new("java/lang/String"));
-
-        assert_eq!(types.next(), Some(FieldType::Base(Boolean)));
-        assert_eq!(types.next(), Some(FieldType::Base(Char)));
-        assert_eq!(types.next(), Some(FieldType::Base(Float)));
-        assert_eq!(types.next(), Some(FieldType::Base(Double)));
-        assert_eq!(types.next(), Some(FieldType::Base(Byte)));
-        assert_eq!(types.next(), Some(FieldType::Base(Short)));
-        assert_eq!(types.next(), Some(FieldType::Base(Int)));
-        assert_eq!(types.next(), Some(FieldType::Base(Long)));
-        assert_eq!(types.next(), Some(string_type.clone()));
-        assert_eq!(types.next(), Some(FieldType::Base(Int).make_array_type()));
+        assert_eq!("Z".parse(), Ok(FieldType::Base(Boolean)));
+        assert_eq!("C".parse(), Ok(FieldType::Base(Char)));
+        assert_eq!("F".parse(), Ok(FieldType::Base(Float)));
+        assert_eq!("D".parse(), Ok(FieldType::Base(Double)));
+        assert_eq!("B".parse(), Ok(FieldType::Base(Byte)));
+        assert_eq!("S".parse(), Ok(FieldType::Base(Short)));
+        assert_eq!("I".parse(), Ok(FieldType::Base(Int)));
+        assert_eq!("J".parse(), Ok(FieldType::Base(Long)));
         assert_eq!(
-            types.next(),
-            Some(string_type.make_array_type().make_array_type())
+            "Ljava/lang/String;".parse(),
+            Ok(FieldType::Object(ClassReference::new("java/lang/String")))
+        );
+        assert_eq!("[I".parse(), Ok(FieldType::Base(Int).make_array_type()));
+        assert_eq!(
+            "[[Ljava/lang/String;".parse(),
+            Ok(FieldType::Object(ClassReference::new("java/lang/String"))
+                .make_array_type()
+                .make_array_type())
         );
     }
 
     #[test]
     fn missing_semicolon() {
-        let descriptor = "Ljava/lang/String";
-        assert!(FieldType::from_str(descriptor).is_err());
+        assert!(FieldType::from_str("Ljava/lang/String").is_err());
     }
 
     #[test]
     fn tailing_chars() {
-        let descriptor = "Ljava/lang/String;A";
-        assert!(FieldType::from_str(descriptor).is_err());
+        assert!(FieldType::from_str("Ljava/lang/String;A").is_err());
+    }
+
+    #[test]
+    fn misisng_array_element() {
+        assert!(FieldType::from_str("[").is_err());
+    }
+
+    #[test]
+    fn invalid_array_element() {
+        assert!(FieldType::from_str("[A").is_err());
     }
 }
