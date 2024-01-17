@@ -1,7 +1,8 @@
 {
   "lspconfig": {
     "rust_analyzer": {
-      "rust-analyzer.cargo.features": "all"
+      "rust-analyzer.cargo.features": "all",
+      "rust-analyzer.check.command": "clippy"
     }
   }
 }
