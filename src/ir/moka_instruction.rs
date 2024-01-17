@@ -170,6 +170,16 @@ impl<'a> IntoIterator for &'a Argument {
     }
 }
 
+impl<'a> Argument {
+    /// Creates an iterator over the possible [`Identifier`].
+    #[must_use]
+    pub fn iter(
+        &'a self,
+    ) -> Either<Once<&'a Identifier>, std::collections::btree_set::Iter<'a, Identifier>> {
+        <&Self as IntoIterator>::into_iter(self)
+    }
+}
+
 /// A unique identifier of a value defined in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(transparent)]

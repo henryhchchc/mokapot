@@ -80,6 +80,14 @@ impl<'i, I> IntoIterator for &'i InstructionList<I> {
     }
 }
 
+impl<'i, I> InstructionList<I> {
+    /// Creates an iterator over the instructions.
+    #[must_use]
+    pub fn iter(&'i self) -> <&'i BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
+}
+
 impl<I> InstructionList<I> {
     /// Returns the instruction at the given program counter.
     #[must_use]
