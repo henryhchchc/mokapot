@@ -11,8 +11,6 @@ license = "MIT"
 repository = "https://github.com/henryhchchc/mokapot"
 
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 bitflags = "2.4"
 itertools = "0.12"
