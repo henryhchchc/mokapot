@@ -7,6 +7,7 @@ pub mod field;
 pub mod method;
 pub mod module;
 pub mod parsing;
+pub mod class_loader;
 
 pub use parsing::errors::ClassFileParsingError;
 
