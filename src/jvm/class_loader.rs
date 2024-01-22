@@ -57,6 +57,12 @@ impl ClassLoader {
         }
         Err(ClassLoadingError::NotFound(binary_name.as_ref().to_owned()))
     }
+
+    /// Create a new class loader with the given class paths.
+    #[must_use]
+    pub fn new(class_path: Vec<Box<dyn ClassPath>>) -> Self {
+        Self { class_path }
+    }
 }
 
 /// A class path that searches for classes in a directory.
