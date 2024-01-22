@@ -3,14 +3,12 @@ pub mod expression;
 mod generator;
 mod moka_instruction;
 
-use std::collections::BTreeMap;
-
 pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
 use crate::jvm::{
     class::ClassReference,
-    code::{ExceptionTableEntry, ProgramCounter},
+    code::{ExceptionTableEntry, InstructionList},
     method::{MethodAccessFlags, MethodDescriptor},
 };
 
@@ -26,7 +24,7 @@ pub struct MokaIRMethod {
     /// The class that contains the method.
     pub owner: ClassReference,
     /// The body of the method.
-    pub instructions: BTreeMap<ProgramCounter, MokaInstruction>,
+    pub instructions: InstructionList<MokaInstruction>,
     /// The exception table of the method.
     pub exception_table: Vec<ExceptionTableEntry>,
 }

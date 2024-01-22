@@ -4,7 +4,7 @@ mod jvm_frame;
 use std::{collections::BTreeMap, iter::once, mem};
 
 use crate::jvm::{
-    code::{ExceptionTableEntry, MethodBody, ProgramCounter},
+    code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
     method::{Method, MethodAccessFlags},
 };
 
@@ -210,9 +210,8 @@ impl MokaIRMethodExt for Method {
 }
 
 impl MokaIRGenerator<'_> {
-    fn generate(self) -> Result<BTreeMap<ProgramCounter, MokaInstruction>, MokaIRGenerationError> {
-        let mut self_mut = self;
-        fixed_point::analyze(&mut self_mut)?;
-        Ok(self_mut.ir_instructions)
+    fn generate(mut self) -> Result<InstructionList<MokaInstruction>, MokaIRGenerationError> {
+        fixed_point::analyze(&mut self)?;
+        Ok(InstructionList::from(self.ir_instructions))
     }
 }
