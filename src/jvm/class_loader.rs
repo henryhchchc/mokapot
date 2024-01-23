@@ -2,6 +2,7 @@
 
 use std::{fs::File, io::BufReader};
 
+use memo_map::MemoMap;
 use thiserror::Error;
 use zip::{result::ZipError, ZipArchive};
 
@@ -38,11 +39,11 @@ where
 
 /// A class loader that can load classes from a list of class paths.
 #[derive(Debug)]
-pub struct ClassLoader {
-    class_path: Vec<Box<dyn ClassPath>>,
+pub struct ClassLoader<'a> {
+    class_path: Vec<&'a dyn ClassPath>,
 }
 
-impl ClassLoader {
+impl<'a> ClassLoader<'a> {
     /// Create a new class loader with the given class paths.
     ///
     /// # Errors
@@ -60,8 +61,17 @@ impl ClassLoader {
 
     /// Create a new class loader with the given class paths.
     #[must_use]
-    pub fn new(class_path: Vec<Box<dyn ClassPath>>) -> Self {
+    pub fn new(class_path: Vec<&'a dyn ClassPath>) -> Self {
         Self { class_path }
+    }
+
+    /// Convert this class loader into a [`CachingClassLoader`].
+    #[must_use]
+    pub fn into_cached(self) -> CachingClassLoader<'a> {
+        CachingClassLoader {
+            class_loader: self,
+            cache: MemoMap::new(),
+        }
     }
 }
 
@@ -117,5 +127,25 @@ impl ClassPath for JarClassPath {
             Err(e) => Err(ClassLoadingError::Other(Box::new(e)))?,
         };
         Class::from_reader(&mut class_file).map_err(std::convert::Into::into)
+    }
+}
+
+/// A class loader that caches loaded classes.
+#[derive(Debug)]
+pub struct CachingClassLoader<'a> {
+    class_loader: ClassLoader<'a>,
+    cache: MemoMap<String, Class>,
+}
+
+impl CachingClassLoader<'_> {
+    /// Loads a class from the class loader's cache, or loads it from the class loader if it is
+    /// not.
+    ///
+    /// # Errors
+    /// See [`ClassLoadingError`].
+    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, ClassLoadingError> {
+        self.cache.get_or_try_insert(binary_name.as_ref(), || {
+            self.class_loader.load_class(binary_name.as_ref())
+        })
     }
 }
