@@ -46,7 +46,7 @@ impl ProgramCounter {
 
 impl Display for ProgramCounter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{:05}", self.0)
+        write!(f, "#{:04X}", self.0)
     }
 }
 

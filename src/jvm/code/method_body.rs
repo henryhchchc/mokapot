@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt::Display,
     ops::{Bound, Range, RangeInclusive},
 };
 
@@ -85,6 +86,23 @@ impl<'i, I> InstructionList<I> {
     #[must_use]
     pub fn iter(&'i self) -> <&'i BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter {
         self.into_iter()
+    }
+}
+
+impl<I> Display for InstructionList<I>
+where
+    I: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.iter();
+        if let Some((pc, instruction)) = iter.next() {
+            write!(f, "{pc}: {instruction}")?;
+        }
+        for (pc, instruction) in iter {
+            writeln!(f)?;
+            write!(f, "{pc}: {instruction}")?;
+        }
+        Ok(())
     }
 }
 
