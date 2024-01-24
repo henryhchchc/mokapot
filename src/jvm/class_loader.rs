@@ -39,11 +39,11 @@ where
 
 /// A class loader that can load classes from a list of class paths.
 #[derive(Debug)]
-pub struct ClassLoader<'a> {
-    class_path: Vec<&'a dyn ClassPath>,
+pub struct ClassLoader {
+    class_path: Vec<Box<dyn ClassPath>>,
 }
 
-impl<'a> ClassLoader<'a> {
+impl ClassLoader {
     /// Create a new class loader with the given class paths.
     ///
     /// # Errors
@@ -61,13 +61,13 @@ impl<'a> ClassLoader<'a> {
 
     /// Create a new class loader with the given class paths.
     #[must_use]
-    pub fn new(class_path: Vec<&'a dyn ClassPath>) -> Self {
+    pub fn new(class_path: Vec<Box<dyn ClassPath>>) -> Self {
         Self { class_path }
     }
 
     /// Convert this class loader into a [`CachingClassLoader`].
     #[must_use]
-    pub fn into_cached(self) -> CachingClassLoader<'a> {
+    pub fn into_cached(self) -> CachingClassLoader {
         CachingClassLoader {
             class_loader: self,
             cache: MemoMap::new(),
@@ -141,12 +141,12 @@ impl ClassPath for JarClassPath {
 
 /// A class loader that caches loaded classes.
 #[derive(Debug)]
-pub struct CachingClassLoader<'a> {
-    class_loader: ClassLoader<'a>,
+pub struct CachingClassLoader {
+    class_loader: ClassLoader,
     cache: MemoMap<String, Class>,
 }
 
-impl CachingClassLoader<'_> {
+impl CachingClassLoader {
     /// Loads a class from the class loader's cache, or loads it from the class loader if it is
     /// not.
     ///
