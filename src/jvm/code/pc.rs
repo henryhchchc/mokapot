@@ -113,6 +113,6 @@ mod tests {
     #[test]
     fn test_display() {
         let pc = ProgramCounter::from(10);
-        assert_eq!(format!("{pc}"), "#00010");
+        assert_eq!(format!("{pc}"), "#000A");
     }
 }
