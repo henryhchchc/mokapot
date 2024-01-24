@@ -110,6 +110,15 @@ pub struct JarClassPath {
     jar_file: std::path::PathBuf,
 }
 
+impl JarClassPath {
+    /// Create a new JAR class path.
+    pub fn new(jar_file: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            jar_file: jar_file.into(),
+        }
+    }
+}
+
 impl ClassPath for JarClassPath {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
         let jar_file = File::open(&self.jar_file)?;
