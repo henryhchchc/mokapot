@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 /// Denotes a program counter in an instruction sequence.
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(transparent)]
 #[derive(Default)]
 pub struct ProgramCounter(u16);
@@ -41,6 +41,12 @@ impl ProgramCounter {
     #[must_use]
     pub const fn is_entry_point(&self) -> bool {
         self.0 == 0
+    }
+}
+
+impl Debug for ProgramCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ProgramCounter(#{:04X})", self.0)
     }
 }
 
