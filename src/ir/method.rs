@@ -4,7 +4,7 @@ use crate::jvm::{
     method::{MethodAccessFlags, MethodDescriptor},
 };
 
-use super::MokaInstruction;
+use super::{ControlFlowGraph, MokaInstruction};
 
 /// Represents a JVM method where the instructions have been converted to Moka IR.
 #[derive(Debug, Clone)]
@@ -21,4 +21,6 @@ pub struct MokaIRMethod {
     pub instructions: InstructionList<MokaInstruction>,
     /// The exception table of the method.
     pub exception_table: Vec<ExceptionTableEntry>,
+    /// The control flow graph of the method.
+    pub control_flow_graph: ControlFlowGraph,
 }

@@ -127,6 +127,18 @@ impl<I> InstructionList<I> {
             .next()
             .map(|(k, _)| *k)
     }
+
+    /// Returns the number of instructions in the list.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether the list is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl InstructionList<RawInstruction> {

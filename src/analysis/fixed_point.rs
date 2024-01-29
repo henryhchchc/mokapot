@@ -11,19 +11,23 @@ pub trait FixedPointAnalyzer {
     /// The type of the error that can occur during the analysis.
     type Err;
 
+    /// The type of the locations that are affected by the analysis.
+    type AffectedLocations: IntoIterator<Item = (Self::Location, Self::Fact)>;
+
     /// Creates the fact at the entry point of the method being analyzed.
     /// # Errors
     /// - [`Err`] If the fail to create the entry fact.
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err>;
 
-    /// Executes the method at the given location with the given fact, and returns a map of the affected locations and the corresponding facts.
+    /// Executes the method at the given location with the given fact, and returns an iterator over
+    /// the affected locations and the corresponding facts.
     /// # Errors
     /// - [`Err`] If the analysis fails.
     fn analyze_location(
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>;
+    ) -> Result<Self::AffectedLocations, Self::Err>;
 
     /// Merges two facts where the control flow joins.
     /// # Errors
@@ -35,7 +39,8 @@ pub trait FixedPointAnalyzer {
     ) -> Result<Self::Fact, Self::Err>;
 }
 
-/// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points) for each location in the control flow graph.
+/// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points)
+/// for each location in the control flow graph.
 /// # Errors
 /// - [`A::Err`](FixedPointAnalyzer::Err) If the analysis fails.
 pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Err>
