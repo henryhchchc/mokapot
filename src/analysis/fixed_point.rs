@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 pub trait FixedPointAnalyzer {
     /// The type of the location in the control flow graph.
-    type Location: Ord + Eq;
+    type Location;
     /// The type of the fact that is propagated through the control flow graph.
-    type Fact: PartialEq;
+    type Fact;
     /// The type of the error that can occur during the analysis.
     type Err;
 
@@ -41,6 +41,8 @@ pub trait FixedPointAnalyzer {
 pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Err>
 where
     A: FixedPointAnalyzer,
+    <A as FixedPointAnalyzer>::Location: Ord + Eq,
+    <A as FixedPointAnalyzer>::Fact: PartialEq,
 {
     let mut facts: BTreeMap<A::Location, A::Fact> = BTreeMap::new();
     let entry_node = analyzer.entry_fact()?;
