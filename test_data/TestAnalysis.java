@@ -22,9 +22,11 @@ class TestAnalysis {
     if (x > 0 ? y > 0 : y < 0) {
       return 0;
     }
-    java.util.function.IntUnaryOperator lambda = (n) -> { return 233 + n + x; };
+    java.util.function.IntUnaryOperator lambda = (n) -> {
+      return 233 + n + x;
+    };
     var type = lambda.applyAsInt(0);
-    var arr = new int[]{0, 1, 2};
+    var arr = new int[] { 0, 1, 2 };
     var b = arr[0 + x];
     arr[b] = b;
     return y;

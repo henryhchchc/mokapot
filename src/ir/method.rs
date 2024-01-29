@@ -4,7 +4,7 @@ use crate::jvm::{
     method::{MethodAccessFlags, MethodDescriptor},
 };
 
-use super::{ControlFlowGraph, MokaInstruction};
+use super::{control_flow::ControlFlowGraph, MokaInstruction};
 
 /// Represents a JVM method where the instructions have been converted to Moka IR.
 #[derive(Debug, Clone)]

@@ -1,7 +1,8 @@
 use mokapot::{
     ir::MokaIRMethodExt,
-    jvm::{class::Class, method::Method},
+    jvm::{class::Class, code::ProgramCounter, method::Method},
 };
+use petgraph::dot::{Config, Dot};
 
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
@@ -33,4 +34,11 @@ fn analyze() {
         let ir_insn = ir.instructions.get(&pc).unwrap();
         println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
     }
+}
+
+#[test]
+fn cfg() {
+    let method = get_test_method();
+    let ir = method.generate_moka_ir().unwrap();
+    let _dot = Dot::with_config(&ir.control_flow_graph, &[]);
 }

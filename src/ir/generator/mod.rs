@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    ir::ControlFlowEdge,
+    ir::control_flow::ControlFlowEdge,
     jvm::{
         class::ClassReference,
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
@@ -22,7 +22,7 @@ use self::jvm_frame::{Entry, JvmStackFrame};
 
 pub use jvm_frame::JvmFrameError;
 
-use super::{expression::Expression, ControlFlowGraph};
+use super::{control_flow::ControlFlowGraph, expression::Expression};
 use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
 /// An error that occurs when generating Moka IR.
@@ -125,7 +125,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 };
                 if condition.is_some() {
                     let next_pc = self.next_pc_of(location)?;
-                    let next_pc_edge = ControlFlowEdge::unconditional(location, next_pc);
+                    let next_pc_edge = ControlFlowEdge::conditional(location, next_pc);
                     vec![
                         (target_edge, frame.same_frame()),
                         (next_pc_edge, frame.same_frame()),
