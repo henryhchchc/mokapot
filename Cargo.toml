@@ -9,6 +9,7 @@ description = "JVM analysis library"
 documentation = "https://docs.rs/mokapot"
 license = "MIT"
 repository = "https://github.com/henryhchchc/mokapot"
+keywords = ["jvm", "java", "analysis", "bytecode"]
 
 
 [dependencies]
