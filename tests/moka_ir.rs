@@ -1,8 +1,8 @@
 use mokapot::{
     ir::MokaIRMethodExt,
-    jvm::{class::Class, code::ProgramCounter, method::Method},
+    jvm::{class::Class, method::Method},
 };
-use petgraph::dot::{Config, Dot};
+use petgraph::dot::Dot;
 
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
