@@ -1,8 +1,7 @@
 //! Discovering and loading classes.
 
-use std::{fs::File, io::BufReader};
+use std::{collections::HashMap, fs::File, io::BufReader, sync::Mutex};
 
-use memo_map::MemoMap;
 use thiserror::Error;
 use zip::{result::ZipError, ZipArchive};
 
@@ -70,7 +69,7 @@ impl ClassLoader {
     pub fn into_cached(self) -> CachingClassLoader {
         CachingClassLoader {
             class_loader: self,
-            cache: MemoMap::new(),
+            cache: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -143,7 +142,7 @@ impl ClassPath for JarClassPath {
 #[derive(Debug)]
 pub struct CachingClassLoader {
     class_loader: ClassLoader,
-    cache: MemoMap<String, Class>,
+    cache: Mutex<HashMap<String, Class>>,
 }
 
 impl CachingClassLoader {
@@ -153,8 +152,19 @@ impl CachingClassLoader {
     /// # Errors
     /// See [`ClassLoadingError`].
     pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, ClassLoadingError> {
-        self.cache.get_or_try_insert(binary_name.as_ref(), || {
-            self.class_loader.load_class(binary_name.as_ref())
-        })
+        let mut cache_guard = match self.cache.lock() {
+            Ok(it) => it,
+            Err(poison_err) => poison_err.into_inner(),
+        };
+        let key_ref = binary_name.as_ref();
+        let class = if let Some(class) = cache_guard.get(key_ref) {
+            class
+        } else {
+            let class = self.class_loader.load_class(key_ref)?;
+            cache_guard.insert(key_ref.to_owned(), class);
+            cache_guard.get(key_ref).unwrap_or_else(|| unreachable!())
+        };
+        // SAFETY: The class reference is valid for the lifetime of the cache.
+        Ok(unsafe { std::mem::transmute(class) })
     }
 }
