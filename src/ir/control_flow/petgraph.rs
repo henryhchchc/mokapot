@@ -37,7 +37,7 @@ impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
     type EdgeReferences = <Vec<Self::EdgeRef> as IntoIterator>::IntoIter;
 
     fn edge_references(self) -> Self::EdgeReferences {
-        self.iter().collect::<Vec<_>>().into_iter()
+        self.iter_edges().collect::<Vec<_>>().into_iter()
     }
 }
 

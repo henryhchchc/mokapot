@@ -57,7 +57,7 @@ impl<N, E> ControlFlowGraph<N, E> {
     }
 
     /// Returns an iterator over the edges
-    pub fn iter(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> + '_ {
+    pub fn iter_edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> + '_ {
         self.inner.iter().flat_map(|(src, (_, outgoing_edges))| {
             outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
         })
@@ -110,5 +110,5 @@ fn from_edges() {
     for i in 0..=4 {
         assert!(nodes.contains(&(i.into(), &())));
     }
-    assert_eq!(cfg.iter().count(), 4);
+    assert_eq!(cfg.iter_edges().count(), 4);
 }
