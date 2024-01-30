@@ -22,7 +22,10 @@ use self::jvm_frame::{Entry, JvmStackFrame};
 
 pub use jvm_frame::JvmFrameError;
 
-use super::{control_flow::ControlFlowGraph, expression::Expression};
+use super::{
+    control_flow::{ControlFlowGraph, ControlTransfer},
+    expression::Expression,
+};
 use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
 /// An error that occurs when generating Moka IR.
@@ -46,7 +49,7 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    control_flow_edges: HashSet<ControlFlowEdge>,
+    control_flow_edges: HashSet<ControlFlowEdge<ControlTransfer>>,
 }
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
@@ -201,7 +204,7 @@ impl<'m> MokaIRGenerator<'m> {
         exception_table: &[ExceptionTableEntry],
         pc: ProgramCounter,
         frame: &JvmStackFrame,
-    ) -> Vec<(ControlFlowEdge, JvmStackFrame)> {
+    ) -> Vec<(ControlFlowEdge<ControlTransfer>, JvmStackFrame)> {
         exception_table
             .iter()
             .filter(|it| it.covers(pc))
@@ -249,7 +252,13 @@ impl MokaIRMethodExt for Method {
 impl MokaIRGenerator<'_> {
     fn generate(
         mut self,
-    ) -> Result<(InstructionList<MokaInstruction>, ControlFlowGraph), MokaIRGenerationError> {
+    ) -> Result<
+        (
+            InstructionList<MokaInstruction>,
+            ControlFlowGraph<(), ControlTransfer>,
+        ),
+        MokaIRGenerationError,
+    > {
         fixed_point::analyze(&mut self)?;
         let cfg = ControlFlowGraph::from_edges(self.control_flow_edges);
         Ok((InstructionList::from(self.ir_instructions), cfg))

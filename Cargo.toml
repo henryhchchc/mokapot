@@ -14,8 +14,14 @@ keywords = ["jvm", "java", "analysis", "bytecode"]
 
 [dependencies]
 bitflags = "2.4"
-itertools = "0.12"
-thiserror = "1.0"
 cesu8 = "1.1"
-petgraph = "0.6"
-zip = "0.6"
+itertools = "0.12"
+petgraph = { version = "0.6", optional = true }
+thiserror = "1.0"
+zip = { version = "0.6", optional = true }
+
+
+[features]
+default = ["jar", "petgraph"]
+jar = ["dep:zip"]
+petgraph = ["dep:petgraph"]

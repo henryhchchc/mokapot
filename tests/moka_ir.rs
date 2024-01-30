@@ -37,8 +37,14 @@ fn analyze() {
 }
 
 #[test]
-fn cfg() {
+#[cfg(feature = "petgraph")]
+fn cfg_to_dot() {
     let method = get_test_method();
     let ir = method.generate_moka_ir().unwrap();
-    let _dot = Dot::with_config(&ir.control_flow_graph, &[]);
+    let cfg_with_insn = ir.control_flow_graph.clone().map(
+        |pc, _| format!("{}", ir.instructions.get(&pc).expect("No instruction")),
+        |_, d| d,
+    );
+    let dot = Dot::with_config(&cfg_with_insn, &[]);
+    println!("{:?}", dot);
 }

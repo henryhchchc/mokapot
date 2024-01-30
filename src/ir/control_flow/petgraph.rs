@@ -1,8 +1,10 @@
 //! Implementations for the traits in the `petgraph` crate.
 
-use std::collections::{BTreeSet, HashSet};
+use std::{
+    collections::{btree_map, BTreeSet},
+    iter::Copied,
+};
 
-use itertools::Itertools;
 use petgraph::{
     visit::{
         Data, GraphBase, GraphProp, IntoEdgeReferences, IntoNeighbors, IntoNeighborsDirected,
@@ -14,62 +16,60 @@ use petgraph::{
 
 use crate::jvm::code::ProgramCounter;
 
-use super::{ControlFlowEdgeKind, ControlFlowGraph};
+use super::ControlFlowGraph;
 
-impl Data for ControlFlowGraph {
-    type NodeWeight = ProgramCounter;
-    type EdgeWeight = ControlFlowEdgeKind;
+impl<N, E> Data for ControlFlowGraph<N, E> {
+    type NodeWeight = N;
+    type EdgeWeight = E;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CFGNode(ProgramCounter, ProgramCounter);
-
-impl NodeRef for CFGNode {
-    type NodeId = ProgramCounter;
-
-    type Weight = ProgramCounter;
+impl NodeRef for ProgramCounter {
+    type NodeId = Self;
+    type Weight = Self;
 
     fn id(&self) -> Self::NodeId {
-        self.0
+        self.to_owned()
     }
 
     fn weight(&self) -> &Self::Weight {
-        &self.1
+        self
     }
 }
 
-impl<'a> IntoNodeReferences for &'a ControlFlowGraph {
-    type NodeRef = CFGNode;
+impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
+    type NodeRef = (ProgramCounter, &'a Self::NodeWeight);
 
-    type NodeReferences = <BTreeSet<CFGNode> as IntoIterator>::IntoIter;
+    type NodeReferences = <Vec<Self::NodeRef> as IntoIterator>::IntoIter;
 
     fn node_references(self) -> Self::NodeReferences {
-        self.node_identifiers()
-            .map(|it| CFGNode(it, it))
-            .collect::<BTreeSet<_>>()
+        self.node_data
+            .iter()
+            .map(|(n, d)| (*n, d))
+            .collect::<Vec<_>>()
             .into_iter()
     }
 }
 
-impl<'a> IntoEdgeReferences for &'a ControlFlowGraph {
+impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
     type EdgeRef = (Self::NodeId, Self::NodeId, &'a Self::EdgeWeight);
 
-    type EdgeReferences = <HashSet<Self::EdgeRef> as IntoIterator>::IntoIter;
+    type EdgeReferences = <Vec<Self::EdgeRef> as IntoIterator>::IntoIter;
 
     fn edge_references(self) -> Self::EdgeReferences {
-        self.inner
+        self.edge_data
             .iter()
-            .map(|((src, dst), kind)| (*src, *dst, kind))
-            .collect::<HashSet<_>>()
+            .map(|((src, dst), data)| (*src, *dst, data))
+            .collect::<Vec<_>>()
             .into_iter()
     }
 }
 
-impl GraphBase for ControlFlowGraph {
+impl<N, E> GraphBase for ControlFlowGraph<N, E> {
     type NodeId = ProgramCounter;
     type EdgeId = (ProgramCounter, ProgramCounter);
 }
 
+/// A visit map for the control flow graph.
 pub type Visited = BTreeSet<ProgramCounter>;
 
 impl VisitMap<ProgramCounter> for Visited {
@@ -82,7 +82,7 @@ impl VisitMap<ProgramCounter> for Visited {
     }
 }
 
-impl Visitable for ControlFlowGraph {
+impl<N, E> Visitable for ControlFlowGraph<N, E> {
     type Map = Visited;
 
     fn visit_map(&self) -> Self::Map {
@@ -94,24 +94,19 @@ impl Visitable for ControlFlowGraph {
     }
 }
 
-impl<'a> IntoNodeIdentifiers for &'a ControlFlowGraph {
-    type NodeIdentifiers = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
+impl<'a, N, E> IntoNodeIdentifiers for &'a ControlFlowGraph<N, E> {
+    type NodeIdentifiers = <Copied<btree_map::Keys<'a, Self::NodeId, N>> as IntoIterator>::IntoIter;
 
     fn node_identifiers(self) -> Self::NodeIdentifiers {
-        self.inner
-            .keys()
-            .copied()
-            .flat_map(|(src, dst)| [src, dst])
-            .collect::<BTreeSet<_>>()
-            .into_iter()
+        self.node_data.keys().copied()
     }
 }
 
-impl<'a> IntoNeighbors for &'a ControlFlowGraph {
+impl<'a, N, E> IntoNeighbors for &'a ControlFlowGraph<N, E> {
     type Neighbors = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
-        self.inner
+        self.edge_data
             .keys()
             .copied()
             .filter(|(src, _)| *src == a)
@@ -121,7 +116,7 @@ impl<'a> IntoNeighbors for &'a ControlFlowGraph {
     }
 }
 
-impl<'a> IntoNeighborsDirected for &'a ControlFlowGraph {
+impl<'a, N, E> IntoNeighborsDirected for &'a ControlFlowGraph<N, E> {
     type NeighborsDirected = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn neighbors_directed(self, n: Self::NodeId, d: Direction) -> Self::NeighborsDirected {
@@ -132,14 +127,9 @@ impl<'a> IntoNeighborsDirected for &'a ControlFlowGraph {
     }
 }
 
-impl NodeIndexable for ControlFlowGraph {
+impl<N, E> NodeIndexable for ControlFlowGraph<N, E> {
     fn node_bound(&self) -> usize {
-        self.inner
-            .keys()
-            .copied()
-            .flat_map(|(src, dst)| [src, dst])
-            .dedup()
-            .count()
+        self.node_data.len()
     }
 
     fn to_index(&self, ix: Self::NodeId) -> usize {
@@ -151,6 +141,6 @@ impl NodeIndexable for ControlFlowGraph {
     }
 }
 
-impl GraphProp for ControlFlowGraph {
+impl<N, E> GraphProp for ControlFlowGraph<N, E> {
     type EdgeType = Directed;
 }

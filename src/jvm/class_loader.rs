@@ -3,6 +3,8 @@
 use std::{collections::HashMap, fs::File, io::BufReader, sync::Mutex};
 
 use thiserror::Error;
+
+#[cfg(feature = "jar")]
 use zip::{result::ZipError, ZipArchive};
 
 use super::class::Class;
@@ -105,10 +107,12 @@ impl DirectoryClassPath {
 
 /// A class path that searches for classes in a JAR file.
 #[derive(Debug)]
+#[cfg(feature = "jar")]
 pub struct JarClassPath {
     jar_file: std::path::PathBuf,
 }
 
+#[cfg(feature = "jar")]
 impl JarClassPath {
     /// Create a new JAR class path.
     pub fn new(jar_file: impl Into<std::path::PathBuf>) -> Self {
@@ -118,6 +122,7 @@ impl JarClassPath {
     }
 }
 
+#[cfg(feature = "jar")]
 impl ClassPath for JarClassPath {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
         let jar_file = File::open(&self.jar_file)?;

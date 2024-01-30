@@ -3,42 +3,35 @@
 use crate::jvm::{class::ClassReference, code::ProgramCounter};
 use std::collections::BTreeMap;
 
-/// A control flow edge in the [`ControlFlowGraph`].
+#[cfg(feature = "petgraph")]
+pub mod petgraph;
+
+/// A control flow edge in a control flow graph
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub struct ControlFlowEdge {
-    /// The source of the edge.
-    pub src: ProgramCounter,
-    /// The destination of the edge.
-    pub dst: ProgramCounter,
-    /// The kind of the edge.
-    pub kind: ControlFlowEdgeKind,
+pub(super) struct ControlFlowEdge<E> {
+    pub(super) src: ProgramCounter,
+    pub(super) dst: ProgramCounter,
+    pub(super) data: E,
 }
 
-impl ControlFlowEdge {
-    /// Creates a new unconditional control flow edge.
-    #[must_use]
-    pub fn unconditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
+impl ControlFlowEdge<ControlTransfer> {
+    pub(super) fn unconditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
         Self {
             src: source,
             dst: destination,
-            kind: ControlFlowEdgeKind::Unconditional,
+            data: ControlTransfer::Unconditional,
         }
     }
 
-    /// Creates a new conditional control flow edge.
-    #[must_use]
-    pub fn conditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
+    pub(super) fn conditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
         Self {
             src: source,
             dst: destination,
-            kind: ControlFlowEdgeKind::Conditional,
+            data: ControlTransfer::Conditional,
         }
     }
 
-    /// Creates a new exception control flow edge.
-    #[must_use]
-    pub fn exception(
+    pub(super) fn exception(
         source: ProgramCounter,
         destination: ProgramCounter,
         exception: ClassReference,
@@ -46,24 +39,22 @@ impl ControlFlowEdge {
         Self {
             src: source,
             dst: destination,
-            kind: ControlFlowEdgeKind::Exception(exception),
+            data: ControlTransfer::Exception(exception),
         }
     }
 
-    /// Creates a new subroutine return control flow edge.
-    #[must_use]
-    pub fn subroutine_return(source: ProgramCounter, destination: ProgramCounter) -> Self {
+    pub(super) fn subroutine_return(source: ProgramCounter, destination: ProgramCounter) -> Self {
         Self {
             src: source,
             dst: destination,
-            kind: ControlFlowEdgeKind::SubroutineReturn,
+            data: ControlTransfer::SubroutineReturn,
         }
     }
 }
 
-/// The kind of a [`ControlFlowEdge`].
+/// The kind of a control transfer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ControlFlowEdgeKind {
+pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
     /// A conditional contol transfer.
@@ -75,21 +66,64 @@ pub enum ControlFlowEdgeKind {
 }
 
 /// A control flow graph.
+///
+/// It is generic the data associated with each node ([`N`]) and edge ([`E`]).
 #[derive(Debug, Clone, Default)]
-pub struct ControlFlowGraph {
-    inner: BTreeMap<(ProgramCounter, ProgramCounter), ControlFlowEdgeKind>,
+pub struct ControlFlowGraph<N, E> {
+    node_data: BTreeMap<ProgramCounter, N>,
+    edge_data: BTreeMap<(ProgramCounter, ProgramCounter), E>,
 }
 
-impl ControlFlowGraph {
-    pub(crate) fn from_edges(edges: impl IntoIterator<Item = ControlFlowEdge>) -> Self {
-        let mut inner = BTreeMap::new();
-        edges
+impl<N, E> ControlFlowGraph<N, E> {
+    /// Transforms the node and edge data of the control flow graph.
+    #[must_use]
+    pub fn map<N1, E1, NMap, EMap>(self, nf: NMap, ef: EMap) -> ControlFlowGraph<N1, E1>
+    where
+        NMap: Fn(ProgramCounter, N) -> N1,
+        EMap: Fn((ProgramCounter, ProgramCounter), E) -> E1,
+    {
+        let node_data = self
+            .node_data
             .into_iter()
-            .for_each(|ControlFlowEdge { src, dst, kind }| {
-                assert!(inner.insert((src, dst), kind).is_none(), "Duplitcate edge");
-            });
-        Self { inner }
+            .map(|(pc, data)| (pc, nf(pc, data)))
+            .collect();
+        let edge_data = self
+            .edge_data
+            .into_iter()
+            .map(|(edge, data)| (edge, ef(edge, data)))
+            .collect();
+        ControlFlowGraph {
+            node_data,
+            edge_data,
+        }
     }
 }
 
-pub mod petgraph;
+impl ControlFlowGraph<(), ControlTransfer> {
+    pub(super) fn from_edges(
+        edges: impl IntoIterator<Item = ControlFlowEdge<ControlTransfer>>,
+    ) -> Self {
+        let mut edge_data = BTreeMap::new();
+        edges.into_iter().for_each(
+            |ControlFlowEdge {
+                 src,
+                 dst,
+                 data: kind,
+             }| {
+                assert!(
+                    edge_data.insert((src, dst), kind).is_none(),
+                    "Duplitcate edge"
+                );
+            },
+        );
+        let node_data = edge_data
+            .keys()
+            .flat_map(|(src, dst)| [*src, *dst])
+            .map(|it| (it, ()))
+            .collect();
+        Self {
+            node_data,
+            edge_data,
+        }
+    }
+}

@@ -1,5 +1,5 @@
 //! Module containing the APIs for the Moka IR.
-mod control_flow;
+pub mod control_flow;
 pub mod expression;
 mod generator;
 mod method;
