@@ -58,10 +58,8 @@ jobs:
             && rustup default nightly 
       - uses: actions/checkout@v3
         name: Checkout source code
-      - run: cargo doc --all-features --no-deps --verbose
+      - run: RUSTDOCFLAGS='--cfg unstable' cargo doc --all-features --no-deps --verbose
         name: Build docs
-        environment:
-            RUSTDOCFLAGS: --cfg unstable
       - name: Fix file permissions
         run: |
           chmod -v -R +rX "target/doc/" | while read line; do
