@@ -3,7 +3,7 @@ members = ["xtask"]
 
 [package]
 name = "mokapot"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "JVM analysis library"
 documentation = "https://docs.rs/mokapot"
