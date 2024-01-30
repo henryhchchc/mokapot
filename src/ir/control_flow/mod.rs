@@ -67,7 +67,7 @@ pub enum ControlTransfer {
 
 /// A control flow graph.
 ///
-/// It is generic the data associated with each node ([`N`]) and edge ([`E`]).
+/// It is generic the data associated with each node and edge.
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph<N, E> {
     node_data: BTreeMap<ProgramCounter, N>,

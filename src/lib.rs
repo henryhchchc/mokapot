@@ -7,6 +7,8 @@
     clippy::pedantic
 )]
 #![allow(clippy::module_name_repetitions)]
+#![cfg_attr(unstable, feature(doc_auto_cfg))]
+
 //! # `MokaPot`
 //! `MokaPot` is a Java bytecode analysis library written in Rust.
 
