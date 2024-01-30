@@ -22,28 +22,22 @@ impl<N, E> Data for ControlFlowGraph<N, E> {
 impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
     type NodeRef = (ProgramCounter, &'a Self::NodeWeight);
 
+    // TODO: Replace with opaque type when it becomes stable.
     type NodeReferences = <Vec<Self::NodeRef> as IntoIterator>::IntoIter;
 
     fn node_references(self) -> Self::NodeReferences {
-        self.node_data
-            .iter()
-            .map(|(n, d)| (*n, d))
-            .collect::<Vec<_>>()
-            .into_iter()
+        self.iter_nodes().collect::<Vec<_>>().into_iter()
     }
 }
 
 impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
     type EdgeRef = (Self::NodeId, Self::NodeId, &'a Self::EdgeWeight);
 
+    // TODO: Replace with opaque type when it becomes stable.
     type EdgeReferences = <Vec<Self::EdgeRef> as IntoIterator>::IntoIter;
 
     fn edge_references(self) -> Self::EdgeReferences {
-        self.edge_data
-            .iter()
-            .map(|((src, dst), data)| (*src, *dst, data))
-            .collect::<Vec<_>>()
-            .into_iter()
+        self.iter().collect::<Vec<_>>().into_iter()
     }
 }
 
@@ -81,7 +75,7 @@ impl<'a, N, E> IntoNodeIdentifiers for &'a ControlFlowGraph<N, E> {
     type NodeIdentifiers = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn node_identifiers(self) -> Self::NodeIdentifiers {
-        self.node_data
+        self.inner
             .keys()
             .copied()
             .collect::<BTreeSet<_>>()
@@ -101,27 +95,33 @@ impl<'a, N, E> IntoNeighborsDirected for &'a ControlFlowGraph<N, E> {
     type NeighborsDirected = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn neighbors_directed(self, n: Self::NodeId, d: Direction) -> Self::NeighborsDirected {
-        self.edge_data
-            .keys()
-            .copied()
-            .filter(|(src, dst)| {
-                n == match d {
-                    Direction::Outgoing => *src,
-                    Direction::Incoming => *dst,
-                }
-            })
-            .map(|(src, dst)| match d {
-                Direction::Outgoing => dst,
-                Direction::Incoming => src,
-            })
-            .collect::<BTreeSet<_>>()
-            .into_iter()
+        if d == Direction::Outgoing {
+            self.inner
+                .get(&n)
+                .map(|(_, edges)| edges.keys().copied())
+                .unwrap_or_default()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+        } else {
+            self.inner
+                .iter()
+                .flat_map(|(src, (_, outgoing_edges))| {
+                    outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
+                })
+                .filter(|(_, dst, _)| *dst == n)
+                .map(|(src, _, _)| src)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+        }
     }
 }
 
 impl<N, E> NodeIndexable for ControlFlowGraph<N, E> {
     fn node_bound(&self) -> usize {
-        self.node_data.len()
+        self.inner
+            .last_key_value()
+            .map(|(n, _)| u16::from(*n).into())
+            .unwrap_or_default()
     }
 
     fn to_index(&self, ix: Self::NodeId) -> usize {

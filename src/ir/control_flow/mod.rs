@@ -6,52 +6,6 @@ use std::collections::BTreeMap;
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
 
-/// A control flow edge in a control flow graph
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct ControlFlowEdge<E> {
-    pub(super) src: ProgramCounter,
-    pub(super) dst: ProgramCounter,
-    pub(super) data: E,
-}
-
-impl ControlFlowEdge<ControlTransfer> {
-    pub(super) fn unconditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
-        Self {
-            src: source,
-            dst: destination,
-            data: ControlTransfer::Unconditional,
-        }
-    }
-
-    pub(super) fn conditional(source: ProgramCounter, destination: ProgramCounter) -> Self {
-        Self {
-            src: source,
-            dst: destination,
-            data: ControlTransfer::Conditional,
-        }
-    }
-
-    pub(super) fn exception(
-        source: ProgramCounter,
-        destination: ProgramCounter,
-        exception: ClassReference,
-    ) -> Self {
-        Self {
-            src: source,
-            dst: destination,
-            data: ControlTransfer::Exception(exception),
-        }
-    }
-
-    pub(super) fn subroutine_return(source: ProgramCounter, destination: ProgramCounter) -> Self {
-        Self {
-            src: source,
-            dst: destination,
-            data: ControlTransfer::SubroutineReturn,
-        }
-    }
-}
-
 /// The kind of a control transfer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlTransfer {
@@ -70,8 +24,7 @@ pub enum ControlTransfer {
 /// It is generic over the data associated with each node and edge.
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph<N, E> {
-    node_data: BTreeMap<ProgramCounter, N>,
-    edge_data: BTreeMap<(ProgramCounter, ProgramCounter), E>,
+    inner: BTreeMap<ProgramCounter, (N, BTreeMap<ProgramCounter, E>)>,
 }
 
 impl<N, E> ControlFlowGraph<N, E> {
@@ -82,48 +35,80 @@ impl<N, E> ControlFlowGraph<N, E> {
         NMap: Fn(ProgramCounter, N) -> N1,
         EMap: Fn((ProgramCounter, ProgramCounter), E) -> E1,
     {
-        let node_data = self
-            .node_data
+        let inner = self
+            .inner
             .into_iter()
-            .map(|(pc, data)| (pc, nf(pc, data)))
+            .map(|(src, (node_data, edges))| {
+                let data = nf(src, node_data);
+                let edges = edges
+                    .into_iter()
+                    .map(|(dst, edge_data)| (dst, ef((src, dst), edge_data)))
+                    .collect();
+                (src, (data, edges))
+            })
             .collect();
-        let edge_data = self
-            .edge_data
-            .into_iter()
-            .map(|(edge, data)| (edge, ef(edge, data)))
-            .collect();
-        ControlFlowGraph {
-            node_data,
-            edge_data,
-        }
+
+        ControlFlowGraph { inner }
+    }
+
+    /// Returns an iterator over the nodes
+    pub fn iter_nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> + '_ {
+        self.inner.iter().map(|(n, (d, _))| (*n, d))
+    }
+
+    /// Returns an iterator over the edges
+    pub fn iter(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> + '_ {
+        self.inner.iter().flat_map(|(src, (_, outgoing_edges))| {
+            outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
+        })
+    }
+
+    /// Returns an iterator over the exits of the control flow graph.
+    pub fn iter_exits(&self) -> impl Iterator<Item = ProgramCounter> + '_ {
+        self.inner
+            .iter()
+            .filter(|(_, (_, outgoing_edges))| outgoing_edges.is_empty())
+            .map(|(n, _)| *n)
     }
 }
 
-impl ControlFlowGraph<(), ControlTransfer> {
-    pub(super) fn from_edges(
-        edges: impl IntoIterator<Item = ControlFlowEdge<ControlTransfer>>,
+impl<E> ControlFlowGraph<(), E> {
+    /// Constructs a new control flow graph from a set of edges.
+    ///
+    /// # Panics
+    /// Panics if there are duplicate edges.
+    pub fn from_edges(
+        edges: impl IntoIterator<Item = (ProgramCounter, ProgramCounter, E)>,
     ) -> Self {
-        let mut edge_data = BTreeMap::new();
-        edges.into_iter().for_each(
-            |ControlFlowEdge {
-                 src,
-                 dst,
-                 data: kind,
-             }| {
-                assert!(
-                    edge_data.insert((src, dst), kind).is_none(),
-                    "Duplitcate edge"
-                );
-            },
-        );
-        let node_data = edge_data
-            .keys()
-            .flat_map(|(src, dst)| [*src, *dst])
-            .map(|it| (it, ()))
-            .collect();
-        Self {
-            node_data,
-            edge_data,
-        }
+        let mut inner = BTreeMap::new();
+        edges.into_iter().for_each(|(src, dst, data)| {
+            assert!(
+                inner
+                    .entry(src)
+                    .or_insert(((), BTreeMap::new()))
+                    .1
+                    .insert(dst, data)
+                    .is_none(),
+                "Duplicate edge"
+            );
+            inner.entry(dst).or_default();
+        });
+        Self { inner }
     }
+}
+
+#[test]
+fn from_edges() {
+    let edges = [
+        (0.into(), 1.into(), ()),
+        (1.into(), 2.into(), ()),
+        (2.into(), 3.into(), ()),
+        (3.into(), 4.into(), ()),
+    ];
+    let cfg = ControlFlowGraph::from_edges(edges);
+    let nodes = cfg.iter_nodes().collect::<std::collections::BTreeSet<_>>();
+    for i in 0..=4 {
+        assert!(nodes.contains(&(i.into(), &())));
+    }
+    assert_eq!(cfg.iter().count(), 4);
 }

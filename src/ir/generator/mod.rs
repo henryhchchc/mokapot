@@ -7,13 +7,10 @@ use std::{
     mem,
 };
 
-use crate::{
-    ir::control_flow::ControlFlowEdge,
-    jvm::{
-        class::ClassReference,
-        code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
-        method::{Method, MethodAccessFlags},
-    },
+use crate::jvm::{
+    class::ClassReference,
+    code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
+    method::{Method, MethodAccessFlags},
 };
 
 use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
@@ -49,7 +46,7 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    control_flow_edges: HashSet<ControlFlowEdge<ControlTransfer>>,
+    control_flow_edges: HashSet<(ProgramCounter, ProgramCounter, ControlTransfer)>,
 }
 
 impl FixedPointAnalyzer for MokaIRGenerator<'_> {
@@ -82,6 +79,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
+        use ControlTransfer::{Conditional, Unconditional};
         let location = location.to_owned();
         let mut frame = fact.same_frame();
         let insn = self
@@ -92,7 +90,8 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
         let edges_and_frames = match &ir_instruction {
             MokaInstruction::Nop => {
                 let next_pc = self.next_pc_of(location)?;
-                vec![(ControlFlowEdge::unconditional(location, next_pc), frame)]
+                let edge = (location, next_pc, Unconditional);
+                vec![(edge, frame)]
             }
             MokaInstruction::Return(_) => Vec::default(),
             MokaInstruction::Definition {
@@ -108,27 +107,25 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 ..
             } => {
                 frame.possible_ret_addresses.insert(*return_address);
-                vec![(ControlFlowEdge::unconditional(location, *target), frame)]
+                let edge = (location, *target, Unconditional);
+                vec![(edge, frame)]
             }
             MokaInstruction::Definition { .. } => {
                 let next_pc = self.next_pc_of(location)?;
                 Self::exception_edges(&self.body.exception_table, location, &frame)
                     .into_iter()
-                    .chain(once((
-                        ControlFlowEdge::unconditional(location, next_pc),
-                        frame,
-                    )))
+                    .chain(once(((location, next_pc, Unconditional), frame)))
                     .collect()
             }
             MokaInstruction::Jump { condition, target } => {
                 let target_edge = if condition.is_some() {
-                    ControlFlowEdge::conditional(location, *target)
+                    (location, *target, Conditional)
                 } else {
-                    ControlFlowEdge::unconditional(location, *target)
+                    (location, *target, Unconditional)
                 };
                 if condition.is_some() {
                     let next_pc = self.next_pc_of(location)?;
-                    let next_pc_edge = ControlFlowEdge::conditional(location, next_pc);
+                    let next_pc_edge = (location, next_pc, Conditional);
                     vec![
                         (target_edge, frame.same_frame()),
                         (next_pc_edge, frame.same_frame()),
@@ -143,14 +140,14 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
                 .values()
                 .chain(once(default))
                 .map(|&it| {
-                    let edge = ControlFlowEdge::unconditional(location, it);
+                    let edge = (location, it, Conditional);
                     (edge, frame.same_frame())
                 })
                 .collect(),
             MokaInstruction::SubroutineRet(_) => mem::take(&mut frame.possible_ret_addresses)
                 .into_iter()
                 .map(|return_address| {
-                    let edge = ControlFlowEdge::subroutine_return(location, return_address);
+                    let edge = (location, return_address, ControlTransfer::SubroutineReturn);
                     (edge, frame.same_frame())
                 })
                 .collect(),
@@ -159,7 +156,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
 
         let (affected_locations, edges) = edges_and_frames
             .into_iter()
-            .map(|(edge, frame)| ((edge.dst, frame), edge))
+            .map(|(edge, frame)| ((edge.1, frame), edge))
             .unzip();
         let edges: HashSet<_> = edges;
         self.control_flow_edges.extend(edges);
@@ -204,7 +201,10 @@ impl<'m> MokaIRGenerator<'m> {
         exception_table: &[ExceptionTableEntry],
         pc: ProgramCounter,
         frame: &JvmStackFrame,
-    ) -> Vec<(ControlFlowEdge<ControlTransfer>, JvmStackFrame)> {
+    ) -> Vec<(
+        (ProgramCounter, ProgramCounter, ControlTransfer),
+        JvmStackFrame,
+    )> {
         exception_table
             .iter()
             .filter(|it| it.covers(pc))
@@ -218,7 +218,11 @@ impl<'m> MokaIRGenerator<'m> {
                     .cloned()
                     .unwrap_or_else(|| ClassReference::new("java/lang/Throwable"));
                 (
-                    ControlFlowEdge::exception(pc, handler.handler_pc, exception_ref),
+                    (
+                        pc,
+                        handler.handler_pc,
+                        ControlTransfer::Exception(exception_ref),
+                    ),
                     handler_frame,
                 )
             })
