@@ -23,7 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
-        run: rustup update stable && rustup default stable 
+        run: |
+          rustup update stable \
+            && rustup default stable \
+            && rustup component add llvm-tools-preview
       - uses: taiki-e/install-action@cargo-llvm-cov
         name: Setup Cargo LLVM Cov
       - uses: taiki-e/install-action@nextest
