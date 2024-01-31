@@ -65,6 +65,9 @@ impl<I, const N: usize> From<[(ProgramCounter, I); N]> for InstructionList<I> {
 
 impl<I> IntoIterator for InstructionList<I> {
     type Item = (ProgramCounter, I);
+
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = <BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -74,6 +77,9 @@ impl<I> IntoIterator for InstructionList<I> {
 
 impl<'i, I> IntoIterator for &'i InstructionList<I> {
     type Item = (&'i ProgramCounter, &'i I);
+
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = <&'i BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
