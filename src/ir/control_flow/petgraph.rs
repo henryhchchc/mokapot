@@ -22,7 +22,8 @@ impl<N, E> Data for ControlFlowGraph<N, E> {
 impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
     type NodeRef = (ProgramCounter, &'a Self::NodeWeight);
 
-    // TODO: Replace with opaque type when it becomes stable.
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type NodeReferences = <Vec<Self::NodeRef> as IntoIterator>::IntoIter;
 
     fn node_references(self) -> Self::NodeReferences {
@@ -33,7 +34,8 @@ impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
 impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
     type EdgeRef = (Self::NodeId, Self::NodeId, &'a Self::EdgeWeight);
 
-    // TODO: Replace with opaque type when it becomes stable.
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type EdgeReferences = <Vec<Self::EdgeRef> as IntoIterator>::IntoIter;
 
     fn edge_references(self) -> Self::EdgeReferences {

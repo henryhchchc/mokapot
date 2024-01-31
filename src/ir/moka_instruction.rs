@@ -143,7 +143,8 @@ impl BitOr for Argument {
 impl IntoIterator for Argument {
     type Item = Identifier;
 
-    // NOTE: Change to opaque type when it's stable. See https://github.com/rust-lang/rust/issues/63063.
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -158,7 +159,8 @@ impl IntoIterator for Argument {
 impl<'a> IntoIterator for &'a Argument {
     type Item = &'a Identifier;
 
-    // NOTE: Change to opaque type when it's stable. See https://github.com/rust-lang/rust/issues/63063.
+    // TODO: Replace it with opaque type when it's stable.
+    //       See https://github.com/rust-lang/rust/issues/63063.
     type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -170,13 +172,10 @@ impl<'a> IntoIterator for &'a Argument {
     }
 }
 
-impl<'a> Argument {
+impl Argument {
     /// Creates an iterator over the possible [`Identifier`].
-    #[must_use]
-    pub fn iter(
-        &'a self,
-    ) -> Either<Once<&'a Identifier>, std::collections::btree_set::Iter<'a, Identifier>> {
-        <&Self as IntoIterator>::into_iter(self)
+    pub fn iter(&self) -> impl Iterator<Item = &Identifier> {
+        self.into_iter()
     }
 }
 

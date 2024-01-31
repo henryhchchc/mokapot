@@ -312,9 +312,9 @@ impl JvmStackFrame {
         if self.max_locals != other.max_locals {
             Err(JvmFrameError::LocalLimitMismatch)?;
         }
-        assert!(
+        debug_assert!(
             self.local_variables.len() == other.local_variables.len(),
-            "BUG: `local_variables` are not allocated correctly"
+            "The size of the local variables does not match"
         );
         if self.operand_stack.len() != other.operand_stack.len() {
             Err(JvmFrameError::StackSizeMismatch)?;
@@ -371,8 +371,9 @@ impl Entry {
     pub fn merge(x: Self, y: Self) -> Self {
         match (x, y) {
             (Entry::Value(lhs), Entry::Value(rhs)) => Entry::Value(lhs | rhs),
-            // NOTE: `lhs` and `rhs` are different variants, that means the local variable slot is reused
-            //       In this case, we do not merge it since it will be overridden afterwrds.
+            // NOTE: When `lhs` and `rhs` are different variants, it indicates that the local
+            //       variable slot is reused. In this case, we do not merge it since it will be
+            //       overridden afterwrds.
             (lhs, _) => lhs,
         }
     }
