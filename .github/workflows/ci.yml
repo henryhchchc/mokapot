@@ -27,7 +27,7 @@ jobs:
           rustup update stable \
             && rustup default stable \
             && rustup component add llvm-tools-preview \
-            && cargo install grcov
+            && cargo install cargo-llvm-cov
       - uses: actions/setup-java@v3
         name: Setup JDK
         with:
@@ -39,14 +39,14 @@ jobs:
         name: Build
       - run: cargo test --all-features --verbose
         name: Test
-      - run: cargo xtask coverage
+      - run: cargo llvm-cov --lcov --output-path ./target/lcov.info
         name: Coverage
       - uses: codecov/codecov-action@v3
         name: Upload coverage to codecov
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: coverage/*.lcov
+          files: target/lcov.info
           
   publish_latest_docs:
     name: MokaPot - docs
