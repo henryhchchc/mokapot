@@ -28,8 +28,8 @@ fn test_parse_file() {
 #[test]
 fn test_parse_version() {
     let my_class = parse_my_class().unwrap();
-    assert_eq!(65, my_class.version.major);
-    assert_eq!(0, my_class.version.minor);
+    assert_eq!(65, my_class.version.major());
+    assert_eq!(0, my_class.version.minor());
     assert!(!my_class.version.is_preview_enabled());
 }
 

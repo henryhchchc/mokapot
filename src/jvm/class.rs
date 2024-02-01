@@ -13,7 +13,7 @@ use super::{
     field::{ConstantValue, Field, FieldReference},
     method::{Method, MethodDescriptor, MethodReference},
     module::{Module, PackageReference},
-    ClassFileParsingResult,
+    ClassFileParsingError, ClassFileParsingResult,
 };
 
 /// APIs for the constant pool in JVM.
@@ -107,17 +107,152 @@ impl Class {
 
 /// The version of a class file.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
-pub struct ClassVersion {
-    /// The major version number.
-    pub major: u16,
-    /// the minor version number.
-    pub minor: u16,
+#[non_exhaustive]
+pub enum ClassVersion {
+    /// JDK 1.1
+    Jdk1_1(u16),
+    /// JDK 1.2
+    Jdk1_2,
+    /// JDK 1.3
+    Jdk1_3,
+    /// JDK 1.4
+    Jdk1_4,
+    /// JDK 5
+    Jdk5,
+    /// JDK 6
+    Jdk6,
+    /// JDK 7
+    Jdk7,
+    /// JDK 8
+    Jdk8,
+    /// JDK 9
+    Jdk9,
+    /// JDK 10
+    Jdk10,
+    /// JDK 11
+    Jdk11,
+    /// JDK 12
+    Jdk12(bool),
+    /// JDK 13
+    Jdk13(bool),
+    /// JDK 14
+    Jdk14(bool),
+    /// JDK 15
+    Jdk15(bool),
+    /// JDK 16
+    Jdk16(bool),
+    /// JDK 17
+    Jdk17(bool),
+    /// JDK 18
+    Jdk18(bool),
+    /// JDK 19
+    Jdk19(bool),
+    /// JDK 20
+    Jdk20(bool),
+    /// JDK 21
+    Jdk21(bool),
 }
 impl ClassVersion {
+    pub(crate) const fn from_versions(major: u16, minor: u16) -> ClassFileParsingResult<Self> {
+        match (major, minor) {
+            (45, minor) => Ok(Self::Jdk1_1(minor)),
+            (46, 0) => Ok(Self::Jdk1_2),
+            (47, 0) => Ok(Self::Jdk1_3),
+            (48, 0) => Ok(Self::Jdk1_4),
+            (49, 0) => Ok(Self::Jdk5),
+            (50, 0) => Ok(Self::Jdk6),
+            (51, 0) => Ok(Self::Jdk7),
+            (52, 0) => Ok(Self::Jdk8),
+            (53, 0) => Ok(Self::Jdk9),
+            (54, 0) => Ok(Self::Jdk10),
+            (55, 0) => Ok(Self::Jdk11),
+            (56, 0) => Ok(Self::Jdk12(false)),
+            (57, 0) => Ok(Self::Jdk13(false)),
+            (58, 0) => Ok(Self::Jdk14(false)),
+            (59, 0) => Ok(Self::Jdk15(false)),
+            (60, 0) => Ok(Self::Jdk16(false)),
+            (61, 0) => Ok(Self::Jdk17(false)),
+            (62, 0) => Ok(Self::Jdk18(false)),
+            (63, 0) => Ok(Self::Jdk19(false)),
+            (64, 0) => Ok(Self::Jdk20(false)),
+            (65, 0) => Ok(Self::Jdk21(false)),
+            (66, 65535) => Ok(Self::Jdk12(true)),
+            (67, 65535) => Ok(Self::Jdk13(true)),
+            (68, 65535) => Ok(Self::Jdk14(true)),
+            (69, 65535) => Ok(Self::Jdk15(true)),
+            (70, 65535) => Ok(Self::Jdk16(true)),
+            (71, 65535) => Ok(Self::Jdk17(true)),
+            (72, 65535) => Ok(Self::Jdk18(true)),
+            (73, 65535) => Ok(Self::Jdk19(true)),
+            (74, 65535) => Ok(Self::Jdk20(true)),
+            (75, 65535) => Ok(Self::Jdk21(true)),
+            _ => Err(ClassFileParsingError::MalformedClassFile(
+                "Invalid class version",
+            )),
+        }
+    }
+
     /// Returns `true` if this class file is compiled with `--enable-preview`.
     #[must_use]
-    pub fn is_preview_enabled(&self) -> bool {
-        self.minor == 65535
+    pub const fn is_preview_enabled(&self) -> bool {
+        matches!(
+            self,
+            Self::Jdk12(true)
+                | Self::Jdk13(true)
+                | Self::Jdk14(true)
+                | Self::Jdk15(true)
+                | Self::Jdk16(true)
+                | Self::Jdk17(true)
+                | Self::Jdk18(true)
+                | Self::Jdk19(true)
+                | Self::Jdk20(true)
+                | Self::Jdk21(true)
+        )
+    }
+
+    /// Returns the major version of the class file.
+    #[must_use]
+    pub const fn major(&self) -> u16 {
+        match self {
+            Self::Jdk1_1(_) => 45,
+            Self::Jdk1_2 => 46,
+            Self::Jdk1_3 => 47,
+            Self::Jdk1_4 => 48,
+            Self::Jdk5 => 49,
+            Self::Jdk6 => 50,
+            Self::Jdk7 => 51,
+            Self::Jdk8 => 52,
+            Self::Jdk9 => 53,
+            Self::Jdk10 => 54,
+            Self::Jdk11 => 55,
+            Self::Jdk12(_) => 56,
+            Self::Jdk13(_) => 57,
+            Self::Jdk14(_) => 58,
+            Self::Jdk15(_) => 59,
+            Self::Jdk16(_) => 60,
+            Self::Jdk17(_) => 61,
+            Self::Jdk18(_) => 62,
+            Self::Jdk19(_) => 63,
+            Self::Jdk20(_) => 64,
+            Self::Jdk21(_) => 65,
+        }
+    }
+
+    /// Returns the minor version of the class file.
+    #[must_use]
+    pub const fn minor(&self) -> u16 {
+        #[allow(clippy::enum_glob_use)]
+        use ClassVersion::*;
+        if let Jdk1_1(minor) = self {
+            *minor
+        } else if let Jdk1_2 | Jdk1_3 | Jdk1_4 | Jdk5 | Jdk6 | Jdk7 | Jdk8 | Jdk9 | Jdk10 | Jdk11
+        | Jdk12(false) | Jdk13(false) | Jdk14(false) | Jdk15(false) | Jdk16(false)
+        | Jdk17(false) | Jdk18(false) | Jdk19(false) | Jdk20(false) | Jdk21(false) = self
+        {
+            0
+        } else {
+            65535
+        }
     }
 }
 

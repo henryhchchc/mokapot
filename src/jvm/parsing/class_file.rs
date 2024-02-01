@@ -28,7 +28,9 @@ impl Class {
         if magic != Self::JAVA_CLASS_MAIGC {
             return Err(ClassFileParsingError::NotAClassFile);
         }
-        let version = ClassVersion::parse(reader)?;
+        let minor_version = reader.read_value()?;
+        let major_version = reader.read_value()?;
+        let version = ClassVersion::from_versions(major_version, minor_version)?;
         let constant_pool_count: u16 = reader.read_value()?;
         let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
 
@@ -188,17 +190,6 @@ impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
             runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or_default(),
             runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
         })
-    }
-}
-
-impl ClassVersion {
-    fn parse<R>(reader: &mut R) -> std::io::Result<Self>
-    where
-        R: std::io::Read,
-    {
-        let minor = reader.read_value()?;
-        let major = reader.read_value()?;
-        Ok(Self { major, minor })
     }
 }
 

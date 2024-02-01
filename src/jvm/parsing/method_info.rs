@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     jvm::{
-        class::{ClassReference, ClassVersion},
+        class::ClassReference,
         method::{Method, MethodAccessFlags, MethodDescriptor},
         parsing::{
             jvm_element_parser::{parse_flags, parse_jvm},
@@ -64,13 +64,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
             }
         }
 
-        if ctx.class_version
-            >= (ClassVersion {
-                major: 51,
-                minor: 0,
-            })
-            && name == Method::CLASS_INITIALIZER_NAME
-        {
+        if ctx.class_version.major() > 51 && name == Method::CLASS_INITIALIZER_NAME {
             // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
             if !access_flags.contains(MethodAccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
