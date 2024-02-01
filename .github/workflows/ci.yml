@@ -4,9 +4,9 @@ on:
   push:
     branches: ["main"]
     paths:
-      - '**.rs'
+      - "**.rs"
       - test_data/**
-      - '**/Cargo.toml'
+      - "**/Cargo.toml"
       - .github/workflows/**
   pull_request:
 
@@ -40,17 +40,19 @@ jobs:
         name: Checkout source code
       - run: cargo build --all-features --verbose
         name: Build
-      - run: cargo test --all-features --verbose
-        name: Test
-      - run: cargo llvm-cov nextest --lcov --output-path ./target/lcov.info
-        name: Coverage
-      - uses: codecov/codecov-action@v3
-        name: Upload coverage to codecov
+      - name: Test
+        run: |
+          cargo llvm-cov nextest \
+                --all-features \
+                --lcov \
+                --output-path ./target/lcov.info
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: target/lcov.info
-          
+
   publish_latest_docs:
     name: MokaPot - docs
     runs-on: ubuntu-latest
@@ -58,11 +60,13 @@ jobs:
       - name: Setup Rust
         run: |
           rustup update nightly \
-            && rustup default nightly 
+            && rustup default nightly
       - uses: actions/checkout@v3
         name: Checkout source code
-      - run: RUSTDOCFLAGS='--cfg unstable' cargo doc --all-features --no-deps --verbose
-        name: Build docs
+      - name: Build docs
+        env:
+          RUSTDOCFLAGS: --cfg unstable
+        run: cargo doc --all-features --no-deps --verbose
       - name: Fix file permissions
         run: |
           chmod -v -R +rX "target/doc/" | while read line; do
