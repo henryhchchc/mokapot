@@ -44,14 +44,14 @@ jobs:
         run: |
           cargo llvm-cov nextest \
                 --all-features \
-                --lcov \
-                --output-path ./target/lcov.info
+                --codecov \
+                --output-path ./target/codecov.json
       - name: Upload coverage to codecov
         uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: target/lcov.info
+          files: target/codecov.json
 
   publish_latest_docs:
     name: MokaPot - docs
