@@ -70,6 +70,19 @@ impl<N, E> ControlFlowGraph<N, E> {
             .filter(|(_, (_, outgoing_edges))| outgoing_edges.is_empty())
             .map(|(n, _)| *n)
     }
+
+    /// Returns an iterator over the edges starting at the given node.
+    #[must_use]
+    pub fn edges_from(
+        &self,
+        src: ProgramCounter,
+    ) -> Option<impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)>> {
+        self.inner.get(&src).map(|(_, outgoing_edges)| {
+            outgoing_edges
+                .iter()
+                .map(move |(dst, data)| (src, *dst, data))
+        })
+    }
 }
 
 impl<E> ControlFlowGraph<(), E> {
@@ -97,18 +110,54 @@ impl<E> ControlFlowGraph<(), E> {
     }
 }
 
-#[test]
-fn from_edges() {
+#[cfg(test)]
+fn build_cfg() -> ControlFlowGraph<(), ()> {
     let edges = [
         (0.into(), 1.into(), ()),
         (1.into(), 2.into(), ()),
         (2.into(), 3.into(), ()),
         (3.into(), 4.into(), ()),
     ];
-    let cfg = ControlFlowGraph::from_edges(edges);
+    ControlFlowGraph::from_edges(edges)
+}
+
+#[test]
+#[should_panic(expected = "Duplicate edge")]
+fn from_edges_duplicate() {
+    let edges = [
+        (0.into(), 1.into(), ()),
+        (1.into(), 2.into(), ()),
+        (2.into(), 3.into(), ()),
+        (3.into(), 4.into(), ()),
+        (0.into(), 1.into(), ()),
+    ];
+    ControlFlowGraph::from_edges(edges);
+}
+
+#[test]
+fn iter_nodes() {
+    let cfg = build_cfg();
     let nodes = cfg.iter_nodes().collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(nodes.len(), 5);
     for i in 0..=4 {
         assert!(nodes.contains(&(i.into(), &())));
     }
-    assert_eq!(cfg.iter_edges().count(), 4);
+}
+
+#[test]
+fn iter_edges() {
+    let cfg = build_cfg();
+    let edges = cfg.iter_edges().collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(edges.len(), 4);
+    for i in 0..=3 {
+        assert!(edges.contains(&(i.into(), (i + 1).into(), &())));
+    }
+}
+
+#[test]
+fn iter_exits() {
+    let cfg = build_cfg();
+    let exits = cfg.iter_exits().collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(exits.len(), 1);
+    assert!(exits.contains(&4.into()));
 }
