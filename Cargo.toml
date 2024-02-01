@@ -15,7 +15,9 @@ cesu8 = "1.1"
 itertools = "0.12"
 petgraph = { version = "0.6", optional = true }
 thiserror = "1.0"
-zip = { version = "0.6", optional = true }
+zip = { version = "0.6", optional = true, default-features = false, features = [
+  "deflate",
+] }
 
 
 [features]
