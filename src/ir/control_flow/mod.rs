@@ -52,12 +52,12 @@ impl<N, E> ControlFlowGraph<N, E> {
     }
 
     /// Returns an iterator over the nodes
-    pub fn iter_nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> + '_ {
+    pub fn iter_nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> {
         self.inner.iter().map(|(n, (d, _))| (*n, d))
     }
 
     /// Returns an iterator over the edges
-    pub fn iter_edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> + '_ {
+    pub fn iter_edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> {
         self.inner.iter().flat_map(|(src, (_, outgoing_edges))| {
             outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
         })
