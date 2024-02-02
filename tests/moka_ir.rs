@@ -39,12 +39,24 @@ fn analyze() {
 #[test]
 #[cfg(feature = "petgraph")]
 fn cfg_to_dot() {
+    use mokapot::ir::control_flow::ControlTransfer;
+
     let method = get_test_method();
     let ir = method.generate_moka_ir().unwrap();
     let cfg_with_insn = ir.control_flow_graph.clone().map(
-        |pc, _| format!("{}", ir.instructions.get(&pc).expect("No instruction")),
-        |_, d| d,
+        |pc, _| {
+            format!(
+                "{pc}: {}",
+                ir.instructions.get(&pc).expect("No instruction")
+            )
+        },
+        |_, d| match d {
+            ControlTransfer::Unconditional => "".to_owned(),
+            ControlTransfer::Conditional => "<conditional>".to_owned(),
+            ControlTransfer::Exception(e) => format!("catch {e}"),
+            ControlTransfer::SubroutineReturn => "<ret>".to_owned(),
+        },
     );
     let dot = Dot::with_config(&cfg_with_insn, &[]);
-    println!("{:?}", dot);
+    println!("{}", dot);
 }
