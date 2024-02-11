@@ -93,17 +93,10 @@ impl<E> ControlFlowGraph<(), E> {
     pub fn from_edges(
         edges: impl IntoIterator<Item = (ProgramCounter, ProgramCounter, E)>,
     ) -> Self {
-        let mut inner = BTreeMap::new();
+        let mut inner: BTreeMap<_, (_, BTreeMap<_, _>)> = BTreeMap::new();
         edges.into_iter().for_each(|(src, dst, data)| {
-            assert!(
-                inner
-                    .entry(src)
-                    .or_insert(((), BTreeMap::new()))
-                    .1
-                    .insert(dst, data)
-                    .is_none(),
-                "Duplicate edge"
-            );
+            let edge_map = &mut inner.entry(src).or_default().1;
+            assert!(edge_map.insert(dst, data).is_none(), "Duplicate edge");
             inner.entry(dst).or_default();
         });
         Self { inner }
