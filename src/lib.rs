@@ -17,3 +17,6 @@ pub mod ir;
 pub mod jvm;
 pub(crate) mod macros;
 pub mod types;
+
+#[cfg(test)]
+pub mod tests;

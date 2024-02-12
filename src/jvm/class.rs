@@ -105,6 +105,9 @@ impl Class {
     }
 }
 
+/// The maximum supported major version of a class file.
+pub const MAX_MAJOR_VERSION: u16 = 65;
+
 /// The version of a class file.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
@@ -176,16 +179,19 @@ impl ClassVersion {
             (63, 0) => Ok(Self::Jdk19(false)),
             (64, 0) => Ok(Self::Jdk20(false)),
             (65, 0) => Ok(Self::Jdk21(false)),
-            (66, 65535) => Ok(Self::Jdk12(true)),
-            (67, 65535) => Ok(Self::Jdk13(true)),
-            (68, 65535) => Ok(Self::Jdk14(true)),
-            (69, 65535) => Ok(Self::Jdk15(true)),
-            (70, 65535) => Ok(Self::Jdk16(true)),
-            (71, 65535) => Ok(Self::Jdk17(true)),
-            (72, 65535) => Ok(Self::Jdk18(true)),
-            (73, 65535) => Ok(Self::Jdk19(true)),
-            (74, 65535) => Ok(Self::Jdk20(true)),
-            (75, 65535) => Ok(Self::Jdk21(true)),
+            (56, 65535) => Ok(Self::Jdk12(true)),
+            (57, 65535) => Ok(Self::Jdk13(true)),
+            (58, 65535) => Ok(Self::Jdk14(true)),
+            (59, 65535) => Ok(Self::Jdk15(true)),
+            (60, 65535) => Ok(Self::Jdk16(true)),
+            (61, 65535) => Ok(Self::Jdk17(true)),
+            (62, 65535) => Ok(Self::Jdk18(true)),
+            (63, 65535) => Ok(Self::Jdk19(true)),
+            (64, 65535) => Ok(Self::Jdk20(true)),
+            (65, 65535) => Ok(Self::Jdk21(true)),
+            (major, _) if major > MAX_MAJOR_VERSION => Err(
+                ClassFileParsingError::MalformedClassFile("Unsupportted class version"),
+            ),
             _ => Err(ClassFileParsingError::MalformedClassFile(
                 "Invalid class version",
             )),
@@ -420,5 +426,38 @@ bitflags! {
         const ANNOTATION = 0x2000;
         /// Declared as an enum class.
         const ENUM = 0x4000;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::empty_class_with_version;
+
+    #[test]
+    fn class_major_version() {
+        for major_ver in 45..=65 {
+            let bytes = empty_class_with_version(major_ver, 0);
+            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
+            assert_eq!(major_ver, class.version.major());
+        }
+    }
+
+    #[test]
+    fn class_45_minor_version() {
+        for minor_ver in 0..=65535 {
+            let bytes = empty_class_with_version(45, minor_ver);
+            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
+            assert_eq!(minor_ver, class.version.minor());
+        }
+    }
+
+    #[test]
+    fn preview_feature() {
+        for major_ver in 56..=65 {
+            let bytes = empty_class_with_version(major_ver, 65535);
+            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
+            assert!(class.version.is_preview_enabled());
+        }
     }
 }
