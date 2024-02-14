@@ -47,6 +47,12 @@ pub struct ControlFlowGraph<N, E> {
 }
 
 impl<N, E> ControlFlowGraph<N, E> {
+    /// Returns the entry point of the control flow graph.
+    #[must_use]
+    pub const fn entry_point(&self) -> ProgramCounter {
+        ProgramCounter::ZERO
+    }
+
     /// Transforms the node and edge data to construt a new control flow graph.
     #[must_use]
     pub fn map<N1, E1, NMap, EMap>(self, nf: NMap, ef: EMap) -> ControlFlowGraph<N1, E1>
