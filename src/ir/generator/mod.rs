@@ -17,6 +17,7 @@ use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
 
 use self::jvm_frame::{Entry, JvmStackFrame};
 
+use itertools::Itertools;
 pub use jvm_frame::JvmFrameError;
 
 use super::{
@@ -208,21 +209,24 @@ impl<'m> MokaIRGenerator<'m> {
         exception_table
             .iter()
             .filter(|it| it.covers(pc))
-            .map(|handler| {
+            .sorted_unstable_by_key(|&it| it.handler_pc)
+            .group_by(|it| it.handler_pc)
+            .into_iter()
+            .map(|(handler_pc, entries)| {
                 let caught_exception_ref = Argument::Id(Identifier::CaughtException);
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
-                let exception_ref = handler
-                    .catch_type
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_else(|| ClassReference::new("java/lang/Throwable"));
+                let exceptions = entries
+                    .map(|it| {
+                        it.catch_type
+                            .as_ref()
+                            .cloned()
+                            .unwrap_or_else(|| ClassReference::new("java/lang/Throwable"))
+                    })
+                    .dedup()
+                    .collect();
                 (
-                    (
-                        pc,
-                        handler.handler_pc,
-                        ControlTransfer::Exception(exception_ref),
-                    ),
+                    (pc, handler_pc, ControlTransfer::Exception(exceptions)),
                     handler_frame,
                 )
             })

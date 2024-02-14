@@ -39,6 +39,7 @@ fn analyze() {
 #[test]
 #[cfg(feature = "petgraph")]
 fn cfg_to_dot() {
+    use itertools::Itertools;
     use mokapot::ir::control_flow::ControlTransfer;
 
     let method = get_test_method();
@@ -53,7 +54,10 @@ fn cfg_to_dot() {
         |_, d| match d {
             ControlTransfer::Unconditional => "".to_owned(),
             ControlTransfer::Conditional => "<conditional>".to_owned(),
-            ControlTransfer::Exception(e) => format!("catch {e}"),
+            ControlTransfer::Exception(e) => format!(
+                "catch {}",
+                e.into_iter().map(|it| it.binary_name).join(" | ")
+            ),
             ControlTransfer::SubroutineReturn => "<ret>".to_owned(),
         },
     );
