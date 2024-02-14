@@ -21,6 +21,7 @@ use super::{
 };
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub(crate) enum Attribute {
     ConstantValue(ConstantValue),
     Code(MethodBody),

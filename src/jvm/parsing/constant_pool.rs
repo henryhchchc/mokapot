@@ -271,6 +271,7 @@ impl ConstantPool {
 
 /// An entry in the [`ConstantPool`].
 #[derive(Debug, Clone)]
+#[repr(u8)]
 pub enum Entry {
     /// A UTF-8 string.
     /// See the [JVM Specification §4.4.7](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.7) for more information.
