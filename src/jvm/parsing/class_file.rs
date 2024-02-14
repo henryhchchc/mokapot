@@ -68,25 +68,25 @@ impl Class {
 
         extract_attributes! {
             for attributes in "class_file" by {
-                let source_file <= SourceFile,
-                let inner_classes unwrap_or_default <= InnerClasses,
-                let enclosing_method <= EnclosingMethod,
-                let source_debug_extension <= SourceDebugExtension,
-                let bootstrap_methods unwrap_or_default <= BootstrapMethods,
-                let runtime_visible_annotations unwrap_or_default <= RuntimeVisibleAnnotations,
-                let runtime_invisible_annotations unwrap_or_default <= RuntimeInvisibleAnnotations,
-                let runtime_visible_type_annotations unwrap_or_default <= RuntimeVisibleTypeAnnotations,
-                let runtime_invisible_type_annotations unwrap_or_default <= RuntimeInvisibleTypeAnnotations,
-                let module <= Module,
-                let module_packages unwrap_or_default <= ModulePackages,
-                let module_main_class <= ModuleMainClass,
-                let nest_host <= NestHost,
-                let nest_members unwrap_or_default <= NestMembers,
-                let permitted_subclasses unwrap_or_default <= PermittedSubclasses,
-                let signature <= Signature,
-                let record <= Record,
-                if Synthetic => let is_synthetic = true,
-                if Deprecated => let is_deprecated = true,
+                let source_file: SourceFile,
+                let inner_classes: InnerClasses unwrap_or_default,
+                let enclosing_method: EnclosingMethod,
+                let source_debug_extension: SourceDebugExtension,
+                let bootstrap_methods: BootstrapMethods unwrap_or_default,
+                let runtime_visible_annotations: RuntimeVisibleAnnotations unwrap_or_default,
+                let runtime_invisible_annotations: RuntimeInvisibleAnnotations unwrap_or_default,
+                let runtime_visible_type_annotations: RuntimeVisibleTypeAnnotations unwrap_or_default,
+                let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                let module: Module,
+                let module_packages: ModulePackages unwrap_or_default,
+                let module_main_class: ModuleMainClass,
+                let nest_host: NestHost,
+                let nest_members: NestMembers unwrap_or_default,
+                let permitted_subclasses: PermittedSubclasses unwrap_or_default,
+                let signature: Signature,
+                let record: Record,
+                if let is_synthetic: Synthetic,
+                if let is_deprecated: Deprecated,
             }
         };
 
@@ -173,11 +173,15 @@ impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
         let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "record_component" by {
-                let signature <= Signature,
-                let rt_visible_anno <= RuntimeVisibleAnnotations,
-                let rt_invisible_anno <= RuntimeInvisibleAnnotations,
-                let rt_visible_type_anno <= RuntimeVisibleTypeAnnotations,
-                let rt_invisible_type_anno <= RuntimeInvisibleTypeAnnotations,
+                let signature: Signature,
+                let runtime_visible_annotations
+                    : RuntimeVisibleAnnotations unwrap_or_default,
+                let runtime_invisible_annotations
+                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                let runtime_visible_type_annotations
+                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                let runtime_invisible_type_annotations
+                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
             }
         }
 
@@ -185,10 +189,10 @@ impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
             name,
             component_type,
             signature,
-            runtime_visible_annotations: rt_visible_anno.unwrap_or_default(),
-            runtime_invisible_annotations: rt_invisible_anno.unwrap_or_default(),
-            runtime_visible_type_annotations: rt_visible_type_anno.unwrap_or_default(),
-            runtime_invisible_type_annotations: rt_invisible_type_anno.unwrap_or_default(),
+            runtime_visible_annotations,
+            runtime_invisible_annotations,
+            runtime_visible_type_annotations,
+            runtime_invisible_type_annotations,
         })
     }
 }

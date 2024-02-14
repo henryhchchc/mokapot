@@ -139,10 +139,10 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" by {
-                let line_number_table <= LineNumberTable,
-                let stack_map_table <= StackMapTable,
-                let runtime_visible_type_annotations <= RuntimeVisibleTypeAnnotations,
-                let runtime_invisible_type_annotations <= RuntimeInvisibleTypeAnnotations,
+                let line_number_table: LineNumberTable,
+                let stack_map_table: StackMapTable,
+                let runtime_visible_type_annotations: RuntimeVisibleTypeAnnotations unwrap_or_default,
+                let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations unwrap_or_default,
                 match Attribute::LocalVariableTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTable::default());
                     for LocalVariableDescAttr { id, name, field_type } in it {
@@ -161,14 +161,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
         Ok(Self {
             max_stack,
             max_locals,
-            exception_table,
             instructions,
+            exception_table,
             line_number_table,
             local_variable_table,
             stack_map_table,
-            runtime_visible_type_annotations: runtime_visible_type_annotations.unwrap_or_default(),
-            runtime_invisible_type_annotations: runtime_invisible_type_annotations
-                .unwrap_or_default(),
+            runtime_visible_type_annotations,
+            runtime_invisible_type_annotations,
         })
     }
 }

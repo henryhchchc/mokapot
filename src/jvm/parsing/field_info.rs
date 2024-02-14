@@ -26,14 +26,18 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
         let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "field_info" by {
-                let constant_value <= ConstantValue,
-                let signature <= Signature,
-                let runtime_visible_annotations unwrap_or_default <= RuntimeVisibleAnnotations,
-                let runtime_invisible_annotations unwrap_or_default <= RuntimeInvisibleAnnotations,
-                let runtime_visible_type_annotations unwrap_or_default <= RuntimeVisibleTypeAnnotations,
-                let runtime_invisible_type_annotations unwrap_or_default <= RuntimeInvisibleTypeAnnotations,
-                if Synthetic => let is_synthetic = true,
-                if Deprecated => let is_deperecated = true,
+                let constant_value: ConstantValue,
+                let signature: Signature,
+                let runtime_visible_annotations
+                    : RuntimeVisibleAnnotations unwrap_or_default,
+                let runtime_invisible_annotations
+                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                let runtime_visible_type_annotations
+                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                let runtime_invisible_type_annotations
+                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                if let is_synthetic: Synthetic,
+                if let is_deperecated: Deprecated,
             }
         }
 

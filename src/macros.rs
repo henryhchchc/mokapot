@@ -2,9 +2,9 @@
 
 macro_rules! extract_attributes {
     (for $attrs: ident in $env:literal by {
-         $( let $var: ident $($uw: ident)? <= $attr: ident,)*
-         $( if $attr_true: ident => let $var_true: ident = true,)*
-         $( match $attr_custom: pat => $var_custom: block,)*
+         $( let $var: ident: $attr: ident $($uw: ident)?, )*
+         $( if let $var_true: ident: $attr_true: ident, )*
+         $( match $attr_custom: pat => $var_custom: block, )*
     }) => {
         use crate::jvm::parsing::attribute::Attribute;
         $( let mut $var = None; )*

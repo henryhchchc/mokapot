@@ -27,19 +27,25 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
         let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
         extract_attributes! {
             for attributes in "method_info" by {
-                let body <= Code,
-                let exceptions unwrap_or_default <= Exceptions,
-                let runtime_visible_annotations unwrap_or_default <= RuntimeVisibleAnnotations,
-                let runtime_invisible_annotations unwrap_or_default <= RuntimeInvisibleAnnotations,
-                let runtime_visible_type_annotations unwrap_or_default <= RuntimeVisibleTypeAnnotations,
-                let runtime_invisible_type_annotations unwrap_or_default <= RuntimeInvisibleTypeAnnotations,
-                let runtime_visible_parameter_annotations unwrap_or_default <= RuntimeVisibleParameterAnnotations,
-                let runtime_invisible_parameter_annotations unwrap_or_default <= RuntimeInvisibleParameterAnnotations,
-                let annotation_default <= AnnotationDefault,
-                let parameters unwrap_or_default <= MethodParameters,
-                let signature <= Signature,
-                if Synthetic => let is_synthetic = true,
-                if Deprecated => let is_deprecated = true,
+                let body: Code,
+                let exceptions: Exceptions unwrap_or_default,
+                let runtime_visible_annotations
+                    : RuntimeVisibleAnnotations unwrap_or_default,
+                let runtime_invisible_annotations
+                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                let runtime_visible_type_annotations
+                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                let runtime_invisible_type_annotations
+                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                let runtime_visible_parameter_annotations
+                    : RuntimeVisibleParameterAnnotations unwrap_or_default,
+                let runtime_invisible_parameter_annotations
+                    : RuntimeInvisibleParameterAnnotations unwrap_or_default,
+                let annotation_default: AnnotationDefault,
+                let parameters: MethodParameters unwrap_or_default,
+                let signature: Signature,
+                if let is_synthetic: Synthetic,
+                if let is_deprecated: Deprecated,
             }
         };
 

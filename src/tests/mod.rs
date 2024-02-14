@@ -1,4 +1,5 @@
 #[rustfmt::skip]
+#[must_use]
 pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
     [
         0xCA, 0xFE, 0xBA, 0xBE, // Magic
