@@ -13,7 +13,7 @@ use crate::jvm::{
     method::{Method, MethodAccessFlags},
 };
 
-use crate::analysis::fixed_point::{self, FixedPointAnalyzer};
+use crate::analysis::fixed_point::FixedPointAnalyzer;
 
 use self::jvm_frame::{Entry, JvmStackFrame};
 
@@ -267,7 +267,7 @@ impl MokaIRGenerator<'_> {
         ),
         MokaIRGenerationError,
     > {
-        fixed_point::analyze(&mut self)?;
+        self.analyze()?;
         let cfg = ControlFlowGraph::from_edges(self.control_flow_edges);
         Ok((InstructionList::from(self.ir_instructions), cfg))
     }

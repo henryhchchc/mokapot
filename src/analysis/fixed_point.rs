@@ -37,36 +37,35 @@ pub trait FixedPointAnalyzer {
         current_fact: &Self::Fact,
         incoming_fact: Self::Fact,
     ) -> Result<Self::Fact, Self::Err>;
-}
 
-/// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points)
-/// for each location in the control flow graph.
-/// # Errors
-/// - [`A::Err`](FixedPointAnalyzer::Err) If the analysis fails.
-pub fn analyze<A>(analyzer: &mut A) -> Result<BTreeMap<A::Location, A::Fact>, A::Err>
-where
-    A: FixedPointAnalyzer,
-    <A as FixedPointAnalyzer>::Location: Ord + Eq,
-    <A as FixedPointAnalyzer>::Fact: PartialEq,
-{
-    let mut facts: BTreeMap<A::Location, A::Fact> = BTreeMap::new();
-    let entry_node = analyzer.entry_fact()?;
-    let mut dirty_nodes = VecDeque::from([entry_node]);
+    /// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points)
+    /// for each location in the control flow graph.
+    /// # Errors
+    /// - [`A::Err`](FixedPointAnalyzer::Err) If the analysis fails.
+    fn analyze(&mut self) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>
+    where
+        Self::Location: Ord + Eq,
+        Self::Fact: PartialEq,
+    {
+        let mut facts: BTreeMap<Self::Location, Self::Fact> = BTreeMap::new();
+        let entry_node = self.entry_fact()?;
+        let mut dirty_nodes = VecDeque::from([entry_node]);
 
-    while let Some((location, incoming_fact)) = dirty_nodes.pop_front() {
-        let maybe_updated_fact = match facts.get(&location) {
-            Some(current_fact) => {
-                let merged_fact = analyzer.merge_facts(current_fact, incoming_fact)?;
-                Some(merged_fact).filter(|it| it.ne(current_fact))
+        while let Some((location, incoming_fact)) = dirty_nodes.pop_front() {
+            let maybe_updated_fact = match facts.get(&location) {
+                Some(current_fact) => {
+                    let merged_fact = self.merge_facts(current_fact, incoming_fact)?;
+                    Some(merged_fact).filter(|it| it.ne(current_fact))
+                }
+                None => Some(incoming_fact),
+            };
+
+            if let Some(fact) = maybe_updated_fact {
+                dirty_nodes.extend(self.analyze_location(&location, &fact)?);
+                facts.insert(location, fact);
             }
-            None => Some(incoming_fact),
-        };
-
-        if let Some(fact) = maybe_updated_fact {
-            dirty_nodes.extend(analyzer.analyze_location(&location, &fact)?);
-            facts.insert(location, fact);
         }
-    }
 
-    Ok(facts)
+        Ok(facts)
+    }
 }
