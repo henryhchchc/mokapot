@@ -4,14 +4,14 @@ use mokapot::{
     jvm::{
         class::{Class, ClassAccessFlags, ClassReference},
         method::ReturnType,
-        ClassFileParsingError, ClassFileParsingResult,
+        parsing::Error,
     },
     types::field_type::{FieldType, PrimitiveType},
 };
 
 /// Parses the class file compiled from `MyClass.java` from the `test_data` directory.
 /// The source code ot the class files is as follows.
-fn parse_my_class() -> ClassFileParsingResult<Class> {
+fn parse_my_class() -> Result<Class, Error> {
     let bytes = include_bytes!(concat!(
         env!("OUT_DIR"),
         "/java_classes/org/pkg/MyClass.class"
@@ -131,6 +131,6 @@ fn not_a_class_file() {
     ));
     assert!(matches!(
         Class::from_reader(bytes.as_slice()),
-        Err(ClassFileParsingError::NotAClassFile)
+        Err(Error::NotAClassFile)
     ));
 }

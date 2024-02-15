@@ -6,12 +6,12 @@ use crate::jvm::{
         jvm_element_parser::{parse_jvm, ParseJvmElement},
         parsing_context::ParsingContext,
         reader_utils::ClassReader,
+        Error,
     },
-    ClassFileParsingError, ClassFileParsingResult,
 };
 
 impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let frame_type: u8 = reader.read_value()?;
         let result = match frame_type {
             it @ 0..=63 => Self::SameFrame {
@@ -60,14 +60,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
                     stack: parse_jvm!(u16, reader, ctx)?,
                 }
             }
-            _ => Err(ClassFileParsingError::UnknownStackMapFrameType(frame_type))?,
+            _ => Err(Error::UnknownStackMapFrameType(frame_type))?,
         };
         Ok(result)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
         let result = match tag {
             0 => Self::TopVariable,
@@ -86,9 +86,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
                 let offset = reader.read_value::<u16>()?.into();
                 Self::UninitializedVariable { offset }
             }
-            unexpected => Err(ClassFileParsingError::InvalidVerificationTypeInfoTag(
-                unexpected,
-            ))?,
+            unexpected => Err(Error::InvalidVerificationTypeInfoTag(unexpected))?,
         };
         Ok(result)
     }

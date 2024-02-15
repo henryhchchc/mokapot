@@ -11,17 +11,16 @@ use crate::{
             LocalVariableTable, MethodBody,
         },
         method::ParameterInfo,
-        parsing::{jvm_element_parser::parse_jvm, reader_utils::read_byte_chunk},
-        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
     types::field_type::FieldType,
 };
 
 use super::{
-    jvm_element_parser::{parse_flags, ParseJvmElement},
+    jvm_element_parser::{parse_flags, parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
-    reader_utils::ClassReader,
+    reader_utils::{read_byte_chunk, ClassReader},
+    Error,
 };
 
 #[derive(Debug)]
@@ -39,7 +38,7 @@ pub(crate) struct LocalVariableTypeAttr {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
-    fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value::<u16>()?.into();
         let line_number = reader.read_value()?;
         Ok(Self {
@@ -50,7 +49,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value::<u16>()?.into();
         let end_pc = reader.read_value::<u16>()?.into();
         let covered_pc = start_pc..=end_pc;
@@ -70,7 +69,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value::<u16>()?;
         let length = reader.read_value::<u16>()?;
         let effective_range = start_pc.into()..(start_pc + length).into();
@@ -92,7 +91,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
     }
 }
 impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value::<u16>()?;
         let length = reader.read_value::<u16>()?;
         let effective_range = start_pc.into()..(start_pc + length).into();
@@ -113,7 +112,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
     }
 }
 impl<R: std::io::Read> ParseJvmElement<R> for ParameterInfo {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let name_index = reader.read_value()?;
         let name = if name_index == 0 {
             None
@@ -126,7 +125,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ParameterInfo {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;

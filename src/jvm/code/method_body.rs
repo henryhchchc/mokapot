@@ -8,7 +8,7 @@ use crate::{
     jvm::{
         annotation::TypeAnnotation,
         class::{constant_pool::ConstantPool, ClassReference},
-        ClassFileParsingError, ClassFileParsingResult,
+        parsing::Error,
     },
     types::field_type::FieldType,
 };
@@ -153,7 +153,7 @@ impl InstructionList<RawInstruction> {
     pub fn lift(
         self,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<InstructionList<Instruction>> {
+    ) -> Result<InstructionList<Instruction>, Error> {
         let mut instructions = BTreeMap::new();
         for (pc, raw_instruction) in self {
             let instruction =
@@ -232,11 +232,11 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         field_type: FieldType,
-    ) -> ClassFileParsingResult<()> {
+    ) -> Result<(), Error> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ClassFileParsingError::MalformedClassFile(
+                Err(Error::MalformedClassFile(
                     "Name of local variable does not match",
                 ))?;
             }
@@ -251,11 +251,11 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         signature: String,
-    ) -> ClassFileParsingResult<()> {
+    ) -> Result<(), Error> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ClassFileParsingError::MalformedClassFile(
+                Err(Error::MalformedClassFile(
                     "Name of local variable does not match",
                 ))?;
             }

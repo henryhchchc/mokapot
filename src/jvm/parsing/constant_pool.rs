@@ -2,15 +2,16 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
-use super::reader_utils::{read_byte_chunk, ClassReader};
+use super::{
+    reader_utils::{read_byte_chunk, ClassReader},
+    Error,
+};
 use crate::{
-    jvm::ClassFileParsingError,
     jvm::{
         class::{ClassReference, MethodHandle},
         field::{ConstantValue, FieldReference, JavaString},
         method::{MethodDescriptor, MethodReference},
         module::{ModuleReference, PackageReference},
-        ClassFileParsingResult,
     },
     types::field_type::{FieldType, TypeReference},
 };
@@ -38,7 +39,7 @@ impl ConstantPool {
     /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one. See the [JVM Specification §4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.1) for more information.
     /// # Errors
     /// See [`ClassFileParsingError`] for more information.
-    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> ClassFileParsingResult<Self>
+    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -56,35 +57,32 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_str(&self, index: u16) -> ClassFileParsingResult<&str> {
+    pub(crate) fn get_str(&self, index: u16) -> Result<&str, Error> {
         let entry = self.get_entry(index)?;
         match entry {
             Entry::Utf8(JavaString::ValidUtf8(string)) => Ok(string),
-            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ClassFileParsingError::BrokenUTF8),
-            _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(Error::BrokenUTF8),
+            _ => Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Utf8",
                 found: entry.constant_kind(),
             }),
         }
     }
 
-    pub(crate) fn get_class_ref(&self, index: u16) -> ClassFileParsingResult<ClassReference> {
+    pub(crate) fn get_class_ref(&self, index: u16) -> Result<ClassReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
             Ok(ClassReference::new(name))
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Class",
                 found: entry.constant_kind(),
             })
         }
     }
 
-    pub(crate) fn get_constant_value(
-        &self,
-        value_index: u16,
-    ) -> ClassFileParsingResult<ConstantValue> {
+    pub(crate) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, Error> {
         let entry = self.get_entry(value_index)?;
         match entry {
         &Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
@@ -95,7 +93,7 @@ impl ConstantPool {
             if let Entry::Utf8(java_str) = self.get_entry(string_index)? {
                 Ok(ConstantValue::String(java_str.clone()))
             } else {
-                Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                Err(Error::MismatchedConstantPoolEntryType {
                     expected: "Utf8",
                     found: entry.constant_kind(),
                 })
@@ -126,27 +124,27 @@ impl ConstantPool {
                 descriptor,
             ))
         }
-        unexpected => Err(ClassFileParsingError::MismatchedConstantPoolEntryType{
+        unexpected => Err(Error::MismatchedConstantPoolEntryType{
             expected: "Integer | Long | Float | Double | String | MethodType | Class | MethodHandle | Dynamic",
             found: unexpected.constant_kind(),
         })
     }
     }
 
-    pub(crate) fn get_module_ref(&self, index: u16) -> ClassFileParsingResult<ModuleReference> {
+    pub(crate) fn get_module_ref(&self, index: u16) -> Result<ModuleReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
             Ok(ModuleReference { name })
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Module",
                 found: entry.constant_kind(),
             })
         }
     }
 
-    pub(crate) fn get_package_ref(&self, index: u16) -> ClassFileParsingResult<PackageReference> {
+    pub(crate) fn get_package_ref(&self, index: u16) -> Result<PackageReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
@@ -154,14 +152,14 @@ impl ConstantPool {
                 binary_name: name.to_owned(),
             })
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Package",
                 found: entry.constant_kind(),
             })
         }
     }
 
-    pub(crate) fn get_field_ref(&self, index: u16) -> ClassFileParsingResult<FieldReference> {
+    pub(crate) fn get_field_ref(&self, index: u16) -> Result<FieldReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::FieldRef {
             class_index,
@@ -177,13 +175,13 @@ impl ConstantPool {
                 field_type,
             });
         }
-        Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+        Err(Error::MismatchedConstantPoolEntryType {
             expected: "Field",
             found: entry.constant_kind(),
         })
     }
 
-    pub(crate) fn get_name_and_type(&self, index: u16) -> ClassFileParsingResult<(&str, &str)> {
+    pub(crate) fn get_name_and_type(&self, index: u16) -> Result<(&str, &str), Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::NameAndType {
             name_index,
@@ -194,14 +192,14 @@ impl ConstantPool {
             let descriptor = self.get_str(descriptor_index)?;
             Ok((name, descriptor))
         } else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Err(Error::MismatchedConstantPoolEntryType {
                 expected: "NameAndType",
                 found: entry.constant_kind(),
             })
         }
     }
 
-    pub(crate) fn get_method_ref(&self, index: u16) -> ClassFileParsingResult<MethodReference> {
+    pub(crate) fn get_method_ref(&self, index: u16) -> Result<MethodReference, Error> {
         let entry = self.get_entry(index)?;
         match entry {
             &Entry::MethodRef {
@@ -222,14 +220,14 @@ impl ConstantPool {
                     descriptor,
                 })
             }
-            _ => Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            _ => Err(Error::MismatchedConstantPoolEntryType {
                 expected: "MethodRef | InterfaceMethodRef",
                 found: entry.constant_kind(),
             }),
         }
     }
 
-    pub(crate) fn get_method_handle(&self, index: u16) -> ClassFileParsingResult<MethodHandle> {
+    pub(crate) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, Error> {
         use MethodHandle::{
             RefGetField, RefGetStatic, RefInvokeInterface, RefInvokeSpecial, RefInvokeStatic,
             RefInvokeVirtual, RefNewInvokeSpecial, RefPutField, RefPutStatic,
@@ -241,7 +239,7 @@ impl ConstantPool {
             reference_index: idx,
         } = entry
         else {
-            Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+            Err(Error::MismatchedConstantPoolEntryType {
                 expected: "MethodHandle",
                 found: entry.constant_kind(),
             })?
@@ -257,14 +255,14 @@ impl ConstantPool {
             7 => RefInvokeSpecial(self.get_method_ref(idx)?),
             8 => RefNewInvokeSpecial(self.get_method_ref(idx)?),
             9 => RefInvokeInterface(self.get_method_ref(idx)?),
-            _ => Err(ClassFileParsingError::MalformedClassFile(
+            _ => Err(Error::MalformedClassFile(
                 "Invalid reference kind in method handle",
             ))?,
         };
         Ok(result)
     }
 
-    pub(crate) fn get_type_ref(&self, index: u16) -> ClassFileParsingResult<TypeReference> {
+    pub(crate) fn get_type_ref(&self, index: u16) -> Result<TypeReference, Error> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?
@@ -395,7 +393,7 @@ pub enum Entry {
 }
 
 impl Entry {
-    fn parse_multiple<R>(reader: &mut R, count: u16) -> ClassFileParsingResult<Vec<Slot>>
+    fn parse_multiple<R>(reader: &mut R, count: u16) -> Result<Vec<Slot>, Error>
     where
         R: std::io::Read,
     {
@@ -415,7 +413,7 @@ impl Entry {
         Ok(result)
     }
 
-    fn parse<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -438,7 +436,7 @@ impl Entry {
             18 => Self::parse_invoke_dynamic(reader),
             19 => Self::parse_module(reader),
             20 => Self::parse_package(reader),
-            it => Err(ClassFileParsingError::UnexpectedConstantPoolTag(it)),
+            it => Err(Error::UnexpectedConstantPoolTag(it)),
         }
     }
 
@@ -466,7 +464,7 @@ impl Entry {
         }
     }
 
-    fn parse_utf8<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_utf8<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -478,35 +476,35 @@ impl Entry {
         }
     }
 
-    fn parse_integer<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_integer<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
         Ok(Self::Integer(reader.read_value()?))
     }
 
-    fn parse_float<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_float<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
         Ok(Self::Float(reader.read_value()?))
     }
 
-    fn parse_long<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_long<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
         Ok(Self::Long(reader.read_value()?))
     }
 
-    fn parse_double<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_double<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
         Ok(Self::Double(reader.read_value()?))
     }
 
-    fn parse_class<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_class<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -514,7 +512,7 @@ impl Entry {
         Ok(Self::Class { name_index })
     }
 
-    fn parse_string<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_string<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -522,7 +520,7 @@ impl Entry {
         Ok(Self::String { string_index })
     }
 
-    fn parse_field_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_field_ref<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -534,7 +532,7 @@ impl Entry {
         })
     }
 
-    fn parse_method_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_method_ref<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -546,7 +544,7 @@ impl Entry {
         })
     }
 
-    fn parse_interface_method_ref<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_interface_method_ref<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -558,7 +556,7 @@ impl Entry {
         })
     }
 
-    fn parse_name_and_type<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_name_and_type<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -570,7 +568,7 @@ impl Entry {
         })
     }
 
-    fn parse_method_handle<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_method_handle<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -582,7 +580,7 @@ impl Entry {
         })
     }
 
-    fn parse_method_type<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_method_type<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -590,7 +588,7 @@ impl Entry {
         Ok(Self::MethodType { descriptor_index })
     }
 
-    fn parse_dynamic<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_dynamic<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -602,7 +600,7 @@ impl Entry {
         })
     }
 
-    fn parse_invoke_dynamic<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_invoke_dynamic<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -614,7 +612,7 @@ impl Entry {
         })
     }
 
-    fn parse_module<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_module<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {
@@ -622,7 +620,7 @@ impl Entry {
         Ok(Self::Module { name_index })
     }
 
-    fn parse_package<R>(reader: &mut R) -> ClassFileParsingResult<Self>
+    fn parse_package<R>(reader: &mut R) -> Result<Self, Error>
     where
         R: std::io::Read,
     {

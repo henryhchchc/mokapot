@@ -14,7 +14,7 @@ macro_rules! extract_attributes {
                 match attr {
                 $(
                     Attribute::$attr(it) => if $var.replace(it).is_some() {
-                        Err(ClassFileParsingError::MalformedClassFile(concat!(
+                        Err(Error::MalformedClassFile(concat!(
                             "There should be at most one ",
                             stringify!($attr),
                             " in a ",
@@ -29,7 +29,7 @@ macro_rules! extract_attributes {
                 )*
                 $($attr_custom => $var_custom,)*
                     unexpected => {
-                        Err(ClassFileParsingError::UnexpectedAttribute(unexpected.name(), $env))?;
+                        Err(Error::UnexpectedAttribute(unexpected.name(), $env))?;
                     }
                 }
             }

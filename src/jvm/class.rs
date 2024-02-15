@@ -13,7 +13,7 @@ use super::{
     field::{ConstantValue, Field, FieldReference},
     method::{Method, MethodDescriptor, MethodReference},
     module::{Module, PackageReference},
-    ClassFileParsingError, ClassFileParsingResult,
+    parsing::Error,
 };
 
 /// APIs for the constant pool in JVM.
@@ -88,7 +88,7 @@ impl Class {
     /// - [`ClassFileParsingError::ReadFail`](crate::jvm::parsing::errors::ClassFileParsingError::ReadFail) If the reader fails to read.
     /// Other errors may be returned if the class file is malformed.
     /// See [`ClassFileParsingError`](crate::jvm::parsing::errors::ClassFileParsingError) for more information.
-    pub fn from_reader<R>(reader: R) -> ClassFileParsingResult<Class>
+    pub fn from_reader<R>(reader: R) -> Result<Class, Error>
     where
         R: std::io::Read,
     {
@@ -156,7 +156,7 @@ pub enum ClassVersion {
     Jdk21(bool),
 }
 impl ClassVersion {
-    pub(crate) const fn from_versions(major: u16, minor: u16) -> ClassFileParsingResult<Self> {
+    pub(crate) const fn from_versions(major: u16, minor: u16) -> Result<Self, Error> {
         match (major, minor) {
             (45, minor) => Ok(Self::Jdk1_1(minor)),
             (46, 0x0000) => Ok(Self::Jdk1_2),
@@ -189,12 +189,10 @@ impl ClassVersion {
             (64, 0xFFFF) => Ok(Self::Jdk20(true)),
             (65, 0x0000) => Ok(Self::Jdk21(false)),
             (65, 0xFFFF) => Ok(Self::Jdk21(true)),
-            (major, _) if major > MAX_MAJOR_VERSION => Err(
-                ClassFileParsingError::MalformedClassFile("Unsupportted class version"),
-            ),
-            _ => Err(ClassFileParsingError::MalformedClassFile(
-                "Invalid class version",
-            )),
+            (major, _) if major > MAX_MAJOR_VERSION => {
+                Err(Error::MalformedClassFile("Unsupportted class version"))
+            }
+            _ => Err(Error::MalformedClassFile("Invalid class version")),
         }
     }
 

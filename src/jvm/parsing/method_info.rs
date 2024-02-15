@@ -8,15 +8,14 @@ use crate::{
             jvm_element_parser::{parse_flags, parse_jvm},
             parsing_context::ParsingContext,
         },
-        ClassFileParsingError, ClassFileParsingResult,
     },
     macros::extract_attributes,
 };
 
-use super::{jvm_element_parser::ParseJvmElement, reader_utils::ClassReader};
+use super::{jvm_element_parser::ParseJvmElement, reader_utils::ClassReader, Error};
 
 impl<R: std::io::Read> ParseJvmElement<R> for Method {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
         let name = parse_jvm!(reader, ctx)?;
         let descriptor: MethodDescriptor = parse_jvm!(reader, ctx)?;
@@ -57,16 +56,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
-                Err(ClassFileParsingError::MalformedClassFile(
-                    "Unexpected code attribute",
-                ))?;
+                Err(Error::MalformedClassFile("Unexpected code attribute"))?;
             }
         } else {
             // Otherwise, its method_info structure must have exactly one Code attribute in its attributes table
             if body.is_none() {
-                Err(ClassFileParsingError::MalformedClassFile(
-                    "The method must have a body",
-                ))?;
+                Err(Error::MalformedClassFile("The method must have a body"))?;
             }
         }
 
@@ -75,7 +70,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
             if !access_flags.contains(MethodAccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
-                Err(ClassFileParsingError::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?;
+                Err(Error::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?;
             }
         }
 
@@ -102,9 +97,9 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for MethodDescriptor {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        MethodDescriptor::from_str(descriptor).map_err(ClassFileParsingError::from)
+        MethodDescriptor::from_str(descriptor).map_err(Error::from)
     }
 }

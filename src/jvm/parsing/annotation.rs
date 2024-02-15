@@ -6,7 +6,6 @@ use crate::{
         code::LocalVariableId,
         field::{ConstantValue, JavaString},
         method::ReturnType,
-        ClassFileParsingError, ClassFileParsingResult,
     },
     types::field_type::FieldType,
 };
@@ -15,10 +14,11 @@ use super::{
     jvm_element_parser::{parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::ClassReader,
+    Error,
 };
 
 impl<R: std::io::Read> ParseJvmElement<R> for TypePathElement {
-    fn parse(reader: &mut R, _ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let kind: u8 = reader.read_value()?;
         let argument_index: u8 = reader.read_value()?;
         match (kind, argument_index) {
@@ -26,13 +26,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypePathElement {
             (1, 0) => Ok(Self::Nested),
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
-            _ => Err(ClassFileParsingError::InvalidTypePathKind),
+            _ => Err(Error::InvalidTypePathKind),
         }
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let type_idx = reader.read_value()?;
         let annotation_type = ctx.constant_pool.get_str(type_idx)?;
         let annotation_type = FieldType::from_str(annotation_type)?;
@@ -44,7 +44,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<ClassFileParsingResult<_>>()?;
+            .collect::<Result<_, Error>>()?;
         Ok(Annotation {
             annotation_type,
             element_value_pairs,
@@ -52,7 +52,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
     }
 }
 impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let target_type = reader.read_value()?;
         let target_info = match target_type {
             0x00 | 0x01 => TargetInfo::TypeParameter {
@@ -85,7 +85,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
                             index,
                         })
                     })
-                    .collect::<ClassFileParsingResult<_>>()?;
+                    .collect::<Result<_, Error>>()?;
                 TargetInfo::LocalVar(table)
             }
             0x42 => TargetInfo::Catch {
@@ -96,13 +96,13 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
                 offset: reader.read_value::<u16>()?.into(),
                 index: reader.read_value()?,
             },
-            unexpected => Err(ClassFileParsingError::InvalidTargetType(unexpected))?,
+            unexpected => Err(Error::InvalidTargetType(unexpected))?,
         };
         // The length of target path is represented by a single byte.
         let target_path_length: u8 = reader.read_value()?;
         let target_path = repeat_with(|| parse_jvm!(reader, ctx))
             .take(target_path_length as usize)
-            .collect::<ClassFileParsingResult<_>>()?;
+            .collect::<Result<_, Error>>()?;
         let type_index = reader.read_value()?;
         let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
         let annotation_type = FieldType::from_str(annotation_type_str)?;
@@ -114,7 +114,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
                 let element_value = ElementValue::parse(reader, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<ClassFileParsingResult<_>>()?;
+            .collect::<Result<_, Error>>()?;
         Ok(TypeAnnotation {
             annotation_type,
             target_info,
@@ -125,7 +125,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
 
         match tag as char {
@@ -137,7 +137,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
                     | ('D', ConstantValue::Double(_))
                     | ('F', ConstantValue::Float(_))
                     | ('J', ConstantValue::Long(_)) => Ok(Self::Constant(const_value)),
-                    _ => Err(ClassFileParsingError::MalformedClassFile(
+                    _ => Err(Error::MalformedClassFile(
                         "Primitive element tag must point to primitive constant values",
                     )),
                 }
@@ -170,7 +170,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
                 let values = parse_jvm!(u16, reader, ctx)?;
                 Ok(Self::Array(values))
             }
-            unexpected => Err(ClassFileParsingError::InvalidElementValueTag(unexpected)),
+            unexpected => Err(Error::InvalidElementValueTag(unexpected)),
         }
     }
 }

@@ -10,7 +10,6 @@ use crate::jvm::{
     field::ConstantValue,
     method::{MethodDescriptor, ParameterInfo},
     module::{Module, PackageReference},
-    ClassFileParsingError, ClassFileParsingResult,
 };
 
 use super::{
@@ -18,6 +17,7 @@ use super::{
     jvm_element_parser::{parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::{read_byte_chunk, ClassReader},
+    Error,
 };
 
 #[derive(Debug)]
@@ -93,7 +93,7 @@ impl Attribute {
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let name_idx = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let attribute_length: u32 = reader.read_value()?;
@@ -152,29 +152,27 @@ impl<R: std::io::Read> ParseJvmElement<R> for Attribute {
             "NestMembers" => parse_jvm!(u16, reader, ctx).map(Self::NestMembers),
             "Record" => parse_jvm!(u16, reader, ctx).map(Self::Record),
             "PermittedSubclasses" => parse_jvm!(u16, reader, ctx).map(Self::PermittedSubclasses),
-            unexpected => Err(ClassFileParsingError::UnknownAttribute(
-                unexpected.to_owned(),
-            )),
+            unexpected => Err(Error::UnknownAttribute(unexpected.to_owned())),
         };
         result.and_then(|attribute| {
             if reader.position() == u64::from(attribute_length) {
                 Ok(attribute)
             } else {
-                Err(ClassFileParsingError::UnexpectedData)
+                Err(Error::UnexpectedData)
             }
         })
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for ConstantValue {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let value_index = reader.read_value()?;
         ctx.constant_pool.get_constant_value(value_index)
     }
 }
 
 impl<R: std::io::Read> ParseJvmElement<R> for EnclosingMethod {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> ClassFileParsingResult<Self> {
+    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let class_index = reader.read_value()?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = reader.read_value()?;

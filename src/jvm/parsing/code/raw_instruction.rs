@@ -1,16 +1,13 @@
 use std::collections::BTreeMap;
 
-use crate::jvm::{
-    code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
-    parsing::reader_utils::ClassReader,
-    ClassFileParsingError, ClassFileParsingResult,
-};
+use super::super::{reader_utils::ClassReader, Error};
+use crate::jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction};
 
 impl RawInstruction {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`ClassFileParsingError`] for more information.
-    pub fn from_bytes(bytes: Vec<u8>) -> ClassFileParsingResult<InstructionList<RawInstruction>> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
         let mut cursor = std::io::Cursor::new(bytes);
         let mut inner = BTreeMap::new();
         while let Some((pc, instruction)) = RawInstruction::parse(&mut cursor)? {
@@ -22,17 +19,17 @@ impl RawInstruction {
     #[allow(clippy::too_many_lines)]
     fn parse(
         reader: &mut std::io::Cursor<Vec<u8>>,
-    ) -> ClassFileParsingResult<Option<(ProgramCounter, Self)>> {
+    ) -> Result<Option<(ProgramCounter, Self)>, Error> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
         let pc = u16::try_from(reader.position())
-            .map_err(|_| ClassFileParsingError::TooLongInstructionList)?
+            .map_err(|_| Error::TooLongInstructionList)?
             .into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => Err(ClassFileParsingError::ReadFail(e))?,
+            Err(e) => Err(Error::ReadFail(e))?,
         };
         let instruction = match opcode {
             0x32 => AALoad,
@@ -233,9 +230,7 @@ impl RawInstruction {
                 let dynamic_index = reader.read_value()?;
                 let zero: u16 = reader.read_value()?;
                 if zero != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile(
-                        "Zero paddings are not zero",
-                    ))?;
+                    Err(Error::MalformedClassFile("Zero paddings are not zero"))?;
                 }
                 InvokeDynamic { dynamic_index }
             }
@@ -244,9 +239,7 @@ impl RawInstruction {
                 let count: u8 = reader.read_value()?;
                 let zero: u8 = reader.read_value()?;
                 if zero != 0 {
-                    Err(ClassFileParsingError::MalformedClassFile(
-                        "Zero paddings are not zero",
-                    ))?;
+                    Err(Error::MalformedClassFile("Zero paddings are not zero"))?;
                 }
                 InvokeInterface {
                     method_index,
@@ -324,7 +317,7 @@ impl RawInstruction {
                         let offset = reader.read_value()?;
                         Ok((match_value, offset))
                     })
-                    .collect::<ClassFileParsingResult<_>>()?;
+                    .collect::<Result<_, Error>>()?;
                 LookupSwitch {
                     default,
                     match_offsets,
@@ -433,11 +426,11 @@ impl RawInstruction {
                     0xa9 => RawWideInstruction::Ret {
                         index: reader.read_value()?,
                     },
-                    _ => Err(ClassFileParsingError::UnexpectedOpCode(wide_opcode))?,
+                    _ => Err(Error::UnexpectedOpCode(wide_opcode))?,
                 };
                 Wide(wide_insn)
             }
-            it => Err(ClassFileParsingError::UnexpectedOpCode(it))?,
+            it => Err(Error::UnexpectedOpCode(it))?,
         };
         Ok(Some((pc, instruction)))
     }

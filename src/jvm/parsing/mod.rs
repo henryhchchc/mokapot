@@ -12,4 +12,5 @@ mod module;
 mod parsing_context;
 mod reader_utils;
 
+pub use errors::Error;
 pub use parsing_context::ParsingContext;

@@ -4,7 +4,7 @@ use super::constant_pool::BadConstantPoolIndex;
 
 /// An error that occurs when parsing a Java class file.
 #[derive(Debug, thiserror::Error)]
-pub enum ClassFileParsingError {
+pub enum Error {
     /// An error that occurs when reading from a buffer.
     #[error("Failed to read from buffer: {0}")]
     ReadFail(#[from] std::io::Error),

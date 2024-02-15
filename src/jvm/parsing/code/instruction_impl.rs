@@ -10,8 +10,7 @@ use crate::{
             WideInstruction,
         },
         method::MethodDescriptor,
-        parsing::parsing_context::ParsingContext,
-        ClassFileParsingError, ClassFileParsingResult,
+        parsing::{parsing_context::ParsingContext, Error},
     },
     types::field_type::PrimitiveType,
 };
@@ -20,7 +19,7 @@ impl Instruction {
     pub(crate) fn parse_code(
         reader: Vec<u8>,
         ctx: &ParsingContext,
-    ) -> ClassFileParsingResult<InstructionList<Instruction>> {
+    ) -> Result<InstructionList<Instruction>, Error> {
         let raw_instructions = RawInstruction::from_bytes(reader)?;
         let result = raw_instructions.lift(&ctx.constant_pool)?;
         Ok(result)
@@ -31,7 +30,7 @@ impl Instruction {
         raw_instruction: RawInstruction,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
-    ) -> ClassFileParsingResult<Self> {
+    ) -> Result<Self, Error> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
@@ -355,7 +354,7 @@ impl Instruction {
                     name_and_type_index,
                 } = entry
                 else {
-                    Err(ClassFileParsingError::MismatchedConstantPoolEntryType {
+                    Err(Error::MismatchedConstantPoolEntryType {
                         expected: "InvokeDynamic",
                         found: entry.constant_kind(),
                     })?
@@ -382,7 +381,7 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(ClassFileParsingError::MalformedClassFile(
+                    _ => Err(Error::MalformedClassFile(
                         "NewArray must create an array of primitive types",
                     ))?,
                 };
