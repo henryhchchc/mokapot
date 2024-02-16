@@ -20,7 +20,7 @@ jobs:
         with:
           java-version: 21
           distribution: corretto
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         name: Checkout source code
       - run: cargo build --all-features --verbose
         name: Build
