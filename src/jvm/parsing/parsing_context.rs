@@ -1,6 +1,4 @@
-use crate::jvm::class::ClassVersion;
-
-use super::constant_pool::ConstantPool;
+use crate::jvm::{class::ClassVersion, constant_pool::ConstantPool};
 
 /// Context used to parse a class file.
 #[derive(Debug, Clone)]

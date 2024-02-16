@@ -6,8 +6,7 @@ use std::{
 
 use crate::{
     jvm::{
-        annotation::TypeAnnotation,
-        class::{constant_pool::ConstantPool, ClassReference},
+        annotation::TypeAnnotation, class::ClassReference, constant_pool::ConstantPool,
         parsing::Error,
     },
     types::field_type::FieldType,

@@ -1,10 +1,12 @@
-use crate::jvm::module::{
-    Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleReference, ModuleRequire,
-    PackageReference,
+use crate::jvm::{
+    constant_pool::Entry,
+    module::{
+        Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleReference, ModuleRequire,
+        PackageReference,
+    },
 };
 
 use super::{
-    constant_pool::Entry,
     jvm_element_parser::{parse_flags, parse_jvm, ParseJvmElement},
     parsing_context::ParsingContext,
     reader_utils::ClassReader,

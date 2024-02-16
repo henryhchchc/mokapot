@@ -16,13 +16,6 @@ use super::{
     parsing::Error,
 };
 
-/// APIs for the constant pool in JVM.
-pub mod constant_pool {
-    pub use super::super::parsing::constant_pool::BadConstantPoolIndex;
-    pub use super::super::parsing::constant_pool::ConstantPool;
-    pub use super::super::parsing::constant_pool::Entry as ConstantPoolEntry;
-}
-
 /// A JVM class
 /// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
 #[derive(Debug, Clone)]

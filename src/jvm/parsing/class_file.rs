@@ -3,9 +3,10 @@ use std::iter::repeat_with;
 use crate::{
     jvm::{
         class::{
-            constant_pool::ConstantPool, BootstrapMethod, Class, ClassAccessFlags, ClassReference,
-            ClassVersion, InnerClassInfo, RecordComponent, SourceDebugExtension,
+            BootstrapMethod, Class, ClassAccessFlags, ClassReference, ClassVersion, InnerClassInfo,
+            RecordComponent, SourceDebugExtension,
         },
+        constant_pool::ConstantPool,
         parsing::{
             jvm_element_parser::{parse_flags, parse_jvm},
             reader_utils::ClassReader,
@@ -14,9 +15,7 @@ use crate::{
     macros::extract_attributes,
 };
 
-use super::{
-    jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, Error,
-};
+use super::{jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, Error};
 
 impl Class {
     const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
