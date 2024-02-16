@@ -38,7 +38,7 @@ impl ConstantPool {
     /// Parses a constant pool from the given bytes.
     /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one. See the [JVM Specification §4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.1) for more information.
     /// # Errors
-    /// See [`ClassFileParsingError`] for more information.
+    /// See [`Error`] for more information.
     pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> Result<Self, Error>
     where
         R: std::io::Read,

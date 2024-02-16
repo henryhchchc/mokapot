@@ -149,11 +149,8 @@ impl<I> InstructionList<I> {
 impl InstructionList<RawInstruction> {
     /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
     /// # Errors
-    /// See [`ClassFileParsingError`] for possible errors.
-    pub fn lift(
-        self,
-        constant_pool: &ConstantPool,
-    ) -> Result<InstructionList<Instruction>, Error> {
+    /// See [`Error`] for possible errors.
+    pub fn lift(self, constant_pool: &ConstantPool) -> Result<InstructionList<Instruction>, Error> {
         let mut instructions = BTreeMap::new();
         for (pc, raw_instruction) in self {
             let instruction =

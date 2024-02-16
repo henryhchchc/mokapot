@@ -85,9 +85,9 @@ pub struct Class {
 impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
-    /// - [`ClassFileParsingError::ReadFail`](crate::jvm::parsing::errors::ClassFileParsingError::ReadFail) If the reader fails to read.
+    /// - [`ReadFail`](crate::jvm::parsing::Error::ReadFail) If the reader fails to read.
     /// Other errors may be returned if the class file is malformed.
-    /// See [`ClassFileParsingError`](crate::jvm::parsing::errors::ClassFileParsingError) for more information.
+    /// See [`Error`] for more information.
     pub fn from_reader<R>(reader: R) -> Result<Class, Error>
     where
         R: std::io::Read,
