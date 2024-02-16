@@ -25,7 +25,7 @@ const fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, Error> 
 }
 
 impl ConstantPool {
-    pub(crate) fn get_str(&self, index: u16) -> Result<&str, Error> {
+    pub(super) fn get_str(&self, index: u16) -> Result<&str, Error> {
         let entry = self.get_entry(index)?;
         match entry {
             Entry::Utf8(JavaString::Utf8(string)) => Ok(string),
@@ -34,7 +34,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_class_ref(&self, index: u16) -> Result<ClassReference, Error> {
+    pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
@@ -44,7 +44,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, Error> {
+    pub(super) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, Error> {
         let entry = self.get_entry(value_index)?;
         match entry {
             &Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
@@ -88,7 +88,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_module_ref(&self, index: u16) -> Result<ModuleReference, Error> {
+    pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
@@ -98,7 +98,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_package_ref(&self, index: u16) -> Result<PackageReference, Error> {
+    pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
@@ -110,7 +110,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_field_ref(&self, index: u16) -> Result<FieldReference, Error> {
+    pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::FieldRef {
             class_index,
@@ -130,7 +130,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_name_and_type(&self, index: u16) -> Result<(&str, &str), Error> {
+    pub(super) fn get_name_and_type(&self, index: u16) -> Result<(&str, &str), Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::NameAndType {
             name_index,
@@ -145,7 +145,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_method_ref(&self, index: u16) -> Result<MethodReference, Error> {
+    pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodReference, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::MethodRef {
             class_index,
@@ -170,7 +170,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, Error> {
+    pub(super) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, Error> {
         #[allow(clippy::enum_glob_use)]
         use MethodHandle::*;
 
@@ -196,7 +196,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_type_ref(&self, index: u16) -> Result<TypeReference, Error> {
+    pub(super) fn get_type_ref(&self, index: u16) -> Result<TypeReference, Error> {
         let ClassReference { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?

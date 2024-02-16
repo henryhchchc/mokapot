@@ -2,13 +2,13 @@ use std::{io::Read, usize};
 
 use crate::jvm::code::ProgramCounter;
 
-pub(crate) trait ValueReaderExt
+pub(super) trait ValueReaderExt
 where
     Self: Read + Sized,
 {
     fn read_value<T: Readable>(&mut self) -> std::io::Result<T>;
 }
-pub(crate) trait Readable {
+pub(super) trait Readable {
     fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self>
     where
         Self: Sized;
@@ -54,7 +54,7 @@ macro_rules! impl_readable_for {
 impl_readable_for!(u8, u16, u32, i8, i16, i32, i64, f32, f64);
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
+pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
 where
     R: Read,
 {

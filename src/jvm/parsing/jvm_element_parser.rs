@@ -9,10 +9,7 @@ use super::{
     Error,
 };
 
-pub(crate) trait JvmElement
-where
-    Self: Sized,
-{
+pub(super) trait JvmElement: Sized {
     fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error>;
 
     fn parse_vec<C, R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Vec<Self>, Error>
@@ -35,7 +32,7 @@ impl JvmElement for String {
 }
 
 #[inline]
-pub(crate) fn parse_flags<F, R>(reader: &mut R) -> Result<F, Error>
+pub(super) fn parse_flags<F, R>(reader: &mut R) -> Result<F, Error>
 where
     R: Read,
     F: Flags<Bits = u16>,

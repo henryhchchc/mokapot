@@ -1,7 +1,10 @@
 use std::{collections::BTreeMap, io::Cursor};
 
 use super::super::{reader_utils::ValueReaderExt, Error};
-use crate::jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction};
+use crate::{
+    jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
+    macros::malform,
+};
 
 impl RawInstruction {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
@@ -228,7 +231,7 @@ impl RawInstruction {
                 let dynamic_index = reader.read_value()?;
                 let zero: u16 = reader.read_value()?;
                 if zero != 0 {
-                    Err(Error::MalformedClassFile("Zero paddings are not zero"))?;
+                    malform!("Zero paddings are not zero");
                 }
                 InvokeDynamic { dynamic_index }
             }
@@ -237,7 +240,7 @@ impl RawInstruction {
                 let count: u8 = reader.read_value()?;
                 let zero: u8 = reader.read_value()?;
                 if zero != 0 {
-                    Err(Error::MalformedClassFile("Zero paddings are not zero"))?;
+                    malform!("Zero paddings are not zero");
                 }
                 InvokeInterface {
                     method_index,

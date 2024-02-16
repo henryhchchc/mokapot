@@ -40,7 +40,7 @@ macro_rules! extract_attributes {
 }
 
 macro_rules! malform {
-    ($msg:literal) => {
+    ($msg:expr) => {
         Err(Error::MalformedClassFile($msg))?
     };
 }

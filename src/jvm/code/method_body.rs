@@ -9,6 +9,7 @@ use crate::{
         annotation::TypeAnnotation, class::ClassReference, constant_pool::ConstantPool,
         parsing::Error,
     },
+    macros::malform,
     types::field_type::FieldType,
 };
 
@@ -232,9 +233,7 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(Error::MalformedClassFile(
-                    "Name of local variable does not match",
-                ))?;
+                malform!("Name of local variable does not match");
             }
         }
         entry.name = Some(name);
@@ -251,9 +250,7 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(Error::MalformedClassFile(
-                    "Name of local variable does not match",
-                ))?;
+                malform!("Name of local variable does not match");
             }
         }
         entry.name = Some(name);

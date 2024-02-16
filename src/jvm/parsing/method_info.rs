@@ -6,7 +6,7 @@ use crate::{
         method::{Method, MethodAccessFlags, MethodDescriptor},
         parsing::{jvm_element_parser::parse_flags, parsing_context::ParsingContext},
     },
-    macros::extract_attributes,
+    macros::{extract_attributes, malform},
 };
 
 use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Error};
@@ -53,12 +53,12 @@ impl JvmElement for Method {
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
-                Err(Error::MalformedClassFile("Unexpected code attribute"))?;
+                malform!("Unexpected code attribute");
             }
         } else {
             // Otherwise, its method_info structure must have exactly one Code attribute in its attributes table
             if body.is_none() {
-                Err(Error::MalformedClassFile("The method must have a body"))?;
+                malform!("The method must have a body");
             }
         }
 
@@ -67,7 +67,10 @@ impl JvmElement for Method {
             if !access_flags.contains(MethodAccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
-                Err(Error::MalformedClassFile("Class initializer in class version 51 or above must be static and takes no arguments"))?;
+                malform!(concat!(
+                    "Class initializer in class version 51 or above",
+                    "must be static and takes no arguments"
+                ));
             }
         }
 

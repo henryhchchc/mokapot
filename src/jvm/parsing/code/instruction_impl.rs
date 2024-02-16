@@ -12,6 +12,7 @@ use crate::{
         method::MethodDescriptor,
         parsing::{parsing_context::ParsingContext, Error},
     },
+    macros::malform,
     types::field_type::PrimitiveType,
 };
 
@@ -381,9 +382,7 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(Error::MalformedClassFile(
-                        "NewArray must create an array of primitive types",
-                    ))?,
+                    _ => malform!("NewArray must create an array of primitive types"),
                 };
                 Self::NewArray(element_type)
             }
