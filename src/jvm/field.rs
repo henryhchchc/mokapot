@@ -55,7 +55,7 @@ impl Field {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum JavaString {
     /// A valid UTF-8 string.
-    ValidUtf8(String),
+    Utf8(String),
     /// An string that is not valid UTF-8.
     InvalidUtf8(Vec<u8>),
 }
@@ -63,7 +63,7 @@ pub enum JavaString {
 impl Display for JavaString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JavaString::ValidUtf8(value) => write!(f, "String(\"{value}\")"),
+            JavaString::Utf8(value) => write!(f, "String(\"{value}\")"),
             JavaString::InvalidUtf8(value) => write!(
                 f,
                 "String({}) // Invalid UTF-8",

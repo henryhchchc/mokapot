@@ -14,12 +14,13 @@ macro_rules! extract_attributes {
                 match attr {
                 $(
                     Attribute::$attr(it) => if $var.replace(it).is_some() {
-                        Err(Error::MalformedClassFile(concat!(
+                        let message = concat!(
                             "There should be at most one ",
                             stringify!($attr),
                             " in a ",
                             $env
-                        )))?;
+                        );
+                        Err(Error::MalformedClassFile(message))?;
                     },
                 )*
                 $(
@@ -38,4 +39,11 @@ macro_rules! extract_attributes {
     };
 }
 
+macro_rules! malform {
+    ($msg:literal) => {
+        Err(Error::MalformedClassFile($msg))?
+    };
+}
+
 pub(crate) use extract_attributes;
+pub(crate) use malform;

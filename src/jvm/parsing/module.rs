@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::jvm::{
     constant_pool::Entry,
     module::{
@@ -7,16 +9,13 @@ use crate::jvm::{
 };
 
 use super::{
-    jvm_element_parser::{parse_flags, parse_jvm, ParseJvmElement},
+    jvm_element_parser::{parse_flags, JvmElement},
     parsing_context::ParsingContext,
-    reader_utils::ClassReader,
+    reader_utils::ValueReaderExt,
     Error,
 };
 
-fn parse_version<R>(reader: &mut R, ctx: &ParsingContext) -> Result<Option<String>, Error>
-where
-    R: std::io::Read,
-{
+fn parse_version<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Option<String>, Error> {
     let version_index = reader.read_value()?;
     let result = if version_index > 0 {
         Some(ctx.constant_pool.get_str(version_index)?.to_owned())
@@ -26,9 +25,9 @@ where
     Ok(result)
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ModuleRequire {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let module = parse_jvm!(reader, ctx)?;
+impl JvmElement for ModuleRequire {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let module = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let version = parse_version(reader, ctx)?;
         Ok(ModuleRequire {
@@ -39,34 +38,34 @@ impl<R: std::io::Read> ParseJvmElement<R> for ModuleRequire {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ModuleExport {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let package = parse_jvm!(reader, ctx)?;
+impl JvmElement for ModuleExport {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let package = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
-        let to = parse_jvm!(u16, reader, ctx)?;
+        let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         Ok(ModuleExport { package, flags, to })
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ModuleOpen {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let package = parse_jvm!(reader, ctx)?;
+impl JvmElement for ModuleOpen {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let package = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
-        let to = parse_jvm!(u16, reader, ctx)?;
+        let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         Ok(ModuleOpen { package, flags, to })
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ModuleProvide {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let service = parse_jvm!(reader, ctx)?;
-        let with = parse_jvm!(u16, reader, ctx)?;
+impl JvmElement for ModuleProvide {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let service = JvmElement::parse(reader, ctx)?;
+        let with = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         Ok(ModuleProvide { service, with })
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for Module {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for Module {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module_info_idx = reader.read_value()?;
         let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
         let &Entry::Module { name_index } = module_info_entry else {
@@ -82,24 +81,24 @@ impl<R: std::io::Read> ParseJvmElement<R> for Module {
             name,
             flags,
             version,
-            requires: parse_jvm!(u16, reader, ctx)?,
-            exports: parse_jvm!(u16, reader, ctx)?,
-            opens: parse_jvm!(u16, reader, ctx)?,
-            uses: parse_jvm!(u16, reader, ctx)?,
-            provides: parse_jvm!(u16, reader, ctx)?,
+            requires: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+            exports: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+            opens: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+            uses: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+            provides: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
         })
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for PackageReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for PackageReference {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let package_index = reader.read_value()?;
         ctx.constant_pool.get_package_ref(package_index)
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ModuleReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for ModuleReference {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module_ref_idx = reader.read_value()?;
         ctx.constant_pool.get_module_ref(module_ref_idx)
     }

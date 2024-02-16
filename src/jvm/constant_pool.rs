@@ -3,7 +3,7 @@
 use super::{field::JavaString, parsing::Error};
 
 #[derive(Debug, Clone)]
-pub(crate) enum Slot {
+pub(super) enum Slot {
     Entry(Entry),
     Padding,
 }
@@ -12,7 +12,7 @@ pub(crate) enum Slot {
 /// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
 #[derive(Debug, Clone)]
 pub struct ConstantPool {
-    pub(super) entries: Vec<Slot>,
+    inner: Vec<Slot>,
 }
 
 impl ConstantPool {
@@ -24,15 +24,27 @@ impl ConstantPool {
     where
         R: std::io::Read,
     {
-        let entries = Entry::parse_multiple(reader, constant_pool_count)?;
-        Ok(Self { entries })
+        // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
+        let count: usize = constant_pool_count.into();
+        let mut inner = Vec::with_capacity(count);
+        inner.push(Slot::Padding);
+        while inner.len() < count {
+            let entry = Entry::parse(reader)?;
+            if let entry @ (Entry::Long(_) | Entry::Double(_)) = entry {
+                inner.push(Slot::Entry(entry));
+                inner.push(Slot::Padding);
+            } else {
+                inner.push(Slot::Entry(entry));
+            }
+        }
+        Ok(Self { inner })
     }
 
     /// Gets the constant pool entry at the given index.
     /// # Errors
     /// - [`BadConstantPoolIndex`] if `index` does not point to a valid entry.
     pub fn get_entry(&self, index: u16) -> Result<&Entry, BadConstantPoolIndex> {
-        match self.entries.get(index as usize) {
+        match self.inner.get(index as usize) {
             Some(Slot::Entry(entry)) => Ok(entry),
             _ => Err(BadConstantPoolIndex(index)),
         }

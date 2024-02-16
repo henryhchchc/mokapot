@@ -1,93 +1,57 @@
 use std::{io::Read, usize};
 
-pub(crate) trait ClassReader
+use crate::jvm::code::ProgramCounter;
+
+pub(crate) trait ValueReaderExt
 where
     Self: Read + Sized,
 {
-    fn read_value<T>(&mut self) -> std::io::Result<T>
-    where
-        T: ReadFromReader<Self>,
-    {
-        T::read_from_reader(self)
-    }
+    fn read_value<T: Readable>(&mut self) -> std::io::Result<T>;
 }
-pub(crate) trait ReadFromReader<R: Read> {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self>
+pub(crate) trait Readable {
+    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self>
     where
         Self: Sized;
 }
 
-impl<T> ClassReader for T where T: Read + Sized {}
+impl<R: Read + Sized> ValueReaderExt for R {
+    fn read_value<T: Readable>(&mut self) -> std::io::Result<T>
+    where
+        T: Readable,
+    {
+        T::read_from_reader(self)
+    }
+}
 
-impl<R: Read, const N: usize> ReadFromReader<R> for [u8; N] {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
+impl<const N: usize> Readable for [u8; N] {
+    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
     }
 }
 
-impl<R: Read> ReadFromReader<R> for u8 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
+impl Readable for ProgramCounter {
+    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let inner = u16::read_from_reader(reader)?;
+        Ok(inner.into())
     }
 }
 
-impl<R: Read> ReadFromReader<R> for u16 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
+macro_rules! impl_readable_for {
+    ($($t:ty),*) => {
+        $(
+            impl Readable for $t {
+                fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+                    let buf = reader.read_value()?;
+                    Ok(Self::from_be_bytes(buf))
+                }
+            }
+        )*
+    };
 }
 
-impl<R: Read> ReadFromReader<R> for u32 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-
-impl<R: Read> ReadFromReader<R> for i8 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-
-impl<R: Read> ReadFromReader<R> for i16 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-
-impl<R: Read> ReadFromReader<R> for i32 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-
-impl<R: Read> ReadFromReader<R> for i64 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-impl<R: Read> ReadFromReader<R> for f32 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
-
-impl<R: Read> ReadFromReader<R> for f64 {
-    fn read_from_reader(reader: &mut R) -> std::io::Result<Self> {
-        let buf = reader.read_value()?;
-        Ok(Self::from_be_bytes(buf))
-    }
-}
+impl_readable_for!(u8, u16, u32, i8, i16, i32, i64, f32, f64);
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
 pub(crate) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
@@ -101,7 +65,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::jvm::parsing::reader_utils::ClassReader;
+    use super::ValueReaderExt;
 
     #[test]
     fn read_bytes_success() {

@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io::Cursor};
 
-use super::super::{reader_utils::ClassReader, Error};
+use super::super::{reader_utils::ValueReaderExt, Error};
 use crate::jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction};
 
 impl RawInstruction {
@@ -8,7 +8,7 @@ impl RawInstruction {
     /// # Errors
     /// See [`ClassFileParsingError`] for more information.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
-        let mut cursor = std::io::Cursor::new(bytes);
+        let mut cursor = Cursor::new(bytes);
         let mut inner = BTreeMap::new();
         while let Some((pc, instruction)) = RawInstruction::parse(&mut cursor)? {
             inner.insert(pc, instruction);
@@ -17,9 +17,7 @@ impl RawInstruction {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn parse(
-        reader: &mut std::io::Cursor<Vec<u8>>,
-    ) -> Result<Option<(ProgramCounter, Self)>, Error> {
+    fn parse(reader: &mut Cursor<Vec<u8>>) -> Result<Option<(ProgramCounter, Self)>, Error> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 

@@ -1,4 +1,4 @@
-use std::{iter::repeat_with, str::FromStr};
+use std::{io::Read, iter::repeat_with, str::FromStr};
 
 use crate::{
     jvm::{
@@ -11,14 +11,12 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::{parse_jvm, ParseJvmElement},
-    parsing_context::ParsingContext,
-    reader_utils::ClassReader,
+    jvm_element_parser::JvmElement, parsing_context::ParsingContext, reader_utils::ValueReaderExt,
     Error,
 };
 
-impl<R: std::io::Read> ParseJvmElement<R> for TypePathElement {
-    fn parse(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for TypePathElement {
+    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let kind: u8 = reader.read_value()?;
         let argument_index: u8 = reader.read_value()?;
         match (kind, argument_index) {
@@ -31,8 +29,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypePathElement {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for Annotation {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let type_idx = reader.read_value()?;
         let annotation_type = ctx.constant_pool.get_str(type_idx)?;
         let annotation_type = FieldType::from_str(annotation_type)?;
@@ -51,8 +49,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for Annotation {
         })
     }
 }
-impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for TypeAnnotation {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let target_type = reader.read_value()?;
         let target_info = match target_type {
             0x00 | 0x01 => TargetInfo::TypeParameter {
@@ -100,7 +98,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
         };
         // The length of target path is represented by a single byte.
         let target_path_length: u8 = reader.read_value()?;
-        let target_path = repeat_with(|| parse_jvm!(reader, ctx))
+        let target_path = repeat_with(|| JvmElement::parse(reader, ctx))
             .take(target_path_length as usize)
             .collect::<Result<_, Error>>()?;
         let type_index = reader.read_value()?;
@@ -124,8 +122,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for TypeAnnotation {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for ElementValue {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
 
         match tag as char {
@@ -145,9 +143,9 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
             's' => {
                 let utf8_idx = reader.read_value()?;
                 let str = ctx.constant_pool.get_str(utf8_idx)?;
-                Ok(Self::Constant(ConstantValue::String(
-                    JavaString::ValidUtf8(str.to_owned()),
-                )))
+                Ok(Self::Constant(ConstantValue::String(JavaString::Utf8(
+                    str.to_owned(),
+                ))))
             }
             'e' => {
                 let enum_type_name_idx = reader.read_value()?;
@@ -167,7 +165,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for ElementValue {
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
             '[' => {
-                let values = parse_jvm!(u16, reader, ctx)?;
+                let values = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
                 Ok(Self::Array(values))
             }
             unexpected => Err(Error::InvalidElementValueTag(unexpected)),

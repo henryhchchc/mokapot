@@ -1,4 +1,6 @@
-use std::iter::repeat_with;
+use std::{io::Read, iter::repeat_with};
+
+use itertools::Itertools;
 
 use crate::{
     jvm::{
@@ -7,23 +9,17 @@ use crate::{
             RecordComponent, SourceDebugExtension,
         },
         constant_pool::ConstantPool,
-        parsing::{
-            jvm_element_parser::{parse_flags, parse_jvm},
-            reader_utils::ClassReader,
-        },
+        parsing::{jvm_element_parser::parse_flags, reader_utils::ValueReaderExt},
     },
-    macros::extract_attributes,
+    macros::{extract_attributes, malform},
 };
 
-use super::{jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext, Error};
+use super::{jvm_element_parser::JvmElement, parsing_context::ParsingContext, Error};
 
 impl Class {
     const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
 
-    pub(crate) fn parse<R>(reader: &mut R) -> Result<Self, Error>
-    where
-        R: std::io::Read,
-    {
+    pub(crate) fn parse<R: Read>(reader: &mut R) -> Result<Self, Error> {
         let magic: u32 = reader.read_value()?;
         if magic != Self::JAVA_CLASS_MAIGC {
             return Err(Error::NotAClassFile);
@@ -41,9 +37,7 @@ impl Class {
         let super_class = match super_class_idx {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
-            0 => Err(Error::MalformedClassFile(
-                "Class must have a super type except for java/lang/Object or a module",
-            ))?,
+            0 => malform!("Class must have a super type except for java/lang/Object or a module"),
             it => Some(constant_pool.get_class_ref(it)?),
         };
 
@@ -55,14 +49,17 @@ impl Class {
 
         let ctx = &parsing_context;
 
-        let interfaces = parse_jvm!(u16, reader, ctx)?;
-        let fields = parse_jvm!(u16, reader, ctx)?;
-        let methods = parse_jvm!(u16, reader, ctx)?;
-        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
+        let interfaces = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let fields = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let methods = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
 
-        let mut may_remain: [u8; 1] = [0];
-        let remain = std::io::Read::read(reader, &mut may_remain)?;
-        if remain == 1 {
+        let has_unread_data = {
+            let mut may_remain = [0u8];
+            let remain = Read::read(reader, &mut may_remain)?;
+            remain == 1
+        };
+        if has_unread_data {
             return Err(Error::UnexpectedData);
         }
 
@@ -121,8 +118,8 @@ impl Class {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for BootstrapMethod {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let bootstrap_method_ref = reader.read_value()?;
         let method_ref = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
         let num_bootstrap_arguments: u16 = reader.read_value()?;
@@ -131,7 +128,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
             ctx.constant_pool.get_constant_value(arg_idx)
         })
         .take(num_bootstrap_arguments as usize)
-        .collect::<Result<_, _>>()?;
+        .try_collect()?;
         Ok(Self {
             method: method_ref,
             arguments,
@@ -139,9 +136,9 @@ impl<R: std::io::Read> ParseJvmElement<R> for BootstrapMethod {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let inner_class = parse_jvm!(reader, ctx)?;
+impl JvmElement for InnerClassInfo {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let inner_class = JvmElement::parse(reader, ctx)?;
         let outer_class_info_index = reader.read_value()?;
         let outer_class = if outer_class_info_index == 0 {
             None
@@ -165,12 +162,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for InnerClassInfo {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let name = parse_jvm!(reader, ctx)?;
-        let component_type = parse_jvm!(reader, ctx)?;
+impl JvmElement for RecordComponent {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let name = JvmElement::parse(reader, ctx)?;
+        let component_type = JvmElement::parse(reader, ctx)?;
 
-        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
+        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
             for attributes in "record_component" by {
                 let signature: Signature,
@@ -197,15 +194,15 @@ impl<R: std::io::Read> ParseJvmElement<R> for RecordComponent {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ClassReference {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for ClassReference {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let class_info_idx = reader.read_value()?;
         ctx.constant_pool.get_class_ref(class_info_idx)
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for SourceDebugExtension {
-    fn parse(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for SourceDebugExtension {
+    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let mut content = Vec::new();
         reader.read_to_end(&mut content)?;
         Ok(Self::new(content))

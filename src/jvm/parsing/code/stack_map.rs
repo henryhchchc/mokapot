@@ -1,17 +1,15 @@
-use std::iter::repeat_with;
+use std::{io::Read, iter::repeat_with};
 
 use crate::jvm::{
     code::{StackMapFrame, VerificationTypeInfo},
     parsing::{
-        jvm_element_parser::{parse_jvm, ParseJvmElement},
-        parsing_context::ParsingContext,
-        reader_utils::ClassReader,
-        Error,
+        jvm_element_parser::JvmElement, parsing_context::ParsingContext,
+        reader_utils::ValueReaderExt, Error,
     },
 };
 
-impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for StackMapFrame {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let frame_type: u8 = reader.read_value()?;
         let result = match frame_type {
             it @ 0..=63 => Self::SameFrame {
@@ -19,11 +17,11 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
             },
             it @ 64..=127 => Self::SameLocals1StackItemFrame {
                 offset_delta: u16::from(it) - 64,
-                stack: parse_jvm!(reader, ctx)?,
+                stack: JvmElement::parse(reader, ctx)?,
             },
             247 => {
                 let offset_delta = reader.read_value()?;
-                let stack = parse_jvm!(reader, ctx)?;
+                let stack = JvmElement::parse(reader, ctx)?;
                 Self::SameLocals1StackItemFrame {
                     offset_delta,
                     stack,
@@ -44,7 +42,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
             it @ 252..=254 => {
                 let offset_delta = reader.read_value()?;
                 let locals_count = it - 251;
-                let locals = repeat_with(|| parse_jvm!(reader, ctx))
+                let locals = repeat_with(|| JvmElement::parse(reader, ctx))
                     .take(locals_count as usize)
                     .collect::<Result<_, _>>()?;
                 Self::AppendFrame {
@@ -56,8 +54,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
                 let offset_delta = reader.read_value()?;
                 Self::FullFrame {
                     offset_delta,
-                    locals: parse_jvm!(u16, reader, ctx)?,
-                    stack: parse_jvm!(u16, reader, ctx)?,
+                    locals: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+                    stack: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
                 }
             }
             _ => Err(Error::UnknownStackMapFrameType(frame_type))?,
@@ -66,8 +64,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for StackMapFrame {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for VerificationTypeInfo {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
         let result = match tag {
             0 => Self::TopVariable,
@@ -83,7 +81,7 @@ impl<R: std::io::Read> ParseJvmElement<R> for VerificationTypeInfo {
                 Self::ObjectVariable(class_ref)
             }
             8 => {
-                let offset = reader.read_value::<u16>()?.into();
+                let offset = reader.read_value()?;
                 Self::UninitializedVariable { offset }
             }
             unexpected => Err(Error::InvalidVerificationTypeInfoTag(unexpected))?,

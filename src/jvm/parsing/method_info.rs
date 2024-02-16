@@ -1,29 +1,26 @@
-use std::str::FromStr;
+use std::{io::Read, str::FromStr};
 
 use crate::{
     jvm::{
         class::ClassReference,
         method::{Method, MethodAccessFlags, MethodDescriptor},
-        parsing::{
-            jvm_element_parser::{parse_flags, parse_jvm},
-            parsing_context::ParsingContext,
-        },
+        parsing::{jvm_element_parser::parse_flags, parsing_context::ParsingContext},
     },
     macros::extract_attributes,
 };
 
-use super::{jvm_element_parser::ParseJvmElement, reader_utils::ClassReader, Error};
+use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Error};
 
-impl<R: std::io::Read> ParseJvmElement<R> for Method {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for Method {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
-        let name = parse_jvm!(reader, ctx)?;
-        let descriptor: MethodDescriptor = parse_jvm!(reader, ctx)?;
+        let name = JvmElement::parse(reader, ctx)?;
+        let descriptor: MethodDescriptor = JvmElement::parse(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 
-        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
+        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
             for attributes in "method_info" by {
                 let body: Code,
@@ -96,8 +93,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for Method {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for MethodDescriptor {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for MethodDescriptor {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         MethodDescriptor::from_str(descriptor).map_err(Error::from)

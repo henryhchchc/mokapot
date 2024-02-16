@@ -1,29 +1,25 @@
-use std::str::FromStr;
+use std::{io::Read, str::FromStr};
 
 use crate::{
-    jvm::{
-        class::ClassReference,
-        field::Field,
-        parsing::jvm_element_parser::{parse_flags, parse_jvm},
-    },
+    jvm::{class::ClassReference, field::Field, parsing::jvm_element_parser::parse_flags},
     macros::extract_attributes,
     types::field_type::FieldType,
 };
 
 use super::{
-    jvm_element_parser::ParseJvmElement, parsing_context::ParsingContext,
-    reader_utils::ClassReader, Error,
+    jvm_element_parser::JvmElement, parsing_context::ParsingContext, reader_utils::ValueReaderExt,
+    Error,
 };
 
-impl<R: std::io::Read> ParseJvmElement<R> for Field {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for Field {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let access_flags = parse_flags(reader)?;
-        let name = parse_jvm!(reader, ctx)?;
-        let field_type = parse_jvm!(reader, ctx)?;
+        let name = JvmElement::parse(reader, ctx)?;
+        let field_type = JvmElement::parse(reader, ctx)?;
         let owner = ClassReference {
             binary_name: ctx.current_class_binary_name.clone(),
         };
-        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
+        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
             for attributes in "field_info" by {
                 let constant_value: ConstantValue,
@@ -58,8 +54,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for Field {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for FieldType {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for FieldType {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         FieldType::from_str(descriptor).map_err(Error::from)

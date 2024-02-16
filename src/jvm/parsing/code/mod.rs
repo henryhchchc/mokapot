@@ -2,13 +2,13 @@ pub(super) mod instruction_impl;
 pub(super) mod raw_instruction;
 pub(super) mod stack_map;
 
-use std::str::FromStr;
+use std::{io::Read, str::FromStr};
 
 use crate::{
     jvm::{
         code::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableId,
-            LocalVariableTable, MethodBody,
+            LocalVariableTable, MethodBody, ProgramCounter,
         },
         method::ParameterInfo,
     },
@@ -17,9 +17,9 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::{parse_flags, parse_jvm, ParseJvmElement},
+    jvm_element_parser::{parse_flags, JvmElement},
     parsing_context::ParsingContext,
-    reader_utils::{read_byte_chunk, ClassReader},
+    reader_utils::{read_byte_chunk, ValueReaderExt},
     Error,
 };
 
@@ -37,9 +37,9 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
-    fn parse(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
-        let start_pc = reader.read_value::<u16>()?.into();
+impl JvmElement for LineNumberTableEntry {
+    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+        let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
         Ok(Self {
             start_pc,
@@ -48,12 +48,12 @@ impl<R: std::io::Read> ParseJvmElement<R> for LineNumberTableEntry {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let start_pc = reader.read_value::<u16>()?.into();
-        let end_pc = reader.read_value::<u16>()?.into();
+impl JvmElement for ExceptionTableEntry {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let start_pc = reader.read_value()?;
+        let end_pc = reader.read_value()?;
         let covered_pc = start_pc..=end_pc;
-        let handler_pc = reader.read_value::<u16>()?.into();
+        let handler_pc = reader.read_value()?;
         let catch_type_idx = reader.read_value()?;
         let catch_type = if catch_type_idx == 0 {
             None
@@ -68,11 +68,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for ExceptionTableEntry {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let start_pc = reader.read_value::<u16>()?;
-        let length = reader.read_value::<u16>()?;
-        let effective_range = start_pc.into()..(start_pc + length).into();
+impl JvmElement for LocalVariableDescAttr {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let effective_range = {
+            let start_pc: ProgramCounter = reader.read_value()?;
+            let length = reader.read_value::<u16>()?;
+            let end_pc = start_pc.offset(i32::from(length))?;
+            start_pc..end_pc
+        };
         let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor_index = reader.read_value()?;
@@ -90,11 +93,14 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableDescAttr {
         })
     }
 }
-impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
-        let start_pc = reader.read_value::<u16>()?;
-        let length = reader.read_value::<u16>()?;
-        let effective_range = start_pc.into()..(start_pc + length).into();
+impl JvmElement for LocalVariableTypeAttr {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+        let effective_range = {
+            let start_pc: ProgramCounter = reader.read_value()?;
+            let length = reader.read_value::<u16>()?;
+            let end_pc = start_pc.offset(i32::from(length))?;
+            start_pc..end_pc
+        };
         let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let signature_index = reader.read_value()?;
@@ -111,8 +117,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for LocalVariableTypeAttr {
         })
     }
 }
-impl<R: std::io::Read> ParseJvmElement<R> for ParameterInfo {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for ParameterInfo {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let name_index = reader.read_value()?;
         let name = if name_index == 0 {
             None
@@ -124,8 +130,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for ParameterInfo {
     }
 }
 
-impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
-    fn parse(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for MethodBody {
+    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;
@@ -133,8 +139,8 @@ impl<R: std::io::Read> ParseJvmElement<R> for MethodBody {
         let code = read_byte_chunk(reader, code_length as usize)?;
         let instructions = Instruction::parse_code(code, ctx)?;
 
-        let exception_table = parse_jvm!(u16, reader, ctx)?;
-        let attributes: Vec<Attribute> = parse_jvm!(u16, reader, ctx)?;
+        let exception_table = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" by {
