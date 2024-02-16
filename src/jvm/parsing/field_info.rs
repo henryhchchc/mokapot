@@ -12,7 +12,7 @@ use super::{
 };
 
 impl JvmElement for Field {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let access_flags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let field_type = JvmElement::parse(reader, ctx)?;
@@ -55,7 +55,7 @@ impl JvmElement for Field {
 }
 
 impl JvmElement for FieldType {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         FieldType::from_str(descriptor).map_err(Error::from)

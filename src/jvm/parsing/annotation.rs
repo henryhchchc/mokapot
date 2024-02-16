@@ -16,7 +16,7 @@ use super::{
 };
 
 impl JvmElement for TypePathElement {
-    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let kind: u8 = reader.read_value()?;
         let argument_index: u8 = reader.read_value()?;
         match (kind, argument_index) {
@@ -30,7 +30,7 @@ impl JvmElement for TypePathElement {
 }
 
 impl JvmElement for Annotation {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let type_idx = reader.read_value()?;
         let annotation_type = ctx.constant_pool.get_str(type_idx)?;
         let annotation_type = FieldType::from_str(annotation_type)?;
@@ -50,7 +50,7 @@ impl JvmElement for Annotation {
     }
 }
 impl JvmElement for TypeAnnotation {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let target_type = reader.read_value()?;
         let target_info = match target_type {
             0x00 | 0x01 => TargetInfo::TypeParameter {
@@ -123,7 +123,7 @@ impl JvmElement for TypeAnnotation {
 }
 
 impl JvmElement for ElementValue {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
 
         match tag as char {

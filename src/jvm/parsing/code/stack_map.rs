@@ -9,7 +9,7 @@ use crate::jvm::{
 };
 
 impl JvmElement for StackMapFrame {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let frame_type: u8 = reader.read_value()?;
         let result = match frame_type {
             it @ 0..=63 => Self::SameFrame {
@@ -65,7 +65,7 @@ impl JvmElement for StackMapFrame {
 }
 
 impl JvmElement for VerificationTypeInfo {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
         let result = match tag {
             0 => Self::TopVariable,

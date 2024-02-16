@@ -12,7 +12,7 @@ use crate::{
 use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Error};
 
 impl JvmElement for Method {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let descriptor: MethodDescriptor = JvmElement::parse(reader, ctx)?;
@@ -97,7 +97,7 @@ impl JvmElement for Method {
 }
 
 impl JvmElement for MethodDescriptor {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         MethodDescriptor::from_str(descriptor).map_err(Error::from)

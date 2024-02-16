@@ -1,5 +1,7 @@
 //! APIs for the constant pool in JVM.
 
+use std::io::Read;
+
 use super::{field::JavaString, parsing::Error};
 
 #[derive(Debug, Clone)]
@@ -22,7 +24,7 @@ impl ConstantPool {
     /// See [`Error`] for more information.
     pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> Result<Self, Error>
     where
-        R: std::io::Read,
+        R: Read + ?Sized,
     {
         // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
         let count: usize = constant_pool_count.into();

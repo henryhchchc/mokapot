@@ -15,7 +15,10 @@ use super::{
     Error,
 };
 
-fn parse_version<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Option<String>, Error> {
+fn parse_version<R: Read + ?Sized>(
+    reader: &mut R,
+    ctx: &ParsingContext,
+) -> Result<Option<String>, Error> {
     let version_index = reader.read_value()?;
     let result = if version_index > 0 {
         Some(ctx.constant_pool.get_str(version_index)?.to_owned())
@@ -26,7 +29,7 @@ fn parse_version<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Option
 }
 
 impl JvmElement for ModuleRequire {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let version = parse_version(reader, ctx)?;
@@ -39,7 +42,7 @@ impl JvmElement for ModuleRequire {
 }
 
 impl JvmElement for ModuleExport {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let package = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
@@ -48,7 +51,7 @@ impl JvmElement for ModuleExport {
 }
 
 impl JvmElement for ModuleOpen {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let package = JvmElement::parse(reader, ctx)?;
         let flags = parse_flags(reader)?;
         let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
@@ -57,7 +60,7 @@ impl JvmElement for ModuleOpen {
 }
 
 impl JvmElement for ModuleProvide {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let service = JvmElement::parse(reader, ctx)?;
         let with = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         Ok(ModuleProvide { service, with })
@@ -65,7 +68,7 @@ impl JvmElement for ModuleProvide {
 }
 
 impl JvmElement for Module {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module_info_idx = reader.read_value()?;
         let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
         let &Entry::Module { name_index } = module_info_entry else {
@@ -91,14 +94,14 @@ impl JvmElement for Module {
 }
 
 impl JvmElement for PackageReference {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let package_index = reader.read_value()?;
         ctx.constant_pool.get_package_ref(package_index)
     }
 }
 
 impl JvmElement for ModuleReference {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module_ref_idx = reader.read_value()?;
         ctx.constant_pool.get_module_ref(module_ref_idx)
     }

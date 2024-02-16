@@ -19,7 +19,7 @@ use super::{jvm_element_parser::JvmElement, parsing_context::ParsingContext, Err
 impl Class {
     const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
 
-    pub(crate) fn parse<R: Read>(reader: &mut R) -> Result<Self, Error> {
+    pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let magic: u32 = reader.read_value()?;
         if magic != Self::JAVA_CLASS_MAIGC {
             return Err(Error::NotAClassFile);
@@ -119,7 +119,7 @@ impl Class {
 }
 
 impl JvmElement for BootstrapMethod {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let bootstrap_method_ref = reader.read_value()?;
         let method_ref = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
         let num_bootstrap_arguments: u16 = reader.read_value()?;
@@ -137,7 +137,7 @@ impl JvmElement for BootstrapMethod {
 }
 
 impl JvmElement for InnerClassInfo {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let inner_class = JvmElement::parse(reader, ctx)?;
         let outer_class_info_index = reader.read_value()?;
         let outer_class = if outer_class_info_index == 0 {
@@ -163,7 +163,7 @@ impl JvmElement for InnerClassInfo {
 }
 
 impl JvmElement for RecordComponent {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let name = JvmElement::parse(reader, ctx)?;
         let component_type = JvmElement::parse(reader, ctx)?;
 
@@ -195,14 +195,14 @@ impl JvmElement for RecordComponent {
 }
 
 impl JvmElement for ClassReference {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let class_info_idx = reader.read_value()?;
         ctx.constant_pool.get_class_ref(class_info_idx)
     }
 }
 
 impl JvmElement for SourceDebugExtension {
-    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let mut content = Vec::new();
         reader.read_to_end(&mut content)?;
         Ok(Self::new(content))

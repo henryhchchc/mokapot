@@ -2,29 +2,23 @@ use std::{io::Read, usize};
 
 use crate::jvm::code::ProgramCounter;
 
-pub(super) trait ValueReaderExt
-where
-    Self: Read + Sized,
-{
+pub(super) trait ValueReaderExt: Read {
     fn read_value<T: Readable>(&mut self) -> std::io::Result<T>;
 }
 pub(super) trait Readable {
-    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self>
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self>
     where
         Self: Sized;
 }
 
-impl<R: Read + Sized> ValueReaderExt for R {
-    fn read_value<T: Readable>(&mut self) -> std::io::Result<T>
-    where
-        T: Readable,
-    {
-        T::read_from_reader(self)
+impl<R: Read + ?Sized> ValueReaderExt for R {
+    fn read_value<T: Readable>(&mut self) -> std::io::Result<T> {
+        T::from_reader(self)
     }
 }
 
 impl<const N: usize> Readable for [u8; N] {
-    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
@@ -32,8 +26,8 @@ impl<const N: usize> Readable for [u8; N] {
 }
 
 impl Readable for ProgramCounter {
-    fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
-        let inner = u16::read_from_reader(reader)?;
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+        let inner = u16::from_reader(reader)?;
         Ok(inner.into())
     }
 }
@@ -42,7 +36,7 @@ macro_rules! impl_readable_for {
     ($($t:ty),*) => {
         $(
             impl Readable for $t {
-                fn read_from_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+                fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
                     let buf = reader.read_value()?;
                     Ok(Self::from_be_bytes(buf))
                 }
@@ -56,7 +50,7 @@ impl_readable_for!(u8, u16, u32, i8, i16, i32, i64, f32, f64);
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
 pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
 where
-    R: Read,
+    R: Read + ?Sized,
 {
     let mut buf = vec![0u8; len];
     reader.read_exact(buf.as_mut_slice())?;

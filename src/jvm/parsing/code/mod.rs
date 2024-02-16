@@ -38,7 +38,7 @@ pub(crate) struct LocalVariableTypeAttr {
 }
 
 impl JvmElement for LineNumberTableEntry {
-    fn parse<R: Read>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
         Ok(Self {
@@ -49,7 +49,7 @@ impl JvmElement for LineNumberTableEntry {
 }
 
 impl JvmElement for ExceptionTableEntry {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let start_pc = reader.read_value()?;
         let end_pc = reader.read_value()?;
         let covered_pc = start_pc..=end_pc;
@@ -69,7 +69,7 @@ impl JvmElement for ExceptionTableEntry {
 }
 
 impl JvmElement for LocalVariableDescAttr {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let effective_range = {
             let start_pc: ProgramCounter = reader.read_value()?;
             let length = reader.read_value::<u16>()?;
@@ -94,7 +94,7 @@ impl JvmElement for LocalVariableDescAttr {
     }
 }
 impl JvmElement for LocalVariableTypeAttr {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let effective_range = {
             let start_pc: ProgramCounter = reader.read_value()?;
             let length = reader.read_value::<u16>()?;
@@ -118,7 +118,7 @@ impl JvmElement for LocalVariableTypeAttr {
     }
 }
 impl JvmElement for ParameterInfo {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let name_index = reader.read_value()?;
         let name = if name_index == 0 {
             None
@@ -131,7 +131,7 @@ impl JvmElement for ParameterInfo {
 }
 
 impl JvmElement for MethodBody {
-    fn parse<R: Read>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;

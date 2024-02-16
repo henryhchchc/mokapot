@@ -208,7 +208,7 @@ impl ConstantPool {
 }
 
 impl Entry {
-    pub(crate) fn parse<R: Read>(reader: &mut R) -> Result<Self, Error> {
+    pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let tag = reader.read_value()?;
         match tag {
             1 => Self::parse_utf8(reader),
@@ -263,7 +263,7 @@ impl Entry {
         }
     }
 
-    fn parse_utf8<R: Read>(reader: &mut R) -> Result<Self, Error> {
+    fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let length: u16 = reader.read_value()?;
         let cesu8_content = read_byte_chunk(reader, length as usize)?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {
