@@ -76,5 +76,5 @@ jobs:
         name: Upload docs as github pages artifact
         with:
           path: target/doc
-      - uses: actions/deploy-pages@v2
+      - uses: actions/deploy-pages@v4
         name: Deploy docs to github pages
