@@ -29,7 +29,8 @@ jobs:
             && rustup component add llvm-tools-preview
       - name: Setup Build Tools
         uses: taiki-e/install-action@v2
-        tool: cargo-llvm-cov,cargo-nextest
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
         uses: actions/setup-java@v3
         with:
