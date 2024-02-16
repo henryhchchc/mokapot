@@ -62,7 +62,10 @@ impl ConstantPool {
                 .get_str(descriptor_index)
                 .and_then(|it| MethodDescriptor::from_str(it).map_err(Into::into))
                 .map(ConstantValue::MethodType),
-            Entry::Class { .. } => self.get_class_ref(value_index).map(ConstantValue::Class),
+            &Entry::Class { name_index } => self
+                .get_str(name_index)
+                .map(ClassReference::new)
+                .map(ConstantValue::Class),
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
                 .map(ConstantValue::Handle),
