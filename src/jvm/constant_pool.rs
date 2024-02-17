@@ -46,7 +46,7 @@ impl ConstantPool {
     /// # Errors
     /// - [`BadConstantPoolIndex`] if `index` does not point to a valid entry.
     pub fn get_entry(&self, index: u16) -> Result<&Entry, BadConstantPoolIndex> {
-        match self.inner.get(index as usize) {
+        match self.inner.get(usize::from(index)) {
             Some(Slot::Entry(entry)) => Ok(entry),
             _ => Err(BadConstantPoolIndex(index)),
         }

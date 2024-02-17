@@ -99,7 +99,7 @@ impl JvmElement for TypeAnnotation {
         // The length of target path is represented by a single byte.
         let target_path_length: u8 = reader.read_value()?;
         let target_path = repeat_with(|| JvmElement::parse(reader, ctx))
-            .take(target_path_length as usize)
+            .take(target_path_length.into())
             .collect::<Result<_, Error>>()?;
         let type_index = reader.read_value()?;
         let annotation_type_str = ctx.constant_pool.get_str(type_index)?;

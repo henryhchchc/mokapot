@@ -135,8 +135,9 @@ impl JvmElement for MethodBody {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;
+        let code_length = usize::try_from(code_length).expect("32-bit length is not supported");
 
-        let code = read_byte_chunk(reader, code_length as usize)?;
+        let code = read_byte_chunk(reader, code_length)?;
         let instructions = Instruction::parse_code(code, ctx)?;
 
         let exception_table = JvmElement::parse_vec::<u16, _>(reader, ctx)?;

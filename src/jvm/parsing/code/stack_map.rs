@@ -43,7 +43,7 @@ impl JvmElement for StackMapFrame {
                 let offset_delta = reader.read_value()?;
                 let locals_count = it - 251;
                 let locals = repeat_with(|| JvmElement::parse(reader, ctx))
-                    .take(locals_count as usize)
+                    .take(locals_count.into())
                     .collect::<Result<_, _>>()?;
                 Self::AppendFrame {
                     offset_delta,

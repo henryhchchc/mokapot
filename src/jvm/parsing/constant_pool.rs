@@ -268,7 +268,7 @@ impl Entry {
 
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let length: u16 = reader.read_value()?;
-        let cesu8_content = read_byte_chunk(reader, length as usize)?;
+        let cesu8_content = read_byte_chunk(reader, length.into())?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {
             Ok(result) => Ok(Self::Utf8(JavaString::Utf8(result.into_owned()))),
             Err(_) => Ok(Self::Utf8(JavaString::InvalidUtf8(cesu8_content))),

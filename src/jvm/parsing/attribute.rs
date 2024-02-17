@@ -1,4 +1,9 @@
-use std::{io::Read, iter::repeat_with, str::FromStr};
+use std::{
+    io::{Cursor, Read},
+    iter::repeat_with,
+    str::FromStr,
+    usize,
+};
 
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -97,8 +102,13 @@ impl JvmElement for Attribute {
         let name_idx = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let attribute_length: u32 = reader.read_value()?;
-        let attribute_bytes = read_byte_chunk(reader, attribute_length as usize)?;
-        let reader = &mut std::io::Cursor::new(attribute_bytes);
+        let reader = {
+            let attribute_length = usize::try_from(attribute_length)
+                .expect("32-bit size is not supported on the current platform");
+            let attribute_bytes = read_byte_chunk(reader, attribute_length)?;
+            &mut Cursor::new(attribute_bytes)
+        };
+
         let result = match name {
             "ConstantValue" => JvmElement::parse(reader, ctx).map(Self::ConstantValue),
             "Code" => JvmElement::parse(reader, ctx).map(Self::Code),
@@ -133,14 +143,14 @@ impl JvmElement for Attribute {
             "RuntimeVisibleParameterAnnotations" => {
                 let num_parameters: u8 = reader.read_value()?;
                 repeat_with(|| JvmElement::parse_vec::<u16, _>(reader, ctx))
-                    .take(num_parameters as usize)
+                    .take(num_parameters.into())
                     .collect::<Result<_, _>>()
                     .map(Self::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
                 let num_parameters: u8 = reader.read_value()?;
                 repeat_with(|| JvmElement::parse_vec::<u16, _>(reader, ctx))
-                    .take(num_parameters as usize)
+                    .take(num_parameters.into())
                     .collect::<Result<_, _>>()
                     .map(Self::RuntimeInvisibleParameterAnnotations)
             }
@@ -169,7 +179,9 @@ impl JvmElement for Attribute {
             unexpected => Err(Error::UnknownAttribute(unexpected.to_owned())),
         };
         result.and_then(|attribute| {
-            if reader.position() == u64::from(attribute_length) {
+            let bytes_read = u32::try_from(reader.position())
+                .expect("The size of the attribute should fit in u32");
+            if bytes_read == attribute_length {
                 Ok(attribute)
             } else {
                 Err(Error::UnexpectedData)

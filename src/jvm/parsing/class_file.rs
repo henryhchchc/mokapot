@@ -127,7 +127,7 @@ impl JvmElement for BootstrapMethod {
             let arg_idx = reader.read_value()?;
             ctx.constant_pool.get_constant_value(arg_idx)
         })
-        .take(num_bootstrap_arguments as usize)
+        .take(num_bootstrap_arguments.into())
         .try_collect()?;
         Ok(Self {
             method: method_ref,

@@ -1,24 +1,24 @@
-use std::{io::Read, usize};
+use std::io::{Read, Result};
 
 use crate::jvm::code::ProgramCounter;
 
 pub(super) trait ValueReaderExt: Read {
-    fn read_value<T: Readable>(&mut self) -> std::io::Result<T>;
+    fn read_value<T: Readable>(&mut self) -> Result<T>;
 }
 pub(super) trait Readable {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self>
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
     where
         Self: Sized;
 }
 
 impl<R: Read + ?Sized> ValueReaderExt for R {
-    fn read_value<T: Readable>(&mut self) -> std::io::Result<T> {
+    fn read_value<T: Readable>(&mut self) -> Result<T> {
         T::from_reader(self)
     }
 }
 
 impl<const N: usize> Readable for [u8; N] {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
@@ -26,7 +26,7 @@ impl<const N: usize> Readable for [u8; N] {
 }
 
 impl Readable for ProgramCounter {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let inner = u16::from_reader(reader)?;
         Ok(inner.into())
     }
@@ -36,7 +36,7 @@ macro_rules! impl_readable_for {
     ($($t:ty),*) => {
         $(
             impl Readable for $t {
-                fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+                fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
                     let buf = reader.read_value()?;
                     Ok(Self::from_be_bytes(buf))
                 }
@@ -48,7 +48,7 @@ macro_rules! impl_readable_for {
 impl_readable_for!(u8, u16, u32, i8, i16, i32, i64, f32, f64);
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
+pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read + ?Sized,
 {

@@ -62,16 +62,16 @@ impl JvmStackFrame {
             max_locals,
             max_stack,
             local_variables,
-            operand_stack: Vec::with_capacity(max_stack as usize),
+            operand_stack: Vec::with_capacity(max_stack.into()),
             possible_ret_addresses: BTreeSet::new(),
         }
     }
 
     #[inline]
     fn push_raw(&mut self, value: Entry) -> Result<(), JvmFrameError> {
-        if u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16")
-            >= self.max_stack
-        {
+        let stack_size =
+            u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16");
+        if stack_size >= self.max_stack {
             Err(JvmFrameError::StackOverflow)
         } else {
             self.operand_stack.push(value);
@@ -109,9 +109,9 @@ impl JvmStackFrame {
         self.push_raw(Entry::Value(value))
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<usize>) -> Result<Argument, JvmFrameError> {
+    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
-        let frame_value = self.local_variables[idx]
+        let frame_value = self.local_variables[usize::from(idx)]
             .clone()
             .ok_or(JvmFrameError::LocalUnset)?;
         match frame_value {
@@ -154,16 +154,16 @@ impl JvmStackFrame {
 
     pub(super) fn get_dual_slot_local(
         &self,
-        idx: impl Into<usize>,
+        idx: impl Into<u16>,
     ) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
-        if idx + 1 >= self.max_locals as usize {
+        if idx + 1 >= self.max_locals {
             Err(JvmFrameError::LocalLimitExceed)?;
         }
         match (
-            // If panic here then `local_variables` are not allocated correctly
-            self.local_variables[idx].as_ref(),
-            self.local_variables[idx + 1].as_ref(),
+            // Panic only when `local_variables` were not allocated correctly
+            self.local_variables[usize::from(idx)].as_ref(),
+            self.local_variables[usize::from(idx + 1)].as_ref(),
         ) {
             (Some(Entry::Value(it)), Some(Entry::Top)) => Ok(it.clone()),
             _ => Err(JvmFrameError::ValueMismatch),
@@ -172,16 +172,16 @@ impl JvmStackFrame {
 
     pub(super) fn set_local(
         &mut self,
-        idx: impl Into<usize>,
+        idx: impl Into<u16>,
         value: Argument,
     ) -> Result<(), JvmFrameError> {
-        let idx: usize = idx.into();
-        if idx < self.max_locals as usize {
-            self.local_variables[idx].replace(Entry::Value(value));
-            if idx < self.max_locals as usize - 1
-                && matches!(self.local_variables[idx + 1], Some(Entry::Top))
+        let idx = idx.into();
+        if idx < self.max_locals {
+            self.local_variables[usize::from(idx)].replace(Entry::Value(value));
+            if idx + 1 < self.max_locals
+                && matches!(self.local_variables[usize::from(idx + 1)], Some(Entry::Top))
             {
-                self.local_variables[idx + 1].take();
+                self.local_variables[usize::from(idx + 1)].take();
             }
             Ok(())
         } else {
@@ -191,14 +191,14 @@ impl JvmStackFrame {
 
     pub(super) fn set_dual_slot_local(
         &mut self,
-        idx: impl Into<usize>,
+        idx: impl Into<u16>,
         value: Argument,
     ) -> Result<(), JvmFrameError> {
-        let idx: usize = idx.into();
-        if idx + 1 < self.max_locals as usize {
-            // If panic here then `local_variables` are not allocated correctly
-            self.local_variables[idx].replace(Entry::Value(value));
-            self.local_variables[idx + 1].replace(Entry::Top);
+        let idx = idx.into();
+        if idx + 1 < self.max_locals {
+            // Panic only when `local_variables` were not allocated correctly
+            self.local_variables[usize::from(idx)].replace(Entry::Value(value));
+            self.local_variables[usize::from(idx + 1)].replace(Entry::Top);
             Ok(())
         } else {
             Err(JvmFrameError::LocalLimitExceed)
@@ -210,7 +210,8 @@ impl JvmStackFrame {
     }
 
     pub(super) fn same_locals_1_stack_item_frame(&self, stack_value: Entry) -> Self {
-        let mut operand_stack = Vec::with_capacity(self.max_stack as usize);
+        let mut operand_stack = Vec::with_capacity(self.max_stack.into());
+
         operand_stack.push(stack_value);
         Self {
             max_locals: self.max_locals,
