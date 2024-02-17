@@ -50,8 +50,8 @@ pub enum Error {
     #[error("Unexpected opcode {0:#x}")]
     UnexpectedOpCode(u8),
     /// The flags cannot be recognized.
-    #[error("Unknown access flag in {1}: {0:#x}")]
-    UnknownFlags(u16, &'static str),
+    #[error("Unknown {0}: {1:#04x}")]
+    UnknownFlags(&'static str, u16),
     /// The descriptor is invalid.
     #[error("Fail to parse descriptor: {0}")]
     InvalidDescriptor(#[from] InvalidDescriptor),

@@ -41,5 +41,5 @@ where
     F: Flags<Bits = u16>,
 {
     let flag_bits = reader.read_value()?;
-    F::from_bits(flag_bits).ok_or(Error::UnknownFlags(flag_bits, std::any::type_name::<F>()))
+    F::from_bits(flag_bits).ok_or(Error::UnknownFlags(std::any::type_name::<F>(), flag_bits))
 }
