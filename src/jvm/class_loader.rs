@@ -23,14 +23,11 @@ pub enum ClassLoadingError {
     IO(#[from] std::io::Error),
     /// Other error occurred.
     #[error("Cause: {0}")]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Other(#[from] Box<dyn std::error::Error + Send>),
 }
 
 /// A class path that can be searched for classes.
-pub trait ClassPath
-where
-    Self: std::fmt::Debug,
-{
+pub trait ClassPath: Sync + std::fmt::Debug {
     /// Find a class by its binary name.
     ///
     /// # Errors
