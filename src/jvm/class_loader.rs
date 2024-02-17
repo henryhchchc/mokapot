@@ -23,7 +23,7 @@ pub enum ClassLoadingError {
     IO(#[from] std::io::Error),
     /// Other error occurred.
     #[error("Cause: {0}")]
-    Other(#[from] Box<dyn std::error::Error + Send>),
+    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// A class path that can be searched for classes.
