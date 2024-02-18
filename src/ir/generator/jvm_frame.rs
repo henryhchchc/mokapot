@@ -10,7 +10,7 @@ use crate::{
 pub(super) struct JvmStackFrame {
     max_locals: u16,
     max_stack: u16,
-    local_variables: Vec<Option<Entry>>,
+    local_variables: Vec<Entry>,
     operand_stack: Vec<Entry>,
     pub possible_ret_addresses: BTreeSet<ProgramCounter>,
 }
@@ -40,21 +40,21 @@ impl JvmStackFrame {
         max_locals: u16,
         max_stack: u16,
     ) -> Self {
-        let mut local_variables = vec![None; max_locals.into()];
+        let mut local_variables = vec![Entry::UninitializedLocal; max_locals.into()];
         let mut local_idx = 0;
         if !is_static {
             let this_ref = Argument::Id(Identifier::This);
-            local_variables[local_idx].replace(Entry::Value(this_ref));
+            local_variables[local_idx] = Entry::Value(this_ref);
             local_idx += 1;
         }
         for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
             let arg_ref = Argument::Id(Identifier::Arg(
                 u16::try_from(arg_idx).expect("The number of args should be within u16"),
             ));
-            local_variables[local_idx].replace(Entry::Value(arg_ref));
+            local_variables[local_idx] = Entry::Value(arg_ref);
             local_idx += 1;
             if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
-                local_variables[local_idx].replace(Entry::Top);
+                local_variables[local_idx] = Entry::Top;
                 local_idx += 1;
             }
         }
@@ -89,7 +89,7 @@ impl JvmStackFrame {
     pub(super) fn pop_value(&mut self) -> Result<Argument, JvmFrameError> {
         match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
-            Entry::Top => Err(JvmFrameError::ValueMismatch),
+            _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
@@ -111,12 +111,10 @@ impl JvmStackFrame {
 
     pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, JvmFrameError> {
         let idx = idx.into();
-        let frame_value = self.local_variables[usize::from(idx)]
-            .clone()
-            .ok_or(JvmFrameError::LocalUnset)?;
+        let frame_value = &self.local_variables[usize::from(idx)];
         match frame_value {
-            Entry::Value(it) => Ok(it),
-            Entry::Top => Err(JvmFrameError::ValueMismatch),
+            Entry::Value(it) => Ok(it.clone()),
+            _ => Err(JvmFrameError::ValueMismatch),
         }
     }
 
@@ -162,10 +160,10 @@ impl JvmStackFrame {
         }
         match (
             // Panic only when `local_variables` were not allocated correctly
-            self.local_variables[usize::from(idx)].as_ref(),
-            self.local_variables[usize::from(idx + 1)].as_ref(),
+            &self.local_variables[usize::from(idx)],
+            &self.local_variables[usize::from(idx + 1)],
         ) {
-            (Some(Entry::Value(it)), Some(Entry::Top)) => Ok(it.clone()),
+            (Entry::Value(it), Entry::Top) => Ok(it.clone()),
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
@@ -177,11 +175,11 @@ impl JvmStackFrame {
     ) -> Result<(), JvmFrameError> {
         let idx = idx.into();
         if idx < self.max_locals {
-            self.local_variables[usize::from(idx)].replace(Entry::Value(value));
+            self.local_variables[usize::from(idx)] = Entry::Value(value);
             if idx + 1 < self.max_locals
-                && matches!(self.local_variables[usize::from(idx + 1)], Some(Entry::Top))
+                && matches!(self.local_variables[usize::from(idx + 1)], Entry::Top)
             {
-                self.local_variables[usize::from(idx + 1)].take();
+                self.local_variables[usize::from(idx + 1)].erase();
             }
             Ok(())
         } else {
@@ -197,8 +195,8 @@ impl JvmStackFrame {
         let idx = idx.into();
         if idx + 1 < self.max_locals {
             // Panic only when `local_variables` were not allocated correctly
-            self.local_variables[usize::from(idx)].replace(Entry::Value(value));
-            self.local_variables[usize::from(idx + 1)].replace(Entry::Top);
+            self.local_variables[usize::from(idx)] = Entry::Value(value);
+            self.local_variables[usize::from(idx + 1)] = Entry::Top;
             Ok(())
         } else {
             Err(JvmFrameError::LocalLimitExceed)
@@ -331,10 +329,7 @@ impl JvmStackFrame {
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(self_loc, other_loc)| match (self_loc, other_loc) {
-                (Some(self_loc), Some(other_loc)) => Some(Entry::merge(self_loc, other_loc)),
-                (lhs, rhs) => lhs.or(rhs),
-            })
+            .map(|(lhs, rhs)| Entry::merge(lhs, rhs))
             .collect();
         let operand_stack = self
             .operand_stack
@@ -357,6 +352,7 @@ impl JvmStackFrame {
 pub(super) enum Entry {
     Value(Argument),
     Top,
+    UninitializedLocal,
 }
 
 impl Display for Entry {
@@ -364,19 +360,28 @@ impl Display for Entry {
         match self {
             Self::Value(id) => id.fmt(f),
             Self::Top => write!(f, "Top"),
+            Self::UninitializedLocal => write!(f, "<uninitialized_local>"),
         }
     }
 }
 
 impl Entry {
-    pub fn merge(x: Self, y: Self) -> Self {
-        match (x, y) {
-            (Entry::Value(lhs), Entry::Value(rhs)) => Entry::Value(lhs | rhs),
+    pub fn merge(lhs: Self, rhs: Self) -> Self {
+        #[allow(clippy::enum_glob_use)]
+        use Entry::*;
+        match (lhs, rhs) {
+            (Value(lhs), Value(rhs)) => Value(lhs | rhs),
+            (Top, Top) => Top,
+            (UninitializedLocal, it) | (it, UninitializedLocal) => it,
             // NOTE: When `lhs` and `rhs` are different variants, it indicates that the local
             //       variable slot is reused. In this case, we do not merge it since it will be
             //       overridden afterwrds.
             (lhs, _) => lhs,
         }
+    }
+
+    pub fn erase(&mut self) {
+        *self = Self::UninitializedLocal;
     }
 }
 
