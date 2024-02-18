@@ -58,6 +58,8 @@ pub struct Method {
     pub is_deprecated: bool,
     /// The generic signature.
     pub signature: Option<MethodSignature>,
+    /// Unrecognized JVM attributes.
+    pub free_attributes: Vec<(String, Vec<u8>)>,
 }
 
 impl Method {

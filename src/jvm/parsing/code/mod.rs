@@ -161,6 +161,7 @@ impl JvmElement for MethodBody {
                         table.merge_signature(id, name, signature)?;
                     }
                 },
+                else let free_attributes
             }
         }
 
@@ -174,6 +175,7 @@ impl JvmElement for MethodBody {
             stack_map_table,
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
+            free_attributes,
         })
     }
 }

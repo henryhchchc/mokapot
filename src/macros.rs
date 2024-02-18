@@ -5,10 +5,12 @@ macro_rules! extract_attributes {
          $( let $var: ident: $attr: ident $($uw: ident)?, )*
          $( if let $var_true: ident: $attr_true: ident, )*
          $( match $attr_custom: pat => $var_custom: block, )*
+         else let $unrecognized:ident
     }) => {
         use crate::jvm::parsing::attribute::Attribute;
         $( let mut $var = None; )*
         $( let mut $var_true = false; )*
+        let mut $unrecognized = Vec::new();
         {
             for attr in $attrs {
                 match attr {
@@ -29,8 +31,14 @@ macro_rules! extract_attributes {
                     },
                 )*
                 $($attr_custom => $var_custom,)*
+                    Attribute::Unrecognized(name, bytes) => {
+                        $unrecognized.push((name, bytes));
+                    }
                     unexpected => {
-                        Err(Error::UnexpectedAttribute(unexpected.name(), $env))?;
+                        Err(Error::UnexpectedAttribute(
+                            unexpected.name().to_owned(),
+                            $env.to_owned()
+                        ))?;
                     }
                 }
             }

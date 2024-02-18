@@ -73,6 +73,8 @@ pub struct Class {
     pub signature: Option<ClassSignature>,
     /// The record components of the class if the class is `record`.
     pub record: Option<Vec<RecordComponent>>,
+    /// Unrecognized JVM attributes.
+    pub free_attributes: Vec<(String, Vec<u8>)>,
 }
 
 impl Class {
@@ -366,6 +368,8 @@ pub struct RecordComponent {
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// Unrecognized JVM attributes.
+    pub free_attributes: Vec<(String, Vec<u8>)>,
 }
 
 bitflags! {

@@ -5,6 +5,8 @@ use std::{
     usize,
 };
 
+use itertools::Itertools;
+
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::{
@@ -58,10 +60,11 @@ pub(crate) enum Attribute {
     NestMembers(Vec<ClassReference>),
     Record(Vec<RecordComponent>),
     PermittedSubclasses(Vec<ClassReference>),
+    Unrecognized(String, Vec<u8>),
 }
 
 impl Attribute {
-    pub const fn name<'a>(&self) -> &'a str {
+    pub fn name(&self) -> &str {
         match self {
             Self::ConstantValue(_) => "ConstantValue",
             Self::Code(_) => "Code",
@@ -93,6 +96,7 @@ impl Attribute {
             Self::NestMembers(_) => "NestMembers",
             Self::Record(_) => "Record",
             Self::PermittedSubclasses(_) => "PermittedSubclasses",
+            Self::Unrecognized(name, _) => name,
         }
     }
 }
@@ -176,7 +180,11 @@ impl JvmElement for Attribute {
             "PermittedSubclasses" => {
                 JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::PermittedSubclasses)
             }
-            unexpected => Err(Error::UnknownAttribute(unexpected.to_owned())),
+            name => reader
+                .bytes()
+                .try_collect()
+                .map(|bytes| Attribute::Unrecognized(name.to_owned(), bytes))
+                .map_err(Into::into),
         };
         result.and_then(|attribute| {
             let bytes_read = u32::try_from(reader.position())

@@ -27,7 +27,7 @@ pub enum Error {
     UnknownAttribute(String),
     /// An known attribute is found in an unexpected location.
     #[error("Unexpected attribute {0} in {1}")]
-    UnexpectedAttribute(&'static str, &'static str),
+    UnexpectedAttribute(String, String),
     /// There are unread data when the parsing is finished.
     #[error("Unexpected data at the end of the file")]
     UnexpectedData,
