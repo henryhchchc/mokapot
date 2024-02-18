@@ -411,6 +411,10 @@ bitflags! {
         const STATIC = 0x0008;
         /// Marked `final` in source.
         const FINAL = 0x0010;
+        /// Treat superclass methods specially when invoked by the invokespecial instruction.
+        /// NOTE: This was not menetioned in the JVM Specification,
+        /// but it appears in some class files.
+        const SUPER = 0x0020;
         /// Was an `interface` in source.
         const INTERFACE = 0x0200;
         /// Marked or implicitly `abstract` in source.
