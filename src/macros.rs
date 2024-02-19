@@ -1,8 +1,8 @@
 #![deny(meta_variable_misuse)]
 
 macro_rules! extract_attributes {
-    (for $attrs: ident in $env:literal by {
-         $( let $var: ident: $attr: ident $($uw: ident)?, )*
+    (for $attrs: ident in $env:literal {
+         $( let $var: ident: $attr: ident $(as $uw: ident)?, )*
          $( if let $var_true: ident: $attr_true: ident, )*
          $( match $attr_custom: pat => $var_custom: block, )*
          else let $unrecognized:ident

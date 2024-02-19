@@ -21,17 +21,17 @@ impl JvmElement for Field {
         };
         let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
-            for attributes in "field_info" by {
+            for attributes in "field_info" {
                 let constant_value: ConstantValue,
                 let signature: Signature,
                 let runtime_visible_annotations
-                    : RuntimeVisibleAnnotations unwrap_or_default,
+                    : RuntimeVisibleAnnotations as unwrap_or_default,
                 let runtime_invisible_annotations
-                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                    : RuntimeInvisibleAnnotations as unwrap_or_default,
                 let runtime_visible_type_annotations
-                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations
-                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 if let is_synthetic: Synthetic,
                 if let is_deperecated: Deprecated,
                 else let free_attributes

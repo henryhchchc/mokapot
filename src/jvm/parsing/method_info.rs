@@ -22,23 +22,23 @@ impl JvmElement for Method {
 
         let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
-            for attributes in "method_info" by {
+            for attributes in "method_info" {
                 let body: Code,
-                let exceptions: Exceptions unwrap_or_default,
+                let exceptions: Exceptions as unwrap_or_default,
                 let runtime_visible_annotations
-                    : RuntimeVisibleAnnotations unwrap_or_default,
+                    : RuntimeVisibleAnnotations as unwrap_or_default,
                 let runtime_invisible_annotations
-                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                    : RuntimeInvisibleAnnotations as unwrap_or_default,
                 let runtime_visible_type_annotations
-                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations
-                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 let runtime_visible_parameter_annotations
-                    : RuntimeVisibleParameterAnnotations unwrap_or_default,
+                    : RuntimeVisibleParameterAnnotations as unwrap_or_default,
                 let runtime_invisible_parameter_annotations
-                    : RuntimeInvisibleParameterAnnotations unwrap_or_default,
+                    : RuntimeInvisibleParameterAnnotations as unwrap_or_default,
                 let annotation_default: AnnotationDefault,
-                let parameters: MethodParameters unwrap_or_default,
+                let parameters: MethodParameters as unwrap_or_default,
                 let signature: Signature,
                 if let is_synthetic: Synthetic,
                 if let is_deprecated: Deprecated,

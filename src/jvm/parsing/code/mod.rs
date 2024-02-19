@@ -144,11 +144,13 @@ impl JvmElement for MethodBody {
         let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         let mut local_variable_table = None;
         extract_attributes! {
-            for attributes in "code" by {
+            for attributes in "code" {
                 let line_number_table: LineNumberTable,
                 let stack_map_table: StackMapTable,
-                let runtime_visible_type_annotations: RuntimeVisibleTypeAnnotations unwrap_or_default,
-                let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                let runtime_visible_type_annotations:
+                    RuntimeVisibleTypeAnnotations as unwrap_or_default,
+                let runtime_invisible_type_annotations:
+                    RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 match Attribute::LocalVariableTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTable::default());
                     for LocalVariableDescAttr { id, name, field_type } in it {

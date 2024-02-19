@@ -64,22 +64,22 @@ impl Class {
         }
 
         extract_attributes! {
-            for attributes in "class_file" by {
+            for attributes in "class_file" {
                 let source_file: SourceFile,
-                let inner_classes: InnerClasses unwrap_or_default,
+                let inner_classes: InnerClasses as unwrap_or_default,
                 let enclosing_method: EnclosingMethod,
                 let source_debug_extension: SourceDebugExtension,
-                let bootstrap_methods: BootstrapMethods unwrap_or_default,
-                let runtime_visible_annotations: RuntimeVisibleAnnotations unwrap_or_default,
-                let runtime_invisible_annotations: RuntimeInvisibleAnnotations unwrap_or_default,
-                let runtime_visible_type_annotations: RuntimeVisibleTypeAnnotations unwrap_or_default,
-                let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                let bootstrap_methods: BootstrapMethods as unwrap_or_default,
+                let runtime_visible_annotations: RuntimeVisibleAnnotations as unwrap_or_default,
+                let runtime_invisible_annotations: RuntimeInvisibleAnnotations as unwrap_or_default,
+                let runtime_visible_type_annotations: RuntimeVisibleTypeAnnotations as unwrap_or_default,
+                let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 let module: Module,
-                let module_packages: ModulePackages unwrap_or_default,
+                let module_packages: ModulePackages as unwrap_or_default,
                 let module_main_class: ModuleMainClass,
                 let nest_host: NestHost,
-                let nest_members: NestMembers unwrap_or_default,
-                let permitted_subclasses: PermittedSubclasses unwrap_or_default,
+                let nest_members: NestMembers as unwrap_or_default,
+                let permitted_subclasses: PermittedSubclasses as unwrap_or_default,
                 let signature: Signature,
                 let record: Record,
                 if let is_synthetic: Synthetic,
@@ -171,16 +171,14 @@ impl JvmElement for RecordComponent {
 
         let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
         extract_attributes! {
-            for attributes in "record_component" by {
+            for attributes in "record_component" {
                 let signature: Signature,
-                let runtime_visible_annotations
-                    : RuntimeVisibleAnnotations unwrap_or_default,
-                let runtime_invisible_annotations
-                    : RuntimeInvisibleAnnotations unwrap_or_default,
+                let runtime_visible_annotations : RuntimeVisibleAnnotations as unwrap_or_default,
+                let runtime_invisible_annotations : RuntimeInvisibleAnnotations as unwrap_or_default,
                 let runtime_visible_type_annotations
-                    : RuntimeVisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations
-                    : RuntimeInvisibleTypeAnnotations unwrap_or_default,
+                    : RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 else let free_attributes
             }
         }
