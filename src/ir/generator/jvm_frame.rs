@@ -24,12 +24,12 @@ pub enum JvmFrameError {
     #[error("The local variable index exceeds the max local variable size")]
     LocalLimitExceed,
     #[error("The local variable is not initialized")]
-    LocalUnset,
+    LocalUninitialized,
     #[error("The stack size mismatch")]
     StackSizeMismatch,
     #[error("The local limit mismatch")]
     LocalLimitMismatch,
-    #[error("Expected a ValueRef but got a Padding or vice versa")]
+    #[error("Value type in the stack or local variable table mismatch")]
     ValueMismatch,
 }
 
@@ -89,13 +89,17 @@ impl JvmStackFrame {
     pub(super) fn pop_value(&mut self) -> Result<Argument, JvmFrameError> {
         match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
-            _ => Err(JvmFrameError::ValueMismatch),
+            Entry::Top => Err(JvmFrameError::ValueMismatch),
+            // `UninitializedLocal` is never pushed to the stack
+            Entry::UninitializedLocal => unreachable!(),
         }
     }
 
     pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, JvmFrameError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (Entry::Value(it), Entry::Top) => Ok(it),
+            // `UninitializedLocal` is never pushed to the stack
+            (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => unreachable!(),
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
@@ -107,15 +111,6 @@ impl JvmStackFrame {
     pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
         self.push_raw(Entry::Top)?;
         self.push_raw(Entry::Value(value))
-    }
-
-    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, JvmFrameError> {
-        let idx = idx.into();
-        let frame_value = &self.local_variables[usize::from(idx)];
-        match frame_value {
-            Entry::Value(it) => Ok(it.clone()),
-            _ => Err(JvmFrameError::ValueMismatch),
-        }
     }
 
     pub(super) fn pop_args(
@@ -150,6 +145,16 @@ impl JvmStackFrame {
         }
     }
 
+    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, JvmFrameError> {
+        let idx = idx.into();
+        let frame_value = &self.local_variables[usize::from(idx)];
+        match frame_value {
+            Entry::Value(it) => Ok(it.clone()),
+            Entry::Top => Err(JvmFrameError::ValueMismatch),
+            Entry::UninitializedLocal => Err(JvmFrameError::LocalUninitialized),
+        }
+    }
+
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<u16>,
@@ -164,6 +169,9 @@ impl JvmStackFrame {
             &self.local_variables[usize::from(idx + 1)],
         ) {
             (Entry::Value(it), Entry::Top) => Ok(it.clone()),
+            (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => {
+                Err(JvmFrameError::LocalUninitialized)
+            }
             _ => Err(JvmFrameError::ValueMismatch),
         }
     }
@@ -174,17 +182,16 @@ impl JvmStackFrame {
         value: Argument,
     ) -> Result<(), JvmFrameError> {
         let idx = idx.into();
-        if idx < self.max_locals {
-            self.local_variables[usize::from(idx)] = Entry::Value(value);
-            if idx + 1 < self.max_locals
-                && matches!(self.local_variables[usize::from(idx + 1)], Entry::Top)
-            {
-                self.local_variables[usize::from(idx + 1)].erase();
-            }
-            Ok(())
-        } else {
-            Err(JvmFrameError::LocalLimitExceed)
+        if idx >= self.max_locals {
+            Err(JvmFrameError::LocalLimitExceed)?;
         }
+        self.local_variables[usize::from(idx)] = Entry::Value(value);
+        if idx + 1 < self.max_locals
+            && matches!(self.local_variables[usize::from(idx + 1)], Entry::Top)
+        {
+            self.local_variables[usize::from(idx + 1)].erase();
+        }
+        Ok(())
     }
 
     pub(super) fn set_dual_slot_local(
