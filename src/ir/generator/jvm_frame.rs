@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, fmt::Display};
+use std::{collections::BTreeSet, fmt::Display, iter::once};
+
+use itertools::Itertools;
 
 use crate::{
     ir::{Argument, Identifier},
@@ -36,31 +38,39 @@ pub enum JvmFrameError {
 impl JvmStackFrame {
     pub(super) fn new(
         is_static: bool,
-        desc: MethodDescriptor,
+        desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, JvmFrameError> {
-        let mut local_variables = vec![Entry::UninitializedLocal; max_locals.into()];
-        let mut local_idx = 0;
         if usize::from(max_locals) < usize::from(is_static) + desc.parameters_types.len() {
             return Err(JvmFrameError::LocalLimitExceed);
         }
-        if !is_static {
-            let this_ref = Argument::Id(Identifier::This);
-            local_variables[local_idx] = Entry::Value(this_ref);
-            local_idx += 1;
-        }
-        for (arg_idx, local_type) in desc.parameters_types.into_iter().enumerate() {
-            let arg_ref = Argument::Id(Identifier::Arg(
-                u16::try_from(arg_idx).expect("The number of args should be within u16"),
-            ));
-            local_variables[local_idx] = Entry::Value(arg_ref);
-            local_idx += 1;
-            if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = local_type {
-                local_variables[local_idx] = Entry::Top;
-                local_idx += 1;
-            }
-        }
+        let this_arg = if is_static {
+            None
+        } else {
+            Some(Entry::Value(Argument::Id(Identifier::This)))
+        };
+        let args = desc
+            .parameters_types
+            .iter()
+            .enumerate()
+            .flat_map(|(arg_idx, local_type)| {
+                use PrimitiveType::{Double, Long};
+                let arg_idx =
+                    u16::try_from(arg_idx).expect("The number of args should be within u16");
+                let arg_ref = Argument::Id(Identifier::Arg(arg_idx));
+                let maybe_top = if let FieldType::Base(Long | Double) = local_type {
+                    Some(Entry::Top)
+                } else {
+                    None
+                };
+                once(Entry::Value(arg_ref)).chain(maybe_top)
+            });
+        let local_variables = this_arg
+            .into_iter()
+            .chain(args)
+            .pad_using(max_locals.into(), |_| Entry::UninitializedLocal)
+            .collect();
         Ok(Self {
             max_locals,
             max_stack,

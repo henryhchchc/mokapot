@@ -66,7 +66,7 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             .to_owned();
         JvmStackFrame::new(
             self.method.access_flags.contains(MethodAccessFlags::STATIC),
-            self.method.descriptor.clone(),
+            &self.method.descriptor,
             self.body.max_locals,
             self.body.max_stack,
         )
