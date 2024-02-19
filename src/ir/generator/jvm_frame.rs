@@ -39,9 +39,12 @@ impl JvmStackFrame {
         desc: MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
-    ) -> Self {
+    ) -> Result<Self, JvmFrameError> {
         let mut local_variables = vec![Entry::UninitializedLocal; max_locals.into()];
         let mut local_idx = 0;
+        if usize::from(max_locals) < usize::from(is_static) + desc.parameters_types.len() {
+            return Err(JvmFrameError::LocalLimitExceed);
+        }
         if !is_static {
             let this_ref = Argument::Id(Identifier::This);
             local_variables[local_idx] = Entry::Value(this_ref);
@@ -58,13 +61,13 @@ impl JvmStackFrame {
                 local_idx += 1;
             }
         }
-        JvmStackFrame {
+        Ok(Self {
             max_locals,
             max_stack,
             local_variables,
             operand_stack: Vec::with_capacity(max_stack.into()),
             possible_ret_addresses: BTreeSet::new(),
-        }
+        })
     }
 
     #[inline]

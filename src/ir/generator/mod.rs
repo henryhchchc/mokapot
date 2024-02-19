@@ -64,15 +64,14 @@ impl FixedPointAnalyzer for MokaIRGenerator<'_> {
             .ok_or(MokaIRGenerationError::MalformedControlFlow)?
             .0
             .to_owned();
-        Ok((
-            first_pc,
-            JvmStackFrame::new(
-                self.method.access_flags.contains(MethodAccessFlags::STATIC),
-                self.method.descriptor.clone(),
-                self.body.max_locals,
-                self.body.max_stack,
-            ),
-        ))
+        JvmStackFrame::new(
+            self.method.access_flags.contains(MethodAccessFlags::STATIC),
+            self.method.descriptor.clone(),
+            self.body.max_locals,
+            self.body.max_stack,
+        )
+        .map(|frame| (first_pc, frame))
+        .map_err(Into::into)
     }
 
     fn analyze_location(
