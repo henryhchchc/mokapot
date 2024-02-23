@@ -1,3 +1,10 @@
+use proptest::prelude::*;
+
+use crate::{
+    jvm::class::ClassReference,
+    types::field_type::{FieldType, PrimitiveType},
+};
+
 #[rustfmt::skip]
 #[must_use]
 pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
@@ -20,4 +27,45 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
         0x00, 0x00, // Methods count
         0x00, 0x00, // Attributes count
     ]
+}
+
+prop_compose! {
+    pub(crate) fn arb_class_name()(
+        package in r"[a-zA-Z_][a-zA-Z0-9_]*/",
+        class in r"[a-zA-Z_][a-zA-Z0-9_]*"
+    ) -> String {
+        format!("{package}{class}")
+    }
+}
+
+prop_compose! {
+    pub(crate) fn arb_primitive_type_name()(n in r"[BCDFIJSZ]") -> String {
+        n
+    }
+}
+
+fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
+    prop_oneof![
+        any::<PrimitiveType>().prop_map(FieldType::Base),
+        arb_class_name()
+            .prop_map(ClassReference::new)
+            .prop_map(FieldType::Object),
+    ]
+}
+
+prop_compose! {
+    fn arb_array_field_type()(
+        t in arb_non_array_field_type(),
+        dim in 1..=u8::MAX
+    ) -> FieldType {
+        let mut result = t;
+        for _ in 0..dim {
+            result = FieldType::Array(Box::new(result));
+        }
+        result
+    }
+}
+
+pub(crate) fn arb_field_type() -> impl Strategy<Value = FieldType> {
+    prop_oneof![arb_non_array_field_type(), arb_array_field_type()]
 }

@@ -430,33 +430,43 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{arbitrary::any, proptest, strategy::Strategy};
+
     use super::*;
-    use crate::tests::empty_class_with_version;
 
-    #[test]
-    fn class_major_version() {
-        for major_ver in 45..=65 {
-            let bytes = empty_class_with_version(major_ver, 0);
-            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
-            assert_eq!(major_ver, class.version.major());
-        }
-    }
+    proptest! {
 
-    #[test]
-    fn class_45_minor_version() {
-        for minor_ver in 0..=65535 {
-            let bytes = empty_class_with_version(45, minor_ver);
-            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
-            assert_eq!(minor_ver, class.version.minor());
+        #[test]
+        fn class_version_45(minor in any::<u16>()) {
+            let class_version = ClassVersion::from_versions(45, minor).unwrap();
+            assert_eq!(45, class_version.major());
+            assert_eq!(minor, class_version.minor());
         }
-    }
 
-    #[test]
-    fn preview_feature() {
-        for major_ver in 56..=65 {
-            let bytes = empty_class_with_version(major_ver, 65535);
-            let class = Class::from_reader(&bytes[..]).expect("Cannot parse class version");
-            assert!(class.version.is_preview_enabled());
+        #[test]
+        fn newer_class_versions(
+            major in (46..=MAX_MAJOR_VERSION),
+            minor in (0..1).prop_map(|it| if it == 0 { 0 } else { u16::MAX })
+        ) {
+            let class_version = ClassVersion::from_versions(major, minor).unwrap();
+            assert_eq!(major, class_version.major());
+            assert_eq!(class_version.is_preview_enabled(), minor == u16::MAX);
         }
+
+        #[test]
+        fn too_low_class_version(major in 0u16..45) {
+            assert!(ClassVersion::from_versions(major, 0).is_err());
+        }
+
+        #[test]
+        fn too_high_class_version(major in (MAX_MAJOR_VERSION+1)..u16::MAX) {
+            assert!(ClassVersion::from_versions(major, 0).is_err());
+        }
+
+        #[test]
+        fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..u16::MAX) {
+            assert!(ClassVersion::from_versions(major, minor).is_err());
+        }
+
     }
 }

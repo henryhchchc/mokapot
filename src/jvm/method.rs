@@ -313,51 +313,52 @@ impl Display for MethodReference {
 #[cfg(test)]
 mod test {
     use super::*;
+    use proptest::prelude::*;
 
     use crate::{
         jvm::method::{MethodReference, ReturnType},
+        tests::{arb_class_name, arb_field_type},
         types::field_type::FieldType,
-        types::field_type::PrimitiveType::*,
     };
 
-    #[test]
-    fn single_param() {
-        let descriptor = "(I)V";
-        let method_descriptor =
-            MethodDescriptor::from_str(descriptor).expect("Failed to parse method descriptor");
-        assert_eq!(method_descriptor.return_type, ReturnType::Void);
-        assert_eq!(
-            method_descriptor.parameters_types,
-            vec![FieldType::Base(Int)]
-        );
+    const MAX_PARAMS: usize = 10;
+
+    fn arb_return_type() -> impl Strategy<Value = ReturnType> {
+        prop_oneof![
+            Just(ReturnType::Void),
+            arb_field_type().prop_map(ReturnType::Some),
+        ]
     }
 
-    #[test]
-    fn param_complex() {
-        let descriptor = "(I[JLjava/lang/String;J)I";
-        let method_descriptor =
-            MethodDescriptor::from_str(descriptor).expect("Failed to parse method descriptor");
-        let string_type = FieldType::Object(ClassReference::new("java/lang/String"));
-        assert_eq!(
-            method_descriptor.return_type,
-            ReturnType::Some(FieldType::Base(Int))
-        );
-        assert_eq!(
-            method_descriptor.parameters_types,
-            vec![
-                FieldType::Base(Int),
-                FieldType::Base(Long).make_array_type(),
-                string_type,
-                FieldType::Base(Long),
-            ]
-        );
-    }
+    proptest! {
+        #[test]
+        fn method_desc_from_str(
+            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
+            ret in arb_return_type(),
+        ) {
+            let descriptor = format!(
+                "({}){}",
+                params.iter().map(FieldType::descriptor_string).join(""),
+                ret.descriptor_string()
+            );
+            let parsed =
+                MethodDescriptor::from_str(&descriptor).expect("Failed to parse method descriptor");
+            assert_eq!(parsed.return_type, ret);
+            assert_eq!(parsed.parameters_types, params);
+        }
 
-    #[test]
-    fn too_many_return_type() {
-        let descriptor = "(I)VJ";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
+        #[test]
+        fn too_many_return_type(
+            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
+            rets in prop::collection::vec(arb_return_type(), 2..5),
+        ) {
+            let descriptor = format!(
+                "({}){}",
+                params.iter().map(FieldType::descriptor_string).join(""),
+                rets.iter().map(ReturnType::descriptor_string).join(""),
+            );
+            assert!(MethodDescriptor::from_str(&descriptor).is_err());
+        }
     }
 
     #[test]
@@ -400,25 +401,28 @@ mod test {
         assert!(method_descriptor.is_err());
     }
 
-    #[test]
-    fn test_is_constructor() {
-        let method = MethodReference {
-            owner: ClassReference::new("test"),
-            name: Method::CONSTRUCTOR_NAME.to_string(),
-            descriptor: "()V".parse().unwrap(),
-        };
+    proptest! {
 
-        assert!(method.is_constructor());
-    }
+        #[test]
+        fn test_is_constructor(class_name in arb_class_name()) {
+            let method = MethodReference {
+                owner: ClassReference::new(class_name),
+                name: Method::CONSTRUCTOR_NAME.to_string(),
+                descriptor: "()V".parse().unwrap(),
+            };
 
-    #[test]
-    fn test_is_static_initializer_bolck() {
-        let method = MethodReference {
-            owner: ClassReference::new("test"),
-            name: Method::CLASS_INITIALIZER_NAME.to_string(),
-            descriptor: "()V".parse().unwrap(),
-        };
+            assert!(method.is_constructor());
+        }
 
-        assert!(method.is_static_initializer_block());
+        #[test]
+        fn test_is_static_initializer_bolck(class_name in arb_class_name()) {
+            let method = MethodReference {
+                owner: ClassReference::new(class_name),
+                name: Method::CLASS_INITIALIZER_NAME.to_string(),
+                descriptor: "()V".parse().unwrap(),
+            };
+
+            assert!(method.is_static_initializer_block());
+        }
     }
 }
