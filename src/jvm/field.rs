@@ -55,6 +55,7 @@ impl Field {
 
 /// A string in the JVM bytecode.
 #[derive(PartialEq, Eq, Debug, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.
     Utf8(String),

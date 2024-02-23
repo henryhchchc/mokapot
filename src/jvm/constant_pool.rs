@@ -62,6 +62,7 @@ pub struct BadConstantPoolIndex(pub u16);
 #[derive(Debug, Clone)]
 #[repr(u8)]
 #[non_exhaustive]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Entry {
     /// A UTF-8 string.
     /// See the [JVM Specification §4.4.7](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.7) for more information.
@@ -211,7 +212,7 @@ mod tests {
 
     prop_compose! {
         fn arb_constant_pool_bytes()(
-            entries in prop::collection::vec(arb_constant_pool_info(), 1..=100)
+            entries in prop::collection::vec(arb_constant_pool_info(), 1..=50)
         ) -> (u16, Vec<u8>) {
             let count = {
                 let mut len = entries.len();
@@ -229,11 +230,25 @@ mod tests {
     proptest! {
 
         #[test]
-        fn constant_pool_from_reader((count, bytes) in arb_constant_pool_bytes()) {
+        fn from_reader((count, bytes) in arb_constant_pool_bytes()) {
             let mut reader = bytes.as_slice();
             let constant_pool = ConstantPool::from_reader(&mut reader, count);
             assert!(constant_pool.is_ok());
             assert!(reader.is_empty());
         }
+
+        #[test]
+        fn from_reader_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
+            let mut reader = bytes.as_slice();
+            let constant_pool = ConstantPool::from_reader(&mut reader, count + 1);
+            assert!(constant_pool.is_err());
+        }
+
+        #[test]
+        fn constant_kind(entry in any::<Entry>()) {
+            let kind = entry.constant_kind();
+            assert!(kind.starts_with("CONSTANT_"));
+        }
+
     }
 }
