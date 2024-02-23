@@ -275,3 +275,271 @@ impl Entry {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+
+    use super::*;
+    use proptest::prelude::*;
+
+    const MAX_BYTES: usize = 255;
+
+    proptest! {
+
+        #[test]
+        fn parse_entry(entry in arb_constant_pool_info()) {
+            let mut reader = entry.as_slice();
+            let parsed = Entry::parse(&mut reader);
+            let tag = entry.first().unwrap();
+            match tag {
+                1 => assert!(matches!(parsed, Ok(Entry::Utf8(_)))),
+                3 => assert!(matches!(parsed, Ok(Entry::Integer(_)))),
+                4 => assert!(matches!(parsed, Ok(Entry::Float(_)))),
+                5 => assert!(matches!(parsed, Ok(Entry::Long(_)))),
+                6 => assert!(matches!(parsed, Ok(Entry::Double(_)))),
+                7 => assert!(matches!(parsed, Ok(Entry::Class { .. }))),
+                8 => assert!(matches!(parsed, Ok(Entry::String { .. }))),
+                9 => assert!(matches!(parsed, Ok(Entry::FieldRef { .. }))),
+                10 => assert!(matches!(parsed, Ok(Entry::MethodRef { .. }))),
+                11 => assert!(matches!(parsed, Ok(Entry::InterfaceMethodRef { .. }))),
+                12 => assert!(matches!(parsed, Ok(Entry::NameAndType { .. }))),
+                15 => assert!(matches!(parsed, Ok(Entry::MethodHandle { .. }))),
+                16 => assert!(matches!(parsed, Ok(Entry::MethodType { .. }))),
+                17 => assert!(matches!(parsed, Ok(Entry::Dynamic { .. }))),
+                18 => assert!(matches!(parsed, Ok(Entry::InvokeDynamic { .. }))),
+                19 => assert!(matches!(parsed, Ok(Entry::Module { .. }))),
+                20 => assert!(matches!(parsed, Ok(Entry::Package { .. }))),
+                _ => unreachable!()
+            }
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_utf8()(
+            content in prop::collection::vec(any::<u8>(), 1..=MAX_BYTES)
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(content.len() + 3);
+            result.push(1);
+            let len = u16::try_from(content.len()).unwrap();
+            result.extend(len.to_be_bytes());
+            result.extend(content);
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_integer()(
+            value in any::<i32>()
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(3);
+            result.extend(value.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_float()(
+            value in any::<f32>()
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(4);
+            result.extend(value.to_be_bytes());
+            result
+        }
+
+    }
+
+    prop_compose! {
+        fn arb_constant_info_long()(
+            value in any::<i64>()
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(9);
+            result.push(5);
+            result.extend(value.to_be_bytes());
+            result
+        }
+
+    }
+
+    prop_compose! {
+        fn arb_constant_info_double()(
+            value in any::<f64>()
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(9);
+            result.push(6);
+            result.extend(value.to_be_bytes());
+            result
+        }
+
+    }
+
+    prop_compose! {
+        fn arb_constant_info_class()(
+            name_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(3);
+            result.push(7);
+            result.extend(name_index.to_be_bytes());
+            result
+        }
+
+    }
+
+    prop_compose! {
+        fn arb_constant_info_string()(
+            string_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(3);
+            result.push(8);
+            result.extend(string_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_field_ref()(
+            class_index in 1..=u16::MAX,
+            name_and_type_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(9);
+            result.extend(class_index.to_be_bytes());
+            result.extend(name_and_type_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_method_ref()(
+            class_index in 1..=u16::MAX,
+            name_and_type_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(10);
+            result.extend(class_index.to_be_bytes());
+            result.extend(name_and_type_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_interface_method_ref()(
+            class_index in 1..=u16::MAX,
+            name_and_type_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(11);
+            result.extend(class_index.to_be_bytes());
+            result.extend(name_and_type_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_name_and_type()(
+            name_index in 1..=u16::MAX,
+            descriptor_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(12);
+            result.extend(name_index.to_be_bytes());
+            result.extend(descriptor_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_method_handle()(
+            reference_kind in 1..=u8::MAX,
+            reference_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(15);
+            result.push(reference_kind);
+            result.extend(reference_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_method_type()(
+            descriptor_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(3);
+            result.push(16);
+            result.extend(descriptor_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_dynamic()(
+            bootstrap_method_attr_index in 1..=u16::MAX,
+            name_and_type_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(17);
+            result.extend(bootstrap_method_attr_index.to_be_bytes());
+            result.extend(name_and_type_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_invoke_dynamic()(
+            bootstrap_method_attr_index in 1..=u16::MAX,
+            name_and_type_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(5);
+            result.push(18);
+            result.extend(bootstrap_method_attr_index.to_be_bytes());
+            result.extend(name_and_type_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_module()(
+            name_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(3);
+            result.push(19);
+            result.extend(name_index.to_be_bytes());
+            result
+        }
+    }
+
+    prop_compose! {
+        fn arb_constant_info_package()(
+            name_index in 1..=u16::MAX
+        ) -> Vec<u8> {
+            let mut result = Vec::with_capacity(3);
+            result.push(20);
+            result.extend(name_index.to_be_bytes());
+            result
+        }
+    }
+
+    pub(crate) fn arb_constant_pool_info() -> impl Strategy<Value = Vec<u8>> {
+        prop_oneof![
+            arb_constant_info_utf8(),
+            arb_constant_info_integer(),
+            arb_constant_info_float(),
+            arb_constant_info_long(),
+            arb_constant_info_double(),
+            arb_constant_info_class(),
+            arb_constant_info_string(),
+            arb_constant_info_field_ref(),
+            arb_constant_info_method_ref(),
+            arb_constant_info_interface_method_ref(),
+            arb_constant_info_name_and_type(),
+            arb_constant_info_method_handle(),
+            arb_constant_info_method_type(),
+            arb_constant_info_dynamic(),
+            arb_constant_info_invoke_dynamic(),
+            arb_constant_info_module(),
+            arb_constant_info_package(),
+        ]
+    }
+}

@@ -202,3 +202,38 @@ impl Entry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::parsing::constant_pool::tests::arb_constant_pool_info;
+    use super::*;
+    use proptest::prelude::*;
+
+    prop_compose! {
+        fn arb_constant_pool_bytes()(
+            entries in prop::collection::vec(arb_constant_pool_info(), 1..=100)
+        ) -> (u16, Vec<u8>) {
+            let count = {
+                let mut len = entries.len();
+                len += entries.iter().filter(|&it| {
+                    it.first().is_some_and(|&it| it == 5 || it == 6)
+                }).count();
+                len += 1;
+                u16::try_from(len).unwrap()
+            };
+            let bytes = entries.into_iter().flatten().collect();
+            (count, bytes)
+        }
+    }
+
+    proptest! {
+
+        #[test]
+        fn constant_pool_from_reader((count, bytes) in arb_constant_pool_bytes()) {
+            let mut reader = bytes.as_slice();
+            let constant_pool = ConstantPool::from_reader(&mut reader, count);
+            assert!(constant_pool.is_ok());
+            assert!(reader.is_empty());
+        }
+    }
+}
