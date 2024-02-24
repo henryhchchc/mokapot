@@ -35,7 +35,10 @@ pub trait ClassPath: std::fmt::Debug {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError>;
 }
 
-impl ClassPath for Box<dyn ClassPath> {
+impl<T> ClassPath for Box<T>
+where
+    T: ClassPath + ?Sized,
+{
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
         self.as_ref().find_class(binary_name)
     }
