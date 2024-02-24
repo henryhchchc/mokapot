@@ -9,7 +9,7 @@ use crate::{
 impl RawInstruction {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
-    /// See [`ClassFileParsingError`] for more information.
+    /// See [`Error`] for more information.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
         let mut cursor = Cursor::new(bytes);
         let mut inner = BTreeMap::new();
