@@ -27,7 +27,7 @@ pub enum ClassLoadingError {
 }
 
 /// A class path that can be searched for classes.
-pub trait ClassPath: std::fmt::Debug {
+pub trait ClassPath {
     /// Find a class by its binary name.
     ///
     /// # Errors

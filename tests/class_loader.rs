@@ -1,7 +1,4 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering::Relaxed},
-    Arc,
-};
+use std::cell::Cell;
 
 use mokapot::jvm::{
     class::Class,
@@ -28,36 +25,35 @@ fn load_absent_class() {
     assert!(matches!(class, Err(ClassLoadingError::NotFound(_))));
 }
 
-#[derive(Debug)]
-struct TestClassPath {
-    inner: DirectoryClassPath,
-    counter: Arc<AtomicUsize>,
+struct MockClassPath<'a> {
+    counter: &'a Cell<usize>,
 }
 
-impl TestClassPath {
-    fn new(counter: Arc<AtomicUsize>) -> Self {
-        Self {
-            inner: create_test_dir_class_path(),
-            counter,
-        }
+impl<'a> MockClassPath<'a> {
+    fn new(counter: &'a Cell<usize>) -> Self {
+        Self { counter }
     }
 }
 
-impl ClassPath for TestClassPath {
-    fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
-        self.counter.fetch_add(1, Relaxed);
-        self.inner.find_class(binary_name)
+impl ClassPath for MockClassPath<'_> {
+    fn find_class(&self, _binary_name: &str) -> Result<Class, ClassLoadingError> {
+        self.counter.set(self.counter.get() + 1);
+        let reader = include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/java_classes/org/pkg/MyClass.class"
+        ));
+        Class::from_reader(reader.as_slice()).map_err(Into::into)
     }
 }
 
 #[test]
 fn caching_class_loader_load_once() {
-    let counter = Arc::default();
-    let test_cp = TestClassPath::new(Arc::clone(&counter));
+    let counter = Cell::new(0);
+    let test_cp = MockClassPath::new(&counter);
     let class_loader = ClassLoader::new([test_cp]).into_cached();
     for _ in 0..10 {
         let class = class_loader.load_class("org/pkg/MyClass").unwrap();
         assert_eq!(class.binary_name, "org/pkg/MyClass");
     }
-    assert_eq!(counter.load(Relaxed), 1);
+    assert_eq!(counter.get(), 1);
 }
