@@ -12,6 +12,7 @@ keywords = ["jvm", "java", "analysis", "bytecode"]
 [dependencies]
 bitflags = "2.4"
 cesu8 = "1.1"
+document-features = "0.2"
 itertools = "0.12"
 petgraph = { version = "0.6", optional = true }
 thiserror = "1.0"
@@ -26,5 +27,9 @@ proptest-derive = "0.4"
 
 [features]
 default = ["jar", "petgraph"]
+
+## Enables loading classes from `.jar` files
 jar = ["dep:zip"]
+
+## Enables the analysis of control flow graphs with `petgraph`.
 petgraph = ["dep:petgraph"]

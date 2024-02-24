@@ -1,4 +1,4 @@
-//! Module containing the APIs for the JVM elements.
+//! JVM elements, such as classes, methods, fields, and annotations.
 
 pub mod annotation;
 pub mod class;

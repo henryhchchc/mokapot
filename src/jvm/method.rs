@@ -1,4 +1,4 @@
-//! Module for the APIs for the method in JVM.
+//! JVM methods.
 use core::str;
 use std::{
     fmt::Display,

@@ -1,4 +1,4 @@
-//! Module for the APIs for the class in JVM.
+//! JVM classes and interfaces
 use std::fmt::Display;
 
 use bitflags::bitflags;

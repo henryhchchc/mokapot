@@ -1,4 +1,4 @@
-//! APIs for the constant pool in JVM.
+//! Constant pool in a JVM class file.
 
 use std::io::Read;
 

@@ -1,4 +1,4 @@
-//! Module for the APIs for the constant pool in JVM.
+//! JVM fields and constant values.
 use std::fmt::Display;
 
 use crate::types::{field_type::FieldType, signitures::FieldSignature};

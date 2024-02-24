@@ -1,4 +1,6 @@
-//! Module containing the APIs for the Moka IR.
+//! `MokaIR` is an intermediate representation of JVM bytecode.
+//! It is register based and is in SSA form, which make it easier to analyze.
+
 pub mod control_flow;
 pub mod expression;
 mod generator;
