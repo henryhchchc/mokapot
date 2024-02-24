@@ -35,13 +35,19 @@ pub trait ClassPath: Sync + std::fmt::Debug {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError>;
 }
 
-/// A class loader that can load classes from a list of class paths.
-#[derive(Debug)]
-pub struct ClassLoader {
-    class_path: Vec<Box<dyn ClassPath>>,
+impl ClassPath for Box<dyn ClassPath> {
+    fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
+        self.as_ref().find_class(binary_name)
+    }
 }
 
-impl ClassLoader {
+/// A class loader that can load classes from a list of class paths.
+#[derive(Debug)]
+pub struct ClassLoader<P> {
+    class_path: Vec<P>,
+}
+
+impl<P: ClassPath> ClassLoader<P> {
     /// Create a new class loader with the given class paths.
     ///
     /// # Errors
@@ -56,16 +62,19 @@ impl ClassLoader {
         }
         Err(ClassLoadingError::NotFound(binary_name.as_ref().to_owned()))
     }
+}
 
+impl<P> ClassLoader<P> {
     /// Create a new class loader with the given class paths.
     #[must_use]
-    pub fn new(class_path: Vec<Box<dyn ClassPath>>) -> Self {
+    pub fn new(class_path: impl Into<Vec<P>>) -> Self {
+        let class_path = class_path.into();
         Self { class_path }
     }
 
     /// Convert this class loader into a [`CachingClassLoader`].
     #[must_use]
-    pub fn into_cached(self) -> CachingClassLoader {
+    pub fn into_cached(self) -> CachingClassLoader<P> {
         CachingClassLoader {
             class_loader: self,
             cache: Mutex::new(HashMap::new()),
@@ -142,12 +151,12 @@ impl ClassPath for JarClassPath {
 
 /// A class loader that caches loaded classes.
 #[derive(Debug)]
-pub struct CachingClassLoader {
-    class_loader: ClassLoader,
+pub struct CachingClassLoader<P> {
+    class_loader: ClassLoader<P>,
     cache: Mutex<HashMap<String, Class>>,
 }
 
-impl CachingClassLoader {
+impl<P: ClassPath> CachingClassLoader<P> {
     /// Loads a class from the class loader's cache, or loads it from the class loader if it is
     /// not.
     ///

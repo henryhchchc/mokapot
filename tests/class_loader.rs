@@ -15,7 +15,7 @@ fn create_test_dir_class_path() -> DirectoryClassPath {
 #[test]
 fn load_class() {
     let dir_cp = create_test_dir_class_path();
-    let class_loader = ClassLoader::new(vec![Box::new(dir_cp)]);
+    let class_loader = ClassLoader::new([dir_cp]);
     let class = class_loader.load_class("org/pkg/MyClass").unwrap();
     assert_eq!(class.binary_name, "org/pkg/MyClass");
 }
@@ -23,7 +23,7 @@ fn load_class() {
 #[test]
 fn load_absent_class() {
     let dir_cp = create_test_dir_class_path();
-    let class_loader = ClassLoader::new(vec![Box::new(dir_cp)]);
+    let class_loader = ClassLoader::new([dir_cp]);
     let class = class_loader.load_class("org/pkg/MyAbsentClass");
     assert!(matches!(class, Err(ClassLoadingError::NotFound(_))));
 }
@@ -54,7 +54,7 @@ impl ClassPath for TestClassPath {
 fn caching_class_loader_load_once() {
     let counter = Arc::default();
     let test_cp = TestClassPath::new(Arc::clone(&counter));
-    let class_loader = ClassLoader::new(vec![Box::new(test_cp)]).into_cached();
+    let class_loader = ClassLoader::new([test_cp]).into_cached();
     for _ in 0..10 {
         let class = class_loader.load_class("org/pkg/MyClass").unwrap();
         assert_eq!(class.binary_name, "org/pkg/MyClass");
