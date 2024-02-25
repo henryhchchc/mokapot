@@ -32,16 +32,16 @@ pub enum PrimitiveType {
 impl PrimitiveType {
     /// Returns the JVM descriptor for this type.
     #[must_use]
-    pub const fn descriptor<'a>(self) -> &'a str {
+    pub const fn descriptor(self) -> char {
         match self {
-            Self::Boolean => "Z",
-            Self::Char => "C",
-            Self::Float => "F",
-            Self::Double => "D",
-            Self::Byte => "B",
-            Self::Short => "S",
-            Self::Int => "I",
-            Self::Long => "J",
+            Self::Boolean => 'Z',
+            Self::Char => 'C',
+            Self::Float => 'F',
+            Self::Double => 'D',
+            Self::Byte => 'B',
+            Self::Short => 'S',
+            Self::Int => 'I',
+            Self::Long => 'J',
         }
     }
 }
@@ -154,7 +154,7 @@ impl FieldType {
     #[must_use]
     pub fn descriptor(&self) -> String {
         match self {
-            FieldType::Base(it) => it.descriptor().to_owned(),
+            FieldType::Base(it) => it.descriptor().to_string(),
             FieldType::Object(ClassReference { binary_name }) => {
                 format!("L{binary_name};")
             }
@@ -176,16 +176,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn primitive_type_descriptor_str() {
+    fn primitive_type_descriptor() {
         use PrimitiveType::*;
-        assert_eq!(Boolean.descriptor(), "Z");
-        assert_eq!(Char.descriptor(), "C");
-        assert_eq!(Float.descriptor(), "F");
-        assert_eq!(Double.descriptor(), "D");
-        assert_eq!(Byte.descriptor(), "B");
-        assert_eq!(Short.descriptor(), "S");
-        assert_eq!(Int.descriptor(), "I");
-        assert_eq!(Long.descriptor(), "J");
+        assert_eq!(Boolean.descriptor(), 'Z');
+        assert_eq!(Char.descriptor(), 'C');
+        assert_eq!(Float.descriptor(), 'F');
+        assert_eq!(Double.descriptor(), 'D');
+        assert_eq!(Byte.descriptor(), 'B');
+        assert_eq!(Short.descriptor(), 'S');
+        assert_eq!(Int.descriptor(), 'I');
+        assert_eq!(Long.descriptor(), 'J');
     }
 
     #[test]
