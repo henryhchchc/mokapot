@@ -25,7 +25,7 @@ The documentation of the latest commit is available at [github.io](https://henry
 
 Add the following line to the `[dependencies]` section in your `Cargo.toml`.
 ```toml
-mokapot = "0.9"
+mokapot = "0.10"
 ```
 
 Add the following line instead to use the latest development version.
