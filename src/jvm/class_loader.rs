@@ -1,6 +1,6 @@
 //! Discovering and loading classes.
 
-use std::{collections::HashMap, fs::File, io::BufReader, sync::Mutex};
+use std::{collections::HashMap, fs::File, io::BufReader, ops::Deref, sync::Mutex};
 
 use thiserror::Error;
 
@@ -35,12 +35,13 @@ pub trait ClassPath {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError>;
 }
 
-impl<T> ClassPath for Box<T>
+impl<T> ClassPath for T
 where
-    T: ClassPath + ?Sized,
+    T: Deref,
+    <T as Deref>::Target: ClassPath,
 {
     fn find_class(&self, binary_name: &str) -> Result<Class, ClassLoadingError> {
-        self.as_ref().find_class(binary_name)
+        self.deref().find_class(binary_name)
     }
 }
 
@@ -148,7 +149,7 @@ impl ClassPath for JarClassPath {
             Err(ZipError::Io(io_err)) => Err(ClassLoadingError::IO(io_err))?,
             Err(e) => Err(ClassLoadingError::Other(Box::new(e)))?,
         };
-        Class::from_reader(&mut class_file).map_err(std::convert::Into::into)
+        Class::from_reader(&mut class_file).map_err(Into::into)
     }
 }
 
@@ -165,18 +166,32 @@ impl<P: ClassPath> CachingClassLoader<P> {
     ///
     /// # Errors
     /// See [`ClassLoadingError`].
+    #[allow(
+        clippy::missing_panics_doc,
+        // TODO: Uncomment the following when lint reason is stabalized.
+        //       See https://github.com/rust-lang/rust/issues/54503
+        // reason = "The unwrap is garenteed to not panic."
+    )]
     pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, ClassLoadingError> {
-        let mut cache_guard = match self.cache.lock() {
+        let mut cache = match self.cache.lock() {
             Ok(it) => it,
-            Err(poison_err) => poison_err.into_inner(),
+            Err(poison_err) => {
+                // The operaion on `self.cache` should not panic.
+                // When the other thread holding the lock get panic, the panic should happen before
+                // modifying the cache.
+                // Therefore, it is safe to take the lock even if it is poisoned.
+                poison_err.into_inner()
+            }
         };
         let key_ref = binary_name.as_ref();
-        let class = if let Some(class) = cache_guard.get(key_ref) {
+        let class = if let Some(class) = cache.get(key_ref) {
             class
         } else {
             let class = self.class_loader.load_class(key_ref)?;
-            cache_guard.insert(key_ref.to_owned(), class);
-            cache_guard.get(key_ref).unwrap_or_else(|| unreachable!())
+            let overridden = cache.insert(key_ref.to_owned(), class);
+            debug_assert!(overridden.is_none(), "Class is already in the cache");
+            // The unwrap is safe since the class was just inserted into the cache.
+            cache.get(key_ref).unwrap()
         };
         // SAFETY: The class reference is valid for the lifetime of the cache.
         Ok(unsafe { std::mem::transmute(class) })
