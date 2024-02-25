@@ -64,10 +64,10 @@ impl Display for ConversionOperation {
             Self::Int2Char(operand) => write!(f, "{operand} as char"),
             Self::Int2Short(operand) => write!(f, "{operand} as short"),
             Self::CheckCast(operand, target_type) => {
-                write!(f, "{} as {}", operand, target_type.descriptor_string())
+                write!(f, "{} as {}", operand, target_type.descriptor())
             }
             Self::InstanceOf(operand, target_type) => {
-                write!(f, "{} is {}", operand, target_type.descriptor_string())
+                write!(f, "{} is {}", operand, target_type.descriptor())
             }
         }
     }

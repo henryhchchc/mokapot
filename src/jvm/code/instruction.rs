@@ -4,9 +4,12 @@ use crate::{
     jvm::{
         class::ClassReference,
         field::{ConstantValue, FieldReference},
-        method::{MethodDescriptor, MethodReference},
+        method::MethodReference,
     },
-    types::field_type::{PrimitiveType, TypeReference},
+    types::{
+        field_type::{PrimitiveType, TypeReference},
+        method_descriptor::MethodDescriptor,
+    },
 };
 
 use super::ProgramCounter;

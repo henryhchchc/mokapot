@@ -3,10 +3,12 @@ use std::io::BufReader;
 use mokapot::{
     jvm::{
         class::{Class, ClassAccessFlags, ClassReference},
-        method::ReturnType,
         parsing::Error,
     },
-    types::field_type::{FieldType, PrimitiveType},
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::ReturnType,
+    },
 };
 
 /// Parses the class file compiled from `MyClass.java` from the `test_data` directory.
@@ -84,7 +86,7 @@ fn test_methods() {
         .expect("main method not found");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::Object(ClassReference::new("java/lang/String")).make_array_type(),
+        FieldType::Object(ClassReference::new("java/lang/String")).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }

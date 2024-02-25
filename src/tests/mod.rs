@@ -38,13 +38,7 @@ prop_compose! {
     }
 }
 
-prop_compose! {
-    pub(crate) fn arb_primitive_type_name()(n in r"[BCDFIJSZ]") -> String {
-        n
-    }
-}
-
-fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
+pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![
         any::<PrimitiveType>().prop_map(FieldType::Base),
         arb_class_name()
@@ -58,11 +52,7 @@ prop_compose! {
         t in arb_non_array_field_type(),
         dim in 1..=u8::MAX
     ) -> FieldType {
-        let mut result = t;
-        for _ in 0..dim {
-            result = FieldType::Array(Box::new(result));
-        }
-        result
+        FieldType::array_of(t, dim)
     }
 }
 

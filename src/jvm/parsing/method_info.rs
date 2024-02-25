@@ -1,12 +1,13 @@
-use std::{io::Read, str::FromStr};
+use std::io::Read;
 
 use crate::{
     jvm::{
         class::ClassReference,
-        method::{Method, MethodAccessFlags, MethodDescriptor},
+        method::{Method, MethodAccessFlags},
         parsing::{jvm_element_parser::parse_flags, parsing_context::ParsingContext},
     },
     macros::{extract_attributes, malform},
+    types::method_descriptor::MethodDescriptor,
 };
 
 use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Error};
@@ -102,6 +103,6 @@ impl JvmElement for MethodDescriptor {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        MethodDescriptor::from_str(descriptor).map_err(Error::from)
+        descriptor.parse().map_err(Into::into)
     }
 }

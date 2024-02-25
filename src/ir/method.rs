@@ -1,7 +1,10 @@
-use crate::jvm::{
-    class::ClassReference,
-    code::{ExceptionTableEntry, InstructionList},
-    method::{MethodAccessFlags, MethodDescriptor},
+use crate::{
+    jvm::{
+        class::ClassReference,
+        code::{ExceptionTableEntry, InstructionList},
+        method::MethodAccessFlags,
+    },
+    types::method_descriptor::MethodDescriptor,
 };
 
 use super::{

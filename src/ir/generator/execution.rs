@@ -10,9 +10,11 @@ use crate::{
     jvm::{
         code::{Instruction, ProgramCounter, WideInstruction},
         field::ConstantValue,
-        method::ReturnType,
     },
-    types::field_type::{FieldType, PrimitiveType, TypeReference},
+    types::{
+        field_type::{FieldType, PrimitiveType, TypeReference},
+        method_descriptor::ReturnType,
+    },
 };
 
 #[allow(clippy::too_many_lines)]

@@ -1,13 +1,9 @@
-use std::{io::Read, iter::repeat_with, str::FromStr};
+use std::{io::Read, iter::repeat_with};
 
-use crate::{
-    jvm::{
-        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-        code::LocalVariableId,
-        field::{ConstantValue, JavaString},
-        method::ReturnType,
-    },
-    types::field_type::FieldType,
+use crate::jvm::{
+    annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+    code::LocalVariableId,
+    field::{ConstantValue, JavaString},
 };
 
 use super::{
@@ -32,8 +28,7 @@ impl JvmElement for TypePathElement {
 impl JvmElement for Annotation {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let type_idx = reader.read_value()?;
-        let annotation_type = ctx.constant_pool.get_str(type_idx)?;
-        let annotation_type = FieldType::from_str(annotation_type)?;
+        let annotation_type = ctx.constant_pool.get_str(type_idx)?.parse()?;
         let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
@@ -102,8 +97,7 @@ impl JvmElement for TypeAnnotation {
             .take(target_path_length.into())
             .collect::<Result<_, Error>>()?;
         let type_index = reader.read_value()?;
-        let annotation_type_str = ctx.constant_pool.get_str(type_index)?;
-        let annotation_type = FieldType::from_str(annotation_type_str)?;
+        let annotation_type = ctx.constant_pool.get_str(type_index)?.parse()?;
         let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
@@ -159,8 +153,7 @@ impl JvmElement for ElementValue {
             }
             'c' => {
                 let class_info_idx = reader.read_value()?;
-                let return_descriptor_str = ctx.constant_pool.get_str(class_info_idx)?.to_owned();
-                let return_descriptor = ReturnType::from_str(&return_descriptor_str)?;
+                let return_descriptor = ctx.constant_pool.get_str(class_info_idx)?.parse()?;
                 Ok(Self::Class { return_descriptor })
             }
             '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),

@@ -1,10 +1,9 @@
 //! Module for the APIs for the annotation in JVM.
-use crate::types::field_type::FieldType;
+use crate::types::{field_type::FieldType, method_descriptor::ReturnType};
 
 use super::{
     code::{LocalVariableId, ProgramCounter},
     field::ConstantValue,
-    method::ReturnType,
 };
 
 /// An annotation on a class, field, method, or parameter.

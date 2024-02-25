@@ -1,5 +1,6 @@
-use crate::jvm::{
-    code::InvalidOffset, constant_pool::BadConstantPoolIndex, method::InvalidDescriptor,
+use crate::{
+    jvm::{code::InvalidOffset, constant_pool::BadConstantPoolIndex},
+    types::method_descriptor::InvalidDescriptor,
 };
 
 /// An error that occurs when parsing a Java class file.

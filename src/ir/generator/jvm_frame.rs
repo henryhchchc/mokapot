@@ -4,8 +4,11 @@ use itertools::Itertools;
 
 use crate::{
     ir::{Argument, Identifier},
-    jvm::{code::ProgramCounter, method::MethodDescriptor},
-    types::field_type::{FieldType, PrimitiveType},
+    jvm::code::ProgramCounter,
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::MethodDescriptor,
+    },
 };
 
 #[derive(PartialEq, Debug, Clone)]

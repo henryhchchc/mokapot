@@ -50,7 +50,7 @@ impl Display for ArrayOperation {
             Self::New {
                 element_type,
                 length,
-            } => write!(f, "new {}[{}]", element_type.descriptor_string(), length),
+            } => write!(f, "new {}[{}]", element_type.descriptor(), length),
             Self::NewMultiDim {
                 element_type,
                 dimensions,
@@ -58,7 +58,7 @@ impl Display for ArrayOperation {
                 write!(
                     f,
                     "new {}[{}]",
-                    element_type.descriptor_string(),
+                    element_type.descriptor(),
                     dimensions
                         .iter()
                         .map(std::string::ToString::to_string)

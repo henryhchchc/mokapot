@@ -5,13 +5,14 @@ use bitflags::bitflags;
 
 use crate::types::{
     field_type::FieldType,
+    method_descriptor::MethodDescriptor,
     signitures::{ClassSignature, FieldSignature},
 };
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
     field::{ConstantValue, Field, FieldReference},
-    method::{Method, MethodDescriptor, MethodReference},
+    method::{Method, MethodReference},
     module::{Module, PackageReference},
     parsing::Error,
 };

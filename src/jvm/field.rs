@@ -1,12 +1,13 @@
 //! JVM fields and constant values.
 use std::fmt::Display;
 
-use crate::types::{field_type::FieldType, signitures::FieldSignature};
+use crate::types::{
+    field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
+};
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
     class::{ClassReference, MethodHandle},
-    method::MethodDescriptor,
 };
 
 /// A JVM field.
@@ -120,7 +121,7 @@ impl Display for ConstantValue {
                     "Dynamic({}, {}, {})",
                     bootstrap_method_attr_index,
                     name,
-                    field_type.descriptor_string()
+                    field_type.descriptor()
                 )
             }
         }
@@ -210,12 +211,12 @@ mod test {
             "Ljava/lang/String;".parse(),
             Ok(FieldType::Object(ClassReference::new("java/lang/String")))
         );
-        assert_eq!("[I".parse(), Ok(FieldType::Base(Int).make_array_type()));
+        assert_eq!("[I".parse(), Ok(FieldType::Base(Int).into_array_type()));
         assert_eq!(
             "[[Ljava/lang/String;".parse(),
             Ok(FieldType::Object(ClassReference::new("java/lang/String"))
-                .make_array_type()
-                .make_array_type())
+                .into_array_type()
+                .into_array_type())
         );
     }
 

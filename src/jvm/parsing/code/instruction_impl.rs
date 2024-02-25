@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use itertools::Itertools;
 
 use crate::{
@@ -8,8 +6,7 @@ use crate::{
             Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
             WideInstruction,
         },
-        constant_pool::{ConstantPool, Entry as ConstantPoolEntry},
-        method::MethodDescriptor,
+        constant_pool::{self, ConstantPool},
         parsing::{parsing_context::ParsingContext, Error},
     },
     macros::malform,
@@ -350,7 +347,7 @@ impl Instruction {
             }
             InvokeDynamic { dynamic_index } => {
                 let entry = constant_pool.get_entry(dynamic_index)?;
-                let &ConstantPoolEntry::InvokeDynamic {
+                let &constant_pool::Entry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
                 } = entry
@@ -360,12 +357,11 @@ impl Instruction {
                         found: entry.constant_kind(),
                     })?
                 };
-                let (name, desc_str) = constant_pool.get_name_and_type(name_and_type_index)?;
-                let descriptor = MethodDescriptor::from_str(desc_str)?;
+                let (name, descriptor) = constant_pool.get_name_and_type(name_and_type_index)?;
                 Self::InvokeDynamic {
                     bootstrap_method_index,
+                    name,
                     descriptor,
-                    name: name.to_owned(),
                 }
             }
             New { index } => {

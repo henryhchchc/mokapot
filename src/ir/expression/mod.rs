@@ -5,11 +5,11 @@ use itertools::Itertools;
 
 use super::Argument;
 
-use crate::jvm::{
-    class::ClassReference,
-    code::ProgramCounter,
-    field::ConstantValue,
-    method::{MethodDescriptor, MethodReference},
+use crate::{
+    jvm::{
+        class::ClassReference, code::ProgramCounter, field::ConstantValue, method::MethodReference,
+    },
+    types::method_descriptor::MethodDescriptor,
 };
 
 mod array;

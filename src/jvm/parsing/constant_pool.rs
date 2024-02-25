@@ -9,7 +9,7 @@ use crate::{
         class::{ClassReference, MethodHandle},
         constant_pool::{ConstantPool, Entry},
         field::{ConstantValue, FieldReference, JavaString},
-        method::{MethodDescriptor, MethodReference},
+        method::MethodReference,
         module::{ModuleReference, PackageReference},
     },
     macros::malform,
@@ -60,7 +60,7 @@ impl ConstantPool {
             }
             &Entry::MethodType { descriptor_index } => self
                 .get_str(descriptor_index)
-                .and_then(|it| MethodDescriptor::from_str(it).map_err(Into::into))
+                .and_then(|it| it.parse().map_err(Into::into))
                 .map(ConstantValue::MethodType),
             &Entry::Class { name_index } => self
                 .get_str(name_index)
@@ -74,10 +74,9 @@ impl ConstantPool {
                 name_and_type_index,
             } => {
                 let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-                let descriptor = FieldType::from_str(descriptor)?;
                 Ok(ConstantValue::Dynamic(
                     bootstrap_method_attr_index,
-                    name.to_owned(),
+                    name,
                     descriptor,
                 ))
             }
@@ -121,11 +120,10 @@ impl ConstantPool {
         } = entry
         {
             let class = self.get_class_ref(class_index)?;
-            let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-            let field_type = FieldType::from_str(descriptor)?;
+            let (name, field_type) = self.get_name_and_type(name_and_type_index)?;
             Ok(FieldReference {
                 class,
-                name: name.to_owned(),
+                name,
                 field_type,
             })
         } else {
@@ -133,7 +131,11 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_name_and_type(&self, index: u16) -> Result<(&str, &str), Error> {
+    pub(super) fn get_name_and_type<T>(&self, index: u16) -> Result<(String, T), Error>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Into<Error>,
+    {
         let entry = self.get_entry(index)?;
         if let &Entry::NameAndType {
             name_index,
@@ -141,8 +143,11 @@ impl ConstantPool {
         } = entry
         {
             let name = self.get_str(name_index)?;
-            let descriptor = self.get_str(descriptor_index)?;
-            Ok((name, descriptor))
+            let descriptor = self
+                .get_str(descriptor_index)?
+                .parse()
+                .map_err(Into::into)?;
+            Ok((name.to_owned(), descriptor))
         } else {
             mismatch("NameAndType", entry)
         }
@@ -160,9 +165,7 @@ impl ConstantPool {
         } = entry
         {
             let owner = self.get_class_ref(class_index)?;
-            let (name, descriptor_str) = self.get_name_and_type(name_and_type_index)?;
-            let name = name.to_owned();
-            let descriptor = MethodDescriptor::from_str(descriptor_str)?;
+            let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
             Ok(MethodReference {
                 owner,
                 name,

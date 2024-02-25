@@ -1,7 +1,6 @@
 use std::{
     io::{Cursor, Read},
     iter::repeat_with,
-    str::FromStr,
     usize,
 };
 
@@ -15,7 +14,7 @@ use crate::jvm::{
     },
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
-    method::{MethodDescriptor, ParameterInfo},
+    method::ParameterInfo,
     module::{Module, PackageReference},
 };
 
@@ -211,9 +210,8 @@ impl JvmElement for EnclosingMethod {
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = reader.read_value()?;
         let method_name_and_desc = if method_index > 0 {
-            let (name, descriptor) = ctx.constant_pool.get_name_and_type(method_index)?;
-            let descriptor = MethodDescriptor::from_str(descriptor)?;
-            Some((name.to_owned(), descriptor))
+            let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
+            Some(name_and_desc)
         } else {
             None
         };
