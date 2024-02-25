@@ -1,8 +1,11 @@
 //! JVM fields and constant values.
 use std::fmt::Display;
 
-use crate::types::{
-    field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
+use crate::{
+    macros::see_jvm_spec,
+    types::{
+        field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
+    },
 };
 
 use super::{
@@ -11,7 +14,7 @@ use super::{
 };
 
 /// A JVM field.
-/// See the [JVM Specification §4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.5) for more information.
+#[doc = see_jvm_spec!(4, 5)]
 #[derive(Debug, Clone)]
 pub struct Field {
     /// The access modifiers of the field.
@@ -78,7 +81,7 @@ impl Display for JavaString {
 }
 
 /// Denotes a compile-time constant value.
-/// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
+#[doc = see_jvm_spec!(4, 4)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum ConstantValue {
     /// The `null` value.

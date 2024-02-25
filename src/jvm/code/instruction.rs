@@ -6,6 +6,7 @@ use crate::{
         field::{ConstantValue, FieldReference},
         method::MethodReference,
     },
+    macros::see_jvm_spec,
     types::{
         field_type::{PrimitiveType, TypeReference},
         method_descriptor::MethodDescriptor,
@@ -15,7 +16,7 @@ use crate::{
 use super::ProgramCounter;
 
 /// A JVM instruction.
-/// See [the JVM specification](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5) for more information.
+#[doc = see_jvm_spec!(6, 5)]
 #[derive(Debug, PartialEq, Clone)]
 #[allow(missing_docs)]
 #[repr(u8)]

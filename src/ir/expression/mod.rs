@@ -28,11 +28,11 @@ pub enum Expression {
     /// A constant value.
     Const(ConstantValue),
     /// A function call
-    /// See the following documentation for more information:
-    /// - [`invokestatic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokestatic)
-    /// - [`invokevirtual`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokevirtual)
-    /// - [`invokespecial`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokespecial)
-    /// - [`invokeinterface`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokeinterface)
+    /// Corresponds to the following JVM instructions:
+    /// - `invokestatic`
+    /// - `invokevirtual`
+    /// - `invokespecial`
+    /// - `invokeinterface`
     Call {
         /// The method being called.
         method: MethodReference,
@@ -43,8 +43,8 @@ pub enum Expression {
         args: Vec<Argument>,
     },
     /// A call to a bootstrap method to create a closure.  
-    /// See the following documentation for more information:
-    /// - [`invokedynamic`](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-6.html#jvms-6.5.invokedynamic)
+    /// Corresponds to the following JVM instructions:
+    /// - `invokedynamic`
     Closure {
         /// The name of the closure.
         name: String,

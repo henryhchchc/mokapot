@@ -53,5 +53,20 @@ macro_rules! malform {
     };
 }
 
+macro_rules! see_jvm_spec {
+    ($l1:literal $(, $l2:literal $(, $l3:literal $(, $l4:literal )? )? )?) => {
+        concat!(
+            "See the [JVM Specification §", $l1,
+            $( ".", $l2, $( ".", $l3, $( ".", $l4, )? )? )?
+            "](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-",
+            $l1,
+            ".html#jvms-", $l1,
+            $( ".", $l2, $( ".", $l3, $( ".", $l4, )? )? )?
+            ") for more information."
+        )
+    };
+}
+
 pub(crate) use extract_attributes;
 pub(crate) use malform;
+pub(crate) use see_jvm_spec;

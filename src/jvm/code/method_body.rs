@@ -9,14 +9,14 @@ use crate::{
         annotation::TypeAnnotation, class::ClassReference, constant_pool::ConstantPool,
         parsing::Error,
     },
-    macros::malform,
+    macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
 };
 
 use super::{Instruction, ProgramCounter, RawInstruction};
 
 /// The body of a method.
-/// See the [JVM Specification §4.7.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.3) for more information.
+#[doc = see_jvm_spec!(4, 7, 3)]
 #[derive(Debug, Clone)]
 pub struct MethodBody {
     /// The maximum number of values on the operand stack of the method.
@@ -283,7 +283,7 @@ pub struct LocalVariableTableEntry {
 }
 
 /// The type of a value in the stack map table for verification.
-/// See the [JVM Specification §4.7.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.4) for more information.
+#[doc = see_jvm_spec!(4, 7, 4)]
 #[derive(Debug, Clone)]
 pub enum VerificationTypeInfo {
     /// Indicates that the local variable has the verification type `top`.
@@ -310,7 +310,7 @@ pub enum VerificationTypeInfo {
 }
 
 /// A stack map frame for verification.
-/// See the [JVM Specification §4.7.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.4) for more information.
+#[doc = see_jvm_spec!(4, 7, 4)]
 #[derive(Debug, Clone)]
 pub enum StackMapFrame {
     /// Indicates that the frame has exactly the same locals as the previous frame and that the operand stack is empty.

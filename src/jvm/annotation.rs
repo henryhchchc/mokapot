@@ -1,5 +1,8 @@
 //! Module for the APIs for the annotation in JVM.
-use crate::types::{field_type::FieldType, method_descriptor::ReturnType};
+use crate::{
+    macros::see_jvm_spec,
+    types::{field_type::FieldType, method_descriptor::ReturnType},
+};
 
 use super::{
     code::{LocalVariableId, ProgramCounter},
@@ -7,7 +10,7 @@ use super::{
 };
 
 /// An annotation on a class, field, method, or parameter.
-/// See the [JVM Specification §4.7.16](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.16) for more information.
+#[doc = see_jvm_spec!(4, 7, 16)]
 #[derive(Debug, Clone)]
 pub struct Annotation {
     /// The type of the annotation.
@@ -17,7 +20,7 @@ pub struct Annotation {
 }
 
 /// A value of an annotation field.
-/// See the [JVM Specification §4.7.16.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.16.1) for more information.
+#[doc = see_jvm_spec!(4, 7, 16, 1)]
 #[derive(Debug, Clone)]
 pub enum ElementValue {
     /// A constant value.
@@ -41,7 +44,7 @@ pub enum ElementValue {
 }
 
 /// Information about the target of a [`TypeAnnotation`].
-/// See the [JVM Specification §4.7.20.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.1) for more information.
+#[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone)]
 pub enum TargetInfo {
     /// Idicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
@@ -101,7 +104,7 @@ pub enum TargetInfo {
 }
 
 /// Identifies a part of a type that is annotated.
-/// See the [JVM Specification §4.7.20.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.2) for more information.
+#[doc = see_jvm_spec!(4, 7, 20, 2)]
 #[derive(Debug, Clone)]
 pub enum TypePathElement {
     /// Annotation is deeper in an array type.
@@ -115,16 +118,16 @@ pub enum TypePathElement {
 }
 
 /// An type annotation on a class, field, method, or parameter.
-/// See the [JVM Specification §4.7.20](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20) for more information.
+#[doc = see_jvm_spec!(4, 7, 20)]
 #[derive(Debug, Clone)]
 pub struct TypeAnnotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
     /// Denotes which type of declaration this annotation is on.
-    /// See the [JVM Specification §4.7.20.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.1) for more information.
+    #[doc = see_jvm_spec!(4, 7, 20, 1)]
     pub target_info: TargetInfo,
     /// The path to the annotated type.
-    /// See the [JVM Specification §4.7.20.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.20.2) for more information.
+    #[doc = see_jvm_spec!(4, 7, 20, 2)]
     pub target_path: Vec<TypePathElement>,
     /// The names and values of the annotation's fields.
     pub element_value_pairs: Vec<(String, ElementValue)>,

@@ -3,10 +3,13 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
-use crate::types::{
-    field_type::FieldType,
-    method_descriptor::MethodDescriptor,
-    signitures::{ClassSignature, FieldSignature},
+use crate::{
+    macros::see_jvm_spec,
+    types::{
+        field_type::FieldType,
+        method_descriptor::MethodDescriptor,
+        signitures::{ClassSignature, FieldSignature},
+    },
 };
 
 use super::{
@@ -18,7 +21,7 @@ use super::{
 };
 
 /// A JVM class
-/// See the [JVM Specification §4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html) for more information.
+#[doc = see_jvm_spec!(4)]
 #[derive(Debug, Clone)]
 pub struct Class {
     /// The version of the class file.
@@ -310,7 +313,7 @@ pub struct BootstrapMethod {
 }
 
 /// The source debug extension.
-/// See the [JVM Specification §4.7.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.11) for more information.
+#[doc = see_jvm_spec!(4, 7, 11)]
 #[derive(Debug, Clone)]
 pub struct SourceDebugExtension(Vec<u8>);
 
@@ -329,7 +332,7 @@ impl SourceDebugExtension {
 }
 
 /// A method handle.
-/// See the [JVM Specification §4.4.8](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.8) for more information.
+#[doc = see_jvm_spec!(4, 4, 8)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum MethodHandle {
     /// Get an instance field.

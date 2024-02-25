@@ -2,6 +2,8 @@
 
 use std::io::Read;
 
+use crate::macros::see_jvm_spec;
+
 use super::{field::JavaString, parsing::Error};
 
 #[derive(Debug, Clone)]
@@ -11,7 +13,7 @@ pub(super) enum Slot {
 }
 
 /// A JVM constant pool.
-/// See the [JVM Specification §4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4) for more information.
+#[doc = see_jvm_spec!(4, 4)]
 #[derive(Debug, Clone)]
 pub struct ConstantPool {
     inner: Vec<Slot>,
@@ -19,7 +21,8 @@ pub struct ConstantPool {
 
 impl ConstantPool {
     /// Parses a constant pool from the given bytes.
-    /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one. See the [JVM Specification §4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.1) for more information.
+    /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one.
+    #[doc = see_jvm_spec!(4, 1)]
     /// # Errors
     /// See [`Error`] for more information.
     pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> Result<Self, Error>
@@ -65,35 +68,35 @@ pub struct BadConstantPoolIndex(pub u16);
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Entry {
     /// A UTF-8 string.
-    /// See the [JVM Specification §4.4.7](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.7) for more information.
+    #[doc = see_jvm_spec!(4, 4, 7)]
     Utf8(JavaString) = 1,
     /// An integer.
-    /// See the [JVM Specification §4.4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.4) for more information.
+    #[doc = see_jvm_spec!(4, 4, 4)]
     Integer(i32) = 3,
     /// A float.
-    /// See the [JVM Specification §4.4.4](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.4) for more information.
+    #[doc = see_jvm_spec!(4, 4, 4)]
     Float(f32) = 4,
     /// A long.
-    /// See the [JVM Specification §4.4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.5) for more information.
+    #[doc = see_jvm_spec!(4, 4, 5)]
     Long(i64) = 5,
     /// A double.
-    /// See the [JVM Specification §4.4.5](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.5) for more information.
+    #[doc = see_jvm_spec!(4, 4, 5)]
     Double(f64) = 6,
     /// A class.
-    /// See the [JVM Specification §4.4.1](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.1) for more information.
+    #[doc = see_jvm_spec!(4, 4, 1)]
     Class {
         /// The index in the constant pool of its binary name.
         name_index: u16,
     } = 7,
     /// A string.
-    /// See the [JVM Specification §4.4.3](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.3) for more information.
+    #[doc = see_jvm_spec!(4, 4, 3)]
     String {
         /// The index in the constant pool of its UTF-8 value.
         /// The entry at that index must be a [`Entry::Utf8`].
         string_index: u16,
     } = 8,
     /// A field reference.
-    /// See the [JVM Specification §4.4.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.2) for more information.
+    #[doc = see_jvm_spec!(4, 4, 2)]
     FieldRef {
         /// The index in the constant pool of the class containing the field.
         /// The entry at that index must be a [`Entry::Class`].
@@ -103,7 +106,7 @@ pub enum Entry {
         name_and_type_index: u16,
     } = 9,
     /// A method reference.
-    /// See the [JVM Specification §4.4.2](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.2) for more information.
+    #[doc = see_jvm_spec!(4, 4, 2)]
     MethodRef {
         /// The index in the constant pool of the class containing the method.
         /// The entry at that index must be a [`Entry::Class`].
@@ -113,6 +116,7 @@ pub enum Entry {
         name_and_type_index: u16,
     } = 10,
     /// An interface method reference.
+    #[doc = see_jvm_spec!(4, 4, 2)]
     InterfaceMethodRef {
         /// The index in the constant pool of the interface containing the method.
         /// The entry at that index must be a [`Entry::Class`].
@@ -122,6 +126,7 @@ pub enum Entry {
         name_and_type_index: u16,
     } = 11,
     /// A name and type.
+    #[doc = see_jvm_spec!(4, 4, 6)]
     NameAndType {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`Entry::Utf8`].
@@ -131,6 +136,7 @@ pub enum Entry {
         descriptor_index: u16,
     } = 12,
     /// A method handle.
+    #[doc = see_jvm_spec!(4, 4, 8)]
     MethodHandle {
         /// The kind of method handle.
         reference_kind: u8,
@@ -139,13 +145,14 @@ pub enum Entry {
         reference_index: u16,
     } = 15,
     /// A method type.
-    /// See the [JVM Specification §4.4.9](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.9) for more information.
+    #[doc = see_jvm_spec!(4, 4, 9)]
     MethodType {
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
         /// The entry at that index must be a [`Entry::Utf8`].
         descriptor_index: u16,
     } = 16,
     /// A dynamically computed constant.
+    #[doc = see_jvm_spec!(4, 4, 10)]
     Dynamic {
         /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
@@ -154,7 +161,7 @@ pub enum Entry {
         name_and_type_index: u16,
     } = 17,
     /// An invokedynamic instruction.
-    /// See the [JVM Specification §4.4.10](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.10) for more information.
+    #[doc = see_jvm_spec!(4, 4, 10)]
     InvokeDynamic {
         /// The index of the bootstrap method in the bootstrap method table.
         bootstrap_method_attr_index: u16,
@@ -163,14 +170,14 @@ pub enum Entry {
         name_and_type_index: u16,
     } = 18,
     /// A module.
-    /// See the [JVM Specification §4.4.11](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.11) for more information.
+    #[doc = see_jvm_spec!(4, 4, 11)]
     Module {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`Entry::Utf8`].
         name_index: u16,
     } = 19,
     /// A package.
-    /// See the [JVM Specification §4.4.12](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.4.12) for more information.
+    #[doc = see_jvm_spec!(4, 4, 12)]
     Package {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`Entry::Utf8`].

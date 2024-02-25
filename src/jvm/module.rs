@@ -1,10 +1,12 @@
 //! Modules in the JPMS.
 use bitflags::bitflags;
 
+use crate::macros::see_jvm_spec;
+
 use super::class::ClassReference;
 
 /// A JVM module.
-/// See the [JVM Specification §4.7.25](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.25) for more information.
+#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct Module {
     /// The name of the module.
@@ -26,7 +28,7 @@ pub struct Module {
 }
 
 /// A service provided by a module.
-/// See the [JVM Specification §4.7.25](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.7.25) for more information.
+#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct ModuleProvide {
     /// The reference to a class which is provided as a service.
@@ -36,6 +38,7 @@ pub struct ModuleProvide {
 }
 
 /// A module opening.
+#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct ModuleOpen {
     /// The reference to the package which is opened.
@@ -47,6 +50,7 @@ pub struct ModuleOpen {
 }
 
 /// A module export.
+#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct ModuleExport {
     /// The reference to the package which is exported.
@@ -58,6 +62,7 @@ pub struct ModuleExport {
 }
 
 /// A module require.
+#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct ModuleRequire {
     /// The reference to the module which is required.

@@ -4,9 +4,12 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
-use crate::types::{
-    method_descriptor::{MethodDescriptor, ReturnType},
-    signitures::MethodSignature,
+use crate::{
+    macros::see_jvm_spec,
+    types::{
+        method_descriptor::{MethodDescriptor, ReturnType},
+        signitures::MethodSignature,
+    },
 };
 
 use super::{
@@ -16,7 +19,7 @@ use super::{
 };
 
 /// A JVM method.
-/// See the [JVM Specification §4.6](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.6) for more information.
+#[doc = see_jvm_spec!(4, 6)]
 #[derive(Debug, Clone)]
 pub struct Method {
     /// The access flags of the method.

@@ -8,6 +8,7 @@
 )]
 #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(unstable, feature(doc_auto_cfg))]
+#![deny(rustdoc::broken_intra_doc_links)]
 
 //! Welcome to `MokaPot`, a library to faciliate the analysis of JVM bytecode.
 //! ## Features
