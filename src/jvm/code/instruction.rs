@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use crate::{
     jvm::{
-        class::ClassReference,
-        field::{ConstantValue, FieldReference},
-        method::MethodReference,
+        class::ClassRef,
+        field::{ConstantValue, FieldRef},
+        method::MethodRef,
     },
     macros::see_jvm_spec,
     types::{
@@ -223,22 +223,22 @@ pub enum Instruction {
     Return = 0xb1,
 
     // References
-    GetStatic(FieldReference) = 0xb2,
-    PutStatic(FieldReference) = 0xb3,
-    GetField(FieldReference) = 0xb4,
-    PutField(FieldReference) = 0xb5,
-    InvokeVirtual(MethodReference) = 0xb6,
-    InvokeSpecial(MethodReference) = 0xb7,
-    InvokeStatic(MethodReference) = 0xb8,
-    InvokeInterface(MethodReference, u8) = 0xb9,
+    GetStatic(FieldRef) = 0xb2,
+    PutStatic(FieldRef) = 0xb3,
+    GetField(FieldRef) = 0xb4,
+    PutField(FieldRef) = 0xb5,
+    InvokeVirtual(MethodRef) = 0xb6,
+    InvokeSpecial(MethodRef) = 0xb7,
+    InvokeStatic(MethodRef) = 0xb8,
+    InvokeInterface(MethodRef, u8) = 0xb9,
     InvokeDynamic {
         bootstrap_method_index: u16,
         name: String,
         descriptor: MethodDescriptor,
     } = 0xba,
-    New(ClassReference) = 0xbb,
+    New(ClassRef) = 0xbb,
     NewArray(PrimitiveType) = 0xbc,
-    ANewArray(ClassReference) = 0xbd,
+    ANewArray(ClassRef) = 0xbd,
     ArrayLength = 0xbe,
     AThrow = 0xbf,
     CheckCast(TypeReference) = 0xc0,

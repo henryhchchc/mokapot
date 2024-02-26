@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    class::{ClassReference, MethodHandle},
+    class::{ClassRef, MethodHandle},
 };
 
 /// A JVM field.
@@ -22,7 +22,7 @@ pub struct Field {
     /// The name of the field.
     pub name: String,
     /// The class containing the field.
-    pub owner: ClassReference,
+    pub owner: ClassRef,
     /// The type of the field.
     pub field_type: FieldType,
     /// The constant value of the field, if any.
@@ -48,8 +48,8 @@ pub struct Field {
 impl Field {
     /// Creates a [`FieldReference`] referring to the field.
     #[must_use]
-    pub fn make_reference(&self) -> FieldReference {
-        FieldReference {
+    pub fn make_reference(&self) -> FieldRef {
+        FieldRef {
             class: self.owner.clone(),
             name: self.name.clone(),
             field_type: self.field_type.clone(),
@@ -97,7 +97,7 @@ pub enum ConstantValue {
     /// A string literal.
     String(JavaString),
     /// A class literal.
-    Class(ClassReference),
+    Class(ClassRef),
     /// A method handle.
     Handle(MethodHandle),
     /// A method type.
@@ -161,9 +161,9 @@ bitflags! {
 
 /// A reference to a field.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct FieldReference {
+pub struct FieldRef {
     /// A reference to the class that contains the field.
-    pub class: ClassReference,
+    pub class: ClassRef,
     /// The name of the field.
     pub name: String,
 
@@ -171,7 +171,7 @@ pub struct FieldReference {
     pub field_type: FieldType,
 }
 
-impl Display for FieldReference {
+impl Display for FieldRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}.{}", self.class, self.name)
     }
@@ -182,7 +182,7 @@ mod test {
 
     use std::str::FromStr;
 
-    use crate::jvm::class::ClassReference;
+    use crate::jvm::class::ClassRef;
     use crate::types::field_type::{
         FieldType,
         PrimitiveType::{self, *},
@@ -212,12 +212,12 @@ mod test {
         assert_eq!("J".parse(), Ok(FieldType::Base(Long)));
         assert_eq!(
             "Ljava/lang/String;".parse(),
-            Ok(FieldType::Object(ClassReference::new("java/lang/String")))
+            Ok(FieldType::Object(ClassRef::new("java/lang/String")))
         );
         assert_eq!("[I".parse(), Ok(FieldType::Base(Int).into_array_type()));
         assert_eq!(
             "[[Ljava/lang/String;".parse(),
-            Ok(FieldType::Object(ClassReference::new("java/lang/String"))
+            Ok(FieldType::Object(ClassRef::new("java/lang/String"))
                 .into_array_type()
                 .into_array_type())
         );

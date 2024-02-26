@@ -3,7 +3,7 @@ use bitflags::bitflags;
 
 use crate::macros::see_jvm_spec;
 
-use super::class::ClassReference;
+use super::class::ClassRef;
 
 /// A JVM module.
 #[doc = see_jvm_spec!(4, 7, 25)]
@@ -22,7 +22,7 @@ pub struct Module {
     /// A list of the modules that are opened by this module.
     pub opens: Vec<ModuleOpen>,
     /// A list of the classes that are used by this module.
-    pub uses: Vec<ClassReference>,
+    pub uses: Vec<ClassRef>,
     /// A list of the services that are provided by this module.
     pub provides: Vec<ModuleProvide>,
 }
@@ -32,9 +32,9 @@ pub struct Module {
 #[derive(Debug, Clone)]
 pub struct ModuleProvide {
     /// The reference to a class which is provided as a service.
-    pub service: ClassReference,
+    pub service: ClassRef,
     /// The list of the classes which implement the service.
-    pub with: Vec<ClassReference>,
+    pub with: Vec<ClassRef>,
 }
 
 /// A module opening.
@@ -42,11 +42,11 @@ pub struct ModuleProvide {
 #[derive(Debug, Clone)]
 pub struct ModuleOpen {
     /// The reference to the package which is opened.
-    pub package: PackageReference,
+    pub package: PackageRef,
     /// The flags of the opening.
     pub flags: ModuleOpenFlags,
     /// The list of the modules which can access the package.
-    pub to: Vec<ModuleReference>,
+    pub to: Vec<ModuleRef>,
 }
 
 /// A module export.
@@ -54,11 +54,11 @@ pub struct ModuleOpen {
 #[derive(Debug, Clone)]
 pub struct ModuleExport {
     /// The reference to the package which is exported.
-    pub package: PackageReference,
+    pub package: PackageRef,
     /// The flags of the export.
     pub flags: ModuleExportFlags,
     /// The list of the modules which can access the package.
-    pub to: Vec<ModuleReference>,
+    pub to: Vec<ModuleRef>,
 }
 
 /// A module require.
@@ -66,7 +66,7 @@ pub struct ModuleExport {
 #[derive(Debug, Clone)]
 pub struct ModuleRequire {
     /// The reference to the module which is required.
-    pub module: ModuleReference,
+    pub module: ModuleRef,
     /// The flags of the require.
     pub flags: ModuleRequireFlags,
     /// The version of the required module.
@@ -125,14 +125,14 @@ bitflags! {
 
 /// A reference to a module in the binary format.
 #[derive(Debug, Clone)]
-pub struct ModuleReference {
+pub struct ModuleRef {
     /// The name of the module.
     pub name: String,
 }
 
 /// A reference to a package in the binary format.
 #[derive(Debug, Clone)]
-pub struct PackageReference {
+pub struct PackageRef {
     /// The binary name of the package.
     pub binary_name: String,
 }

@@ -3,8 +3,7 @@ use std::io::Read;
 use crate::jvm::{
     constant_pool::Entry,
     module::{
-        Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleReference, ModuleRequire,
-        PackageReference,
+        Module, ModuleExport, ModuleOpen, ModuleProvide, ModuleRef, ModuleRequire, PackageRef,
     },
 };
 
@@ -93,14 +92,14 @@ impl JvmElement for Module {
     }
 }
 
-impl JvmElement for PackageReference {
+impl JvmElement for PackageRef {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let package_index = reader.read_value()?;
         ctx.constant_pool.get_package_ref(package_index)
     }
 }
 
-impl JvmElement for ModuleReference {
+impl JvmElement for ModuleRef {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let module_ref_idx = reader.read_value()?;
         ctx.constant_pool.get_module_ref(module_ref_idx)

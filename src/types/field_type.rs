@@ -3,7 +3,7 @@ use std::{fmt::Display, str::FromStr};
 
 use itertools::Itertools;
 
-use crate::jvm::class::ClassReference;
+use crate::jvm::class::ClassRef;
 
 use super::method_descriptor::InvalidDescriptor;
 
@@ -97,7 +97,7 @@ pub enum FieldType {
     /// A primitive type.
     Base(PrimitiveType),
     /// A reference type (except arrays).
-    Object(ClassReference),
+    Object(ClassRef),
     /// An array type.
     Array(Box<FieldType>),
 }
@@ -124,7 +124,7 @@ impl FromStr for FieldType {
             Some('L') => {
                 let type_name = chars.take_while_ref(|&it| it != ';').collect::<String>();
                 match (chars.next(), chars.next()) {
-                    (Some(';'), None) => Ok(Self::Object(ClassReference::new(type_name))),
+                    (Some(';'), None) => Ok(Self::Object(ClassRef::new(type_name))),
                     _ => Err(InvalidDescriptor(descriptor.to_owned())),
                 }
             }
@@ -155,7 +155,7 @@ impl FieldType {
     pub fn descriptor(&self) -> String {
         match self {
             FieldType::Base(it) => it.descriptor().to_string(),
-            FieldType::Object(ClassReference { binary_name }) => {
+            FieldType::Object(ClassRef { binary_name }) => {
                 format!("L{binary_name};")
             }
             FieldType::Array(inner) => format!("[{}", inner.descriptor()),
@@ -243,12 +243,12 @@ mod tests {
         assert_eq!(Base(Int).to_string(), "int");
         assert_eq!(Base(Long).to_string(), "long");
         assert_eq!(
-            Object(ClassReference::new("java/lang/Object")).to_string(),
+            Object(ClassRef::new("java/lang/Object")).to_string(),
             "java/lang/Object"
         );
         assert_eq!(Base(Int).into_array_type().to_string(), "int[]");
         assert_eq!(
-            Object(ClassReference::new("java/lang/Object"))
+            Object(ClassRef::new("java/lang/Object"))
                 .into_array_type()
                 .to_string(),
             "java/lang/Object[]"
@@ -259,7 +259,7 @@ mod tests {
         #[test]
         fn field_type_from_str_class(class_name in arb_class_name()) {
             let s = format!("L{class_name};");
-            let expected = FieldType::Object(ClassReference::new(class_name));
+            let expected = FieldType::Object(ClassRef::new(class_name));
             assert_eq!(s.parse(), Ok(expected));
         }
 

@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::{
     jvm::{
-        class::ClassReference,
+        class::ClassRef,
         method::{Method, MethodAccessFlags},
         parsing::{jvm_element_parser::parse_flags, parsing_context::ParsingContext},
     },
@@ -17,7 +17,7 @@ impl JvmElement for Method {
         let access_flags: MethodAccessFlags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let descriptor: MethodDescriptor = JvmElement::parse(reader, ctx)?;
-        let owner = ClassReference {
+        let owner = ClassRef {
             binary_name: ctx.current_class_binary_name.clone(),
         };
 

@@ -6,8 +6,7 @@ use std::{
 
 use crate::{
     jvm::{
-        annotation::TypeAnnotation, class::ClassReference, constant_pool::ConstantPool,
-        parsing::Error,
+        annotation::TypeAnnotation, class::ClassRef, constant_pool::ConstantPool, parsing::Error,
     },
     macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
@@ -200,7 +199,7 @@ pub struct ExceptionTableEntry {
     /// The location of the exception handler.
     pub handler_pc: ProgramCounter,
     /// The type of the exception to be handled.
-    pub catch_type: Option<ClassReference>,
+    pub catch_type: Option<ClassRef>,
 }
 
 impl ExceptionTableEntry {
@@ -297,7 +296,7 @@ pub enum VerificationTypeInfo {
     /// Indicates that the local variable has the verification type `uninitializedThis`.
     UninitializedThisVariable,
     /// Indicates that the local variable has the verification type `object` with the given type
-    ObjectVariable(ClassReference),
+    ObjectVariable(ClassRef),
     /// Indicates that the local variable has the verification type `uninitialized` with the given offset.
     UninitializedVariable {
         /// The location of the [`Instruction::New`] that created the object.

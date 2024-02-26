@@ -1,7 +1,7 @@
 use std::{io::Read, str::FromStr};
 
 use crate::{
-    jvm::{class::ClassReference, field::Field, parsing::jvm_element_parser::parse_flags},
+    jvm::{class::ClassRef, field::Field, parsing::jvm_element_parser::parse_flags},
     macros::extract_attributes,
     types::field_type::FieldType,
 };
@@ -16,7 +16,7 @@ impl JvmElement for Field {
         let access_flags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let field_type = JvmElement::parse(reader, ctx)?;
-        let owner = ClassReference {
+        let owner = ClassRef {
             binary_name: ctx.current_class_binary_name.clone(),
         };
         let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         class::{
-            BootstrapMethod, Class, ClassAccessFlags, ClassReference, ClassVersion, InnerClassInfo,
+            BootstrapMethod, Class, ClassAccessFlags, ClassRef, ClassVersion, InnerClassInfo,
             RecordComponent, SourceDebugExtension,
         },
         constant_pool::ConstantPool,
@@ -32,7 +32,7 @@ impl Class {
 
         let access_flags: ClassAccessFlags = parse_flags(reader)?;
         let this_class_idx = reader.read_value()?;
-        let ClassReference { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
+        let ClassRef { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
         let super_class_idx = reader.read_value()?;
         let super_class = match super_class_idx {
             0 if binary_name == "java/lang/Object" => None,
@@ -196,7 +196,7 @@ impl JvmElement for RecordComponent {
     }
 }
 
-impl JvmElement for ClassReference {
+impl JvmElement for ClassRef {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
         let class_info_idx = reader.read_value()?;
         ctx.constant_pool.get_class_ref(class_info_idx)

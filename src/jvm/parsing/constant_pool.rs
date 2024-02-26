@@ -6,11 +6,11 @@ use super::{
 };
 use crate::{
     jvm::{
-        class::{ClassReference, MethodHandle},
+        class::{ClassRef, MethodHandle},
         constant_pool::{ConstantPool, Entry},
-        field::{ConstantValue, FieldReference, JavaString},
-        method::MethodReference,
-        module::{ModuleReference, PackageReference},
+        field::{ConstantValue, FieldRef, JavaString},
+        method::MethodRef,
+        module::{ModuleRef, PackageRef},
     },
     macros::malform,
     types::field_type::{FieldType, TypeReference},
@@ -34,11 +34,11 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassReference, Error> {
+    pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassRef, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(ClassReference::new(name))
+            Ok(ClassRef::new(name))
         } else {
             mismatch("Class", entry)
         }
@@ -64,7 +64,7 @@ impl ConstantPool {
                 .map(ConstantValue::MethodType),
             &Entry::Class { name_index } => self
                 .get_str(name_index)
-                .map(ClassReference::new)
+                .map(ClassRef::new)
                 .map(ConstantValue::Class),
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
@@ -90,21 +90,21 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleReference, Error> {
+    pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
-            Ok(ModuleReference { name })
+            Ok(ModuleRef { name })
         } else {
             mismatch("Module", entry)
         }
     }
 
-    pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageReference, Error> {
+    pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageRef, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(PackageReference {
+            Ok(PackageRef {
                 binary_name: name.to_owned(),
             })
         } else {
@@ -112,7 +112,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldReference, Error> {
+    pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldRef, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::FieldRef {
             class_index,
@@ -121,7 +121,7 @@ impl ConstantPool {
         {
             let class = self.get_class_ref(class_index)?;
             let (name, field_type) = self.get_name_and_type(name_and_type_index)?;
-            Ok(FieldReference {
+            Ok(FieldRef {
                 class,
                 name,
                 field_type,
@@ -153,7 +153,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodReference, Error> {
+    pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodRef, Error> {
         let entry = self.get_entry(index)?;
         if let &Entry::MethodRef {
             class_index,
@@ -166,7 +166,7 @@ impl ConstantPool {
         {
             let owner = self.get_class_ref(class_index)?;
             let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-            Ok(MethodReference {
+            Ok(MethodRef {
                 owner,
                 name,
                 descriptor,
@@ -203,11 +203,11 @@ impl ConstantPool {
     }
 
     pub(super) fn get_type_ref(&self, index: u16) -> Result<TypeReference, Error> {
-        let ClassReference { binary_name: name } = self.get_class_ref(index)?;
+        let ClassRef { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?
         } else {
-            FieldType::Object(ClassReference::new(name))
+            FieldType::Object(ClassRef::new(name))
         };
         Ok(TypeReference(field_type.clone()))
     }

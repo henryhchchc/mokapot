@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
-    class::ClassReference,
+    class::ClassRef,
     code::MethodBody,
 };
 
@@ -29,11 +29,11 @@ pub struct Method {
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
     /// The class containing the method.
-    pub owner: ClassReference,
+    pub owner: ClassRef,
     /// The body of the method if it is not `abstract`` or `native`.
     pub body: Option<MethodBody>,
     /// The checked exceptions that may be thrown by the method.
-    pub exceptions: Vec<ClassReference>,
+    pub exceptions: Vec<ClassRef>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
@@ -78,10 +78,10 @@ impl Method {
         self.name == Self::CLASS_INITIALIZER_NAME
     }
 
-    /// Creates a [`MethodReference`] pointting to this method.
+    /// Creates a [`MethodRef`] pointting to this method.
     #[must_use]
-    pub fn make_refernece(&self) -> MethodReference {
-        MethodReference {
+    pub fn make_refernece(&self) -> MethodRef {
+        MethodRef {
             owner: self.owner.clone(),
             name: self.name.clone(),
             descriptor: self.descriptor.clone(),
@@ -144,16 +144,16 @@ bitflags! {
 
 /// A reference to a method.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct MethodReference {
+pub struct MethodRef {
     /// The reference to the class containing the method.
-    pub owner: ClassReference,
+    pub owner: ClassRef,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
 }
 
-impl MethodReference {
+impl MethodRef {
     /// Checks if the method reference refers to a constructor.
     #[must_use]
     pub fn is_constructor(&self) -> bool {
@@ -170,7 +170,7 @@ impl MethodReference {
     }
 }
 
-impl Display for MethodReference {
+impl Display for MethodRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}::{}", self.owner, self.name)
     }
@@ -187,8 +187,8 @@ mod tests {
 
         #[test]
         fn test_is_constructor(class_name in arb_class_name()) {
-            let method = MethodReference {
-                owner: ClassReference::new(class_name),
+            let method = MethodRef {
+                owner: ClassRef::new(class_name),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
@@ -198,8 +198,8 @@ mod tests {
 
         #[test]
         fn test_is_static_initializer_bolck(class_name in arb_class_name()) {
-            let method = MethodReference {
-                owner: ClassReference::new(class_name),
+            let method = MethodRef {
+                owner: ClassRef::new(class_name),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };

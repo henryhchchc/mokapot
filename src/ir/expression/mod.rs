@@ -6,9 +6,7 @@ use itertools::Itertools;
 use super::Argument;
 
 use crate::{
-    jvm::{
-        class::ClassReference, code::ProgramCounter, field::ConstantValue, method::MethodReference,
-    },
+    jvm::{class::ClassRef, code::ProgramCounter, field::ConstantValue, method::MethodRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -35,7 +33,7 @@ pub enum Expression {
     /// - `invokeinterface`
     Call {
         /// The method being called.
-        method: MethodReference,
+        method: MethodRef,
         /// [`Some`] argument for the `this` object if the method is an instance method.
         /// [`None`] if the method is `static` or `native`.
         this: Option<Argument>,
@@ -68,7 +66,7 @@ pub enum Expression {
     /// An operation on a monitor.
     Synchronization(LockOperation),
     /// Creates a new object.
-    New(ClassReference),
+    New(ClassRef),
     /// A return address.
     Subroutine {
         /// The address to return to.

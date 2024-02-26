@@ -2,7 +2,7 @@ use std::io::BufReader;
 
 use mokapot::{
     jvm::{
-        class::{Class, ClassAccessFlags, ClassReference},
+        class::{Class, ClassAccessFlags, ClassRef},
         parsing::Error,
     },
     types::{
@@ -52,7 +52,7 @@ fn test_class_name() {
 fn test_super_class_name() {
     let my_class = parse_my_class().unwrap();
     assert_eq!(
-        Some(ClassReference::new("java/lang/Object")),
+        Some(ClassRef::new("java/lang/Object")),
         my_class.super_class
     );
 }
@@ -62,7 +62,7 @@ fn test_interfaces() {
     let my_class = parse_my_class().unwrap();
     let mut interfaces = my_class.interfaces.into_iter();
     assert_eq!(
-        Some(ClassReference::new("java/lang/Cloneable")),
+        Some(ClassRef::new("java/lang/Cloneable")),
         interfaces.next()
     );
 }
@@ -86,7 +86,7 @@ fn test_methods() {
         .expect("main method not found");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::Object(ClassReference::new("java/lang/String")).into_array_type(),
+        FieldType::Object(ClassRef::new("java/lang/String")).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }

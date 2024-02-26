@@ -14,9 +14,9 @@ use crate::{
 
 use super::{
     annotation::{Annotation, TypeAnnotation},
-    field::{ConstantValue, Field, FieldReference},
-    method::{Method, MethodReference},
-    module::{Module, PackageReference},
+    field::{ConstantValue, Field, FieldRef},
+    method::{Method, MethodRef},
+    module::{Module, PackageRef},
     parsing::Error,
 };
 
@@ -32,9 +32,9 @@ pub struct Class {
     pub binary_name: String,
     /// A reference to the superclass of the class.
     /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
-    pub super_class: Option<ClassReference>,
+    pub super_class: Option<ClassRef>,
     /// The interfaces implemented by the class.
-    pub interfaces: Vec<ClassReference>,
+    pub interfaces: Vec<ClassRef>,
     /// The fields declared the class.
     pub fields: Vec<Field>,
     /// The methods declared in the class.
@@ -60,15 +60,15 @@ pub struct Class {
     /// The infomation of the module if the class is `module-info`.
     pub module: Option<Module>,
     /// The packages of the module.
-    pub module_packages: Vec<PackageReference>,
+    pub module_packages: Vec<PackageRef>,
     /// The main class of the module.
-    pub module_main_class: Option<ClassReference>,
+    pub module_main_class: Option<ClassRef>,
     /// The nearest outer class of the class.
-    pub nest_host: Option<ClassReference>,
+    pub nest_host: Option<ClassRef>,
     /// The nested classes of the class.
-    pub nest_members: Vec<ClassReference>,
+    pub nest_members: Vec<ClassRef>,
     /// The permitted subclasses of the class if the class is `sealed`.
-    pub permitted_subclasses: Vec<ClassReference>,
+    pub permitted_subclasses: Vec<ClassRef>,
     /// Indicates whether the class is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates whether the class is deprecated.
@@ -261,21 +261,21 @@ impl ClassVersion {
 
 /// A reference to a class in the binary format.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct ClassReference {
+pub struct ClassRef {
     /// The binary name of the class.
     pub binary_name: String,
 }
 
-impl ClassReference {
+impl ClassRef {
     /// Creates a new class reference.
     pub fn new<S: Into<String>>(binary_name: S) -> Self {
-        ClassReference {
+        ClassRef {
             binary_name: binary_name.into(),
         }
     }
 }
 
-impl Display for ClassReference {
+impl Display for ClassRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.binary_name)
     }
@@ -285,9 +285,9 @@ impl Display for ClassReference {
 #[derive(Debug, Clone)]
 pub struct InnerClassInfo {
     /// The inner class.
-    pub inner_class: ClassReference,
+    pub inner_class: ClassRef,
     /// The outer class.
-    pub outer_class: Option<ClassReference>,
+    pub outer_class: Option<ClassRef>,
     /// The name of the inner class.
     pub inner_name: Option<String>,
     /// The access flags of the inner class.
@@ -298,7 +298,7 @@ pub struct InnerClassInfo {
 #[derive(Debug, Clone)]
 pub struct EnclosingMethod {
     /// The class being enclosed.
-    pub class: ClassReference,
+    pub class: ClassRef,
     /// The name and descriptor of the enclosing method.
     pub method_name_and_desc: Option<(String, MethodDescriptor)>,
 }
@@ -336,23 +336,23 @@ impl SourceDebugExtension {
 #[derive(Debug, PartialEq, Clone)]
 pub enum MethodHandle {
     /// Get an instance field.
-    RefGetField(FieldReference),
+    RefGetField(FieldRef),
     /// Get a static field.
-    RefGetStatic(FieldReference),
+    RefGetStatic(FieldRef),
     /// Writes to an instance field.
-    RefPutField(FieldReference),
+    RefPutField(FieldRef),
     /// Writes to a static field.
-    RefPutStatic(FieldReference),
+    RefPutStatic(FieldRef),
     /// Invoke an instance method.
-    RefInvokeVirtual(MethodReference),
+    RefInvokeVirtual(MethodRef),
     /// Invoke a static method.
-    RefInvokeStatic(MethodReference),
+    RefInvokeStatic(MethodRef),
     /// Invoke a special method (e.g., a constructor).
-    RefInvokeSpecial(MethodReference),
+    RefInvokeSpecial(MethodRef),
     /// The new version a special method (e.g., a constructor).
-    RefNewInvokeSpecial(MethodReference),
+    RefNewInvokeSpecial(MethodRef),
     /// Invoke an interface method.
-    RefInvokeInterface(MethodReference),
+    RefInvokeInterface(MethodRef),
 }
 
 /// The record components of a [`Class`] that represents a `record`.

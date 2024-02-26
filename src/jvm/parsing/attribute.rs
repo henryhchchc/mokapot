@@ -9,13 +9,13 @@ use itertools::Itertools;
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::{
-        BootstrapMethod, ClassReference, EnclosingMethod, InnerClassInfo, RecordComponent,
+        BootstrapMethod, ClassRef, EnclosingMethod, InnerClassInfo, RecordComponent,
         SourceDebugExtension,
     },
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
     method::ParameterInfo,
-    module::{Module, PackageReference},
+    module::{Module, PackageRef},
 };
 
 use super::{
@@ -32,7 +32,7 @@ pub(crate) enum Attribute {
     ConstantValue(ConstantValue),
     Code(MethodBody),
     StackMapTable(Vec<StackMapFrame>),
-    Exceptions(Vec<ClassReference>),
+    Exceptions(Vec<ClassRef>),
     SourceFile(String),
     LineNumberTable(Vec<LineNumberTableEntry>),
     InnerClasses(Vec<InnerClassInfo>),
@@ -53,12 +53,12 @@ pub(crate) enum Attribute {
     BootstrapMethods(Vec<BootstrapMethod>),
     MethodParameters(Vec<ParameterInfo>),
     Module(Module),
-    ModulePackages(Vec<PackageReference>),
-    ModuleMainClass(ClassReference),
-    NestHost(ClassReference),
-    NestMembers(Vec<ClassReference>),
+    ModulePackages(Vec<PackageRef>),
+    ModuleMainClass(ClassRef),
+    NestHost(ClassRef),
+    NestMembers(Vec<ClassRef>),
     Record(Vec<RecordComponent>),
-    PermittedSubclasses(Vec<ClassReference>),
+    PermittedSubclasses(Vec<ClassRef>),
     Unrecognized(String, Vec<u8>),
 }
 

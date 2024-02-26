@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::jvm::{
-    class::ClassReference,
+    class::ClassRef,
     code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
     method::{Method, MethodAccessFlags},
 };
@@ -220,7 +220,7 @@ impl<'m> MokaIRGenerator<'m> {
                         it.catch_type
                             .as_ref()
                             .cloned()
-                            .unwrap_or_else(|| ClassReference::new("java/lang/Throwable"))
+                            .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
                     })
                     .dedup()
                     .collect();

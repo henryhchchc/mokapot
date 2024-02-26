@@ -2,7 +2,7 @@
 
 use itertools::Itertools;
 
-use crate::jvm::{class::ClassReference, code::ProgramCounter};
+use crate::jvm::{class::ClassRef, code::ProgramCounter};
 use std::collections::{BTreeMap, HashSet};
 
 #[cfg(feature = "petgraph")]
@@ -16,7 +16,7 @@ pub enum ControlTransfer {
     /// A conditional contol transfer.
     Conditional,
     /// A control transfer to the exception handler.
-    Exception(HashSet<ClassReference>),
+    Exception(HashSet<ClassRef>),
     /// A control transfer caused by subroutine return.
     SubroutineReturn,
 }

@@ -7,7 +7,7 @@ use std::{
     str::{Chars, FromStr},
 };
 
-use crate::jvm::class::ClassReference;
+use crate::jvm::class::ClassRef;
 
 use super::field_type::{FieldType, PrimitiveType};
 
@@ -76,7 +76,7 @@ impl MethodDescriptor {
                 'L' => {
                     let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
                     match remaining.next() {
-                        Some(';') => Ok(FieldType::Object(ClassReference::new(binary_name))),
+                        Some(';') => Ok(FieldType::Object(ClassRef::new(binary_name))),
                         _ => Err(build_err(remaining)),
                     }
                 }

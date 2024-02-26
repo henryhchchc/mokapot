@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 
 use crate::{
-    jvm::class::ClassReference,
+    jvm::class::ClassRef,
     types::field_type::{FieldType, PrimitiveType},
 };
 
@@ -38,7 +38,7 @@ pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![
         any::<PrimitiveType>().prop_map(FieldType::Base),
         arb_class_name()
-            .prop_map(ClassReference::new)
+            .prop_map(ClassRef::new)
             .prop_map(FieldType::Object),
     ]
 }

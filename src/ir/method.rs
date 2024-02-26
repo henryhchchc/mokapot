@@ -1,6 +1,6 @@
 use crate::{
     jvm::{
-        class::ClassReference,
+        class::ClassRef,
         code::{ExceptionTableEntry, InstructionList},
         method::MethodAccessFlags,
     },
@@ -22,7 +22,7 @@ pub struct MokaIRMethod {
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
     /// The class that contains the method.
-    pub owner: ClassReference,
+    pub owner: ClassRef,
     /// The body of the method.
     pub instructions: InstructionList<MokaInstruction>,
     /// The exception table of the method.

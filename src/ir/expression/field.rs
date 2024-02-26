@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{ir::Argument, jvm::field::FieldReference};
+use crate::{ir::Argument, jvm::field::FieldRef};
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,12 +8,12 @@ pub enum FieldAccess {
     /// Reads a static field.
     ReadStatic {
         /// The field to read.
-        field: FieldReference,
+        field: FieldRef,
     },
     /// Writes to a static field.
     WriteStatic {
         /// The field to write to.
-        field: FieldReference,
+        field: FieldRef,
         /// The value to be written.
         value: Argument,
     },
@@ -22,14 +22,14 @@ pub enum FieldAccess {
         /// The object to read from.
         object_ref: Argument,
         /// The field to read.
-        field: FieldReference,
+        field: FieldRef,
     },
     /// Writes to an instance field.
     WriteInstance {
         /// The object to write to.
         object_ref: Argument,
         /// The field to write to.
-        field: FieldReference,
+        field: FieldRef,
         /// The value to be written.
         value: Argument,
     },
