@@ -434,7 +434,7 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use proptest::{arbitrary::any, proptest, strategy::Strategy};
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -450,7 +450,7 @@ mod tests {
         #[test]
         fn newer_class_versions(
             major in (46..=MAX_MAJOR_VERSION),
-            minor in (0..1).prop_map(|it| if it == 0 { 0 } else { u16::MAX })
+            minor in prop_oneof![Just(0u16), Just(u16::MAX)]
         ) {
             let class_version = ClassVersion::from_versions(major, minor).unwrap();
             assert_eq!(major, class_version.major());
@@ -463,12 +463,12 @@ mod tests {
         }
 
         #[test]
-        fn too_high_class_version(major in (MAX_MAJOR_VERSION+1)..u16::MAX) {
+        fn too_high_class_version(major in (MAX_MAJOR_VERSION+1)..=u16::MAX) {
             assert!(ClassVersion::from_versions(major, 0).is_err());
         }
 
         #[test]
-        fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..u16::MAX) {
+        fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..=u16::MAX) {
             assert!(ClassVersion::from_versions(major, minor).is_err());
         }
 
