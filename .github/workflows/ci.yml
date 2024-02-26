@@ -18,8 +18,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  code_style_checking:
+    name: Code Style Checking
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Rust
+        run: |
+          rustup update stable \
+            && rustup default stable
+      - uses: actions/checkout@v4
+        name: Checkout source code
+      - name: Cargo Fmt
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy
+     
   build_and_test:
-    name: MokaPot - latest
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
@@ -38,8 +53,8 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
-      - run: cargo build --all-features --verbose
-        name: Build
+      - run: cargo check --all-features --verbose
+        name: Cargo check
       - name: Test
         run: |
           cargo llvm-cov nextest \
@@ -54,7 +69,7 @@ jobs:
           files: target/codecov.json
 
   publish_latest_docs:
-    name: MokaPot - docs
+    name: Rust Doc
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
