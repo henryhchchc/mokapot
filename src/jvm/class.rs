@@ -441,15 +441,31 @@ mod tests {
     proptest! {
 
         #[test]
-        fn class_version_45(minor in any::<u16>()) {
+        fn jdk_1_1(minor in any::<u16>()) {
             let class_version = ClassVersion::from_versions(45, minor).unwrap();
             assert_eq!(45, class_version.major());
             assert_eq!(minor, class_version.minor());
         }
 
         #[test]
+        fn jdk_1_x(major in 46u16..56) {
+            let class_version = ClassVersion::from_versions(major, 0).unwrap();
+            assert_eq!(major, class_version.major());
+            assert!(!class_version.is_preview_enabled());
+        }
+
+        #[test]
+        fn jdk_1_x_invalid(
+            major in 46u16..56,
+            minor in 1u16..
+        ) {
+            let class_version = ClassVersion::from_versions(major, minor);
+            assert!(class_version.is_err());
+        }
+
+        #[test]
         fn newer_class_versions(
-            major in (46..=MAX_MAJOR_VERSION),
+            major in (56..=MAX_MAJOR_VERSION),
             minor in prop_oneof![Just(0u16), Just(u16::MAX)]
         ) {
             let class_version = ClassVersion::from_versions(major, minor).unwrap();
