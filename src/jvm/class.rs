@@ -189,9 +189,9 @@ impl ClassVersion {
             (65, 0x0000) => Ok(Self::Jdk21(false)),
             (65, 0xFFFF) => Ok(Self::Jdk21(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
-                Err(Error::MalformedClassFile("Unsupportted class version"))
+                Err(Error::Other("Unsupportted class version"))
             }
-            _ => Err(Error::MalformedClassFile("Invalid class version")),
+            _ => Err(Error::Other("Invalid class version")),
         }
     }
 

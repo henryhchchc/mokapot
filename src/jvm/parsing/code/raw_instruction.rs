@@ -30,7 +30,7 @@ impl RawInstruction {
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => Err(Error::ReadFail(e))?,
+            Err(e) => Err(Error::IO(e))?,
         };
         let instruction = match opcode {
             0x32 => AALoad,

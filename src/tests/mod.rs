@@ -29,13 +29,9 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
     ]
 }
 
-prop_compose! {
-    pub(crate) fn arb_class_name()(
-        package in r"[a-zA-Z_][a-zA-Z0-9_]*/",
-        class in r"[a-zA-Z_][a-zA-Z0-9_]*"
-    ) -> String {
-        format!("{package}{class}")
-    }
+pub(crate) fn arb_class_name() -> impl Strategy<Value = String> {
+    let arb_ident = prop::string::string_regex(r"[a-zA-Z][\w\$_]*").expect("The regex is invalid");
+    prop::collection::vec(arb_ident, 0..10).prop_map(|v| v.join("/"))
 }
 
 pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {

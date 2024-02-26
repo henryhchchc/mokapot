@@ -129,7 +129,7 @@ impl JvmElement for ElementValue {
                     | ('D', ConstantValue::Double(_))
                     | ('F', ConstantValue::Float(_))
                     | ('J', ConstantValue::Long(_)) => Ok(Self::Constant(const_value)),
-                    _ => Err(Error::MalformedClassFile(
+                    _ => Err(Error::Other(
                         "Primitive element tag must point to primitive constant values",
                     )),
                 }

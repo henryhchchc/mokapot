@@ -8,10 +8,10 @@ use crate::{
 pub enum Error {
     /// An error that occurs when reading from a buffer.
     #[error("Failed to read from buffer: {0}")]
-    ReadFail(#[from] std::io::Error),
+    IO(#[from] std::io::Error),
     /// The format of the class file is invalid.
     #[error("MalformedClassFile: {0}")]
-    MalformedClassFile(&'static str),
+    Other(&'static str),
     /// The constant pool index does not point to a desired entry.
     #[error("Mismatched constant pool entry, expected {expected}, but found {found}")]
     MismatchedConstantPoolEntryType {
@@ -23,9 +23,6 @@ pub enum Error {
     /// The constant pool index does not point to an entry.
     #[error("Error when accessing constant pool: {0}")]
     BadConstantPoolIndex(#[from] BadConstantPoolIndex),
-    /// The attribute table contains an attribute whose name cannot be recognized.
-    #[error("Unknown attribute: {0}")]
-    UnknownAttribute(String),
     /// An known attribute is found in an unexpected location.
     #[error("Unexpected attribute {0} in {1}")]
     UnexpectedAttribute(String, String),

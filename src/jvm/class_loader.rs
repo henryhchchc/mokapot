@@ -17,7 +17,7 @@ pub enum ClassLoadingError {
     NotFound(String),
     /// Error occurred while parsing the class bytes.
     #[error("Error parsing class bytes: {0}")]
-    Parse(#[from] super::parsing::errors::Error),
+    Malformed(#[from] super::parsing::errors::Error),
     /// Error occurred while reading the class bytes or locating the class file.
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),

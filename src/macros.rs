@@ -22,7 +22,7 @@ macro_rules! extract_attributes {
                             " in a ",
                             $env
                         );
-                        Err(Error::MalformedClassFile(message))?;
+                        Err(Error::Other(message))?;
                     },
                 )*
                 $(
@@ -49,7 +49,7 @@ macro_rules! extract_attributes {
 
 macro_rules! malform {
     ($msg:expr) => {
-        Err(Error::MalformedClassFile($msg))?
+        Err(Error::Other($msg))?
     };
 }
 

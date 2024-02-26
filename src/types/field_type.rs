@@ -117,12 +117,12 @@ impl FromStr for FieldType {
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
         let mut chars = descriptor.chars();
-        match chars.nth(0) {
+        match chars.next() {
             Some('[') => Self::from_str(chars.as_str())
                 .map(FieldType::into_array_type)
                 .map_err(|_| InvalidDescriptor(descriptor.to_owned())),
             Some('L') => {
-                let type_name = chars.take_while_ref(|it| it != &';').collect::<String>();
+                let type_name = chars.take_while_ref(|&it| it != ';').collect::<String>();
                 match (chars.next(), chars.next()) {
                     (Some(';'), None) => Ok(Self::Object(ClassReference::new(type_name))),
                     _ => Err(InvalidDescriptor(descriptor.to_owned())),
