@@ -131,7 +131,7 @@ jobs:
       - uses: actions/deploy-pages@v4
         name: Deploy docs to github pages
         with:
-          name: mokapot-docs
+          artifact_name: mokapot-docs
 
   publish_to_crate_io:
     name: Publish to crate.io
