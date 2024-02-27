@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Cargo Update
-        run: cargo update --all-features --verbose
+        run: cargo update --verbose
       - name: Cache Rust Build Targets
         uses: actions/cache@v4
         with:
