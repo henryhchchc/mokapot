@@ -8,6 +8,8 @@ on:
       - test_data/**
       - "**/Cargo.toml"
       - .github/workflows/**
+    tags:
+      - v**
   pull_request:
 
 permissions:
