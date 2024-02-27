@@ -20,13 +20,13 @@ jobs:
         with:
           java-version: 21
           distribution: corretto
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         name: Checkout source code
-      - run: cargo build --all-features --verbose
-        name: Build
-      - run: cargo test --all-features --verbose
-        name: Test
-      - run: cargo publish --all-features --verbose
-        name: Publish to crates.io
+      - name: Cargo Check
+        run: cargo check --all-features --verbose
+      - name: Test
+        run: cargo nextest run --all-features --verbose
+      - name: Publish to crates.io
+        run: cargo publish --all-features --verbose
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
