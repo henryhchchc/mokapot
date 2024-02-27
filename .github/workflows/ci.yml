@@ -56,11 +56,14 @@ jobs:
         name: Checkout source code
       - name: Cargo Update
         run: cargo update --verbose
-      - name: Cache Rust Build Targets
+      - name: Cache Rust Build Stuff
         uses: actions/cache@v4
         with:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          path: target
+          path:
+            - target
+            - ~/.cargo/registry/index/
+            - ~/.cargo/registry/cache/
       - run: cargo check --all-features --verbose
         name: Cargo check
       - name: Test
