@@ -84,8 +84,6 @@ pub struct Class {
 impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
-    /// - [`ReadFail`](crate::jvm::parsing::Error::ReadFail) If the reader fails to read.
-    /// Other errors may be returned if the class file is malformed.
     /// See [`Error`] for more information.
     pub fn from_reader<R>(reader: R) -> Result<Class, Error>
     where
@@ -101,6 +99,14 @@ impl Class {
         self.methods
             .iter()
             .find(|m| m.name == name && &m.descriptor == descriptor)
+    }
+
+    /// Creates a [`ClassRef`] referring to the class.
+    #[must_use]
+    pub fn as_ref(&self) -> ClassRef {
+        ClassRef {
+            binary_name: self.binary_name.clone(),
+        }
     }
 }
 

@@ -80,7 +80,7 @@ impl Method {
 
     /// Creates a [`MethodRef`] pointting to this method.
     #[must_use]
-    pub fn make_refernece(&self) -> MethodRef {
+    pub fn as_ref(&self) -> MethodRef {
         MethodRef {
             owner: self.owner.clone(),
             name: self.name.clone(),

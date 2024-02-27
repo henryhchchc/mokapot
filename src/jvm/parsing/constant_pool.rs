@@ -119,10 +119,10 @@ impl ConstantPool {
             name_and_type_index,
         } = entry
         {
-            let class = self.get_class_ref(class_index)?;
+            let owner = self.get_class_ref(class_index)?;
             let (name, field_type) = self.get_name_and_type(name_and_type_index)?;
             Ok(FieldRef {
-                class,
+                owner,
                 name,
                 field_type,
             })

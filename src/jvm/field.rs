@@ -46,11 +46,11 @@ pub struct Field {
 }
 
 impl Field {
-    /// Creates a [`FieldReference`] referring to the field.
+    /// Creates a [`FieldRef`] referring to the field.
     #[must_use]
-    pub fn make_reference(&self) -> FieldRef {
+    pub fn as_ref(&self) -> FieldRef {
         FieldRef {
-            class: self.owner.clone(),
+            owner: self.owner.clone(),
             name: self.name.clone(),
             field_type: self.field_type.clone(),
         }
@@ -163,7 +163,7 @@ bitflags! {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FieldRef {
     /// A reference to the class that contains the field.
-    pub class: ClassRef,
+    pub owner: ClassRef,
     /// The name of the field.
     pub name: String,
 
@@ -173,7 +173,7 @@ pub struct FieldRef {
 
 impl Display for FieldRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.class, self.name)
+        write!(f, "{}.{}", self.owner, self.name)
     }
 }
 
