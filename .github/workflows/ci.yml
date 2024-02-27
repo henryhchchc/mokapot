@@ -80,6 +80,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build_and_test
     steps:
+      - uses: actions/checkout@v4
+        name: Checkout source code
       - name: Download Coverage Data
         uses: actions/download-artifact@v4
         with:
@@ -90,6 +92,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: codecov.json
+          fail_ci_if_error: true
 
   build_doc:
     name: Generate Rust Doc
@@ -114,6 +117,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         name: Upload docs as github pages artifact
         with:
+          name: mokapot-docs
           path: target/doc
 
   publish_latest_docs:
@@ -123,6 +127,8 @@ jobs:
     steps:
       - uses: actions/deploy-pages@v4
         name: Deploy docs to github pages
+        with:
+          name: mokapot-docs
 
   publish_to_crate_io:
     name: Publish to crate.io
