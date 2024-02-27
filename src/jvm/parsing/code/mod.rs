@@ -18,9 +18,8 @@ use crate::{
 
 use super::{
     jvm_element_parser::{parse_flags, JvmElement},
-    Context,
     reader_utils::{read_byte_chunk, ValueReaderExt},
-    Error,
+    Context, Error,
 };
 
 #[derive(Debug)]

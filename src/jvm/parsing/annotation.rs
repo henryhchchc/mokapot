@@ -6,9 +6,7 @@ use crate::jvm::{
     field::{ConstantValue, JavaString},
 };
 
-use super::{
-    jvm_element_parser::JvmElement, Context, reader_utils::ValueReaderExt, Error,
-};
+use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Context, Error};
 
 impl JvmElement for TypePathElement {
     fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &Context) -> Result<Self, Error> {

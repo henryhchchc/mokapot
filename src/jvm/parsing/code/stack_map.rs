@@ -2,10 +2,7 @@ use std::{io::Read, iter::repeat_with};
 
 use crate::jvm::{
     code::{StackMapFrame, VerificationTypeInfo},
-    parsing::{
-        jvm_element_parser::JvmElement, Context, reader_utils::ValueReaderExt,
-        Error,
-    },
+    parsing::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Context, Error},
 };
 
 impl JvmElement for StackMapFrame {

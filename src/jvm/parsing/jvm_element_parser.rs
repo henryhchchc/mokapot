@@ -4,9 +4,8 @@ use bitflags::Flags;
 use itertools::Itertools;
 
 use super::{
-    Context,
     reader_utils::{Readable, ValueReaderExt},
-    Error,
+    Context, Error,
 };
 
 pub(super) trait JvmElement: Sized {
