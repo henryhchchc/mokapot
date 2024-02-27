@@ -54,6 +54,13 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
+      - name: Cargo Update
+        run: cargo update --all-features --verbose
+      - name: Cache Rust Build Targets
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          path: target
       - run: cargo check --all-features --verbose
         name: Cargo check
       - name: Test
