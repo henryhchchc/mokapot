@@ -82,7 +82,7 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: target/codecov.json
+          files: codecov.json
 
   build_doc:
     name: Generate Rust Doc
