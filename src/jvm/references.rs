@@ -7,7 +7,8 @@ use crate::types::{
 };
 
 use super::method::Method;
-/// A reference to a class in the binary format.
+
+/// A reference to a [`Class`](crate::jvm::class::Class).
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ClassRef {
     /// The binary name of the class.
@@ -15,7 +16,7 @@ pub struct ClassRef {
 }
 
 impl ClassRef {
-    /// Creates a new class reference.
+    /// Creates a new [`ClassRef`] from a binary name.
     pub fn new<S: Into<String>>(binary_name: S) -> Self {
         ClassRef {
             binary_name: binary_name.into(),
@@ -29,7 +30,7 @@ impl Display for ClassRef {
     }
 }
 
-/// A reference to a field.
+/// A reference to a [`Field`](crate::jvm::field::Field).
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FieldRef {
     /// A reference to the class that contains the field.
@@ -47,7 +48,7 @@ impl Display for FieldRef {
     }
 }
 
-/// A reference to a method.
+/// A reference to a [`Method`].
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MethodRef {
     /// The reference to the class containing the method.
@@ -81,14 +82,14 @@ impl Display for MethodRef {
     }
 }
 
-/// A reference to a module in the binary format.
+/// A reference to a [`Module`](crate::jvm::module::Module).
 #[derive(Debug, Clone)]
 pub struct ModuleRef {
     /// The name of the module.
     pub name: String,
 }
 
-/// A reference to a package in the binary format.
+/// A reference to a package.
 #[derive(Debug, Clone)]
 pub struct PackageRef {
     /// The binary name of the package.
