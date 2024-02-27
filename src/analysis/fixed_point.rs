@@ -2,8 +2,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 /// A trait for fixed-point analysis.
-
-pub trait FixedPointAnalyzer {
+pub trait Analyzer {
     /// The type of the location in the control flow graph.
     type Location;
     /// The type of the fact that is propagated through the control flow graph.
@@ -41,7 +40,7 @@ pub trait FixedPointAnalyzer {
     /// Runs fixed-point analysis on a given analyzer, and returns a map of the facts (at fixed points)
     /// for each location in the control flow graph.
     /// # Errors
-    /// - [`A::Err`](FixedPointAnalyzer::Err) If the analysis fails.
+    /// - [`Analyzer::Err`] If the analysis fails.
     fn analyze(&mut self) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>
     where
         Self::Location: Ord + Eq,

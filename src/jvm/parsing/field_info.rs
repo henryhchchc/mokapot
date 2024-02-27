@@ -1,18 +1,15 @@
 use std::{io::Read, str::FromStr};
 
 use crate::{
-    jvm::{class::ClassRef, field::Field, parsing::jvm_element_parser::parse_flags},
+    jvm::{field::Field, parsing::jvm_element_parser::parse_flags, references::ClassRef},
     macros::extract_attributes,
     types::field_type::FieldType,
 };
 
-use super::{
-    jvm_element_parser::JvmElement, parsing_context::ParsingContext, reader_utils::ValueReaderExt,
-    Error,
-};
+use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Context, Error};
 
 impl JvmElement for Field {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let access_flags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let field_type = JvmElement::parse(reader, ctx)?;
@@ -57,7 +54,7 @@ impl JvmElement for Field {
 }
 
 impl JvmElement for FieldType {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let descriptor_index = reader.read_value()?;
         let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
         FieldType::from_str(descriptor).map_err(Error::from)

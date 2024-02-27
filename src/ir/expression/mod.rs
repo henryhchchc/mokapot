@@ -6,7 +6,11 @@ use itertools::Itertools;
 use super::Argument;
 
 use crate::{
-    jvm::{class::ClassRef, code::ProgramCounter, field::ConstantValue, method::MethodRef},
+    jvm::{
+        code::ProgramCounter,
+        field::ConstantValue,
+        references::{ClassRef, MethodRef},
+    },
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -17,7 +21,14 @@ mod field;
 mod lock;
 mod math;
 
-pub use {array::*, condition::*, conversion::*, field::*, lock::*, math::*};
+pub use {
+    array::Operation as ArrayOperation,
+    condition::Condition,
+    conversion::Operaion as Conversion,
+    field::Access as FieldAccess,
+    lock::Operation as LockOperation,
+    math::{NaNTreatment, Operation as MathOperation},
+};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
@@ -60,7 +71,7 @@ pub enum Expression {
     /// An array operation.
     Array(ArrayOperation),
     /// A type conversion.
-    Conversion(ConversionOperation),
+    Conversion(Conversion),
     /// Throws an exception.
     Throw(Argument),
     /// An operation on a monitor.

@@ -8,7 +8,7 @@ use super::super::Argument;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConversionOperation {
+pub enum Operaion {
     /// Converts an `int` to a `long`.
     Int2Long(Argument),
     /// Converts an `int` to a `float`.
@@ -45,7 +45,7 @@ pub enum ConversionOperation {
     InstanceOf(Argument, FieldType),
 }
 
-impl Display for ConversionOperation {
+impl Display for Operaion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Int2Long(arg) | Self::Float2Long(arg) | Self::Double2Long(arg) => {

@@ -8,22 +8,19 @@ use std::{
 };
 
 use crate::jvm::{
-    class::ClassRef,
     code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
     method::{Method, MethodAccessFlags},
+    references::ClassRef,
 };
 
-use crate::analysis::fixed_point::FixedPointAnalyzer;
+use crate::analysis::fixed_point::Analyzer;
 
 use self::jvm_frame::{Entry, JvmStackFrame};
 
 use itertools::Itertools;
-pub use jvm_frame::JvmFrameError;
+pub use jvm_frame::ExecutionError;
 
-use super::{
-    control_flow::{ControlFlowGraph, ControlTransfer},
-    expression::Expression,
-};
+use super::{control_flow::ControlTransfer, expression::Expression, ControlFlowGraph};
 use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
 /// An error that occurs when generating Moka IR.
@@ -31,10 +28,10 @@ use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 pub enum MokaIRGenerationError {
     /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]
-    ExecutionError(#[from] JvmFrameError),
+    ExecutionError(#[from] ExecutionError),
     /// An error that occurs when merging two stack frames.
     #[error("Error when merging two stack frames: {0}")]
-    MergeError(JvmFrameError),
+    MergeError(ExecutionError),
     /// An error that occurs when a method does not have a body.
     #[error("The method does not have a body")]
     NoMethodBody,
@@ -50,7 +47,7 @@ struct MokaIRGenerator<'m> {
     control_flow_edges: HashSet<(ProgramCounter, ProgramCounter, ControlTransfer)>,
 }
 
-impl FixedPointAnalyzer for MokaIRGenerator<'_> {
+impl Analyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
     type Fact = JvmStackFrame;
     type Err = MokaIRGenerationError;
@@ -182,7 +179,7 @@ impl<'m> MokaIRGenerator<'m> {
             .ok_or(MokaIRGenerationError::MalformedControlFlow)
     }
 
-    fn for_method(method: &'m Method) -> Result<Self, <Self as FixedPointAnalyzer>::Err> {
+    fn for_method(method: &'m Method) -> Result<Self, <Self as Analyzer>::Err> {
         let body = method
             .body
             .as_ref()

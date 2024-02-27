@@ -1,12 +1,12 @@
 #![warn(
-    missing_debug_implementations,
-    rust_2018_idioms,
-    missing_docs,
-    rust_2021_compatibility,
+    clippy::pedantic,
     future_incompatible,
-    clippy::pedantic
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    rust_2021_compatibility
 )]
-#![allow(clippy::module_name_repetitions)]
+// #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(unstable, feature(doc_auto_cfg))]
 #![deny(rustdoc::broken_intra_doc_links)]
 

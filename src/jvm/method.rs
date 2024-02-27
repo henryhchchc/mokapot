@@ -1,21 +1,16 @@
 //! JVM methods.
 
-use std::fmt::Display;
-
 use bitflags::bitflags;
 
 use crate::{
     macros::see_jvm_spec,
-    types::{
-        method_descriptor::{MethodDescriptor, ReturnType},
-        signitures::MethodSignature,
-    },
+    types::{method_descriptor::MethodDescriptor, signitures::MethodSignature},
 };
 
 use super::{
-    annotation::{Annotation, ElementValue, TypeAnnotation},
-    class::ClassRef,
+    annotation::{Annotation, ElementValue, Type},
     code::MethodBody,
+    references::{ClassRef, MethodRef},
 };
 
 /// A JVM method.
@@ -39,9 +34,9 @@ pub struct Method {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_type_annotations: Vec<Type>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<Type>,
     /// The runtime visible parameter annotations.
     pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
     /// The runtime invisible parameter annotations.
@@ -139,72 +134,5 @@ bitflags! {
         const SYNTHETIC = 0x1000;
         /// Declared as either `mandated` or `optional`.
         const MANDATED = 0x8000;
-    }
-}
-
-/// A reference to a method.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct MethodRef {
-    /// The reference to the class containing the method.
-    pub owner: ClassRef,
-    /// The name of the method.
-    pub name: String,
-    /// The descriptor of the method.
-    pub descriptor: MethodDescriptor,
-}
-
-impl MethodRef {
-    /// Checks if the method reference refers to a constructor.
-    #[must_use]
-    pub fn is_constructor(&self) -> bool {
-        self.name == Method::CONSTRUCTOR_NAME
-            && matches!(self.descriptor.return_type, ReturnType::Void)
-    }
-
-    /// Checks if the method reference refers to a static initializer block.
-    #[must_use]
-    pub fn is_static_initializer_block(&self) -> bool {
-        self.name == Method::CLASS_INITIALIZER_NAME
-            && self.descriptor.parameters_types.is_empty()
-            && matches!(self.descriptor.return_type, ReturnType::Void)
-    }
-}
-
-impl Display for MethodRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.owner, self.name)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::tests::arb_class_name;
-
-    use super::*;
-    use proptest::prelude::*;
-
-    proptest! {
-
-        #[test]
-        fn test_is_constructor(class_name in arb_class_name()) {
-            let method = MethodRef {
-                owner: ClassRef::new(class_name),
-                name: Method::CONSTRUCTOR_NAME.to_string(),
-                descriptor: "()V".parse().unwrap(),
-            };
-
-            assert!(method.is_constructor());
-        }
-
-        #[test]
-        fn test_is_static_initializer_bolck(class_name in arb_class_name()) {
-            let method = MethodRef {
-                owner: ClassRef::new(class_name),
-                name: Method::CLASS_INITIALIZER_NAME.to_string(),
-                descriptor: "()V".parse().unwrap(),
-            };
-
-            assert!(method.is_static_initializer_block());
-        }
     }
 }

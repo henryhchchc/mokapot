@@ -7,23 +7,22 @@ use std::{
 use itertools::Itertools;
 
 use crate::jvm::{
-    annotation::{Annotation, ElementValue, TypeAnnotation},
+    annotation::{Annotation, ElementValue, Type},
     class::{
-        BootstrapMethod, ClassRef, EnclosingMethod, InnerClassInfo, RecordComponent,
-        SourceDebugExtension,
+        BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent, SourceDebugExtension,
     },
     code::{LineNumberTableEntry, MethodBody, StackMapFrame},
     field::ConstantValue,
     method::ParameterInfo,
-    module::{Module, PackageRef},
+    module::Module,
+    references::{ClassRef, PackageRef},
 };
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::JvmElement,
-    parsing_context::ParsingContext,
     reader_utils::{read_byte_chunk, ValueReaderExt},
-    Error,
+    Context, Error,
 };
 
 #[derive(Debug)]
@@ -47,8 +46,8 @@ pub(crate) enum Attribute {
     RuntimeInvisibleAnnotations(Vec<Annotation>),
     RuntimeVisibleParameterAnnotations(Vec<Vec<Annotation>>),
     RuntimeInvisibleParameterAnnotations(Vec<Vec<Annotation>>),
-    RuntimeVisibleTypeAnnotations(Vec<TypeAnnotation>),
-    RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation>),
+    RuntimeVisibleTypeAnnotations(Vec<Type>),
+    RuntimeInvisibleTypeAnnotations(Vec<Type>),
     AnnotationDefault(ElementValue),
     BootstrapMethods(Vec<BootstrapMethod>),
     MethodParameters(Vec<ParameterInfo>),
@@ -101,7 +100,7 @@ impl Attribute {
 }
 
 impl JvmElement for Attribute {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let name_idx = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let attribute_length: u32 = reader.read_value()?;
@@ -198,14 +197,14 @@ impl JvmElement for Attribute {
 }
 
 impl JvmElement for ConstantValue {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let value_index = reader.read_value()?;
         ctx.constant_pool.get_constant_value(value_index)
     }
 }
 
 impl JvmElement for EnclosingMethod {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let class_index = reader.read_value()?;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
         let method_index = reader.read_value()?;

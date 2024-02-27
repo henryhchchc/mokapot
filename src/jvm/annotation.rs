@@ -43,7 +43,7 @@ pub enum ElementValue {
     Array(Vec<ElementValue>),
 }
 
-/// Information about the target of a [`TypeAnnotation`].
+/// Information about the target of a [`self::Type`].
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone)]
 pub enum TargetInfo {
@@ -120,7 +120,7 @@ pub enum TypePathElement {
 /// An type annotation on a class, field, method, or parameter.
 #[doc = see_jvm_spec!(4, 7, 20)]
 #[derive(Debug, Clone)]
-pub struct TypeAnnotation {
+pub struct Type {
     /// The type of the annotation.
     pub annotation_type: FieldType,
     /// Denotes which type of declaration this annotation is on.

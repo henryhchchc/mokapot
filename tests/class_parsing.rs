@@ -2,8 +2,9 @@ use std::io::BufReader;
 
 use mokapot::{
     jvm::{
-        class::{Class, ClassAccessFlags, ClassRef},
+        class::{Class, ClassAccessFlags},
         parsing::Error,
+        references::ClassRef,
     },
     types::{
         field_type::{FieldType, PrimitiveType},

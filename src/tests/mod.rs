@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 
 use crate::{
-    jvm::class::ClassRef,
+    jvm::references::ClassRef,
     types::field_type::{FieldType, PrimitiveType},
 };
 

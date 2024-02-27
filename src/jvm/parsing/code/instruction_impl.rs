@@ -7,7 +7,7 @@ use crate::{
             WideInstruction,
         },
         constant_pool::{self, ConstantPool},
-        parsing::{parsing_context::ParsingContext, Error},
+        parsing::{Context, Error},
     },
     macros::malform,
     types::field_type::PrimitiveType,
@@ -16,7 +16,7 @@ use crate::{
 impl Instruction {
     pub(crate) fn parse_code(
         reader: Vec<u8>,
-        ctx: &ParsingContext,
+        ctx: &Context,
     ) -> Result<InstructionList<Instruction>, Error> {
         let raw_instructions = RawInstruction::from_bytes(reader)?;
         let result = raw_instructions.lift(&ctx.constant_pool)?;

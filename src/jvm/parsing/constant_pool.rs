@@ -6,11 +6,10 @@ use super::{
 };
 use crate::{
     jvm::{
-        class::{ClassRef, MethodHandle},
+        class::MethodHandle,
         constant_pool::{ConstantPool, Entry},
-        field::{ConstantValue, FieldRef, JavaString},
-        method::MethodRef,
-        module::{ModuleRef, PackageRef},
+        field::{ConstantValue, JavaString},
+        references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
     types::field_type::{FieldType, TypeReference},

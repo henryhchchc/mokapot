@@ -4,18 +4,15 @@ use bitflags::Flags;
 use itertools::Itertools;
 
 use super::{
-    parsing_context::ParsingContext,
+    Context,
     reader_utils::{Readable, ValueReaderExt},
     Error,
 };
 
 pub(super) trait JvmElement: Sized {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error>;
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error>;
 
-    fn parse_vec<C, R: Read + ?Sized>(
-        reader: &mut R,
-        ctx: &ParsingContext,
-    ) -> Result<Vec<Self>, Error>
+    fn parse_vec<C, R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Vec<Self>, Error>
     where
         C: Into<usize> + Readable,
     {
@@ -28,7 +25,7 @@ pub(super) trait JvmElement: Sized {
 }
 
 impl JvmElement for String {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let utf_8_index = reader.read_value()?;
         ctx.constant_pool.get_str(utf_8_index).map(str::to_owned)
     }

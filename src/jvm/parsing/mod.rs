@@ -9,8 +9,18 @@ mod field_info;
 mod jvm_element_parser;
 mod method_info;
 mod module;
-mod parsing_context;
 mod reader_utils;
 
+use crate::jvm::{class::Version, constant_pool::ConstantPool};
 pub use errors::Error;
-pub use parsing_context::ParsingContext;
+
+/// Context used to parse a class file.
+#[derive(Debug, Clone)]
+pub struct Context {
+    /// The constant pool of the class file.
+    pub constant_pool: ConstantPool,
+    /// The version of the class file being parsed.
+    pub class_version: Version,
+    /// The binary name of the class being parsed.
+    pub current_class_binary_name: String,
+}

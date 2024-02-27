@@ -1,10 +1,10 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{ir::Argument, jvm::field::FieldRef};
+use crate::{ir::Argument, jvm::references::FieldRef};
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldAccess {
+pub enum Access {
     /// Reads a static field.
     ReadStatic {
         /// The field to read.
@@ -35,7 +35,7 @@ pub enum FieldAccess {
     },
 }
 
-impl Display for FieldAccess {
+impl Display for Access {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ReadStatic { field } => write!(f, "read {field}"),

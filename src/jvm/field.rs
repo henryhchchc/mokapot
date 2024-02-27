@@ -9,8 +9,9 @@ use crate::{
 };
 
 use super::{
-    annotation::{Annotation, TypeAnnotation},
-    class::{ClassRef, MethodHandle},
+    annotation::{Annotation, Type},
+    class::MethodHandle,
+    references::{ClassRef, FieldRef},
 };
 
 /// A JVM field.
@@ -38,9 +39,9 @@ pub struct Field {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_type_annotations: Vec<Type>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<Type>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }
@@ -159,33 +160,17 @@ bitflags! {
     }
 }
 
-/// A reference to a field.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct FieldRef {
-    /// A reference to the class that contains the field.
-    pub owner: ClassRef,
-    /// The name of the field.
-    pub name: String,
-
-    /// The type of the field.
-    pub field_type: FieldType,
-}
-
-impl Display for FieldRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.owner, self.name)
-    }
-}
-
 #[cfg(test)]
 mod test {
 
     use std::str::FromStr;
 
-    use crate::jvm::class::ClassRef;
-    use crate::types::field_type::{
-        FieldType,
-        PrimitiveType::{self, *},
+    use crate::{
+        jvm::references::ClassRef,
+        types::field_type::{
+            FieldType,
+            PrimitiveType::{self, *},
+        },
     };
 
     #[test]

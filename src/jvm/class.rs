@@ -1,5 +1,4 @@
 //! JVM classes and interfaces
-use std::fmt::Display;
 
 use bitflags::bitflags;
 
@@ -13,11 +12,12 @@ use crate::{
 };
 
 use super::{
-    annotation::{Annotation, TypeAnnotation},
-    field::{ConstantValue, Field, FieldRef},
-    method::{Method, MethodRef},
-    module::{Module, PackageRef},
+    annotation::{Annotation, Type},
+    field::{ConstantValue, Field},
+    method::Method,
+    module::Module,
     parsing::Error,
+    references::{ClassRef, FieldRef, MethodRef, PackageRef},
 };
 
 /// A JVM class
@@ -25,7 +25,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Class {
     /// The version of the class file.
-    pub version: ClassVersion,
+    pub version: Version,
     /// The access modifiers of the class.
     pub access_flags: ClassAccessFlags,
     /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
@@ -52,9 +52,9 @@ pub struct Class {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_type_annotations: Vec<Type>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<Type>,
     /// The bootstrap methods of the class, which are used to generate dynamic callsites.
     pub bootstrap_methods: Vec<BootstrapMethod>,
     /// The infomation of the module if the class is `module-info`.
@@ -116,7 +116,7 @@ pub const MAX_MAJOR_VERSION: u16 = 65;
 /// The version of a class file.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
-pub enum ClassVersion {
+pub enum Version {
     /// JDK 1.1
     Jdk1_1(u16),
     /// JDK 1.2
@@ -160,7 +160,7 @@ pub enum ClassVersion {
     /// JDK 21
     Jdk21(bool),
 }
-impl ClassVersion {
+impl Version {
     pub(crate) const fn from_versions(major: u16, minor: u16) -> Result<Self, Error> {
         match (major, minor) {
             (45, minor) => Ok(Self::Jdk1_1(minor)),
@@ -251,7 +251,7 @@ impl ClassVersion {
     #[must_use]
     pub const fn minor(&self) -> u16 {
         #[allow(clippy::enum_glob_use)]
-        use ClassVersion::*;
+        use Version::*;
         if let Jdk1_1(minor) = self {
             *minor
         } else if let Jdk1_2 | Jdk1_3 | Jdk1_4 | Jdk5 | Jdk6 | Jdk7 | Jdk8 | Jdk9 | Jdk10 | Jdk11
@@ -262,28 +262,6 @@ impl ClassVersion {
         } else {
             65535
         }
-    }
-}
-
-/// A reference to a class in the binary format.
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct ClassRef {
-    /// The binary name of the class.
-    pub binary_name: String,
-}
-
-impl ClassRef {
-    /// Creates a new class reference.
-    pub fn new<S: Into<String>>(binary_name: S) -> Self {
-        ClassRef {
-            binary_name: binary_name.into(),
-        }
-    }
-}
-
-impl Display for ClassRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.binary_name)
     }
 }
 
@@ -375,9 +353,9 @@ pub struct RecordComponent {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_type_annotations: Vec<Type>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<Type>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }
@@ -448,14 +426,14 @@ mod tests {
 
         #[test]
         fn jdk_1_1(minor in any::<u16>()) {
-            let class_version = ClassVersion::from_versions(45, minor).unwrap();
+            let class_version = Version::from_versions(45, minor).unwrap();
             assert_eq!(45, class_version.major());
             assert_eq!(minor, class_version.minor());
         }
 
         #[test]
         fn jdk_1_x(major in 46u16..56) {
-            let class_version = ClassVersion::from_versions(major, 0).unwrap();
+            let class_version = Version::from_versions(major, 0).unwrap();
             assert_eq!(major, class_version.major());
             assert!(!class_version.is_preview_enabled());
         }
@@ -465,7 +443,7 @@ mod tests {
             major in 46u16..56,
             minor in 1u16..
         ) {
-            let class_version = ClassVersion::from_versions(major, minor);
+            let class_version = Version::from_versions(major, minor);
             assert!(class_version.is_err());
         }
 
@@ -474,24 +452,24 @@ mod tests {
             major in (56..=MAX_MAJOR_VERSION),
             minor in prop_oneof![Just(0u16), Just(u16::MAX)]
         ) {
-            let class_version = ClassVersion::from_versions(major, minor).unwrap();
+            let class_version = Version::from_versions(major, minor).unwrap();
             assert_eq!(major, class_version.major());
             assert_eq!(class_version.is_preview_enabled(), minor == u16::MAX);
         }
 
         #[test]
         fn too_low_class_version(major in 0u16..45) {
-            assert!(ClassVersion::from_versions(major, 0).is_err());
+            assert!(Version::from_versions(major, 0).is_err());
         }
 
         #[test]
         fn too_high_class_version(major in (MAX_MAJOR_VERSION+1)..=u16::MAX) {
-            assert!(ClassVersion::from_versions(major, 0).is_err());
+            assert!(Version::from_versions(major, 0).is_err());
         }
 
         #[test]
         fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..=u16::MAX) {
-            assert!(ClassVersion::from_versions(major, minor).is_err());
+            assert!(Version::from_versions(major, minor).is_err());
         }
 
     }

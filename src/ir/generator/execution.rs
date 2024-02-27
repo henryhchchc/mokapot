@@ -2,7 +2,7 @@ use super::{jvm_frame::JvmStackFrame, MokaIRGenerationError, MokaIRGenerator};
 use crate::{
     ir::{
         expression::{
-            ArrayOperation, Condition, ConversionOperation, Expression, FieldAccess, LockOperation,
+            ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
         Argument, MokaInstruction as IR, Value,
@@ -272,21 +272,21 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            I2F => conversion_op::<_, false, false>(frame, def, ConversionOperation::Int2Float)?,
-            I2L => conversion_op::<_, false, true>(frame, def, ConversionOperation::Int2Long)?,
-            I2D => conversion_op::<_, false, true>(frame, def, ConversionOperation::Int2Double)?,
-            L2I => conversion_op::<_, true, false>(frame, def, ConversionOperation::Long2Int)?,
-            L2F => conversion_op::<_, true, false>(frame, def, ConversionOperation::Long2Float)?,
-            L2D => conversion_op::<_, true, true>(frame, def, ConversionOperation::Long2Double)?,
-            F2I => conversion_op::<_, false, false>(frame, def, ConversionOperation::Float2Int)?,
-            F2L => conversion_op::<_, false, true>(frame, def, ConversionOperation::Float2Long)?,
-            F2D => conversion_op::<_, false, true>(frame, def, ConversionOperation::Float2Double)?,
-            D2I => conversion_op::<_, true, false>(frame, def, ConversionOperation::Double2Int)?,
-            D2L => conversion_op::<_, true, true>(frame, def, ConversionOperation::Double2Long)?,
-            D2F => conversion_op::<_, true, false>(frame, def, ConversionOperation::Double2Float)?,
-            I2B => conversion_op::<_, false, false>(frame, def, ConversionOperation::Int2Byte)?,
-            I2C => conversion_op::<_, false, false>(frame, def, ConversionOperation::Int2Char)?,
-            I2S => conversion_op::<_, false, false>(frame, def, ConversionOperation::Int2Short)?,
+            I2F => conversion_op::<_, false, false>(frame, def, Conversion::Int2Float)?,
+            I2L => conversion_op::<_, false, true>(frame, def, Conversion::Int2Long)?,
+            I2D => conversion_op::<_, false, true>(frame, def, Conversion::Int2Double)?,
+            L2I => conversion_op::<_, true, false>(frame, def, Conversion::Long2Int)?,
+            L2F => conversion_op::<_, true, false>(frame, def, Conversion::Long2Float)?,
+            L2D => conversion_op::<_, true, true>(frame, def, Conversion::Long2Double)?,
+            F2I => conversion_op::<_, false, false>(frame, def, Conversion::Float2Int)?,
+            F2L => conversion_op::<_, false, true>(frame, def, Conversion::Float2Long)?,
+            F2D => conversion_op::<_, false, true>(frame, def, Conversion::Float2Double)?,
+            D2I => conversion_op::<_, true, false>(frame, def, Conversion::Double2Int)?,
+            D2L => conversion_op::<_, true, true>(frame, def, Conversion::Double2Long)?,
+            D2F => conversion_op::<_, true, false>(frame, def, Conversion::Double2Float)?,
+            I2B => conversion_op::<_, false, false>(frame, def, Conversion::Int2Byte)?,
+            I2C => conversion_op::<_, false, false>(frame, def, Conversion::Int2Char)?,
+            I2S => conversion_op::<_, false, false>(frame, def, Conversion::Int2Short)?,
             LCmp => {
                 let lhs = frame.pop_dual_slot_value()?;
                 let rhs = frame.pop_dual_slot_value()?;
@@ -472,7 +472,7 @@ impl MokaIRGenerator<'_> {
                     this: Some(object_ref),
                     args: arguments,
                 };
-                if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
+                if let ReturnType::Some(ref return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
                 IR::Definition {
@@ -487,7 +487,7 @@ impl MokaIRGenerator<'_> {
                     this: None,
                     args: arguments,
                 };
-                if let ReturnType::Some(return_type) = &method_ref.descriptor.return_type {
+                if let ReturnType::Some(ref return_type) = &method_ref.descriptor.return_type {
                     frame.typed_push(return_type, def.as_argument())?;
                 }
                 IR::Definition {
@@ -570,12 +570,12 @@ impl MokaIRGenerator<'_> {
             }
             CheckCast(TypeReference(target_type)) => {
                 conversion_op::<_, false, false>(frame, def, |value| {
-                    ConversionOperation::CheckCast(value, target_type.clone())
+                    Conversion::CheckCast(value, target_type.clone())
                 })?
             }
             InstanceOf(TypeReference(target_type)) => {
                 conversion_op::<_, false, false>(frame, def, |value| {
-                    ConversionOperation::InstanceOf(value, target_type.clone())
+                    Conversion::InstanceOf(value, target_type.clone())
                 })?
             }
             MonitorEnter => {
@@ -691,7 +691,7 @@ fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
     conversion: C,
 ) -> Result<IR, MokaIRGenerationError>
 where
-    C: FnOnce(Argument) -> ConversionOperation,
+    C: FnOnce(Argument) -> Conversion,
 {
     let operand = if OPERAND_WIDE {
         frame.pop_dual_slot_value()?

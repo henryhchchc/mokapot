@@ -21,7 +21,7 @@ pub(super) struct JvmStackFrame {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum JvmFrameError {
+pub enum ExecutionError {
     #[error("Trying to pop an empty stack")]
     StackUnderflow,
     #[error("The stack size exceeds the max stack size")]
@@ -44,9 +44,9 @@ impl JvmStackFrame {
         desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
-    ) -> Result<Self, JvmFrameError> {
+    ) -> Result<Self, ExecutionError> {
         if usize::from(max_locals) < usize::from(is_static) + desc.parameters_types.len() {
-            return Err(JvmFrameError::LocalLimitExceed);
+            return Err(ExecutionError::LocalLimitExceed);
         }
         let this_arg = if is_static {
             None
@@ -84,11 +84,11 @@ impl JvmStackFrame {
     }
 
     #[inline]
-    fn push_raw(&mut self, value: Entry) -> Result<(), JvmFrameError> {
+    fn push_raw(&mut self, value: Entry) -> Result<(), ExecutionError> {
         let stack_size =
             u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16");
         if stack_size >= self.max_stack {
-            Err(JvmFrameError::StackOverflow)
+            Err(ExecutionError::StackOverflow)
         } else {
             self.operand_stack.push(value);
             Ok(())
@@ -96,35 +96,35 @@ impl JvmStackFrame {
     }
 
     #[inline]
-    fn pop_raw(&mut self) -> Result<Entry, JvmFrameError> {
+    fn pop_raw(&mut self) -> Result<Entry, ExecutionError> {
         self.operand_stack
             .pop()
-            .ok_or(JvmFrameError::StackUnderflow)
+            .ok_or(ExecutionError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<Argument, JvmFrameError> {
+    pub(super) fn pop_value(&mut self) -> Result<Argument, ExecutionError> {
         match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
-            Entry::Top => Err(JvmFrameError::ValueMismatch),
+            Entry::Top => Err(ExecutionError::ValueMismatch),
             // `UninitializedLocal` is never pushed to the stack
             Entry::UninitializedLocal => unreachable!(),
         }
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, JvmFrameError> {
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, ExecutionError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (Entry::Value(it), Entry::Top) => Ok(it),
             // `UninitializedLocal` is never pushed to the stack
             (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => unreachable!(),
-            _ => Err(JvmFrameError::ValueMismatch),
+            _ => Err(ExecutionError::ValueMismatch),
         }
     }
 
-    pub(super) fn push_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
+    pub(super) fn push_value(&mut self, value: Argument) -> Result<(), ExecutionError> {
         self.push_raw(Entry::Value(value))
     }
 
-    pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), JvmFrameError> {
+    pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), ExecutionError> {
         self.push_raw(Entry::Top)?;
         self.push_raw(Entry::Value(value))
     }
@@ -132,7 +132,7 @@ impl JvmStackFrame {
     pub(super) fn pop_args(
         &mut self,
         descriptor: &MethodDescriptor,
-    ) -> Result<Vec<Argument>, JvmFrameError> {
+    ) -> Result<Vec<Argument>, ExecutionError> {
         use FieldType::Base;
         use PrimitiveType::{Double, Long};
         let mut args = Vec::with_capacity(descriptor.parameters_types.len());
@@ -152,7 +152,7 @@ impl JvmStackFrame {
         &mut self,
         value_type: &FieldType,
         value: Argument,
-    ) -> Result<(), JvmFrameError> {
+    ) -> Result<(), ExecutionError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
                 self.push_dual_slot_value(value)
@@ -161,23 +161,23 @@ impl JvmStackFrame {
         }
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, JvmFrameError> {
+    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, ExecutionError> {
         let idx = idx.into();
         let frame_value = &self.local_variables[usize::from(idx)];
         match frame_value {
             Entry::Value(it) => Ok(it.clone()),
-            Entry::Top => Err(JvmFrameError::ValueMismatch),
-            Entry::UninitializedLocal => Err(JvmFrameError::LocalUninitialized),
+            Entry::Top => Err(ExecutionError::ValueMismatch),
+            Entry::UninitializedLocal => Err(ExecutionError::LocalUninitialized),
         }
     }
 
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<u16>,
-    ) -> Result<Argument, JvmFrameError> {
+    ) -> Result<Argument, ExecutionError> {
         let idx = idx.into();
         if idx + 1 >= self.max_locals {
-            Err(JvmFrameError::LocalLimitExceed)?;
+            Err(ExecutionError::LocalLimitExceed)?;
         }
         match (
             // Panic only when `local_variables` were not allocated correctly
@@ -186,9 +186,9 @@ impl JvmStackFrame {
         ) {
             (Entry::Value(it), Entry::Top) => Ok(it.clone()),
             (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => {
-                Err(JvmFrameError::LocalUninitialized)
+                Err(ExecutionError::LocalUninitialized)
             }
-            _ => Err(JvmFrameError::ValueMismatch),
+            _ => Err(ExecutionError::ValueMismatch),
         }
     }
 
@@ -196,10 +196,10 @@ impl JvmStackFrame {
         &mut self,
         idx: impl Into<u16>,
         value: Argument,
-    ) -> Result<(), JvmFrameError> {
+    ) -> Result<(), ExecutionError> {
         let idx = idx.into();
         if idx >= self.max_locals {
-            Err(JvmFrameError::LocalLimitExceed)?;
+            Err(ExecutionError::LocalLimitExceed)?;
         }
         self.local_variables[usize::from(idx)] = Entry::Value(value);
         if idx + 1 < self.max_locals
@@ -214,7 +214,7 @@ impl JvmStackFrame {
         &mut self,
         idx: impl Into<u16>,
         value: Argument,
-    ) -> Result<(), JvmFrameError> {
+    ) -> Result<(), ExecutionError> {
         let idx = idx.into();
         if idx + 1 < self.max_locals {
             // Panic only when `local_variables` were not allocated correctly
@@ -222,7 +222,7 @@ impl JvmStackFrame {
             self.local_variables[usize::from(idx + 1)] = Entry::Top;
             Ok(())
         } else {
-            Err(JvmFrameError::LocalLimitExceed)
+            Err(ExecutionError::LocalLimitExceed)
         }
     }
 
@@ -246,25 +246,25 @@ impl JvmStackFrame {
 
 /// Implementations of JVM stack frame instructions.
 impl JvmStackFrame {
-    pub(super) fn pop(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn pop(&mut self) -> Result<(), ExecutionError> {
         let _top_element = self.pop_raw()?;
         Ok(())
     }
 
-    pub(super) fn pop2(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn pop2(&mut self) -> Result<(), ExecutionError> {
         let _top_element = self.pop_raw()?;
         let _top_element = self.pop_raw()?;
         Ok(())
     }
 
-    pub(super) fn dup(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         self.push_raw(top_element.clone())?;
         self.push_raw(top_element)?;
         Ok(())
     }
 
-    pub(super) fn dup_x1(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup_x1(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         self.push_raw(top_element.clone())?;
@@ -273,7 +273,7 @@ impl JvmStackFrame {
         Ok(())
     }
 
-    pub(super) fn dup_x2(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup_x2(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         let third_element = self.pop_raw()?;
@@ -284,7 +284,7 @@ impl JvmStackFrame {
         Ok(())
     }
 
-    pub(super) fn dup2(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup2(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         self.push_raw(second_element.clone())?;
@@ -294,7 +294,7 @@ impl JvmStackFrame {
         Ok(())
     }
 
-    pub(super) fn dup2_x1(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup2_x1(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         let third_element = self.pop_raw()?;
@@ -306,7 +306,7 @@ impl JvmStackFrame {
         Ok(())
     }
 
-    pub(super) fn dup2_x2(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn dup2_x2(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         let third_element = self.pop_raw()?;
@@ -320,7 +320,7 @@ impl JvmStackFrame {
         Ok(())
     }
 
-    pub(super) fn swap(&mut self) -> Result<(), JvmFrameError> {
+    pub(super) fn swap(&mut self) -> Result<(), ExecutionError> {
         let top_element = self.pop_raw()?;
         let second_element = self.pop_raw()?;
         self.push_raw(top_element)?;
@@ -330,16 +330,16 @@ impl JvmStackFrame {
 }
 
 impl JvmStackFrame {
-    pub(super) fn merge(&self, other: Self) -> Result<Self, JvmFrameError> {
+    pub(super) fn merge(&self, other: Self) -> Result<Self, ExecutionError> {
         if self.max_locals != other.max_locals {
-            Err(JvmFrameError::LocalLimitMismatch)?;
+            Err(ExecutionError::LocalLimitMismatch)?;
         }
         debug_assert!(
             self.local_variables.len() == other.local_variables.len(),
             "The size of the local variables does not match"
         );
         if self.operand_stack.len() != other.operand_stack.len() {
-            Err(JvmFrameError::StackSizeMismatch)?;
+            Err(ExecutionError::StackSizeMismatch)?;
         }
         let reachable_subroutines = self
             .possible_ret_addresses

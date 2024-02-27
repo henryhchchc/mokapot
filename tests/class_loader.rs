@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use mokapot::jvm::{
     class::Class,
-    class_loader::{ClassLoader, ClassLoadingError, ClassPath, DirectoryClassPath},
+    class_loader::{class_paths::DirectoryClassPath, ClassLoader, ClassPath, Error},
 };
 
 fn create_test_dir_class_path() -> DirectoryClassPath {
@@ -22,7 +22,7 @@ fn load_absent_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
     let class = class_loader.load_class("org/pkg/MyAbsentClass");
-    assert!(matches!(class, Err(ClassLoadingError::NotFound(_))));
+    assert!(matches!(class, Err(Error::NotFound(_))));
 }
 
 struct MockClassPath<'a> {
@@ -36,7 +36,7 @@ impl<'a> MockClassPath<'a> {
 }
 
 impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, _binary_name: &str) -> Result<Class, ClassLoadingError> {
+    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
         let reader = include_bytes!(concat!(
             env!("OUT_DIR"),

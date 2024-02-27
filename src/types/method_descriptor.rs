@@ -7,7 +7,7 @@ use std::{
     str::{Chars, FromStr},
 };
 
-use crate::jvm::class::ClassRef;
+use crate::jvm::references::ClassRef;
 
 use super::field_type::{FieldType, PrimitiveType};
 

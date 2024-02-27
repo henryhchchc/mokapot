@@ -3,9 +3,8 @@ use std::{fmt::Display, str::FromStr};
 
 use itertools::Itertools;
 
-use crate::jvm::class::ClassRef;
-
 use super::method_descriptor::InvalidDescriptor;
+use crate::jvm::references::ClassRef;
 
 /// A primitive type in Java.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]

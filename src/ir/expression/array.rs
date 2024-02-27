@@ -6,7 +6,7 @@ use crate::{ir::Argument, types::field_type::FieldType};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ArrayOperation {
+pub enum Operation {
     /// Create a new array.
     New {
         /// The type of the elements in the array.
@@ -44,7 +44,7 @@ pub enum ArrayOperation {
     },
 }
 
-impl Display for ArrayOperation {
+impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::New {

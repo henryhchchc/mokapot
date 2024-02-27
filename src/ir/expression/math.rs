@@ -4,7 +4,7 @@ use crate::ir::Argument;
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum MathOperation {
+pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs``).
     Add(Argument, Argument),
     /// Subtracts the second argument from the first (i.e., `lhs - rhs`).
@@ -46,7 +46,7 @@ pub enum NaNTreatment {
     IsSmallest,
 }
 
-impl Display for MathOperation {
+impl Display for Operation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Add(a, b) => write!(f, "{a} + {b}"),

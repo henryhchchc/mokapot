@@ -1,18 +1,17 @@
 use std::{io::Read, iter::repeat_with};
 
 use crate::jvm::{
-    annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+    annotation::{Annotation, ElementValue, TargetInfo, Type, TypePathElement},
     code::LocalVariableId,
     field::{ConstantValue, JavaString},
 };
 
 use super::{
-    jvm_element_parser::JvmElement, parsing_context::ParsingContext, reader_utils::ValueReaderExt,
-    Error,
+    jvm_element_parser::JvmElement, Context, reader_utils::ValueReaderExt, Error,
 };
 
 impl JvmElement for TypePathElement {
-    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &Context) -> Result<Self, Error> {
         let kind: u8 = reader.read_value()?;
         let argument_index: u8 = reader.read_value()?;
         match (kind, argument_index) {
@@ -26,7 +25,7 @@ impl JvmElement for TypePathElement {
 }
 
 impl JvmElement for Annotation {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let type_idx = reader.read_value()?;
         let annotation_type = ctx.constant_pool.get_str(type_idx)?.parse()?;
         let num_element_value_pairs: u16 = reader.read_value()?;
@@ -44,8 +43,8 @@ impl JvmElement for Annotation {
         })
     }
 }
-impl JvmElement for TypeAnnotation {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+impl JvmElement for Type {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let target_type = reader.read_value()?;
         let target_info = match target_type {
             0x00 | 0x01 => TargetInfo::TypeParameter {
@@ -107,7 +106,7 @@ impl JvmElement for TypeAnnotation {
                 Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, Error>>()?;
-        Ok(TypeAnnotation {
+        Ok(Type {
             annotation_type,
             target_info,
             target_path,
@@ -117,7 +116,7 @@ impl JvmElement for TypeAnnotation {
 }
 
 impl JvmElement for ElementValue {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &ParsingContext) -> Result<Self, Error> {
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let tag: u8 = reader.read_value()?;
 
         match tag as char {

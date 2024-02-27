@@ -3,7 +3,7 @@ use bitflags::bitflags;
 
 use crate::macros::see_jvm_spec;
 
-use super::class::ClassRef;
+use super::references::{ClassRef, ModuleRef, PackageRef};
 
 /// A JVM module.
 #[doc = see_jvm_spec!(4, 7, 25)]
@@ -12,25 +12,25 @@ pub struct Module {
     /// The name of the module.
     pub name: String,
     /// The flags of the module.
-    pub flags: ModuleFlags,
+    pub flags: Flags,
     /// The version of the module.
     pub version: Option<String>,
     /// A list of the modules that are required by this module.
-    pub requires: Vec<ModuleRequire>,
+    pub requires: Vec<Require>,
     /// A list of the modules that are exported by this module.
-    pub exports: Vec<ModuleExport>,
+    pub exports: Vec<Export>,
     /// A list of the modules that are opened by this module.
-    pub opens: Vec<ModuleOpen>,
+    pub opens: Vec<Open>,
     /// A list of the classes that are used by this module.
     pub uses: Vec<ClassRef>,
     /// A list of the services that are provided by this module.
-    pub provides: Vec<ModuleProvide>,
+    pub provides: Vec<Provide>,
 }
 
 /// A service provided by a module.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct ModuleProvide {
+pub struct Provide {
     /// The reference to a class which is provided as a service.
     pub service: ClassRef,
     /// The list of the classes which implement the service.
@@ -40,11 +40,11 @@ pub struct ModuleProvide {
 /// A module opening.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct ModuleOpen {
+pub struct Open {
     /// The reference to the package which is opened.
     pub package: PackageRef,
     /// The flags of the opening.
-    pub flags: ModuleOpenFlags,
+    pub flags: OpenFlags,
     /// The list of the modules which can access the package.
     pub to: Vec<ModuleRef>,
 }
@@ -52,11 +52,11 @@ pub struct ModuleOpen {
 /// A module export.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct ModuleExport {
+pub struct Export {
     /// The reference to the package which is exported.
     pub package: PackageRef,
     /// The flags of the export.
-    pub flags: ModuleExportFlags,
+    pub flags: ExportFlags,
     /// The list of the modules which can access the package.
     pub to: Vec<ModuleRef>,
 }
@@ -64,11 +64,11 @@ pub struct ModuleExport {
 /// A module require.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct ModuleRequire {
+pub struct Require {
     /// The reference to the module which is required.
     pub module: ModuleRef,
     /// The flags of the require.
-    pub flags: ModuleRequireFlags,
+    pub flags: RequireFlags,
     /// The version of the required module.
     pub version: Option<String>,
 }
@@ -76,7 +76,7 @@ pub struct ModuleRequire {
 bitflags! {
     /// The flags of a module.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ModuleFlags: u16 {
+    pub struct Flags: u16 {
         /// Indicates that this module is open.
         const OPEN = 0x0020;
         /// Indicates that this module was not explicitly or implicitly declared.
@@ -89,7 +89,7 @@ bitflags! {
 bitflags! {
     /// The flags of a module require.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ModuleRequireFlags: u16 {
+    pub struct RequireFlags: u16 {
         /// Indicates that any module which depends on the current module, implicitly declares a dependence on the module indicated by this entry.
         const TRANSITIVE = 0x0020;
         /// Indicates that the module indicated by this entry can be read by the current module at compile time, despite not being observable at run time.
@@ -104,7 +104,7 @@ bitflags! {
 bitflags! {
     /// The flags of a module export.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ModuleExportFlags: u16 {
+    pub struct ExportFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
         const SYNTHETIC = 0x1000;
         /// Indicates that this opening was implicitly declared in the source of the module declaration.
@@ -115,24 +115,10 @@ bitflags! {
 bitflags! {
     /// The flags of a module open.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ModuleOpenFlags: u16 {
+    pub struct OpenFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
         const SYNTHETIC = 0x1000;
         /// Indicates that this opening was implicitly declared in the source of the module declaration.
         const MANDATED = 0x8000;
     }
-}
-
-/// A reference to a module in the binary format.
-#[derive(Debug, Clone)]
-pub struct ModuleRef {
-    /// The name of the module.
-    pub name: String,
-}
-
-/// A reference to a package in the binary format.
-#[derive(Debug, Clone)]
-pub struct PackageRef {
-    /// The binary name of the package.
-    pub binary_name: String,
 }
