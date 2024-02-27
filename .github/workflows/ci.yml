@@ -137,7 +137,7 @@ jobs:
           artifact_name: mokapot-docs
 
   publish_to_crate_io:
-    name: Publish to crate.io (${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Skipped' }})
+    name: Publish to crate.io
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
