@@ -36,6 +36,7 @@ jobs:
   build_and_test:
     name: Build & Test
     runs-on: ubuntu-latest
+    needs: code_style_checking
     steps:
       - name: Setup Rust
         run: |
@@ -71,6 +72,7 @@ jobs:
   publish_latest_docs:
     name: Rust Doc
     runs-on: ubuntu-latest
+    needs: build_and_test
     steps:
       - name: Setup Rust
         run: |
