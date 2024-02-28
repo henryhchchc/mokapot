@@ -1,0 +1,21 @@
+[package]
+name = "mokapot-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.mokapot]
+path = ".."
+
+[[bin]]
+name = "class_parsing"
+path = "fuzz_targets/class_parsing.rs"
+test = false
+doc = false
+bench = false
