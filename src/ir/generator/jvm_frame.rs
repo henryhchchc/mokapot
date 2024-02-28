@@ -1,7 +1,5 @@
 use std::{collections::BTreeSet, fmt::Display, iter::once};
 
-use itertools::Itertools;
-
 use crate::{
     ir::{Argument, Identifier},
     jvm::code::ProgramCounter,
@@ -10,6 +8,7 @@ use crate::{
         method_descriptor::MethodDescriptor,
     },
 };
+use itertools::Itertools;
 
 #[derive(PartialEq, Debug, Clone)]
 pub(super) struct JvmStackFrame {
@@ -45,7 +44,17 @@ impl JvmStackFrame {
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, ExecutionError> {
-        if usize::from(max_locals) < usize::from(is_static) + desc.parameters_types.len() {
+        use PrimitiveType::{Double, Long};
+        let locals_for_args = desc
+            .parameters_types
+            .iter()
+            .map(|it| match it {
+                FieldType::Base(Long | Double) => 2,
+                _ => 1,
+            })
+            .sum::<usize>()
+            + usize::from(!is_static);
+        if usize::from(max_locals) < locals_for_args {
             return Err(ExecutionError::LocalLimitExceed);
         }
         let this_arg = if is_static {
@@ -58,7 +67,6 @@ impl JvmStackFrame {
             .iter()
             .enumerate()
             .flat_map(|(arg_idx, local_type)| {
-                use PrimitiveType::{Double, Long};
                 let arg_idx =
                     u16::try_from(arg_idx).expect("The number of args should be within u16");
                 let arg_ref = Argument::Id(Identifier::Arg(arg_idx));
@@ -412,9 +420,12 @@ impl Entry {
 mod test {
     use std::collections::BTreeSet;
 
-    use crate::ir::{Argument, Identifier, Value};
+    use crate::{
+        ir::{Argument, Identifier, Value},
+        types::method_descriptor::MethodDescriptor,
+    };
 
-    use super::Entry;
+    use super::{Entry, JvmStackFrame};
 
     #[test]
     fn merge_value_ref() {
@@ -441,5 +452,14 @@ mod test {
             result,
             Entry::Value(Argument::Id(Identifier::Value(Value::new(0))))
         );
+    }
+
+    #[test]
+    fn args_locals_checking() {
+        let desc: MethodDescriptor = "([ID)I".parse().unwrap();
+        let too_small_locals = JvmStackFrame::new(false, &desc, 2, 2);
+        assert!(too_small_locals.is_err());
+        let correct = JvmStackFrame::new(false, &desc, 4, 2);
+        assert!(correct.is_ok());
     }
 }
