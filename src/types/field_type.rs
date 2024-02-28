@@ -4,9 +4,10 @@ use std::{fmt::Display, str::FromStr};
 use itertools::Itertools;
 
 use super::method_descriptor::InvalidDescriptor;
-use crate::jvm::references::ClassRef;
+use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 /// A primitive type in Java.
+#[doc = see_jvm_spec!(4, 3, 2)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
@@ -73,7 +74,7 @@ impl TryFrom<char> for PrimitiveType {
             'S' => Ok(Self::Short),
             'I' => Ok(Self::Int),
             'J' => Ok(Self::Long),
-            unexpected => Err(InvalidDescriptor(unexpected.to_string())),
+            _ => Err(InvalidDescriptor),
         }
     }
 }
@@ -85,7 +86,7 @@ impl FromStr for PrimitiveType {
         let mut chars = descriptor.chars();
         match (chars.next(), chars.next()) {
             (Some(c), None) => Self::try_from(c),
-            _ => Err(InvalidDescriptor(descriptor.to_owned())),
+            _ => Err(InvalidDescriptor),
         }
     }
 }
@@ -119,19 +120,19 @@ impl FromStr for FieldType {
         match chars.next() {
             Some('[') => Self::from_str(chars.as_str())
                 .map(FieldType::into_array_type)
-                .map_err(|_| InvalidDescriptor(descriptor.to_owned())),
+                .map_err(|_| InvalidDescriptor),
             Some('L') => {
                 let type_name = chars.take_while_ref(|&it| it != ';').collect::<String>();
                 match (chars.next(), chars.next()) {
                     (Some(';'), None) => Ok(Self::Object(ClassRef::new(type_name))),
-                    _ => Err(InvalidDescriptor(descriptor.to_owned())),
+                    _ => Err(InvalidDescriptor),
                 }
             }
             Some(c) => match chars.next() {
                 None => PrimitiveType::try_from(c).map(Self::Base),
-                _ => Err(InvalidDescriptor(descriptor.to_owned())),
+                _ => Err(InvalidDescriptor),
             },
-            None => Err(InvalidDescriptor(descriptor.to_owned())),
+            None => Err(InvalidDescriptor),
         }
     }
 }

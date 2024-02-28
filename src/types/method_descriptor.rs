@@ -7,12 +7,13 @@ use std::{
     str::{Chars, FromStr},
 };
 
-use crate::jvm::references::ClassRef;
+use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 use super::field_type::{FieldType, PrimitiveType};
 
 /// The descriptor of a method.
 /// Consists of the parameters types and the return type.
+#[doc = see_jvm_spec!(4, 3, 3)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MethodDescriptor {
     /// The type of the parameters.
@@ -41,10 +42,10 @@ impl Display for ReturnType {
 
 impl ToString for MethodDescriptor {
     fn to_string(&self) -> String {
-        once("(".to_string())
+        once("(".to_owned())
             .chain(self.parameters_types.iter().map(FieldType::descriptor))
-            .chain(once(")".to_string()))
-            .chain(once(self.return_type.descriptor_string()))
+            .chain(once(")".to_owned()))
+            .chain(once(self.return_type.descriptor()))
             .collect()
     }
 }
@@ -68,7 +69,6 @@ impl MethodDescriptor {
         prefix: char,
         remaining: &mut Chars<'_>,
     ) -> Result<FieldType, InvalidDescriptor> {
-        let build_err = |rem: &Chars<'_>| InvalidDescriptor(format!("{}{}", prefix, rem.as_str()));
         if let Ok(p) = PrimitiveType::try_from(prefix) {
             Ok(FieldType::Base(p))
         } else {
@@ -77,14 +77,14 @@ impl MethodDescriptor {
                     let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
                     match remaining.next() {
                         Some(';') => Ok(FieldType::Object(ClassRef::new(binary_name))),
-                        _ => Err(build_err(remaining)),
+                        _ => Err(InvalidDescriptor),
                     }
                 }
                 '[' => {
-                    let next_prefix = remaining.next().ok_or_else(|| build_err(remaining))?;
+                    let next_prefix = remaining.next().ok_or(InvalidDescriptor)?;
                     Self::parse_single_param(next_prefix, remaining).map(FieldType::into_array_type)
                 }
-                _ => Err(build_err(remaining)),
+                _ => Err(InvalidDescriptor),
             }
         }
     }
@@ -104,7 +104,7 @@ impl FromStr for MethodDescriptor {
                     let param = Self::parse_single_param(c, &mut chars)?;
                     parameters_types.push(param);
                 }
-                None => Err(InvalidDescriptor(descriptor.into()))?,
+                None => Err(InvalidDescriptor)?,
             }
         };
         Ok(Self {
@@ -116,8 +116,8 @@ impl FromStr for MethodDescriptor {
 
 /// An error indicating that the descriptor string is invalid.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
-#[error("Invalid descriptor: {0}")]
-pub struct InvalidDescriptor(pub String);
+#[error("Invalid descriptor")]
+pub struct InvalidDescriptor;
 
 impl FromStr for ReturnType {
     type Err = InvalidDescriptor;
@@ -131,7 +131,9 @@ impl FromStr for ReturnType {
 }
 
 impl ReturnType {
-    fn descriptor_string(&self) -> String {
+    /// Returns the descriptor for return type.
+    #[must_use]
+    pub fn descriptor(&self) -> String {
         match self {
             ReturnType::Some(it) => it.descriptor(),
             ReturnType::Void => "V".to_owned(),
@@ -163,7 +165,7 @@ mod test {
             let descriptor = format!(
                 "({}){}",
                 params.iter().map(FieldType::descriptor).join(""),
-                ret.descriptor_string()
+                ret.descriptor()
             );
             let parsed =
                 MethodDescriptor::from_str(&descriptor).expect("Failed to parse method descriptor");
@@ -179,7 +181,7 @@ mod test {
             let descriptor = format!(
                 "({}){}",
                 params.iter().map(FieldType::descriptor).join(""),
-                rets.iter().map(ReturnType::descriptor_string).join(""),
+                rets.iter().map(ReturnType::descriptor).join(""),
             );
             assert!(MethodDescriptor::from_str(&descriptor).is_err());
         }
@@ -189,12 +191,7 @@ mod test {
     fn empty_desc() {
         let descriptor = "";
         let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert_eq!(
-            method_descriptor
-                .expect_err("Empty descriptor should be invalid")
-                .0,
-            ""
-        );
+        assert!(method_descriptor.is_err());
     }
 
     #[test]
