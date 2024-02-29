@@ -183,15 +183,15 @@ impl JvmStackFrame {
         &self,
         idx: impl Into<u16>,
     ) -> Result<Argument, ExecutionError> {
-        let idx = idx.into();
-        if idx + 1 >= self.max_locals {
-            Err(ExecutionError::LocalLimitExceed)?;
-        }
-        match (
-            // Panic only when `local_variables` were not allocated correctly
-            &self.local_variables[usize::from(idx)],
-            &self.local_variables[usize::from(idx + 1)],
-        ) {
+        let idx: usize = idx.into().into();
+        let [lower_slot, higher_slot] = self
+            .local_variables
+            .get(idx..=idx + 1)
+            .ok_or(ExecutionError::LocalLimitExceed)?
+        else {
+            unreachable!("There will be always two elements")
+        };
+        match (lower_slot, higher_slot) {
             (Entry::Value(it), Entry::Top) => Ok(it.clone()),
             (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => {
                 Err(ExecutionError::LocalUninitialized)
@@ -206,15 +206,11 @@ impl JvmStackFrame {
         value: Argument,
     ) -> Result<(), ExecutionError> {
         let idx = idx.into();
-        if idx >= self.max_locals {
-            Err(ExecutionError::LocalLimitExceed)?;
-        }
-        self.local_variables[usize::from(idx)] = Entry::Value(value);
-        if idx + 1 < self.max_locals
-            && matches!(self.local_variables[usize::from(idx + 1)], Entry::Top)
-        {
-            self.local_variables[usize::from(idx + 1)].erase();
-        }
+        let slot = self
+            .local_variables
+            .get_mut(usize::from(idx))
+            .ok_or(ExecutionError::LocalLimitExceed)?;
+        *slot = Entry::Value(value);
         Ok(())
     }
 
@@ -223,15 +219,18 @@ impl JvmStackFrame {
         idx: impl Into<u16>,
         value: Argument,
     ) -> Result<(), ExecutionError> {
-        let idx = idx.into();
-        if idx + 1 < self.max_locals {
-            // Panic only when `local_variables` were not allocated correctly
-            self.local_variables[usize::from(idx)] = Entry::Value(value);
-            self.local_variables[usize::from(idx + 1)] = Entry::Top;
-            Ok(())
-        } else {
-            Err(ExecutionError::LocalLimitExceed)
-        }
+        let idx: usize = idx.into().into();
+        let [lower_slot, higher_slot] = self
+            .local_variables
+            .get_mut(idx..=idx + 1)
+            .ok_or(ExecutionError::LocalLimitExceed)?
+        else {
+            unreachable!("There will be always two elements");
+        };
+
+        *lower_slot = Entry::Value(value);
+        *higher_slot = Entry::Top;
+        Ok(())
     }
 
     pub(super) fn same_frame(&self) -> Self {
@@ -409,10 +408,6 @@ impl Entry {
             //       overridden afterwrds.
             (lhs, _) => lhs,
         }
-    }
-
-    pub fn erase(&mut self) {
-        *self = Self::UninitializedLocal;
     }
 }
 
