@@ -46,12 +46,15 @@ pub struct ClassLoader<P> {
     class_path: Vec<P>,
 }
 
-impl<P: ClassPath> ClassLoader<P> {
+impl<P> ClassLoader<P> {
     /// Create a new class loader with the given class paths.
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<Class, Error> {
+    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<Class, Error>
+    where
+        P: ClassPath,
+    {
         for class_path in &self.class_path {
             match class_path.find_class(binary_name.as_ref()) {
                 Ok(class) => return Ok(class),
@@ -61,23 +64,19 @@ impl<P: ClassPath> ClassLoader<P> {
         }
         Err(Error::NotFound(binary_name.as_ref().to_owned()))
     }
-}
 
-impl<P> ClassLoader<P> {
     /// Create a new class loader with the given class paths.
     #[must_use]
-    pub fn new(class_path: impl Into<Vec<P>>) -> Self {
+    pub fn new<C: Into<Vec<P>>>(class_path: C) -> Self {
         let class_path = class_path.into();
         Self { class_path }
     }
 
     /// Convert this class loader into a [`CachingClassLoader`].
     #[must_use]
+    #[deprecated(note = "Use [`CachingClassLoader::from`] instead")]
     pub fn into_cached(self) -> CachingClassLoader<P> {
-        CachingClassLoader {
-            class_loader: self,
-            cache: RwLock::new(HashMap::new()),
-        }
+        CachingClassLoader::from(self)
     }
 }
 
@@ -91,7 +90,7 @@ pub struct CachingClassLoader<P> {
     cache: RwLock<HashMap<String, Box<Class>>>,
 }
 
-impl<P: ClassPath> CachingClassLoader<P> {
+impl<P> CachingClassLoader<P> {
     /// Loads a class from the class loader's cache, or loads it from the class loader if it is
     /// not.
     ///
@@ -103,7 +102,10 @@ impl<P: ClassPath> CachingClassLoader<P> {
         //       See https://github.com/rust-lang/rust/issues/54503
         // reason = "The unwrap is garenteed to not panic."
     )]
-    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, Error> {
+    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, Error>
+    where
+        P: ClassPath,
+    {
         let cache = match self.cache.read() {
             Ok(it) => it,
             Err(poison_err) => {
@@ -126,13 +128,12 @@ impl<P: ClassPath> CachingClassLoader<P> {
                 Ok(it) => it,
                 Err(poison_err) => poison_err.into_inner(),
             };
-            let b = if let Some(b) = cache.get(key_ref) {
-                // It is possible that the class is loaded before we get the write lock.
-                // Therefore, we need to check the cache again.
+            // It is possible that the class is loaded before we get the write lock.
+            // Therefore, we need to check the cache again.
+            let class_box = if let Some(b) = cache.get(key_ref) {
                 b
             } else {
-                let class = self.class_loader.load_class(key_ref)?;
-                let class = Box::new(class);
+                let class = Box::new(self.class_loader.load_class(key_ref)?);
                 let overridden = cache.insert(key_ref.to_owned(), class);
                 debug_assert!(overridden.is_none(), "Class is already in the cache");
                 // The unwrap is safe since the class was just inserted into the cache.
@@ -141,8 +142,17 @@ impl<P: ClassPath> CachingClassLoader<P> {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute(b.as_ref()) }
+            unsafe { transmute(class_box.as_ref()) }
         };
         Ok(class_ref)
+    }
+}
+
+impl<P> From<ClassLoader<P>> for CachingClassLoader<P> {
+    fn from(class_loader: ClassLoader<P>) -> Self {
+        Self {
+            class_loader,
+            cache: RwLock::new(HashMap::new()),
+        }
     }
 }

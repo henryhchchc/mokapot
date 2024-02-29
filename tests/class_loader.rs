@@ -2,7 +2,9 @@ use std::cell::Cell;
 
 use mokapot::jvm::{
     class::Class,
-    class_loader::{class_paths::DirectoryClassPath, ClassLoader, ClassPath, Error},
+    class_loader::{
+        class_paths::DirectoryClassPath, CachingClassLoader, ClassLoader, ClassPath, Error,
+    },
 };
 
 fn create_test_dir_class_path() -> DirectoryClassPath {
@@ -50,7 +52,7 @@ impl ClassPath for MockClassPath<'_> {
 fn caching_class_loader_load_once() {
     let counter = Cell::new(0);
     let test_cp = MockClassPath::new(&counter);
-    let class_loader = ClassLoader::new([test_cp]).into_cached();
+    let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
     for _ in 0..10 {
         let class = class_loader.load_class("org/pkg/MyClass").unwrap();
         assert_eq!(class.binary_name, "org/pkg/MyClass");
