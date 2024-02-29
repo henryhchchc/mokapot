@@ -59,7 +59,7 @@ use mokapot::ir::{MokaIRMethod, MokaIRMethodExt};
 
 fn moka_ir() -> Result<MokaIRMethod, Box<dyn std::error::Error>> {
     let method: Method = todo!("Some method");
-    let moka_ir_method = method.generate_moka_ir()?;
+    let moka_ir_method = method.brew()?;
     Ok(moka_ir_method)
 }
 ```

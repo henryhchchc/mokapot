@@ -234,7 +234,7 @@ impl<'m> MokaIRGenerator<'m> {
 pub trait MokaIRMethodExt {
     /// Genreates Moka IR for the method.
     /// # Errors
-    /// See [`MokaIRGenerationError`] for more information.
+    /// See [`MokaIRBrewingError`] for more information.
     fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError>;
 }
 
