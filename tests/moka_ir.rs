@@ -29,7 +29,7 @@ fn load_test_method() {
 #[test]
 fn analyze() {
     let method = get_test_method();
-    let ir = method.generate_moka_ir().unwrap();
+    let ir = method.brew().unwrap();
     for (pc, insn) in method.body.unwrap().instructions {
         let ir_insn = ir.instructions.get(&pc).unwrap();
         println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
@@ -43,7 +43,7 @@ fn cfg_to_dot() {
     use mokapot::ir::control_flow::ControlTransfer;
 
     let method = get_test_method();
-    let ir = method.generate_moka_ir().unwrap();
+    let ir = method.brew().unwrap();
     let cfg_with_insn = ir.control_flow_graph.clone().map(
         |pc, _| {
             format!(

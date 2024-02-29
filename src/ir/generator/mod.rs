@@ -25,7 +25,7 @@ use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
-pub enum MokaIRGenerationError {
+pub enum MokaIRBrewingError {
     /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]
     ExecutionError(#[from] ExecutionError),
@@ -50,7 +50,7 @@ struct MokaIRGenerator<'m> {
 impl Analyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
     type Fact = JvmStackFrame;
-    type Err = MokaIRGenerationError;
+    type Err = MokaIRBrewingError;
     type AffectedLocations = Vec<(Self::Location, Self::Fact)>;
 
     fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
@@ -58,7 +58,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             .body
             .instructions
             .entry_point()
-            .ok_or(MokaIRGenerationError::MalformedControlFlow)?
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?
             .0
             .to_owned();
         JvmStackFrame::new(
@@ -82,7 +82,7 @@ impl Analyzer for MokaIRGenerator<'_> {
         let insn = self
             .body
             .instruction_at(location)
-            .ok_or(MokaIRGenerationError::MalformedControlFlow)?;
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
         let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
         let edges_and_frames = match &ir_instruction {
             MokaInstruction::Nop => {
@@ -167,23 +167,23 @@ impl Analyzer for MokaIRGenerator<'_> {
     ) -> Result<Self::Fact, Self::Err> {
         current_fact
             .merge(incoming_fact)
-            .map_err(MokaIRGenerationError::MergeError)
+            .map_err(MokaIRBrewingError::MergeError)
     }
 }
 
 impl<'m> MokaIRGenerator<'m> {
-    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRGenerationError> {
+    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBrewingError> {
         self.body
             .instructions
             .next_pc_of(&pc)
-            .ok_or(MokaIRGenerationError::MalformedControlFlow)
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)
     }
 
     fn for_method(method: &'m Method) -> Result<Self, <Self as Analyzer>::Err> {
         let body = method
             .body
             .as_ref()
-            .ok_or(MokaIRGenerationError::NoMethodBody)?;
+            .ok_or(MokaIRBrewingError::NoMethodBody)?;
         Ok(Self {
             ir_instructions: BTreeMap::default(),
             method,
@@ -235,11 +235,11 @@ pub trait MokaIRMethodExt {
     /// Genreates Moka IR for the method.
     /// # Errors
     /// See [`MokaIRGenerationError`] for more information.
-    fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError>;
+    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError>;
 }
 
 impl MokaIRMethodExt for Method {
-    fn generate_moka_ir(&self) -> Result<MokaIRMethod, MokaIRGenerationError> {
+    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
         let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
@@ -261,7 +261,7 @@ impl MokaIRGenerator<'_> {
             InstructionList<MokaInstruction>,
             ControlFlowGraph<(), ControlTransfer>,
         ),
-        MokaIRGenerationError,
+        MokaIRBrewingError,
     > {
         self.analyze()?;
         let cfg = ControlFlowGraph::from_edges(self.control_flow_edges);

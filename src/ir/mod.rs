@@ -10,7 +10,7 @@ pub mod petgraph;
 
 use std::collections::BTreeMap;
 
-pub use generator::{MokaIRGenerationError, MokaIRMethodExt};
+pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
 use crate::{

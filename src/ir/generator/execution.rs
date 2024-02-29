@@ -1,4 +1,4 @@
-use super::{jvm_frame::JvmStackFrame, MokaIRGenerationError, MokaIRGenerator};
+use super::{jvm_frame::JvmStackFrame, MokaIRBrewingError, MokaIRGenerator};
 use crate::{
     ir::{
         expression::{
@@ -24,7 +24,7 @@ impl MokaIRGenerator<'_> {
         insn: &Instruction,
         pc: ProgramCounter,
         frame: &mut JvmStackFrame,
-    ) -> Result<IR, MokaIRGenerationError> {
+    ) -> Result<IR, MokaIRBrewingError> {
         #[allow(clippy::enum_glob_use)]
         use Instruction::*;
 
@@ -624,28 +624,28 @@ impl MokaIRGenerator<'_> {
 }
 
 #[inline]
-fn store_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
+fn store_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
     let value = frame.pop_dual_slot_value()?;
     frame.set_dual_slot_local(idx, value)?;
     Ok(IR::Nop)
 }
 
 #[inline]
-fn store_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
+fn store_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
     let value = frame.pop_value()?;
     frame.set_local(idx, value)?;
     Ok(IR::Nop)
 }
 
 #[inline]
-fn load_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
+fn load_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
     let value = frame.get_dual_slot_local(idx)?;
     frame.push_dual_slot_value(value)?;
     Ok(IR::Nop)
 }
 
 #[inline]
-fn load_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRGenerationError> {
+fn load_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
     let value = frame.get_local(idx)?;
     frame.push_value(value)?;
     Ok(IR::Nop)
@@ -656,7 +656,7 @@ fn unitary_conditional_jump<C>(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
     condition: C,
-) -> Result<IR, MokaIRGenerationError>
+) -> Result<IR, MokaIRBrewingError>
 where
     C: FnOnce(Argument) -> Condition,
 {
@@ -672,7 +672,7 @@ fn binary_conditional_jump<C>(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
     condition: C,
-) -> Result<IR, MokaIRGenerationError>
+) -> Result<IR, MokaIRBrewingError>
 where
     C: FnOnce(Argument, Argument) -> Condition,
 {
@@ -689,7 +689,7 @@ fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
     frame: &mut JvmStackFrame,
     def_id: Value,
     conversion: C,
-) -> Result<IR, MokaIRGenerationError>
+) -> Result<IR, MokaIRBrewingError>
 where
     C: FnOnce(Argument) -> Conversion,
 {
@@ -714,7 +714,7 @@ fn binary_op_math<M>(
     frame: &mut JvmStackFrame,
     def_id: Value,
     math: M,
-) -> Result<IR, MokaIRGenerationError>
+) -> Result<IR, MokaIRBrewingError>
 where
     M: FnOnce(Argument, Argument) -> MathOperation,
 {
@@ -733,7 +733,7 @@ fn binary_wide_math<M>(
     frame: &mut JvmStackFrame,
     def_id: Value,
     math: M,
-) -> Result<IR, MokaIRGenerationError>
+) -> Result<IR, MokaIRBrewingError>
 where
     M: FnOnce(Argument, Argument) -> MathOperation,
 {
