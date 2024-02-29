@@ -1,6 +1,6 @@
 //! Discovering and loading classes.
 
-use std::{collections::HashMap, ops::Deref, sync::Mutex};
+use std::{collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
 
 use super::class::Class;
 
@@ -76,7 +76,7 @@ impl<P> ClassLoader<P> {
     pub fn into_cached(self) -> CachingClassLoader<P> {
         CachingClassLoader {
             class_loader: self,
-            cache: Mutex::new(HashMap::new()),
+            cache: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -88,7 +88,7 @@ pub mod class_paths;
 #[allow(clippy::module_name_repetitions)]
 pub struct CachingClassLoader<P> {
     class_loader: ClassLoader<P>,
-    cache: Mutex<HashMap<String, Class>>,
+    cache: RwLock<HashMap<String, Box<Class>>>,
 }
 
 impl<P: ClassPath> CachingClassLoader<P> {
@@ -104,7 +104,7 @@ impl<P: ClassPath> CachingClassLoader<P> {
         // reason = "The unwrap is garenteed to not panic."
     )]
     pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, Error> {
-        let mut cache = match self.cache.lock() {
+        let cache = match self.cache.read() {
             Ok(it) => it,
             Err(poison_err) => {
                 // The operaion on `self.cache` should not panic.
@@ -115,16 +115,34 @@ impl<P: ClassPath> CachingClassLoader<P> {
             }
         };
         let key_ref = binary_name.as_ref();
-        let class = if let Some(class) = cache.get(key_ref) {
-            class
+        let class_ref = if let Some(b) = cache.get(key_ref) {
+            // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
+            // `self.cache` gets dropped, which is when `self` gets dropped.
+            // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
+            unsafe { transmute(b.as_ref()) }
         } else {
-            let class = self.class_loader.load_class(key_ref)?;
-            let overridden = cache.insert(key_ref.to_owned(), class);
-            debug_assert!(overridden.is_none(), "Class is already in the cache");
-            // The unwrap is safe since the class was just inserted into the cache.
-            cache.get(key_ref).unwrap()
+            drop(cache);
+            let mut cache = match self.cache.write() {
+                Ok(it) => it,
+                Err(poison_err) => poison_err.into_inner(),
+            };
+            let b = if let Some(b) = cache.get(key_ref) {
+                // It is possible that the class is loaded before we get the write lock.
+                // Therefore, we need to check the cache again.
+                b
+            } else {
+                let class = self.class_loader.load_class(key_ref)?;
+                let class = Box::new(class);
+                let overridden = cache.insert(key_ref.to_owned(), class);
+                debug_assert!(overridden.is_none(), "Class is already in the cache");
+                // The unwrap is safe since the class was just inserted into the cache.
+                cache.get(key_ref).unwrap()
+            };
+            // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
+            // `self.cache` gets dropped, which is when `self` gets dropped.
+            // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
+            unsafe { transmute(b.as_ref()) }
         };
-        // SAFETY: The class reference is valid for the lifetime of the cache.
-        Ok(unsafe { std::mem::transmute(class) })
+        Ok(class_ref)
     }
 }
