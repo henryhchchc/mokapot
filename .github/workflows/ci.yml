@@ -126,6 +126,7 @@ jobs:
     name: Publish Rustdoc to GitHub Pages
     runs-on: ubuntu-latest
     needs: build_doc
+    if: ${{ !startsWith(github.ref, 'refs/pull/') }}
     permissions:
       pages: write
       id-token: write
