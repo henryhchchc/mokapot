@@ -57,7 +57,7 @@ jobs:
         run: |
           file_path="${{ env.JAVA_HOME }}/lib/modules"
           hash=$(sha256sum "$file_path" | awk '{print $1}')
-          echo "::set-output name=hash::${hash}"
+          echo "hash=${hash}" >> $GITHUB_OUTPUT
       - name: Cache JDK classes
         id: cache-jdk-classes
         uses: actions/cache@v4
