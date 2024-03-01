@@ -366,6 +366,10 @@ bitflags! {
     pub struct ClassAccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
+        /// Marked `private` in source.
+        /// NOTE: The is not mentioned in the JVM Specification. However it is set in some class
+        /// files, event for those in the JDK.
+        const PRIVATE = 0x0002;
         /// Declared `final`; no subclasses allowed.
         const FINAL = 0x0010;
         /// Treat superclass methods specially when invoked by the invokespecial instruction.
