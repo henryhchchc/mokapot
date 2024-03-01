@@ -40,6 +40,8 @@ fn parse_jdk_classes() {
         let reader = fs::File::open(&class_file).unwrap();
         let buf_reader = std::io::BufReader::new(reader);
         let class = class::Class::from_reader(buf_reader);
-        assert!(class.is_ok(), "Failed to parse {:?}", class_file);
+        if let Err(e) = class {
+            panic!("Failed to parse {:?}: {}", class_file, e);
+        }
     });
 }
