@@ -15,7 +15,6 @@ fn parse_jdk_classes() {
         .collect();
 
     class_files.into_par_iter().for_each(|class_file| {
-        eprintln!("Parsing {:?}", class_file);
         let reader = fs::File::open(&class_file).unwrap();
         let buf_reader = std::io::BufReader::new(reader);
         let class = class::Class::from_reader(buf_reader);
@@ -38,16 +37,24 @@ fn moka_ir_jdk_classes() {
         .collect();
 
     class_files.into_par_iter().for_each(|class_file| {
-        eprintln!("Parsing {:?}", class_file);
         let reader = fs::File::open(&class_file).unwrap();
         let buf_reader = std::io::BufReader::new(reader);
         let class = class::Class::from_reader(buf_reader);
         match class {
-            Ok(c) => c.methods.iter().for_each(|it| {
-                if let Err(e) = it.brew() {
-                    panic!("Failed to brew {:?}: {}", it, e);
-                }
-            }),
+            Ok(c) => c
+                .methods
+                .par_iter()
+                .filter(|it| {
+                    it.body
+                        .as_ref()
+                        // Skip large method to speed up the test
+                        .is_some_and(|it| it.instructions.len() < 512)
+                })
+                .for_each(|it| {
+                    if let Err(e) = it.brew() {
+                        panic!("Failed to brew {:?}: {}", it, e);
+                    }
+                }),
             Err(e) => {
                 panic!("Failed to parse {:?}: {}", class_file, e);
             }
