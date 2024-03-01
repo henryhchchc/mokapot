@@ -2,7 +2,7 @@ mod execution;
 mod jvm_frame;
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     iter::once,
     mem,
 };
@@ -44,7 +44,7 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    control_flow_edges: HashSet<(ProgramCounter, ProgramCounter, ControlTransfer)>,
+    control_flow_edges: BTreeSet<(ProgramCounter, ProgramCounter, ControlTransfer)>,
 }
 
 impl Analyzer for MokaIRGenerator<'_> {
@@ -155,7 +155,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             .into_iter()
             .map(|(edge, frame)| ((edge.1, frame), edge))
             .unzip();
-        let edges: HashSet<_> = edges;
+        let edges: BTreeSet<_> = edges;
         self.control_flow_edges.extend(edges);
         Ok(affected_locations)
     }
@@ -190,7 +190,7 @@ impl<'m> MokaIRGenerator<'m> {
             body,
             // The number of control flow edges is at least `body.instructions.len() - 1` if there
             // is no deadcode.
-            control_flow_edges: HashSet::with_capacity(body.instructions.len()),
+            control_flow_edges: Default::default(),
         })
     }
 

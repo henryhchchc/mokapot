@@ -9,7 +9,7 @@ use crate::types::{
 use super::method::Method;
 
 /// A reference to a [`Class`](crate::jvm::class::Class).
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
 pub struct ClassRef {
     /// The binary name of the class.
     pub binary_name: String,
