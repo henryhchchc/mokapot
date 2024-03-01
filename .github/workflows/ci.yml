@@ -50,6 +50,15 @@ jobs:
         with:
           java-version: 21
           distribution: corretto
+      - name: Cache JDK classes
+        id: cache-jdk-classes
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ hashFiles('${{env.JAVA_HOME}}/lib/modules') }}
+          path: ./jdk_classes
+      - name: Extract JDK classes
+        if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
+        run: jimage extract --dir=./jdk_classes $JAVA_HOME/lib/modules
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Cargo Update
@@ -63,14 +72,17 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-      - run: cargo check --all-features --verbose
+      - run: cargo check --all-features --verbose 
         name: Cargo check
       - name: Test
+        env:
+          JDK_CLASSES: ./jdk_classes
         run: |
           cargo llvm-cov nextest \
                 --all-features \
                 --codecov \
-                --output-path ./target/codecov.json
+                --output-path ./target/codecov.json \
+                --run-ignored all
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
         with:
