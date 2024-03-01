@@ -50,6 +50,8 @@ jobs:
         with:
           java-version: 21
           distribution: corretto
+      - uses: actions/checkout@v4
+        name: Checkout source code
       - name: Hash JDK modules
         id: hash-jdk-modules
         run: |
@@ -65,8 +67,6 @@ jobs:
       - name: Extract JDK classes
         if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
         run: jimage extract --verbose --dir=./jdk_classes $JAVA_HOME/lib/modules
-      - uses: actions/checkout@v4
-        name: Checkout source code
       - name: Cargo Update
         run: cargo update --verbose
       - name: Cache Rust Build Stuff
