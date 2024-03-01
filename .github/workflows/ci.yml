@@ -50,15 +50,21 @@ jobs:
         with:
           java-version: 21
           distribution: corretto
+      - name: Hash JDK modules
+        id: hash-jdk-modules
+        run: |
+          file_path="${{ env.JAVA_HOME }}/lib/modules"
+          hash=$(sha256sum "$file_path" | awk '{print $1}')
+          echo "::set-output name=hash::${hash}"
       - name: Cache JDK classes
         id: cache-jdk-classes
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ hashFiles('${{env.JAVA_HOME}}/lib/modules') }}
-          path: ./jdk_classes
+          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
+          path: jdk_classes/
       - name: Extract JDK classes
         if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
-        run: jimage extract --dir=./jdk_classes $JAVA_HOME/lib/modules
+        run: jimage extract --verbose --dir=./jdk_classes $JAVA_HOME/lib/modules
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Cargo Update
