@@ -12,10 +12,6 @@ on:
       - v**
   pull_request:
 
-permissions:
-  pages: write
-  id-token: write
-
 env:
   CARGO_TERM_COLOR: always
 
@@ -130,6 +126,9 @@ jobs:
     name: Publish Rustdoc to GitHub Pages
     runs-on: ubuntu-latest
     needs: build_doc
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - uses: actions/deploy-pages@v4
         name: Deploy docs to github pages
