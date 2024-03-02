@@ -1,4 +1,3 @@
-use proptest::prelude::*;
 use std::io::BufReader;
 
 use mokapot::{
@@ -32,29 +31,29 @@ fn parse_my_class() -> Result<Class, Error> {
     Class::from_reader(bytes)
 }
 
-proptest! {
-
-    /// Parse classes in OpenJDK test data
-    /// The data is borrowed from [OpenJDK test data](https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata)
-    #[test]
-    fn parse_openjdk_test_data(bytes in prop_oneof![
-        Just(test_data_class!("openjdk", "testdata/Pattern1")),
-        Just(test_data_class!("openjdk", "testdata/Pattern2")),
-        Just(test_data_class!("openjdk", "testdata/Pattern3")),
-        Just(test_data_class!("openjdk", "testdata/Pattern4")),
-        Just(test_data_class!("openjdk", "testdata/Pattern5")),
-        Just(test_data_class!("openjdk", "testdata/Pattern6")),
-        Just(test_data_class!("openjdk", "testdata/Pattern7")),
-        Just(test_data_class!("openjdk", "testdata/Pattern8")),
-        Just(test_data_class!("openjdk", "testdata/Pattern9")),
-        Just(test_data_class!("openjdk", "testdata/Pattern10")),
-        Just(test_data_class!("openjdk", "testdata/Lvt")),
-        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern")),
-        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Foo")),
-        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Bar")),
-        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle")),
-        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner")),
-    ]) {
+/// Parse classes in OpenJDK test data
+/// The data is borrowed from [OpenJDK test data](https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata)
+#[test]
+fn parse_openjdk_test_data() {
+    let test_data = [
+        test_data_class!("openjdk", "testdata/Pattern1"),
+        test_data_class!("openjdk", "testdata/Pattern2"),
+        test_data_class!("openjdk", "testdata/Pattern3"),
+        test_data_class!("openjdk", "testdata/Pattern4"),
+        test_data_class!("openjdk", "testdata/Pattern5"),
+        test_data_class!("openjdk", "testdata/Pattern6"),
+        test_data_class!("openjdk", "testdata/Pattern7"),
+        test_data_class!("openjdk", "testdata/Pattern8"),
+        test_data_class!("openjdk", "testdata/Pattern9"),
+        test_data_class!("openjdk", "testdata/Pattern10"),
+        test_data_class!("openjdk", "testdata/Lvt"),
+        test_data_class!("openjdk", "testdata/TypeAnnotationPattern"),
+        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Foo"),
+        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Bar"),
+        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle"),
+        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner"),
+    ];
+    for bytes in test_data {
         assert!(Class::from_reader(bytes).is_ok())
     }
 }
