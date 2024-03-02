@@ -24,6 +24,11 @@ jobs:
         run: |
           rustup update stable \
             && rustup default stable
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Cargo Fmt
