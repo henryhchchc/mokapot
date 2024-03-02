@@ -1,5 +1,5 @@
 //! Module for fixed point analysis
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A trait for fixed-point analysis.
 pub trait Analyzer {
@@ -44,23 +44,42 @@ pub trait Analyzer {
     fn analyze(&mut self) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>
     where
         Self::Location: Ord + Eq,
-        Self::Fact: PartialEq,
+        Self::Fact: Ord + Eq,
     {
         let mut facts: BTreeMap<Self::Location, Self::Fact> = BTreeMap::new();
-        let entry_node = self.entry_fact()?;
-        let mut dirty_nodes = VecDeque::from([entry_node]);
+        let (entry_point, entry_fact) = self.entry_fact()?;
+        let mut dirty_nodes = BTreeMap::from([(entry_point, BTreeSet::from([entry_fact]))]);
 
-        while let Some((location, incoming_fact)) = dirty_nodes.pop_front() {
+        while let Some((location, incoming_facts)) = dirty_nodes.pop_first() {
+            let incoming_fact = {
+                // TODO: Replace it with `try_reduce` when it's stable.
+                //       See https://github.com/rust-lang/rust/issues/87053.
+                let mut merged_fact = None;
+                for incoming_fact in incoming_facts {
+                    if let Some(ref merged) = merged_fact {
+                        let new = self.merge_facts(merged, incoming_fact)?;
+                        merged_fact.replace(new);
+                    } else {
+                        merged_fact.replace(incoming_fact);
+                    }
+                }
+                merged_fact.unwrap()
+            };
             let maybe_updated_fact = match facts.get(&location) {
                 Some(current_fact) => {
                     let merged_fact = self.merge_facts(current_fact, incoming_fact)?;
-                    Some(merged_fact).filter(|it| it.ne(current_fact))
+                    Some(merged_fact).filter(|it| it != current_fact)
                 }
                 None => Some(incoming_fact),
             };
 
             if let Some(fact) = maybe_updated_fact {
-                dirty_nodes.extend(self.analyze_location(&location, &fact)?);
+                for (loc, new_fact) in self.analyze_location(&location, &fact)? {
+                    dirty_nodes
+                        .entry(loc)
+                        .or_insert_with(BTreeSet::new)
+                        .insert(new_fact);
+                }
                 facts.insert(location, fact);
             }
         }

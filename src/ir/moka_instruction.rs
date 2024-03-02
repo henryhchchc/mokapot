@@ -92,7 +92,7 @@ impl Display for MokaInstruction {
 }
 
 /// Represents a reference to a value in the Moka IR.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Argument {
     /// A reference to a value defined in the current scope.
     Id(Identifier),

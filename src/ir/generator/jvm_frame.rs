@@ -10,7 +10,7 @@ use crate::{
 };
 use itertools::Itertools;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct JvmStackFrame {
     max_locals: u16,
     max_stack: u16,
@@ -378,7 +378,7 @@ impl JvmStackFrame {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub(super) enum Entry {
     Value(Argument),
     Top,
