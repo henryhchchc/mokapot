@@ -32,7 +32,7 @@ fn parse_my_class() -> Result<Class, Error> {
 }
 
 /// Parse classes in OpenJDK test data
-/// The data is borrowed from [OpenJDK test data](https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata)
+/// Stolen from https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata
 #[test]
 fn parse_openjdk_test_data() {
     let test_data = [
