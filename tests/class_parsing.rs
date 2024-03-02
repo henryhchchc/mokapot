@@ -1,3 +1,4 @@
+use proptest::prelude::*;
 use std::io::BufReader;
 
 use mokapot::{
@@ -12,15 +13,50 @@ use mokapot::{
     },
 };
 
-/// Parses the class file compiled from `MyClass.java` from the `test_data` directory.
-/// The source code ot the class files is as follows.
+macro_rules! test_data_class {
+    ($folder:literal, $class_name:literal) => {
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/",
+            $folder,
+            "/java_classes/",
+            $class_name,
+            ".class"
+        ))
+        .as_slice()
+    };
+}
+
 fn parse_my_class() -> Result<Class, Error> {
-    let bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/java_classes/org/pkg/MyClass.class"
-    ));
-    let reader = BufReader::new(&bytes[..]);
-    Class::from_reader(reader)
+    let bytes = test_data_class!("", "org/pkg/MyClass");
+    Class::from_reader(bytes)
+}
+
+proptest! {
+
+    /// Parse classes in OpenJDK test data
+    /// The data is borrowed from [OpenJDK test data](https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata)
+    #[test]
+    fn parse_openjdk_test_data(bytes in prop_oneof![
+        Just(test_data_class!("openjdk", "testdata/Pattern1")),
+        Just(test_data_class!("openjdk", "testdata/Pattern2")),
+        Just(test_data_class!("openjdk", "testdata/Pattern3")),
+        Just(test_data_class!("openjdk", "testdata/Pattern4")),
+        Just(test_data_class!("openjdk", "testdata/Pattern5")),
+        Just(test_data_class!("openjdk", "testdata/Pattern6")),
+        Just(test_data_class!("openjdk", "testdata/Pattern7")),
+        Just(test_data_class!("openjdk", "testdata/Pattern8")),
+        Just(test_data_class!("openjdk", "testdata/Pattern9")),
+        Just(test_data_class!("openjdk", "testdata/Pattern10")),
+        Just(test_data_class!("openjdk", "testdata/Lvt")),
+        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern")),
+        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Foo")),
+        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Bar")),
+        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle")),
+        Just(test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner")),
+    ]) {
+        assert!(Class::from_reader(bytes).is_ok())
+    }
 }
 
 #[test]
