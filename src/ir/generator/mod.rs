@@ -188,9 +188,7 @@ impl<'m> MokaIRGenerator<'m> {
             ir_instructions: BTreeMap::default(),
             method,
             body,
-            // The number of control flow edges is at least `body.instructions.len() - 1` if there
-            // is no deadcode.
-            control_flow_edges: Default::default(),
+            control_flow_edges: BTreeSet::default(),
         })
     }
 
