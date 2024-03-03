@@ -82,19 +82,19 @@ impl<N, E> ControlFlowGraph<N, E> {
     }
 
     /// Returns an iterator over the nodes
-    pub fn iter_nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> {
+    pub fn nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> {
         self.inner.iter().map(|(n, (d, _))| (*n, d))
     }
 
     /// Returns an iterator over the edges
-    pub fn iter_edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> {
+    pub fn edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> {
         self.inner.iter().flat_map(|(src, (_, outgoing_edges))| {
             outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
         })
     }
 
     /// Returns an iterator over the exits of the control flow graph.
-    pub fn iter_exits(&self) -> impl Iterator<Item = ProgramCounter> + '_ {
+    pub fn exits(&self) -> impl Iterator<Item = ProgramCounter> + '_ {
         self.inner
             .iter()
             .filter(|(_, (_, outgoing_edges))| outgoing_edges.is_empty())
@@ -160,7 +160,7 @@ fn from_edges_duplicate() {
 #[test]
 fn iter_nodes() {
     let cfg = build_cfg();
-    let nodes = cfg.iter_nodes().collect::<std::collections::BTreeSet<_>>();
+    let nodes = cfg.nodes().collect::<std::collections::BTreeSet<_>>();
     assert_eq!(nodes.len(), 5);
     for i in 0..=4 {
         assert!(nodes.contains(&(i.into(), &())));
@@ -170,7 +170,7 @@ fn iter_nodes() {
 #[test]
 fn iter_edges() {
     let cfg = build_cfg();
-    let edges = cfg.iter_edges().collect::<std::collections::BTreeSet<_>>();
+    let edges = cfg.edges().collect::<std::collections::BTreeSet<_>>();
     assert_eq!(edges.len(), 4);
     for i in 0..=3 {
         assert!(edges.contains(&(i.into(), (i + 1).into(), &())));
@@ -180,7 +180,7 @@ fn iter_edges() {
 #[test]
 fn iter_exits() {
     let cfg = build_cfg();
-    let exits = cfg.iter_exits().collect::<std::collections::BTreeSet<_>>();
+    let exits = cfg.exits().collect::<std::collections::BTreeSet<_>>();
     assert_eq!(exits.len(), 1);
     assert!(exits.contains(&4.into()));
 }
