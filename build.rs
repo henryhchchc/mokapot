@@ -8,6 +8,8 @@ fn compile_java_test_data() {
     if Command::new("javac").spawn().is_ok() {
         compile_java_files("");
         compile_java_files("openjdk");
+    } else {
+        println!("cargo:warning=Can not find javac,skip compiling java test data")
     }
 }
 
