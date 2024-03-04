@@ -1,7 +1,7 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{Display, Formatter},
-    iter::Once,
+    collections::{btree_set, BTreeMap, BTreeSet},
+    fmt::{self, Display, Formatter},
+    iter::{self, Once},
     ops::BitOr,
 };
 
@@ -49,7 +49,7 @@ pub enum MokaInstruction {
 }
 
 impl Display for MokaInstruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
             Self::Definition {
@@ -102,7 +102,7 @@ pub enum Argument {
 }
 
 impl Display for Argument {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Id(id) => id.fmt(f),
             Self::Phi(ids) => write!(
@@ -145,12 +145,12 @@ impl IntoIterator for Argument {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::IntoIter<Self::Item>>;
+    type IntoIter = Either<Once<Self::Item>, btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
         use Argument::{Id, Phi};
         match self {
-            Id(id) => Either::Left(std::iter::once(id)),
+            Id(id) => Either::Left(iter::once(id)),
             Phi(ids) => Either::Right(ids.into_iter()),
         }
     }
@@ -161,12 +161,12 @@ impl<'a> IntoIterator for &'a Argument {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, std::collections::btree_set::Iter<'a, Identifier>>;
+    type IntoIter = Either<Once<Self::Item>, btree_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
         use Argument::{Id, Phi};
         match self {
-            Id(id) => Either::Left(std::iter::once(id)),
+            Id(id) => Either::Left(iter::once(id)),
             Phi(ids) => Either::Right(ids.iter()),
         }
     }
@@ -199,7 +199,7 @@ impl Value {
 }
 
 impl Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "%{}", self.0)
     }
 }
@@ -218,7 +218,7 @@ pub enum Identifier {
 }
 
 impl Display for Identifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Identifier::{Arg, CaughtException, This, Value};
         match self {
             This => write!(f, "%this"),
