@@ -32,7 +32,7 @@ pub use {
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),

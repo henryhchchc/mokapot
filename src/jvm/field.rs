@@ -1,4 +1,5 @@
 //! JVM fields and constant values.
+use core::f32;
 use std::fmt::Display;
 
 use crate::{
@@ -83,7 +84,7 @@ impl Display for JavaString {
 
 /// Denotes a compile-time constant value.
 #[doc = see_jvm_spec!(4, 4)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum ConstantValue {
     /// The `null` value.
     Null,
@@ -106,6 +107,30 @@ pub enum ConstantValue {
     /// A dynamic constant.
     Dynamic(u16, String, FieldType),
 }
+
+impl PartialEq<Self> for ConstantValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) => true,
+            (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
+            (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
+            (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
+            (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Double(lhs), Self::Double(rhs)) => lhs == rhs,
+            (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
+            (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
+            (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
+            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
+            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
+                lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConstantValue {}
 
 impl Display for ConstantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

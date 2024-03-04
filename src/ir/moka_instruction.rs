@@ -11,7 +11,7 @@ use itertools::{Either, Itertools};
 use super::expression::{Condition, Expression};
 
 /// Represents a single instruction in the Moka IR.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MokaInstruction {
     /// A no-op instruction.
     Nop,

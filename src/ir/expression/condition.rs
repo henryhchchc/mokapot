@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::ir::Argument;
 
 /// A condition that can be used in a conditional jump.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
     /// The two arguments are equal (i.e., `lhs == rhs`).
     Equal(Argument, Argument),
