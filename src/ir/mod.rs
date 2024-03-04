@@ -1,12 +1,12 @@
 //! `MokaIR` is an intermediate representation of JVM bytecode.
 //! It is register based and is in SSA form, which make it easier to analyze.
 
+#[cfg(feature = "petgraph")]
+pub mod cfg_petgraph;
 pub mod control_flow;
 pub mod expression;
 mod generator;
 mod moka_instruction;
-#[cfg(feature = "petgraph")]
-pub mod petgraph;
 
 use std::collections::BTreeMap;
 
