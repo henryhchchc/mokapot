@@ -1,6 +1,12 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::BTreeSet,
+    fmt::{Display, Formatter},
+};
 
-use crate::{ir::Argument, jvm::references::FieldRef};
+use crate::{
+    ir::{Argument, Identifier},
+    jvm::references::FieldRef,
+};
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +39,21 @@ pub enum Access {
         /// The value to be written.
         value: Argument,
     },
+}
+impl Access {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::WriteStatic { value: u, .. } | Self::ReadInstance { object_ref: u, .. } => {
+                u.iter().copied().collect()
+            }
+            Self::WriteInstance {
+                object_ref, value, ..
+            } => object_ref.iter().chain(value.iter()).copied().collect(),
+            Self::ReadStatic { .. } => BTreeSet::default(),
+        }
+    }
 }
 
 impl Display for Access {

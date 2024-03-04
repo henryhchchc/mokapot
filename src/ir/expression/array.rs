@@ -1,8 +1,11 @@
-use std::fmt::Display;
+use std::{collections::BTreeSet, fmt::Display};
 
 use itertools::Itertools;
 
-use crate::{ir::Argument, types::field_type::FieldType};
+use crate::{
+    ir::{Argument, Identifier},
+    types::field_type::FieldType,
+};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +45,30 @@ pub enum Operation {
         /// The array to get the length of.
         array_ref: Argument,
     },
+}
+impl Operation {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::New { length, .. } => length.iter().copied().collect(),
+            Self::NewMultiDim { dimensions, .. } => dimensions.iter().flatten().copied().collect(),
+            Self::Read { array_ref, index } => {
+                array_ref.iter().chain(index.iter()).copied().collect()
+            }
+            Self::Write {
+                array_ref,
+                index,
+                value,
+            } => array_ref
+                .iter()
+                .chain(index.iter())
+                .chain(value.iter())
+                .copied()
+                .collect(),
+            Self::Length { array_ref } => array_ref.iter().copied().collect(),
+        }
+    }
 }
 
 impl Display for Operation {

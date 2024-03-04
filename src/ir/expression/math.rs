@@ -1,6 +1,9 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::BTreeSet,
+    fmt::{Display, Formatter},
+};
 
-use crate::ir::Argument;
+use crate::ir::{Argument, Identifier};
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -35,6 +38,28 @@ pub enum Operation {
     LongComparison(Argument, Argument),
     /// Compares the two arguments as floating point numbers (i.e., `lhs fcmp rhs`).
     FloatingPointComparison(Argument, Argument, NaNTreatment),
+}
+impl Operation {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Add(a, b)
+            | Self::Subtract(a, b)
+            | Self::Multiply(a, b)
+            | Self::Divide(a, b)
+            | Self::Remainder(a, b)
+            | Self::ShiftLeft(a, b)
+            | Self::ShiftRight(a, b)
+            | Self::LogicalShiftRight(a, b)
+            | Self::BitwiseAnd(a, b)
+            | Self::BitwiseOr(a, b)
+            | Self::BitwiseXor(a, b)
+            | Self::LongComparison(a, b)
+            | Self::FloatingPointComparison(a, b, _) => a.iter().chain(b.iter()).copied().collect(),
+            Self::Negate(a) | Self::Increment(a, _) => a.iter().copied().collect(),
+        }
+    }
 }
 
 /// How NaNs are treated in floating point comparisons.

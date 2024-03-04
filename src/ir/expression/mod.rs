@@ -1,9 +1,12 @@
 //! Module for the expressions in Moka IR.
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::BTreeSet,
+    fmt::{Display, Formatter},
+};
 
 use itertools::Itertools;
 
-use super::Argument;
+use super::{Argument, Identifier};
 
 use crate::{
     jvm::{
@@ -85,6 +88,24 @@ pub enum Expression {
         /// The address where the subroutine starts.
         target: ProgramCounter,
     },
+}
+
+impl Expression {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Call { this, args, .. } => this.iter().chain(args).flatten().copied().collect(),
+            Self::Closure { captures, .. } => captures.iter().flatten().copied().collect(),
+            Self::Math(math_op) => math_op.uses(),
+            Self::Field(field_op) => field_op.uses(),
+            Self::Array(array_op) => array_op.uses(),
+            Self::Conversion(conv_op) => conv_op.uses(),
+            Self::Throw(arg) => arg.iter().copied().collect(),
+            Self::Synchronization(monitor_op) => monitor_op.uses(),
+            _ => BTreeSet::default(),
+        }
+    }
 }
 
 impl Display for Expression {

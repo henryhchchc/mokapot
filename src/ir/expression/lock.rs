@@ -1,6 +1,9 @@
+use std::collections::BTreeSet;
 use std::fmt::Formatter;
 
 use std::fmt::Display;
+
+use crate::ir::Identifier;
 
 use super::super::Argument;
 
@@ -11,6 +14,15 @@ pub enum Operation {
     Acquire(Argument),
     /// Releases the lock.
     Release(Argument),
+}
+impl Operation {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Acquire(arg) | Self::Release(arg) => arg.iter().copied().collect(),
+        }
+    }
 }
 
 impl Display for Operation {

@@ -48,6 +48,34 @@ pub enum MokaInstruction {
     SubroutineRet(Argument),
 }
 
+impl MokaInstruction {
+    /// Returns the value defined by the instruction if it is a definition.
+    #[must_use] pub fn def(&self) -> Option<Value> {
+        match self {
+            Self::Definition { value, .. } => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// Returns the set of [`Identifier`]s used by the instruction.
+    #[must_use] pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Nop => BTreeSet::new(),
+            Self::Definition { expr, .. } => expr.uses(),
+            Self::Jump {
+                condition: Some(condition),
+                ..
+            } => condition.uses(),
+            Self::Return(Some(uses))
+            | Self::SubroutineRet(uses)
+            | Self::Switch {
+                match_value: uses, ..
+            } => uses.iter().copied().collect(),
+            _ => BTreeSet::default(),
+        }
+    }
+}
+
 impl Display for MokaInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {

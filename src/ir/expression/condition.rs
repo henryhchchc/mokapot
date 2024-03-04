@@ -1,6 +1,6 @@
-use std::fmt::Display;
+use std::{collections::BTreeSet, fmt::Display};
 
-use crate::ir::Argument;
+use crate::ir::{Argument, Identifier};
 
 /// A condition that can be used in a conditional jump.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +33,29 @@ pub enum Condition {
     IsNonNegative(Argument),
     /// The argument is non-positive (i.e., `arg <= 0`).
     IsNonPositive(Argument),
+}
+
+impl Condition {
+    /// Returns the set of [`Identifier`]s used by the condition.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Equal(a, b)
+            | Self::NotEqual(a, b)
+            | Self::LessThan(a, b)
+            | Self::LessThanOrEqual(a, b)
+            | Self::GreaterThan(a, b)
+            | Self::GreaterThanOrEqual(a, b) => a.iter().chain(b.iter()).copied().collect(),
+            Self::IsNull(a)
+            | Self::IsNotNull(a)
+            | Self::IsZero(a)
+            | Self::IsNonZero(a)
+            | Self::IsPositive(a)
+            | Self::IsNegative(a)
+            | Self::IsNonNegative(a)
+            | Self::IsNonPositive(a) => a.iter().copied().collect(),
+        }
+    }
 }
 
 impl Display for Condition {

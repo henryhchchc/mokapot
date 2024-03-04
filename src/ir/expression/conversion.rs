@@ -1,7 +1,9 @@
+use std::collections::BTreeSet;
 use std::fmt::Formatter;
 
 use std::fmt::Display;
 
+use crate::ir::Identifier;
 use crate::types::field_type::FieldType;
 
 use super::super::Argument;
@@ -43,6 +45,31 @@ pub enum Operaion {
     CheckCast(Argument, FieldType),
     /// Checks whether an object is an instance of a given type.
     InstanceOf(Argument, FieldType),
+}
+impl Operaion {
+    /// Returns the set of [`Identifier`]s used by the expression.
+    #[must_use]
+    pub fn uses(&self) -> BTreeSet<Identifier> {
+        match self {
+            Self::Int2Long(arg)
+            | Self::Float2Long(arg)
+            | Self::Double2Long(arg)
+            | Self::Long2Int(arg)
+            | Self::Float2Int(arg)
+            | Self::Double2Int(arg)
+            | Self::Long2Float(arg)
+            | Self::Int2Float(arg)
+            | Self::Double2Float(arg)
+            | Self::Long2Double(arg)
+            | Self::Int2Double(arg)
+            | Self::Float2Double(arg)
+            | Self::Int2Byte(arg)
+            | Self::Int2Char(arg)
+            | Self::Int2Short(arg)
+            | Self::CheckCast(arg, _)
+            | Self::InstanceOf(arg, _) => arg.iter().copied().collect(),
+        }
+    }
 }
 
 impl Display for Operaion {
