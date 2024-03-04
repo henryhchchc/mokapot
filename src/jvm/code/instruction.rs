@@ -7,7 +7,7 @@ use crate::{
     },
     macros::see_jvm_spec,
     types::{
-        field_type::{PrimitiveType, TypeReference},
+        field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
     },
 };
@@ -240,14 +240,14 @@ pub enum Instruction {
     ANewArray(ClassRef) = 0xbd,
     ArrayLength = 0xbe,
     AThrow = 0xbf,
-    CheckCast(TypeReference) = 0xc0,
-    InstanceOf(TypeReference) = 0xc1,
+    CheckCast(FieldType) = 0xc0,
+    InstanceOf(FieldType) = 0xc1,
     MonitorEnter = 0xc2,
     MonitorExit = 0xc3,
 
     // Extended
     Wide(WideInstruction) = 0xc4,
-    MultiANewArray(TypeReference, u8) = 0xc5,
+    MultiANewArray(FieldType, u8) = 0xc5,
     IfNull(ProgramCounter) = 0xc6,
     IfNonNull(ProgramCounter) = 0xc7,
     GotoW(ProgramCounter) = 0xc8,

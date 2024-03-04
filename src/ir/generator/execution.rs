@@ -12,7 +12,7 @@ use crate::{
         field::ConstantValue,
     },
     types::{
-        field_type::{FieldType, PrimitiveType, TypeReference},
+        field_type::{FieldType, PrimitiveType},
         method_descriptor::ReturnType,
     },
 };
@@ -546,7 +546,7 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Array(array_op),
                 }
             }
-            MultiANewArray(TypeReference(element_type), dimension) => {
+            MultiANewArray(element_type, dimension) => {
                 let counts: Vec<_> = (0..*dimension)
                     .map(|_| frame.pop_value())
                     .collect::<Result<_, _>>()?;
@@ -568,16 +568,12 @@ impl MokaIRGenerator<'_> {
                 let expr = Expression::Throw(exception_ref);
                 IR::Definition { value: def, expr }
             }
-            CheckCast(TypeReference(target_type)) => {
-                conversion_op::<_, false, false>(frame, def, |value| {
-                    Conversion::CheckCast(value, target_type.clone())
-                })?
-            }
-            InstanceOf(TypeReference(target_type)) => {
-                conversion_op::<_, false, false>(frame, def, |value| {
-                    Conversion::InstanceOf(value, target_type.clone())
-                })?
-            }
+            CheckCast(target_type) => conversion_op::<_, false, false>(frame, def, |value| {
+                Conversion::CheckCast(value, target_type.clone())
+            })?,
+            InstanceOf(target_type) => conversion_op::<_, false, false>(frame, def, |value| {
+                Conversion::InstanceOf(value, target_type.clone())
+            })?,
             MonitorEnter => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Acquire(object_ref);

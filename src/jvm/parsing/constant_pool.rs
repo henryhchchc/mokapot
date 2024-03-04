@@ -12,7 +12,7 @@ use crate::{
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
-    types::field_type::{FieldType, TypeReference},
+    types::field_type::FieldType,
 };
 
 #[inline]
@@ -201,14 +201,14 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_type_ref(&self, index: u16) -> Result<TypeReference, Error> {
+    pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, Error> {
         let ClassRef { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?
         } else {
             FieldType::Object(ClassRef::new(name))
         };
-        Ok(TypeReference(field_type.clone()))
+        Ok(field_type)
     }
 }
 
