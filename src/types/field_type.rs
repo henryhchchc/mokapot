@@ -165,6 +165,7 @@ impl FieldType {
 
 /// A reference to a [`FieldType`].
 #[derive(Debug, PartialEq, Clone)]
+#[deprecated = "Use `FieldType` directly"]
 pub struct TypeReference(pub FieldType);
 
 #[cfg(test)]
