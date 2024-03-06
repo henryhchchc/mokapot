@@ -54,15 +54,12 @@ macro_rules! malform {
 }
 
 macro_rules! see_jvm_spec {
-    ($l1:literal $(, $l2:literal $(, $l3:literal $(, $l4:literal )? )? )?) => {
+    (__latest_jdk) => { 21 };
+    ($sec:literal $(, $sub_sec:literal )*) => {
         concat!(
-            "See the [JVM Specification §", $l1,
-            $( ".", $l2, $( ".", $l3, $( ".", $l4, )? )? )?
-            "](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-",
-            $l1,
-            ".html#jvms-", $l1,
-            $( ".", $l2, $( ".", $l3, $( ".", $l4, )? )? )?
-            ") for more information."
+            "See the [JVM Specification §", $sec, $( ".", $sub_sec, )* "]",
+            "(https://docs.oracle.com/javase/specs/jvms/se", see_jvm_spec!(__latest_jdk),
+            "/html/jvms-", $sec, ".html#jvms-", $sec, $( ".", $sub_sec, )* ") for more information."
         )
     };
 }
