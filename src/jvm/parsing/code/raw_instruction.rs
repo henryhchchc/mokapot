@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, io::Cursor};
+use std::{
+    collections::BTreeMap,
+    io::{self, Cursor},
+};
 
 use super::super::{reader_utils::ValueReaderExt, Error};
 use crate::{
@@ -29,7 +32,7 @@ impl RawInstruction {
             .into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => Err(Error::IO(e))?,
         };
         let instruction = match opcode {
@@ -318,7 +321,7 @@ impl RawInstruction {
                         let offset = reader.read_value()?;
                         Ok((match_value, offset))
                     })
-                    .collect::<Result<_, Error>>()?;
+                    .collect::<io::Result<_>>()?;
                 LookupSwitch {
                     default,
                     match_offsets,
@@ -333,7 +336,7 @@ impl RawInstruction {
                 let high = reader.read_value()?;
                 let jump_offsets = (low..=high)
                     .map(|_| reader.read_value())
-                    .collect::<std::io::Result<_>>()?;
+                    .collect::<io::Result<_>>()?;
                 TableSwitch {
                     default,
                     low,
