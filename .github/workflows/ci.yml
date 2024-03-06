@@ -12,6 +12,10 @@ on:
       - v**
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -83,7 +87,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-      - run: cargo check --all-features --verbose 
+      - run: cargo check --all-features --verbose
         name: Cargo check
       - name: Test
         env:
