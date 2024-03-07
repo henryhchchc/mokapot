@@ -74,3 +74,30 @@ fn jar_class_path() {
         .load_class("jdk/internal/jimage/ImageReader")
         .is_ok());
 }
+
+#[test]
+fn jar_class_path_not_found() {
+    let Ok(java_home) = std::env::var("JAVA_HOME") else {
+        return;
+    };
+    let jar_path = PathBuf::from(java_home).join("lib").join("jrt-fs.jar");
+    let jar_cp = JarClassPath::new(jar_path);
+    let class_loader = ClassLoader::new([jar_cp]);
+
+    assert!(matches!(
+        class_loader.load_class("jdk/internal/jimage/ImageReader3"),
+        Err(Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn jar_class_path_not_jar() {
+    let jar_path = PathBuf::from("test_data/MyClass.java");
+    let jar_cp = JarClassPath::new(jar_path);
+    let class_loader = ClassLoader::new([jar_cp]);
+
+    assert!(matches!(
+        class_loader.load_class("jdk/internal/jimage/ImageReader"),
+        Err(Error::Other(_)),
+    ));
+}
