@@ -136,3 +136,55 @@ bitflags! {
         const MANDATED = 0x8000;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn arb_access_flag() -> impl Strategy<Value = MethodAccessFlags> {
+        prop_oneof![
+            Just(MethodAccessFlags::PUBLIC),
+            Just(MethodAccessFlags::PRIVATE),
+            Just(MethodAccessFlags::PROTECTED),
+            Just(MethodAccessFlags::STATIC),
+            Just(MethodAccessFlags::FINAL),
+            Just(MethodAccessFlags::SYNCHRONIZED),
+            Just(MethodAccessFlags::BRIDGE),
+            Just(MethodAccessFlags::VARARGS),
+            Just(MethodAccessFlags::NATIVE),
+            Just(MethodAccessFlags::ABSTRACT),
+            Just(MethodAccessFlags::STRICT),
+            Just(MethodAccessFlags::SYNTHETIC)
+        ]
+    }
+
+    fn arb_parameter_access_flag() -> impl Strategy<Value = MethodParameterAccessFlags> {
+        prop_oneof![
+            Just(MethodParameterAccessFlags::FINAL),
+            Just(MethodParameterAccessFlags::SYNTHETIC),
+            Just(MethodParameterAccessFlags::MANDATED)
+        ]
+    }
+
+    proptest! {
+
+        #[test]
+        fn access_flags_bit_no_overlap(
+            lhs in arb_access_flag(),
+            rhs in arb_access_flag()
+        ){
+            prop_assume!(lhs != rhs);
+            assert_eq!(lhs.bits() & rhs.bits(), 0);
+        }
+
+        #[test]
+        fn parameter_access_flags_bit_no_overlap(
+            lhs in arb_parameter_access_flag(),
+            rhs in arb_parameter_access_flag()
+        ){
+            prop_assume!(lhs != rhs);
+            assert_eq!(lhs.bits() & rhs.bits(), 0);
+        }
+    }
+}

@@ -475,6 +475,32 @@ mod tests {
         fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..=u16::MAX) {
             assert!(Version::from_versions(major, minor).is_err());
         }
+    }
 
+    fn arb_access_flag() -> impl Strategy<Value = ClassAccessFlags> {
+        prop_oneof![
+            Just(ClassAccessFlags::PUBLIC),
+            Just(ClassAccessFlags::PRIVATE),
+            Just(ClassAccessFlags::FINAL),
+            Just(ClassAccessFlags::SUPER),
+            Just(ClassAccessFlags::INTERFACE),
+            Just(ClassAccessFlags::ABSTRACT),
+            Just(ClassAccessFlags::SYNTHETIC),
+            Just(ClassAccessFlags::ANNOTATION),
+            Just(ClassAccessFlags::ENUM),
+            Just(ClassAccessFlags::MODULE),
+        ]
+    }
+
+    proptest! {
+
+        #[test]
+        fn access_flags_bit_no_overlap(
+            lhs in arb_access_flag(),
+            rhs in arb_access_flag()
+        ){
+            prop_assume!(lhs != rhs);
+            assert_eq!(lhs.bits() & rhs.bits(), 0);
+        }
     }
 }

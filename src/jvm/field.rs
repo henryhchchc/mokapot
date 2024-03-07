@@ -187,16 +187,15 @@ bitflags! {
 
 #[cfg(test)]
 mod test {
-
     use std::str::FromStr;
 
-    use crate::{
-        jvm::references::ClassRef,
-        types::field_type::{
-            FieldType,
-            PrimitiveType::{self, *},
-        },
-    };
+    use super::*;
+    use crate::types::field_type::PrimitiveType;
+    use PrimitiveType::{Boolean, Byte, Char, Double, Float, Int, Long, Short};
+
+    use proptest::prelude::*;
+
+    use super::FieldAccessFlags;
 
     #[test]
     fn parse_primitive() {
@@ -251,5 +250,31 @@ mod test {
     #[test]
     fn invalid_array_element() {
         assert!(FieldType::from_str("[A").is_err());
+    }
+
+    fn arb_access_flag() -> impl Strategy<Value = FieldAccessFlags> {
+        prop_oneof![
+            Just(FieldAccessFlags::PUBLIC),
+            Just(FieldAccessFlags::PRIVATE),
+            Just(FieldAccessFlags::PROTECTED),
+            Just(FieldAccessFlags::STATIC),
+            Just(FieldAccessFlags::FINAL),
+            Just(FieldAccessFlags::VOLATILE),
+            Just(FieldAccessFlags::TRANSIENT),
+            Just(FieldAccessFlags::SYNTHETIC),
+            Just(FieldAccessFlags::ENUM),
+        ]
+    }
+
+    proptest! {
+
+        #[test]
+        fn access_flags_bit_no_overlap(
+            lhs in arb_access_flag(),
+            rhs in arb_access_flag()
+        ){
+            prop_assume!(lhs != rhs);
+            assert_eq!(lhs.bits() & rhs.bits(), 0);
+        }
     }
 }
