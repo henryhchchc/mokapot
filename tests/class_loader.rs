@@ -1,9 +1,10 @@
-use std::cell::Cell;
+use std::{cell::Cell, path::PathBuf};
 
 use mokapot::jvm::{
     class::Class,
     class_loader::{
-        class_paths::DirectoryClassPath, CachingClassLoader, ClassLoader, ClassPath, Error,
+        class_paths::{DirectoryClassPath, JarClassPath},
+        CachingClassLoader, ClassLoader, ClassPath, Error,
     },
 };
 
@@ -58,4 +59,18 @@ fn caching_class_loader_load_once() {
         assert_eq!(class.binary_name, "org/pkg/MyClass");
     }
     assert_eq!(counter.get(), 1);
+}
+
+#[test]
+fn jar_class_path() {
+    let Ok(java_home) = std::env::var("JAVA_HOME") else {
+        return;
+    };
+    let jar_path = PathBuf::from(java_home).join("lib").join("jrt-fs.jar");
+    let jar_cp = JarClassPath::new(jar_path);
+    let class_loader = ClassLoader::new([jar_cp]);
+
+    assert!(class_loader
+        .load_class("jdk/internal/jimage/ImageReader")
+        .is_ok());
 }
