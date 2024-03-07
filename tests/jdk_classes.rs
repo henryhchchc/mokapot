@@ -3,8 +3,8 @@ use rayon::prelude::*;
 use std::{env, fs, path::PathBuf};
 
 #[test]
-#[ignore = "Takes long"]
-fn moka_ir_jdk_classes() {
+#[ignore = "CI Only"]
+fn works_with_jdk_classes() {
     let extracted_modules_images = env::var("JDK_CLASSES").unwrap();
     let extracted_modules_images = PathBuf::from(extracted_modules_images);
     let class_files: Vec<_> = walkdir::WalkDir::new(extracted_modules_images)
@@ -29,6 +29,14 @@ fn moka_ir_jdk_classes() {
                         .is_some_and(|it| it.instructions.len() < 512)
                 })
                 .for_each(|it| {
+                    it.body
+                        .as_ref()
+                        .unwrap()
+                        .instructions
+                        .iter()
+                        .for_each(|(_pc, insn)| {
+                            let _ = insn.name();
+                        });
                     if let Err(e) = it.brew() {
                         panic!("Failed to brew {:?}: {}", it, e);
                     }
