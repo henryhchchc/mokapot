@@ -361,3 +361,16 @@ impl RawInstruction {
         unsafe { *(self as *const Self).cast::<u8>() }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::RawInstruction::*;
+
+    #[test]
+    fn test_opcode() {
+        assert_eq!(Nop.opcode(), 0x00);
+        assert_eq!(AConstNull.opcode(), 0x01);
+        assert_eq!(IConstM1.opcode(), 0x02);
+        assert_eq!(ILoad { index: 233 }.opcode(), 0x15);
+    }
+}
