@@ -458,7 +458,7 @@ mod tests {
         ) {
             let class_version = Version::from_versions(major, minor).unwrap();
             assert_eq!(major, class_version.major());
-            assert_eq!(class_version.is_preview_enabled(), minor == u16::MAX);
+            assert_eq!(class_version.is_preview_enabled(), class_version.minor() == u16::MAX);
         }
 
         #[test]
