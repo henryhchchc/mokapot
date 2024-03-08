@@ -33,3 +33,25 @@ impl Display for Operation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::ir::test::arb_argument;
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+
+        #[test]
+        fn uses(lock in arb_argument()) {
+            let ids = lock.iter().cloned().collect::<BTreeSet<_>>();
+            let operation = Operation::Acquire(lock.clone());
+            assert_eq!(operation.uses(), ids);
+
+            let operation = Operation::Release(lock.clone());
+            assert_eq!(operation.uses(), ids);
+        }
+    }
+}
