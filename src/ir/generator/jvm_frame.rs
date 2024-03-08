@@ -416,7 +416,7 @@ mod test {
     use std::collections::BTreeSet;
 
     use crate::{
-        ir::{Argument, Identifier, Value},
+        ir::{Argument, Identifier, LocalValue},
         types::method_descriptor::MethodDescriptor,
     };
 
@@ -424,28 +424,28 @@ mod test {
 
     #[test]
     fn merge_value_ref() {
-        let lhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
-        let rhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(1))));
+        let lhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
+        let rhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(1))));
 
         let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
             Entry::Value(Argument::Phi(BTreeSet::from([
-                Identifier::Value(Value::new(0)),
-                Identifier::Value(Value::new(1))
+                Identifier::Local(LocalValue::new(0)),
+                Identifier::Local(LocalValue::new(1))
             ])))
         );
     }
 
     #[test]
     fn merge_same_value_ref() {
-        let lhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
-        let rhs = Entry::Value(Argument::Id(Identifier::Value(Value::new(0))));
+        let lhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
+        let rhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
 
         let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
-            Entry::Value(Argument::Id(Identifier::Value(Value::new(0))))
+            Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))))
         );
     }
 

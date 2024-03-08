@@ -5,7 +5,7 @@ use crate::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
-        Argument, MokaInstruction as IR, Value,
+        Argument, LocalValue, MokaInstruction as IR,
     },
     jvm::{
         code::{Instruction, ProgramCounter, WideInstruction},
@@ -28,7 +28,7 @@ impl MokaIRGenerator<'_> {
         #[allow(clippy::enum_glob_use)]
         use Instruction::*;
 
-        let def = Value::new(pc.into());
+        let def = LocalValue::new(pc.into());
         let ir_instruction = match insn {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
@@ -683,7 +683,7 @@ where
 #[inline]
 fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
     frame: &mut JvmStackFrame,
-    def_id: Value,
+    def_id: LocalValue,
     conversion: C,
 ) -> Result<IR, MokaIRBrewingError>
 where
@@ -708,7 +708,7 @@ where
 #[inline]
 fn binary_op_math<M>(
     frame: &mut JvmStackFrame,
-    def_id: Value,
+    def_id: LocalValue,
     math: M,
 ) -> Result<IR, MokaIRBrewingError>
 where
@@ -727,7 +727,7 @@ where
 #[inline]
 fn binary_wide_math<M>(
     frame: &mut JvmStackFrame,
-    def_id: Value,
+    def_id: LocalValue,
     math: M,
 ) -> Result<IR, MokaIRBrewingError>
 where

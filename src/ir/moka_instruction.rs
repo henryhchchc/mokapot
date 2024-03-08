@@ -18,7 +18,7 @@ pub enum MokaInstruction {
     /// Creates a definition by evaluating an [`Expression`].
     Definition {
         /// The value defined by the expression.
-        value: Value,
+        value: LocalValue,
         /// The expression that defines the value.
         expr: Expression,
     },
@@ -51,7 +51,7 @@ pub enum MokaInstruction {
 impl MokaInstruction {
     /// Returns the value defined by the instruction if it is a definition.
     #[must_use]
-    pub fn def(&self) -> Option<Value> {
+    pub fn def(&self) -> Option<LocalValue> {
         match self {
             Self::Definition { value, .. } => Some(*value),
             _ => None,
@@ -212,9 +212,9 @@ impl Argument {
 /// A unique identifier of a value defined in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(transparent)]
-pub struct Value(u16);
+pub struct LocalValue(u16);
 
-impl Value {
+impl LocalValue {
     /// Creates a new [`Value`] with the given ID.
     #[must_use]
     pub const fn new(id: u16) -> Self {
@@ -228,7 +228,7 @@ impl Value {
     }
 }
 
-impl Display for Value {
+impl Display for LocalValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "%{}", self.0)
     }
@@ -242,26 +242,26 @@ pub enum Identifier {
     /// An argument of the current method.
     Arg(u16),
     /// A locally defined value.
-    Value(Value),
+    Local(LocalValue),
     /// The exception caught by a `catch` block.
     CaughtException,
 }
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use Identifier::{Arg, CaughtException, This, Value};
+        use Identifier::{Arg, CaughtException, Local, This};
         match self {
             This => write!(f, "%this"),
             Arg(idx) => write!(f, "%arg{idx}"),
-            Value(idx) => idx.fmt(f),
+            Local(idx) => idx.fmt(f),
             CaughtException => write!(f, "%caught_exception"),
         }
     }
 }
 
-impl From<Value> for Identifier {
-    fn from(value: Value) -> Self {
-        Self::Value(value)
+impl From<LocalValue> for Identifier {
+    fn from(value: LocalValue) -> Self {
+        Self::Local(value)
     }
 }
 
