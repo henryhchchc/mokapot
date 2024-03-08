@@ -38,7 +38,7 @@ jobs:
       - name: Cargo Fmt
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
   build_and_test:
     name: Build & Test
