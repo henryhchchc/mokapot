@@ -27,7 +27,7 @@ pub struct Class {
     /// The version of the class file.
     pub version: Version,
     /// The access modifiers of the class.
-    pub access_flags: ClassAccessFlags,
+    pub access_flags: AccessFlags,
     /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
     pub binary_name: String,
     /// A reference to the superclass of the class.
@@ -363,7 +363,7 @@ pub struct RecordComponent {
 bitflags! {
     /// The access flags of a [`Class`].
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct ClassAccessFlags: u16 {
+    pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
         /// Marked `private` in source.
@@ -477,18 +477,18 @@ mod tests {
         }
     }
 
-    fn arb_access_flag() -> impl Strategy<Value = ClassAccessFlags> {
+    fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
         prop_oneof![
-            Just(ClassAccessFlags::PUBLIC),
-            Just(ClassAccessFlags::PRIVATE),
-            Just(ClassAccessFlags::FINAL),
-            Just(ClassAccessFlags::SUPER),
-            Just(ClassAccessFlags::INTERFACE),
-            Just(ClassAccessFlags::ABSTRACT),
-            Just(ClassAccessFlags::SYNTHETIC),
-            Just(ClassAccessFlags::ANNOTATION),
-            Just(ClassAccessFlags::ENUM),
-            Just(ClassAccessFlags::MODULE),
+            Just(AccessFlags::PUBLIC),
+            Just(AccessFlags::PRIVATE),
+            Just(AccessFlags::FINAL),
+            Just(AccessFlags::SUPER),
+            Just(AccessFlags::INTERFACE),
+            Just(AccessFlags::ABSTRACT),
+            Just(AccessFlags::SYNTHETIC),
+            Just(AccessFlags::ANNOTATION),
+            Just(AccessFlags::ENUM),
+            Just(AccessFlags::MODULE),
         ]
     }
 

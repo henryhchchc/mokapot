@@ -2,7 +2,7 @@ use std::io::BufReader;
 
 use mokapot::{
     jvm::{
-        class::{Class, ClassAccessFlags},
+        class::{AccessFlags, Class},
         parsing::Error,
         references::ClassRef,
     },
@@ -74,7 +74,7 @@ fn test_parse_version() {
 #[test]
 fn test_access_flag() {
     let my_class = parse_my_class().unwrap();
-    let expected = ClassAccessFlags::PUBLIC | ClassAccessFlags::SUPER;
+    let expected = AccessFlags::PUBLIC | AccessFlags::SUPER;
     assert_eq!(expected, my_class.access_flags);
 }
 

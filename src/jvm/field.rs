@@ -20,7 +20,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Field {
     /// The access modifiers of the field.
-    pub access_flags: FieldAccessFlags,
+    pub access_flags: AccessFlags,
     /// The name of the field.
     pub name: String,
     /// The class containing the field.
@@ -163,7 +163,7 @@ use itertools::Itertools;
 bitflags! {
     /// The access flags of a field.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct FieldAccessFlags: u16 {
+    pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
         /// Declared `private`; accessible only within the defining class and other classes belonging to the same nest.
@@ -195,7 +195,7 @@ mod test {
 
     use proptest::prelude::*;
 
-    use super::FieldAccessFlags;
+    use super::AccessFlags;
 
     #[test]
     fn parse_primitive() {
@@ -252,17 +252,17 @@ mod test {
         assert!(FieldType::from_str("[A").is_err());
     }
 
-    fn arb_access_flag() -> impl Strategy<Value = FieldAccessFlags> {
+    fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
         prop_oneof![
-            Just(FieldAccessFlags::PUBLIC),
-            Just(FieldAccessFlags::PRIVATE),
-            Just(FieldAccessFlags::PROTECTED),
-            Just(FieldAccessFlags::STATIC),
-            Just(FieldAccessFlags::FINAL),
-            Just(FieldAccessFlags::VOLATILE),
-            Just(FieldAccessFlags::TRANSIENT),
-            Just(FieldAccessFlags::SYNTHETIC),
-            Just(FieldAccessFlags::ENUM),
+            Just(AccessFlags::PUBLIC),
+            Just(AccessFlags::PRIVATE),
+            Just(AccessFlags::PROTECTED),
+            Just(AccessFlags::STATIC),
+            Just(AccessFlags::FINAL),
+            Just(AccessFlags::VOLATILE),
+            Just(AccessFlags::TRANSIENT),
+            Just(AccessFlags::SYNTHETIC),
+            Just(AccessFlags::ENUM),
         ]
     }
 

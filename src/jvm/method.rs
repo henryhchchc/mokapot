@@ -18,7 +18,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Method {
     /// The access flags of the method.
-    pub access_flags: MethodAccessFlags,
+    pub access_flags: AccessFlags,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
@@ -90,13 +90,13 @@ pub struct ParameterInfo {
     /// The name of the parameter.
     pub name: Option<String>,
     /// The access flags of the parameter.
-    pub access_flags: MethodParameterAccessFlags,
+    pub access_flags: ParameterAccessFlags,
 }
 
 bitflags! {
     /// Access flags for a [`Method`].
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct MethodAccessFlags: u16 {
+    pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
         const PUBLIC = 0x0001;
         /// Declared `private`; accessible only within the defining class and other classes belonging to the same nest.
@@ -127,7 +127,7 @@ bitflags! {
 bitflags! {
     /// The access flags for a method parameter.
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct MethodParameterAccessFlags: u16 {
+    pub struct ParameterAccessFlags: u16 {
         /// Declared `final`; may not be assigned to after initialization.
         const FINAL = 0x0010;
         /// Declared synthetic; not present in the source code.
@@ -142,28 +142,28 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    fn arb_access_flag() -> impl Strategy<Value = MethodAccessFlags> {
+    fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
         prop_oneof![
-            Just(MethodAccessFlags::PUBLIC),
-            Just(MethodAccessFlags::PRIVATE),
-            Just(MethodAccessFlags::PROTECTED),
-            Just(MethodAccessFlags::STATIC),
-            Just(MethodAccessFlags::FINAL),
-            Just(MethodAccessFlags::SYNCHRONIZED),
-            Just(MethodAccessFlags::BRIDGE),
-            Just(MethodAccessFlags::VARARGS),
-            Just(MethodAccessFlags::NATIVE),
-            Just(MethodAccessFlags::ABSTRACT),
-            Just(MethodAccessFlags::STRICT),
-            Just(MethodAccessFlags::SYNTHETIC)
+            Just(AccessFlags::PUBLIC),
+            Just(AccessFlags::PRIVATE),
+            Just(AccessFlags::PROTECTED),
+            Just(AccessFlags::STATIC),
+            Just(AccessFlags::FINAL),
+            Just(AccessFlags::SYNCHRONIZED),
+            Just(AccessFlags::BRIDGE),
+            Just(AccessFlags::VARARGS),
+            Just(AccessFlags::NATIVE),
+            Just(AccessFlags::ABSTRACT),
+            Just(AccessFlags::STRICT),
+            Just(AccessFlags::SYNTHETIC)
         ]
     }
 
-    fn arb_parameter_access_flag() -> impl Strategy<Value = MethodParameterAccessFlags> {
+    fn arb_parameter_access_flag() -> impl Strategy<Value = ParameterAccessFlags> {
         prop_oneof![
-            Just(MethodParameterAccessFlags::FINAL),
-            Just(MethodParameterAccessFlags::SYNTHETIC),
-            Just(MethodParameterAccessFlags::MANDATED)
+            Just(ParameterAccessFlags::FINAL),
+            Just(ParameterAccessFlags::SYNTHETIC),
+            Just(ParameterAccessFlags::MANDATED)
         ]
     }
 

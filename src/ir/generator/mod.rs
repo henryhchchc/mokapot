@@ -9,7 +9,7 @@ use std::{
 
 use crate::jvm::{
     code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
-    method::{Method, MethodAccessFlags},
+    method::{self, Method},
     references::ClassRef,
 };
 
@@ -62,7 +62,9 @@ impl Analyzer for MokaIRGenerator<'_> {
             .0
             .to_owned();
         JvmStackFrame::new(
-            self.method.access_flags.contains(MethodAccessFlags::STATIC),
+            self.method
+                .access_flags
+                .contains(method::AccessFlags::STATIC),
             &self.method.descriptor,
             self.body.max_locals,
             self.body.max_stack,

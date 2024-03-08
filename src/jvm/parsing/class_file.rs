@@ -5,8 +5,8 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         class::{
-            BootstrapMethod, Class, ClassAccessFlags, InnerClassInfo, RecordComponent,
-            SourceDebugExtension, Version,
+            self, BootstrapMethod, Class, InnerClassInfo, RecordComponent, SourceDebugExtension,
+            Version,
         },
         constant_pool::ConstantPool,
         parsing::{jvm_element_parser::parse_flags, reader_utils::ValueReaderExt},
@@ -31,13 +31,13 @@ impl Class {
         let constant_pool_count: u16 = reader.read_value()?;
         let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
 
-        let access_flags: ClassAccessFlags = parse_flags(reader)?;
+        let access_flags: class::AccessFlags = parse_flags(reader)?;
         let this_class_idx = reader.read_value()?;
         let ClassRef { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
         let super_class_idx = reader.read_value()?;
         let super_class = match super_class_idx {
             0 if binary_name == "java/lang/Object" => None,
-            0 if access_flags.contains(ClassAccessFlags::MODULE) => None,
+            0 if access_flags.contains(class::AccessFlags::MODULE) => None,
             0 => malform!("Class must have a super type except for java/lang/Object or a module"),
             it => Some(constant_pool.get_class_ref(it)?),
         };

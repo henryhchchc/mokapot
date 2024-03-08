@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::{
     jvm::{
-        method::{Method, MethodAccessFlags},
+        method::{self, Method},
         parsing::{jvm_element_parser::parse_flags, Context},
         references::ClassRef,
     },
@@ -14,7 +14,7 @@ use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Error}
 
 impl JvmElement for Method {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let access_flags: MethodAccessFlags = parse_flags(reader)?;
+        let access_flags: method::AccessFlags = parse_flags(reader)?;
         let name = JvmElement::parse(reader, ctx)?;
         let descriptor: MethodDescriptor = JvmElement::parse(reader, ctx)?;
         let owner = ClassRef {
@@ -49,8 +49,8 @@ impl JvmElement for Method {
 
         // JVM specification 4.7.3
         // If the method is either `native` or `abstract`, and is not a class or interface initialization method
-        if (access_flags.contains(MethodAccessFlags::NATIVE)
-            || access_flags.contains(MethodAccessFlags::ABSTRACT))
+        if (access_flags.contains(method::AccessFlags::NATIVE)
+            || access_flags.contains(method::AccessFlags::ABSTRACT))
             && name != Method::CLASS_INITIALIZER_NAME
         {
             // then its method_info structure must not have a Code attribute in its attributes table
@@ -66,7 +66,7 @@ impl JvmElement for Method {
 
         if ctx.class_version.major() > 51 && name == Method::CLASS_INITIALIZER_NAME {
             // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
-            if !access_flags.contains(MethodAccessFlags::STATIC)
+            if !access_flags.contains(method::AccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
                 malform!(concat!(

@@ -16,7 +16,7 @@ pub use moka_instruction::*;
 use crate::{
     jvm::{
         code::{ExceptionTableEntry, InstructionList, ProgramCounter},
-        method::MethodAccessFlags,
+        method::{self},
         references::ClassRef,
     },
     types::method_descriptor::MethodDescriptor,
@@ -28,7 +28,7 @@ use self::control_flow::ControlTransfer;
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
     /// The access flags of the method.
-    pub access_flags: MethodAccessFlags,
+    pub access_flags: method::AccessFlags,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
