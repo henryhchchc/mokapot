@@ -78,3 +78,73 @@ impl Display for Condition {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ir::test::arb_argument;
+
+    use super::*;
+    use proptest::prelude::*;
+
+    fn check_uses(cond: &Condition, ids: &BTreeSet<Identifier>) {
+        let cond_ids = cond.uses();
+        for id in ids {
+            assert!(cond_ids.contains(id));
+        }
+    }
+
+    proptest! {
+
+
+        #[test]
+        fn uses(
+            arg1 in arb_argument(),
+            arg2 in arb_argument(),
+        ) {
+            let arg1_ids = arg1.clone().into_iter().collect();
+            let both_arg_ids = arg1.iter().chain(arg2.iter()).copied().collect();
+
+            let eq = Condition::Equal(arg1.clone(), arg2.clone());
+            check_uses(&eq, &both_arg_ids);
+
+            let ne = Condition::NotEqual(arg1.clone(), arg2.clone());
+            check_uses(&ne, &both_arg_ids);
+
+            let lt = Condition::LessThan(arg1.clone(), arg2.clone());
+            check_uses(&lt, &both_arg_ids);
+
+            let le = Condition::LessThanOrEqual(arg1.clone(), arg2.clone());
+            check_uses(&le, &both_arg_ids);
+
+            let gt = Condition::GreaterThan(arg1.clone(), arg2.clone());
+            check_uses(&gt, &both_arg_ids);
+
+            let ge = Condition::GreaterThanOrEqual(arg1.clone(), arg2.clone());
+            check_uses(&ge, &both_arg_ids);
+
+            let is_null = Condition::IsNull(arg1.clone());
+            check_uses(&is_null, &arg1_ids);
+
+            let is_not_null = Condition::IsNotNull(arg1.clone());
+            check_uses(&is_not_null, &arg1_ids);
+
+            let is_zero = Condition::IsZero(arg1.clone());
+            check_uses(&is_zero, &arg1_ids);
+
+            let is_non_zero = Condition::IsNonZero(arg1.clone());
+            check_uses(&is_non_zero, &arg1_ids);
+
+            let is_positive = Condition::IsPositive(arg1.clone());
+            check_uses(&is_positive, &arg1_ids);
+
+            let is_negative = Condition::IsNegative(arg1.clone());
+            check_uses(&is_negative, &arg1_ids);
+
+            let is_non_negative = Condition::IsNonNegative(arg1.clone());
+            check_uses(&is_non_negative, &arg1_ids);
+
+            let is_non_positive = Condition::IsNonPositive(arg1.clone());
+            check_uses(&is_non_positive, &arg1_ids);
+        }
+    }
+}

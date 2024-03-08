@@ -211,6 +211,7 @@ impl Argument {
 
 /// A unique identifier of a value defined in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
 pub struct LocalValue(u16);
 
@@ -236,6 +237,7 @@ impl Display for LocalValue {
 
 /// Represents an identifier of a value in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Identifier {
     /// The `this` value in an instance method.
     This,
@@ -266,7 +268,16 @@ impl From<LocalValue> for Identifier {
 }
 
 #[cfg(test)]
-mod test {
+pub(super) mod test {
+    use super::*;
+    use proptest::prelude::*;
+
+    pub(crate) fn arb_argument() -> impl Strategy<Value = Argument> {
+        prop_oneof![
+            any::<Identifier>().prop_map(Argument::Id),
+            prop::collection::btree_set(any::<Identifier>(), 1..10).prop_map(Argument::Phi)
+        ]
+    }
 
     #[test]
     fn value_ref_merge() {

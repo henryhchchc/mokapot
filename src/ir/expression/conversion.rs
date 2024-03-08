@@ -99,3 +99,49 @@ impl Display for Operaion {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{ir::test::arb_argument, tests::arb_field_type};
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+
+        #[test]
+        fn uses(
+            arg in arb_argument(),
+            target_type in arb_field_type(),
+        ) {
+            let arg_ids: BTreeSet<_> = arg.clone().into_iter().collect();
+            let conversions = [
+                Operaion::Int2Long(arg.clone()),
+                Operaion::Int2Float(arg.clone()),
+                Operaion::Int2Double(arg.clone()),
+                Operaion::Long2Int(arg.clone()),
+                Operaion::Long2Float(arg.clone()),
+                Operaion::Long2Double(arg.clone()),
+                Operaion::Float2Int(arg.clone()),
+                Operaion::Float2Long(arg.clone()),
+                Operaion::Float2Double(arg.clone()),
+                Operaion::Double2Int(arg.clone()),
+                Operaion::Double2Long(arg.clone()),
+                Operaion::Double2Float(arg.clone()),
+                Operaion::Int2Byte(arg.clone()),
+                Operaion::Int2Char(arg.clone()),
+                Operaion::Int2Short(arg.clone()),
+                Operaion::CheckCast(arg.clone(), target_type.clone()),
+                Operaion::InstanceOf(arg.clone(), target_type.clone()),
+            ];
+
+            for conv in conversions {
+                let uses = conv.uses();
+                for id in &arg_ids {
+                    assert!(uses.contains(id));
+                }
+            }
+        }
+    }
+}

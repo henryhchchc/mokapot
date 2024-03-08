@@ -102,3 +102,60 @@ impl Display for Operation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{ir::test::arb_argument, tests::arb_field_type};
+
+    use super::*;
+    use proptest::prelude::*;
+
+    fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Argument>) {
+        let uses = op.uses();
+        args.into_iter().flatten().for_each(|a| {
+            assert!(uses.contains(a));
+        });
+    }
+
+    proptest! {
+
+        #[test]
+        fn uses(
+            arg1 in arb_argument(),
+            arg2 in arb_argument(),
+            arg3 in arb_argument(),
+            ty in arb_field_type()
+        ) {
+            let new_ops = Operation::New {
+                element_type: ty.clone(),
+                length: arg1.clone(),
+            };
+            check_uses(&new_ops, [&arg1]);
+
+            let new_multi_ops = Operation::NewMultiDim {
+                element_type: ty.clone(),
+                dimensions: [&arg1, &arg2, &arg3].into_iter().cloned().collect()
+            };
+            check_uses(&new_multi_ops, [&arg1, &arg2, &arg3]);
+
+            let read_ops = Operation::Read {
+                array_ref: arg1.clone(),
+                index: arg2.clone()
+            };
+            check_uses(&read_ops, [&arg1, &arg2]);
+
+            let write_ops = Operation::Write {
+                array_ref: arg1.clone(),
+                index: arg2.clone(),
+                value: arg3.clone()
+            };
+            check_uses(&write_ops, [&arg1,&arg2,&arg3]);
+
+            let len_ops = Operation::Length {
+                array_ref: arg1.clone()
+            };
+            check_uses(&len_ops, [&arg1]);
+        }
+
+    }
+}
