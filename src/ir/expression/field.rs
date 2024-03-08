@@ -72,3 +72,47 @@ impl Display for Access {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{ir::test::arb_argument, jvm::references::tests::arb_field_ref};
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+
+        #[test]
+        fn uses(
+            field in arb_field_ref(),
+            object_ref in arb_argument(),
+            value in arb_argument()
+        ) {
+            let value_ids = value.iter().copied().collect::<BTreeSet<_>>();
+            let object_ref_ids = object_ref.iter().copied().collect::<BTreeSet<_>>();
+
+            let read_static = Access::ReadStatic { field: field.clone() };
+            assert!(read_static.uses().is_empty());
+
+            let write_static = Access::WriteStatic {
+                field: field.clone(),
+                value: value.clone(),
+            };
+            assert_eq!(write_static.uses(), value_ids);
+
+            let read_instance = Access::ReadInstance {
+                object_ref: object_ref.clone(),
+                field: field.clone(),
+            };
+            assert_eq!(read_instance.uses(), object_ref_ids);
+
+            let write_instance = Access::WriteInstance {
+                object_ref: object_ref.clone(),
+                field: field.clone(),
+                value: value.clone(),
+            };
+            assert_eq!(write_instance.uses(), value_ids.union(&object_ref_ids).copied().collect());
+        }
+    }
+}

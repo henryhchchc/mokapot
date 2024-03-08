@@ -96,11 +96,25 @@ pub struct PackageRef {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::tests::arb_class_name;
+pub(crate) mod tests {
+    use crate::tests::{arb_class_name, arb_field_type};
 
     use super::*;
     use proptest::prelude::*;
+
+    pub(crate) fn arb_class_ref() -> impl Strategy<Value = ClassRef> {
+        arb_class_name().prop_map(ClassRef::new)
+    }
+
+    pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
+        (arb_class_ref(), any::<String>(), arb_field_type()).prop_map(
+            |(owner, name, field_type)| FieldRef {
+                owner,
+                name,
+                field_type,
+            },
+        )
+    }
 
     proptest! {
 
