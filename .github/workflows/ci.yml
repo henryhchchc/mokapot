@@ -172,6 +172,8 @@ jobs:
     steps:
       - name: Setup Rust
         run: rustup update && rustup default
+      - uses: actions/checkout@v4
+        name: Checkout source code
       - name: Cargo Update
         run: cargo update --verbose
       - name: Cache Rust Build Stuff
