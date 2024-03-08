@@ -215,13 +215,13 @@ impl Argument {
 pub struct LocalValue(u16);
 
 impl LocalValue {
-    /// Creates a new [`Value`] with the given ID.
+    /// Creates a new [`LocalValue`] with the given ID.
     #[must_use]
     pub const fn new(id: u16) -> Self {
         Self(id)
     }
 
-    /// Create an [`Argument`] by referencing this [`Value`].
+    /// Create an [`Argument`] by referencing this [`LocalValue`].
     #[must_use]
     pub fn as_argument(&self) -> Argument {
         Argument::Id((*self).into())
