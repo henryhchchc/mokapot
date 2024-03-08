@@ -37,7 +37,6 @@ pub struct FieldRef {
     pub owner: ClassRef,
     /// The name of the field.
     pub name: String,
-
     /// The type of the field.
     pub field_type: FieldType,
 }
