@@ -64,6 +64,7 @@ impl Operation {
 
 /// How NaNs are treated in floating point comparisons.
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum NaNTreatment {
     /// NaNs are treated as the largest possible value.
     IsLargest,
@@ -93,6 +94,53 @@ impl Display for Operation {
             }
             Self::FloatingPointComparison(a, b, NaNTreatment::IsSmallest) => {
                 write!(f, "cmp({a}, {b}) nan is smallest")
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ir::test::arb_argument;
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn uses(
+            arg1 in arb_argument(),
+            arg2 in arb_argument(),
+            num in any::<i32>(),
+            nan_treament in any::<NaNTreatment>()
+        ) {
+            let bin_ops = [
+                Operation::Add(arg1.clone(), arg2.clone()),
+                Operation::Subtract(arg1.clone(), arg2.clone()),
+                Operation::Multiply(arg1.clone(), arg2.clone()),
+                Operation::Divide(arg1.clone(), arg2.clone()),
+                Operation::Remainder(arg1.clone(), arg2.clone()),
+                Operation::ShiftLeft(arg1.clone(), arg2.clone()),
+                Operation::ShiftRight(arg1.clone(), arg2.clone()),
+                Operation::LogicalShiftRight(arg1.clone(), arg2.clone()),
+                Operation::BitwiseAnd(arg1.clone(), arg2.clone()),
+                Operation::BitwiseOr(arg1.clone(), arg2.clone()),
+                Operation::BitwiseXor(arg1.clone(), arg2.clone()),
+                Operation::LongComparison(arg1.clone(), arg2.clone()),
+                Operation::FloatingPointComparison(arg1.clone(), arg2.clone(), nan_treament.clone()),
+            ];
+            let bin_ops_ids = arg1.iter().chain(arg2.iter()).copied().collect::<BTreeSet<_>>();
+            for op in &bin_ops {
+                assert_eq!(op.uses(), bin_ops_ids);
+            }
+
+            let unitary_ops = [
+                Operation::Negate(arg1.clone()),
+                Operation::Increment(arg1.clone(), num),
+            ];
+            let unitary_ops_ids = arg1.iter().copied().collect::<BTreeSet<_>>();
+            for op in &unitary_ops {
+                assert_eq!(op.uses(), unitary_ops_ids);
             }
         }
     }

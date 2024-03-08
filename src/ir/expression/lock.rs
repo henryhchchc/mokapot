@@ -46,7 +46,7 @@ mod tests {
 
         #[test]
         fn uses(lock in arb_argument()) {
-            let ids = lock.iter().cloned().collect::<BTreeSet<_>>();
+            let ids = lock.iter().copied().collect::<BTreeSet<_>>();
             let operation = Operation::Acquire(lock.clone());
             assert_eq!(operation.uses(), ids);
 
