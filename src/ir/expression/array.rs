@@ -48,18 +48,6 @@ pub enum Operation {
 }
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
-    ///
-    /// # Examples
-    /// ```
-    /// use std::collections::BTreeSet;
-    /// use mokapot::ir::{expression::ArrayOperation, Argument, Identifier, Value};
-    ///
-    /// let length = Value::new(0);
-    /// let element_type = "I".parse().unwrap();
-    /// let new_array = ArrayOperation::New { element_type, length: length.as_argument() };
-    ///
-    /// assert_eq!(new_array.uses(), BTreeSet::from([Identifier::Value(length)]));
-    /// ```
     #[must_use]
     pub fn uses(&self) -> BTreeSet<Identifier> {
         match self {

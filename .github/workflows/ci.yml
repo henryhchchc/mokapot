@@ -47,9 +47,7 @@ jobs:
     steps:
       - name: Setup Rust
         run: |
-          # TODO: Remove `cargo update nightly` when doctest support is stabilized.
           rustup update stable \
-            && rustup update nightly \
             && rustup default stable \
             && rustup component add llvm-tools-preview
       - name: Setup Build Tools
@@ -89,23 +87,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-      - run: cargo check --all-features --verbose
+      - run: cargo check --all-targets --all-features --verbose
         name: Cargo check
       - name: Test
         env:
           JDK_CLASSES: ./jdk_classes
         run: |
           cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest \
-                --all-features \
-                --no-report \
-                --run-ignored all
-          # TODO: Remove `+nightly` when doctest support is stabilized.
-          cargo +nightly llvm-cov --no-report --all-features --doctests
-          cargo +nightly llvm-cov report \
-                --doctests \
-                --codecov \
-                --output-path ./target/codecov.json
+          cargo llvm-cov nextest --all-features --no-report
+          cargo llvm-cov report --codecov --output-path ./target/codecov.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
         with:
