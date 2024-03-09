@@ -6,7 +6,6 @@
       Currently the signatures of fields and methods (located in module `mokapot::types::signatures`) are aliased to `String`.
       We plan to extend it to structured ones (See `FieldType` and `MethodDescriptor`) to make it easier for type checking.
 
-
 ## Static Analysis
 
 - [ ] Fixed point analysis leveraging multiple CPU cores.
@@ -23,3 +22,8 @@
 ## CI
 
 - [ ] Run doc tests and include their coverage in the report.
+
+## Modification of Byte Code
+
+- [ ] APIs for turning MokaPot data structures into JVM byte code.
+      Such APIs enable the modification of JVM byte code in scenarios like instrumentation.
