@@ -1,7 +1,7 @@
 //! The parsing logic for the JVM class file format.
 mod annotation;
 mod attribute;
-mod class_file;
+pub(super) mod class_file;
 mod code;
 pub(super) mod constant_pool;
 pub(super) mod errors;

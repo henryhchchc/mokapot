@@ -3,21 +3,21 @@ use std::io::{Read, Result};
 use crate::jvm::code::ProgramCounter;
 
 pub(super) trait ValueReaderExt: Read {
-    fn read_value<T: Readable>(&mut self) -> Result<T>;
+    fn read_value<T: FromReader>(&mut self) -> Result<T>;
 }
-pub(super) trait Readable {
+pub(super) trait FromReader {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
     where
         Self: Sized;
 }
 
 impl<R: Read + ?Sized> ValueReaderExt for R {
-    fn read_value<T: Readable>(&mut self) -> Result<T> {
+    fn read_value<T: FromReader>(&mut self) -> Result<T> {
         T::from_reader(self)
     }
 }
 
-impl<const N: usize> Readable for [u8; N] {
+impl<const N: usize> FromReader for [u8; N] {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
@@ -25,7 +25,7 @@ impl<const N: usize> Readable for [u8; N] {
     }
 }
 
-impl Readable for ProgramCounter {
+impl FromReader for ProgramCounter {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let inner = u16::from_reader(reader)?;
         Ok(inner.into())
@@ -35,7 +35,7 @@ impl Readable for ProgramCounter {
 macro_rules! impl_readable_for {
     ($($t:ty),*) => {
         $(
-            impl Readable for $t {
+            impl FromReader for $t {
                 fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
                     let buf = reader.read_value()?;
                     Ok(Self::from_be_bytes(buf))

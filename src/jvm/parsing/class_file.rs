@@ -1,4 +1,7 @@
-use std::{io::Read, iter::repeat_with};
+use std::{
+    io::{self, Read},
+    iter::repeat_with,
+};
 
 use itertools::Itertools;
 
@@ -12,30 +15,106 @@ use crate::{
         parsing::{jvm_element_parser::parse_flags, reader_utils::ValueReaderExt},
         references::ClassRef,
     },
-    macros::{extract_attributes, malform},
+    macros::{extract_attributes, malform, see_jvm_spec},
 };
 
-use super::{jvm_element_parser::JvmElement, Context, Error};
+use super::{
+    attribute::AttributeInfo,
+    field_info::FieldInfo,
+    jvm_element_parser::{FromRaw, JvmElement},
+    method_info::MethodInfo,
+    reader_utils::FromReader,
+    Context, Error,
+};
 
-impl Class {
+/// The raw representation of a class file.
+#[doc = see_jvm_spec!(4, 1)]
+#[derive(Debug)]
+pub(crate) struct ClassFile {
+    minor_version: u16,
+    major_version: u16,
+    constant_pool: ConstantPool,
+    access_flags: u16,
+    this_class: u16,
+    super_class: u16,
+    interfaces: Vec<u16>,
+    fields: Vec<FieldInfo>,
+    methods: Vec<MethodInfo>,
+    attributes: Vec<AttributeInfo>,
+}
+
+impl ClassFile {
     const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
 
-    pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
+    pub(crate) fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let magic: u32 = reader.read_value()?;
         if magic != Self::JAVA_CLASS_MAIGC {
             return Err(Error::NotAClassFile);
         }
         let minor_version = reader.read_value()?;
         let major_version = reader.read_value()?;
-        let version = Version::from_versions(major_version, minor_version)?;
-        let constant_pool_count: u16 = reader.read_value()?;
+        let constant_pool_count = reader.read_value()?;
         let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
+        let access_flags = reader.read_value()?;
+        let this_class = reader.read_value()?;
+        let super_class = reader.read_value()?;
+        let interfaces_count: u16 = reader.read_value()?;
+        let interfaces = (0..interfaces_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        let fields_count: u16 = reader.read_value()?;
+        let fields = (0..fields_count)
+            .map(|_| FieldInfo::from_reader(reader))
+            .collect::<io::Result<_>>()?;
+        let methods_count: u16 = reader.read_value()?;
+        let methods = (0..methods_count)
+            .map(|_| MethodInfo::from_reader(reader))
+            .collect::<io::Result<_>>()?;
+        let attributes_count: u16 = reader.read_value()?;
+        let attributes = (0..attributes_count)
+            .map(|_| AttributeInfo::from_reader(reader))
+            .collect::<io::Result<_>>()?;
 
-        let access_flags: class::AccessFlags = parse_flags(reader)?;
-        let this_class_idx = reader.read_value()?;
-        let ClassRef { binary_name } = constant_pool.get_class_ref(this_class_idx)?;
-        let super_class_idx = reader.read_value()?;
-        let super_class = match super_class_idx {
+        let mut should_not_be_filled = [0u8; 1];
+        match reader.read(&mut should_not_be_filled) {
+            Ok(0) => (),
+            _ => return Err(Error::UnexpectedData),
+        }
+
+        Ok(Self {
+            minor_version,
+            major_version,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            attributes,
+        })
+    }
+}
+
+impl Class {
+    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, Error> {
+        let ClassFile {
+            minor_version,
+            major_version,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            attributes,
+        } = raw;
+        let version = Version::from_versions(major_version, minor_version)?;
+        let access_flags = class::AccessFlags::from_bits(access_flags)
+            .ok_or(Error::UnknownFlags("ClassAccessFlags", access_flags))?;
+        let ClassRef { binary_name } = constant_pool.get_class_ref(this_class)?;
+        let super_class = match super_class {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
             0 => malform!("Class must have a super type except for java/lang/Object or a module"),
@@ -50,19 +129,22 @@ impl Class {
 
         let ctx = &parsing_context;
 
-        let interfaces = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
-        let fields = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
-        let methods = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
-        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
-
-        let has_unread_data = {
-            let mut may_remain = [0u8];
-            let remain = Read::read(reader, &mut may_remain)?;
-            remain == 1
-        };
-        if has_unread_data {
-            return Err(Error::UnexpectedData);
-        }
+        let interfaces = interfaces
+            .into_iter()
+            .map(|it| ctx.constant_pool.get_class_ref(it))
+            .collect::<Result<_, _>>()?;
+        let fields = fields
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
+        let methods = methods
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
+        let attributes: Vec<Attribute> = attributes
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
 
         extract_attributes! {
             for attributes in "class_file" {

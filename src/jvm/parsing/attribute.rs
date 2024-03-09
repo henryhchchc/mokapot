@@ -1,29 +1,57 @@
 use std::{
-    io::{Cursor, Read},
+    io::{self, Read},
     iter::repeat_with,
     usize,
 };
 
 use itertools::Itertools;
 
-use crate::jvm::{
-    annotation::{Annotation, ElementValue, Type},
-    class::{
-        BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent, SourceDebugExtension,
+use crate::{
+    jvm::{
+        annotation::{Annotation, ElementValue, Type},
+        class::{
+            BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent, SourceDebugExtension,
+        },
+        code::{LineNumberTableEntry, MethodBody, StackMapFrame},
+        field::ConstantValue,
+        method::ParameterInfo,
+        module::Module,
+        references::{ClassRef, PackageRef},
     },
-    code::{LineNumberTableEntry, MethodBody, StackMapFrame},
-    field::ConstantValue,
-    method::ParameterInfo,
-    module::Module,
-    references::{ClassRef, PackageRef},
+    macros::see_jvm_spec,
 };
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    jvm_element_parser::JvmElement,
-    reader_utils::{read_byte_chunk, ValueReaderExt},
+    jvm_element_parser::{FromRaw, JvmElement},
+    reader_utils::{read_byte_chunk, FromReader, ValueReaderExt},
     Context, Error,
 };
+
+/// Represent an attribute of a class file, method, field, or code.
+#[doc = see_jvm_spec!(4, 7)]
+#[derive(Debug)]
+pub(crate) struct AttributeInfo {
+    name_idx: u16,
+    info: Vec<u8>,
+}
+
+impl AttributeInfo {
+    fn from_raw_parts(name_idx: u16, info: Vec<u8>) -> Self {
+        Self { name_idx, info }
+    }
+}
+
+impl FromReader for AttributeInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let name_idx = reader.read_value()?;
+        let attribute_length: u32 = reader.read_value()?;
+        let attribute_length = usize::try_from(attribute_length)
+            .expect("32-bit size is not supported on the current platform");
+        let info = read_byte_chunk(reader, attribute_length)?;
+        Ok(Self::from_raw_parts(name_idx, info))
+    }
+}
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -99,17 +127,13 @@ impl Attribute {
     }
 }
 
-impl JvmElement for Attribute {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let name_idx = reader.read_value()?;
+impl FromRaw for Attribute {
+    type Raw = AttributeInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let attribute_length: u32 = reader.read_value()?;
-        let reader = {
-            let attribute_length = usize::try_from(attribute_length)
-                .expect("32-bit size is not supported on the current platform");
-            let attribute_bytes = read_byte_chunk(reader, attribute_length)?;
-            &mut Cursor::new(attribute_bytes)
-        };
+        let reader = &mut info.as_slice();
 
         let result = match name {
             "ConstantValue" => JvmElement::parse(reader, ctx).map(Self::ConstantValue),
@@ -183,16 +207,13 @@ impl JvmElement for Attribute {
                 .try_collect()
                 .map(|bytes| Attribute::Unrecognized(name.to_owned(), bytes))
                 .map_err(Into::into),
-        };
-        result.and_then(|attribute| {
-            let bytes_read = u32::try_from(reader.position())
-                .expect("The size of the attribute should fit in u32");
-            if bytes_read == attribute_length {
-                Ok(attribute)
-            } else {
-                Err(Error::UnexpectedData)
-            }
-        })
+        }?;
+        let mut should_not_be_filled = [0u8; 1];
+        match reader.read(&mut should_not_be_filled) {
+            Ok(0) => Ok(result),
+            Ok(_) => Err(Error::UnexpectedData),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

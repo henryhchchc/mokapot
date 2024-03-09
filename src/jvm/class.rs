@@ -16,7 +16,7 @@ use super::{
     field::{ConstantValue, Field},
     method::Method,
     module::Module,
-    parsing::Error,
+    parsing::{class_file::ClassFile, Error},
     references::{ClassRef, FieldRef, MethodRef, PackageRef},
 };
 
@@ -90,7 +90,8 @@ impl Class {
         R: std::io::Read,
     {
         let mut reader = reader;
-        Class::parse(&mut reader)
+        let class_file = ClassFile::from_reader(&mut reader)?;
+        Class::from_raw(class_file)
     }
 
     /// Gets a method of the class by its name and descriptor.

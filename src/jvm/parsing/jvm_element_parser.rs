@@ -4,16 +4,33 @@ use bitflags::Flags;
 use itertools::Itertools;
 
 use super::{
-    reader_utils::{Readable, ValueReaderExt},
+    reader_utils::{FromReader, ValueReaderExt},
     Context, Error,
 };
+
+pub(super) trait FromRaw: Sized {
+    type Raw: Sized;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error>;
+}
+
+impl<T> JvmElement for T
+where
+    T: FromRaw,
+    <T as FromRaw>::Raw: FromReader,
+{
+    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
+        let raw = <T::Raw as FromReader>::from_reader(reader)?;
+        T::from_raw(raw, ctx)
+    }
+}
 
 pub(super) trait JvmElement: Sized {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error>;
 
     fn parse_vec<C, R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Vec<Self>, Error>
     where
-        C: Into<usize> + Readable,
+        C: Into<usize> + FromReader,
     {
         let count: C = reader.read_value()?;
         let count: usize = count.into();
