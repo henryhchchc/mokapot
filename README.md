@@ -21,17 +21,16 @@ The documentation of the latest commit is available at [github.io](https://henry
 
 ### Adding the dependency
 
-Add the following line to the `[dependencies]` section in your `Cargo.toml`.
-
-```toml
-mokapot = "0.12"
+Run the following command in the root directory of your project.
+```sh
+cargo add mokapot
 ```
 
-Alternatively, to follow the latest commit version, add the following line instead.
+Alternatively, to follow the latest commit version, run the following command instead.
 Before building your project, run `cargo update` to fetch the latest commit.
 
-```toml
-mokapot = { git = "https://github.com/henryhchchc/mokapot.git" }
+```sh
+cargo add --git https://github.com/henryhchchc/mokapot.git mokapot
 ```
 
 ### Parsing a class
