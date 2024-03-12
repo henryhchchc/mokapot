@@ -43,7 +43,7 @@ pub enum ElementValue {
     Array(Vec<ElementValue>),
 }
 
-/// Information about the target of a [`self::Type`].
+/// Information about the target of a [`TypeAnnotation`].
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone)]
 pub enum TargetInfo {
