@@ -136,10 +136,25 @@ impl FromRaw for Attribute {
         let reader = &mut info.as_slice();
 
         let result = match name {
-            "ConstantValue" => JvmElement::parse(reader, ctx).map(Self::ConstantValue),
-            "Code" => JvmElement::parse(reader, ctx).map(Self::Code),
+            "ConstantValue" => {
+                let idx = reader.read_value()?;
+                let constant_value = ctx.constant_pool.get_constant_value(idx)?;
+                Ok(Self::ConstantValue(constant_value))
+            }
+            "Code" => {
+                let code = reader.read_value()?;
+                let method_body = MethodBody::from_raw(code, ctx)?;
+                Ok(Self::Code(method_body))
+            }
             "StackMapTable" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::StackMapTable)
+                let number_of_entries: u16 = reader.read_value()?;
+                let entries = (0..number_of_entries)
+                    .map(|_| {
+                        let raw_value = reader.read_value()?;
+                        FromRaw::from_raw(raw_value, ctx)
+                    })
+                    .collect::<Result<_, _>>()?;
+                Ok(Self::StackMapTable(entries))
             }
             "Exceptions" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::Exceptions),
             "InnerClasses" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::InnerClasses),
@@ -208,19 +223,14 @@ impl FromRaw for Attribute {
                 .map(|bytes| Attribute::Unrecognized(name.to_owned(), bytes))
                 .map_err(Into::into),
         }?;
-        let mut should_not_be_filled = [0u8; 1];
-        match reader.read(&mut should_not_be_filled) {
+        match reader.read(&mut [0]) {
             Ok(0) => Ok(result),
-            Ok(_) => Err(Error::UnexpectedData),
+            Ok(_) => Err(Error::IO(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Extra data at the end of the attribute",
+            ))),
             Err(e) => Err(e.into()),
         }
-    }
-}
-
-impl JvmElement for ConstantValue {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let value_index = reader.read_value()?;
-        ctx.constant_pool.get_constant_value(value_index)
     }
 }
 

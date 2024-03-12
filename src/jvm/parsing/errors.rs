@@ -26,9 +26,6 @@ pub enum Error {
     /// An known attribute is found in an unexpected location.
     #[error("Unexpected attribute {0} in {1}")]
     UnexpectedAttribute(String, String),
-    /// There are unread data when the parsing is finished.
-    #[error("Unexpected data at the end of the file")]
-    UnexpectedData,
     /// The value of an element in an annotation is invalid.
     #[error("Invalid element tag {0}")]
     InvalidElementValueTag(char),
@@ -56,9 +53,6 @@ pub enum Error {
     /// The constant pool tag is invalid.
     #[error("Unexpected constant pool tag {0}")]
     UnexpectedConstantPoolTag(u8),
-    /// The buffer does not contain a Java class file.
-    #[error("The buffer does not contains a Java class file")]
-    NotAClassFile,
     /// The jump target is invalid.
     #[error("Invalid jump target: {0}")]
     InvalidJumpTarget(#[from] InvalidOffset),

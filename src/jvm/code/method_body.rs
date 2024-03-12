@@ -282,7 +282,7 @@ pub struct LocalVariableTableEntry {
 /// The type of a value in the stack map table for verification.
 #[doc = see_jvm_spec!(4, 7, 4)]
 #[derive(Debug, Clone)]
-pub enum VerificationTypeInfo {
+pub enum VerificationType {
     /// Indicates that the local variable has the verification type `top`.
     TopVariable,
     /// Indicates that the local variable has the verification type `int`.
@@ -322,7 +322,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The type of the one entry in the operand stack.
-        stack: VerificationTypeInfo,
+        stack: VerificationType,
     },
     /// Indicates that the frame has the same local variables as the previous frame except that the last few local
     /// variables are absent, and that the operand stack is empty.
@@ -340,7 +340,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of additional local variables.
-        locals: Vec<VerificationTypeInfo>,
+        locals: Vec<VerificationType>,
     },
     /// Indicates a new frame.
     /// Corresponds to `full_frame`.
@@ -348,8 +348,8 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of the local variables.
-        locals: Vec<VerificationTypeInfo>,
+        locals: Vec<VerificationType>,
         /// The verification information of the operand stack.
-        stack: Vec<VerificationTypeInfo>,
+        stack: Vec<VerificationType>,
     },
 }

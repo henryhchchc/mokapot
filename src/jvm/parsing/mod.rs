@@ -9,6 +9,7 @@ mod field_info;
 mod jvm_element_parser;
 mod method_info;
 mod module;
+mod raw_attributes;
 mod reader_utils;
 
 use crate::jvm::{class::Version, constant_pool::ConstantPool};

@@ -17,8 +17,9 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::{parse_flags, JvmElement},
-    reader_utils::{read_byte_chunk, ValueReaderExt},
+    jvm_element_parser::{parse_flags, FromRaw, JvmElement},
+    raw_attributes::{self, Code},
+    reader_utils::ValueReaderExt,
     Context, Error,
 };
 
@@ -47,13 +48,20 @@ impl JvmElement for LineNumberTableEntry {
     }
 }
 
-impl JvmElement for ExceptionTableEntry {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let start_pc = reader.read_value()?;
-        let end_pc = reader.read_value()?;
+impl FromRaw for ExceptionTableEntry {
+    type Raw = raw_attributes::ExceptionTableEntry;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let raw_attributes::ExceptionTableEntry {
+            start_pc,
+            end_pc,
+            handler_pc,
+            catch_type_idx,
+        } = raw;
+        let start_pc = ProgramCounter::from(start_pc);
+        let end_pc = ProgramCounter::from(end_pc);
         let covered_pc = start_pc..=end_pc;
-        let handler_pc = reader.read_value()?;
-        let catch_type_idx = reader.read_value()?;
+        let handler_pc = ProgramCounter::from(handler_pc);
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
@@ -129,18 +137,27 @@ impl JvmElement for ParameterInfo {
     }
 }
 
-impl JvmElement for MethodBody {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let max_stack = reader.read_value()?;
-        let max_locals = reader.read_value()?;
-        let code_length: u32 = reader.read_value()?;
-        let code_length = usize::try_from(code_length).expect("32-bit length is not supported");
+impl FromRaw for MethodBody {
+    type Raw = Code;
 
-        let code = read_byte_chunk(reader, code_length)?;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Code {
+            max_stack,
+            max_locals,
+            instruction_bytes: code,
+            exception_table,
+            attributes,
+        } = raw;
         let instructions = Instruction::parse_code(code, ctx)?;
 
-        let exception_table = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
-        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let exception_table = exception_table
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
+        let attributes: Vec<Attribute> = attributes
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" {

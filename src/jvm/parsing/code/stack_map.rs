@@ -1,88 +1,90 @@
-use std::{io::Read, iter::repeat_with};
-
 use crate::jvm::{
-    code::{StackMapFrame, VerificationTypeInfo},
-    parsing::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Context, Error},
+    code::{ProgramCounter, StackMapFrame, VerificationType},
+    parsing::{jvm_element_parser::FromRaw, raw_attributes, Context, Error},
 };
 
-impl JvmElement for StackMapFrame {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let frame_type: u8 = reader.read_value()?;
-        let result = match frame_type {
-            it @ 0..=63 => Self::SameFrame {
-                offset_delta: u16::from(it),
-            },
-            it @ 64..=127 => Self::SameLocals1StackItemFrame {
-                offset_delta: u16::from(it) - 64,
-                stack: JvmElement::parse(reader, ctx)?,
-            },
-            247 => {
-                let offset_delta = reader.read_value()?;
-                let stack = JvmElement::parse(reader, ctx)?;
-                Self::SameLocals1StackItemFrame {
-                    offset_delta,
-                    stack,
-                }
+impl FromRaw for StackMapFrame {
+    type Raw = raw_attributes::StackMapFrameInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        match raw {
+            Self::Raw::SameFrame { frame_type } => Ok(Self::SameFrame {
+                offset_delta: u16::from(frame_type),
+            }),
+            Self::Raw::SameFrameExtended { offset_delta } => Ok(Self::SameFrame { offset_delta }),
+            Self::Raw::SameLocals1StackItemFrame { frame_type, stack } => {
+                Ok(Self::SameLocals1StackItemFrame {
+                    offset_delta: u16::from(frame_type) - 64,
+                    stack: FromRaw::from_raw(stack, ctx)?,
+                })
             }
-            it @ 248..=250 => {
-                let chop_count = 251 - it;
-                let offset_delta = reader.read_value()?;
-                Self::ChopFrame {
+            Self::Raw::SameLocals1StackItemFrameExtended {
+                offset_delta,
+                stack,
+            } => Ok(Self::SameLocals1StackItemFrame {
+                offset_delta,
+                stack: FromRaw::from_raw(stack, ctx)?,
+            }),
+            Self::Raw::ChopFrame {
+                frame_type,
+                offset_delta,
+            } => {
+                let chop_count = 251 - frame_type;
+                Ok(Self::ChopFrame {
                     chop_count,
                     offset_delta,
-                }
+                })
             }
-            251 => {
-                let offset_delta = reader.read_value()?;
-                Self::SameFrame { offset_delta }
-            }
-            it @ 252..=254 => {
-                let offset_delta = reader.read_value()?;
-                let locals_count = it - 251;
-                let locals = repeat_with(|| JvmElement::parse(reader, ctx))
-                    .take(locals_count.into())
+            Self::Raw::AppendFrame {
+                offset_delta,
+                locals,
+            } => Ok(Self::AppendFrame {
+                offset_delta,
+                locals: locals
+                    .into_iter()
+                    .map(|it| FromRaw::from_raw(it, ctx))
+                    .collect::<Result<_, _>>()?,
+            }),
+            Self::Raw::FullFrame {
+                offset_delta,
+                locals,
+                stack,
+            } => {
+                let locals = locals
+                    .into_iter()
+                    .map(|it| FromRaw::from_raw(it, ctx))
                     .collect::<Result<_, _>>()?;
-                Self::AppendFrame {
+                let stack = stack
+                    .into_iter()
+                    .map(|it| FromRaw::from_raw(it, ctx))
+                    .collect::<Result<_, _>>()?;
+                Ok(Self::FullFrame {
                     offset_delta,
                     locals,
-                }
+                    stack,
+                })
             }
-            255 => {
-                let offset_delta = reader.read_value()?;
-                Self::FullFrame {
-                    offset_delta,
-                    locals: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-                    stack: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-                }
-            }
-            _ => Err(Error::UnknownStackMapFrameType(frame_type))?,
-        };
-        Ok(result)
+        }
     }
 }
 
-impl JvmElement for VerificationTypeInfo {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let tag: u8 = reader.read_value()?;
-        let result = match tag {
-            0 => Self::TopVariable,
-            1 => Self::IntegerVariable,
-            2 => Self::FloatVariable,
-            3 => Self::DoubleVariable,
-            4 => Self::LongVariable,
-            5 => Self::NullVariable,
-            6 => Self::UninitializedThisVariable,
-            7 => {
-                let cpool_index = reader.read_value()?;
-                let class_ref = ctx.constant_pool.get_class_ref(cpool_index)?;
-                Self::ObjectVariable(class_ref)
-            }
-            8 => {
-                let offset = reader.read_value()?;
-                Self::UninitializedVariable { offset }
-            }
-            unexpected => Err(Error::InvalidVerificationTypeInfoTag(unexpected))?,
-        };
-        Ok(result)
+impl FromRaw for VerificationType {
+    type Raw = raw_attributes::VerificationTypeInfo;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        match raw {
+            Self::Raw::Top => Ok(Self::TopVariable),
+            Self::Raw::Integer => Ok(Self::IntegerVariable),
+            Self::Raw::Float => Ok(Self::FloatVariable),
+            Self::Raw::Double => Ok(Self::DoubleVariable),
+            Self::Raw::Long => Ok(Self::LongVariable),
+            Self::Raw::Null => Ok(Self::NullVariable),
+            Self::Raw::UninitializedThis => Ok(Self::UninitializedThisVariable),
+            Self::Raw::Object { class_info_index } => Ok(Self::ObjectVariable(
+                ctx.constant_pool.get_class_ref(class_info_index)?,
+            )),
+            Self::Raw::Uninitialized { offset } => Ok(Self::UninitializedVariable {
+                offset: ProgramCounter::from(offset),
+            }),
+        }
     }
 }
