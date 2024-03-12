@@ -9,7 +9,7 @@ fn get_test_class() -> Class {
         env!("OUT_DIR"),
         "/java_classes/org/mokapot/test/TestAnalysis.class"
     ));
-    Class::from_reader(&bytes[..]).unwrap()
+    Class::parse(&bytes[..]).unwrap()
 }
 
 fn get_test_method() -> Method {

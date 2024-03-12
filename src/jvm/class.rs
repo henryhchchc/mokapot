@@ -16,7 +16,7 @@ use super::{
     field::{ConstantValue, Field},
     method::Method,
     module::Module,
-    parsing::{class_file::ClassFile, Error},
+    parsing::Error,
     references::{ClassRef, FieldRef, MethodRef, PackageRef},
 };
 
@@ -82,18 +82,6 @@ pub struct Class {
 }
 
 impl Class {
-    /// Parses a class file from the given reader.
-    /// # Errors
-    /// See [`Error`] for more information.
-    pub fn from_reader<R>(reader: R) -> Result<Class, Error>
-    where
-        R: std::io::Read,
-    {
-        let mut reader = reader;
-        let class_file = ClassFile::from_reader(&mut reader)?;
-        Class::from_raw(class_file)
-    }
-
     /// Gets a method of the class by its name and descriptor.
     #[must_use]
     pub fn get_method(&self, name: &str, descriptor: &MethodDescriptor) -> Option<&Method> {

@@ -1,4 +1,4 @@
-use std::io::BufReader;
+use std::io::{self, BufReader};
 
 use mokapot::{
     jvm::{
@@ -28,7 +28,7 @@ macro_rules! test_data_class {
 
 fn parse_my_class() -> Result<Class, Error> {
     let bytes = test_data_class!("", "org/pkg/MyClass");
-    Class::from_reader(bytes)
+    Class::parse(bytes)
 }
 
 /// Parse classes in OpenJDK test data
@@ -54,7 +54,7 @@ fn parse_openjdk_test_data() {
         test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner"),
     ];
     for bytes in test_data {
-        assert!(Class::from_reader(bytes).is_ok())
+        assert!(Class::parse(bytes).is_ok())
     }
 }
 
@@ -133,7 +133,7 @@ fn parse_complicated_class() -> Class {
         "/java_classes/org/mokapot/test/ComplicatedClass.class"
     ));
     let reader = BufReader::new(&bytes[..]);
-    Class::from_reader(reader).unwrap()
+    Class::parse(reader).unwrap()
 }
 
 fn parse_complicated_inner_class() -> Class {
@@ -142,7 +142,7 @@ fn parse_complicated_inner_class() -> Class {
         "/java_classes/org/mokapot/test/ComplicatedClass$InnerClass.class"
     ));
     let reader = BufReader::new(&bytes[..]);
-    Class::from_reader(reader).unwrap()
+    Class::parse(reader).unwrap()
 }
 
 fn parse_complicated_in_method_class() -> Class {
@@ -151,7 +151,7 @@ fn parse_complicated_in_method_class() -> Class {
         "/java_classes/org/mokapot/test/ComplicatedClass$1Test.class"
     ));
     let reader = BufReader::new(&bytes[..]);
-    Class::from_reader(reader).unwrap()
+    Class::parse(reader).unwrap()
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn not_a_class_file() {
         "/test_data/MyClass.java"
     ));
     assert!(matches!(
-        Class::from_reader(bytes.as_slice()),
-        Err(Error::NotAClassFile)
+        Class::parse(bytes.as_slice()),
+        Err(Error::IO(e)) if e.kind() == io::ErrorKind::InvalidData
     ));
 }

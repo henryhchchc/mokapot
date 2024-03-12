@@ -45,7 +45,7 @@ impl ClassPath for MockClassPath<'_> {
             env!("OUT_DIR"),
             "/java_classes/org/pkg/MyClass.class"
         ));
-        Class::from_reader(reader.as_slice()).map_err(Into::into)
+        Class::parse(reader.as_slice()).map_err(Into::into)
     }
 }
 

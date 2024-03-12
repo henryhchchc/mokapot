@@ -1,4 +1,7 @@
-use std::{io::Read, str::FromStr};
+use std::{
+    io::{self, Read},
+    str::FromStr,
+};
 
 use super::{
     reader_utils::{read_byte_chunk, ValueReaderExt},
@@ -213,8 +216,8 @@ impl ConstantPool {
 }
 
 impl Entry {
-    pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
-        let tag = reader.read_value()?;
+    pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let tag: u8 = reader.read_value()?;
         match tag {
             1 => Self::parse_utf8(reader),
             3 => reader.read_value().map(Self::Integer).map_err(Into::into),
@@ -264,11 +267,14 @@ impl Entry {
             20 => Ok(Self::Package {
                 name_index: reader.read_value()?,
             }),
-            it => Err(Error::UnexpectedConstantPoolTag(it)),
+            it => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid constant pool tag: {it}"),
+            )),
         }
     }
 
-    fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
+    fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let length: u16 = reader.read_value()?;
         let cesu8_content = read_byte_chunk(reader, length.into())?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {

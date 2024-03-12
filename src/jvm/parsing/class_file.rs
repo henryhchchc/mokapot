@@ -42,14 +42,30 @@ pub(crate) struct ClassFile {
     methods: Vec<MethodInfo>,
     attributes: Vec<AttributeInfo>,
 }
+const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
 
-impl ClassFile {
-    const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
+impl Class {
+    /// Parses a class file from the given reader.
+    /// # Errors
+    /// See [`Error`] for more information.
+    pub fn parse<R>(reader: R) -> Result<Class, Error>
+    where
+        R: std::io::Read,
+    {
+        let mut reader = reader;
+        let class_file = ClassFile::from_reader(&mut reader)?;
+        Class::from_raw(class_file)
+    }
+}
 
-    pub(crate) fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
+impl FromReader for ClassFile {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let magic: u32 = reader.read_value()?;
-        if magic != Self::JAVA_CLASS_MAIGC {
-            return Err(Error::NotAClassFile);
+        if magic != JAVA_CLASS_MAIGC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "This is not a Java class file",
+            ));
         }
         let minor_version = reader.read_value()?;
         let major_version = reader.read_value()?;
@@ -78,7 +94,7 @@ impl ClassFile {
         let mut should_not_be_filled = [0u8; 1];
         match reader.read(&mut should_not_be_filled) {
             Ok(0) => (),
-            _ => return Err(Error::UnexpectedData),
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Extra data")),
         }
 
         Ok(Self {
