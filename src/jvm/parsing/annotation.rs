@@ -1,7 +1,7 @@
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
     code::LocalVariableId,
-    field::ConstantValue,
+    field::{ConstantValue, JavaString},
 };
 
 use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
@@ -158,15 +158,13 @@ impl FromRaw for ElementValue {
                     Err(Error::Other("Expecte long constant value"))
                 }
             }
-            Self::Raw::ConstValue(b's', const_value_index) => {
-                if let const_value @ ConstantValue::String(_) =
-                    ctx.constant_pool.get_constant_value(const_value_index)?
-                {
-                    Ok(Self::Constant(const_value))
-                } else {
-                    Err(Error::Other("Expecte string constant value"))
-                }
-            }
+            Self::Raw::ConstValue(b's', const_value_index) => ctx
+                .constant_pool
+                .get_str(const_value_index)
+                .map(ToOwned::to_owned)
+                .map(JavaString::Utf8)
+                .map(ConstantValue::String)
+                .map(Self::Constant),
             Self::Raw::ConstValue(_, _) => Err(Error::Other("Invalid constant value tag")),
             Self::Raw::EnumConstValue {
                 type_name_index,
