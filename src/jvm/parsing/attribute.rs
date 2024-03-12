@@ -8,10 +8,8 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
-        annotation::{Annotation, ElementValue, Type},
-        class::{
-            BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent, SourceDebugExtension,
-        },
+        annotation::{Annotation, ElementValue, TypeAnnotation},
+        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         field::ConstantValue,
         method::ParameterInfo,
@@ -24,6 +22,7 @@ use crate::{
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::{FromRaw, JvmElement},
+    raw_attributes,
     reader_utils::{read_byte_chunk, FromReader, ValueReaderExt},
     Context, Error,
 };
@@ -67,15 +66,15 @@ pub(crate) enum Attribute {
     Deprecated,
     EnclosingMethod(EnclosingMethod),
     Signature(String),
-    SourceDebugExtension(SourceDebugExtension),
+    SourceDebugExtension(Vec<u8>),
     LocalVariableTable(Vec<LocalVariableDescAttr>),
     LocalVariableTypeTable(Vec<LocalVariableTypeAttr>),
     RuntimeVisibleAnnotations(Vec<Annotation>),
     RuntimeInvisibleAnnotations(Vec<Annotation>),
     RuntimeVisibleParameterAnnotations(Vec<Vec<Annotation>>),
     RuntimeInvisibleParameterAnnotations(Vec<Vec<Annotation>>),
-    RuntimeVisibleTypeAnnotations(Vec<Type>),
-    RuntimeInvisibleTypeAnnotations(Vec<Type>),
+    RuntimeVisibleTypeAnnotations(Vec<TypeAnnotation>),
+    RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation>),
     AnnotationDefault(ElementValue),
     BootstrapMethods(Vec<BootstrapMethod>),
     MethodParameters(Vec<ParameterInfo>),
@@ -127,6 +126,19 @@ impl Attribute {
     }
 }
 
+macro_rules! parse_multiple {
+    ($len_type:ty; $reader:expr, || $with:block) => {{
+        let count: $len_type = $reader.read_value()?;
+        (0..count).map(|_| $with).try_collect()
+    }};
+    ($len_type:ty; $reader:expr, $ctx:expr) => {
+        parse_multiple![$len_type; $reader, || {
+            let raw = FromReader::from_reader($reader)?;
+            FromRaw::from_raw(raw, $ctx)
+        }]
+    };
+}
+
 impl FromRaw for Attribute {
     type Raw = AttributeInfo;
 
@@ -138,42 +150,49 @@ impl FromRaw for Attribute {
         let result = match name {
             "ConstantValue" => {
                 let idx = reader.read_value()?;
-                let constant_value = ctx.constant_pool.get_constant_value(idx)?;
-                Ok(Self::ConstantValue(constant_value))
+                ctx.constant_pool
+                    .get_constant_value(idx)
+                    .map(Self::ConstantValue)
             }
             "Code" => {
                 let code = reader.read_value()?;
-                let method_body = MethodBody::from_raw(code, ctx)?;
-                Ok(Self::Code(method_body))
+                MethodBody::from_raw(code, ctx).map(Self::Code)
             }
-            "StackMapTable" => {
-                let number_of_entries: u16 = reader.read_value()?;
-                let entries = (0..number_of_entries)
-                    .map(|_| {
-                        let raw_value = reader.read_value()?;
-                        FromRaw::from_raw(raw_value, ctx)
-                    })
-                    .collect::<Result<_, _>>()?;
-                Ok(Self::StackMapTable(entries))
+            "StackMapTable" => parse_multiple![u16; reader, ctx].map(Self::StackMapTable),
+            "Exceptions" => parse_multiple![u16; reader, || {
+                let idx = reader.read_value()?;
+                ctx.constant_pool.get_class_ref(idx)
+            }]
+            .map(Self::Exceptions),
+            "InnerClasses" => parse_multiple![u16; reader, ctx].map(Self::InnerClasses),
+            "EnclosingMethod" => {
+                let raw_attr = reader.read_value()?;
+                FromRaw::from_raw(raw_attr, ctx).map(Self::EnclosingMethod)
             }
-            "Exceptions" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::Exceptions),
-            "InnerClasses" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::InnerClasses),
-            "EnclosingMethod" => JvmElement::parse(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => JvmElement::parse(reader, ctx).map(Self::Signature),
-            "SourceFile" => JvmElement::parse(reader, ctx).map(Self::SourceFile),
+            "Signature" => {
+                let str_idx = reader.read_value()?;
+                ctx.constant_pool
+                    .get_str(str_idx)
+                    .map(str::to_owned)
+                    .map(Self::Signature)
+            }
+            "SourceFile" => {
+                let str_idx = reader.read_value()?;
+                ctx.constant_pool
+                    .get_str(str_idx)
+                    .map(str::to_owned)
+                    .map(Self::SourceFile)
+            }
             "SourceDebugExtension" => {
-                JvmElement::parse(reader, ctx).map(Self::SourceDebugExtension)
+                let bytes = reader.bytes().try_collect()?;
+                Ok(Self::SourceDebugExtension(bytes))
             }
-            "LineNumberTable" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::LineNumberTable)
-            }
-            "LocalVariableTable" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::LocalVariableTable)
-            }
+            "LineNumberTable" => parse_multiple![u16; reader, ctx].map(Self::LineNumberTable),
+            "LocalVariableTable" => parse_multiple![u16; reader, ctx].map(Self::LocalVariableTable),
             "LocalVariableTypeTable" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::LocalVariableTypeTable)
+                parse_multiple![u16; reader, ctx].map(Self::LocalVariableTypeTable)
             }
             "RuntimeVisibleAnnotations" => {
                 JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::RuntimeVisibleAnnotations)
@@ -233,12 +252,15 @@ impl FromRaw for Attribute {
         }
     }
 }
+impl FromRaw for EnclosingMethod {
+    type Raw = raw_attributes::EnclosingMethod;
 
-impl JvmElement for EnclosingMethod {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let class_index = reader.read_value()?;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            class_index,
+            method_index,
+        } = raw;
         let class = ctx.constant_pool.get_class_ref(class_index)?;
-        let method_index = reader.read_value()?;
         let method_name_and_desc = if method_index > 0 {
             let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
             Some(name_and_desc)

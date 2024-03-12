@@ -8,11 +8,11 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         class::{
-            self, BootstrapMethod, Class, InnerClassInfo, RecordComponent, SourceDebugExtension,
+            self, BootstrapMethod, Class, InnerClassInfo, NestedClassAccessFlags, RecordComponent,
             Version,
         },
         constant_pool::ConstantPool,
-        parsing::{jvm_element_parser::parse_flags, reader_utils::ValueReaderExt},
+        parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
     },
     macros::{extract_attributes, malform, see_jvm_spec},
@@ -23,6 +23,7 @@ use super::{
     field_info::FieldInfo,
     jvm_element_parser::{FromRaw, JvmElement},
     method_info::MethodInfo,
+    raw_attributes,
     reader_utils::FromReader,
     Context, Error,
 };
@@ -237,28 +238,36 @@ impl JvmElement for BootstrapMethod {
     }
 }
 
-impl JvmElement for InnerClassInfo {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let inner_class = JvmElement::parse(reader, ctx)?;
-        let outer_class_info_index = reader.read_value()?;
+impl FromRaw for InnerClassInfo {
+    type Raw = raw_attributes::InnerClass;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            inner_class_info_index,
+            outer_class_info_index,
+            inner_name_index,
+            inner_class_access_flags,
+        } = raw;
+        let inner_class = ctx.constant_pool.get_class_ref(inner_class_info_index)?;
         let outer_class = if outer_class_info_index == 0 {
             None
         } else {
             let the_class = ctx.constant_pool.get_class_ref(outer_class_info_index)?;
             Some(the_class)
         };
-        let inner_name_index = reader.read_value()?;
         let inner_name = if inner_name_index == 0 {
             None
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let inner_class_access_flags = parse_flags(reader)?;
+        let access_flags = NestedClassAccessFlags::from_bits(inner_class_access_flags).ok_or(
+            Error::UnknownFlags("NextClassAccessFlags", inner_class_access_flags),
+        )?;
         Ok(Self {
             inner_class,
             outer_class,
             inner_name,
-            inner_class_access_flags,
+            access_flags,
         })
     }
 }
@@ -299,13 +308,5 @@ impl JvmElement for ClassRef {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let class_info_idx = reader.read_value()?;
         ctx.constant_pool.get_class_ref(class_info_idx)
-    }
-}
-
-impl JvmElement for SourceDebugExtension {
-    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &Context) -> Result<Self, Error> {
-        let mut content = Vec::new();
-        reader.read_to_end(&mut content)?;
-        Ok(Self::new(content))
     }
 }

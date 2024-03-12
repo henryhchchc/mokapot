@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    annotation::{Annotation, Type},
+    annotation::{Annotation, TypeAnnotation},
     field::{ConstantValue, Field},
     method::Method,
     module::Module,
@@ -46,15 +46,15 @@ pub struct Class {
     /// The outer class and method of the class.
     pub enclosing_method: Option<EnclosingMethod>,
     /// The source debug extension.
-    pub source_debug_extension: Option<SourceDebugExtension>,
+    pub source_debug_extension: Option<Vec<u8>>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<Type>,
+    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<Type>,
+    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// The bootstrap methods of the class, which are used to generate dynamic callsites.
     pub bootstrap_methods: Vec<BootstrapMethod>,
     /// The infomation of the module if the class is `module-info`.
@@ -264,7 +264,7 @@ pub struct InnerClassInfo {
     /// The name of the inner class.
     pub inner_name: Option<String>,
     /// The access flags of the inner class.
-    pub inner_class_access_flags: NestedClassAccessFlags,
+    pub access_flags: NestedClassAccessFlags,
 }
 
 /// The information of an enclosing method of a [`Class`].
@@ -283,25 +283,6 @@ pub struct BootstrapMethod {
     pub method: MethodHandle,
     /// The argument that are passed to the bootstrap method.
     pub arguments: Vec<ConstantValue>,
-}
-
-/// The source debug extension.
-#[doc = see_jvm_spec!(4, 7, 11)]
-#[derive(Debug, Clone)]
-pub struct SourceDebugExtension(Vec<u8>);
-
-impl SourceDebugExtension {
-    /// Creates a new source debug extension.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        SourceDebugExtension(bytes)
-    }
-
-    /// Gets the bytes of the source debug extension.
-    #[must_use]
-    pub fn bytes(&self) -> &[u8] {
-        &self.0
-    }
 }
 
 /// A method handle.
@@ -342,9 +323,9 @@ pub struct RecordComponent {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<Type>,
+    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<Type>,
+    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }

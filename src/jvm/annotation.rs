@@ -120,7 +120,8 @@ pub enum TypePathElement {
 /// An type annotation on a class, field, method, or parameter.
 #[doc = see_jvm_spec!(4, 7, 20)]
 #[derive(Debug, Clone)]
-pub struct Type {
+#[allow(clippy::module_name_repetitions, /* reason = "To be consistent with JVM spec" */)]
+pub struct TypeAnnotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
     /// Denotes which type of declaration this annotation is on.

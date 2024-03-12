@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::{
-    jvm::{annotation::Type, constant_pool::ConstantPool, parsing::Error, references::ClassRef},
+    jvm::{
+        annotation::TypeAnnotation, constant_pool::ConstantPool, parsing::Error,
+        references::ClassRef,
+    },
     macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
 };
@@ -31,9 +34,9 @@ pub struct MethodBody {
     /// The stack map table.
     pub stack_map_table: Option<Vec<StackMapFrame>>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<Type>,
+    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<Type>,
+    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }

@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    annotation::{Annotation, ElementValue, Type},
+    annotation::{Annotation, ElementValue, TypeAnnotation},
     code::MethodBody,
     references::{ClassRef, MethodRef},
 };
@@ -34,9 +34,9 @@ pub struct Method {
     /// The runtime invisible annotations.
     pub runtime_invisible_annotations: Vec<Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<Type>,
+    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<Type>,
+    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime visible parameter annotations.
     pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
     /// The runtime invisible parameter annotations.

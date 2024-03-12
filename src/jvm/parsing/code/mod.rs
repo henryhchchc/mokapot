@@ -2,7 +2,10 @@ pub(super) mod instruction_impl;
 pub(super) mod raw_instruction;
 pub(super) mod stack_map;
 
-use std::{io::Read, str::FromStr};
+use std::{
+    io::{self, Read},
+    str::FromStr,
+};
 
 use crate::{
     jvm::{
@@ -19,7 +22,7 @@ use crate::{
 use super::{
     jvm_element_parser::{parse_flags, FromRaw, JvmElement},
     raw_attributes::{self, Code},
-    reader_utils::ValueReaderExt,
+    reader_utils::{FromReader, ValueReaderExt},
     Context, Error,
 };
 
@@ -37,11 +40,19 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl JvmElement for LineNumberTableEntry {
-    fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &Context) -> Result<Self, Error> {
+impl FromRaw for LineNumberTableEntry {
+    type Raw = Self;
+
+    fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
+        Ok(raw)
+    }
+}
+
+impl FromReader for LineNumberTableEntry {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
-        Ok(Self {
+        Ok(LineNumberTableEntry {
             start_pc,
             line_number,
         })
@@ -75,20 +86,24 @@ impl FromRaw for ExceptionTableEntry {
     }
 }
 
-impl JvmElement for LocalVariableDescAttr {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
+impl FromRaw for LocalVariableDescAttr {
+    type Raw = raw_attributes::LocalVariableInfo;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            start_pc,
+            length,
+            name_index,
+            desc_or_signature_idx,
+            index,
+        } = raw;
+
         let effective_range = {
-            let start_pc: ProgramCounter = reader.read_value()?;
-            let length = reader.read_value::<u16>()?;
             let end_pc = start_pc.offset(i32::from(length))?;
             start_pc..end_pc
         };
-        let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor_index = reader.read_value()?;
-        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
+        let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx)?;
         let field_type = FieldType::from_str(descriptor)?;
-        let index = reader.read_value()?;
         let id = LocalVariableId {
             effective_range,
             index,
@@ -100,19 +115,23 @@ impl JvmElement for LocalVariableDescAttr {
         })
     }
 }
-impl JvmElement for LocalVariableTypeAttr {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
+impl FromRaw for LocalVariableTypeAttr {
+    type Raw = raw_attributes::LocalVariableInfo;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            start_pc,
+            length,
+            name_index,
+            desc_or_signature_idx,
+            index,
+        } = raw;
+
         let effective_range = {
-            let start_pc: ProgramCounter = reader.read_value()?;
-            let length = reader.read_value::<u16>()?;
             let end_pc = start_pc.offset(i32::from(length))?;
             start_pc..end_pc
         };
-        let name_index = reader.read_value()?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let signature_index = reader.read_value()?;
-        let signature = ctx.constant_pool.get_str(signature_index)?.to_owned();
-        let index = reader.read_value()?;
+        let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
         let id = LocalVariableId {
             effective_range,
             index,

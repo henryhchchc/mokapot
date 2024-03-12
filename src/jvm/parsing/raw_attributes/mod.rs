@@ -1,6 +1,7 @@
 use std::io;
 use std::io::prelude::Read;
 
+use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 
 use super::attribute::AttributeInfo;
@@ -183,6 +184,120 @@ impl FromReader for VerificationTypeInfo {
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown verification type tag: {tag}"),
+            )),
+        }
+    }
+}
+
+pub struct InnerClass {
+    pub inner_class_info_index: u16,
+    pub outer_class_info_index: u16,
+    pub inner_name_index: u16,
+    pub inner_class_access_flags: u16,
+}
+
+impl FromReader for InnerClass {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            inner_class_info_index: reader.read_value()?,
+            outer_class_info_index: reader.read_value()?,
+            inner_name_index: reader.read_value()?,
+            inner_class_access_flags: reader.read_value()?,
+        })
+    }
+}
+
+pub struct EnclosingMethod {
+    pub class_index: u16,
+    pub method_index: u16,
+}
+
+impl FromReader for EnclosingMethod {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            class_index: reader.read_value()?,
+            method_index: reader.read_value()?,
+        })
+    }
+}
+
+pub struct LocalVariableInfo {
+    pub start_pc: ProgramCounter,
+    pub length: u16,
+    pub name_index: u16,
+    pub desc_or_signature_idx: u16,
+    pub index: u16,
+}
+
+impl FromReader for LocalVariableInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            start_pc: reader.read_value()?,
+            length: reader.read_value()?,
+            name_index: reader.read_value()?,
+            desc_or_signature_idx: reader.read_value()?,
+            index: reader.read_value()?,
+        })
+    }
+}
+
+pub struct Annotation {
+    pub type_index: u16,
+    pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
+}
+
+impl FromReader for Annotation {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let type_index = reader.read_value()?;
+        let num_element_value_pairs: u16 = reader.read_value()?;
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_index = reader.read_value()?;
+                let element_value = reader.read_value()?;
+                Ok((element_name_index, element_value))
+            })
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            type_index,
+            element_value_pairs,
+        })
+    }
+}
+
+pub enum ElementValueInfo {
+    ConstValue(u8, u16),
+    EnumConstValue {
+        type_name_index: u16,
+        const_name_index: u16,
+    },
+    ClassInfo(u16),
+    AnnotationValue(Annotation),
+    ArrayValue(Vec<ElementValueInfo>),
+}
+
+impl FromReader for ElementValueInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let tag: u8 = reader.read_value()?;
+        match tag {
+            tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
+                Ok(Self::ConstValue(tag, reader.read_value()?))
+            }
+            b'e' => Ok(Self::EnumConstValue {
+                type_name_index: reader.read_value()?,
+                const_name_index: reader.read_value()?,
+            }),
+            b'c' => Ok(Self::ClassInfo(reader.read_value()?)),
+            b'@' => Ok(Self::AnnotationValue(reader.read_value()?)),
+            b'[' => {
+                let num_values: u16 = reader.read_value()?;
+                let values = (0..num_values)
+                    .map(|_| reader.read_value())
+                    .collect::<io::Result<_>>()?;
+                Ok(Self::ArrayValue(values))
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unknown element value tag: {tag}"),
             )),
         }
     }

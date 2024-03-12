@@ -1,12 +1,17 @@
 use std::{io::Read, iter::repeat_with};
 
 use crate::jvm::{
-    annotation::{Annotation, ElementValue, TargetInfo, Type, TypePathElement},
+    annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
     code::LocalVariableId,
-    field::{ConstantValue, JavaString},
+    field::ConstantValue,
 };
 
-use super::{jvm_element_parser::JvmElement, reader_utils::ValueReaderExt, Context, Error};
+use super::{
+    jvm_element_parser::{FromRaw, JvmElement},
+    raw_attributes,
+    reader_utils::ValueReaderExt,
+    Context, Error,
+};
 
 impl JvmElement for TypePathElement {
     fn parse<R: Read + ?Sized>(reader: &mut R, _ctx: &Context) -> Result<Self, Error> {
@@ -22,16 +27,20 @@ impl JvmElement for TypePathElement {
     }
 }
 
-impl JvmElement for Annotation {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let type_idx = reader.read_value()?;
-        let annotation_type = ctx.constant_pool.get_str(type_idx)?.parse()?;
-        let num_element_value_pairs: u16 = reader.read_value()?;
-        let element_value_pairs = (0..num_element_value_pairs)
-            .map(|_| {
-                let element_name_idx = reader.read_value()?;
-                let element_name = ctx.constant_pool.get_str(element_name_idx)?;
-                let element_value = ElementValue::parse(reader, ctx)?;
+impl FromRaw for Annotation {
+    type Raw = raw_attributes::Annotation;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            type_index,
+            element_value_pairs,
+        } = raw;
+        let annotation_type = ctx.constant_pool.get_str(type_index)?.parse()?;
+        let element_value_pairs = element_value_pairs
+            .into_iter()
+            .map(|(name_idx, raw_value)| {
+                let element_name = ctx.constant_pool.get_str(name_idx)?;
+                let element_value = ElementValue::from_raw(raw_value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, Error>>()?;
@@ -41,7 +50,7 @@ impl JvmElement for Annotation {
         })
     }
 }
-impl JvmElement for Type {
+impl JvmElement for TypeAnnotation {
     fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
         let target_type = reader.read_value()?;
         let target_info = match target_type {
@@ -104,7 +113,7 @@ impl JvmElement for Type {
                 Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, Error>>()?;
-        Ok(Type {
+        Ok(TypeAnnotation {
             annotation_type,
             target_info,
             target_path,
@@ -113,52 +122,82 @@ impl JvmElement for Type {
     }
 }
 
-impl JvmElement for ElementValue {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let tag: u8 = reader.read_value()?;
+impl FromRaw for ElementValue {
+    type Raw = raw_attributes::ElementValueInfo;
 
-        match tag as char {
-            it @ ('B' | 'C' | 'I' | 'S' | 'Z' | 'D' | 'F' | 'J') => {
-                let const_value_index = reader.read_value()?;
-                let const_value = ctx.constant_pool.get_constant_value(const_value_index)?;
-                match (it, &const_value) {
-                    ('B' | 'C' | 'I' | 'S' | 'Z', ConstantValue::Integer(_))
-                    | ('D', ConstantValue::Double(_))
-                    | ('F', ConstantValue::Float(_))
-                    | ('J', ConstantValue::Long(_)) => Ok(Self::Constant(const_value)),
-                    _ => Err(Error::Other(
-                        "Primitive element tag must point to primitive constant values",
-                    )),
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        match raw {
+            Self::Raw::ConstValue(b'B' | b'C' | b'I' | b'S' | b'Z', const_value_index) => {
+                if let const_value @ ConstantValue::Integer(_) =
+                    ctx.constant_pool.get_constant_value(const_value_index)?
+                {
+                    Ok(Self::Constant(const_value))
+                } else {
+                    Err(Error::Other("Expecte integer constant value"))
                 }
             }
-            's' => {
-                let utf8_idx = reader.read_value()?;
-                let str = ctx.constant_pool.get_str(utf8_idx)?;
-                Ok(Self::Constant(ConstantValue::String(JavaString::Utf8(
-                    str.to_owned(),
-                ))))
+            Self::Raw::ConstValue(b'D', const_value_index) => {
+                if let const_value @ ConstantValue::Double(_) =
+                    ctx.constant_pool.get_constant_value(const_value_index)?
+                {
+                    Ok(Self::Constant(const_value))
+                } else {
+                    Err(Error::Other("Expecte double constant value"))
+                }
             }
-            'e' => {
-                let enum_type_name_idx = reader.read_value()?;
-                let enum_type = ctx.constant_pool.get_str(enum_type_name_idx)?;
-                let const_name_idx = reader.read_value()?;
-                let const_name = ctx.constant_pool.get_str(const_name_idx)?.to_owned();
+            Self::Raw::ConstValue(b'F', const_value_index) => {
+                if let const_value @ ConstantValue::Float(_) =
+                    ctx.constant_pool.get_constant_value(const_value_index)?
+                {
+                    Ok(Self::Constant(const_value))
+                } else {
+                    Err(Error::Other("Expecte float constant value"))
+                }
+            }
+            Self::Raw::ConstValue(b'J', const_value_index) => {
+                if let const_value @ ConstantValue::Long(_) =
+                    ctx.constant_pool.get_constant_value(const_value_index)?
+                {
+                    Ok(Self::Constant(const_value))
+                } else {
+                    Err(Error::Other("Expecte long constant value"))
+                }
+            }
+            Self::Raw::ConstValue(b's', const_value_index) => {
+                if let const_value @ ConstantValue::String(_) =
+                    ctx.constant_pool.get_constant_value(const_value_index)?
+                {
+                    Ok(Self::Constant(const_value))
+                } else {
+                    Err(Error::Other("Expecte string constant value"))
+                }
+            }
+            Self::Raw::ConstValue(_, _) => Err(Error::Other("Invalid constant value tag")),
+            Self::Raw::EnumConstValue {
+                type_name_index,
+                const_name_index,
+            } => {
+                let enum_type = ctx.constant_pool.get_str(type_name_index)?.to_owned();
+                let const_name = ctx.constant_pool.get_str(const_name_index)?.to_owned();
                 Ok(Self::EnumConstant {
-                    enum_type_name: enum_type.to_owned(),
+                    enum_type_name: enum_type,
                     const_name,
                 })
             }
-            'c' => {
-                let class_info_idx = reader.read_value()?;
-                let return_descriptor = ctx.constant_pool.get_str(class_info_idx)?.parse()?;
+            Self::Raw::ClassInfo(class_info_index) => {
+                let return_descriptor = ctx.constant_pool.get_str(class_info_index)?.parse()?;
                 Ok(Self::Class { return_descriptor })
             }
-            '@' => Annotation::parse(reader, ctx).map(Self::AnnotationInterface),
-            '[' => {
-                let values = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+            Self::Raw::AnnotationValue(annotation) => Ok(Self::AnnotationInterface(
+                Annotation::from_raw(annotation, ctx)?,
+            )),
+            Self::Raw::ArrayValue(values) => {
+                let values = values
+                    .into_iter()
+                    .map(|raw_value| FromRaw::from_raw(raw_value, ctx))
+                    .collect::<Result<_, _>>()?;
                 Ok(Self::Array(values))
             }
-            unexpected => Err(Error::InvalidElementValueTag(unexpected)),
         }
     }
 }
