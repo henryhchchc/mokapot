@@ -1,6 +1,5 @@
 use std::{
     io::{self, Read},
-    iter::repeat_with,
     usize,
 };
 
@@ -126,8 +125,15 @@ impl Attribute {
     }
 }
 
+macro_rules! parse_from_raw {
+    ($reader:expr, $ctx:expr) => {{
+        let raw_attr = $reader.read_value()?;
+        FromRaw::from_raw(raw_attr, $ctx)
+    }};
+}
+
 macro_rules! parse_multiple {
-    ($len_type:ty; $reader:expr, || $with:block) => {{
+    ($len_type:ty; $reader:expr, || $with:expr) => {{
         let count: $len_type = $reader.read_value()?;
         (0..count).map(|_| $with).try_collect()
     }};
@@ -154,10 +160,7 @@ impl FromRaw for Attribute {
                     .get_constant_value(idx)
                     .map(Self::ConstantValue)
             }
-            "Code" => {
-                let code = reader.read_value()?;
-                MethodBody::from_raw(code, ctx).map(Self::Code)
-            }
+            "Code" => MethodBody::from_raw(reader.read_value()?, ctx).map(Self::Code),
             "StackMapTable" => parse_multiple![u16; reader, ctx].map(Self::StackMapTable),
             "Exceptions" => parse_multiple![u16; reader, || {
                 let idx = reader.read_value()?;
@@ -165,10 +168,7 @@ impl FromRaw for Attribute {
             }]
             .map(Self::Exceptions),
             "InnerClasses" => parse_multiple![u16; reader, ctx].map(Self::InnerClasses),
-            "EnclosingMethod" => {
-                let raw_attr = reader.read_value()?;
-                FromRaw::from_raw(raw_attr, ctx).map(Self::EnclosingMethod)
-            }
+            "EnclosingMethod" => parse_from_raw!(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
             "Signature" => {
@@ -195,29 +195,25 @@ impl FromRaw for Attribute {
                 parse_multiple![u16; reader, ctx].map(Self::LocalVariableTypeTable)
             }
             "RuntimeVisibleAnnotations" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::RuntimeVisibleAnnotations)
+                parse_multiple![u16; reader, ctx].map(Self::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::RuntimeInvisibleAnnotations)
+                parse_multiple![u16; reader, ctx].map(Self::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                let num_parameters: u8 = reader.read_value()?;
-                repeat_with(|| JvmElement::parse_vec::<u16, _>(reader, ctx))
-                    .take(num_parameters.into())
-                    .collect::<Result<_, _>>()
+                parse_multiple![u8; reader, || parse_multiple![u16; reader, ctx]]
                     .map(Self::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                let num_parameters: u8 = reader.read_value()?;
-                repeat_with(|| JvmElement::parse_vec::<u16, _>(reader, ctx))
-                    .take(num_parameters.into())
-                    .collect::<Result<_, _>>()
+                parse_multiple![u8; reader, || parse_multiple![u16; reader, ctx]]
                     .map(Self::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => JvmElement::parse_vec::<u16, _>(reader, ctx)
-                .map(Self::RuntimeVisibleTypeAnnotations),
-            "RuntimeInvisibleTypeAnnotations" => JvmElement::parse_vec::<u16, _>(reader, ctx)
-                .map(Self::RuntimeInvisibleTypeAnnotations),
+            "RuntimeVisibleTypeAnnotations" => {
+                parse_multiple![u16; reader, ctx].map(Self::RuntimeVisibleTypeAnnotations)
+            }
+            "RuntimeInvisibleTypeAnnotations" => {
+                parse_multiple![u16; reader, ctx].map(Self::RuntimeInvisibleTypeAnnotations)
+            }
             "AnnotationDefault" => JvmElement::parse(reader, ctx).map(Self::AnnotationDefault),
             "BootstrapMethods" => {
                 JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::BootstrapMethods)

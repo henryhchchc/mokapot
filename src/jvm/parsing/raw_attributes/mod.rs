@@ -190,19 +190,19 @@ impl FromReader for VerificationTypeInfo {
 }
 
 pub struct InnerClass {
-    pub inner_class_info_index: u16,
+    pub info_index: u16,
     pub outer_class_info_index: u16,
     pub inner_name_index: u16,
-    pub inner_class_access_flags: u16,
+    pub access_flags: u16,
 }
 
 impl FromReader for InnerClass {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            inner_class_info_index: reader.read_value()?,
+            info_index: reader.read_value()?,
             outer_class_info_index: reader.read_value()?,
             inner_name_index: reader.read_value()?,
-            inner_class_access_flags: reader.read_value()?,
+            access_flags: reader.read_value()?,
         })
     }
 }
@@ -300,5 +300,104 @@ impl FromReader for ElementValueInfo {
                 format!("Unknown element value tag: {tag}"),
             )),
         }
+    }
+}
+
+pub struct TypeAnnotation {
+    pub target_info: TargetInfo,
+    pub target_path: Vec<(u8, u8)>,
+    pub type_index: u16,
+    pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
+}
+
+impl FromReader for TypeAnnotation {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let target_info = reader.read_value()?;
+        let target_path_length: u8 = reader.read_value()?;
+        let target_path = (0..target_path_length)
+            .map(|_| {
+                let type_path_kind = reader.read_value()?;
+                let type_argument_index = reader.read_value()?;
+                Ok((type_path_kind, type_argument_index))
+            })
+            .collect::<io::Result<_>>()?;
+        let type_index = reader.read_value()?;
+        let num_element_value_pairs: u16 = reader.read_value()?;
+        let element_value_pairs = (0..num_element_value_pairs)
+            .map(|_| {
+                let element_name_index = reader.read_value()?;
+                let element_value = reader.read_value()?;
+                Ok((element_name_index, element_value))
+            })
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            target_info,
+            target_path,
+            type_index,
+            element_value_pairs,
+        })
+    }
+}
+
+pub enum TargetInfo {
+    TypeParameter { index: u8 },
+    SuperType { index: u16 },
+    TypeParameterBound { type_parameter: u8, bound_index: u8 },
+    Empty,
+    FormalParameter { index: u8 },
+    Throws { index: u16 },
+    LocalVariable(Vec<(ProgramCounter, u16, u16)>),
+    Catch { exception_table_index: u16 },
+    Offset(u16),
+    TypeArgument { offset: ProgramCounter, index: u8 },
+}
+
+impl FromReader for TargetInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let target_type: u8 = reader.read_value()?;
+        let target_info = match target_type {
+            0x00 | 0x01 => Self::TypeParameter {
+                index: reader.read_value()?,
+            },
+            0x10 => Self::SuperType {
+                index: reader.read_value()?,
+            },
+            0x11 | 0x12 => Self::TypeParameterBound {
+                type_parameter: reader.read_value()?,
+                bound_index: reader.read_value()?,
+            },
+            0x13..=0x15 => Self::Empty,
+            0x16 => Self::FormalParameter {
+                index: reader.read_value()?,
+            },
+            0x17 => Self::Throws {
+                index: reader.read_value()?,
+            },
+            0x40 | 0x41 => {
+                let table_length: u16 = reader.read_value()?;
+                let table = (0..table_length)
+                    .map(|_| {
+                        let start_pc = reader.read_value()?;
+                        let length = reader.read_value()?;
+                        let index = reader.read_value()?;
+                        Ok((start_pc, length, index))
+                    })
+                    .collect::<io::Result<_>>()?;
+                Self::LocalVariable(table)
+            }
+            0x42 => Self::Catch {
+                exception_table_index: reader.read_value()?,
+            },
+            0x43..=0x46 => Self::Offset(reader.read_value()?),
+            0x47..=0x4B => Self::TypeArgument {
+                offset: reader.read_value()?,
+                index: reader.read_value()?,
+            },
+            unexpected => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid target type: {unexpected}"),
+            ))?,
+        };
+        Ok(target_info)
     }
 }

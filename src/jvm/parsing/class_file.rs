@@ -243,12 +243,12 @@ impl FromRaw for InnerClassInfo {
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
-            inner_class_info_index,
+            info_index,
             outer_class_info_index,
             inner_name_index,
-            inner_class_access_flags,
+            access_flags,
         } = raw;
-        let inner_class = ctx.constant_pool.get_class_ref(inner_class_info_index)?;
+        let inner_class = ctx.constant_pool.get_class_ref(info_index)?;
         let outer_class = if outer_class_info_index == 0 {
             None
         } else {
@@ -260,9 +260,8 @@ impl FromRaw for InnerClassInfo {
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let access_flags = NestedClassAccessFlags::from_bits(inner_class_access_flags).ok_or(
-            Error::UnknownFlags("NextClassAccessFlags", inner_class_access_flags),
-        )?;
+        let access_flags = NestedClassAccessFlags::from_bits(access_flags)
+            .ok_or(Error::UnknownFlags("NextClassAccessFlags", access_flags))?;
         Ok(Self {
             inner_class,
             outer_class,
