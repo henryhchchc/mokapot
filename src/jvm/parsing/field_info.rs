@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Read},
-    str::FromStr,
-};
+use std::io::{self, Read};
 
 use crate::{
     jvm::{
@@ -9,12 +6,11 @@ use crate::{
         references::ClassRef,
     },
     macros::{extract_attributes, see_jvm_spec},
-    types::field_type::FieldType,
 };
 
 use super::{
     attribute::AttributeInfo,
-    jvm_element_parser::{FromRaw, JvmElement},
+    jvm_element_parser::FromRaw,
     reader_utils::{FromReader, ValueReaderExt},
     Context, Error,
 };
@@ -102,13 +98,5 @@ impl FromRaw for Field {
             runtime_invisible_type_annotations,
             free_attributes,
         })
-    }
-}
-
-impl JvmElement for FieldType {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let descriptor_index = reader.read_value()?;
-        let descriptor = ctx.constant_pool.get_str(descriptor_index)?;
-        FieldType::from_str(descriptor).map_err(Error::from)
     }
 }

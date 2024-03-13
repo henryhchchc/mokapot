@@ -61,8 +61,8 @@ pub struct Class {
     pub module: Option<Module>,
     /// The packages of the module.
     pub module_packages: Vec<PackageRef>,
-    /// The main class of the module.
-    pub module_main_class: Option<ClassRef>,
+    /// Indicates if this class is the main class of the module.
+    pub is_module_main_class: bool,
     /// The nearest outer class of the class.
     pub nest_host: Option<ClassRef>,
     /// The nested classes of the class.

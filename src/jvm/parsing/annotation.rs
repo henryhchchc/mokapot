@@ -1,7 +1,8 @@
 use crate::jvm::{
     annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
     code::LocalVariableId,
-    field::{ConstantValue, JavaString},
+    constant_pool,
+    field::ConstantValue,
 };
 
 use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
@@ -121,70 +122,52 @@ impl FromRaw for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let cp = &ctx.constant_pool;
         match raw {
-            Self::Raw::ConstValue(b'B' | b'C' | b'I' | b'S' | b'Z', const_value_index) => {
-                if let const_value @ ConstantValue::Integer(_) =
-                    ctx.constant_pool.get_constant_value(const_value_index)?
-                {
-                    Ok(Self::Constant(const_value))
-                } else {
-                    Err(Error::Other("Expecte integer constant value"))
+            Self::Raw::Const(b'B' | b'C' | b'I' | b'S' | b'Z', idx) => {
+                match cp.get_constant_value(idx)? {
+                    it @ ConstantValue::Integer(_) => Ok(Self::Constant(it)),
+                    _ => Err(Error::Other("Expected integer constant value")),
                 }
             }
-            Self::Raw::ConstValue(b'D', const_value_index) => {
-                if let const_value @ ConstantValue::Double(_) =
-                    ctx.constant_pool.get_constant_value(const_value_index)?
-                {
-                    Ok(Self::Constant(const_value))
-                } else {
-                    Err(Error::Other("Expecte double constant value"))
+            Self::Raw::Const(b'D', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Double(_) => Ok(Self::Constant(it)),
+                _ => Err(Error::Other("Expected double constant value")),
+            },
+            Self::Raw::Const(b'F', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Float(_) => Ok(Self::Constant(it)),
+                _ => Err(Error::Other("Expected float constant value")),
+            },
+            Self::Raw::Const(b'J', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Long(_) => Ok(Self::Constant(it)),
+                _ => Err(Error::Other("Expected long constant value")),
+            },
+            Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
+                constant_pool::Entry::Utf8(s) => {
+                    Ok(Self::Constant(ConstantValue::String(s.to_owned())))
                 }
-            }
-            Self::Raw::ConstValue(b'F', const_value_index) => {
-                if let const_value @ ConstantValue::Float(_) =
-                    ctx.constant_pool.get_constant_value(const_value_index)?
-                {
-                    Ok(Self::Constant(const_value))
-                } else {
-                    Err(Error::Other("Expecte float constant value"))
-                }
-            }
-            Self::Raw::ConstValue(b'J', const_value_index) => {
-                if let const_value @ ConstantValue::Long(_) =
-                    ctx.constant_pool.get_constant_value(const_value_index)?
-                {
-                    Ok(Self::Constant(const_value))
-                } else {
-                    Err(Error::Other("Expecte long constant value"))
-                }
-            }
-            Self::Raw::ConstValue(b's', const_value_index) => ctx
-                .constant_pool
-                .get_str(const_value_index)
-                .map(ToOwned::to_owned)
-                .map(JavaString::Utf8)
-                .map(ConstantValue::String)
-                .map(Self::Constant),
-            Self::Raw::ConstValue(_, _) => Err(Error::Other("Invalid constant value tag")),
-            Self::Raw::EnumConstValue {
+                _ => Err(Error::Other("Expected string constant value")),
+            },
+            Self::Raw::Const(_, _) => Err(Error::Other("Invalid constant value tag")),
+            Self::Raw::Enum {
                 type_name_index,
                 const_name_index,
             } => {
-                let enum_type = ctx.constant_pool.get_str(type_name_index)?.to_owned();
-                let const_name = ctx.constant_pool.get_str(const_name_index)?.to_owned();
+                let enum_type = cp.get_str(type_name_index)?.to_owned();
+                let const_name = cp.get_str(const_name_index)?.to_owned();
                 Ok(Self::EnumConstant {
                     enum_type_name: enum_type,
                     const_name,
                 })
             }
-            Self::Raw::ClassInfo(class_info_index) => {
-                let return_descriptor = ctx.constant_pool.get_str(class_info_index)?.parse()?;
+            Self::Raw::ClassInfo(idx) => {
+                let return_descriptor = cp.get_str(idx)?.parse()?;
                 Ok(Self::Class { return_descriptor })
             }
-            Self::Raw::AnnotationValue(annotation) => Ok(Self::AnnotationInterface(
-                Annotation::from_raw(annotation, ctx)?,
+            Self::Raw::Annotation(annotation_info) => Ok(Self::AnnotationInterface(
+                Annotation::from_raw(annotation_info, ctx)?,
             )),
-            Self::Raw::ArrayValue(values) => {
+            Self::Raw::Array(values) => {
                 let values = values
                     .into_iter()
                     .map(|raw_value| FromRaw::from_raw(raw_value, ctx))

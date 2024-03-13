@@ -265,14 +265,14 @@ impl FromReader for Annotation {
 }
 
 pub enum ElementValueInfo {
-    ConstValue(u8, u16),
-    EnumConstValue {
+    Const(u8, u16),
+    Enum {
         type_name_index: u16,
         const_name_index: u16,
     },
     ClassInfo(u16),
-    AnnotationValue(Annotation),
-    ArrayValue(Vec<ElementValueInfo>),
+    Annotation(Annotation),
+    Array(Vec<ElementValueInfo>),
 }
 
 impl FromReader for ElementValueInfo {
@@ -280,20 +280,20 @@ impl FromReader for ElementValueInfo {
         let tag: u8 = reader.read_value()?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::ConstValue(tag, reader.read_value()?))
+                Ok(Self::Const(tag, reader.read_value()?))
             }
-            b'e' => Ok(Self::EnumConstValue {
+            b'e' => Ok(Self::Enum {
                 type_name_index: reader.read_value()?,
                 const_name_index: reader.read_value()?,
             }),
             b'c' => Ok(Self::ClassInfo(reader.read_value()?)),
-            b'@' => Ok(Self::AnnotationValue(reader.read_value()?)),
+            b'@' => Ok(Self::Annotation(reader.read_value()?)),
             b'[' => {
                 let num_values: u16 = reader.read_value()?;
                 let values = (0..num_values)
                     .map(|_| reader.read_value())
                     .collect::<io::Result<_>>()?;
-                Ok(Self::ArrayValue(values))
+                Ok(Self::Array(values))
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -399,5 +399,182 @@ impl FromReader for TargetInfo {
             ))?,
         };
         Ok(target_info)
+    }
+}
+
+pub struct BootstrapMethod {
+    pub method_ref_idx: u16,
+    pub arguments: Vec<u16>,
+}
+
+impl FromReader for BootstrapMethod {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let method_ref_idx = reader.read_value()?;
+        let num_arguments: u16 = reader.read_value()?;
+        let arguments = (0..num_arguments)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            method_ref_idx,
+            arguments,
+        })
+    }
+}
+
+pub struct ParameterInfo(pub u16, pub u16);
+
+impl FromReader for ParameterInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self(reader.read_value()?, reader.read_value()?))
+    }
+}
+
+pub struct ModuleInfo {
+    pub info_index: u16,
+    pub flags: u16,
+    pub version_index: u16,
+    pub requires: Vec<RequiresInfo>,
+    pub exports: Vec<ExportsInfo>,
+    pub opens: Vec<OpensInfo>,
+    pub uses: Vec<u16>,
+    pub provides: Vec<ProvidesInfo>,
+}
+
+impl FromReader for ModuleInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let info_index = reader.read_value()?;
+        let flags = reader.read_value()?;
+        let version_index = reader.read_value()?;
+        let requires_count: u16 = reader.read_value()?;
+        let requires = (0..requires_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        let exports_count: u16 = reader.read_value()?;
+        let exports = (0..exports_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        let opens_count: u16 = reader.read_value()?;
+        let opens = (0..opens_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        let uses_count: u16 = reader.read_value()?;
+        let uses = (0..uses_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        let provides_count: u16 = reader.read_value()?;
+        let provides = (0..provides_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            info_index,
+            flags,
+            version_index,
+            requires,
+            exports,
+            opens,
+            uses,
+            provides,
+        })
+    }
+}
+
+pub struct RequiresInfo {
+    pub requires_index: u16,
+    pub flags: u16,
+    pub version_index: u16,
+}
+
+impl FromReader for RequiresInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            requires_index: reader.read_value()?,
+            flags: reader.read_value()?,
+            version_index: reader.read_value()?,
+        })
+    }
+}
+
+pub struct ExportsInfo {
+    pub exports_index: u16,
+    pub flags: u16,
+    pub to: Vec<u16>,
+}
+
+impl FromReader for ExportsInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let exports_index = reader.read_value()?;
+        let flags = reader.read_value()?;
+        let to_count: u16 = reader.read_value()?;
+        let to = (0..to_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            exports_index,
+            flags,
+            to,
+        })
+    }
+}
+
+pub struct OpensInfo {
+    pub opens_index: u16,
+    pub flags: u16,
+    pub to: Vec<u16>,
+}
+
+impl FromReader for OpensInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let opens_index = reader.read_value()?;
+        let flags = reader.read_value()?;
+        let to_count: u16 = reader.read_value()?;
+        let to = (0..to_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            opens_index,
+            flags,
+            to,
+        })
+    }
+}
+
+pub struct ProvidesInfo {
+    pub provides_index: u16,
+    pub with: Vec<u16>,
+}
+
+impl FromReader for ProvidesInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let provides_index = reader.read_value()?;
+        let with_count: u16 = reader.read_value()?;
+        let with = (0..with_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            provides_index,
+            with,
+        })
+    }
+}
+
+pub struct RecordComponentInfo {
+    pub name_index: u16,
+    pub descriptor_index: u16,
+    pub attributes: Vec<AttributeInfo>,
+}
+
+impl FromReader for RecordComponentInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+        let name_index = reader.read_value()?;
+        let descriptor_index = reader.read_value()?;
+        let attributes_count: u16 = reader.read_value()?;
+        let attributes = (0..attributes_count)
+            .map(|_| reader.read_value())
+            .collect::<io::Result<_>>()?;
+        Ok(Self {
+            name_index,
+            descriptor_index,
+            attributes,
+        })
     }
 }

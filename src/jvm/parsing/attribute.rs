@@ -20,8 +20,7 @@ use crate::{
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    jvm_element_parser::{FromRaw, JvmElement},
-    raw_attributes,
+    jvm_element_parser::FromRaw,
     reader_utils::{read_byte_chunk, FromReader, ValueReaderExt},
     Context, Error,
 };
@@ -79,7 +78,7 @@ pub(crate) enum Attribute {
     MethodParameters(Vec<ParameterInfo>),
     Module(Module),
     ModulePackages(Vec<PackageRef>),
-    ModuleMainClass(ClassRef),
+    ModuleMainClass,
     NestHost(ClassRef),
     NestMembers(Vec<ClassRef>),
     Record(Vec<RecordComponent>),
@@ -115,7 +114,7 @@ impl Attribute {
             Self::MethodParameters(_) => "MethodParameters",
             Self::Module(_) => "Module",
             Self::ModulePackages(_) => "ModulePackages",
-            Self::ModuleMainClass(_) => "ModuleMainClass",
+            Self::ModuleMainClass => "ModuleMainClass",
             Self::NestHost(_) => "NestHost",
             Self::NestMembers(_) => "NestMembers",
             Self::Record(_) => "Record",
@@ -171,20 +170,8 @@ impl FromRaw for Attribute {
             "EnclosingMethod" => parse_from_raw!(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => {
-                let str_idx = reader.read_value()?;
-                ctx.constant_pool
-                    .get_str(str_idx)
-                    .map(str::to_owned)
-                    .map(Self::Signature)
-            }
-            "SourceFile" => {
-                let str_idx = reader.read_value()?;
-                ctx.constant_pool
-                    .get_str(str_idx)
-                    .map(str::to_owned)
-                    .map(Self::SourceFile)
-            }
+            "Signature" => parse_string(reader, ctx).map(Self::Signature),
+            "SourceFile" => parse_string(reader, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
                 let bytes = reader.bytes().try_collect()?;
                 Ok(Self::SourceDebugExtension(bytes))
@@ -214,24 +201,31 @@ impl FromRaw for Attribute {
             "RuntimeInvisibleTypeAnnotations" => {
                 parse_multiple![u16; reader, ctx].map(Self::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => JvmElement::parse(reader, ctx).map(Self::AnnotationDefault),
-            "BootstrapMethods" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::BootstrapMethods)
+            "AnnotationDefault" => parse_from_raw!(reader, ctx).map(Self::AnnotationDefault),
+            "BootstrapMethods" => parse_multiple![u16; reader, ctx].map(Self::BootstrapMethods),
+            "MethodParameters" => parse_multiple![u8; reader, ctx].map(Self::MethodParameters),
+            "Module" => parse_from_raw!(reader, ctx).map(Self::Module),
+            "ModulePackages" => parse_multiple![u16; reader, || {
+                let idx = reader.read_value()?;
+                ctx.constant_pool.get_package_ref(idx)
+            }]
+            .map(Self::ModulePackages),
+            "ModuleMainClass" => parse_module_main_class(reader, ctx)?,
+            "NestHost" => {
+                let idx = reader.read_value()?;
+                ctx.constant_pool.get_class_ref(idx).map(Self::NestHost)
             }
-            "MethodParameters" => {
-                JvmElement::parse_vec::<u8, _>(reader, ctx).map(Self::MethodParameters)
-            }
-            "Module" => JvmElement::parse(reader, ctx).map(Self::Module),
-            "ModulePackages" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::ModulePackages)
-            }
-            "ModuleMainClass" => JvmElement::parse(reader, ctx).map(Self::ModuleMainClass),
-            "NestHost" => JvmElement::parse(reader, ctx).map(Self::NestHost),
-            "NestMembers" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::NestMembers),
-            "Record" => JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::Record),
-            "PermittedSubclasses" => {
-                JvmElement::parse_vec::<u16, _>(reader, ctx).map(Self::PermittedSubclasses)
-            }
+            "NestMembers" => parse_multiple![u16; reader, || {
+                let idx = reader.read_value()?;
+                ctx.constant_pool.get_class_ref(idx)
+            }]
+            .map(Self::NestMembers),
+            "Record" => parse_multiple![u16; reader, ctx].map(Self::Record),
+            "PermittedSubclasses" => parse_multiple![u16; reader, || {
+                let idx = reader.read_value()?;
+                ctx.constant_pool.get_class_ref(idx)
+            }]
+            .map(Self::PermittedSubclasses),
             name => reader
                 .bytes()
                 .try_collect()
@@ -248,24 +242,23 @@ impl FromRaw for Attribute {
         }
     }
 }
-impl FromRaw for EnclosingMethod {
-    type Raw = raw_attributes::EnclosingMethod;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
-        let Self::Raw {
-            class_index,
-            method_index,
-        } = raw;
-        let class = ctx.constant_pool.get_class_ref(class_index)?;
-        let method_name_and_desc = if method_index > 0 {
-            let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
-            Some(name_and_desc)
-        } else {
-            None
-        };
-        Ok(EnclosingMethod {
-            class,
-            method_name_and_desc,
-        })
-    }
+#[inline]
+fn parse_string<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<String, Error> {
+    let str_idx = reader.read_value()?;
+    ctx.constant_pool.get_str(str_idx).map(str::to_owned)
+}
+
+#[inline]
+fn parse_module_main_class(
+    reader: &mut &[u8],
+    ctx: &Context,
+) -> Result<Result<Attribute, Error>, Error> {
+    let idx = reader.read_value()?;
+    let module_main_class = ctx.constant_pool.get_str(idx)?;
+    Ok(if module_main_class == "ModuleMainClass" {
+        Ok(Attribute::ModuleMainClass)
+    } else {
+        Err(Error::Other("Invalid ModuleMainClass attribute"))
+    })
 }

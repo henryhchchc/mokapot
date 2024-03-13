@@ -1,15 +1,10 @@
-use std::{
-    io::{self, Read},
-    iter::repeat_with,
-};
-
-use itertools::Itertools;
+use std::io::{self, Read};
 
 use crate::{
     jvm::{
         class::{
-            self, BootstrapMethod, Class, InnerClassInfo, NestedClassAccessFlags, RecordComponent,
-            Version,
+            self, BootstrapMethod, Class, EnclosingMethod, InnerClassInfo, NestedClassAccessFlags,
+            RecordComponent, Version,
         },
         constant_pool::ConstantPool,
         parsing::reader_utils::ValueReaderExt,
@@ -19,13 +14,8 @@ use crate::{
 };
 
 use super::{
-    attribute::AttributeInfo,
-    field_info::FieldInfo,
-    jvm_element_parser::{FromRaw, JvmElement},
-    method_info::MethodInfo,
-    raw_attributes,
-    reader_utils::FromReader,
-    Context, Error,
+    attribute::AttributeInfo, field_info::FieldInfo, jvm_element_parser::FromRaw,
+    method_info::MethodInfo, raw_attributes, reader_utils::FromReader, Context, Error,
 };
 
 /// The raw representation of a class file.
@@ -176,12 +166,12 @@ impl Class {
                 let runtime_invisible_type_annotations: RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 let module: Module,
                 let module_packages: ModulePackages as unwrap_or_default,
-                let module_main_class: ModuleMainClass,
                 let nest_host: NestHost,
                 let nest_members: NestMembers as unwrap_or_default,
                 let permitted_subclasses: PermittedSubclasses as unwrap_or_default,
                 let signature: Signature,
                 let record: Record,
+                if let is_module_main_class: ModuleMainClass,
                 if let is_synthetic: Synthetic,
                 if let is_deprecated: Deprecated,
                 else let free_attributes
@@ -207,7 +197,7 @@ impl Class {
             bootstrap_methods,
             module,
             module_packages,
-            module_main_class,
+            is_module_main_class,
             nest_host,
             nest_members,
             permitted_subclasses,
@@ -220,21 +210,20 @@ impl Class {
     }
 }
 
-impl JvmElement for BootstrapMethod {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let bootstrap_method_ref = reader.read_value()?;
-        let method_ref = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
-        let num_bootstrap_arguments: u16 = reader.read_value()?;
-        let arguments = repeat_with(|| {
-            let arg_idx = reader.read_value()?;
-            ctx.constant_pool.get_constant_value(arg_idx)
-        })
-        .take(num_bootstrap_arguments.into())
-        .try_collect()?;
-        Ok(Self {
-            method: method_ref,
+impl FromRaw for BootstrapMethod {
+    type Raw = raw_attributes::BootstrapMethod;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            method_ref_idx,
             arguments,
-        })
+        } = raw;
+        let method = ctx.constant_pool.get_method_handle(method_ref_idx)?;
+        let arguments = arguments
+            .into_iter()
+            .map(|it| ctx.constant_pool.get_constant_value(it))
+            .collect::<Result<_, _>>()?;
+        Ok(Self { method, arguments })
     }
 }
 
@@ -271,12 +260,21 @@ impl FromRaw for InnerClassInfo {
     }
 }
 
-impl JvmElement for RecordComponent {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let name = JvmElement::parse(reader, ctx)?;
-        let component_type = JvmElement::parse(reader, ctx)?;
+impl FromRaw for RecordComponent {
+    type Raw = raw_attributes::RecordComponentInfo;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            name_index,
+            descriptor_index,
+            attributes,
+        } = raw;
+        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let component_type = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
 
-        let attributes: Vec<Attribute> = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+        let attributes: Vec<Attribute> = attributes
+            .into_iter()
+            .map(|it| FromRaw::from_raw(it, ctx))
+            .collect::<Result<_, _>>()?;
         extract_attributes! {
             for attributes in "record_component" {
                 let signature: Signature,
@@ -303,9 +301,24 @@ impl JvmElement for RecordComponent {
     }
 }
 
-impl JvmElement for ClassRef {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let class_info_idx = reader.read_value()?;
-        ctx.constant_pool.get_class_ref(class_info_idx)
+impl FromRaw for EnclosingMethod {
+    type Raw = raw_attributes::EnclosingMethod;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            class_index,
+            method_index,
+        } = raw;
+        let class = ctx.constant_pool.get_class_ref(class_index)?;
+        let method_name_and_desc = if method_index > 0 {
+            let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
+            Some(name_and_desc)
+        } else {
+            None
+        };
+        Ok(EnclosingMethod {
+            class,
+            method_name_and_desc,
+        })
     }
 }

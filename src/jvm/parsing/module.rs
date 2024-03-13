@@ -1,32 +1,25 @@
-use std::io::Read;
-
 use crate::jvm::{
     constant_pool::Entry,
     module::{Export, Module, Open, Provide, Require},
-    references::{ModuleRef, PackageRef},
 };
 
-use super::{
-    jvm_element_parser::{parse_flags, JvmElement},
-    reader_utils::ValueReaderExt,
-    Context, Error,
-};
+use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
 
-fn parse_version<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Option<String>, Error> {
-    let version_index = reader.read_value()?;
-    let result = if version_index > 0 {
-        Some(ctx.constant_pool.get_str(version_index)?.to_owned())
-    } else {
-        None
-    };
-    Ok(result)
-}
-
-impl JvmElement for Require {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let module = JvmElement::parse(reader, ctx)?;
-        let flags = parse_flags(reader)?;
-        let version = parse_version(reader, ctx)?;
+impl FromRaw for Require {
+    type Raw = raw_attributes::RequiresInfo;
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            requires_index,
+            flags,
+            version_index,
+        } = raw;
+        let module = ctx.constant_pool.get_module_ref(requires_index)?;
+        let flags = FromRaw::from_raw(flags, ctx)?;
+        let version = if version_index > 0 {
+            Some(ctx.constant_pool.get_str(version_index)?.to_owned())
+        } else {
+            None
+        };
         Ok(Require {
             module,
             flags,
@@ -35,36 +28,78 @@ impl JvmElement for Require {
     }
 }
 
-impl JvmElement for Export {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let package = JvmElement::parse(reader, ctx)?;
-        let flags = parse_flags(reader)?;
-        let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+impl FromRaw for Export {
+    type Raw = raw_attributes::ExportsInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            exports_index,
+            to,
+            flags,
+        } = raw;
+
+        let package = ctx.constant_pool.get_package_ref(exports_index)?;
+        let flags = FromRaw::from_raw(flags, ctx)?;
+        let to = to
+            .into_iter()
+            .map(|idx| ctx.constant_pool.get_module_ref(idx))
+            .collect::<Result<_, _>>()?;
         Ok(Export { package, flags, to })
     }
 }
 
-impl JvmElement for Open {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let package = JvmElement::parse(reader, ctx)?;
-        let flags = parse_flags(reader)?;
-        let to = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+impl FromRaw for Open {
+    type Raw = raw_attributes::OpensInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            opens_index,
+            to,
+            flags,
+        } = raw;
+
+        let package = ctx.constant_pool.get_package_ref(opens_index)?;
+        let flags = FromRaw::from_raw(flags, ctx)?;
+        let to = to
+            .into_iter()
+            .map(|idx| ctx.constant_pool.get_module_ref(idx))
+            .collect::<Result<_, _>>()?;
         Ok(Open { package, flags, to })
     }
 }
 
-impl JvmElement for Provide {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let service = JvmElement::parse(reader, ctx)?;
-        let with = JvmElement::parse_vec::<u16, _>(reader, ctx)?;
+impl FromRaw for Provide {
+    type Raw = raw_attributes::ProvidesInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            provides_index,
+            with,
+        } = raw;
+        let service = ctx.constant_pool.get_class_ref(provides_index)?;
+        let with = with
+            .into_iter()
+            .map(|idx| ctx.constant_pool.get_class_ref(idx))
+            .collect::<Result<_, _>>()?;
         Ok(Provide { service, with })
     }
 }
 
-impl JvmElement for Module {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let module_info_idx = reader.read_value()?;
-        let module_info_entry = ctx.constant_pool.get_entry(module_info_idx)?;
+impl FromRaw for Module {
+    type Raw = raw_attributes::ModuleInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let Self::Raw {
+            info_index: module_info_index,
+            flags,
+            version_index,
+            requires,
+            exports,
+            opens,
+            uses,
+            provides,
+        } = raw;
+        let module_info_entry = ctx.constant_pool.get_entry(module_info_index)?;
         let &Entry::Module { name_index } = module_info_entry else {
             Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Module",
@@ -72,31 +107,41 @@ impl JvmElement for Module {
             })?
         };
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let flags = parse_flags(reader)?;
-        let version = parse_version(reader, ctx)?;
+        let flags = FromRaw::from_raw(flags, ctx)?;
+        let version = if version_index > 0 {
+            Some(ctx.constant_pool.get_str(version_index)?.to_owned())
+        } else {
+            None
+        };
+        let requires = requires
+            .into_iter()
+            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .collect::<Result<_, _>>()?;
+        let exports = exports
+            .into_iter()
+            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .collect::<Result<_, _>>()?;
+        let opens = opens
+            .into_iter()
+            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .collect::<Result<_, _>>()?;
+        let uses = uses
+            .into_iter()
+            .map(|idx| ctx.constant_pool.get_class_ref(idx))
+            .collect::<Result<_, _>>()?;
+        let provides = provides
+            .into_iter()
+            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .collect::<Result<_, _>>()?;
         Ok(Module {
             name,
             flags,
             version,
-            requires: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-            exports: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-            opens: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-            uses: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
-            provides: JvmElement::parse_vec::<u16, _>(reader, ctx)?,
+            requires,
+            exports,
+            opens,
+            uses,
+            provides,
         })
-    }
-}
-
-impl JvmElement for PackageRef {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let package_index = reader.read_value()?;
-        ctx.constant_pool.get_package_ref(package_index)
-    }
-}
-
-impl JvmElement for ModuleRef {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let module_ref_idx = reader.read_value()?;
-        ctx.constant_pool.get_module_ref(module_ref_idx)
     }
 }

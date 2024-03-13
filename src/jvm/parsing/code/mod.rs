@@ -13,14 +13,14 @@ use crate::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableId,
             LocalVariableTable, MethodBody, ProgramCounter,
         },
-        method::ParameterInfo,
+        method::{ParameterAccessFlags, ParameterInfo},
     },
     macros::extract_attributes,
     types::field_type::FieldType,
 };
 
 use super::{
-    jvm_element_parser::{parse_flags, FromRaw, JvmElement},
+    jvm_element_parser::FromRaw,
     raw_attributes::{self, Code},
     reader_utils::{FromReader, ValueReaderExt},
     Context, Error,
@@ -143,15 +143,18 @@ impl FromRaw for LocalVariableTypeAttr {
         })
     }
 }
-impl JvmElement for ParameterInfo {
-    fn parse<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<Self, Error> {
-        let name_index = reader.read_value()?;
+impl FromRaw for ParameterInfo {
+    type Raw = raw_attributes::ParameterInfo;
+
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let raw_attributes::ParameterInfo(name_index, access_flags) = raw;
         let name = if name_index == 0 {
             None
         } else {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
-        let access_flags = parse_flags(reader)?;
+        let access_flags = ParameterAccessFlags::from_bits(access_flags)
+            .ok_or(Error::UnknownFlags("ParameterAccessFlags", access_flags))?;
         Ok(ParameterInfo { name, access_flags })
     }
 }
