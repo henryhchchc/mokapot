@@ -52,7 +52,15 @@ pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read + ?Sized,
 {
-    let mut buf = vec![0u8; len];
+    let mut buf = Vec::with_capacity(len);
+
+    // SAFETY: We are going to read exactly `len` bytes into the buffer.
+    //         Otherwise, read_exact` will return an error.
+    //         Therefore, we will never return a Vec with uninitialized memory.
+    #[allow(clippy::uninit_vec)]
+    unsafe {
+        buf.set_len(len);
+    };
     reader.read_exact(buf.as_mut_slice())?;
     Ok(buf)
 }
