@@ -21,7 +21,7 @@ use crate::{
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::FromRaw,
-    reader_utils::{read_byte_chunk, FromReader, ValueReaderExt},
+    reader_utils::{read_byte_chunk, ReadBytes, ValueReaderExt},
     Context, Error,
 };
 
@@ -39,8 +39,8 @@ impl AttributeInfo {
     }
 }
 
-impl FromReader for AttributeInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl ReadBytes for AttributeInfo {
+    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_idx = reader.read_value()?;
         let attribute_length: u32 = reader.read_value()?;
         let attribute_length = usize::try_from(attribute_length)
@@ -124,23 +124,20 @@ impl Attribute {
     }
 }
 
-macro_rules! parse_from_raw {
-    ($reader:expr, $ctx:expr) => {{
+macro_rules! parse {
+    ($reader:expr, $ctx:expr $(=> $attr:ident )?) => {{
         let raw_attr = $reader.read_value()?;
-        FromRaw::from_raw(raw_attr, $ctx)
+        FromRaw::from_raw(raw_attr, $ctx)$( .map(Self::$attr) )?
     }};
-}
-
-macro_rules! parse_multiple {
-    ($len_type:ty; $reader:expr, || $with:expr) => {{
+    ($len_type:ty; $reader:expr, || $with:expr $(=> $attr:ident )?) => {{
         let count: $len_type = $reader.read_value()?;
-        (0..count).map(|_| $with).try_collect()
+        (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
-    ($len_type:ty; $reader:expr, $ctx:expr) => {
-        parse_multiple![$len_type; $reader, || {
-            let raw = FromReader::from_reader($reader)?;
+    ($len_type:ty; $reader:expr, $ctx:expr $(=> $attr:ident )?) => {
+        parse![$len_type; $reader, || {
+            let raw = ReadBytes::read_bytes($reader)?;
             FromRaw::from_raw(raw, $ctx)
-        }]
+        }] $( .map(Self::$attr) )?
     };
 }
 
@@ -159,15 +156,14 @@ impl FromRaw for Attribute {
                     .get_constant_value(idx)
                     .map(Self::ConstantValue)
             }
-            "Code" => MethodBody::from_raw(reader.read_value()?, ctx).map(Self::Code),
-            "StackMapTable" => parse_multiple![u16; reader, ctx].map(Self::StackMapTable),
-            "Exceptions" => parse_multiple![u16; reader, || {
+            "Code" => parse!(reader, ctx => Code),
+            "StackMapTable" => parse![u16; reader, ctx => StackMapTable],
+            "Exceptions" => parse![u16; reader, || {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_class_ref(idx)
-            }]
-            .map(Self::Exceptions),
-            "InnerClasses" => parse_multiple![u16; reader, ctx].map(Self::InnerClasses),
-            "EnclosingMethod" => parse_from_raw!(reader, ctx).map(Self::EnclosingMethod),
+            } => Exceptions],
+            "InnerClasses" => parse![u16; reader, ctx => InnerClasses],
+            "EnclosingMethod" => parse!(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
             "Signature" => parse_string(reader, ctx).map(Self::Signature),
@@ -176,40 +172,32 @@ impl FromRaw for Attribute {
                 let bytes = reader.bytes().try_collect()?;
                 Ok(Self::SourceDebugExtension(bytes))
             }
-            "LineNumberTable" => parse_multiple![u16; reader, ctx].map(Self::LineNumberTable),
-            "LocalVariableTable" => parse_multiple![u16; reader, ctx].map(Self::LocalVariableTable),
-            "LocalVariableTypeTable" => {
-                parse_multiple![u16; reader, ctx].map(Self::LocalVariableTypeTable)
-            }
-            "RuntimeVisibleAnnotations" => {
-                parse_multiple![u16; reader, ctx].map(Self::RuntimeVisibleAnnotations)
-            }
+            "LineNumberTable" => parse![u16; reader, ctx => LineNumberTable],
+            "LocalVariableTable" => parse![u16; reader, ctx => LocalVariableTable],
+            "LocalVariableTypeTable" => parse![u16; reader, ctx => LocalVariableTypeTable],
+            "RuntimeVisibleAnnotations" => parse![u16; reader, ctx => RuntimeVisibleAnnotations],
             "RuntimeInvisibleAnnotations" => {
-                parse_multiple![u16; reader, ctx].map(Self::RuntimeInvisibleAnnotations)
+                parse![u16; reader, ctx => RuntimeInvisibleAnnotations]
             }
-            "RuntimeVisibleParameterAnnotations" => {
-                parse_multiple![u8; reader, || parse_multiple![u16; reader, ctx]]
-                    .map(Self::RuntimeVisibleParameterAnnotations)
-            }
+            "RuntimeVisibleParameterAnnotations" => parse![u8; reader, || parse![u16; reader, ctx]]
+                .map(Self::RuntimeVisibleParameterAnnotations),
             "RuntimeInvisibleParameterAnnotations" => {
-                parse_multiple![u8; reader, || parse_multiple![u16; reader, ctx]]
-                    .map(Self::RuntimeInvisibleParameterAnnotations)
+                parse![u8; reader, || parse![u16; reader, ctx] => RuntimeInvisibleParameterAnnotations]
             }
             "RuntimeVisibleTypeAnnotations" => {
-                parse_multiple![u16; reader, ctx].map(Self::RuntimeVisibleTypeAnnotations)
+                parse![u16; reader, ctx => RuntimeVisibleTypeAnnotations]
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                parse_multiple![u16; reader, ctx].map(Self::RuntimeInvisibleTypeAnnotations)
+                parse![u16; reader, ctx => RuntimeInvisibleTypeAnnotations]
             }
-            "AnnotationDefault" => parse_from_raw!(reader, ctx).map(Self::AnnotationDefault),
-            "BootstrapMethods" => parse_multiple![u16; reader, ctx].map(Self::BootstrapMethods),
-            "MethodParameters" => parse_multiple![u8; reader, ctx].map(Self::MethodParameters),
-            "Module" => parse_from_raw!(reader, ctx).map(Self::Module),
-            "ModulePackages" => parse_multiple![u16; reader, || {
+            "AnnotationDefault" => parse!(reader, ctx => AnnotationDefault),
+            "BootstrapMethods" => parse![u16; reader, ctx => BootstrapMethods],
+            "MethodParameters" => parse![u8; reader, ctx => MethodParameters],
+            "Module" => parse!(reader, ctx => Module),
+            "ModulePackages" => parse![u16; reader, || {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_package_ref(idx)
-            }]
-            .map(Self::ModulePackages),
+            } => ModulePackages],
             "ModuleMainClass" => {
                 let idx = reader.read_value()?;
                 ctx.constant_pool
@@ -220,17 +208,16 @@ impl FromRaw for Attribute {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_class_ref(idx).map(Self::NestHost)
             }
-            "NestMembers" => parse_multiple![u16; reader, || {
+            "NestMembers" => parse![u16; reader, || {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_class_ref(idx)
             }]
             .map(Self::NestMembers),
-            "Record" => parse_multiple![u16; reader, ctx].map(Self::Record),
-            "PermittedSubclasses" => parse_multiple![u16; reader, || {
+            "Record" => parse![u16; reader, ctx => Record],
+            "PermittedSubclasses" => parse![u16; reader, || {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_class_ref(idx)
-            }]
-            .map(Self::PermittedSubclasses),
+            } => PermittedSubclasses],
             name => reader
                 .bytes()
                 .try_collect()

@@ -11,7 +11,7 @@ use crate::{
 use super::{
     attribute::AttributeInfo,
     jvm_element_parser::FromRaw,
-    reader_utils::{FromReader, ValueReaderExt},
+    reader_utils::{ReadBytes, ValueReaderExt},
     Context, Error,
 };
 
@@ -25,14 +25,14 @@ pub(crate) struct FieldInfo {
     attributes: Vec<AttributeInfo>,
 }
 
-impl FromReader for FieldInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl ReadBytes for FieldInfo {
+    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let access_flags = reader.read_value()?;
         let name_index = reader.read_value()?;
         let descriptor_index = reader.read_value()?;
         let attributes_count: u16 = reader.read_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_reader(reader))
+            .map(|_| AttributeInfo::read_bytes(reader))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             access_flags,

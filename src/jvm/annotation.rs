@@ -1,7 +1,10 @@
 //! Module for the APIs for the annotation in JVM.
 use crate::{
     macros::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::ReturnType},
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::ReturnType,
+    },
 };
 
 use super::{
@@ -23,8 +26,10 @@ pub struct Annotation {
 #[doc = see_jvm_spec!(4, 7, 16, 1)]
 #[derive(Debug, Clone)]
 pub enum ElementValue {
-    /// A constant value.
-    Constant(ConstantValue),
+    /// A constant value in primitive type.
+    Primitive(PrimitiveType, ConstantValue),
+    /// A constant value in String type.
+    String(ConstantValue),
     /// An enum constant.
     EnumConstant {
         /// The name of the enum type.

@@ -1,8 +1,11 @@
-use crate::jvm::{
-    annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
-    code::LocalVariableId,
-    constant_pool,
-    field::ConstantValue,
+use crate::{
+    jvm::{
+        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+        code::LocalVariableId,
+        constant_pool,
+        field::ConstantValue,
+    },
+    types::field_type::PrimitiveType,
 };
 
 use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
@@ -124,27 +127,41 @@ impl FromRaw for ElementValue {
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let cp = &ctx.constant_pool;
         match raw {
-            Self::Raw::Const(b'B' | b'C' | b'I' | b'S' | b'Z', idx) => {
-                match cp.get_constant_value(idx)? {
-                    it @ ConstantValue::Integer(_) => Ok(Self::Constant(it)),
-                    _ => Err(Error::Other("Expected integer constant value")),
-                }
-            }
+            Self::Raw::Const(b'B', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Byte, it)),
+                _ => Err(Error::Other("Expected integer constant value")),
+            },
+            Self::Raw::Const(b'C', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Char, it)),
+                _ => Err(Error::Other("Expected integer constant value")),
+            },
+            Self::Raw::Const(b'I', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Int, it)),
+                _ => Err(Error::Other("Expected integer constant value")),
+            },
+            Self::Raw::Const(b'S', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Short, it)),
+                _ => Err(Error::Other("Expected integer constant value")),
+            },
+            Self::Raw::Const(b'Z', idx) => match cp.get_constant_value(idx)? {
+                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Boolean, it)),
+                _ => Err(Error::Other("Expected integer constant value")),
+            },
             Self::Raw::Const(b'D', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Double(_) => Ok(Self::Constant(it)),
+                it @ ConstantValue::Double(_) => Ok(Self::Primitive(PrimitiveType::Double, it)),
                 _ => Err(Error::Other("Expected double constant value")),
             },
             Self::Raw::Const(b'F', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Float(_) => Ok(Self::Constant(it)),
+                it @ ConstantValue::Float(_) => Ok(Self::Primitive(PrimitiveType::Float, it)),
                 _ => Err(Error::Other("Expected float constant value")),
             },
             Self::Raw::Const(b'J', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Long(_) => Ok(Self::Constant(it)),
+                it @ ConstantValue::Long(_) => Ok(Self::Primitive(PrimitiveType::Long, it)),
                 _ => Err(Error::Other("Expected long constant value")),
             },
             Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
                 constant_pool::Entry::Utf8(s) => {
-                    Ok(Self::Constant(ConstantValue::String(s.to_owned())))
+                    Ok(Self::String(ConstantValue::String(s.to_owned())))
                 }
                 _ => Err(Error::Other("Expected string constant value")),
             },

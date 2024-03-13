@@ -22,7 +22,7 @@ use crate::{
 use super::{
     jvm_element_parser::FromRaw,
     raw_attributes::{self, Code},
-    reader_utils::{FromReader, ValueReaderExt},
+    reader_utils::{ReadBytes, ValueReaderExt},
     Context, Error,
 };
 
@@ -48,8 +48,8 @@ impl FromRaw for LineNumberTableEntry {
     }
 }
 
-impl FromReader for LineNumberTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl ReadBytes for LineNumberTableEntry {
+    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
         Ok(LineNumberTableEntry {
