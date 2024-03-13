@@ -78,7 +78,7 @@ pub(crate) enum Attribute {
     MethodParameters(Vec<ParameterInfo>),
     Module(Module),
     ModulePackages(Vec<PackageRef>),
-    ModuleMainClass,
+    ModuleMainClass(ClassRef),
     NestHost(ClassRef),
     NestMembers(Vec<ClassRef>),
     Record(Vec<RecordComponent>),
@@ -114,7 +114,7 @@ impl Attribute {
             Self::MethodParameters(_) => "MethodParameters",
             Self::Module(_) => "Module",
             Self::ModulePackages(_) => "ModulePackages",
-            Self::ModuleMainClass => "ModuleMainClass",
+            Self::ModuleMainClass(_) => "ModuleMainClass",
             Self::NestHost(_) => "NestHost",
             Self::NestMembers(_) => "NestMembers",
             Self::Record(_) => "Record",
@@ -210,7 +210,12 @@ impl FromRaw for Attribute {
                 ctx.constant_pool.get_package_ref(idx)
             }]
             .map(Self::ModulePackages),
-            "ModuleMainClass" => parse_module_main_class(reader, ctx)?,
+            "ModuleMainClass" => {
+                let idx = reader.read_value()?;
+                ctx.constant_pool
+                    .get_class_ref(idx)
+                    .map(Self::ModuleMainClass)
+            }
             "NestHost" => {
                 let idx = reader.read_value()?;
                 ctx.constant_pool.get_class_ref(idx).map(Self::NestHost)
@@ -247,18 +252,4 @@ impl FromRaw for Attribute {
 fn parse_string<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<String, Error> {
     let str_idx = reader.read_value()?;
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
-}
-
-#[inline]
-fn parse_module_main_class(
-    reader: &mut &[u8],
-    ctx: &Context,
-) -> Result<Result<Attribute, Error>, Error> {
-    let idx = reader.read_value()?;
-    let module_main_class = ctx.constant_pool.get_str(idx)?;
-    Ok(if module_main_class == "ModuleMainClass" {
-        Ok(Attribute::ModuleMainClass)
-    } else {
-        Err(Error::Other("Invalid ModuleMainClass attribute"))
-    })
 }

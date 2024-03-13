@@ -90,7 +90,7 @@ impl FromRaw for Module {
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
-            info_index: module_info_index,
+            info_index,
             flags,
             version_index,
             requires,
@@ -99,7 +99,7 @@ impl FromRaw for Module {
             uses,
             provides,
         } = raw;
-        let module_info_entry = ctx.constant_pool.get_entry(module_info_index)?;
+        let module_info_entry = ctx.constant_pool.get_entry(info_index)?;
         let &Entry::Module { name_index } = module_info_entry else {
             Err(Error::MismatchedConstantPoolEntryType {
                 expected: "Module",
