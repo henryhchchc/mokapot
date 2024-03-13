@@ -8,6 +8,20 @@ use mokapot::jvm::{
     },
 };
 
+macro_rules! test_data_class {
+    ($folder:literal, $class_name:literal) => {
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/",
+            $folder,
+            "/java_classes/",
+            $class_name,
+            ".class"
+        ))
+        .as_slice()
+    };
+}
+
 fn create_test_dir_class_path() -> DirectoryClassPath {
     DirectoryClassPath::new(concat!(env!("OUT_DIR"), "/java_classes"))
 }
@@ -16,8 +30,8 @@ fn create_test_dir_class_path() -> DirectoryClassPath {
 fn load_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
-    let class = class_loader.load_class("org/pkg/MyClass").unwrap();
-    assert_eq!(class.binary_name, "org/pkg/MyClass");
+    let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
+    assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
 }
 
 #[test]
@@ -41,11 +55,8 @@ impl<'a> MockClassPath<'a> {
 impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
-        let reader = include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/java_classes/org/pkg/MyClass.class"
-        ));
-        Class::parse(reader.as_slice()).map_err(Into::into)
+        let reader = test_data_class!("", "org/mokapot/test/MyClass");
+        Class::parse(reader).map_err(Into::into)
     }
 }
 
@@ -55,8 +66,8 @@ fn caching_class_loader_load_once() {
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
     for _ in 0..10 {
-        let class = class_loader.load_class("org/pkg/MyClass").unwrap();
-        assert_eq!(class.binary_name, "org/pkg/MyClass");
+        let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
+        assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
     }
     assert_eq!(counter.get(), 1);
 }

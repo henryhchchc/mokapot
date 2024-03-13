@@ -1,4 +1,4 @@
-use std::io::{self, BufReader};
+use std::io::{self};
 
 use mokapot::{
     jvm::{
@@ -12,6 +12,7 @@ use mokapot::{
     },
 };
 
+#[macro_export]
 macro_rules! test_data_class {
     ($folder:literal, $class_name:literal) => {
         include_bytes!(concat!(
@@ -27,7 +28,7 @@ macro_rules! test_data_class {
 }
 
 fn parse_my_class() -> Result<Class, Error> {
-    let bytes = test_data_class!("", "org/pkg/MyClass");
+    let bytes = test_data_class!("", "org/mokapot/test/MyClass");
     Class::parse(bytes)
 }
 
@@ -81,7 +82,7 @@ fn test_access_flag() {
 #[test]
 fn test_class_name() {
     let my_class = parse_my_class().unwrap();
-    assert_eq!("org/pkg/MyClass", my_class.binary_name);
+    assert_eq!("org/mokapot/test/MyClass", my_class.binary_name);
 }
 
 #[test]
@@ -127,38 +128,15 @@ fn test_methods() {
     );
 }
 
-fn parse_complicated_class() -> Class {
-    let bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/java_classes/org/mokapot/test/ComplicatedClass.class"
-    ));
-    let reader = BufReader::new(&bytes[..]);
-    Class::parse(reader).unwrap()
-}
-
-fn parse_complicated_inner_class() -> Class {
-    let bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/java_classes/org/mokapot/test/ComplicatedClass$InnerClass.class"
-    ));
-    let reader = BufReader::new(&bytes[..]);
-    Class::parse(reader).unwrap()
-}
-
-fn parse_complicated_in_method_class() -> Class {
-    let bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/java_classes/org/mokapot/test/ComplicatedClass$1Test.class"
-    ));
-    let reader = BufReader::new(&bytes[..]);
-    Class::parse(reader).unwrap()
-}
-
 #[test]
-fn parse_complicated_class_works() {
-    parse_complicated_class();
-    parse_complicated_inner_class();
-    parse_complicated_in_method_class();
+fn parse_complicated_class() {
+    for bytes in [
+        test_data_class!("", "org/mokapot/test/ComplicatedClass"),
+        test_data_class!("", "org/mokapot/test/ComplicatedClass$InnerClass"),
+        test_data_class!("", "org/mokapot/test/ComplicatedClass$1Test"),
+    ] {
+        Class::parse(bytes).unwrap();
+    }
 }
 
 #[test]
