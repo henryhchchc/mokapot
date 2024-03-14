@@ -1,6 +1,6 @@
 //! Implementations of [`ClassPath`].
 
-use std::{fs::File, io::BufReader};
+use std::{borrow::Borrow, fs::File, io::BufReader};
 
 #[cfg(feature = "jar")]
 use zip::{result::ZipError, ZipArchive};
@@ -15,15 +15,18 @@ pub struct DirectoryClassPath {
 }
 
 impl ClassPath for DirectoryClassPath {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
-        let class_file_path = self.directory.join(binary_name).with_extension("class");
+    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error> {
+        let class_file_path = self
+            .directory
+            .join(binary_name.borrow())
+            .with_extension("class");
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
             let buf_read = BufReader::new(class_file);
             let class = Class::parse(buf_read)?;
             Ok(class)
         } else {
-            Err(Error::NotFound(binary_name.to_owned()))
+            Err(Error::NotFound)
         }
     }
 }
@@ -56,16 +59,16 @@ impl JarClassPath {
 
 #[cfg(feature = "jar")]
 impl ClassPath for JarClassPath {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error> {
         let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
         let mut jar_archive = ZipArchive::new(jar_reader).map_err(|e| match e {
             ZipError::Io(io_err) => Error::IO(io_err),
             e => Error::Other(Box::new(e)),
         })?;
-        let mut class_file = match jar_archive.by_name(&format!("{binary_name}.class")) {
+        let mut class_file = match jar_archive.by_name(&format!("{}.class", binary_name.borrow())) {
             Ok(it) => it,
-            Err(ZipError::FileNotFound) => Err(Error::NotFound(binary_name.to_owned()))?,
+            Err(ZipError::FileNotFound) => Err(Error::NotFound)?,
             Err(ZipError::Io(io_err)) => Err(Error::IO(io_err))?,
             Err(e) => Err(Error::Other(Box::new(e)))?,
         };

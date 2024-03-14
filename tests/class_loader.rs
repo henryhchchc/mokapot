@@ -1,4 +1,4 @@
-use std::{cell::Cell, path::PathBuf};
+use std::{borrow::Borrow, cell::Cell, path::PathBuf};
 
 use mokapot::jvm::{
     class::Class,
@@ -39,7 +39,7 @@ fn load_absent_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
     let class = class_loader.load_class("org/pkg/MyAbsentClass");
-    assert!(matches!(class, Err(Error::NotFound(_))));
+    assert!(matches!(class, Err(Error::NotFound)));
 }
 
 struct MockClassPath<'a> {
@@ -53,7 +53,7 @@ impl<'a> MockClassPath<'a> {
 }
 
 impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, _binary_name: impl Borrow<str>) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
         let reader = test_data_class!("", "org/mokapot/test/MyClass");
         Class::parse(reader).map_err(Into::into)
@@ -97,7 +97,7 @@ fn jar_class_path_not_found() {
 
     assert!(matches!(
         class_loader.load_class("jdk/internal/jimage/ImageReader3"),
-        Err(Error::NotFound(_))
+        Err(Error::NotFound)
     ));
 }
 

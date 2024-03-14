@@ -1,6 +1,6 @@
 //! Discovering and loading classes.
 
-use std::{collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
+use std::{borrow::Borrow, collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
 
 use super::class::Class;
 
@@ -8,8 +8,8 @@ use super::class::Class;
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// The class could not be found.
-    #[error("Class not found: {0}")]
-    NotFound(String),
+    #[error("Class not found")]
+    NotFound,
     /// Error occurred while parsing the class bytes.
     #[error("Error parsing class bytes: {0}")]
     Malformed(#[from] super::parsing::errors::Error),
@@ -27,7 +27,7 @@ pub trait ClassPath {
     ///
     /// # Errors
     /// See [`Error`].
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error>;
+    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error>;
 }
 
 impl<T> ClassPath for T
@@ -35,7 +35,7 @@ where
     T: Deref,
     <T as Deref>::Target: ClassPath,
 {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error> {
         self.deref().find_class(binary_name)
     }
 }
@@ -51,18 +51,18 @@ impl<P> ClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<Class, Error>
+    pub fn load_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error>
     where
         P: ClassPath,
     {
         for class_path in &self.class_path {
-            match class_path.find_class(binary_name.as_ref()) {
+            match class_path.find_class(binary_name.borrow()) {
                 Ok(class) => return Ok(class),
-                Err(Error::NotFound(_)) => continue,
+                Err(Error::NotFound) => continue,
                 Err(err) => return Err(err),
             }
         }
-        Err(Error::NotFound(binary_name.as_ref().to_owned()))
+        Err(Error::NotFound)
     }
 
     /// Create a new class loader with the given class paths.
@@ -102,7 +102,7 @@ impl<P> CachingClassLoader<P> {
         //       See https://github.com/rust-lang/rust/issues/54503
         // reason = "The unwrap is garenteed to not panic."
     )]
-    pub fn load_class(&self, binary_name: impl AsRef<str>) -> Result<&Class, Error>
+    pub fn load_class(&self, binary_name: impl Borrow<str>) -> Result<&Class, Error>
     where
         P: ClassPath,
     {
@@ -116,8 +116,7 @@ impl<P> CachingClassLoader<P> {
                 poison_err.into_inner()
             }
         };
-        let key_ref = binary_name.as_ref();
-        let class_ref = if let Some(b) = cache.get(key_ref) {
+        let class_ref = if let Some(b) = cache.get(binary_name.borrow()) {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
@@ -130,14 +129,14 @@ impl<P> CachingClassLoader<P> {
             };
             // It is possible that the class is loaded before we get the write lock.
             // Therefore, we need to check the cache again.
-            let class_box = if let Some(b) = cache.get(key_ref) {
+            let class_box = if let Some(b) = cache.get(binary_name.borrow()) {
                 b
             } else {
-                let class = Box::new(self.class_loader.load_class(key_ref)?);
-                let overridden = cache.insert(key_ref.to_owned(), class);
+                let class = self.class_loader.load_class(binary_name.borrow())?;
+                let overridden = cache.insert(binary_name.borrow().to_owned(), Box::new(class));
                 debug_assert!(overridden.is_none(), "Class is already in the cache");
                 // The unwrap is safe since the class was just inserted into the cache.
-                cache.get(key_ref).unwrap()
+                cache.get(binary_name.borrow()).unwrap()
             };
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
