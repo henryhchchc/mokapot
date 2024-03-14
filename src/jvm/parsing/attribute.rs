@@ -147,7 +147,7 @@ impl FromRaw for Attribute {
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let reader = &mut info.as_slice();
+        let reader = &mut io::Cursor::new(info);
 
         let result = match name {
             "ConstantValue" => {
