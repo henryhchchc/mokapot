@@ -140,6 +140,17 @@ fn parse_complicated_class() {
 }
 
 #[test]
+fn parse_module_info() {
+    let bytes = test_data_class!("", "module-info");
+    let class = Class::parse(bytes).unwrap();
+    assert_eq!("module-info", class.binary_name);
+    let module = class.module.expect("The class is a module-info");
+    assert_eq!(1, module.exports.len());
+    assert_eq!(1, module.opens.len());
+    assert_eq!(1, module.requires.len());
+}
+
+#[test]
 fn not_a_class_file() {
     let bytes = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
