@@ -27,7 +27,7 @@ pub trait ClassPath {
     ///
     /// # Errors
     /// See [`Error`].
-    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error>;
+    fn find_class(&self, binary_name: &str) -> Result<Class, Error>;
 }
 
 impl<T> ClassPath for T
@@ -35,7 +35,7 @@ where
     T: Deref,
     <T as Deref>::Target: ClassPath,
 {
-    fn find_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error> {
+    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
         self.deref().find_class(binary_name)
     }
 }
@@ -51,12 +51,12 @@ impl<P> ClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: impl Borrow<str>) -> Result<Class, Error>
+    pub fn load_class(&self, binary_name: &str) -> Result<Class, Error>
     where
         P: ClassPath,
     {
         for class_path in &self.class_path {
-            match class_path.find_class(binary_name.borrow()) {
+            match class_path.find_class(binary_name) {
                 Ok(class) => return Ok(class),
                 Err(Error::NotFound) => continue,
                 Err(err) => return Err(err),

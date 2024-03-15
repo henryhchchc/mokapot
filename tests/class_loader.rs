@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::Cell, path::PathBuf};
+use std::{cell::Cell, path::PathBuf};
 
 use mokapot::jvm::{
     class::Class,
@@ -53,7 +53,7 @@ impl<'a> MockClassPath<'a> {
 }
 
 impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, _binary_name: impl Borrow<str>) -> Result<Class, Error> {
+    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
         let reader = test_data_class!("", "org/mokapot/test/MyClass");
         Class::from_reader(reader).map_err(Into::into)
@@ -111,4 +111,8 @@ fn jar_class_path_not_jar() {
         class_loader.load_class("jdk/internal/jimage/ImageReader"),
         Err(Error::Other(_)),
     ));
+}
+
+fn _class_path_object_safety(_b: Box<dyn ClassPath>) {
+    // For compilation checking only.
 }
