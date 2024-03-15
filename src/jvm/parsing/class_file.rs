@@ -82,8 +82,9 @@ impl ReadBytes for ClassFile {
             .map(|_| AttributeInfo::read_bytes(reader))
             .collect::<io::Result<_>>()?;
 
-        match reader.read(&mut [0; 1]) {
-            Ok(0) => Ok(Self {
+        // Make sure there is no extra data in the reader
+        if let Ok(0) = reader.read(&mut [0; 1]) {
+            Ok(Self {
                 minor_version,
                 major_version,
                 constant_pool,
@@ -94,8 +95,9 @@ impl ReadBytes for ClassFile {
                 fields,
                 methods,
                 attributes,
-            }),
-            _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Extra data")),
+            })
+        } else {
+            Err(io::Error::new(io::ErrorKind::InvalidData, "Extra data"))
         }
     }
 }
