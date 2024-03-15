@@ -10,8 +10,8 @@ use std::{
 use crate::{
     jvm::{
         code::{
-            ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableId,
-            LocalVariableTable, MethodBody, ProgramCounter,
+            ExceptionTableEntry, LineNumberTableEntry, LocalVariableId, LocalVariableTable,
+            MethodBody, ProgramCounter, RawInstruction,
         },
         method::{ParameterAccessFlags, ParameterInfo},
     },
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::FromRaw,
+    jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::{ReadBytes, ValueReaderExt},
     Context, Error,
@@ -40,7 +40,7 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl FromRaw for LineNumberTableEntry {
+impl ClassElement for LineNumberTableEntry {
     type Raw = Self;
 
     fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
@@ -59,7 +59,7 @@ impl ReadBytes for LineNumberTableEntry {
     }
 }
 
-impl FromRaw for ExceptionTableEntry {
+impl ClassElement for ExceptionTableEntry {
     type Raw = raw_attributes::ExceptionTableEntry;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -86,7 +86,7 @@ impl FromRaw for ExceptionTableEntry {
     }
 }
 
-impl FromRaw for LocalVariableDescAttr {
+impl ClassElement for LocalVariableDescAttr {
     type Raw = raw_attributes::LocalVariableInfo;
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
@@ -115,7 +115,7 @@ impl FromRaw for LocalVariableDescAttr {
         })
     }
 }
-impl FromRaw for LocalVariableTypeAttr {
+impl ClassElement for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableInfo;
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
@@ -143,7 +143,7 @@ impl FromRaw for LocalVariableTypeAttr {
         })
     }
 }
-impl FromRaw for ParameterInfo {
+impl ClassElement for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -159,26 +159,28 @@ impl FromRaw for ParameterInfo {
     }
 }
 
-impl FromRaw for MethodBody {
+impl ClassElement for MethodBody {
     type Raw = Code;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Code {
             max_stack,
             max_locals,
-            instruction_bytes: code,
+            instruction_bytes,
             exception_table,
             attributes,
         } = raw;
-        let instructions = Instruction::parse_code(code, ctx)?;
+
+        let raw_instructions = RawInstruction::from_bytes(instruction_bytes)?;
+        let instructions = ClassElement::from_raw(raw_instructions, ctx)?;
 
         let exception_table = exception_table
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let mut local_variable_table = None;
         extract_attributes! {

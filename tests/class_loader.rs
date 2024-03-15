@@ -56,7 +56,7 @@ impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: impl Borrow<str>) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
         let reader = test_data_class!("", "org/mokapot/test/MyClass");
-        Class::parse(reader).map_err(Into::into)
+        Class::from_reader(reader).map_err(Into::into)
     }
 }
 

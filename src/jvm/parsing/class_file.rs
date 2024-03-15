@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    attribute::AttributeInfo, field_info::FieldInfo, jvm_element_parser::FromRaw,
+    attribute::AttributeInfo, field_info::FieldInfo, jvm_element_parser::ClassElement,
     method_info::MethodInfo, raw_attributes, reader_utils::ReadBytes, Context, Error,
 };
 
@@ -39,7 +39,7 @@ impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
     /// See [`Error`] for more information.
-    pub fn parse<R>(reader: R) -> Result<Class, Error>
+    pub fn from_reader<R>(reader: R) -> Result<Class, Error>
     where
         R: std::io::Read,
     {
@@ -82,24 +82,21 @@ impl ReadBytes for ClassFile {
             .map(|_| AttributeInfo::read_bytes(reader))
             .collect::<io::Result<_>>()?;
 
-        let mut should_not_be_filled = [0u8; 1];
-        match reader.read(&mut should_not_be_filled) {
-            Ok(0) => (),
+        match reader.read(&mut [0; 1]) {
+            Ok(0) => Ok(Self {
+                minor_version,
+                major_version,
+                constant_pool,
+                access_flags,
+                this_class,
+                super_class,
+                interfaces,
+                fields,
+                methods,
+                attributes,
+            }),
             _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Extra data")),
         }
-
-        Ok(Self {
-            minor_version,
-            major_version,
-            constant_pool,
-            access_flags,
-            this_class,
-            super_class,
-            interfaces,
-            fields,
-            methods,
-            attributes,
-        })
     }
 }
 
@@ -142,15 +139,15 @@ impl Class {
             .collect::<Result<_, _>>()?;
         let fields = fields
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let methods = methods
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
 
         extract_attributes! {
@@ -210,7 +207,7 @@ impl Class {
     }
 }
 
-impl FromRaw for BootstrapMethod {
+impl ClassElement for BootstrapMethod {
     type Raw = raw_attributes::BootstrapMethod;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -227,7 +224,7 @@ impl FromRaw for BootstrapMethod {
     }
 }
 
-impl FromRaw for InnerClassInfo {
+impl ClassElement for InnerClassInfo {
     type Raw = raw_attributes::InnerClass;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -260,7 +257,7 @@ impl FromRaw for InnerClassInfo {
     }
 }
 
-impl FromRaw for RecordComponent {
+impl ClassElement for RecordComponent {
     type Raw = raw_attributes::RecordComponentInfo;
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
@@ -273,7 +270,7 @@ impl FromRaw for RecordComponent {
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| FromRaw::from_raw(it, ctx))
+            .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         extract_attributes! {
             for attributes in "record_component" {
@@ -301,7 +298,7 @@ impl FromRaw for RecordComponent {
     }
 }
 
-impl FromRaw for EnclosingMethod {
+impl ClassElement for EnclosingMethod {
     type Raw = raw_attributes::EnclosingMethod;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {

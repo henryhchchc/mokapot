@@ -29,7 +29,7 @@ macro_rules! test_data_class {
 
 fn parse_my_class() -> Result<Class, Error> {
     let bytes = test_data_class!("", "org/mokapot/test/MyClass");
-    Class::parse(bytes)
+    Class::from_reader(bytes)
 }
 
 /// Parse classes in OpenJDK test data
@@ -55,7 +55,7 @@ fn parse_openjdk_test_data() {
         test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner"),
     ];
     for bytes in test_data {
-        assert!(Class::parse(bytes).is_ok())
+        assert!(Class::from_reader(bytes).is_ok())
     }
 }
 
@@ -135,14 +135,14 @@ fn parse_complicated_class() {
         test_data_class!("", "org/mokapot/test/ComplicatedClass$InnerClass"),
         test_data_class!("", "org/mokapot/test/ComplicatedClass$1Test"),
     ] {
-        Class::parse(bytes).unwrap();
+        Class::from_reader(bytes).unwrap();
     }
 }
 
 #[test]
 fn parse_module_info() {
     let bytes = test_data_class!("", "module-info");
-    let class = Class::parse(bytes).unwrap();
+    let class = Class::from_reader(bytes).unwrap();
     assert_eq!("module-info", class.binary_name);
     let module = class.module.expect("The class is a module-info");
     assert_eq!(1, module.exports.len());
@@ -157,7 +157,7 @@ fn not_a_class_file() {
         "/test_data/MyClass.java"
     ));
     assert!(matches!(
-        Class::parse(bytes.as_slice()),
+        Class::from_reader(bytes.as_slice()),
         Err(Error::IO(e)) if e.kind() == io::ErrorKind::InvalidData
     ));
 }

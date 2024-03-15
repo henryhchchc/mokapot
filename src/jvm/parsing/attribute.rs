@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    jvm_element_parser::FromRaw,
+    jvm_element_parser::ClassElement,
     reader_utils::{read_byte_chunk, ReadBytes, ValueReaderExt},
     Context, Error,
 };
@@ -126,22 +126,19 @@ impl Attribute {
 
 macro_rules! parse {
     ($reader:expr, $ctx:expr $(=> $attr:ident )?) => {{
-        let raw_attr = $reader.read_value()?;
-        FromRaw::from_raw(raw_attr, $ctx)$( .map(Self::$attr) )?
+        let raw = $reader.read_value()?;
+        ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
     }};
     ($len_type:ty; $reader:expr, || $with:expr $(=> $attr:ident )?) => {{
         let count: $len_type = $reader.read_value()?;
         (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
     ($len_type:ty; $reader:expr, $ctx:expr $(=> $attr:ident )?) => {
-        parse![$len_type; $reader, || {
-            let raw = ReadBytes::read_bytes($reader)?;
-            FromRaw::from_raw(raw, $ctx)
-        }] $( .map(Self::$attr) )?
+        parse![$len_type; $reader, || parse!($reader, $ctx)] $( .map(Self::$attr) )?
     };
 }
 
-impl FromRaw for Attribute {
+impl ClassElement for Attribute {
     type Raw = AttributeInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {

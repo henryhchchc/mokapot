@@ -8,9 +8,9 @@ use crate::{
     types::field_type::PrimitiveType,
 };
 
-use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
+use super::{jvm_element_parser::ClassElement, raw_attributes, Context, Error};
 
-impl FromRaw for TypePathElement {
+impl ClassElement for TypePathElement {
     type Raw = (u8, u8);
     fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
         let (kind, argument_index) = raw;
@@ -24,7 +24,7 @@ impl FromRaw for TypePathElement {
     }
 }
 
-impl FromRaw for Annotation {
+impl ClassElement for Annotation {
     type Raw = raw_attributes::Annotation;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -47,7 +47,7 @@ impl FromRaw for Annotation {
         })
     }
 }
-impl FromRaw for TypeAnnotation {
+impl ClassElement for TypeAnnotation {
     type Raw = raw_attributes::TypeAnnotation;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -61,14 +61,14 @@ impl FromRaw for TypeAnnotation {
         let target_info = TargetInfo::from_raw(target_info, ctx)?;
         let target_path = target_path
             .into_iter()
-            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let annotation_type = ctx.constant_pool.get_str(type_index)?.parse()?;
         let element_value_pairs = element_value_pairs
             .into_iter()
             .map(|(name_idx, value)| {
                 let element_name = ctx.constant_pool.get_str(name_idx)?;
-                let element_value = FromRaw::from_raw(value, ctx)?;
+                let element_value = ClassElement::from_raw(value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, Error>>()?;
@@ -81,7 +81,7 @@ impl FromRaw for TypeAnnotation {
     }
 }
 
-impl FromRaw for TargetInfo {
+impl ClassElement for TargetInfo {
     type Raw = raw_attributes::TargetInfo;
 
     fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
@@ -121,7 +121,7 @@ impl FromRaw for TargetInfo {
     }
 }
 
-impl FromRaw for ElementValue {
+impl ClassElement for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -187,7 +187,7 @@ impl FromRaw for ElementValue {
             Self::Raw::Array(values) => {
                 let values = values
                     .into_iter()
-                    .map(|raw_value| FromRaw::from_raw(raw_value, ctx))
+                    .map(|raw_value| ClassElement::from_raw(raw_value, ctx))
                     .collect::<Result<_, _>>()?;
                 Ok(Self::Array(values))
             }

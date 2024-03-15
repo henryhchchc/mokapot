@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     attribute::AttributeInfo,
-    jvm_element_parser::FromRaw,
+    jvm_element_parser::ClassElement,
     reader_utils::{ReadBytes, ValueReaderExt},
     Context, Error,
 };
@@ -43,7 +43,7 @@ impl ReadBytes for FieldInfo {
     }
 }
 
-impl FromRaw for Field {
+impl ClassElement for Field {
     type Raw = FieldInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {

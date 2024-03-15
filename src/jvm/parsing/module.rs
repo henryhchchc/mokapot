@@ -3,9 +3,9 @@ use crate::jvm::{
     module::{Export, Module, Open, Provide, Require},
 };
 
-use super::{jvm_element_parser::FromRaw, raw_attributes, Context, Error};
+use super::{jvm_element_parser::ClassElement, raw_attributes, Context, Error};
 
-impl FromRaw for Require {
+impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let Self::Raw {
@@ -14,7 +14,7 @@ impl FromRaw for Require {
             version_index,
         } = raw;
         let module = ctx.constant_pool.get_module_ref(requires_index)?;
-        let flags = FromRaw::from_raw(flags, ctx)?;
+        let flags = ClassElement::from_raw(flags, ctx)?;
         let version = if version_index > 0 {
             Some(ctx.constant_pool.get_str(version_index)?.to_owned())
         } else {
@@ -28,7 +28,7 @@ impl FromRaw for Require {
     }
 }
 
-impl FromRaw for Export {
+impl ClassElement for Export {
     type Raw = raw_attributes::ExportsInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -39,7 +39,7 @@ impl FromRaw for Export {
         } = raw;
 
         let package = ctx.constant_pool.get_package_ref(exports_index)?;
-        let flags = FromRaw::from_raw(flags, ctx)?;
+        let flags = ClassElement::from_raw(flags, ctx)?;
         let to = to
             .into_iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
@@ -48,7 +48,7 @@ impl FromRaw for Export {
     }
 }
 
-impl FromRaw for Open {
+impl ClassElement for Open {
     type Raw = raw_attributes::OpensInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -59,7 +59,7 @@ impl FromRaw for Open {
         } = raw;
 
         let package = ctx.constant_pool.get_package_ref(opens_index)?;
-        let flags = FromRaw::from_raw(flags, ctx)?;
+        let flags = ClassElement::from_raw(flags, ctx)?;
         let to = to
             .into_iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
@@ -68,7 +68,7 @@ impl FromRaw for Open {
     }
 }
 
-impl FromRaw for Provide {
+impl ClassElement for Provide {
     type Raw = raw_attributes::ProvidesInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -85,7 +85,7 @@ impl FromRaw for Provide {
     }
 }
 
-impl FromRaw for Module {
+impl ClassElement for Module {
     type Raw = raw_attributes::ModuleInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -107,7 +107,7 @@ impl FromRaw for Module {
             })?
         };
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let flags = FromRaw::from_raw(flags, ctx)?;
+        let flags = ClassElement::from_raw(flags, ctx)?;
         let version = if version_index > 0 {
             Some(ctx.constant_pool.get_str(version_index)?.to_owned())
         } else {
@@ -115,15 +115,15 @@ impl FromRaw for Module {
         };
         let requires = requires
             .into_iter()
-            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let exports = exports
             .into_iter()
-            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let opens = opens
             .into_iter()
-            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let uses = uses
             .into_iter()
@@ -131,7 +131,7 @@ impl FromRaw for Module {
             .collect::<Result<_, _>>()?;
         let provides = provides
             .into_iter()
-            .map(|raw| FromRaw::from_raw(raw, ctx))
+            .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         Ok(Module {
             name,

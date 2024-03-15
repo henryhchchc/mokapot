@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     attribute::AttributeInfo,
-    jvm_element_parser::FromRaw,
+    jvm_element_parser::ClassElement,
     reader_utils::{ReadBytes, ValueReaderExt},
     Error,
 };
@@ -45,7 +45,7 @@ impl ReadBytes for MethodInfo {
     }
 }
 
-impl FromRaw for Method {
+impl ClassElement for Method {
     type Raw = MethodInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {

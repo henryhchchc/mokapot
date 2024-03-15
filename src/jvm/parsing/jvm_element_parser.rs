@@ -2,13 +2,13 @@ use bitflags::Flags;
 
 use super::{Context, Error};
 
-pub(super) trait FromRaw: Sized {
+pub(super) trait ClassElement: Sized {
     type Raw: Sized;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error>;
 }
 
-impl<T> FromRaw for T
+impl<T> ClassElement for T
 where
     T: Flags<Bits = u16>,
 {

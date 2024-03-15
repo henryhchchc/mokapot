@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 
 use crate::{
@@ -7,22 +9,28 @@ use crate::{
             WideInstruction,
         },
         constant_pool::{self, ConstantPool},
-        parsing::{Context, Error},
+        parsing::{jvm_element_parser::ClassElement, Context, Error},
     },
     macros::malform,
     types::field_type::PrimitiveType,
 };
 
-impl Instruction {
-    pub(crate) fn parse_code(
-        reader: Vec<u8>,
-        ctx: &Context,
-    ) -> Result<InstructionList<Instruction>, Error> {
-        let raw_instructions = RawInstruction::from_bytes(reader)?;
-        let result = raw_instructions.lift(&ctx.constant_pool)?;
-        Ok(result)
-    }
+impl ClassElement for InstructionList<Instruction> {
+    type Raw = InstructionList<RawInstruction>;
 
+    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+        let inner: BTreeMap<_, _> = raw
+            .into_iter()
+            .map(|(pc, raw_insn)| {
+                Instruction::from_raw_instruction(raw_insn, pc, &ctx.constant_pool)
+                    .map(|it| (pc, it))
+            })
+            .try_collect()?;
+        Ok(InstructionList::from(inner))
+    }
+}
+
+impl Instruction {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn from_raw_instruction(
         raw_instruction: RawInstruction,
