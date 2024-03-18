@@ -28,7 +28,7 @@ macro_rules! test_data_class {
 }
 
 fn parse_my_class() -> Result<Class, Error> {
-    let bytes = test_data_class!("", "org/mokapot/test/MyClass");
+    let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
     Class::from_reader(bytes)
 }
 
@@ -131,9 +131,9 @@ fn test_methods() {
 #[test]
 fn parse_complicated_class() {
     for bytes in [
-        test_data_class!("", "org/mokapot/test/ComplicatedClass"),
-        test_data_class!("", "org/mokapot/test/ComplicatedClass$InnerClass"),
-        test_data_class!("", "org/mokapot/test/ComplicatedClass$1Test"),
+        test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass"),
+        test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$InnerClass"),
+        test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$1Test"),
     ] {
         Class::from_reader(bytes).unwrap();
     }
@@ -141,7 +141,7 @@ fn parse_complicated_class() {
 
 #[test]
 fn parse_module_info() {
-    let bytes = test_data_class!("", "module-info");
+    let bytes = test_data_class!("mokapot", "module-info");
     let class = Class::from_reader(bytes).unwrap();
     assert_eq!("module-info", class.binary_name);
     let module = class.module.expect("The class is a module-info");
@@ -152,10 +152,7 @@ fn parse_module_info() {
 
 #[test]
 fn not_a_class_file() {
-    let bytes = include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/test_data/MyClass.java"
-    ));
+    let bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
     assert!(matches!(
         Class::from_reader(bytes.as_slice()),
         Err(Error::IO(e)) if e.kind() == io::ErrorKind::InvalidData

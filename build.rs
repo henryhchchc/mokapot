@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{env, path::PathBuf, process::Command};
 
 fn main() {
     compile_java_test_data();
@@ -6,10 +6,11 @@ fn main() {
 
 fn compile_java_test_data() {
     if Command::new("javac").spawn().is_ok() {
-        compile_java_files("");
+        compile_java_files("mokapot");
         compile_java_files("openjdk");
+        println!("cargo:rustc-cfg=test_with_jdk");
     } else {
-        println!("cargo:warning=Can not find javac,skip compiling java test data")
+        println!("cargo:warning=Can not find javac, test compilation will fail");
     }
 }
 
@@ -18,18 +19,34 @@ fn compile_java_files(path: &str) {
     let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("test_data")
         .join(path);
-    let java_source_files: Vec<_> = fs::read_dir(test_data_path)
-        .expect("Fail to open test data dir")
-        .filter_map(|it| it.ok())
-        .filter(|it| it.file_name().to_string_lossy().ends_with(".java"))
+    let glob_pattern = format!(
+        "{}/**/*.java",
+        test_data_path
+            .to_str()
+            .expect("Test folder is not named with vaild UTF-8")
+    );
+    let java_source_files: Vec<_> = glob::glob(&glob_pattern)
+        .expect("Failed to search for .java files in the test data folder")
+        .filter_map(Result::ok)
         .collect();
-    java_source_files.into_iter().for_each(|java_file| {
-        Command::new("javac")
-            .arg("-g")
-            .arg("-d")
-            .arg(build_path.join(path).join("java_classes"))
-            .arg(java_file.path().to_string_lossy().to_string())
-            .status()
-            .unwrap();
-    });
+
+    let status = Command::new("javac")
+        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/test_data"))
+        .arg("-g")
+        .arg("-d")
+        .arg(build_path.join(path).join("java_classes"))
+        .args(java_source_files.into_iter().map(|it| {
+            it.to_str()
+                .expect("Java source file is not named with vaild UTF-8")
+                .to_owned()
+        }))
+        .output()
+        .expect("Fail to spawn javac");
+
+    if !status.status.success() {
+        println!(
+            "cargo:warning=Failed to compile java files: {}",
+            String::from_utf8_lossy(&status.stderr)
+        );
+    }
 }

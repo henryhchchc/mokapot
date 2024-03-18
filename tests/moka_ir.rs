@@ -7,7 +7,7 @@ use petgraph::dot::Dot;
 fn get_test_class() -> Class {
     let bytes = include_bytes!(concat!(
         env!("OUT_DIR"),
-        "/java_classes/org/mokapot/test/TestAnalysis.class"
+        "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
     ));
     Class::from_reader(&bytes[..]).unwrap()
 }

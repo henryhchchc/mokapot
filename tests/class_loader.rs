@@ -23,7 +23,7 @@ macro_rules! test_data_class {
 }
 
 fn create_test_dir_class_path() -> DirectoryClassPath {
-    DirectoryClassPath::new(concat!(env!("OUT_DIR"), "/java_classes"))
+    DirectoryClassPath::new(concat!(env!("OUT_DIR"), "/mokapot/java_classes"))
 }
 
 #[test]
@@ -55,7 +55,7 @@ impl<'a> MockClassPath<'a> {
 impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
         self.counter.set(self.counter.get() + 1);
-        let reader = test_data_class!("", "org/mokapot/test/MyClass");
+        let reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
         Class::from_reader(reader).map_err(Into::into)
     }
 }
@@ -103,7 +103,7 @@ fn jar_class_path_not_found() {
 
 #[test]
 fn jar_class_path_not_jar() {
-    let jar_path = PathBuf::from("test_data/MyClass.java");
+    let jar_path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
     let jar_cp = JarClassPath::new(jar_path);
     let class_loader = ClassLoader::new([jar_cp]);
 
