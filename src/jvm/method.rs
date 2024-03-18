@@ -139,8 +139,49 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
+    use crate::tests::arb_identifier;
+
     use super::*;
     use proptest::prelude::*;
+
+    fn empty_method(name: String) -> Method {
+        Method {
+            name,
+            access_flags: AccessFlags::PUBLIC,
+            descriptor: "()V".parse().unwrap(),
+            owner: ClassRef::new("org/mokapot/Test"),
+            body: None,
+            exceptions: vec![],
+            runtime_visible_annotations: vec![],
+            runtime_invisible_annotations: vec![],
+            runtime_visible_type_annotations: vec![],
+            runtime_invisible_type_annotations: vec![],
+            runtime_visible_parameter_annotations: vec![],
+            runtime_invisible_parameter_annotations: vec![],
+            annotation_default: None,
+            parameters: vec![],
+            is_synthetic: false,
+            is_deprecated: false,
+            signature: None,
+            free_attributes: vec![],
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn not_a_constructor(name in arb_identifier()) {
+            prop_assume!(name != Method::CONSTRUCTOR_NAME);
+            let method = empty_method(name);
+            assert!(!method.is_constructor());
+        }
+
+        #[test]
+        fn not_a_static_init(name in arb_identifier()) {
+            prop_assume!(name != Method::CLASS_INITIALIZER_NAME);
+            let method = empty_method(name);
+            assert!(!method.is_static_initializer_block());
+        }
+    }
 
     fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
         prop_oneof![

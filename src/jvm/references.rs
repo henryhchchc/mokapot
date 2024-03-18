@@ -97,13 +97,13 @@ pub struct PackageRef {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::tests::{arb_class_name, arb_field_type};
+    use crate::tests::{arb_field_type, arb_identifier};
 
     use super::*;
     use proptest::prelude::*;
 
     pub(crate) fn arb_class_ref() -> impl Strategy<Value = ClassRef> {
-        arb_class_name().prop_map(ClassRef::new)
+        arb_identifier().prop_map(ClassRef::new)
     }
 
     pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
@@ -119,7 +119,7 @@ pub(crate) mod tests {
     proptest! {
 
         #[test]
-        fn test_is_constructor(class_name in arb_class_name()) {
+        fn test_is_constructor(class_name in arb_identifier()) {
             let method = MethodRef {
                 owner: ClassRef::new(class_name),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
@@ -130,7 +130,7 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn test_is_static_initializer_bolck(class_name in arb_class_name()) {
+        fn test_is_static_initializer_bolck(class_name in arb_identifier()) {
             let method = MethodRef {
                 owner: ClassRef::new(class_name),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),

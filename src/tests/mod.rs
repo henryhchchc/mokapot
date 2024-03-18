@@ -29,7 +29,7 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
     ]
 }
 
-pub(crate) fn arb_class_name() -> impl Strategy<Value = String> {
+pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
     let arb_ident = prop::string::string_regex(r"[a-zA-Z][\w\$_]*").expect("The regex is invalid");
     prop::collection::vec(arb_ident, 0..10).prop_map(|v| v.join("/"))
 }
@@ -37,7 +37,7 @@ pub(crate) fn arb_class_name() -> impl Strategy<Value = String> {
 pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![
         any::<PrimitiveType>().prop_map(FieldType::Base),
-        arb_class_name()
+        arb_identifier()
             .prop_map(ClassRef::new)
             .prop_map(FieldType::Object),
     ]

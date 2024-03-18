@@ -172,7 +172,7 @@ pub struct TypeReference(pub FieldType);
 mod tests {
     use proptest::prelude::*;
 
-    use crate::tests::{arb_class_name, arb_non_array_field_type};
+    use crate::tests::{arb_identifier, arb_non_array_field_type};
 
     use super::*;
 
@@ -258,7 +258,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn field_type_from_str_class(class_name in arb_class_name()) {
+        fn field_type_from_str_class(class_name in arb_identifier()) {
             let s = format!("L{class_name};");
             let expected = FieldType::Object(ClassRef::new(class_name));
             assert_eq!(s.parse(), Ok(expected));
