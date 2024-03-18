@@ -26,12 +26,12 @@ fn compile_java_files(path: &str) {
             .expect("Test folder is not named with vaild UTF-8")
     );
     let java_source_files: Vec<_> = glob::glob(&glob_pattern)
-        .expect("Failed to search for .java files in the test data folder")
+        .expect("The glob pattern is invalid.")
         .filter_map(Result::ok)
         .collect();
 
     let status = Command::new("javac")
-        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/test_data"))
+        .current_dir(test_data_path)
         .arg("-g")
         .arg("-d")
         .arg(build_path.join(path).join("java_classes"))
