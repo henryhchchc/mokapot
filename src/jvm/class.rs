@@ -1,5 +1,7 @@
 //! JVM classes and interfaces
 
+use std::borrow::Borrow;
+
 use bitflags::bitflags;
 
 use crate::{
@@ -84,10 +86,24 @@ pub struct Class {
 impl Class {
     /// Gets a method of the class by its name and descriptor.
     #[must_use]
-    pub fn get_method(&self, name: &str, descriptor: &MethodDescriptor) -> Option<&Method> {
+    pub fn get_method<D>(&self, name: &str, descriptor: D) -> Option<&Method>
+    where
+        D: Borrow<MethodDescriptor>,
+    {
         self.methods
             .iter()
-            .find(|m| m.name == name && &m.descriptor == descriptor)
+            .find(|m| m.name == name && &m.descriptor == descriptor.borrow())
+    }
+
+    /// Gets a field of the class by its name and type.
+    #[must_use]
+    pub fn get_field<T>(&self, name: &str, field_type: T) -> Option<&Field>
+    where
+        T: Borrow<FieldType>,
+    {
+        self.fields
+            .iter()
+            .find(|f| f.name == name && &f.field_type == field_type.borrow())
     }
 
     /// Creates a [`ClassRef`] referring to the class.

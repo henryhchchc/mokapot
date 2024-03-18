@@ -8,7 +8,7 @@ use mokapot::{
     },
     types::{
         field_type::{FieldType, PrimitiveType},
-        method_descriptor::ReturnType,
+        method_descriptor::{MethodDescriptor, ReturnType},
     },
 };
 
@@ -76,14 +76,17 @@ fn test_parse_my_class() {
         my_class.interfaces.first()
     );
     assert_eq!(2, my_class.fields.len());
-    let test_field = &my_class
-        .fields
-        .iter()
-        .find(|f| f.name == "test")
-        .expect("test field not found");
-    assert_eq!(FieldType::Base(PrimitiveType::Long), test_field.field_type);
+    assert!(my_class
+        .get_field("test", FieldType::Base(PrimitiveType::Long))
+        .is_some());
+
     let main_method = &my_class
-        .get_method("main", &"([Ljava/lang/String;)V".parse().unwrap())
+        .get_method(
+            "main",
+            "([Ljava/lang/String;)V"
+                .parse::<MethodDescriptor>()
+                .unwrap(),
+        )
         .expect("Cannot find main method");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
