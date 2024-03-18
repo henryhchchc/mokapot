@@ -27,11 +27,6 @@ macro_rules! test_data_class {
     };
 }
 
-fn parse_my_class() -> Result<Class, Error> {
-    let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-    Class::from_reader(bytes)
-}
-
 /// Parse classes in OpenJDK test data
 /// Stolen from https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata
 #[test]
@@ -60,67 +55,36 @@ fn parse_openjdk_test_data() {
 }
 
 #[test]
-fn test_parse_file() {
-    assert!(parse_my_class().is_ok());
-}
+fn test_parse_my_class() {
+    let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
+    let my_class = Class::from_reader(bytes).expect("Faied to parse class");
 
-#[test]
-fn test_parse_version() {
-    let my_class = parse_my_class().unwrap();
     assert_eq!(65, my_class.version.major());
     assert_eq!(0, my_class.version.minor());
     assert!(!my_class.version.is_preview_enabled());
-}
-
-#[test]
-fn test_access_flag() {
-    let my_class = parse_my_class().unwrap();
-    let expected = AccessFlags::PUBLIC | AccessFlags::SUPER;
-    assert_eq!(expected, my_class.access_flags);
-}
-
-#[test]
-fn test_class_name() {
-    let my_class = parse_my_class().unwrap();
+    assert_eq!(
+        AccessFlags::PUBLIC | AccessFlags::SUPER,
+        my_class.access_flags
+    );
     assert_eq!("org/mokapot/test/MyClass", my_class.binary_name);
-}
-
-#[test]
-fn test_super_class_name() {
-    let my_class = parse_my_class().unwrap();
     assert_eq!(
         Some(ClassRef::new("java/lang/Object")),
         my_class.super_class
     );
-}
-
-#[test]
-fn test_interfaces() {
-    let my_class = parse_my_class().unwrap();
-    let mut interfaces = my_class.interfaces.into_iter();
     assert_eq!(
-        Some(ClassRef::new("java/lang/Cloneable")),
-        interfaces.next()
+        Some(&ClassRef::new("java/lang/Cloneable")),
+        my_class.interfaces.first()
     );
-}
-
-#[test]
-fn test_fields() {
-    let my_class = parse_my_class().unwrap();
     assert_eq!(2, my_class.fields.len());
-    let test_field = &my_class.fields.iter().find(|f| f.name == "test").unwrap();
-    assert_eq!(FieldType::Base(PrimitiveType::Long), test_field.field_type);
-}
-
-#[test]
-fn test_methods() {
-    let my_class = parse_my_class().unwrap();
-    assert_eq!(4, my_class.methods.len());
-    let main_method = &my_class
-        .methods
+    let test_field = &my_class
+        .fields
         .iter()
-        .find(|f| f.name == "main")
-        .expect("main method not found");
+        .find(|f| f.name == "test")
+        .expect("test field not found");
+    assert_eq!(FieldType::Base(PrimitiveType::Long), test_field.field_type);
+    let main_method = &my_class
+        .get_method("main", &"([Ljava/lang/String;)V".parse().unwrap())
+        .expect("Cannot find main method");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
         FieldType::Object(ClassRef::new("java/lang/String")).into_array_type(),
