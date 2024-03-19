@@ -137,6 +137,12 @@ impl FromStr for FieldType {
     }
 }
 
+impl From<PrimitiveType> for FieldType {
+    fn from(it: PrimitiveType) -> Self {
+        Self::Base(it)
+    }
+}
+
 impl FieldType {
     /// Creates an array type with the given type as its elements.
     #[must_use]

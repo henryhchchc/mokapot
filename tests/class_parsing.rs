@@ -2,7 +2,7 @@ use std::io::{self};
 
 use mokapot::{
     jvm::{
-        class::{AccessFlags, Class},
+        class::{AccessFlags, Class, RecordComponent},
         parsing::Error,
         references::ClassRef,
     },
@@ -109,12 +109,44 @@ fn parse_complicated_class() {
 #[test]
 fn parse_module_info() {
     let bytes = test_data_class!("mokapot", "module-info");
-    let class = Class::from_reader(bytes).unwrap();
+    let class = Class::from_reader(bytes).expect("Fail to parse module-info");
     assert_eq!("module-info", class.binary_name);
     let module = class.module.expect("The class is a module-info");
     assert_eq!(1, module.exports.len());
     assert_eq!(1, module.opens.len());
     assert_eq!(1, module.requires.len());
+}
+
+#[test]
+fn parse_record() {
+    let bytes = test_data_class!("mokapot", "org/mokapot/test/RecordTest");
+    let class = Class::from_reader(bytes).unwrap();
+    assert_eq!("org/mokapot/test/RecordTest", class.binary_name);
+    let Some(componenets) = class.record else {
+        panic!("Record components not found.");
+    };
+    let mut rec_iter = componenets.into_iter();
+    assert!(matches!(
+        rec_iter.next(),
+        Some(RecordComponent { name, component_type, .. })
+        if name == "x" && component_type == PrimitiveType::Int.into()
+    ));
+    assert!(matches!(
+        rec_iter.next(),
+        Some(RecordComponent { name, component_type, .. })
+        if name == "y" && component_type == PrimitiveType::Int.into()
+    ));
+    assert!(matches!(
+        rec_iter.next(),
+        Some(RecordComponent { name, component_type, .. })
+        if name == "z" && component_type == PrimitiveType::Double.into()
+    ));
+    assert!(matches!(
+        rec_iter.next(),
+        Some(RecordComponent { name, component_type: FieldType::Object(ClassRef { binary_name }), .. })
+        if name == "description" && binary_name == "java/lang/String"
+    ));
+    assert!(rec_iter.next().is_none());
 }
 
 #[test]
