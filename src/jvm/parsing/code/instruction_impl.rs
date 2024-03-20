@@ -217,67 +217,67 @@ impl Instruction {
             DCmpL => Self::DCmpL,
             DCmpG => Self::DCmpG,
             IfEq { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfEq(target)
             }
             IfNe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfNe(target)
             }
             IfLt { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfLt(target)
             }
             IfGe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfGe(target)
             }
             IfGt { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfGt(target)
             }
             IfLe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfLe(target)
             }
             IfICmpEq { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpEq(target)
             }
             IfICmpNe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpNe(target)
             }
             IfICmpLt { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpLt(target)
             }
             IfICmpGe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpGe(target)
             }
             IfICmpGt { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpGt(target)
             }
             IfICmpLe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfICmpLe(target)
             }
             IfACmpEq { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfACmpEq(target)
             }
             IfACmpNe { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::IfACmpNe(target)
             }
             Goto { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::Goto(target)
             }
             Jsr { offset } => {
-                let target = pc.offset_i16(offset)?;
+                let target = (pc + offset)?;
                 Self::Jsr(target)
             }
             Ret { index } => Self::Ret(index),
@@ -289,10 +289,10 @@ impl Instruction {
             } => {
                 let targets = jump_offsets
                     .into_iter()
-                    .map(|offset| pc.offset(offset))
+                    .map(|offset| (pc + offset))
                     .try_collect()?;
                 Self::TableSwitch {
-                    default: pc.offset(default)?,
+                    default: (pc + default)?,
                     range: low..=high,
                     jump_targets: targets,
                 }
@@ -303,10 +303,10 @@ impl Instruction {
             } => {
                 let targets = match_offsets
                     .into_iter()
-                    .map(|(value, offset)| pc.offset(offset).map(|target| (value, target)))
+                    .map(|(value, offset)| (pc + offset).map(|target| (value, target)))
                     .try_collect()?;
                 Self::LookupSwitch {
-                    default: pc.offset(default)?,
+                    default: (pc + default)?,
                     match_targets: targets,
                 }
             }
@@ -428,22 +428,10 @@ impl Instruction {
                 let class_ref = constant_pool.get_type_ref(index)?;
                 Self::MultiANewArray(class_ref, dimensions)
             }
-            IfNull { offset } => {
-                let target = pc.offset_i16(offset)?;
-                Self::IfNull(target)
-            }
-            IfNonNull { offset } => {
-                let target = pc.offset_i16(offset)?;
-                Self::IfNonNull(target)
-            }
-            GotoW { offset } => {
-                let target = pc.offset(offset)?;
-                Self::GotoW(target)
-            }
-            JsrW { offset } => {
-                let target = pc.offset(offset)?;
-                Self::JsrW(target)
-            }
+            IfNull { offset } => Self::IfNull((pc + offset)?),
+            IfNonNull { offset } => Self::IfNonNull((pc + offset)?),
+            GotoW { offset } => Self::GotoW((pc + offset)?),
+            JsrW { offset } => Self::JsrW((pc + offset)?),
 
             // Reserved
             Breakpoint => Self::Breakpoint,

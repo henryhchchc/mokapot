@@ -102,7 +102,7 @@ impl ClassElement for TargetInfo {
                 table
                     .into_iter()
                     .map(|(start, len, index)| {
-                        let effective_range = start..start.offset(len.into())?;
+                        let effective_range = start..(start + len)?;
                         Ok(LocalVariableId {
                             effective_range,
                             index,

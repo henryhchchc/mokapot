@@ -1,35 +1,79 @@
-use std::fmt::{Debug, Display};
+use std::{fmt::Debug, ops::Add};
 
 /// Denotes a program counter in an instruction sequence.
-#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::Display,
+)]
 #[repr(transparent)]
-#[derive(Default)]
+#[display(fmt = "#{_0:04X}")]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
     /// Creates a new program counter based on the given value with a given offset.
     /// # Errors
     /// - [`InvalidOffset::I32`] If the resulting value is too large to fit into a [`ProgramCounter`].
+    #[deprecated(note = "Use the `+` operator insted.")]
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
-        let self_i32 = i32::from(self.0);
-        self_i32
-            .checked_add(offset)
-            .and_then(|it| u16::try_from(it).ok())
-            .map(Self)
-            .ok_or(InvalidOffset::I32(offset))
+        *self + offset
     }
 
     /// Creates a new program counter based on the given value with a given offset (in [`i16`]).
     /// # Errors
     /// - [`InvalidOffset::I16`] If the resulting value is too large to fit into a [`ProgramCounter`].
+    #[deprecated(note = "Use the `+` operator insted.")]
     pub fn offset_i16(&self, offset: i16) -> Result<Self, InvalidOffset> {
+        *self + offset
+    }
+}
+
+impl Add<i16> for ProgramCounter {
+    type Output = Result<Self, InvalidOffset>;
+
+    fn add(self, rhs: i16) -> Self::Output {
         let self_i32 = i32::from(self.0);
-        let offset_i32 = i32::from(offset);
+        let offset_i32 = i32::from(rhs);
         self_i32
             .checked_add(offset_i32)
             .and_then(|it| u16::try_from(it).ok())
             .map(Self)
-            .ok_or(InvalidOffset::I16(offset))
+            .ok_or(InvalidOffset)
+    }
+}
+
+impl Add<i32> for ProgramCounter {
+    type Output = Result<Self, InvalidOffset>;
+
+    fn add(self, rhs: i32) -> Self::Output {
+        let self_i32 = i32::from(self.0);
+        self_i32
+            .checked_add(rhs)
+            .and_then(|it| u16::try_from(it).ok())
+            .map(Self)
+            .ok_or(InvalidOffset)
+    }
+}
+
+impl Add<u16> for ProgramCounter {
+    type Output = Result<Self, InvalidOffset>;
+
+    fn add(self, rhs: u16) -> Self::Output {
+        let self_u32 = u32::from(self.0);
+        let offeset_u32 = u32::from(rhs);
+        self_u32
+            .checked_add(offeset_u32)
+            .and_then(|it| u16::try_from(it).ok())
+            .map(Self)
+            .ok_or(InvalidOffset)
     }
 }
 
@@ -50,34 +94,10 @@ impl Debug for ProgramCounter {
     }
 }
 
-impl Display for ProgramCounter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{:04X}", self.0)
-    }
-}
-
-impl From<u16> for ProgramCounter {
-    fn from(value: u16) -> Self {
-        Self(value)
-    }
-}
-
-impl From<ProgramCounter> for u16 {
-    fn from(val: ProgramCounter) -> Self {
-        val.0
-    }
-}
-
 /// An error occurring when trying to offset a program counter.
-#[derive(thiserror::Error, Debug)]
-pub enum InvalidOffset {
-    /// When the offset is given as an [`i16`].
-    #[error("Invalid i16 offset {0}")]
-    I16(i16),
-    /// When the offset is given as an [`i32`].
-    #[error("Invalid i32 offset {0}")]
-    I32(i32),
-}
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+#[error("Invalid PC Offset")]
+pub struct InvalidOffset;
 
 #[cfg(test)]
 mod tests {
@@ -92,23 +112,17 @@ mod tests {
     #[test]
     fn test_offset() {
         let pc = ProgramCounter::from(10);
-        assert_eq!(pc.offset(5).unwrap(), ProgramCounter::from(15));
-        assert_eq!(pc.offset(-5).unwrap(), ProgramCounter::from(5));
-        assert!(pc.offset(i32::MAX).is_err());
+        assert_eq!(pc + 5, Ok(ProgramCounter::from(15)));
+        assert_eq!(pc + -5, Ok(ProgramCounter::from(5)));
+        assert_eq!(pc + i32::MAX, Err(InvalidOffset));
     }
 
     #[test]
     fn test_offset_i16() {
         let pc = ProgramCounter::from(u16::MAX - 10);
-        assert_eq!(
-            pc.offset_i16(5).unwrap(),
-            ProgramCounter::from(u16::MAX - 5)
-        );
-        assert_eq!(
-            pc.offset_i16(-5).unwrap(),
-            ProgramCounter::from(u16::MAX - 15)
-        );
-        assert!(pc.offset_i16(i16::MAX).is_err());
+        assert_eq!(pc + 5i16, Ok(ProgramCounter::from(u16::MAX - 5)));
+        assert_eq!(pc + -5i16, Ok(ProgramCounter::from(u16::MAX - 15)));
+        assert_eq!(pc + i16::MAX, Err(InvalidOffset));
     }
 
     #[test]

@@ -97,10 +97,7 @@ impl ClassElement for LocalVariableDescAttr {
             index,
         } = raw;
 
-        let effective_range = {
-            let end_pc = start_pc.offset(i32::from(length))?;
-            start_pc..end_pc
-        };
+        let effective_range = start_pc..(start_pc + length)?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx)?;
         let field_type = FieldType::from_str(descriptor)?;
@@ -126,10 +123,7 @@ impl ClassElement for LocalVariableTypeAttr {
             index,
         } = raw;
 
-        let effective_range = {
-            let end_pc = start_pc.offset(i32::from(length))?;
-            start_pc..end_pc
-        };
+        let effective_range = start_pc..(start_pc + length)?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
         let id = LocalVariableId {
