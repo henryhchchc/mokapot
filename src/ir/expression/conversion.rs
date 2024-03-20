@@ -1,7 +1,4 @@
 use std::collections::BTreeSet;
-use std::fmt::Formatter;
-
-use std::fmt::Display;
 
 use crate::ir::Identifier;
 use crate::types::field_type::FieldType;
@@ -9,41 +6,58 @@ use crate::types::field_type::FieldType;
 use super::super::Argument;
 
 /// An operation that converts between types.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operaion {
     /// Converts an `int` to a `long`.
+    #[display(fmt = "{_0} as long")]
     Int2Long(Argument),
     /// Converts an `int` to a `float`.
+    #[display(fmt = "{_0} as float")]
     Int2Float(Argument),
     /// Converts an `int` to a `double`.
+    #[display(fmt = "{_0} as double")]
     Int2Double(Argument),
     /// Converts a `long` to an `int`.
+    #[display(fmt = "{_0} as int")]
     Long2Int(Argument),
     /// Converts a `long` to a `float`.
+    #[display(fmt = "{_0} as float")]
     Long2Float(Argument),
     /// Converts a `long` to a `double`.
+    #[display(fmt = "{_0} as double")]
     Long2Double(Argument),
     /// Converts a `float` to an `int`.
+    #[display(fmt = "{_0} as int")]
     Float2Int(Argument),
     /// Converts a `float` to a `long`.
+    #[display(fmt = "{_0} as long")]
     Float2Long(Argument),
     /// Converts a `float` to a `double`.
+    #[display(fmt = "{_0} as double")]
     Float2Double(Argument),
     /// Converts a `double` to an `int`.
+    #[display(fmt = "{_0} as int")]
     Double2Int(Argument),
     /// Converts a `double` to a `long`.
+    #[display(fmt = "{_0} as long")]
     Double2Long(Argument),
     /// Converts a `double` to a `float`.
+    #[display(fmt = "{_0} as float")]
     Double2Float(Argument),
     /// Converts an `int` to a `byte`.
+    #[display(fmt = "{_0} as byte")]
     Int2Byte(Argument),
     /// Converts an `int` to a `char`.
+    #[display(fmt = "{_0} as char")]
     Int2Char(Argument),
     /// Converts an `int` to a `short`.
+    #[display(fmt = "{_0} as short")]
     Int2Short(Argument),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
+    #[display(fmt = "{_0} as {}", "_1.descriptor()")]
     CheckCast(Argument, FieldType),
     /// Checks whether an object is an instance of a given type.
+    #[display(fmt = "{_0} is {}", "_1.descriptor()")]
     InstanceOf(Argument, FieldType),
 }
 impl Operaion {
@@ -68,34 +82,6 @@ impl Operaion {
             | Self::Int2Short(arg)
             | Self::CheckCast(arg, _)
             | Self::InstanceOf(arg, _) => arg.iter().copied().collect(),
-        }
-    }
-}
-
-impl Display for Operaion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Int2Long(arg) | Self::Float2Long(arg) | Self::Double2Long(arg) => {
-                write!(f, "{arg} as long")
-            }
-            Self::Long2Int(arg) | Self::Float2Int(arg) | Self::Double2Int(arg) => {
-                write!(f, "{arg} as int")
-            }
-            Self::Int2Float(arg) | Self::Long2Float(arg) | Self::Double2Float(arg) => {
-                write!(f, "{arg} as float")
-            }
-            Self::Int2Double(arg) | Self::Long2Double(arg) | Self::Float2Double(arg) => {
-                write!(f, "{arg} as double")
-            }
-            Self::Int2Byte(operand) => write!(f, "{operand} as byte"),
-            Self::Int2Char(operand) => write!(f, "{operand} as char"),
-            Self::Int2Short(operand) => write!(f, "{operand} as short"),
-            Self::CheckCast(operand, target_type) => {
-                write!(f, "{} as {}", operand, target_type.descriptor())
-            }
-            Self::InstanceOf(operand, target_type) => {
-                write!(f, "{} is {}", operand, target_type.descriptor())
-            }
         }
     }
 }

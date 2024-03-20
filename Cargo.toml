@@ -12,6 +12,7 @@ keywords = ["jvm", "java", "analysis", "bytecode"]
 [dependencies]
 bitflags = "2.4"
 cesu8 = "1.1"
+derive_more = "0"
 document-features = "0.2"
 itertools = "0.12"
 petgraph = { version = "0.6", optional = true }

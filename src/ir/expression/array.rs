@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Display};
+use std::collections::BTreeSet;
 
 use itertools::Itertools;
 
@@ -8,9 +8,10 @@ use crate::{
 };
 
 /// An operation on an array.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operation {
     /// Create a new array.
+    #[display(fmt = "new {element_type}[{length}]")]
     New {
         /// The type of the elements in the array.
         element_type: FieldType,
@@ -18,6 +19,10 @@ pub enum Operation {
         length: Argument,
     },
     /// Create a new multidimensional array.
+    #[display(
+        fmt = "new {element_type}[{}]",
+        "dimensions.iter().map(std::string::ToString::to_string).join(\", \")"
+    )]
     NewMultiDim {
         /// The type of the elements in the array.
         element_type: FieldType,
@@ -25,6 +30,7 @@ pub enum Operation {
         dimensions: Vec<Argument>,
     },
     /// Gets an element from an array.
+    #[display(fmt = "{array_ref}[{index}]")]
     Read {
         /// The array to read from.
         array_ref: Argument,
@@ -32,6 +38,7 @@ pub enum Operation {
         index: Argument,
     },
     /// Sets an element in an array.
+    #[display(fmt = "{array_ref}[{index}] = {value}")]
     Write {
         /// The array to write to.
         array_ref: Argument,
@@ -41,11 +48,13 @@ pub enum Operation {
         value: Argument,
     },
     /// Gets the length of an array.
+    #[display(fmt = "array_len({array_ref})")]
     Length {
         /// The array to get the length of.
         array_ref: Argument,
     },
 }
+
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
@@ -67,38 +76,6 @@ impl Operation {
                 .copied()
                 .collect(),
             Self::Length { array_ref } => array_ref.iter().copied().collect(),
-        }
-    }
-}
-
-impl Display for Operation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::New {
-                element_type,
-                length,
-            } => write!(f, "new {}[{}]", element_type.descriptor(), length),
-            Self::NewMultiDim {
-                element_type,
-                dimensions,
-            } => {
-                write!(
-                    f,
-                    "new {}[{}]",
-                    element_type.descriptor(),
-                    dimensions
-                        .iter()
-                        .map(std::string::ToString::to_string)
-                        .join(", ")
-                )
-            }
-            Self::Read { array_ref, index } => write!(f, "{array_ref}[{index}]"),
-            Self::Write {
-                array_ref,
-                index,
-                value,
-            } => write!(f, "{array_ref}[{index}] = {value}"),
-            Self::Length { array_ref } => write!(f, "array_len({array_ref})"),
         }
     }
 }

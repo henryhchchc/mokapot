@@ -1,37 +1,51 @@
-use std::{collections::BTreeSet, fmt::Display};
+use std::collections::BTreeSet;
 
 use crate::ir::{Argument, Identifier};
 
 /// A condition that can be used in a conditional jump.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Condition {
     /// The two arguments are equal (i.e., `lhs == rhs`).
+    #[display(fmt = "{_0} == {_1}")]
     Equal(Argument, Argument),
     /// The two arguments are not equal (i.e., `lhs != rhs`).
+    #[display(fmt = "{_0} != {_1}")]
     NotEqual(Argument, Argument),
     /// The first argument is less than the second (i.e., `lhs < rhs`).
+    #[display(fmt = "{_0} < {_1}")]
     LessThan(Argument, Argument),
     /// The first argument is less than or equal to the second (i.e., `lhs <= rhs`).
+    #[display(fmt = "{_0} <= {_1}")]
     LessThanOrEqual(Argument, Argument),
     /// The first argument is greater than the second (i.e., `lhs > rhs`).
+    #[display(fmt = "{_0} > {_1}")]
     GreaterThan(Argument, Argument),
     /// The first argument is greater than or equal to the second (i.e., `lhs >= rhs`).
+    #[display(fmt = "{_0} >= {_1}")]
     GreaterThanOrEqual(Argument, Argument),
     /// The argument is null (i.e., `arg == null`).
+    #[display(fmt = "{_0} == null")]
     IsNull(Argument),
     /// The argument is not null (i.e., `arg != null`).
+    #[display(fmt = "{_0} != null")]
     IsNotNull(Argument),
     /// The argument is zero (i.e., `arg == 0`).
+    #[display(fmt = "{_0} == 0")]
     IsZero(Argument),
     /// The argument is not zero (i.e., `arg != 0`).
+    #[display(fmt = "{_0} != 0")]
     IsNonZero(Argument),
     /// The argument is positive (i.e., `arg > 0`).
+    #[display(fmt = "{_0} > 0")]
     IsPositive(Argument),
     /// The argument is negative (i.e., `arg < 0`).
+    #[display(fmt = "{_0} < 0")]
     IsNegative(Argument),
     /// The argument is non-negative (i.e., `arg >= 0`).
+    #[display(fmt = "{_0} >= 0")]
     IsNonNegative(Argument),
     /// The argument is non-positive (i.e., `arg <= 0`).
+    #[display(fmt = "{_0} <= 0")]
     IsNonPositive(Argument),
 }
 
@@ -54,27 +68,6 @@ impl Condition {
             | Self::IsNegative(a)
             | Self::IsNonNegative(a)
             | Self::IsNonPositive(a) => a.iter().copied().collect(),
-        }
-    }
-}
-
-impl Display for Condition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Equal(a, b) => write!(f, "{a} == {b}"),
-            Self::NotEqual(a, b) => write!(f, "{a} != {b}"),
-            Self::LessThan(a, b) => write!(f, "{a} < {b}"),
-            Self::LessThanOrEqual(a, b) => write!(f, "{a} <= {b}"),
-            Self::GreaterThan(a, b) => write!(f, "{a} > {b}"),
-            Self::GreaterThanOrEqual(a, b) => write!(f, "{a} >= {b}"),
-            Self::IsNull(a) => write!(f, "{a} == null"),
-            Self::IsNotNull(a) => write!(f, "{a} != null"),
-            Self::IsZero(a) => write!(f, "{a} == 0"),
-            Self::IsNonZero(a) => write!(f, "{a} != 0"),
-            Self::IsPositive(a) => write!(f, "{a} > 0"),
-            Self::IsNegative(a) => write!(f, "{a} < 0"),
-            Self::IsNonNegative(a) => write!(f, "{a} >= 0"),
-            Self::IsNonPositive(a) => write!(f, "{a} <= 0"),
         }
     }
 }

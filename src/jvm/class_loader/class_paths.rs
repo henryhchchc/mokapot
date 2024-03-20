@@ -63,12 +63,13 @@ impl ClassPath for JarClassPath {
             ZipError::Io(io_err) => Error::IO(io_err),
             e => Error::Other(Box::new(e)),
         })?;
-        let mut class_file = match jar_archive.by_name(&format!("{binary_name}.class")) {
-            Ok(it) => it,
-            Err(ZipError::FileNotFound) => Err(Error::NotFound)?,
-            Err(ZipError::Io(io_err)) => Err(Error::IO(io_err))?,
-            Err(e) => Err(Error::Other(Box::new(e)))?,
-        };
+        let mut class_file = jar_archive
+            .by_name(&format!("{binary_name}.class"))
+            .map_err(|e| match e {
+                ZipError::FileNotFound => Error::NotFound,
+                ZipError::Io(io_err) => Error::IO(io_err),
+                e => Error::Other(Box::new(e)),
+            })?;
         Class::from_reader(&mut class_file).map_err(Into::into)
     }
 }

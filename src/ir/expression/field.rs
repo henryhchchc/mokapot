@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeSet,
-    fmt::{Display, Formatter},
-};
+use std::collections::BTreeSet;
 
 use crate::{
     ir::{Argument, Identifier},
@@ -9,14 +6,16 @@ use crate::{
 };
 
 /// An operation on a field.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Access {
     /// Reads a static field.
+    #[display(fmt = "read {field}")]
     ReadStatic {
         /// The field to read.
         field: FieldRef,
     },
     /// Writes to a static field.
+    #[display(fmt = "write {field}, {value}")]
     WriteStatic {
         /// The field to write to.
         field: FieldRef,
@@ -24,6 +23,7 @@ pub enum Access {
         value: Argument,
     },
     /// Reads an instance field.
+    #[display(fmt = "read {object_ref}.{}", "field.name")]
     ReadInstance {
         /// The object to read from.
         object_ref: Argument,
@@ -31,6 +31,7 @@ pub enum Access {
         field: FieldRef,
     },
     /// Writes to an instance field.
+    #[display(fmt = "write {object_ref}.{}, {value}", "field.name")]
     WriteInstance {
         /// The object to write to.
         object_ref: Argument,
@@ -52,23 +53,6 @@ impl Access {
                 object_ref, value, ..
             } => object_ref.iter().chain(value.iter()).copied().collect(),
             Self::ReadStatic { .. } => BTreeSet::default(),
-        }
-    }
-}
-
-impl Display for Access {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ReadStatic { field } => write!(f, "read {field}"),
-            Self::WriteStatic { field, value } => write!(f, "write {field}, {value}"),
-            Self::ReadInstance { object_ref, field } => {
-                write!(f, "read {}.{}", object_ref, field.name)
-            }
-            Self::WriteInstance {
-                object_ref,
-                field,
-                value,
-            } => write!(f, "write {}.{}, {}", object_ref, field.name, value),
         }
     }
 }
