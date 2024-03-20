@@ -64,3 +64,14 @@ fn cfg_to_dot() {
     let dot = Dot::with_config(&cfg_with_insn, &[]);
     println!("{}", dot);
 }
+
+#[test]
+#[cfg(feature = "petgraph")]
+fn dominance() {
+    use mokapot::jvm::code::ProgramCounter;
+
+    let method = get_test_method();
+    let ir = method.brew().unwrap();
+    let _dominance =
+        petgraph::algo::dominators::simple_fast(&ir.control_flow_graph, ProgramCounter::ZERO);
+}
