@@ -21,7 +21,7 @@ pub struct ProgramCounter(u16);
 impl ProgramCounter {
     /// Creates a new program counter based on the given value with a given offset.
     /// # Errors
-    /// - [`InvalidOffset::I32`] If the resulting value is too large to fit into a [`ProgramCounter`].
+    /// - [`InvalidOffset`] If the resulting value is too large to fit into a [`ProgramCounter`].
     #[deprecated(note = "Use the `+` operator insted.")]
     pub fn offset(&self, offset: i32) -> Result<Self, InvalidOffset> {
         *self + offset
@@ -29,7 +29,7 @@ impl ProgramCounter {
 
     /// Creates a new program counter based on the given value with a given offset (in [`i16`]).
     /// # Errors
-    /// - [`InvalidOffset::I16`] If the resulting value is too large to fit into a [`ProgramCounter`].
+    /// - [`InvalidOffset`] If the resulting value is too large to fit into a [`ProgramCounter`].
     #[deprecated(note = "Use the `+` operator insted.")]
     pub fn offset_i16(&self, offset: i16) -> Result<Self, InvalidOffset> {
         *self + offset
