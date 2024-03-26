@@ -215,8 +215,7 @@ impl<'m> MokaIRGenerator<'m> {
                 let exceptions = entries
                     .map(|it| {
                         it.catch_type
-                            .as_ref()
-                            .cloned()
+                            .clone()
                             .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
                     })
                     .dedup()

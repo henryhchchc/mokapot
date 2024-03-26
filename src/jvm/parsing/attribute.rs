@@ -223,11 +223,12 @@ impl ClassElement for Attribute {
         }?;
         match reader.read(&mut [0]) {
             Ok(0) => Ok(result),
-            Ok(_) => Err(Error::IO(io::Error::new(
+            Ok(1) => Err(Error::IO(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
             ))),
             Err(e) => Err(e.into()),
+            _ => unreachable!(),
         }
     }
 }
