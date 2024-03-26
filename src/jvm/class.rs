@@ -257,15 +257,25 @@ impl Version {
     pub const fn minor(&self) -> u16 {
         #[allow(clippy::enum_glob_use)]
         use Version::*;
-        if let Jdk1_1(minor) = self {
-            *minor
-        } else if let Jdk1_2 | Jdk1_3 | Jdk1_4 | Jdk5 | Jdk6 | Jdk7 | Jdk8 | Jdk9 | Jdk10 | Jdk11
-        | Jdk12(false) | Jdk13(false) | Jdk14(false) | Jdk15(false) | Jdk16(false)
-        | Jdk17(false) | Jdk18(false) | Jdk19(false) | Jdk20(false) | Jdk21(false) = self
-        {
-            0
-        } else {
-            65535
+        match self {
+            Jdk1_1(minor) => *minor,
+            Jdk1_2 | Jdk1_3 | Jdk1_4 | Jdk5 | Jdk6 | Jdk7 | Jdk8 | Jdk9 | Jdk10 | Jdk11 => 0,
+            Jdk12(enable_preview)
+            | Jdk13(enable_preview)
+            | Jdk14(enable_preview)
+            | Jdk15(enable_preview)
+            | Jdk16(enable_preview)
+            | Jdk17(enable_preview)
+            | Jdk18(enable_preview)
+            | Jdk19(enable_preview)
+            | Jdk20(enable_preview)
+            | Jdk21(enable_preview) => {
+                if *enable_preview {
+                    u16::MAX
+                } else {
+                    0
+                }
+            }
         }
     }
 }
