@@ -153,6 +153,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build_doc
     if: ${{ !startsWith(github.ref, 'refs/pull/') }}
+    environment:
+      name: Latest Docs
+      url: https://henryhchchc.github.io/mokapot/mokapot
     permissions:
       pages: write
       id-token: write
