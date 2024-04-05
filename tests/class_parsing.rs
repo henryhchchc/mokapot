@@ -70,8 +70,12 @@ fn test_parse_my_class() {
 
 #[test]
 fn parse_anno() {
-    let bytes = test_data_class!("mokapot", "org/mokapot/test/Anno");
-    Class::from_reader(bytes).unwrap();
+    for bytes in [
+        test_data_class!("mokapot", "org/mokapot/test/Anno"),
+        test_data_class!("mokapot", "org/mokapot/test/Anno$Middle"),
+    ] {
+        Class::from_reader(bytes).unwrap();
+    }
 }
 
 #[test]

@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class Anno {
 
-  class Middle {
+  class Middle extends @Anno.Foo Object {
     class Inner {
     }
   }
@@ -108,7 +108,7 @@ public class Anno {
     var ni = new @Bar HashMap<String, @Foo Object>();
 
     @Anno.Baz(count = 5)
-    var test = new Object();
+    Object test = new Object();
 
     if (o instanceof @Foo String[][]) {
     }
