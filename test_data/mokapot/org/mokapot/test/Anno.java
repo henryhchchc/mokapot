@@ -53,7 +53,7 @@ public class Anno {
   List<@Bar ? extends @Foo String> fk;
 
   @SuppressWarnings("unchecked")
-  <E> void annotatedCode(
+  <E extends @Foo Object> void annotatedCode(
       @Foo String @Bar [][] mpa,
       String @Foo [] @Bar [] mpb,
       @Bar String[] @Foo [] mpc,
@@ -109,6 +109,12 @@ public class Anno {
 
     @Anno.Baz(count = 5)
     Object test = new Object();
+
+    try {
+      System.out.println("233");
+    } catch (@Foo Throwable e) {
+
+    }
 
     if (o instanceof @Foo String[][]) {
     }

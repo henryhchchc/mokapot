@@ -8,6 +8,7 @@ fn compile_java_test_data() {
     if Command::new("javac").spawn().is_ok() {
         compile_java_files("mokapot");
         println!("cargo:rustc-cfg=test_with_jdk");
+        println!("cargo:rerun-if-changed=test_data");
     } else {
         println!("cargo:warning=Can not find javac, test compilation will fail");
     }
