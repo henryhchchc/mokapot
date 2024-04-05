@@ -27,33 +27,6 @@ macro_rules! test_data_class {
     };
 }
 
-/// Parse classes in OpenJDK test data
-/// Stolen from https://github.com/openjdk/jdk/tree/master/test/jdk/jdk/classfile/testdata
-#[test]
-fn parse_openjdk_test_data() {
-    let test_data = [
-        test_data_class!("openjdk", "testdata/Pattern1"),
-        test_data_class!("openjdk", "testdata/Pattern2"),
-        test_data_class!("openjdk", "testdata/Pattern3"),
-        test_data_class!("openjdk", "testdata/Pattern4"),
-        test_data_class!("openjdk", "testdata/Pattern5"),
-        test_data_class!("openjdk", "testdata/Pattern6"),
-        test_data_class!("openjdk", "testdata/Pattern7"),
-        test_data_class!("openjdk", "testdata/Pattern8"),
-        test_data_class!("openjdk", "testdata/Pattern9"),
-        test_data_class!("openjdk", "testdata/Pattern10"),
-        test_data_class!("openjdk", "testdata/Lvt"),
-        test_data_class!("openjdk", "testdata/TypeAnnotationPattern"),
-        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Foo"),
-        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Bar"),
-        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle"),
-        test_data_class!("openjdk", "testdata/TypeAnnotationPattern$Middle$Inner"),
-    ];
-    for bytes in test_data {
-        assert!(Class::from_reader(bytes).is_ok())
-    }
-}
-
 #[test]
 fn test_parse_my_class() {
     let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
@@ -93,6 +66,12 @@ fn test_parse_my_class() {
         FieldType::Object(ClassRef::new("java/lang/String")).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
+}
+
+#[test]
+fn parse_anno() {
+    let bytes = test_data_class!("mokapot", "org/mokapot/test/Anno");
+    Class::from_reader(bytes).unwrap();
 }
 
 #[test]
