@@ -7,6 +7,7 @@ documentation = "https://docs.rs/mokapot"
 license = "MIT"
 repository = "https://github.com/henryhchchc/mokapot"
 keywords = ["jvm", "java", "analysis", "bytecode"]
+categories = ["parsing", "development-tools"]
 
 
 [dependencies]
