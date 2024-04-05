@@ -25,6 +25,12 @@ public class Anno {
   @interface Bar {
   }
 
+  @Target({ TYPE, FIELD, METHOD, PARAMETER, CONSTRUCTOR, LOCAL_VARIABLE, TYPE_PARAMETER, TYPE_USE })
+  @Retention(RetentionPolicy.CLASS)
+  @interface Baz {
+    int count();
+  }
+
   @Foo
   String @Bar [][] fa;
   String @Foo [] @Bar [] fb;
@@ -100,6 +106,9 @@ public class Anno {
     var ng = new @Foo HashMap<@Bar String, Object>();
     var nh = new HashMap<@Foo String, @Bar Object>();
     var ni = new @Bar HashMap<String, @Foo Object>();
+
+    @Anno.Baz(count = 5)
+    var test = new Object();
 
     if (o instanceof @Foo String[][]) {
     }
