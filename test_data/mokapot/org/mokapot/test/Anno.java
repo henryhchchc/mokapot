@@ -87,7 +87,7 @@ public class Anno {
       @Bar Map<String, @Foo Object> mpi,
 
       List<@Foo ? extends @Bar String> mpj,
-      List<@Bar ? extends @Foo String> mpk) {
+      List<@Bar ? extends @Foo String> mpk) throws @Foo Exception {
     @Foo
     String[][] lva;
 
@@ -133,7 +133,6 @@ public class Anno {
     try {
       System.out.println("233");
     } catch (@Foo Throwable e) {
-
     }
 
     if (o instanceof @Foo String[][]) {
