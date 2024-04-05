@@ -1,5 +1,4 @@
 //! References to JVM elements.
-use std::fmt::Display;
 
 use crate::types::{
     field_type::FieldType,
@@ -9,7 +8,8 @@ use crate::types::{
 use super::method::Method;
 
 /// A reference to a [`Class`](crate::jvm::class::Class).
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, derive_more::Display)]
+#[display(fmt = "{binary_name}")]
 pub struct ClassRef {
     /// The binary name of the class.
     pub binary_name: String,
@@ -24,14 +24,9 @@ impl ClassRef {
     }
 }
 
-impl Display for ClassRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.binary_name)
-    }
-}
-
 /// A reference to a [`Field`](crate::jvm::field::Field).
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[display(fmt = "{owner}.{name}")]
 pub struct FieldRef {
     /// A reference to the class that contains the field.
     pub owner: ClassRef,
@@ -41,14 +36,9 @@ pub struct FieldRef {
     pub field_type: FieldType,
 }
 
-impl Display for FieldRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.owner, self.name)
-    }
-}
-
 /// A reference to a [`Method`].
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[display(fmt = "{owner}::{name}")]
 pub struct MethodRef {
     /// The reference to the class containing the method.
     pub owner: ClassRef,
@@ -72,12 +62,6 @@ impl MethodRef {
         self.name == Method::CLASS_INITIALIZER_NAME
             && self.descriptor.parameters_types.is_empty()
             && matches!(self.descriptor.return_type, ReturnType::Void)
-    }
-}
-
-impl Display for MethodRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.owner, self.name)
     }
 }
 

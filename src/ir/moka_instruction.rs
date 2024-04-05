@@ -210,9 +210,10 @@ impl Argument {
 }
 
 /// A unique identifier of a value defined in the current scope.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
+#[display(fmt = "%{_0}")]
 pub struct LocalValue(u16);
 
 impl LocalValue {
@@ -226,12 +227,6 @@ impl LocalValue {
     #[must_use]
     pub fn as_argument(&self) -> Argument {
         Argument::Id((*self).into())
-    }
-}
-
-impl Display for LocalValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "%{}", self.0)
     }
 }
 

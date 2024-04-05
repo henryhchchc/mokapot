@@ -84,27 +84,37 @@ impl Display for JavaString {
 
 /// Denotes a compile-time constant value.
 #[doc = see_jvm_spec!(4, 4)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_more::Display)]
 pub enum ConstantValue {
     /// The `null` value.
+    #[display(fmt = "null")]
     Null,
     /// A primitive integer value (i.e., `int`).
+    #[display(fmt = "int({_0})")]
     Integer(i32),
     /// A primitive floating point value (i.e., `float`).
+    #[display(fmt = "float({_0})")]
     Float(f32),
     /// A primitive long value (i.e., `long`).
+    #[display(fmt = "long({_0})")]
     Long(i64),
     /// A primitive double value (i.e., `double`).
+    #[display(fmt = "double({_0})")]
     Double(f64),
     /// A string literal.
+    #[display(fmt = "{_0}")]
     String(JavaString),
     /// A class literal.
+    #[display(fmt = "{_0}.class")]
     Class(ClassRef),
     /// A method handle.
+    #[display(fmt = "{_0:?}")]
     Handle(MethodHandle),
     /// A method type.
+    #[display(fmt = "{_0:?}")]
     MethodType(MethodDescriptor),
     /// A dynamic constant.
+    #[display(fmt = "Dynamic({_0}, {_1}, {_2})")]
     Dynamic(u16, String, FieldType),
 }
 
@@ -131,31 +141,6 @@ impl PartialEq<Self> for ConstantValue {
 }
 
 impl Eq for ConstantValue {}
-
-impl Display for ConstantValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConstantValue::Null => write!(f, "null"),
-            ConstantValue::Integer(value) => write!(f, "int({value})"),
-            ConstantValue::Float(value) => write!(f, "float({value})"),
-            ConstantValue::Long(value) => write!(f, "long({value})"),
-            ConstantValue::Double(value) => write!(f, "double({value})"),
-            ConstantValue::String(value) => value.fmt(f),
-            ConstantValue::Class(value) => write!(f, "{value}.class"),
-            ConstantValue::Handle(value) => write!(f, "{value:?}"),
-            ConstantValue::MethodType(value) => write!(f, "{value:?}"),
-            ConstantValue::Dynamic(bootstrap_method_attr_index, name, field_type) => {
-                write!(
-                    f,
-                    "Dynamic({}, {}, {})",
-                    bootstrap_method_attr_index,
-                    name,
-                    field_type.descriptor()
-                )
-            }
-        }
-    }
-}
 
 use bitflags::bitflags;
 use itertools::Itertools;
