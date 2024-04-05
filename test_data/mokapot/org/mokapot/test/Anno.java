@@ -28,7 +28,27 @@ public class Anno {
   @Target({ TYPE, FIELD, METHOD, PARAMETER, CONSTRUCTOR, LOCAL_VARIABLE, TYPE_PARAMETER, TYPE_USE })
   @Retention(RetentionPolicy.CLASS)
   @interface Baz {
-    int count();
+
+    byte byteValue();
+
+    short shortValue();
+
+    int intValue();
+
+    long longValue();
+
+    float floatValue();
+
+    double doubleValue();
+
+    char charValue();
+
+    boolean booleanValue();
+
+    String stringValue();
+
+    Class<?> classValue();
+
   }
 
   @Foo
@@ -53,7 +73,7 @@ public class Anno {
   List<@Bar ? extends @Foo String> fk;
 
   @SuppressWarnings("unchecked")
-  <E extends @Foo Object> void annotatedCode(
+  <@Bar E extends @Foo Object> void annotatedCode(
       @Foo String @Bar [][] mpa,
       String @Foo [] @Bar [] mpb,
       @Bar String[] @Foo [] mpc,
@@ -107,7 +127,7 @@ public class Anno {
     var nh = new HashMap<@Foo String, @Bar Object>();
     var ni = new @Bar HashMap<String, @Foo Object>();
 
-    @Anno.Baz(count = 5)
+    @Anno.Baz(byteValue = 1, shortValue = 2, intValue = 3, longValue = 4, floatValue = 5, doubleValue = 6, charValue = 7, booleanValue = true, stringValue = "8", classValue = Object.class)
     Object test = new Object();
 
     try {
