@@ -4,6 +4,7 @@
 [![Codecov](https://img.shields.io/codecov/c/github/henryhchchc/mokapot?style=flat-square&logo=codecov&logoColor=white&label=Coverage)](https://app.codecov.io/gh/henryhchchc/mokapot/)
 [![Crates.io](https://img.shields.io/crates/v/mokapot?style=flat-square&logo=rust&logoColor=white)](https://crates.io/crates/mokapot)
 [![docs.rs](https://img.shields.io/docsrs/mokapot?style=flat-square&logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fhenryhchchc%2Fmokapot.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fhenryhchchc%2Fmokapot?ref=badge_shield)
 
 MokaPot is a Java bytecode analysis library written in Rust.
 
@@ -67,3 +68,7 @@ cargo test --all-features
 ## Contributing
 
 Cool. Contributions are welcomed. See the [contribution guide](docs/CONTRIBUTING.md) for more information.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fhenryhchchc%2Fmokapot.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fhenryhchchc%2Fmokapot?ref=badge_large)
