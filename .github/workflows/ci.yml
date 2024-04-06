@@ -2,6 +2,10 @@ name: CI
 
 on:
   push:
+    branches: 
+      - main
+      - feat/*
+      - fix/*
     paths-ignore:
       - docs/**
       - "*.md"
