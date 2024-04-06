@@ -2,26 +2,28 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
-    paths:
-      - "**.rs"
-      - test_data/**
-      - "**/Cargo.toml"
-      - .github/workflows/**
+    paths-ignore:
+      - docs/**
+      - "*.md"
+      - "LICENSE"
     tags:
       - v**
   pull_request:
+    paths-ignore:
+      - docs/**
+      - "*.md"
+      - "LICENSE"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   code_style_checking:
-    name: Code Style Checking
+    name: Style / cargo-fmt & cargo-clippy
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
@@ -41,7 +43,7 @@ jobs:
         run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
   build_and_test:
-    name: Build & Test
+    name: Build / cargo-check & cargo-llvmcov
     runs-on: ubuntu-latest
     needs: code_style_checking
     steps:
@@ -104,7 +106,7 @@ jobs:
           path: ./target/codecov.json
 
   codecov:
-    name: Upload Coverage to CodeCov
+    name: Report / Codecov
     runs-on: ubuntu-latest
     needs: build_and_test
     steps:
@@ -123,7 +125,7 @@ jobs:
           fail_ci_if_error: true
 
   build_doc:
-    name: Generate Rust Doc
+    name: Docs / Rustdoc
     runs-on: ubuntu-latest
     needs: build_and_test
     steps:
@@ -149,7 +151,7 @@ jobs:
           path: target/doc
 
   publish_latest_docs:
-    name: Publish Rustdoc to GitHub Pages
+    name: Deploy / Latest Rustdoc
     runs-on: ubuntu-latest
     needs: build_doc
     if: ${{ !startsWith(github.ref, 'refs/pull/') }}
@@ -166,7 +168,7 @@ jobs:
           artifact_name: mokapot-docs
 
   publish_to_crate_io:
-    name: Publish to crate.io
+    name: Deploy / crates.io
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
