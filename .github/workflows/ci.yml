@@ -26,8 +26,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  code_style_checking:
-    name: Style / cargo-fmt & cargo-clippy
+  style_rustfmt:
+    name: Style / rustfmt
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
@@ -41,15 +41,31 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
-      - name: Cargo Fmt
+      - name: Check code formatting with rustfmt
         run: cargo fmt --check
-      - name: Clippy
+
+  style_clippy:
+    name: Style / clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Rust
+        run: |
+          rustup update stable \
+            && rustup default stable
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: corretto
+      - uses: actions/checkout@v4
+        name: Checkout source code
+      - name: Run clippy
         run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
   build_and_test:
     name: Build / cargo-check & cargo-llvmcov
     runs-on: ubuntu-latest
-    needs: code_style_checking
+    needs: [style_rustfmt, style_clippy]
     steps:
       - name: Setup Rust
         run: |
