@@ -20,3 +20,13 @@ Before submitting a pull request, please do the following checks:
 ## Tasks
 
 MokaPot needs your contribution to be better. Please check [TODO.md](TODO.md) for a list of tasks that we are planning to do.
+
+## Developer Certificate of Origin
+
+By contributing to this project, you must certify that your contribution complies with the [Developer Certificate of Origin](https://developercertificate.org).
+You may use the following `git` command to [sign-off](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s) your commit.
+
+```bash
+git commit --signoff
+```
+
