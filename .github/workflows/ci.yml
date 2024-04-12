@@ -61,10 +61,10 @@ jobs:
         name: Checkout source code
       - name: Cargo Update
         run: cargo update --verbose
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v4
+      - name: Restore Rust Build Cache
+        uses: actions/cache/restore@v4
         with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.run_id }}
           restore-keys: |
             cargo-build-
           path: |
@@ -118,7 +118,7 @@ jobs:
       - name: Cache Rust Build Stuff
         uses: actions/cache@v4
         with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.run_id }}
           restore-keys: |
             cargo-build-
           path: |
@@ -219,10 +219,10 @@ jobs:
         name: Checkout source code
       - name: Cargo Update
         run: cargo update --verbose
-      - name: Cache Rust Build Stuff
+      - name: Restore Rust Build Cache
         uses: actions/cache@v4
         with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.run_id }}
           restore-keys: |
             cargo-build-
           path: |
