@@ -64,7 +64,9 @@ jobs:
       - name: Cache Rust Build Stuff
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
@@ -116,7 +118,9 @@ jobs:
       - name: Cache Rust Build Stuff
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
@@ -218,7 +222,9 @@ jobs:
       - name: Cache Rust Build Stuff
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
