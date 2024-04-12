@@ -7,10 +7,10 @@ fn main() {
 fn compile_java_test_data() {
     if Command::new("javac").spawn().is_ok() {
         compile_java_files("mokapot");
-        println!("cargo:rustc-cfg=test_with_jdk");
-        println!("cargo:rerun-if-changed=test_data");
+        println!("cargo::rustc-cfg=test_with_jdk");
+        println!("cargo::rerun-if-changed=test_data");
     } else {
-        println!("cargo:warning=Can not find javac, test compilation will fail");
+        println!("cargo::warning=Can not find javac, test compilation will fail");
     }
 }
 
@@ -45,7 +45,7 @@ fn compile_java_files(path: &str) {
 
     if !status.status.success() {
         println!(
-            "cargo:warning=Failed to compile java files: {}",
+            "cargo::warning=Failed to compile java files: {}",
             String::from_utf8_lossy(&status.stderr)
         );
     }
