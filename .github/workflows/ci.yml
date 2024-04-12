@@ -78,7 +78,7 @@ jobs:
 
 
   unit_test:
-    name: Test / unit tests
+    name: Test / unit
     runs-on: ubuntu-latest
     needs: [style_rustfmt, style_clippy_check]
     steps:
@@ -136,7 +136,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: profraw-unit-test
-          path: ./target/llvm-cov-target/
+          path: ./target/llvm-cov-target/*.profraw
 
   integration_tests:
     name: Test / integration
@@ -197,13 +197,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: profraw-integration-test
-          path: ./target/llvm-cov-target/
+          path: ./target/llvm-cov-target/*.profraw
 
   codecov:
     name: Report / Codecov
     runs-on: ubuntu-latest
     needs: [unit_test, integration_tests]
     steps:
+      - name: Setup Build Tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Download Coverage Data
