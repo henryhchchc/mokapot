@@ -44,8 +44,8 @@ jobs:
       - name: Check code formatting with rustfmt
         run: cargo fmt --check
 
-  style_clippy:
-    name: Style / clippy
+  style_clippy_check:
+    name: Style / clippy & check
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
@@ -59,13 +59,26 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
+      - name: Cargo Update
+        run: cargo update --verbose
+      - name: Cache Rust Build Stuff
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+      - run: cargo check --all-targets --all-features --verbose
+        name: Cargo check
       - name: Run clippy
         run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
   build_and_test:
     name: Build / cargo-check & cargo-llvmcov
     runs-on: ubuntu-latest
-    needs: [style_rustfmt, style_clippy]
+    needs: [style_rustfmt, style_clippy_check]
     steps:
       - name: Setup Rust
         run: |
@@ -109,8 +122,6 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-      - run: cargo check --all-targets --all-features --verbose
-        name: Cargo check
       - name: Test
         env:
           JDK_CLASSES: ./jdk_classes
