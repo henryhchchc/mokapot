@@ -76,9 +76,8 @@ jobs:
       - name: Run clippy
         run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
-
-  unit_test:
-    name: Test / unit tests
+  build_and_test:
+    name: Build / cargo-check & cargo-llvmcov
     runs-on: ubuntu-latest
     needs: [style_rustfmt, style_clippy_check]
     steps:
@@ -131,101 +130,38 @@ jobs:
           JDK_CLASSES: ./jdk_classes
         run: |
           cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest --all-features --no-report -E 'kind(lib)'
+          cargo llvm-cov nextest --all-features --no-report
+          cargo llvm-cov nextest --all-features --no-report --run-ignored=ignored-only
+          cargo llvm-cov report --codecov --output-path ./target/codecov.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
         with:
-          name: profraw-unit-test
-          path: ./target/llvm-cov-target/
-
-  integration_tests:
-    name: Test / integration
-    runs-on: ubuntu-latest
-    needs: [style_rustfmt, style_clippy_check]
-    steps:
-      - name: Setup Rust
-        run: |
-          rustup update stable \
-            && rustup default stable \
-            && rustup component add llvm-tools-preview
-      - name: Setup Build Tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov,cargo-nextest
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: corretto
-      - uses: actions/checkout@v4
-        name: Checkout source code
-      - name: Hash JDK modules
-        id: hash-jdk-modules
-        run: |
-          file_path="${{ env.JAVA_HOME }}/lib/modules"
-          hash=$(sha256sum "$file_path" | awk '{print $1}')
-          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
-      - name: Cache JDK classes
-        id: cache-jdk-classes
-        uses: actions/cache@v4
-        with:
-          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
-          path: jdk_classes/
-      - name: Extract JDK classes
-        if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
-        run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
-      - name: Cargo Update
-        run: cargo update --verbose
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v4
-        with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-      - name: Test
-        env:
-          JDK_CLASSES: ./jdk_classes
-        run: |
-          cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
-      - name: Upload Coverage Data
-        uses: actions/upload-artifact@v4
-        with:
-          name: profraw-integration-test
-          path: ./target/llvm-cov-target/
+          name: codecov.json
+          path: ./target/codecov.json
 
   codecov:
     name: Report / Codecov
     runs-on: ubuntu-latest
-    needs: [unit_test, integration_tests]
+    needs: build_and_test
     steps:
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Download Coverage Data
         uses: actions/download-artifact@v4
         with:
-          pattern: profraw-*
-          merge-multiple: true
-          path: ./target/llvm-cov-target/
-      - name: Generate Coverage Report
-        run: cargo llvm-cov report --codecov --output-path ./target/codecov.json
+          name: codecov.json
       - name: Upload to codecov
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: ./target/codecov.json
+          files: codecov.json
           fail_ci_if_error: true
 
   build_doc:
     name: Docs / Rustdoc
     runs-on: ubuntu-latest
-    needs: [unit_test, integration_tests]
+    needs: build_and_test
     steps:
       - name: Setup Rust
         run: |
@@ -269,7 +205,9 @@ jobs:
     name: Deploy / crates.io
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs: [unit_test, integration_tests, build_doc]
+    needs:
+      - build_and_test
+      - build_doc
     environment:
       name: crates.io
       url: https://crates.io/crates/mokapot
