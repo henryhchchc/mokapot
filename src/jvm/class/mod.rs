@@ -1,5 +1,7 @@
 //! JVM classes and interfaces
 
+pub mod constant_pool;
+
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
@@ -48,6 +50,13 @@ impl Class {
             binary_name: self.binary_name.clone(),
         }
     }
+}
+
+/// A JVM constant pool.
+#[doc = see_jvm_spec!(4, 4)]
+#[derive(Debug, Clone)]
+pub struct ConstantPool {
+    inner: Vec<constant_pool::Slot>,
 }
 
 /// The maximum supported major version of a class file.

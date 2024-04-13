@@ -3,10 +3,9 @@ use std::io::{self, Read};
 use crate::{
     jvm::{
         class::{
-            self, BootstrapMethod, EnclosingMethod, InnerClassInfo, NestedClassAccessFlags,
-            RecordComponent, Version,
+            self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
+            NestedClassAccessFlags, RecordComponent, Version,
         },
-        constant_pool::ConstantPool,
         parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
         Class,

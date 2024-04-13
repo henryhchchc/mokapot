@@ -1,5 +1,5 @@
 use crate::jvm::{
-    constant_pool::Entry,
+    class::constant_pool::Entry,
     module::{Export, Open, Provide, Require},
     Module,
 };

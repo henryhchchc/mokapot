@@ -9,8 +9,7 @@ use super::{
 };
 use crate::{
     jvm::{
-        class::MethodHandle,
-        constant_pool::{ConstantPool, Entry},
+        class::{constant_pool::Entry, ConstantPool, MethodHandle},
         field::{ConstantValue, JavaString},
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },

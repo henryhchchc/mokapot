@@ -4,11 +4,11 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
+        class::{constant_pool, ConstantPool},
         code::{
             Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
             WideInstruction,
         },
-        constant_pool::{self, ConstantPool},
         parsing::{jvm_element_parser::ClassElement, Context, Error},
     },
     macros::malform,

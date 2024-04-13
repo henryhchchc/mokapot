@@ -1,8 +1,8 @@
 use crate::{
     jvm::{
         annotation::{ElementValue, TargetInfo, TypePathElement},
+        class::constant_pool,
         code::LocalVariableId,
-        constant_pool,
         field::ConstantValue,
         Annotation, TypeAnnotation,
     },

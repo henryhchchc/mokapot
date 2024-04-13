@@ -1,5 +1,5 @@
 use crate::{
-    jvm::{code::InvalidOffset, constant_pool::BadConstantPoolIndex},
+    jvm::{class::constant_pool::BadConstantPoolIndex, code::InvalidOffset},
     types::method_descriptor::InvalidDescriptor,
 };
 

@@ -4,7 +4,9 @@ use std::io::{self, Read};
 
 use crate::macros::see_jvm_spec;
 
-use super::field::JavaString;
+use crate::jvm::field::JavaString;
+
+use super::ConstantPool;
 
 #[derive(Debug, Clone)]
 pub(super) enum Slot {
@@ -12,19 +14,12 @@ pub(super) enum Slot {
     Padding,
 }
 
-/// A JVM constant pool.
-#[doc = see_jvm_spec!(4, 4)]
-#[derive(Debug, Clone)]
-pub struct ConstantPool {
-    inner: Vec<Slot>,
-}
-
 impl ConstantPool {
     /// Parses a constant pool from the given bytes.
     /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one.
     #[doc = see_jvm_spec!(4, 1)]
     /// # Errors
-    /// See [`Error`](super::parsing::Error) for more information.
+    /// See [`Error`](super::super::parsing::Error) for more information.
     pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
     where
         R: Read + ?Sized,
@@ -213,7 +208,7 @@ impl Entry {
 
 #[cfg(test)]
 mod tests {
-    use super::super::parsing::constant_pool::tests::arb_constant_pool_info;
+    use super::super::super::parsing::constant_pool::tests::arb_constant_pool_info;
     use super::*;
     use proptest::prelude::*;
 

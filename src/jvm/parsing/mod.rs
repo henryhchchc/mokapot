@@ -12,7 +12,7 @@ mod module;
 mod raw_attributes;
 mod reader_utils;
 
-use crate::jvm::{class::Version, constant_pool::ConstantPool};
+use crate::jvm::class::{ConstantPool, Version};
 pub use errors::Error;
 
 /// Context used to parse a class file.
