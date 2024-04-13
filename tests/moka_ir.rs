@@ -1,6 +1,6 @@
 use mokapot::{
     ir::MokaIRMethodExt,
-    jvm::{class::Class, method::Method},
+    jvm::{Class, Method},
 };
 use petgraph::dot::Dot;
 

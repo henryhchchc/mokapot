@@ -7,13 +7,13 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
-        annotation::{Annotation, ElementValue, TypeAnnotation},
+        annotation::ElementValue,
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         field::ConstantValue,
         method::ParameterInfo,
-        module::Module,
         references::{ClassRef, PackageRef},
+        Annotation, Module, TypeAnnotation,
     },
     macros::see_jvm_spec,
 };

@@ -9,8 +9,9 @@ use std::{
 
 use crate::jvm::{
     code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
-    method::{self, Method},
+    method::{self},
     references::ClassRef,
+    Method,
 };
 
 use crate::analysis::fixed_point::Analyzer;

@@ -2,8 +2,9 @@ use std::io::{self, Read};
 
 use crate::{
     jvm::{
-        field::{self, Field},
+        field::{self},
         references::ClassRef,
+        Field,
     },
     macros::{extract_attributes, see_jvm_spec},
 };

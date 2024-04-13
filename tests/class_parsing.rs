@@ -2,9 +2,10 @@ use std::io::{self};
 
 use mokapot::{
     jvm::{
-        class::{AccessFlags, Class, RecordComponent},
+        class::{AccessFlags, RecordComponent},
         parsing::Error,
         references::ClassRef,
+        Class,
     },
     types::{
         field_type::{FieldType, PrimitiveType},

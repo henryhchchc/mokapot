@@ -2,9 +2,10 @@ use std::io::{self, Read};
 
 use crate::{
     jvm::{
-        method::{self, Method},
+        method::{self},
         parsing::Context,
         references::ClassRef,
+        Method,
     },
     macros::{extract_attributes, malform, see_jvm_spec},
     types::method_descriptor::MethodDescriptor,

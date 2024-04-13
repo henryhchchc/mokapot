@@ -1,11 +1,11 @@
 use std::{cell::Cell, path::PathBuf};
 
 use mokapot::jvm::{
-    class::Class,
     class_loader::{
         class_paths::{DirectoryClassPath, JarClassPath},
         CachingClassLoader, ClassLoader, ClassPath, Error,
     },
+    Class,
 };
 
 macro_rules! test_data_class {

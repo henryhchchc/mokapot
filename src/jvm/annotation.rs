@@ -1,26 +1,14 @@
 //! Module for the APIs for the annotation in JVM.
 use crate::{
     macros::see_jvm_spec,
-    types::{
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::ReturnType,
-    },
+    types::{field_type::PrimitiveType, method_descriptor::ReturnType},
 };
 
 use super::{
     code::{LocalVariableId, ProgramCounter},
     field::ConstantValue,
+    Annotation,
 };
-
-/// An annotation on a class, field, method, or parameter.
-#[doc = see_jvm_spec!(4, 7, 16)]
-#[derive(Debug, Clone)]
-pub struct Annotation {
-    /// The type of the annotation.
-    pub annotation_type: FieldType,
-    /// The names and values of the annotation's fields.
-    pub element_value_pairs: Vec<(String, ElementValue)>,
-}
 
 /// A value of an annotation field.
 #[doc = see_jvm_spec!(4, 7, 16, 1)]
@@ -48,7 +36,7 @@ pub enum ElementValue {
     Array(Vec<ElementValue>),
 }
 
-/// Information about the target of a [`TypeAnnotation`].
+/// Information about the target of a [`TypeAnnotation`](super::TypeAnnotation).
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone)]
 pub enum TargetInfo {
@@ -120,21 +108,4 @@ pub enum TypePathElement {
     Bound,
     /// Annotation is on a type argument of a parameterized type.
     TypeArgument(u8),
-}
-
-/// An type annotation on a class, field, method, or parameter.
-#[doc = see_jvm_spec!(4, 7, 20)]
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions, /* reason = "To be consistent with JVM spec" */)]
-pub struct TypeAnnotation {
-    /// The type of the annotation.
-    pub annotation_type: FieldType,
-    /// Denotes which type of declaration this annotation is on.
-    #[doc = see_jvm_spec!(4, 7, 20, 1)]
-    pub target_info: TargetInfo,
-    /// The path to the annotated type.
-    #[doc = see_jvm_spec!(4, 7, 20, 2)]
-    pub target_path: Vec<TypePathElement>,
-    /// The names and values of the annotation's fields.
-    pub element_value_pairs: Vec<(String, ElementValue)>,
 }

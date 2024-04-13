@@ -1,4 +1,4 @@
-use mokapot::{ir::MokaIRMethodExt, jvm::class};
+use mokapot::{ir::MokaIRMethodExt, jvm::Class};
 use rayon::prelude::*;
 use std::{env, fs, path::PathBuf};
 
@@ -17,7 +17,7 @@ fn works_with_jdk_classes() {
     class_files.into_par_iter().for_each(|class_file| {
         let reader = fs::File::open(&class_file).unwrap();
         let buf_reader = std::io::BufReader::new(reader);
-        let class = class::Class::from_reader(buf_reader);
+        let class = Class::from_reader(buf_reader);
         match class {
             Ok(c) => c
                 .methods

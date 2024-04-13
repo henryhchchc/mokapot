@@ -4,48 +4,14 @@ use std::fmt::Display;
 
 use crate::{
     macros::see_jvm_spec,
-    types::{
-        field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
-    },
+    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 use super::{
-    annotation::{Annotation, TypeAnnotation},
     class::MethodHandle,
     references::{ClassRef, FieldRef},
+    Field,
 };
-
-/// A JVM field.
-#[doc = see_jvm_spec!(4, 5)]
-#[derive(Debug, Clone)]
-pub struct Field {
-    /// The access modifiers of the field.
-    pub access_flags: AccessFlags,
-    /// The name of the field.
-    pub name: String,
-    /// The class containing the field.
-    pub owner: ClassRef,
-    /// The type of the field.
-    pub field_type: FieldType,
-    /// The constant value of the field, if any.
-    pub constant_value: Option<ConstantValue>,
-    /// Indicates if the field is synthesized by the compiler.
-    pub is_synthetic: bool,
-    /// Indicates if the field is deprecated.
-    pub is_deperecated: bool,
-    /// The generic signature.
-    pub signature: Option<FieldSignature>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
-}
 
 impl Field {
     /// Creates a [`FieldRef`] referring to the field.

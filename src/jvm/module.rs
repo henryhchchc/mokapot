@@ -5,28 +5,6 @@ use crate::macros::see_jvm_spec;
 
 use super::references::{ClassRef, ModuleRef, PackageRef};
 
-/// A JVM module.
-#[doc = see_jvm_spec!(4, 7, 25)]
-#[derive(Debug, Clone)]
-pub struct Module {
-    /// The name of the module.
-    pub name: String,
-    /// The flags of the module.
-    pub flags: Flags,
-    /// The version of the module.
-    pub version: Option<String>,
-    /// A list of the modules that are required by this module.
-    pub requires: Vec<Require>,
-    /// A list of the modules that are exported by this module.
-    pub exports: Vec<Export>,
-    /// A list of the modules that are opened by this module.
-    pub opens: Vec<Open>,
-    /// A list of the classes that are used by this module.
-    pub uses: Vec<ClassRef>,
-    /// A list of the services that are provided by this module.
-    pub provides: Vec<Provide>,
-}
-
 /// A service provided by a module.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]

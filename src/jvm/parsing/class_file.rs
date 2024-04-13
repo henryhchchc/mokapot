@@ -3,12 +3,13 @@ use std::io::{self, Read};
 use crate::{
     jvm::{
         class::{
-            self, BootstrapMethod, Class, EnclosingMethod, InnerClassInfo, NestedClassAccessFlags,
+            self, BootstrapMethod, EnclosingMethod, InnerClassInfo, NestedClassAccessFlags,
             RecordComponent, Version,
         },
         constant_pool::ConstantPool,
         parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
+        Class,
     },
     macros::{extract_attributes, malform, see_jvm_spec},
 };

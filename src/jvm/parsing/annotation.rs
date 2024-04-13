@@ -1,9 +1,10 @@
 use crate::{
     jvm::{
-        annotation::{Annotation, ElementValue, TargetInfo, TypeAnnotation, TypePathElement},
+        annotation::{ElementValue, TargetInfo, TypePathElement},
         code::LocalVariableId,
         constant_pool,
         field::ConstantValue,
+        Annotation, TypeAnnotation,
     },
     types::field_type::PrimitiveType,
 };

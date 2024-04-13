@@ -5,7 +5,7 @@ use std::{fs::File, io::BufReader};
 #[cfg(feature = "jar")]
 use zip::{result::ZipError, ZipArchive};
 
-use crate::jvm::class::Class;
+use crate::jvm::Class;
 
 use super::{ClassPath, Error};
 /// A class path that searches for classes in a directory.

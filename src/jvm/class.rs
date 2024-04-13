@@ -7,81 +7,16 @@ use bitflags::bitflags;
 use crate::{
     macros::see_jvm_spec,
     types::{
-        field_type::FieldType,
-        method_descriptor::MethodDescriptor,
-        signitures::{ClassSignature, FieldSignature},
+        field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
     },
 };
 
 use super::{
-    annotation::{Annotation, TypeAnnotation},
-    field::{ConstantValue, Field},
-    method::Method,
-    module::Module,
+    field::ConstantValue,
     parsing::Error,
-    references::{ClassRef, FieldRef, MethodRef, PackageRef},
+    references::{ClassRef, FieldRef, MethodRef},
+    Class, Field, Method,
 };
-
-/// A JVM class
-#[doc = see_jvm_spec!(4)]
-#[derive(Debug, Clone)]
-pub struct Class {
-    /// The version of the class file.
-    pub version: Version,
-    /// The access modifiers of the class.
-    pub access_flags: AccessFlags,
-    /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
-    pub binary_name: String,
-    /// A reference to the superclass of the class.
-    /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
-    pub super_class: Option<ClassRef>,
-    /// The interfaces implemented by the class.
-    pub interfaces: Vec<ClassRef>,
-    /// The fields declared the class.
-    pub fields: Vec<Field>,
-    /// The methods declared in the class.
-    pub methods: Vec<Method>,
-    /// The path to the source file of the class.
-    pub source_file: Option<String>,
-    /// The inner classes.
-    pub inner_classes: Vec<InnerClassInfo>,
-    /// The outer class and method of the class.
-    pub enclosing_method: Option<EnclosingMethod>,
-    /// The source debug extension.
-    pub source_debug_extension: Option<Vec<u8>>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    /// The bootstrap methods of the class, which are used to generate dynamic callsites.
-    pub bootstrap_methods: Vec<BootstrapMethod>,
-    /// The infomation of the module if the class is `module-info`.
-    pub module: Option<Module>,
-    /// The packages of the module.
-    pub module_packages: Vec<PackageRef>,
-    /// The main class of the module.
-    pub module_main_class: Option<ClassRef>,
-    /// The nearest outer class of the class.
-    pub nest_host: Option<ClassRef>,
-    /// The nested classes of the class.
-    pub nest_members: Vec<ClassRef>,
-    /// The permitted subclasses of the class if the class is `sealed`.
-    pub permitted_subclasses: Vec<ClassRef>,
-    /// Indicates whether the class is synthesized by the compiler.
-    pub is_synthetic: bool,
-    /// Indicates whether the class is deprecated.
-    pub is_deprecated: bool,
-    /// The generic signature of the class.
-    pub signature: Option<ClassSignature>,
-    /// The record components of the class if the class is `record`.
-    pub record: Option<Vec<RecordComponent>>,
-    /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
-}
 
 impl Class {
     /// Gets a method of the class by its name and descriptor.
@@ -345,13 +280,13 @@ pub struct RecordComponent {
     /// The generic signature of the component.
     pub signature: Option<FieldSignature>,
     /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
+    pub runtime_visible_annotations: Vec<super::Annotation>,
     /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
+    pub runtime_invisible_annotations: Vec<super::Annotation>,
     /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_visible_type_annotations: Vec<super::TypeAnnotation>,
     /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    pub runtime_invisible_type_annotations: Vec<super::TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }

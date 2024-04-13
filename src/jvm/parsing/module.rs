@@ -1,6 +1,7 @@
 use crate::jvm::{
     constant_pool::Entry,
-    module::{Export, Module, Open, Provide, Require},
+    module::{Export, Open, Provide, Require},
+    Module,
 };
 
 use super::{jvm_element_parser::ClassElement, raw_attributes, Context, Error};

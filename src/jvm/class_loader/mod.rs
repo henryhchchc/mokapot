@@ -2,7 +2,7 @@
 
 use std::{borrow::Borrow, collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
 
-use super::class::Class;
+use super::Class;
 
 /// An error that can occur while loading a class.
 #[derive(thiserror::Error, Debug)]

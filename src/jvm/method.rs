@@ -2,58 +2,7 @@
 
 use bitflags::bitflags;
 
-use crate::{
-    macros::see_jvm_spec,
-    types::{method_descriptor::MethodDescriptor, signitures::MethodSignature},
-};
-
-use super::{
-    annotation::{Annotation, ElementValue, TypeAnnotation},
-    code::MethodBody,
-    references::{ClassRef, MethodRef},
-};
-
-/// A JVM method.
-#[doc = see_jvm_spec!(4, 6)]
-#[derive(Debug, Clone)]
-pub struct Method {
-    /// The access flags of the method.
-    pub access_flags: AccessFlags,
-    /// The name of the method.
-    pub name: String,
-    /// The descriptor of the method.
-    pub descriptor: MethodDescriptor,
-    /// The class containing the method.
-    pub owner: ClassRef,
-    /// The body of the method if it is not `abstract`` or `native`.
-    pub body: Option<MethodBody>,
-    /// The checked exceptions that may be thrown by the method.
-    pub exceptions: Vec<ClassRef>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime visible parameter annotations.
-    pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
-    /// The runtime invisible parameter annotations.
-    pub runtime_invisible_parameter_annotations: Vec<Vec<Annotation>>,
-    /// The default value of the annotation.
-    pub annotation_default: Option<ElementValue>,
-    /// The parameters of the method.
-    pub parameters: Vec<ParameterInfo>,
-    /// Indicates if the method is synthesized by the compiler.
-    pub is_synthetic: bool,
-    /// Indicates if the method is deprecated.
-    pub is_deprecated: bool,
-    /// The generic signature.
-    pub signature: Option<MethodSignature>,
-    /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
-}
+use super::{references::MethodRef, Method};
 
 impl Method {
     /// The method of a static initializer block.
@@ -139,7 +88,7 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::arb_identifier;
+    use crate::{jvm::references::ClassRef, tests::arb_identifier};
 
     use super::*;
     use proptest::prelude::*;

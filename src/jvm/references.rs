@@ -5,9 +5,9 @@ use crate::types::{
     method_descriptor::{MethodDescriptor, ReturnType},
 };
 
-use super::method::Method;
+use super::Method;
 
-/// A reference to a [`Class`](crate::jvm::class::Class).
+/// A reference to a [`Class`](crate::jvm::Class).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, derive_more::Display)]
 #[display(fmt = "{binary_name}")]
 pub struct ClassRef {
@@ -24,7 +24,7 @@ impl ClassRef {
     }
 }
 
-/// A reference to a [`Field`](crate::jvm::field::Field).
+/// A reference to a [`Field`](crate::jvm::Field).
 #[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
 #[display(fmt = "{owner}.{name}")]
 pub struct FieldRef {
@@ -65,7 +65,7 @@ impl MethodRef {
     }
 }
 
-/// A reference to a [`Module`](crate::jvm::module::Module).
+/// A reference to a [`Module`](crate::jvm::Module).
 #[derive(Debug, Clone)]
 pub struct ModuleRef {
     /// The name of the module.
