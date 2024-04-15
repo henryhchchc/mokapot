@@ -10,10 +10,9 @@ use crate::{
         annotation::ElementValue,
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
-        field::ConstantValue,
         method::ParameterInfo,
         references::{ClassRef, PackageRef},
-        Annotation, Module, TypeAnnotation,
+        Annotation, ConstantValue, Module, TypeAnnotation,
     },
     macros::see_jvm_spec,
 };

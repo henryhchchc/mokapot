@@ -14,10 +14,9 @@ use crate::{
 };
 
 use super::{
-    field::ConstantValue,
     parsing::Error,
     references::{ClassRef, FieldRef, MethodRef},
-    Class, Field, Method,
+    Class, ConstantValue, Field, Method,
 };
 
 impl Class {

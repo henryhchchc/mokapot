@@ -4,7 +4,7 @@ use std::io::{self, Read};
 
 use crate::macros::see_jvm_spec;
 
-use crate::jvm::field::JavaString;
+use crate::jvm::JavaString;
 
 use super::ConstantPool;
 
@@ -208,8 +208,8 @@ impl Entry {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::parsing::constant_pool::tests::arb_constant_pool_info;
     use super::*;
+    use crate::jvm::parsing::constant_pool::tests::arb_constant_pool_info;
     use proptest::prelude::*;
 
     prop_compose! {

@@ -9,7 +9,7 @@ use crate::{
     },
     jvm::{
         code::{Instruction, ProgramCounter, WideInstruction},
-        field::ConstantValue,
+        ConstantValue,
     },
     types::{
         field_type::{FieldType, PrimitiveType},

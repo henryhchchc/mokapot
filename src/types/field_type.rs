@@ -306,4 +306,36 @@ mod tests {
         assert_eq!("J".parse(), Ok(Base(Long)));
         assert_eq!("Z".parse(), Ok(Base(Boolean)));
     }
+
+    #[test]
+    fn parse_primitive() {
+        assert_eq!(PrimitiveType::try_from('Z'), Ok(PrimitiveType::Boolean));
+        assert_eq!(PrimitiveType::try_from('C'), Ok(PrimitiveType::Char));
+        assert_eq!(PrimitiveType::try_from('F'), Ok(PrimitiveType::Float));
+        assert_eq!(PrimitiveType::try_from('D'), Ok(PrimitiveType::Double));
+        assert_eq!(PrimitiveType::try_from('B'), Ok(PrimitiveType::Byte));
+        assert_eq!(PrimitiveType::try_from('S'), Ok(PrimitiveType::Short));
+        assert_eq!(PrimitiveType::try_from('I'), Ok(PrimitiveType::Int));
+        assert_eq!(PrimitiveType::try_from('J'), Ok(PrimitiveType::Long));
+    }
+
+    #[test]
+    fn missing_semicolon() {
+        assert!(FieldType::from_str("Ljava/lang/String").is_err());
+    }
+
+    #[test]
+    fn tailing_chars() {
+        assert!(FieldType::from_str("Ljava/lang/String;A").is_err());
+    }
+
+    #[test]
+    fn misisng_array_element() {
+        assert!(FieldType::from_str("[").is_err());
+    }
+
+    #[test]
+    fn invalid_array_element() {
+        assert!(FieldType::from_str("[A").is_err());
+    }
 }

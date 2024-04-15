@@ -11,8 +11,8 @@ use super::{Argument, Identifier};
 use crate::{
     jvm::{
         code::ProgramCounter,
-        field::ConstantValue,
         references::{ClassRef, MethodRef},
+        ConstantValue,
     },
     types::method_descriptor::MethodDescriptor,
 };

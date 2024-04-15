@@ -1,17 +1,6 @@
 //! JVM fields and constant values.
-use core::f32;
-use std::fmt::Display;
 
-use crate::{
-    macros::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
-};
-
-use super::{
-    class::MethodHandle,
-    references::{ClassRef, FieldRef},
-    Field,
-};
+use super::{references::FieldRef, Field};
 
 impl Field {
     /// Creates a [`FieldRef`] referring to the field.
@@ -25,91 +14,7 @@ impl Field {
     }
 }
 
-/// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, Clone)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum JavaString {
-    /// A valid UTF-8 string.
-    Utf8(String),
-    /// An string that is not valid UTF-8.
-    InvalidUtf8(Vec<u8>),
-}
-
-impl Display for JavaString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            JavaString::Utf8(value) => write!(f, "String(\"{value}\")"),
-            JavaString::InvalidUtf8(value) => write!(
-                f,
-                "String({}) // Invalid UTF-8",
-                value.iter().map(|it| format!("0x{it:02X}")).join(" ")
-            ),
-        }
-    }
-}
-
-/// Denotes a compile-time constant value.
-#[doc = see_jvm_spec!(4, 4)]
-#[derive(Debug, Clone, derive_more::Display)]
-pub enum ConstantValue {
-    /// The `null` value.
-    #[display(fmt = "null")]
-    Null,
-    /// A primitive integer value (i.e., `int`).
-    #[display(fmt = "int({_0})")]
-    Integer(i32),
-    /// A primitive floating point value (i.e., `float`).
-    #[display(fmt = "float({_0})")]
-    Float(f32),
-    /// A primitive long value (i.e., `long`).
-    #[display(fmt = "long({_0})")]
-    Long(i64),
-    /// A primitive double value (i.e., `double`).
-    #[display(fmt = "double({_0})")]
-    Double(f64),
-    /// A string literal.
-    #[display(fmt = "{_0}")]
-    String(JavaString),
-    /// A class literal.
-    #[display(fmt = "{_0}.class")]
-    Class(ClassRef),
-    /// A method handle.
-    #[display(fmt = "{_0:?}")]
-    Handle(MethodHandle),
-    /// A method type.
-    #[display(fmt = "{_0:?}")]
-    MethodType(MethodDescriptor),
-    /// A dynamic constant.
-    #[display(fmt = "Dynamic({_0}, {_1}, {_2})")]
-    Dynamic(u16, String, FieldType),
-}
-
-impl PartialEq<Self> for ConstantValue {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Null, Self::Null) => true,
-            (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
-            (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-            (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
-            (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
-            (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-            (Self::Double(lhs), Self::Double(rhs)) => lhs == rhs,
-            (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
-            (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
-            (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
-            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
-            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
-                lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
-            }
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ConstantValue {}
-
 use bitflags::bitflags;
-use itertools::Itertools;
 
 bitflags! {
     /// The access flags of a field.
@@ -138,70 +43,10 @@ bitflags! {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
-    use super::*;
-    use crate::types::field_type::PrimitiveType;
-    use PrimitiveType::{Boolean, Byte, Char, Double, Float, Int, Long, Short};
 
     use proptest::prelude::*;
 
     use super::AccessFlags;
-
-    #[test]
-    fn parse_primitive() {
-        assert_eq!(PrimitiveType::try_from('Z'), Ok(Boolean));
-        assert_eq!(PrimitiveType::try_from('C'), Ok(Char));
-        assert_eq!(PrimitiveType::try_from('F'), Ok(Float));
-        assert_eq!(PrimitiveType::try_from('D'), Ok(Double));
-        assert_eq!(PrimitiveType::try_from('B'), Ok(Byte));
-        assert_eq!(PrimitiveType::try_from('S'), Ok(Short));
-        assert_eq!(PrimitiveType::try_from('I'), Ok(Int));
-        assert_eq!(PrimitiveType::try_from('J'), Ok(Long));
-    }
-
-    #[test]
-    fn prase_field_type() {
-        assert_eq!("Z".parse(), Ok(FieldType::Base(Boolean)));
-        assert_eq!("C".parse(), Ok(FieldType::Base(Char)));
-        assert_eq!("F".parse(), Ok(FieldType::Base(Float)));
-        assert_eq!("D".parse(), Ok(FieldType::Base(Double)));
-        assert_eq!("B".parse(), Ok(FieldType::Base(Byte)));
-        assert_eq!("S".parse(), Ok(FieldType::Base(Short)));
-        assert_eq!("I".parse(), Ok(FieldType::Base(Int)));
-        assert_eq!("J".parse(), Ok(FieldType::Base(Long)));
-        assert_eq!(
-            "Ljava/lang/String;".parse(),
-            Ok(FieldType::Object(ClassRef::new("java/lang/String")))
-        );
-        assert_eq!("[I".parse(), Ok(FieldType::Base(Int).into_array_type()));
-        assert_eq!(
-            "[[Ljava/lang/String;".parse(),
-            Ok(FieldType::Object(ClassRef::new("java/lang/String"))
-                .into_array_type()
-                .into_array_type())
-        );
-    }
-
-    #[test]
-    fn missing_semicolon() {
-        assert!(FieldType::from_str("Ljava/lang/String").is_err());
-    }
-
-    #[test]
-    fn tailing_chars() {
-        assert!(FieldType::from_str("Ljava/lang/String;A").is_err());
-    }
-
-    #[test]
-    fn misisng_array_element() {
-        assert!(FieldType::from_str("[").is_err());
-    }
-
-    #[test]
-    fn invalid_array_element() {
-        assert!(FieldType::from_str("[A").is_err());
-    }
 
     fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
         prop_oneof![

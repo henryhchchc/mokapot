@@ -6,8 +6,7 @@ use crate::{
 
 use super::{
     code::{LocalVariableId, ProgramCounter},
-    field::ConstantValue,
-    Annotation,
+    Annotation, ConstantValue,
 };
 
 /// A value of an annotation field.

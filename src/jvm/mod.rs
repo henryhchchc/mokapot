@@ -1,5 +1,9 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
+use std::fmt::Display;
+
+use itertools::Itertools;
+
 use crate::{
     macros::see_jvm_spec,
     types::{
@@ -9,7 +13,10 @@ use crate::{
     },
 };
 
-use self::references::{ClassRef, PackageRef};
+use self::{
+    class::MethodHandle,
+    references::{ClassRef, PackageRef},
+};
 
 pub mod annotation;
 pub mod class;
@@ -122,7 +129,7 @@ pub struct Field {
     /// The type of the field.
     pub field_type: FieldType,
     /// The constant value of the field, if any.
-    pub constant_value: Option<field::ConstantValue>,
+    pub constant_value: Option<ConstantValue>,
     /// Indicates if the field is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates if the field is deprecated.
@@ -204,3 +211,86 @@ pub struct Module {
     /// A list of the services that are provided by this module.
     pub provides: Vec<module::Provide>,
 }
+
+/// A string in the JVM bytecode.
+#[derive(PartialEq, Eq, Debug, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum JavaString {
+    /// A valid UTF-8 string.
+    Utf8(String),
+    /// An string that is not valid UTF-8.
+    InvalidUtf8(Vec<u8>),
+}
+
+impl Display for JavaString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JavaString::Utf8(value) => write!(f, "String(\"{value}\")"),
+            JavaString::InvalidUtf8(value) => write!(
+                f,
+                "String({}) // Invalid UTF-8",
+                value.iter().map(|it| format!("0x{it:02X}")).join(" ")
+            ),
+        }
+    }
+}
+
+/// Denotes a compile-time constant value.
+#[doc = see_jvm_spec!(4, 4)]
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum ConstantValue {
+    /// The `null` value.
+    #[display(fmt = "null")]
+    Null,
+    /// A primitive integer value (i.e., `int`).
+    #[display(fmt = "int({_0})")]
+    Integer(i32),
+    /// A primitive floating point value (i.e., `float`).
+    #[display(fmt = "float({_0})")]
+    Float(f32),
+    /// A primitive long value (i.e., `long`).
+    #[display(fmt = "long({_0})")]
+    Long(i64),
+    /// A primitive double value (i.e., `double`).
+    #[display(fmt = "double({_0})")]
+    Double(f64),
+    /// A string literal.
+    #[display(fmt = "{_0}")]
+    String(JavaString),
+    /// A class literal.
+    #[display(fmt = "{_0}.class")]
+    Class(ClassRef),
+    /// A method handle.
+    #[display(fmt = "{_0:?}")]
+    Handle(MethodHandle),
+    /// A method type.
+    #[display(fmt = "{_0:?}")]
+    MethodType(MethodDescriptor),
+    /// A dynamic constant.
+    #[display(fmt = "Dynamic({_0}, {_1}, {_2})")]
+    Dynamic(u16, String, FieldType),
+}
+
+impl PartialEq<Self> for ConstantValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) => true,
+            (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
+            (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
+            (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
+            (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Double(lhs), Self::Double(rhs)) => lhs == rhs,
+            (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
+            (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
+            (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
+            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
+            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
+                lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConstantValue {}

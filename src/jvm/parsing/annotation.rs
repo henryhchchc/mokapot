@@ -3,8 +3,7 @@ use crate::{
         annotation::{ElementValue, TargetInfo, TypePathElement},
         class::constant_pool,
         code::LocalVariableId,
-        field::ConstantValue,
-        Annotation, TypeAnnotation,
+        Annotation, ConstantValue, TypeAnnotation,
     },
     types::field_type::PrimitiveType,
 };
