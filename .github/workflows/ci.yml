@@ -90,28 +90,8 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov,cargo-nextest
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
-      - name: Hash JDK modules
-        id: hash-jdk-modules
-        run: |
-          file_path="${{ env.JAVA_HOME }}/lib/modules"
-          hash=$(sha256sum "$file_path" | awk '{print $1}')
-          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
-      - name: Cache JDK classes
-        id: cache-jdk-classes
-        uses: actions/cache@v4
-        with:
-          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
-          path: jdk_classes/
-      - name: Extract JDK classes
-        if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
-        run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
       - name: Cargo Update
         run: cargo update --verbose
       - name: Cache Rust Build Stuff
@@ -126,8 +106,6 @@ jobs:
             ~/.cargo/git/db/
             target/
       - name: Test
-        env:
-          JDK_CLASSES: ./jdk_classes
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report -E 'kind(lib)'
