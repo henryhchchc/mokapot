@@ -1,3 +1,5 @@
+#![cfg(integration_test)]
+
 use std::io::{self};
 
 use mokapot::{

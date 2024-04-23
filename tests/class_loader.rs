@@ -1,3 +1,5 @@
+#![cfg(integration_test)]
+
 use std::{cell::Cell, path::PathBuf};
 
 use mokapot::jvm::{

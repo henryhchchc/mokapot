@@ -1,3 +1,5 @@
+#![cfg(integration_test)]
+
 use mokapot::{ir::MokaIRMethodExt, jvm::Class};
 use rayon::prelude::*;
 use std::{env, fs, path::PathBuf};

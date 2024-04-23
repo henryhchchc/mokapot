@@ -168,6 +168,7 @@ jobs:
       - name: Test
         env:
           JDK_CLASSES: ./jdk_classes
+          INTEGRATION_TEST: TRUE
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
