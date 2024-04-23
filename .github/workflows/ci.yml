@@ -109,12 +109,12 @@ jobs:
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report -E 'kind(lib)'
-          cargo llvm-cov report --codecov --output-path ./target/codecov.json
+          cargo llvm-cov report --codecov --output-path ./target/codecov-unit.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
         with:
           name: codecov-unit.json
-          path: ./target/codecov.json
+          path: ./target/codecov-unit.json
 
   integration_test:
     name: Test / integration
@@ -172,12 +172,12 @@ jobs:
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
-          cargo llvm-cov report --codecov --output-path ./target/codecov.json
+          cargo llvm-cov report --codecov --output-path ./target/codecov-integration.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
         with:
           name: codecov-integration.json
-          path: ./target/codecov.json
+          path: ./target/codecov-integration.json
 
   codecov:
     name: Report / Codecov
