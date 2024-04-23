@@ -2,6 +2,8 @@ version: 2
 updates:
   - package-ecosystem: "cargo"
     directory: "/" # Location of package manifests
+    reviewers:
+      - henryhchchc
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
