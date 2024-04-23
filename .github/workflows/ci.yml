@@ -192,7 +192,7 @@ jobs:
           JDK_CLASSES: ./jdk_classes
         run: |
           cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(bin)'
+          cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
           cargo llvm-cov report --codecov --output-path ./target/codecov.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v4
