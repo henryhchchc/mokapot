@@ -6,3 +6,6 @@ coverage:
         threshold: "1%"
 ignore:
   - tests
+flag_management:
+  default_rules:
+    carryforward: true
