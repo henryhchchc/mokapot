@@ -14,6 +14,9 @@ impl Field {
     }
 }
 
+/// A generic type signature for a field, a formal parameter, a local variable, or a record component.
+pub type Signature = String;
+
 use bitflags::bitflags;
 
 bitflags! {

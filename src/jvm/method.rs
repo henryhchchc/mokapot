@@ -4,6 +4,9 @@ use bitflags::bitflags;
 
 use super::{references::MethodRef, Method};
 
+/// A generic type signature for a method.
+pub type Signature = String;
+
 impl Method {
     /// The method of a static initializer block.
     pub const CLASS_INITIALIZER_NAME: &'static str = "<clinit>";

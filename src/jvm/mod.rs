@@ -6,11 +6,7 @@ use itertools::Itertools;
 
 use crate::{
     macros::see_jvm_spec,
-    types::{
-        field_type::FieldType,
-        method_descriptor::MethodDescriptor,
-        signitures::{ClassSignature, FieldSignature, MethodSignature},
-    },
+    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 use self::{
@@ -82,7 +78,7 @@ pub struct Class {
     /// Indicates whether the class is deprecated.
     pub is_deprecated: bool,
     /// The generic signature of the class.
-    pub signature: Option<ClassSignature>,
+    pub signature: Option<class::Signature>,
     /// The record components of the class if the class is `record`.
     pub record: Option<Vec<class::RecordComponent>>,
     /// Unrecognized JVM attributes.
@@ -135,7 +131,7 @@ pub struct Field {
     /// Indicates if the field is deprecated.
     pub is_deperecated: bool,
     /// The generic signature.
-    pub signature: Option<FieldSignature>,
+    pub signature: Option<field::Signature>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<Annotation>,
     /// The runtime invisible annotations.
@@ -185,7 +181,7 @@ pub struct Method {
     /// Indicates if the method is deprecated.
     pub is_deprecated: bool,
     /// The generic signature.
-    pub signature: Option<MethodSignature>,
+    pub signature: Option<method::Signature>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }

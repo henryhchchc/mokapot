@@ -8,16 +8,18 @@ use bitflags::bitflags;
 
 use crate::{
     macros::see_jvm_spec,
-    types::{
-        field_type::FieldType, method_descriptor::MethodDescriptor, signitures::FieldSignature,
-    },
+    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 use super::{
+    field,
     parsing::Error,
     references::{ClassRef, FieldRef, MethodRef},
     Class, ConstantValue, Field, Method,
 };
+
+/// A generic type signature for a class.
+pub type Signature = String;
 
 impl Class {
     /// Gets a method of the class by its name and descriptor.
@@ -286,7 +288,7 @@ pub struct RecordComponent {
     /// The type of the component.
     pub component_type: FieldType,
     /// The generic signature of the component.
-    pub signature: Option<FieldSignature>,
+    pub signature: Option<field::Signature>,
     /// The runtime visible annotations.
     pub runtime_visible_annotations: Vec<super::Annotation>,
     /// The runtime invisible annotations.
