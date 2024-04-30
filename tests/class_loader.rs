@@ -5,9 +5,9 @@ use std::{path::PathBuf, sync::Mutex};
 use mokapot::jvm::{
     class_loader::{
         class_paths::{DirectoryClassPath, JarClassPath},
-        CachingClassLoader, ClassLoader, ClassPath, Error,
+        CachingClassLoader, ClassPath, Error,
     },
-    Class,
+    Class, ClassLoader,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
