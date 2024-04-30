@@ -1,6 +1,8 @@
 //! Discovering and loading classes.
 
-use std::{borrow::Borrow, collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
+use std::{borrow::Borrow, ops::Deref};
+
+use crate::utils::Cache;
 
 use super::{Class, ClassLoader};
 
@@ -81,7 +83,7 @@ pub mod class_paths;
 #[allow(clippy::module_name_repetitions)]
 pub struct CachingClassLoader<P> {
     class_loader: ClassLoader<P>,
-    cache: RwLock<HashMap<String, Box<Class>>>,
+    cache: Cache<String, Class>,
 }
 
 impl<P> CachingClassLoader<P> {
@@ -96,48 +98,13 @@ impl<P> CachingClassLoader<P> {
         //       See https://github.com/rust-lang/rust/issues/54503
         // reason = "The unwrap is garenteed to not panic."
     )]
-    pub fn load_class(&self, binary_name: impl Borrow<str>) -> Result<&Class, Error>
+    pub fn load_class<N>(&self, binary_name: &N) -> Result<&Class, Error>
     where
         P: ClassPath,
+        N: ?Sized + Borrow<str>,
     {
-        let cache = match self.cache.read() {
-            Ok(it) => it,
-            Err(poison_err) => {
-                // The operaion on `self.cache` should not panic.
-                // When the other thread holding the lock get panic, the panic should happen before
-                // modifying the cache.
-                // Therefore, it is safe to take the lock even if it is poisoned.
-                poison_err.into_inner()
-            }
-        };
-        let class_ref = if let Some(b) = cache.get(binary_name.borrow()) {
-            // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
-            // `self.cache` gets dropped, which is when `self` gets dropped.
-            // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute(b.as_ref()) }
-        } else {
-            drop(cache);
-            let mut cache = match self.cache.write() {
-                Ok(it) => it,
-                Err(poison_err) => poison_err.into_inner(),
-            };
-            // It is possible that the class is loaded before we get the write lock.
-            // Therefore, we need to check the cache again.
-            let class_box = if let Some(b) = cache.get(binary_name.borrow()) {
-                b
-            } else {
-                let class = self.class_loader.load_class(binary_name.borrow())?;
-                let overridden = cache.insert(binary_name.borrow().to_owned(), Box::new(class));
-                debug_assert!(overridden.is_none(), "Class is already in the cache");
-                // The unwrap is safe since the class was just inserted into the cache.
-                cache.get(binary_name.borrow()).unwrap()
-            };
-            // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
-            // `self.cache` gets dropped, which is when `self` gets dropped.
-            // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute(class_box.as_ref()) }
-        };
-        Ok(class_ref)
+        self.cache
+            .get_or_try_put(binary_name.borrow(), |it| self.class_loader.load_class(it))
     }
 }
 
@@ -145,7 +112,7 @@ impl<P> From<ClassLoader<P>> for CachingClassLoader<P> {
     fn from(class_loader: ClassLoader<P>) -> Self {
         Self {
             class_loader,
-            cache: RwLock::new(HashMap::new()),
+            cache: Cache::new(),
         }
     }
 }
