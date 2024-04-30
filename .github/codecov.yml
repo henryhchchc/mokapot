@@ -9,7 +9,3 @@ ignore:
 flag_management:
   default_rules:
     carryforward: false
-  unit_tests:
-    name: Unit Tests
-  integration_tests:
-    name: Integration Tests
