@@ -24,6 +24,12 @@ pub mod module;
 pub mod parsing;
 pub mod references;
 
+/// A class loader that can load classes from a list of class paths.
+#[derive(Debug)]
+pub struct ClassLoader<P> {
+    class_path: Vec<P>,
+}
+
 /// A JVM class
 #[doc = see_jvm_spec!(4)]
 #[derive(Debug, Clone)]

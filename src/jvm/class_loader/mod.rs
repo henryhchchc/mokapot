@@ -2,7 +2,7 @@
 
 use std::{borrow::Borrow, collections::HashMap, mem::transmute, ops::Deref, sync::RwLock};
 
-use super::Class;
+use super::{Class, ClassLoader};
 
 /// An error that can occur while loading a class.
 #[derive(thiserror::Error, Debug)]
@@ -40,12 +40,6 @@ where
     }
 }
 
-/// A class loader that can load classes from a list of class paths.
-#[derive(Debug)]
-pub struct ClassLoader<P> {
-    class_path: Vec<P>,
-}
-
 impl<P> ClassLoader<P> {
     /// Create a new class loader with the given class paths.
     ///
@@ -74,7 +68,7 @@ impl<P> ClassLoader<P> {
 
     /// Convert this class loader into a [`CachingClassLoader`].
     #[must_use]
-    #[deprecated(note = "Use [`CachingClassLoader::from`] instead")]
+    #[deprecated(note = "Use `CachingClassLoader::from` instead")]
     pub fn into_cached(self) -> CachingClassLoader<P> {
         CachingClassLoader::from(self)
     }
