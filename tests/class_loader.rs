@@ -1,6 +1,6 @@
 #![cfg(integration_test)]
 
-use std::{cell::Cell, path::PathBuf};
+use std::{path::PathBuf, sync::Mutex};
 
 use mokapot::jvm::{
     class_loader::{
@@ -9,6 +9,7 @@ use mokapot::jvm::{
     },
     Class,
 };
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 macro_rules! test_data_class {
     ($folder:literal, $class_name:literal) => {
@@ -45,18 +46,22 @@ fn load_absent_class() {
 }
 
 struct MockClassPath<'a> {
-    counter: &'a Cell<usize>,
+    counter: &'a Mutex<usize>,
 }
 
 impl<'a> MockClassPath<'a> {
-    fn new(counter: &'a Cell<usize>) -> Self {
+    fn new(counter: &'a Mutex<usize>) -> Self {
         Self { counter }
     }
 }
 
 impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
-        self.counter.set(self.counter.get() + 1);
+        let mut lock = self
+            .counter
+            .lock()
+            .expect("The counter should not be poisoned");
+        *lock += 1;
         let reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
         Class::from_reader(reader).map_err(Into::into)
     }
@@ -64,14 +69,15 @@ impl ClassPath for MockClassPath<'_> {
 
 #[test]
 fn caching_class_loader_load_once() {
-    let counter = Cell::new(0);
+    let counter = Mutex::new(0);
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
-    for _ in 0..10 {
+    (0..100).into_par_iter().for_each(|_| {
         let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
         assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
-    }
-    assert_eq!(counter.get(), 1);
+    });
+    let load_count = counter.lock().expect("The counter should not be poisoned");
+    assert_eq!(*load_count, 1);
 }
 
 #[test]

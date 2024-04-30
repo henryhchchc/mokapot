@@ -4,8 +4,11 @@ fn main() {
     compile_java_test_data();
 }
 
+const INTEGRATION_TEST: &str = "INTEGRATION_TEST";
+
 fn compile_java_test_data() {
-    if env::var("INTEGRATION_TEST").is_ok() {
+    println!("cargo::rerun-if-env-changed={INTEGRATION_TEST}");
+    if env::var(INTEGRATION_TEST).is_ok() {
         println!("cargo::rustc-cfg=integration_test");
     }
     if Command::new("javac").spawn().is_ok() {
