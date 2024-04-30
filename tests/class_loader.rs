@@ -1,6 +1,9 @@
 #![cfg(integration_test)]
 
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::PathBuf,
+    sync::atomic::{self, AtomicUsize},
+};
 
 use mokapot::jvm::{
     class_loader::{
@@ -46,22 +49,18 @@ fn load_absent_class() {
 }
 
 struct MockClassPath<'a> {
-    counter: &'a Mutex<usize>,
+    counter: &'a AtomicUsize,
 }
 
 impl<'a> MockClassPath<'a> {
-    fn new(counter: &'a Mutex<usize>) -> Self {
+    fn new(counter: &'a AtomicUsize) -> Self {
         Self { counter }
     }
 }
 
 impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
-        let mut lock = self
-            .counter
-            .lock()
-            .expect("The counter should not be poisoned");
-        *lock += 1;
+        self.counter.fetch_add(1, atomic::Ordering::Relaxed);
         let reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
         Class::from_reader(reader).map_err(Into::into)
     }
@@ -69,15 +68,14 @@ impl ClassPath for MockClassPath<'_> {
 
 #[test]
 fn caching_class_loader_load_once() {
-    let counter = Mutex::new(0);
+    let counter = AtomicUsize::new(0);
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
     (0..100).into_par_iter().for_each(|_| {
         let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
         assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
     });
-    let load_count = counter.lock().expect("The counter should not be poisoned");
-    assert_eq!(*load_count, 1);
+    assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
 }
 
 #[test]
