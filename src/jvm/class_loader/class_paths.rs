@@ -1,11 +1,14 @@
 //! Implementations of [`ClassPath`].
 
-use std::{fs::File, io::BufReader};
+use std::{collections::HashSet, fs::File, io::BufReader};
 
 #[cfg(feature = "jar")]
 use zip::{result::ZipError, ZipArchive};
 
-use crate::jvm::Class;
+use crate::{
+    analysis::ClassRefs,
+    jvm::{references::ClassRef, Class},
+};
 
 use super::{ClassPath, Error};
 /// A class path that searches for classes in a directory.
@@ -34,6 +37,27 @@ impl DirectoryClassPath {
         Self {
             directory: directory.into(),
         }
+    }
+}
+
+impl ClassRefs for DirectoryClassPath {
+    fn class_refs(&self) -> HashSet<ClassRef> {
+        walkdir::WalkDir::new(&self.directory)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
+            .map(|it| {
+                let binary_name = it
+                    .path()
+                    .strip_prefix(&self.directory)
+                    .expect("The directory should start with `self.directory`")
+                    .with_extension("")
+                    .to_str()
+                    .expect("The path name is not valid UTF-8")
+                    .to_owned();
+                ClassRef { binary_name }
+            })
+            .collect()
     }
 }
 
@@ -71,5 +95,26 @@ impl ClassPath for JarClassPath {
                 e => Error::Other(Box::new(e)),
             })?;
         Class::from_reader(&mut class_file).map_err(Into::into)
+    }
+}
+
+#[cfg(feature = "jar")]
+impl ClassRefs for JarClassPath {
+    fn class_refs(&self) -> HashSet<ClassRef> {
+        let Ok(jar_file) = File::open(&self.jar_file) else {
+            return HashSet::default();
+        };
+        let jar_reader = BufReader::new(jar_file);
+        let Ok(jar_archive) = ZipArchive::new(jar_reader) else {
+            return HashSet::default();
+        };
+        jar_archive
+            .file_names()
+            .filter_map(|it| it.strip_suffix(".class"))
+            .map(|binary_name| {
+                let binary_name = binary_name.to_owned();
+                ClassRef { binary_name }
+            })
+            .collect()
     }
 }
