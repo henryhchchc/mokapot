@@ -63,8 +63,8 @@ impl<P> ClassLoader<P> {
 
     /// Create a new class loader with the given class paths.
     #[must_use]
-    pub fn new<C: Into<Vec<P>>>(class_path: C) -> Self {
-        let class_path = class_path.into();
+    pub fn new<C: IntoIterator<Item = P>>(class_path: C) -> Self {
+        let class_path = class_path.into_iter().collect();
         Self { class_path }
     }
 
