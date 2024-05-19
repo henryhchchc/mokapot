@@ -5,7 +5,7 @@ use crate::ir::{Argument, Identifier};
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 pub enum Operation {
-    /// Adds the two arguments (i.e., `lhs + rhs``).
+    /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display(fmt = "{_0} + {_1}")]
     Add(Argument, Argument),
     /// Subtracts the second argument from the first (i.e., `lhs - rhs`).

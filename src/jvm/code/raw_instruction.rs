@@ -1,3 +1,5 @@
+use std::ptr;
+
 use crate::macros::see_jvm_spec;
 
 /// A raw JVM instruction without the information form the constant pool.
@@ -358,7 +360,7 @@ impl RawInstruction {
         // between `repr(C)` structs, each of which has the `u8` discriminant as its first
         // field, so we can read the discriminant without offsetting the pointer.
         // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
-        unsafe { *(self as *const Self).cast::<u8>() }
+        unsafe { *ptr::from_ref(self).cast::<u8>() }
     }
 }
 

@@ -3,7 +3,6 @@
 use itertools::Itertools;
 use std::{
     fmt::Display,
-    iter::once,
     str::{Chars, FromStr},
 };
 
@@ -40,13 +39,14 @@ impl Display for ReturnType {
     }
 }
 
-impl ToString for MethodDescriptor {
-    fn to_string(&self) -> String {
-        once("(".to_owned())
-            .chain(self.parameters_types.iter().map(FieldType::descriptor))
-            .chain(once(")".to_owned()))
-            .chain(once(self.return_type.descriptor()))
-            .collect()
+impl Display for MethodDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+        for param in &self.parameters_types {
+            write!(f, "{}", param.descriptor())?;
+        }
+        write!(f, ")")?;
+        write!(f, "{}", self.return_type.descriptor())
     }
 }
 

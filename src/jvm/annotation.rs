@@ -78,8 +78,8 @@ pub enum TargetInfo {
         /// The index in the exception index.
         index: u16,
     },
-    /// Indicates that an annotation appears on either the type in an `instanceof`` expression or a `new` expression,
-    /// or the type before the `::` in a method reference expression.
+    /// Indicates that an annotation appears on either the type in an `instanceof` expression
+    /// or a `new` expression, or the type before the `::` in a method reference expression.
     Offset(u16),
     /// Indicates that an annotation appears on a type in a cast expression,
     /// or on a type argument in the explicit type argument list for any of the following:

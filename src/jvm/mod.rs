@@ -162,7 +162,7 @@ pub struct Method {
     pub descriptor: MethodDescriptor,
     /// The class containing the method.
     pub owner: ClassRef,
-    /// The body of the method if it is not `abstract`` or `native`.
+    /// The body of the method if it is not `abstract` or `native`.
     pub body: Option<code::MethodBody>,
     /// The checked exceptions that may be thrown by the method.
     pub exceptions: Vec<ClassRef>,
