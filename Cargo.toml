@@ -15,7 +15,7 @@ bitflags = "2.4"
 cesu8 = "1.1"
 derive_more = "0"
 document-features = "0.2"
-itertools = "0.12"
+itertools = "0.13"
 petgraph = { version = "0.6", optional = true }
 thiserror = "1.0"
 walkdir = "2"
