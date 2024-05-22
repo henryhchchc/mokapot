@@ -205,21 +205,20 @@ impl<'m> MokaIRGenerator<'m> {
     )> {
         exception_table
             .iter()
-            .filter(|it| it.covers(pc))
-            .sorted_unstable_by_key(|&it| it.handler_pc)
-            .group_by(|it| it.handler_pc)
+            .filter(|&it| it.covers(pc))
+            .into_group_map_by(|&it| it.handler_pc)
             .into_iter()
             .map(|(handler_pc, entries)| {
                 let caught_exception_ref = Argument::Id(Identifier::CaughtException);
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
                 let exceptions = entries
+                    .into_iter()
                     .map(|it| {
                         it.catch_type
                             .clone()
                             .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
                     })
-                    .dedup()
                     .collect();
                 (
                     (pc, handler_pc, ControlTransfer::Exception(exceptions)),
