@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: 
+    branches:
       - main
       - feat/*
       - fix/*
@@ -258,7 +258,7 @@ jobs:
     name: Deploy / crates.io
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs: [ unit_test, integration_test, build_doc ]
+    needs: [unit_test, integration_test, build_doc]
     environment:
       name: crates.io
       url: https://crates.io/crates/mokapot
