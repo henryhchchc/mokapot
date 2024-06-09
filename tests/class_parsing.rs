@@ -4,7 +4,7 @@ use std::io::{self};
 
 use mokapot::{
     jvm::{
-        class::{AccessFlags, RecordComponent},
+        class::{self, AccessFlags, RecordComponent},
         parsing::Error,
         references::ClassRef,
         Class,
@@ -35,7 +35,7 @@ fn test_parse_my_class() {
     let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
     let my_class = Class::from_reader(bytes).expect("Faied to parse class");
 
-    assert_eq!(65, my_class.version.major());
+    assert_eq!(class::MAX_MAJOR_VERSION, my_class.version.major());
     assert_eq!(0, my_class.version.minor());
     assert!(!my_class.version.is_preview_enabled());
     assert_eq!(
