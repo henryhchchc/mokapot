@@ -102,6 +102,18 @@ pub enum FieldType {
     Array(Box<FieldType>),
 }
 
+impl FieldType {
+    /// Returns the qualified name of this type.
+    #[must_use]
+    pub fn qualified_name(&self) -> String {
+        match self {
+            Self::Base(pt) => pt.to_string(),
+            Self::Object(ClassRef { binary_name }) => binary_name.replace('/', "."),
+            Self::Array(inner) => format!("{}[]", inner.qualified_name()),
+        }
+    }
+}
+
 impl Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -317,6 +329,23 @@ mod tests {
         assert_eq!(PrimitiveType::try_from('S'), Ok(PrimitiveType::Short));
         assert_eq!(PrimitiveType::try_from('I'), Ok(PrimitiveType::Int));
         assert_eq!(PrimitiveType::try_from('J'), Ok(PrimitiveType::Long));
+    }
+
+    #[test]
+    fn qualified_name() {
+        assert_eq!(FieldType::Base(PrimitiveType::Int).qualified_name(), "int");
+        assert_eq!(
+            FieldType::from_str("Ljava/lang/String;")
+                .unwrap()
+                .qualified_name(),
+            "java.lang.String"
+        );
+        assert_eq!(
+            FieldType::from_str("[Ljava/lang/String;")
+                .unwrap()
+                .qualified_name(),
+            "java.lang.String[]"
+        );
     }
 
     #[test]
