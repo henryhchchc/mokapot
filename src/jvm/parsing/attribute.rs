@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Read},
-    usize,
-};
+use std::io::{self, Read};
 
 use itertools::Itertools;
 

@@ -32,7 +32,7 @@ impl<K, V> Cache<K, V> {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute(b.as_ref()) }
+            unsafe { transmute::<&V, &V>(b.as_ref()) }
         } else {
             drop(cache);
             let mut cache = match self.inner.write() {
@@ -54,7 +54,7 @@ impl<K, V> Cache<K, V> {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute(item_box.as_ref()) }
+            unsafe { transmute::<&V, &V>(item_box.as_ref()) }
         };
         Ok(item)
     }
