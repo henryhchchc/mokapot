@@ -12,7 +12,7 @@ impl<K, V> Cache<K, V> {
         }
     }
 
-    pub fn get_or_try_put<G, E, Q>(&self, key: &Q, generator: G) -> Result<&V, E>
+    pub fn get_or_try_put<'c, G, E, Q>(&'c self, key: &Q, generator: G) -> Result<&'c V, E>
     where
         Q: ?Sized + Eq + Hash + ToOwned<Owned = K>,
         K: Eq + Hash + Borrow<Q>,
@@ -32,7 +32,7 @@ impl<K, V> Cache<K, V> {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute::<&V, &V>(b.as_ref()) }
+            unsafe { transmute::<&V, &'c V>(b.as_ref()) }
         } else {
             drop(cache);
             let mut cache = match self.inner.write() {
@@ -54,7 +54,7 @@ impl<K, V> Cache<K, V> {
             // SAFETY: We never remove elements from the cache so the `Box` is not dropped until
             // `self.cache` gets dropped, which is when `self` gets dropped.
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
-            unsafe { transmute::<&V, &V>(item_box.as_ref()) }
+            unsafe { transmute::<&V, &'c V>(item_box.as_ref()) }
         };
         Ok(item)
     }
