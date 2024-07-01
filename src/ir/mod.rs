@@ -4,6 +4,7 @@
 #[cfg(feature = "petgraph")]
 pub mod cfg_petgraph;
 pub mod control_flow;
+pub mod data_flow;
 pub mod expression;
 mod generator;
 mod moka_instruction;
