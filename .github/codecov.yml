@@ -9,3 +9,14 @@ ignore:
 flag_management:
   default_rules:
     carryforward: false
+
+component_management:
+  individual_components:
+    - component_id: jvm
+      name: JVM
+      paths:
+        - src/jvm/**
+    - component_id: moka_ir
+      name: Moka IR
+      paths:
+        - src/ir/**
