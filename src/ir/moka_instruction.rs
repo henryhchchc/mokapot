@@ -123,6 +123,7 @@ impl Display for MokaInstruction {
 
 /// Represents a reference to a value in the Moka IR.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Argument {
     /// A reference to a value defined in the current scope.
     Id(Identifier),

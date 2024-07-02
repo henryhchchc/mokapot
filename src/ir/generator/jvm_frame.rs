@@ -379,6 +379,7 @@ impl JvmStackFrame {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) enum Entry {
     Value(Argument),
     Top,
@@ -413,10 +414,11 @@ impl Entry {
 
 #[cfg(test)]
 mod test {
+    use proptest::{prelude::*, proptest};
     use std::collections::BTreeSet;
 
     use crate::{
-        ir::{Argument, Identifier, LocalValue},
+        ir::{generator::ExecutionError, Argument, Identifier, LocalValue},
         types::method_descriptor::MethodDescriptor,
     };
 
@@ -456,5 +458,440 @@ mod test {
         assert!(too_small_locals.is_err());
         let correct = JvmStackFrame::new(false, &desc, 4, 2);
         assert!(correct.is_ok());
+    }
+
+    proptest! {
+
+        #[test]
+        fn push_pop(args in prop::collection::vec(any::<Argument>(), 0..10)) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                args.len().try_into().unwrap(),
+            ).unwrap();
+            for arg in &args {
+                stack_frame.push_value(arg.clone()).expect("Fail to push");
+            }
+            for arg in args.iter().rev() {
+                let popped = stack_frame.pop_value().expect("Fail to pop");
+                assert_eq!(popped, arg.clone());
+            }
+        }
+
+        #[test]
+        fn push_pop_dual_slot(args in prop::collection::vec(any::<Argument>(), 0..10)) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                (args.len() * 2).try_into().unwrap(),
+            ).unwrap();
+            for arg in &args {
+                stack_frame.push_dual_slot_value(arg.clone()).expect("Fail to push");
+            }
+            for arg in args.iter().rev() {
+                let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+                assert_eq!(popped, arg.clone());
+            }
+        }
+
+        #[test]
+        fn overflow(push_count in 10u16..20, capacity in 0u16..10) {
+            prop_assume!(push_count > capacity);
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                capacity,
+            ).unwrap();
+            for i in 0..push_count {
+                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                if i < capacity {
+                    stack_frame.push_value(value).expect("Fail to push");
+                } else {
+                    assert!(matches!(
+                        stack_frame.push_value(value),
+                        Err(ExecutionError::StackOverflow),
+                    ));
+                }
+            }
+        }
+
+        #[test]
+        fn underflow(push_count in 0u16..10, pop_count in 10u16..20) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                push_count,
+            ).unwrap();
+            for i in 0..push_count {
+                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                stack_frame.push_value(value).expect("Fail to push");
+            }
+            for _ in 0..push_count {
+                stack_frame.pop_value().expect("Fail to pop");
+            }
+            for _ in push_count..pop_count {
+                assert!(matches!(
+                    stack_frame.pop_value(),
+                    Err(ExecutionError::StackUnderflow),
+                ));
+            }
+        }
+
+        #[test]
+        fn slot_mismatch(valus in any::<Argument>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                2,
+            ).unwrap();
+            stack_frame.push_dual_slot_value(valus.clone()).unwrap();
+            stack_frame.pop_value().unwrap();
+            assert!(matches!(
+                stack_frame.pop_value(),
+                Err(ExecutionError::ValueMismatch),
+            ));
+        }
+
+        #[test]
+        fn mixed_width_values(values in prop::collection::vec(any::<Argument>(), 0..10)) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                (values.len() + (values.len() + 1) / 2).try_into().unwrap(),
+            ).unwrap();
+            for (i, value) in values.iter().enumerate() {
+                if i % 2 == 0 {
+                    stack_frame.push_dual_slot_value(value.clone()).expect("Fail to push");
+                } else {
+                    stack_frame.push_value(value.clone()).expect("Fail to push");
+                }
+            }
+            for (i, value) in values.iter().enumerate().rev() {
+                let popped = if i % 2 == 0 {
+                    stack_frame.pop_dual_slot_value().expect("Fail to pop")
+                } else {
+                    stack_frame.pop_value().expect("Fail to pop")
+                };
+                assert_eq!(popped, value.clone());
+            }
+        }
+
+        #[test]
+        fn jvm_pop(pop_count in 0u16..10) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                pop_count,
+            ).unwrap();
+            for i in 0..pop_count {
+                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                stack_frame.push_value(value).expect("Fail to push");
+            }
+            for _ in 0..pop_count {
+                stack_frame.pop().expect("Fail to pop");
+            }
+            assert!(matches!(
+                stack_frame.pop(),
+                Err(ExecutionError::StackUnderflow),
+            ));
+        }
+
+        #[test]
+        fn jvm_pop2(pop_count in 0u16..10) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                pop_count * 2,
+            ).unwrap();
+            for i in 0..(pop_count * 2) {
+                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                stack_frame.push_value(value).expect("Fail to push");
+            }
+            for _ in 0..pop_count {
+                stack_frame.pop2().expect("Fail to pop");
+            }
+            assert!(matches!(
+                stack_frame.pop2(),
+                Err(ExecutionError::StackUnderflow),
+            ));
+        }
+
+        #[test]
+        fn jvm_dup(value in any::<Argument>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                2,
+            ).unwrap();
+            stack_frame.push_value(value.clone()).expect("Fail to push");
+            stack_frame.dup().expect("Fail to dup");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, value);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, value);
+        }
+
+        #[test]
+        fn jvm_dup_x1([v1, v2] in any::<[Argument;2]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                3,
+            ).unwrap();
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup_x1().expect("Fail to dup_x1");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
+        #[test]
+        fn jvm_dup_x2([v1, v2, v3] in any::<[Argument;3]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                4,
+            ).unwrap();
+
+            // Form 1:
+            //    ..., value3, value2, value1 →
+            //    ..., value1, value3, value2, value1
+            //    where value1, value2, and value3 are all values of a category 1
+            //    computational type (§2.11.1).
+            stack_frame.push_value(v3.clone()).expect("Fail to push");
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup_x2().expect("Fail to dup_x2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v3);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+
+            // Form 2:
+            //    ..., value2, value1 →
+            //    ..., value1, value2, value1
+            //    where value1 is a value of a category 1 computational type and
+            //    value2 is a value of a category 2 computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup_x2().expect("Fail to dup_x2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
+        #[test]
+        fn jvm_dup2([v1, v2] in any::<[Argument;2]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                4,
+            ).unwrap();
+
+            // Form 1:
+            //     ..., value2, value1 →
+            //     ..., value2, value1, value2, value1
+            //     where both value1 and value2 are values of a category 1 computational type
+            //     (§2.11.1).
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2().expect("Fail to dup2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+
+            // Form 2:
+            //     ..., value →
+            //     ..., value, value
+            //     where value is a value of a category 2 computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2().expect("Fail to dup2");
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
+        #[test]
+        fn jvm_dup2_x1([v1, v2, v3] in any::<[Argument;3]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                5,
+            ).unwrap();
+
+            // Form 1:
+            //     ..., value3, value2, value1 →
+            //     ..., value2, value1, value3, value2, value1
+            //     where value1, value2, and value3 are all values of a category 1
+            //     computational type (§2.11.1).
+            stack_frame.push_value(v3.clone()).expect("Fail to push");
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x1().expect("Fail to dup2_x1");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v3);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+
+            // Form 2:
+            //     ..., value2, value1 →
+            //     ..., value1, value2, value1
+            //     where value1 is a value of a category 1 computational type and
+            //     value2 is a value of a category 2 computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x1().expect("Fail to dup2_x1");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
+
+        #[test]
+        fn jvm_dup2_x2([v1, v2, v3, v4] in any::<[Argument;4]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                6,
+            ).unwrap();
+
+            // Form 1:
+            //     ..., value4, value3, value2, value1 →
+            //     ..., value2, value1, value4, value3, value2, value1
+            //     where value1, value2, value3, and value4 are all values of a category 1
+            //     computational type (§2.11.1).
+            stack_frame.push_value(v4.clone()).expect("Fail to push");
+            stack_frame.push_value(v3.clone()).expect("Fail to push");
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x2().expect("Fail to dup2_x2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v3);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v4);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+
+            // Form 2:
+            //    ..., value3, value2, value1 →
+            //    ..., value1, value3, value2, value1
+            //    where value1 and value2 are both values of a category 1
+            //    computational type and value3 is a value of a category 2
+            //    computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v3.clone()).expect("Fail to push");
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x2().expect("Fail to dup2_x2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v3);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+
+
+            // Form 3:
+            //     ..., value3, value2, value1 →
+            //     ..., value1, value3, value2, value1
+            //     where value1 and value2 are both values of a category 1 computational type
+            //     and value3 is a value of a category 2 computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v3.clone()).expect("Fail to push");
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x2().expect("Fail to dup2_x2");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v3);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+
+            // Form 4:
+            //    ..., value2, value1 →
+            //    ..., value1, value2, value1
+            //    where value1 and value2 are both values of a category 2
+            //    computational type (§2.11.1).
+            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_dual_slot_value(v1.clone()).expect("Fail to push");
+            stack_frame.dup2_x2().expect("Fail to dup2_x2");
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
+        #[test]
+        fn jvm_swap([v1, v2] in any::<[Argument;2]>()) {
+            let mut stack_frame = JvmStackFrame::new(
+                true,
+                &"()V".parse().expect("Invalid method desc"),
+                0,
+                2,
+            ).unwrap();
+            stack_frame.push_value(v2.clone()).expect("Fail to push");
+            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.swap().expect("Fail to swap");
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v2);
+            let popped = stack_frame.pop_value().expect("Fail to pop");
+            assert_eq!(popped, v1);
+        }
+
     }
 }
