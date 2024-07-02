@@ -103,6 +103,12 @@ impl<E> ControlFlowGraph<(), E> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn entry_point() {
+        let cfg = ControlFlowGraph::<(), ()>::from_edges(vec![]);
+        assert_eq!(cfg.entry_point(), ProgramCounter::ZERO);
+    }
+
     fn build_cfg() -> ControlFlowGraph<(), ()> {
         let edges = [
             (0.into(), 1.into(), ()),
