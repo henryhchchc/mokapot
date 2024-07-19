@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 
 use crate::{
-    ir::{Argument, Identifier},
+    ir::{Identifier, Operand},
     types::field_type::FieldType,
 };
 
@@ -16,7 +16,7 @@ pub enum Operation {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The length of the array.
-        length: Argument,
+        length: Operand,
     },
     /// Create a new multidimensional array.
     #[display(
@@ -27,31 +27,31 @@ pub enum Operation {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The legths of each of the dimensions of the array.
-        dimensions: Vec<Argument>,
+        dimensions: Vec<Operand>,
     },
     /// Gets an element from an array.
     #[display(fmt = "{array_ref}[{index}]")]
     Read {
         /// The array to read from.
-        array_ref: Argument,
+        array_ref: Operand,
         /// The index of the element to read.
-        index: Argument,
+        index: Operand,
     },
     /// Sets an element in an array.
     #[display(fmt = "{array_ref}[{index}] = {value}")]
     Write {
         /// The array to write to.
-        array_ref: Argument,
+        array_ref: Operand,
         /// The index of the element to write.
-        index: Argument,
+        index: Operand,
         /// The value to be written.
-        value: Argument,
+        value: Operand,
     },
     /// Gets the length of an array.
     #[display(fmt = "array_len({array_ref})")]
     Length {
         /// The array to get the length of.
-        array_ref: Argument,
+        array_ref: Operand,
     },
 }
 
@@ -87,7 +87,7 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Argument>) {
+    fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Operand>) {
         let uses = op.uses();
         args.into_iter().flatten().for_each(|a| {
             assert!(uses.contains(a));

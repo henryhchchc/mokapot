@@ -1,52 +1,52 @@
 use std::collections::BTreeSet;
 
-use crate::ir::{Argument, Identifier};
+use crate::ir::{Identifier, Operand};
 
 /// A condition that can be used in a conditional jump.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Condition {
     /// The two arguments are equal (i.e., `lhs == rhs`).
     #[display(fmt = "{_0} == {_1}")]
-    Equal(Argument, Argument),
+    Equal(Operand, Operand),
     /// The two arguments are not equal (i.e., `lhs != rhs`).
     #[display(fmt = "{_0} != {_1}")]
-    NotEqual(Argument, Argument),
+    NotEqual(Operand, Operand),
     /// The first argument is less than the second (i.e., `lhs < rhs`).
     #[display(fmt = "{_0} < {_1}")]
-    LessThan(Argument, Argument),
+    LessThan(Operand, Operand),
     /// The first argument is less than or equal to the second (i.e., `lhs <= rhs`).
     #[display(fmt = "{_0} <= {_1}")]
-    LessThanOrEqual(Argument, Argument),
+    LessThanOrEqual(Operand, Operand),
     /// The first argument is greater than the second (i.e., `lhs > rhs`).
     #[display(fmt = "{_0} > {_1}")]
-    GreaterThan(Argument, Argument),
+    GreaterThan(Operand, Operand),
     /// The first argument is greater than or equal to the second (i.e., `lhs >= rhs`).
     #[display(fmt = "{_0} >= {_1}")]
-    GreaterThanOrEqual(Argument, Argument),
+    GreaterThanOrEqual(Operand, Operand),
     /// The argument is null (i.e., `arg == null`).
     #[display(fmt = "{_0} == null")]
-    IsNull(Argument),
+    IsNull(Operand),
     /// The argument is not null (i.e., `arg != null`).
     #[display(fmt = "{_0} != null")]
-    IsNotNull(Argument),
+    IsNotNull(Operand),
     /// The argument is zero (i.e., `arg == 0`).
     #[display(fmt = "{_0} == 0")]
-    IsZero(Argument),
+    IsZero(Operand),
     /// The argument is not zero (i.e., `arg != 0`).
     #[display(fmt = "{_0} != 0")]
-    IsNonZero(Argument),
+    IsNonZero(Operand),
     /// The argument is positive (i.e., `arg > 0`).
     #[display(fmt = "{_0} > 0")]
-    IsPositive(Argument),
+    IsPositive(Operand),
     /// The argument is negative (i.e., `arg < 0`).
     #[display(fmt = "{_0} < 0")]
-    IsNegative(Argument),
+    IsNegative(Operand),
     /// The argument is non-negative (i.e., `arg >= 0`).
     #[display(fmt = "{_0} >= 0")]
-    IsNonNegative(Argument),
+    IsNonNegative(Operand),
     /// The argument is non-positive (i.e., `arg <= 0`).
     #[display(fmt = "{_0} <= 0")]
-    IsNonPositive(Argument),
+    IsNonPositive(Operand),
 }
 
 impl Condition {

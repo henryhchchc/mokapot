@@ -2,8 +2,8 @@
 
 use mokapot::{
     ir::{
-        data_flow::DefUseChain, expression::Expression, Argument, Identifier, LocalValue,
-        MokaIRMethodExt, MokaInstruction,
+        data_flow::DefUseChain, expression::Expression, Identifier, LocalValue, MokaIRMethodExt,
+        MokaInstruction, Operand,
     },
     jvm::{code::ProgramCounter, Class, ConstantValue, JavaString, Method},
 };
@@ -59,7 +59,7 @@ fn brew_ir() {
     // #0088 ireturn => return %arg1
     assert!(matches!(
         ir_insns.get(&ProgramCounter::from(0x0088)).unwrap(),
-        MokaInstruction::Return(Some(Argument::Id(Identifier::Arg(1))))
+        MokaInstruction::Return(Some(Operand::Just(Identifier::Arg(1))))
     ));
 }
 

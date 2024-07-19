@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::{
-    ir::{Argument, Identifier},
+    ir::{Identifier, Operand},
     jvm::references::FieldRef,
 };
 
@@ -20,13 +20,13 @@ pub enum Access {
         /// The field to write to.
         field: FieldRef,
         /// The value to be written.
-        value: Argument,
+        value: Operand,
     },
     /// Reads an instance field.
     #[display(fmt = "read {object_ref}.{}", "field.name")]
     ReadInstance {
         /// The object to read from.
-        object_ref: Argument,
+        object_ref: Operand,
         /// The field to read.
         field: FieldRef,
     },
@@ -34,11 +34,11 @@ pub enum Access {
     #[display(fmt = "write {object_ref}.{}, {value}", "field.name")]
     WriteInstance {
         /// The object to write to.
-        object_ref: Argument,
+        object_ref: Operand,
         /// The field to write to.
         field: FieldRef,
         /// The value to be written.
-        value: Argument,
+        value: Operand,
     },
 }
 impl Access {

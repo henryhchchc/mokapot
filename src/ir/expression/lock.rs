@@ -2,17 +2,17 @@ use std::collections::BTreeSet;
 
 use crate::ir::Identifier;
 
-use super::super::Argument;
+use super::super::Operand;
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operation {
     /// Acquires the lock.
     #[display(fmt = "acquire {_0}")]
-    Acquire(Argument),
+    Acquire(Operand),
     /// Releases the lock.
     #[display(fmt = "release {_0}")]
-    Release(Argument),
+    Release(Operand),
 }
 
 impl Operation {

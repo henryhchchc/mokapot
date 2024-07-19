@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, fmt::Display, iter::once};
 
 use crate::{
-    ir::{Argument, Identifier},
+    ir::{Identifier, Operand},
     jvm::code::ProgramCounter,
     types::{
         field_type::{FieldType, PrimitiveType},
@@ -60,7 +60,7 @@ impl JvmStackFrame {
         let this_arg = if is_static {
             None
         } else {
-            Some(Entry::Value(Argument::Id(Identifier::This)))
+            Some(Entry::Value(Operand::Just(Identifier::This)))
         };
         let args = desc
             .parameters_types
@@ -69,7 +69,7 @@ impl JvmStackFrame {
             .flat_map(|(arg_idx, local_type)| {
                 let arg_idx =
                     u16::try_from(arg_idx).expect("The number of args should be within u16");
-                let arg_ref = Argument::Id(Identifier::Arg(arg_idx));
+                let arg_ref = Operand::Just(Identifier::Arg(arg_idx));
                 let maybe_top = if let FieldType::Base(Long | Double) = local_type {
                     Some(Entry::Top)
                 } else {
@@ -110,7 +110,7 @@ impl JvmStackFrame {
             .ok_or(ExecutionError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<Argument, ExecutionError> {
+    pub(super) fn pop_value(&mut self) -> Result<Operand, ExecutionError> {
         match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
@@ -119,7 +119,7 @@ impl JvmStackFrame {
         }
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Argument, ExecutionError> {
+    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Operand, ExecutionError> {
         match (self.pop_raw()?, self.pop_raw()?) {
             (Entry::Value(it), Entry::Top) => Ok(it),
             // `UninitializedLocal` is never pushed to the stack
@@ -128,11 +128,11 @@ impl JvmStackFrame {
         }
     }
 
-    pub(super) fn push_value(&mut self, value: Argument) -> Result<(), ExecutionError> {
+    pub(super) fn push_value(&mut self, value: Operand) -> Result<(), ExecutionError> {
         self.push_raw(Entry::Value(value))
     }
 
-    pub(super) fn push_dual_slot_value(&mut self, value: Argument) -> Result<(), ExecutionError> {
+    pub(super) fn push_dual_slot_value(&mut self, value: Operand) -> Result<(), ExecutionError> {
         self.push_raw(Entry::Top)?;
         self.push_raw(Entry::Value(value))
     }
@@ -140,7 +140,7 @@ impl JvmStackFrame {
     pub(super) fn pop_args(
         &mut self,
         descriptor: &MethodDescriptor,
-    ) -> Result<Vec<Argument>, ExecutionError> {
+    ) -> Result<Vec<Operand>, ExecutionError> {
         use FieldType::Base;
         use PrimitiveType::{Double, Long};
         let mut args = Vec::with_capacity(descriptor.parameters_types.len());
@@ -159,7 +159,7 @@ impl JvmStackFrame {
     pub(super) fn typed_push(
         &mut self,
         value_type: &FieldType,
-        value: Argument,
+        value: Operand,
     ) -> Result<(), ExecutionError> {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
@@ -169,7 +169,7 @@ impl JvmStackFrame {
         }
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Argument, ExecutionError> {
+    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Operand, ExecutionError> {
         let idx = idx.into();
         let frame_value = &self.local_variables[usize::from(idx)];
         match frame_value {
@@ -182,7 +182,7 @@ impl JvmStackFrame {
     pub(super) fn get_dual_slot_local(
         &self,
         idx: impl Into<u16>,
-    ) -> Result<Argument, ExecutionError> {
+    ) -> Result<Operand, ExecutionError> {
         let idx: usize = idx.into().into();
         let [lower_slot, higher_slot] = self
             .local_variables
@@ -203,7 +203,7 @@ impl JvmStackFrame {
     pub(super) fn set_local(
         &mut self,
         idx: impl Into<u16>,
-        value: Argument,
+        value: Operand,
     ) -> Result<(), ExecutionError> {
         let idx = idx.into();
         let slot = self
@@ -217,7 +217,7 @@ impl JvmStackFrame {
     pub(super) fn set_dual_slot_local(
         &mut self,
         idx: impl Into<u16>,
-        value: Argument,
+        value: Operand,
     ) -> Result<(), ExecutionError> {
         let idx: usize = idx.into().into();
         let [lower_slot, higher_slot] = self
@@ -381,7 +381,7 @@ impl JvmStackFrame {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) enum Entry {
-    Value(Argument),
+    Value(Operand),
     Top,
     UninitializedLocal,
 }
@@ -418,7 +418,7 @@ mod test {
     use std::collections::BTreeSet;
 
     use crate::{
-        ir::{generator::ExecutionError, Argument, Identifier, LocalValue},
+        ir::{generator::ExecutionError, Identifier, LocalValue, Operand},
         types::method_descriptor::MethodDescriptor,
     };
 
@@ -426,13 +426,13 @@ mod test {
 
     #[test]
     fn merge_value_ref() {
-        let lhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
-        let rhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(1))));
+        let lhs = Entry::Value(Operand::Just(Identifier::Local(LocalValue::new(0))));
+        let rhs = Entry::Value(Operand::Just(Identifier::Local(LocalValue::new(1))));
 
         let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
-            Entry::Value(Argument::Phi(BTreeSet::from([
+            Entry::Value(Operand::Phi(BTreeSet::from([
                 Identifier::Local(LocalValue::new(0)),
                 Identifier::Local(LocalValue::new(1))
             ])))
@@ -441,13 +441,13 @@ mod test {
 
     #[test]
     fn merge_same_value_ref() {
-        let lhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
-        let rhs = Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))));
+        let lhs = Entry::Value(Operand::Just(Identifier::Local(LocalValue::new(0))));
+        let rhs = Entry::Value(Operand::Just(Identifier::Local(LocalValue::new(0))));
 
         let result = Entry::merge(lhs, rhs);
         assert_eq!(
             result,
-            Entry::Value(Argument::Id(Identifier::Local(LocalValue::new(0))))
+            Entry::Value(Operand::Just(Identifier::Local(LocalValue::new(0))))
         );
     }
 
@@ -463,7 +463,7 @@ mod test {
     proptest! {
 
         #[test]
-        fn push_pop(args in prop::collection::vec(any::<Argument>(), 0..10)) {
+        fn push_pop(args in prop::collection::vec(any::<Operand>(), 0..10)) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -480,7 +480,7 @@ mod test {
         }
 
         #[test]
-        fn push_pop_dual_slot(args in prop::collection::vec(any::<Argument>(), 0..10)) {
+        fn push_pop_dual_slot(args in prop::collection::vec(any::<Operand>(), 0..10)) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -506,7 +506,7 @@ mod test {
                 capacity,
             ).unwrap();
             for i in 0..push_count {
-                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
                 if i < capacity {
                     stack_frame.push_value(value).expect("Fail to push");
                 } else {
@@ -527,7 +527,7 @@ mod test {
                 push_count,
             ).unwrap();
             for i in 0..push_count {
-                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
                 stack_frame.push_value(value).expect("Fail to push");
             }
             for _ in 0..push_count {
@@ -542,7 +542,7 @@ mod test {
         }
 
         #[test]
-        fn slot_mismatch(valus in any::<Argument>()) {
+        fn slot_mismatch(valus in any::<Operand>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -558,7 +558,7 @@ mod test {
         }
 
         #[test]
-        fn mixed_width_values(values in prop::collection::vec(any::<Argument>(), 0..10)) {
+        fn mixed_width_values(values in prop::collection::vec(any::<Operand>(), 0..10)) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -591,7 +591,7 @@ mod test {
                 pop_count,
             ).unwrap();
             for i in 0..pop_count {
-                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
                 stack_frame.push_value(value).expect("Fail to push");
             }
             for _ in 0..pop_count {
@@ -612,7 +612,7 @@ mod test {
                 pop_count * 2,
             ).unwrap();
             for i in 0..(pop_count * 2) {
-                let value = Argument::Id(Identifier::Local(LocalValue::new(i)));
+                let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
                 stack_frame.push_value(value).expect("Fail to push");
             }
             for _ in 0..pop_count {
@@ -625,7 +625,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_dup(value in any::<Argument>()) {
+        fn jvm_dup(value in any::<Operand>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -641,7 +641,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_dup_x1([v1, v2] in any::<[Argument;2]>()) {
+        fn jvm_dup_x1([v1, v2] in any::<[Operand;2]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -660,7 +660,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_dup_x2([v1, v2, v3] in any::<[Argument;3]>()) {
+        fn jvm_dup_x2([v1, v2, v3] in any::<[Operand;3]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -703,7 +703,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_dup2([v1, v2] in any::<[Argument;2]>()) {
+        fn jvm_dup2([v1, v2] in any::<[Operand;2]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -741,7 +741,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_dup2_x1([v1, v2, v3] in any::<[Argument;3]>()) {
+        fn jvm_dup2_x1([v1, v2, v3] in any::<[Operand;3]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -787,7 +787,7 @@ mod test {
 
 
         #[test]
-        fn jvm_dup2_x2([v1, v2, v3, v4] in any::<[Argument;4]>()) {
+        fn jvm_dup2_x2([v1, v2, v3, v4] in any::<[Operand;4]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
@@ -877,7 +877,7 @@ mod test {
         }
 
         #[test]
-        fn jvm_swap([v1, v2] in any::<[Argument;2]>()) {
+        fn jvm_swap([v1, v2] in any::<[Operand;2]>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),

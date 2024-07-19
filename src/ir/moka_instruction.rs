@@ -35,7 +35,7 @@ pub enum MokaInstruction {
     /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
     Switch {
         /// The value to match against the branches.
-        match_value: Argument,
+        match_value: Operand,
         /// The branches of the switch.
         branches: BTreeMap<i32, ProgramCounter>,
         /// The target of the switch if no branches match.
@@ -43,9 +43,9 @@ pub enum MokaInstruction {
     },
     /// Returns from the current method with a value if it is [`Some`].
     /// Otherwise, returns from the current method with `void`.
-    Return(Option<Argument>),
+    Return(Option<Operand>),
     /// Returns from a subroutine.
-    SubroutineRet(Argument),
+    SubroutineRet(Operand),
 }
 
 impl MokaInstruction {
@@ -122,20 +122,24 @@ impl Display for MokaInstruction {
 }
 
 /// Represents a reference to a value in the Moka IR.
+#[deprecated = "Use `Operand` instead."]
+pub type Argument = Operand;
+
+/// Represents a reference to a value in the Moka IR.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum Argument {
+pub enum Operand {
     /// A reference to a value defined in the current scope.
-    Id(Identifier),
+    Just(Identifier),
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
     Phi(BTreeSet<Identifier>),
 }
 
-impl Display for Argument {
+impl Display for Operand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Id(id) => id.fmt(f),
+            Self::Just(id) => id.fmt(f),
             Self::Phi(ids) => write!(
                 f,
                 "Phi({})",
@@ -145,21 +149,21 @@ impl Display for Argument {
     }
 }
 
-impl From<Identifier> for Argument {
+impl From<Identifier> for Operand {
     fn from(value: Identifier) -> Self {
-        Self::Id(value)
+        Self::Just(value)
     }
 }
 
-impl BitOr for Argument {
+impl BitOr for Operand {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        use Argument::{Id, Phi};
+        use Operand::{Just, Phi};
         match (self, rhs) {
-            (Id(lhs), Id(rhs)) if lhs == rhs => Id(lhs),
-            (Id(lhs), Id(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
-            (Id(id), Phi(mut ids)) | (Phi(mut ids), Id(id)) => {
+            (Just(lhs), Just(rhs)) if lhs == rhs => Just(lhs),
+            (Just(lhs), Just(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
+            (Just(id), Phi(mut ids)) | (Phi(mut ids), Just(id)) => {
                 ids.insert(id);
                 Phi(ids)
             }
@@ -171,7 +175,7 @@ impl BitOr for Argument {
     }
 }
 
-impl IntoIterator for Argument {
+impl IntoIterator for Operand {
     type Item = Identifier;
 
     // TODO: Replace it with opaque type when it's stable.
@@ -179,15 +183,15 @@ impl IntoIterator for Argument {
     type IntoIter = Either<Once<Self::Item>, btree_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Argument::{Id, Phi};
+        use Operand::{Just, Phi};
         match self {
-            Id(id) => Either::Left(iter::once(id)),
+            Just(id) => Either::Left(iter::once(id)),
             Phi(ids) => Either::Right(ids.into_iter()),
         }
     }
 }
 
-impl<'a> IntoIterator for &'a Argument {
+impl<'a> IntoIterator for &'a Operand {
     type Item = &'a Identifier;
 
     // TODO: Replace it with opaque type when it's stable.
@@ -195,15 +199,15 @@ impl<'a> IntoIterator for &'a Argument {
     type IntoIter = Either<Once<Self::Item>, btree_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Argument::{Id, Phi};
+        use Operand::{Just, Phi};
         match self {
-            Id(id) => Either::Left(iter::once(id)),
+            Just(id) => Either::Left(iter::once(id)),
             Phi(ids) => Either::Right(ids.iter()),
         }
     }
 }
 
-impl Argument {
+impl Operand {
     /// Creates an iterator over the possible [`Identifier`].
     pub fn iter(&self) -> impl Iterator<Item = &Identifier> {
         self.into_iter()
@@ -226,8 +230,8 @@ impl LocalValue {
 
     /// Create an [`Argument`] by referencing this [`LocalValue`].
     #[must_use]
-    pub fn as_argument(&self) -> Argument {
-        Argument::Id((*self).into())
+    pub fn as_argument(&self) -> Operand {
+        Operand::Just((*self).into())
     }
 }
 
@@ -268,32 +272,38 @@ pub(super) mod test {
     use super::*;
     use proptest::prelude::*;
 
-    pub(crate) fn arb_argument() -> impl Strategy<Value = Argument> {
+    pub(crate) fn arb_argument() -> impl Strategy<Value = Operand> {
         prop_oneof![
-            any::<Identifier>().prop_map(Argument::Id),
-            prop::collection::btree_set(any::<Identifier>(), 1..10).prop_map(Argument::Phi)
+            any::<Identifier>().prop_map(Operand::Just),
+            prop::collection::btree_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
         ]
     }
 
     #[test]
     fn value_ref_merge() {
-        use super::Argument::*;
         use super::Identifier::*;
+        use super::Operand::*;
         use std::collections::BTreeSet;
 
-        assert_eq!(Id(This) | Id(This), Id(This));
-        assert_eq!(Id(This) | Id(Arg(0)), Phi(BTreeSet::from([This, Arg(0)])));
-        assert_eq!(Id(Arg(0)) | Id(This), Phi(BTreeSet::from([This, Arg(0)])));
+        assert_eq!(Just(This) | Just(This), Just(This));
         assert_eq!(
-            Id(Arg(0)) | Id(Arg(1)),
+            Just(This) | Just(Arg(0)),
+            Phi(BTreeSet::from([This, Arg(0)]))
+        );
+        assert_eq!(
+            Just(Arg(0)) | Just(This),
+            Phi(BTreeSet::from([This, Arg(0)]))
+        );
+        assert_eq!(
+            Just(Arg(0)) | Just(Arg(1)),
             Phi(BTreeSet::from([Arg(0), Arg(1)]))
         );
         assert_eq!(
-            Id(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
+            Just(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Id(Arg(0)),
+            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Just(Arg(0)),
             Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
@@ -304,16 +314,16 @@ pub(super) mod test {
 
     #[test]
     fn value_ref_iter() {
-        use super::Argument::*;
         use super::Identifier::*;
+        use super::Operand::*;
         use std::collections::BTreeSet;
 
         assert_eq!(
-            Id(This).into_iter().collect::<BTreeSet<_>>(),
+            Just(This).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([This])
         );
         assert_eq!(
-            Id(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
+            Just(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([Arg(0)])
         );
         assert_eq!(
@@ -326,16 +336,16 @@ pub(super) mod test {
 
     #[test]
     fn value_ref_iter_over_refs() {
-        use super::Argument::*;
         use super::Identifier::*;
+        use super::Operand::*;
         use std::collections::BTreeSet;
 
         assert_eq!(
-            (&Id(This)).into_iter().collect::<BTreeSet<_>>(),
+            (&Just(This)).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([&This])
         );
         assert_eq!(
-            (&Id(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
+            (&Just(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([&Arg(0)])
         );
         assert_eq!(

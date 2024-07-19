@@ -1,55 +1,55 @@
 use std::collections::BTreeSet;
 
-use crate::ir::{Argument, Identifier};
+use crate::ir::{Identifier, Operand};
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display(fmt = "{_0} + {_1}")]
-    Add(Argument, Argument),
+    Add(Operand, Operand),
     /// Subtracts the second argument from the first (i.e., `lhs - rhs`).
     #[display(fmt = "{_0} - {_1}")]
-    Subtract(Argument, Argument),
+    Subtract(Operand, Operand),
     /// Multiplies the two arguments (i.e., `lhs * rhs`).
     #[display(fmt = "{_0} * {_1}")]
-    Multiply(Argument, Argument),
+    Multiply(Operand, Operand),
     /// Divides the first argument by the second (i.e., `lhs / rhs`).
     #[display(fmt = "{_0} / {_1}")]
-    Divide(Argument, Argument),
+    Divide(Operand, Operand),
     /// Computes the remainder of the first argument divided by the second (i.e., `lhs mod rhs`).
     #[display(fmt = "{_0} mod {_1}")]
-    Remainder(Argument, Argument),
+    Remainder(Operand, Operand),
     /// Negates the argument (i.e., `-arg`).
     #[display(fmt = "-{_0}")]
-    Negate(Argument),
+    Negate(Operand),
     /// Increments the argument by a constant (i.e., `arg + N`).
     #[display(fmt = "{_0} + {_1}")]
-    Increment(Argument, i32),
+    Increment(Operand, i32),
     /// Shifts the first argument left by the second (i.e., `lhs << rhs`).
     #[display(fmt = "{_0} << {_1}")]
-    ShiftLeft(Argument, Argument),
+    ShiftLeft(Operand, Operand),
     /// Shifts the first argument right by the second (i.e., `lhs >> rhs`).
     #[display(fmt = "{_0} >> {_1}")]
-    ShiftRight(Argument, Argument),
+    ShiftRight(Operand, Operand),
     /// Shifts the first argument right by the second, filling the leftmost bits with zeros (i.e., `lhs >>> rhs`).
     #[display(fmt = "{_0} >>> {_1}")]
-    LogicalShiftRight(Argument, Argument),
+    LogicalShiftRight(Operand, Operand),
     /// Computes the bitwise AND of the two arguments (i.e., `lhs & rhs`).
     #[display(fmt = "{_0} & {_1}")]
-    BitwiseAnd(Argument, Argument),
+    BitwiseAnd(Operand, Operand),
     /// Computes the bitwise OR of the two arguments (i.e., `lhs | rhs`).
     #[display(fmt = "{_0} | {_1}")]
-    BitwiseOr(Argument, Argument),
+    BitwiseOr(Operand, Operand),
     /// Computes the bitwise XOR of the two arguments (i.e., `lhs ^ rhs`).
     #[display(fmt = "{_0} ^ {_1}")]
-    BitwiseXor(Argument, Argument),
+    BitwiseXor(Operand, Operand),
     /// Compares the two arguments as longs (i.e., `lhs lcmp rhs`).
     #[display(fmt = "cmp({_0}, {_1})")]
-    LongComparison(Argument, Argument),
+    LongComparison(Operand, Operand),
     /// Compares the two arguments as floating point numbers (i.e., `lhs fcmp rhs`).
     #[display(fmt = "cmp({_0}, {_1}) {_2}")]
-    FloatingPointComparison(Argument, Argument, NaNTreatment),
+    FloatingPointComparison(Operand, Operand, NaNTreatment),
 }
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.

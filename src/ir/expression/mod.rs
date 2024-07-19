@@ -6,7 +6,7 @@ use std::{
 
 use itertools::Itertools;
 
-use super::{Argument, Identifier};
+use super::{Identifier, Operand};
 
 use crate::{
     jvm::{
@@ -50,9 +50,9 @@ pub enum Expression {
         method: MethodRef,
         /// [`Some`] argument for the `this` object if the method is an instance method.
         /// [`None`] if the method is `static` or `native`.
-        this: Option<Argument>,
+        this: Option<Operand>,
         /// A list of arguments.
-        args: Vec<Argument>,
+        args: Vec<Operand>,
     },
     /// A call to a bootstrap method to create a closure.  
     /// Corresponds to the following JVM instructions:
@@ -61,7 +61,7 @@ pub enum Expression {
         /// The name of the closure.
         name: String,
         /// The arguments captured by the closure.
-        captures: Vec<Argument>,
+        captures: Vec<Operand>,
         /// The index of the bootstrap method.
         bootstrap_method_index: u16,
         /// The descriptor of the closure generation.
@@ -76,7 +76,7 @@ pub enum Expression {
     /// A type conversion.
     Conversion(Conversion),
     /// Throws an exception.
-    Throw(Argument),
+    Throw(Operand),
     /// An operation on a monitor.
     Synchronization(LockOperation),
     /// Creates a new object.

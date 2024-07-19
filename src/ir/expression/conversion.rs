@@ -3,62 +3,62 @@ use std::collections::BTreeSet;
 use crate::ir::Identifier;
 use crate::types::field_type::FieldType;
 
-use super::super::Argument;
+use super::super::Operand;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operaion {
     /// Converts an `int` to a `long`.
     #[display(fmt = "{_0} as long")]
-    Int2Long(Argument),
+    Int2Long(Operand),
     /// Converts an `int` to a `float`.
     #[display(fmt = "{_0} as float")]
-    Int2Float(Argument),
+    Int2Float(Operand),
     /// Converts an `int` to a `double`.
     #[display(fmt = "{_0} as double")]
-    Int2Double(Argument),
+    Int2Double(Operand),
     /// Converts a `long` to an `int`.
     #[display(fmt = "{_0} as int")]
-    Long2Int(Argument),
+    Long2Int(Operand),
     /// Converts a `long` to a `float`.
     #[display(fmt = "{_0} as float")]
-    Long2Float(Argument),
+    Long2Float(Operand),
     /// Converts a `long` to a `double`.
     #[display(fmt = "{_0} as double")]
-    Long2Double(Argument),
+    Long2Double(Operand),
     /// Converts a `float` to an `int`.
     #[display(fmt = "{_0} as int")]
-    Float2Int(Argument),
+    Float2Int(Operand),
     /// Converts a `float` to a `long`.
     #[display(fmt = "{_0} as long")]
-    Float2Long(Argument),
+    Float2Long(Operand),
     /// Converts a `float` to a `double`.
     #[display(fmt = "{_0} as double")]
-    Float2Double(Argument),
+    Float2Double(Operand),
     /// Converts a `double` to an `int`.
     #[display(fmt = "{_0} as int")]
-    Double2Int(Argument),
+    Double2Int(Operand),
     /// Converts a `double` to a `long`.
     #[display(fmt = "{_0} as long")]
-    Double2Long(Argument),
+    Double2Long(Operand),
     /// Converts a `double` to a `float`.
     #[display(fmt = "{_0} as float")]
-    Double2Float(Argument),
+    Double2Float(Operand),
     /// Converts an `int` to a `byte`.
     #[display(fmt = "{_0} as byte")]
-    Int2Byte(Argument),
+    Int2Byte(Operand),
     /// Converts an `int` to a `char`.
     #[display(fmt = "{_0} as char")]
-    Int2Char(Argument),
+    Int2Char(Operand),
     /// Converts an `int` to a `short`.
     #[display(fmt = "{_0} as short")]
-    Int2Short(Argument),
+    Int2Short(Operand),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
     #[display(fmt = "{_0} as {}", "_1.descriptor()")]
-    CheckCast(Argument, FieldType),
+    CheckCast(Operand, FieldType),
     /// Checks whether an object is an instance of a given type.
     #[display(fmt = "{_0} is {}", "_1.descriptor()")]
-    InstanceOf(Argument, FieldType),
+    InstanceOf(Operand, FieldType),
 }
 impl Operaion {
     /// Returns the set of [`Identifier`]s used by the expression.

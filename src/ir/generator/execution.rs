@@ -5,7 +5,7 @@ use crate::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
-        Argument, LocalValue, MokaInstruction as IR,
+        LocalValue, MokaInstruction as IR, Operand,
     },
     jvm::{
         code::{Instruction, ProgramCounter, WideInstruction},
@@ -95,7 +95,7 @@ impl MokaIRGenerator<'_> {
                 let array_ref = frame.pop_value()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_value(Argument::Id(def.into()))?;
+                frame.push_value(Operand::Just(def.into()))?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),
@@ -106,7 +106,7 @@ impl MokaIRGenerator<'_> {
                 let array_ref = frame.pop_value()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_dual_slot_value(Argument::Id(def.into()))?;
+                frame.push_dual_slot_value(Operand::Just(def.into()))?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),
@@ -654,7 +654,7 @@ fn unitary_conditional_jump<C>(
     condition: C,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    C: FnOnce(Argument) -> Condition,
+    C: FnOnce(Operand) -> Condition,
 {
     let operand = frame.pop_value()?;
     Ok(IR::Jump {
@@ -670,7 +670,7 @@ fn binary_conditional_jump<C>(
     condition: C,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    C: FnOnce(Argument, Argument) -> Condition,
+    C: FnOnce(Operand, Operand) -> Condition,
 {
     let lhs = frame.pop_value()?;
     let rhs = frame.pop_value()?;
@@ -687,7 +687,7 @@ fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
     conversion: C,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    C: FnOnce(Argument) -> Conversion,
+    C: FnOnce(Operand) -> Conversion,
 {
     let operand = if OPERAND_WIDE {
         frame.pop_dual_slot_value()?
@@ -712,7 +712,7 @@ fn binary_op_math<M>(
     math: M,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    M: FnOnce(Argument, Argument) -> MathOperation,
+    M: FnOnce(Operand, Operand) -> MathOperation,
 {
     let lhs = frame.pop_value()?;
     let rhs = frame.pop_value()?;
@@ -731,7 +731,7 @@ fn binary_wide_math<M>(
     math: M,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    M: FnOnce(Argument, Argument) -> MathOperation,
+    M: FnOnce(Operand, Operand) -> MathOperation,
 {
     let lhs = frame.pop_dual_slot_value()?;
     let rhs = frame.pop_dual_slot_value()?;

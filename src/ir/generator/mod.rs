@@ -22,7 +22,7 @@ use itertools::Itertools;
 pub use jvm_frame::ExecutionError;
 
 use super::{control_flow::ControlTransfer, expression::Expression, ControlFlowGraph};
-use super::{Argument, Identifier, MokaIRMethod, MokaInstruction};
+use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
@@ -209,7 +209,7 @@ impl<'m> MokaIRGenerator<'m> {
             .into_group_map_by(|&it| it.handler_pc)
             .into_iter()
             .map(|(handler_pc, entries)| {
-                let caught_exception_ref = Argument::Id(Identifier::CaughtException);
+                let caught_exception_ref = Operand::Just(Identifier::CaughtException);
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
                 let exceptions = entries
