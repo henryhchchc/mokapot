@@ -13,7 +13,7 @@ use super::field_type::{FieldType, PrimitiveType};
 /// The descriptor of a method.
 /// Consists of the parameters types and the return type.
 #[doc = see_jvm_spec!(4, 3, 3)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct MethodDescriptor {
     /// The type of the parameters.
     pub parameters_types: Vec<FieldType>,
@@ -22,7 +22,7 @@ pub struct MethodDescriptor {
 }
 
 /// Denotes the return type of a method.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum ReturnType {
     /// The method returns a specific type.
     Some(FieldType),

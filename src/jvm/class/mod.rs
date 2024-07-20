@@ -265,7 +265,7 @@ pub struct BootstrapMethod {
 
 /// A method handle.
 #[doc = see_jvm_spec!(4, 4, 8)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MethodHandle {
     /// Get an instance field.
     RefGetField(FieldRef),

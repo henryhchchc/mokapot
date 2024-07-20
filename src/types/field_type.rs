@@ -8,7 +8,7 @@ use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 /// A primitive type in Java.
 #[doc = see_jvm_spec!(4, 3, 2)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
     /// The `boolean` type.
@@ -92,7 +92,7 @@ impl FromStr for PrimitiveType {
 }
 
 /// A field type (non-generic) in Java.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum FieldType {
     /// A primitive type.
     Base(PrimitiveType),

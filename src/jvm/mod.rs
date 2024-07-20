@@ -215,7 +215,7 @@ pub struct Module {
 }
 
 /// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.
@@ -296,3 +296,49 @@ impl PartialEq<Self> for ConstantValue {
 }
 
 impl Eq for ConstantValue {}
+
+impl PartialOrd for ConstantValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ConstantValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        #[allow(clippy::enum_glob_use)]
+        use ConstantValue::*;
+        match (self, other) {
+            (Null, Null) => std::cmp::Ordering::Equal,
+            (Null, _) => std::cmp::Ordering::Less,
+            (_, Null) => std::cmp::Ordering::Greater,
+            (Integer(lhs), Integer(rhs)) => lhs.cmp(rhs),
+            (Integer(_), _) => std::cmp::Ordering::Less,
+            (_, Integer(_)) => std::cmp::Ordering::Greater,
+            (Float(lhs), Float(rhs)) => lhs.partial_cmp(rhs).unwrap_or(std::cmp::Ordering::Equal),
+            (Float(_), _) => std::cmp::Ordering::Less,
+            (_, Float(_)) => std::cmp::Ordering::Greater,
+            (Long(lhs), Long(rhs)) => lhs.cmp(rhs),
+            (Long(_), _) => std::cmp::Ordering::Less,
+            (_, Long(_)) => std::cmp::Ordering::Greater,
+            (Double(lhs), Double(rhs)) => lhs.partial_cmp(rhs).unwrap_or(std::cmp::Ordering::Equal),
+            (Double(_), _) => std::cmp::Ordering::Less,
+            (_, Double(_)) => std::cmp::Ordering::Greater,
+            (String(lhs), String(rhs)) => lhs.cmp(rhs),
+            (String(_), _) => std::cmp::Ordering::Less,
+            (_, String(_)) => std::cmp::Ordering::Greater,
+            (Class(lhs), Class(rhs)) => lhs.cmp(rhs),
+            (Class(_), _) => std::cmp::Ordering::Less,
+            (_, Class(_)) => std::cmp::Ordering::Greater,
+            (Handle(lhs), Handle(rhs)) => lhs.cmp(rhs),
+            (Handle(_), _) => std::cmp::Ordering::Less,
+            (_, Handle(_)) => std::cmp::Ordering::Greater,
+            (MethodType(lhs), MethodType(rhs)) => lhs.cmp(rhs),
+            (MethodType(_), _) => std::cmp::Ordering::Less,
+            (_, MethodType(_)) => std::cmp::Ordering::Greater,
+            (Dynamic(lhs0, lhs1, lhs2), Dynamic(rhs0, rhs1, rhs2)) => lhs0
+                .cmp(rhs0)
+                .then_with(|| lhs1.cmp(rhs1))
+                .then_with(|| lhs2.cmp(rhs2)),
+        }
+    }
+}

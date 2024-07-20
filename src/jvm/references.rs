@@ -25,7 +25,7 @@ impl ClassRef {
 }
 
 /// A reference to a [`Field`](crate::jvm::Field).
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display(fmt = "{owner}.{name}")]
 pub struct FieldRef {
     /// A reference to the class that contains the field.
@@ -37,7 +37,7 @@ pub struct FieldRef {
 }
 
 /// A reference to a [`Method`].
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display(fmt = "{owner}::{name}")]
 pub struct MethodRef {
     /// The reference to the class containing the method.
