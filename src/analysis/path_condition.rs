@@ -196,13 +196,6 @@ impl<V> Default for BooleanExpr<V> {
     }
 }
 
-/// A boolean literal.
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum Literal<V> {
-//     Positive(V),
-//     Negative(V),
-// }
-
 /// A condition.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum Condition<V> {
