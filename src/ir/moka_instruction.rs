@@ -107,11 +107,11 @@ impl Display for MokaInstruction {
                     f,
                     "switch {} {{ {}, else => {} }}",
                     match_value,
-                    default,
                     branches
                         .iter()
                         .map(|(key, target)| format!("{key} => {target}"))
-                        .join(", ")
+                        .join(", "),
+                    default
                 )
             }
             Self::Return(Some(value)) => write!(f, "return {value}"),

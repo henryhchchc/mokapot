@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    ir::{self, control_flow::ControlTransfer, MokaIRMethod, MokaInstruction, Operand},
+    ir::{
+        self, control_flow::ControlTransfer, expression::Expression, MokaIRMethod, MokaInstruction,
+        Operand,
+    },
     jvm::{code::ProgramCounter, ConstantValue},
 };
 
@@ -323,14 +326,9 @@ impl fixed_point::Analyzer for Analyzer<'_> {
             .method
             .instructions
             .get(location)
-            .ok_or(AnalysisError::MalformControlFlow)?;
+            .ok_or(AnalysisError::InstructionNotFound)?;
         let affected_locations = match insn {
             MokaInstruction::Jump { condition, target } => {
-                let next_pc = self
-                    .method
-                    .instructions
-                    .next_pc_of(location)
-                    .ok_or(AnalysisError::MalformControlFlow)?;
                 if let Some(condition) = condition {
                     let condition: BooleanExpr<_> = condition.clone().into();
                     let target = {
@@ -338,10 +336,12 @@ impl fixed_point::Analyzer for Analyzer<'_> {
                         let condition = fact.clone() & condition.clone();
                         (pc, condition)
                     };
+                    // let next_pc = self.get_next_pc(*location)?;
+                    let next_pc = self.get_next_pc(*location)?;
                     let fallthrough = (next_pc, fact.clone() & !condition);
                     vec![target, fallthrough]
                 } else {
-                    vec![(next_pc, fact.clone())]
+                    vec![(*target, fact.clone())]
                 }
             }
             MokaInstruction::Switch {
@@ -358,18 +358,7 @@ impl fixed_point::Analyzer for Analyzer<'_> {
                     let condition = fact.clone() & condition.clone();
                     (*target, condition)
                 });
-                let default_condition = branches
-                    .keys()
-                    .map(|value| {
-                        let condition = Condition::NotEqual(
-                            match_value.clone().into(),
-                            ConstantValue::Integer(*value).into(),
-                        );
-                        let condition: BooleanExpr<_> = condition.into();
-                        condition
-                    })
-                    .reduce(|lhs, rhs| lhs & rhs)
-                    .ok_or(AnalysisError::MalformControlFlow)?;
+                let default_condition = default_branch_condition(branches, match_value);
                 let default = {
                     let pc = *default;
                     let condition = fact.clone() & default_condition.clone();
@@ -388,27 +377,32 @@ impl fixed_point::Analyzer for Analyzer<'_> {
                     .map(|(_, addr, _)| (addr, fact.clone()))
                     .collect()
             }
-            MokaInstruction::Definition { .. } => {
-                let next_pc = self
+            MokaInstruction::Definition {
+                expr: Expression::Subroutine { target, .. },
+                ..
+            } => {
+                let target = (*target, fact.clone());
+                vec![target]
+            }
+            MokaInstruction::Definition { expr, .. } => {
+                let handlers = self
                     .method
-                    .instructions
-                    .next_pc_of(location)
-                    .ok_or(AnalysisError::MalformControlFlow)?;
-                self.method
                     .exception_table
                     .iter()
                     .filter(|it| it.covers(*location))
-                    .map(|it| (it.handler_pc, fact.clone()))
-                    .chain(once((next_pc, fact.clone())))
-                    .collect()
+                    .map(|it| (it.handler_pc, fact.clone()));
+                let next_pc = if let Expression::Throw(_) = expr {
+                    None
+                } else {
+                    let next_pc = self.get_next_pc(*location)?;
+                    Some((next_pc, fact.clone()))
+                };
+                handlers.chain(next_pc).collect()
             }
             MokaInstruction::Return(_) => Vec::default(),
             MokaInstruction::Nop => {
-                let next_pc = self
-                    .method
-                    .instructions
-                    .next_pc_of(location)
-                    .ok_or(AnalysisError::MalformControlFlow)?;
+                // let next_pc = self.get_next_pc(*location)?;
+                let next_pc = self.get_next_pc(*location)?;
                 vec![(next_pc, fact.clone())]
             }
         };
@@ -427,9 +421,39 @@ impl fixed_point::Analyzer for Analyzer<'_> {
     }
 }
 
+fn default_branch_condition(
+    branches: &BTreeMap<i32, ProgramCounter>,
+    match_value: &Operand,
+) -> BooleanExpr<Condition<Value>> {
+    branches
+        .keys()
+        .map(|value| {
+            let condition = Condition::NotEqual(
+                match_value.clone().into(),
+                ConstantValue::Integer(*value).into(),
+            );
+            let condition: BooleanExpr<_> = condition.into();
+            condition
+        })
+        .reduce(|lhs, rhs| lhs & rhs)
+        .unwrap_or(BooleanExpr::default())
+}
+
+impl Analyzer<'_> {
+    fn get_next_pc(&self, pc: ProgramCounter) -> Result<ProgramCounter, AnalysisError> {
+        self.method
+            .instructions
+            .next_pc_of(&pc)
+            .ok_or(AnalysisError::MalformControlFlow)
+    }
+}
+
 /// Error when analyzing path conditions.
 #[derive(Debug, thiserror::Error, derive_more::Display)]
 pub enum AnalysisError {
+    /// Cannot find instruction.
+    #[display(fmt = "Cannot find instruction.")]
+    InstructionNotFound,
     /// Malformed control flow in the method.
     #[display(fmt = "Malformed control flow in the method.")]
     MalformControlFlow,
