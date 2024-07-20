@@ -16,7 +16,7 @@ fn moka_ir() -> Result<MokaIRMethod, Box<dyn std::error::Error>> {
 }
 ```
 
-The following is an example of the generated IR from the method `test()` in [test_data/TestAnalysis.java](test_data/TestAnalysis.java).
+The following is an example of the generated IR from the method `test()` in [TestAnalysis.java](test_data/mokapot/org/mokapot/test/TestAnalysis.java).
 
 You may notice that there are lots of `nop`s in the generated MokaIR.
 This because we indent to maintain a bijection between the original bytecode and the generated MokaIR.
