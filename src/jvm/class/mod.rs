@@ -12,10 +12,11 @@ use crate::{
 };
 
 use super::{
+    annotation::ElementValue,
     field,
     parsing::Error,
     references::{ClassRef, FieldRef, MethodRef},
-    Class, ConstantValue, Field, Method,
+    Annotation, Class, ConstantValue, Field, Method,
 };
 
 /// A generic type signature for a class.
@@ -50,6 +51,38 @@ impl Class {
         ClassRef {
             binary_name: self.binary_name.clone(),
         }
+    }
+
+    /// Checks if the class is an interface.
+    #[must_use]
+    pub const fn is_interface(&self) -> bool {
+        self.access_flags.contains(AccessFlags::INTERFACE)
+    }
+
+    /// Checks if the class is an abstract class.
+    #[must_use]
+    pub const fn is_abstract(&self) -> bool {
+        self.access_flags.contains(AccessFlags::ABSTRACT)
+    }
+}
+
+impl Annotation {
+    /// The default name of the annotation element.
+    pub const DEFAULT_ELEMENT_NAME: &'static str = "value";
+
+    /// Gets the value of the annotation element.
+    #[must_use]
+    pub fn get_element_value(&self, name: &str) -> Option<&ElementValue> {
+        self.element_value_pairs
+            .iter()
+            .find(|(pair_name, _)| pair_name == name)
+            .map(|(_, value)| value)
+    }
+
+    /// Gets the value of the `value` element of the annotation.
+    #[must_use]
+    pub fn get_value(&self) -> Option<&ElementValue> {
+        self.get_element_value(Self::DEFAULT_ELEMENT_NAME)
     }
 }
 
@@ -450,5 +483,35 @@ mod tests {
             prop_assume!(lhs != rhs);
             assert_eq!(lhs.bits() & rhs.bits(), 0);
         }
+    }
+
+    #[test]
+    fn class_is_abstract() {
+        let class = Class {
+            access_flags: AccessFlags::PUBLIC | AccessFlags::ABSTRACT,
+            ..Default::default()
+        };
+        assert!(class.is_abstract());
+
+        let class = Class {
+            access_flags: AccessFlags::PUBLIC,
+            ..Default::default()
+        };
+        assert!(!class.is_abstract());
+    }
+
+    #[test]
+    fn class_is_interface() {
+        let class = Class {
+            access_flags: AccessFlags::PUBLIC | AccessFlags::INTERFACE,
+            ..Default::default()
+        };
+        assert!(class.is_interface());
+
+        let class = Class {
+            access_flags: AccessFlags::PUBLIC,
+            ..Default::default()
+        };
+        assert!(!class.is_interface());
     }
 }

@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 
 use crate::{
-    jvm::references::ClassRef,
+    jvm::{class, references::ClassRef, Class},
     types::field_type::{FieldType, PrimitiveType},
 };
 
@@ -27,6 +27,40 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
         0x00, 0x00, // Methods count
         0x00, 0x00, // Attributes count
     ]
+}
+
+impl Default for Class {
+    fn default() -> Self {
+        Self {
+            version: class::Version::Jdk22(false),
+            access_flags: class::AccessFlags::empty(),
+            binary_name: String::default(),
+            super_class: None,
+            interfaces: Vec::default(),
+            fields: Vec::default(),
+            methods: Vec::default(),
+            source_file: None,
+            inner_classes: Vec::default(),
+            enclosing_method: None,
+            source_debug_extension: None,
+            runtime_visible_annotations: Vec::default(),
+            runtime_invisible_annotations: Vec::default(),
+            runtime_visible_type_annotations: Vec::default(),
+            runtime_invisible_type_annotations: Vec::default(),
+            bootstrap_methods: Vec::default(),
+            module: None,
+            module_packages: Vec::default(),
+            module_main_class: None,
+            nest_host: None,
+            nest_members: Vec::default(),
+            permitted_subclasses: Vec::default(),
+            is_synthetic: false,
+            is_deprecated: false,
+            signature: None,
+            record: None,
+            free_attributes: Vec::default(),
+        }
+    }
 }
 
 pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
