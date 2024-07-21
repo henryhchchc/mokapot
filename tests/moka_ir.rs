@@ -35,6 +35,7 @@ fn load_test_method() {
 
 #[test]
 fn brew_ir() {
+    let class = get_test_class();
     let method = get_test_method();
     let ir = method.brew().unwrap();
     if cfg!(debug_assertions) {
@@ -44,6 +45,10 @@ fn brew_ir() {
         }
     }
     let ir_insns = ir.instructions;
+    eprintln!("BSM: {:#?}", class.bootstrap_methods);
+
+    eprintln!("methods: {:?}", class.methods);
+    // eprintln!("IR instructions: {:?}", ir_insns);
     // #0000: ldc => %0 = String("233")
     assert!(matches!(
         ir_insns.get(&ProgramCounter::from(0x0000)).unwrap(),
@@ -123,7 +128,7 @@ fn cfg_to_dot() {
         },
         |_, d| match d {
             ControlTransfer::Unconditional => "".to_owned(),
-            ControlTransfer::Conditional => "<conditional>".to_owned(),
+            ControlTransfer::Conditional(cond) => format!("when {cond}"),
             ControlTransfer::Exception(e) => format!(
                 "catch {}",
                 e.into_iter().map(|it| it.binary_name).join(" | ")

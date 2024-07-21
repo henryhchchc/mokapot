@@ -2,18 +2,174 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
-    iter::once,
 };
 
 use crate::{
-    ir::{
-        self, control_flow::ControlTransfer, expression::Expression, MokaIRMethod, MokaInstruction,
-        Operand,
-    },
+    ir::{self, control_flow::ControlTransfer, MokaIRMethod, Operand},
     jvm::{code::ProgramCounter, ConstantValue},
 };
 
 use super::fixed_point;
+
+/// Path condition in disjunctive normal form.
+#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
+pub struct DNF<T>(BTreeSet<BTreeSet<T>>);
+
+impl<T> DNF<T>
+where
+    T: Ord + Clone + std::ops::Not<Output = T>,
+{
+    fn simplify(&mut self) {
+        let mut should_continue = true;
+        while should_continue {
+            should_continue = false;
+            // Remove contradictory clauses.
+            self.0.retain(|conjunctive_clause| {
+                // A term is contradictory if it contains both a condition and its negation.
+                let should_remove = conjunctive_clause
+                    .iter()
+                    .any(|term| conjunctive_clause.contains(&!term.clone()));
+                should_continue = should_continue || should_remove;
+                !should_remove
+            });
+            // Remove redundant clauses.
+            let clauses_clone = self.0.clone();
+            self.0.retain(|it| {
+                // A clause is redundant if it is a supetset of another clause.
+                let should_remove = clauses_clone
+                    .iter()
+                    .any(|other| it.is_superset(other) && it.len() > other.len());
+                should_continue = should_continue || should_remove;
+                !should_remove
+            });
+            // Simplify pairs of clauses.
+            // A pair of clauses can be simplified if their difference is negation of each other.
+            let clone1 = self.0.clone();
+            let clone2 = self.0.clone();
+            clone1
+                .into_iter()
+                .flat_map(|l| clone2.clone().into_iter().map(move |r| (l.clone(), r)))
+                .for_each(|(mut lhs, mut rhs)| {
+                    let remove_from_lhs: BTreeSet<_> = lhs
+                        .iter()
+                        .filter(|&it| rhs.contains(&!it.clone()))
+                        .cloned()
+                        .collect();
+                    let remove_from_rhs: BTreeSet<_> = rhs
+                        .iter()
+                        .filter(|&it| rhs.contains(&!it.clone()))
+                        .cloned()
+                        .collect();
+                    for it in &remove_from_lhs {
+                        lhs.remove(it);
+                    }
+                    for it in &remove_from_rhs {
+                        rhs.remove(it);
+                    }
+                    self.0.insert(lhs);
+                    self.0.insert(rhs);
+                });
+        }
+    }
+}
+
+impl<T> Default for DNF<T> {
+    fn default() -> Self {
+        Self(BTreeSet::default())
+    }
+}
+
+impl<T> std::ops::BitOr for DNF<T>
+where
+    T: Ord + Clone + std::ops::Not<Output = T>,
+{
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        let DNF(lhs) = self;
+        let DNF(rhs) = rhs;
+        if lhs.is_empty() || rhs.is_empty() {
+            DNF::default()
+        } else {
+            let clauses: BTreeSet<_> = lhs.into_iter().chain(rhs).collect();
+            let mut result = DNF(clauses);
+            result.simplify();
+            result
+        }
+    }
+}
+
+impl<T> std::ops::BitAnd for DNF<T>
+where
+    T: Ord + Clone + std::ops::Not<Output = T>,
+{
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let DNF(this) = self;
+        let DNF(other) = rhs;
+        if this.is_empty() {
+            DNF(other)
+        } else if other.is_empty() {
+            DNF(this)
+        } else {
+            let clauses = this
+                .into_iter()
+                .flat_map(|lhs_con| {
+                    other.clone().into_iter().map(move |rhs_con| {
+                        lhs_con.clone().into_iter().chain(rhs_con.clone()).collect()
+                    })
+                })
+                .collect();
+            let mut result = DNF(clauses);
+            result.simplify();
+            result
+        }
+    }
+}
+
+impl<T> std::ops::Not for DNF<T>
+where
+    T: Ord + Clone + std::ops::Not<Output = T>,
+{
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        let DNF(clauses) = self;
+        let clauses = BTreeSet::from([clauses.into_iter().flatten().map(|it| !it).collect()]);
+        let mut result = DNF(clauses);
+        result.simplify();
+        result
+    }
+}
+
+impl<T> Display for DNF<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let DNF(clauses) = self;
+        for (i, conj) in clauses.iter().enumerate() {
+            if i > 0 {
+                write!(f, " || ")?;
+            }
+            if conj.len() > 1 {
+                write!(f, "(")?;
+            }
+            for (j, cond) in conj.iter().enumerate() {
+                if j > 0 {
+                    write!(f, " && ")?;
+                }
+                write!(f, "{cond}")?;
+            }
+            if conj.len() > 1 {
+                write!(f, ")")?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
@@ -28,177 +184,6 @@ impl<'a> Analyzer<'a> {
         Self { method }
     }
 }
-
-/// A boolean expression.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub enum BooleanExpr<C> {
-    /// A conjunction of clauses.
-    Conjunction {
-        /// The clauses.
-        clauses: BTreeSet<C>,
-    },
-    /// A disjunction of clauses.
-    Disjunction {
-        /// The clauses.
-        clauses: BTreeSet<C>,
-    },
-}
-
-impl<C: Ord> BooleanExpr<C> {
-    /// Creates a new conjunction.
-    pub fn conjunction(clauses: impl Into<BTreeSet<C>>) -> Self {
-        let clauses = clauses.into();
-        Self::Conjunction { clauses }
-    }
-
-    /// Creates a new disjunction.
-    pub fn disjunction(clauses: impl Into<BTreeSet<C>>) -> Self {
-        let clauses = clauses.into();
-        Self::Disjunction { clauses }
-    }
-}
-
-impl<C> BooleanExpr<C>
-where
-    C: Ord + std::ops::Not<Output = C> + Clone,
-{
-    /// Normalizes the expression into conjunctive normal form.
-    #[must_use]
-    pub fn into_cnf(self) -> Self {
-        if let Self::Disjunction { clauses: dis } = self {
-            Self::Conjunction {
-                clauses: dis.into_iter().map(|it| !it).collect(),
-            }
-        } else {
-            self
-        }
-    }
-
-    /// Normalizes the expression into disjunctive normal form.
-    #[must_use]
-    pub fn into_dnf(self) -> Self {
-        if let Self::Conjunction { clauses: con } = self {
-            Self::Disjunction {
-                clauses: con.into_iter().map(|it| !it).collect(),
-            }
-        } else {
-            self
-        }
-    }
-}
-
-impl<C> Display for BooleanExpr<C>
-where
-    C: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[allow(clippy::enum_glob_use)]
-        use BooleanExpr::*;
-        let (clauses, join_op) = match self {
-            Conjunction { clauses } => (clauses, "&&"),
-            Disjunction { clauses } => (clauses, "||"),
-        };
-        for (idx, clause) in clauses.iter().enumerate() {
-            if idx > 0 {
-                write!(f, " {join_op} ")?;
-            }
-            write!(f, "{clause}")?;
-        }
-        Ok(())
-    }
-}
-
-impl<C, T> std::ops::Not for BooleanExpr<C>
-where
-    C: std::ops::Not<Output = T> + Clone,
-    T: Ord,
-{
-    type Output = BooleanExpr<T>;
-
-    fn not(self) -> Self::Output {
-        #[allow(clippy::enum_glob_use)]
-        use BooleanExpr::*;
-        match self {
-            Conjunction { clauses } => Disjunction {
-                clauses: clauses.into_iter().map(std::ops::Not::not).collect(),
-            },
-            Disjunction { clauses } => Conjunction {
-                clauses: clauses.into_iter().map(std::ops::Not::not).collect(),
-            },
-        }
-    }
-}
-
-impl<V> std::ops::BitAnd for BooleanExpr<V>
-where
-    V: Ord + std::ops::Not<Output = V>,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Conjunction { clauses: lhs }, Self::Conjunction { clauses: rhs }) => {
-                Self::Conjunction {
-                    clauses: lhs.into_iter().chain(rhs).collect(),
-                }
-            }
-            (Self::Conjunction { clauses: con }, Self::Disjunction { clauses: dis })
-            | (Self::Disjunction { clauses: dis }, Self::Conjunction { clauses: con }) => {
-                Self::Conjunction {
-                    clauses: con
-                        .into_iter()
-                        .chain(dis.into_iter().map(|it| !it))
-                        .collect(),
-                }
-            }
-            (Self::Disjunction { clauses: lhs }, Self::Disjunction { clauses: rhs }) => {
-                Self::Disjunction {
-                    clauses: lhs.into_iter().chain(rhs).map(|it| !it).collect(),
-                }
-            }
-        }
-    }
-}
-
-impl<V> std::ops::BitOr for BooleanExpr<V>
-where
-    V: Ord + std::ops::Not<Output = V>,
-{
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Conjunction { clauses: lhs }, Self::Conjunction { clauses: rhs }) => {
-                Self::Conjunction {
-                    clauses: lhs.into_iter().chain(rhs).map(|it| !it).collect(),
-                }
-            }
-            (Self::Conjunction { clauses: con }, Self::Disjunction { clauses: dis })
-            | (Self::Disjunction { clauses: dis }, Self::Conjunction { clauses: con }) => {
-                Self::Disjunction {
-                    clauses: dis
-                        .into_iter()
-                        .chain(con.into_iter().map(|it| !it))
-                        .collect(),
-                }
-            }
-            (Self::Disjunction { clauses: lhs }, Self::Disjunction { clauses: rhs }) => {
-                Self::Disjunction {
-                    clauses: lhs.into_iter().chain(rhs).collect(),
-                }
-            }
-        }
-    }
-}
-
-impl<V> Default for BooleanExpr<V> {
-    fn default() -> Self {
-        Self::Disjunction {
-            clauses: BTreeSet::default(),
-        }
-    }
-}
-
 /// A condition.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum Condition<V> {
@@ -249,15 +234,13 @@ where
     }
 }
 
-impl<C: Ord> From<Condition<C>> for BooleanExpr<Condition<C>> {
+impl<C: Ord> From<Condition<C>> for DNF<Condition<C>> {
     fn from(value: Condition<C>) -> Self {
-        BooleanExpr::Disjunction {
-            clauses: BTreeSet::from([value]),
-        }
+        DNF(BTreeSet::from([BTreeSet::from([value])]))
     }
 }
 
-impl From<ir::expression::Condition> for BooleanExpr<Condition<Value>> {
+impl From<ir::expression::Condition> for DNF<Condition<Value>> {
     fn from(value: ir::expression::Condition) -> Self {
         #[allow(clippy::enum_glob_use)]
         use ir::expression::Condition::*;
@@ -279,7 +262,7 @@ impl From<ir::expression::Condition> for BooleanExpr<Condition<Value>> {
             IsNull(value) => Condition::IsNull(value.into()),
             IsNotNull(value) => Condition::IsNotNull(value.into()),
         };
-        BooleanExpr::disjunction([cond])
+        cond.into()
     }
 }
 
@@ -307,7 +290,7 @@ impl From<ConstantValue> for Value {
 impl fixed_point::Analyzer for Analyzer<'_> {
     type Location = ProgramCounter;
 
-    type Fact = BooleanExpr<Condition<Value>>;
+    type Fact = DNF<Condition<Value>>;
 
     type Err = AnalysisError;
 
@@ -322,93 +305,16 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
-        let insn = self
+        Ok(self
             .method
-            .instructions
-            .get(location)
-            .ok_or(AnalysisError::InstructionNotFound)?;
-        let affected_locations = match insn {
-            MokaInstruction::Jump { condition, target } => {
-                if let Some(condition) = condition {
-                    let condition: BooleanExpr<_> = condition.clone().into();
-                    let target = {
-                        let pc = *target;
-                        let condition = fact.clone() & condition.clone();
-                        (pc, condition)
-                    };
-                    // let next_pc = self.get_next_pc(*location)?;
-                    let next_pc = self.get_next_pc(*location)?;
-                    let fallthrough = (next_pc, fact.clone() & !condition);
-                    vec![target, fallthrough]
-                } else {
-                    vec![(*target, fact.clone())]
-                }
-            }
-            MokaInstruction::Switch {
-                match_value,
-                branches,
-                default,
-            } => {
-                let match_targets = branches.iter().map(|(value, target)| {
-                    let condition = Condition::Equal(
-                        match_value.clone().into(),
-                        ConstantValue::Integer(*value).into(),
-                    );
-                    let condition: BooleanExpr<_> = condition.into();
-                    let condition = fact.clone() & condition.clone();
-                    (*target, condition)
-                });
-                let default_condition = default_branch_condition(branches, match_value);
-                let default = {
-                    let pc = *default;
-                    let condition = fact.clone() & default_condition.clone();
-                    (pc, condition)
-                };
-                match_targets.chain(once(default)).collect()
-            }
-            MokaInstruction::SubroutineRet(_) => {
-                let return_addresses = self
-                    .method
-                    .control_flow_graph
-                    .edges_from(*location)
-                    .ok_or(AnalysisError::MalformControlFlow)?
-                    .filter(|(_, _, it)| matches!(it, ControlTransfer::SubroutineReturn));
-                return_addresses
-                    .map(|(_, addr, _)| (addr, fact.clone()))
-                    .collect()
-            }
-            MokaInstruction::Definition {
-                expr: Expression::Subroutine { target, .. },
-                ..
-            } => {
-                let target = (*target, fact.clone());
-                vec![target]
-            }
-            MokaInstruction::Definition { expr, .. } => {
-                let handlers = self
-                    .method
-                    .exception_table
-                    .iter()
-                    .filter(|it| it.covers(*location))
-                    .map(|it| (it.handler_pc, fact.clone()));
-                let next_pc = if let Expression::Throw(_) = expr {
-                    None
-                } else {
-                    let next_pc = self.get_next_pc(*location)?;
-                    Some((next_pc, fact.clone()))
-                };
-                handlers.chain(next_pc).collect()
-            }
-            MokaInstruction::Return(_) => Vec::default(),
-            MokaInstruction::Nop => {
-                // let next_pc = self.get_next_pc(*location)?;
-                let next_pc = self.get_next_pc(*location)?;
-                vec![(next_pc, fact.clone())]
-            }
-        };
-        Ok(affected_locations
+            .control_flow_graph
+            .edges_from(*location)
             .into_iter()
-            .map(|(pc, cond)| (pc, cond.into_dnf()))
+            .flatten()
+            .map(|(_, dst, trx)| match trx {
+                ControlTransfer::Conditional(cond) => (dst, cond.clone() & fact.clone()),
+                _ => (dst, fact.clone()),
+            })
             .collect())
     }
 
@@ -417,34 +323,9 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         current_fact: &Self::Fact,
         incoming_fact: Self::Fact,
     ) -> Result<Self::Fact, Self::Err> {
-        Ok(current_fact.clone() | incoming_fact)
-    }
-}
-
-fn default_branch_condition(
-    branches: &BTreeMap<i32, ProgramCounter>,
-    match_value: &Operand,
-) -> BooleanExpr<Condition<Value>> {
-    branches
-        .keys()
-        .map(|value| {
-            let condition = Condition::NotEqual(
-                match_value.clone().into(),
-                ConstantValue::Integer(*value).into(),
-            );
-            let condition: BooleanExpr<_> = condition.into();
-            condition
-        })
-        .reduce(|lhs, rhs| lhs & rhs)
-        .unwrap_or(BooleanExpr::default())
-}
-
-impl Analyzer<'_> {
-    fn get_next_pc(&self, pc: ProgramCounter) -> Result<ProgramCounter, AnalysisError> {
-        self.method
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or(AnalysisError::MalformControlFlow)
+        let mut result = current_fact.clone() | incoming_fact;
+        result.simplify();
+        Ok(result)
     }
 }
 

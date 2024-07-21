@@ -7,11 +7,14 @@ use std::{
     mem,
 };
 
-use crate::jvm::{
-    code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
-    method::{self},
-    references::ClassRef,
-    Method,
+use crate::{
+    analysis::path_condition::{Condition, DNF},
+    jvm::{
+        code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
+        method::{self},
+        references::ClassRef,
+        ConstantValue, Method,
+    },
 };
 
 use crate::analysis::fixed_point::Analyzer;
@@ -45,7 +48,7 @@ struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
     method: &'m Method,
     body: &'m MethodBody,
-    control_flow_edges: BTreeSet<(ProgramCounter, ProgramCounter, ControlTransfer)>,
+    control_flow_edges: BTreeMap<(ProgramCounter, ProgramCounter), ControlTransfer>,
 }
 
 impl Analyzer for MokaIRGenerator<'_> {
@@ -118,32 +121,46 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .collect()
             }
             MokaInstruction::Jump { condition, target } => {
-                let target_edge = if condition.is_some() {
-                    (location, *target, Conditional)
-                } else {
-                    (location, *target, Unconditional)
-                };
-                if condition.is_some() {
+                if let Some(condition) = condition {
+                    let cond: DNF<_> = condition.clone().into();
+                    let target_edge = (location, *target, Conditional(cond.clone()));
                     let next_pc = self.next_pc_of(location)?;
-                    let next_pc_edge = (location, next_pc, Conditional);
+                    let next_pc_edge = (location, next_pc, Conditional(!cond));
                     vec![
                         (target_edge, frame.same_frame()),
                         (next_pc_edge, frame.same_frame()),
                     ]
                 } else {
-                    vec![(target_edge, frame.same_frame())]
+                    vec![((location, *target, Unconditional), frame.same_frame())]
                 }
             }
             MokaInstruction::Switch {
-                default, branches, ..
-            } => branches
-                .values()
-                .chain(once(default))
-                .map(|&it| {
-                    let edge = (location, it, Conditional);
-                    (edge, frame.same_frame())
-                })
-                .collect(),
+                default,
+                branches,
+                match_value,
+            } => {
+                let default_cond = branches
+                    .keys()
+                    .map(|it| {
+                        let val = ConstantValue::Integer(*it).into();
+                        Condition::NotEqual(match_value.clone().into(), val).into()
+                    })
+                    .reduce(std::ops::BitAnd::bitand)
+                    .unwrap_or_default();
+                branches
+                    .iter()
+                    .map(|(&val, &pc)| {
+                        let val = ConstantValue::Integer(val).into();
+                        let cond = Condition::Equal(match_value.clone().into(), val).into();
+                        let edge = (location, pc, Conditional(cond));
+                        (edge, frame.same_frame())
+                    })
+                    .chain(once((
+                        (location, *default, Conditional(default_cond)),
+                        frame.same_frame(),
+                    )))
+                    .collect()
+            }
             MokaInstruction::SubroutineRet(_) => mem::take(&mut frame.possible_ret_addresses)
                 .into_iter()
                 .map(|return_address| {
@@ -159,7 +176,8 @@ impl Analyzer for MokaIRGenerator<'_> {
             .map(|(edge, frame)| ((edge.1, frame), edge))
             .unzip();
         let edges: BTreeSet<_> = edges;
-        self.control_flow_edges.extend(edges);
+        self.control_flow_edges
+            .extend(edges.into_iter().map(|it| ((it.0, it.1), it.2)));
         Ok(affected_locations)
     }
 
@@ -191,7 +209,7 @@ impl<'m> MokaIRGenerator<'m> {
             ir_instructions: BTreeMap::default(),
             method,
             body,
-            control_flow_edges: BTreeSet::default(),
+            control_flow_edges: BTreeMap::default(),
         })
     }
 
@@ -263,7 +281,11 @@ impl MokaIRGenerator<'_> {
         MokaIRBrewingError,
     > {
         self.analyze()?;
-        let cfg = ControlFlowGraph::from_edges(self.control_flow_edges);
+        let cfg = ControlFlowGraph::from_edges(
+            self.control_flow_edges
+                .into_iter()
+                .map(|(k, v)| (k.0, k.1, v)),
+        );
         Ok((InstructionList::from(self.ir_instructions), cfg))
     }
 }

@@ -1,6 +1,9 @@
 //! Control flow analysis
 
-use crate::jvm::{code::ProgramCounter, references::ClassRef};
+use crate::{
+    analysis::path_condition::{Condition, Value, DNF},
+    jvm::{code::ProgramCounter, references::ClassRef},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ControlFlowGraph;
@@ -11,7 +14,7 @@ pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
     /// A conditional contol transfer.
-    Conditional,
+    Conditional(DNF<Condition<Value>>),
     /// A control transfer to the exception handler.
     Exception(BTreeSet<ClassRef>),
     /// A control transfer caused by subroutine return.
