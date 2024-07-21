@@ -1,7 +1,6 @@
 #![cfg(integration_test)]
 
 use mokapot::{
-    analysis::{fixed_point::Analyzer, path_condition},
     ir::{
         data_flow::DefUseChain, expression::Expression, Identifier, LocalValue, MokaIRMethodExt,
         MokaInstruction, Operand,
@@ -116,8 +115,7 @@ fn cfg_to_dot() {
 
     let method = get_test_method();
     let ir = method.brew().unwrap();
-    let mut pc_analyzer = path_condition::Analyzer::new(&ir);
-    let condition = pc_analyzer.analyze().unwrap();
+    let condition = ir.path_conditions;
     let cfg_with_insn = ir.control_flow_graph.clone().map(
         |pc, _| {
             format!(
@@ -149,15 +147,4 @@ fn dominance() {
     let ir = method.brew().unwrap();
     let _dominance =
         petgraph::algo::dominators::simple_fast(&ir.control_flow_graph, ProgramCounter::ZERO);
-}
-
-#[test]
-fn path_condition() {
-    let method = get_test_method();
-    let ir_method = method.brew().unwrap();
-    let mut pc_analyzer = path_condition::Analyzer::new(&ir_method);
-    let facts = pc_analyzer.analyze().unwrap();
-    for (pc, fact) in facts {
-        println!("{}: {}", pc, fact);
-    }
 }

@@ -11,6 +11,7 @@ mod moka_instruction;
 
 use std::collections::BTreeMap;
 
+use control_flow::path_condition::{Condition, Value, DNF};
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
@@ -42,6 +43,8 @@ pub struct MokaIRMethod {
     pub exception_table: Vec<ExceptionTableEntry>,
     /// The control flow graph of the method.
     pub control_flow_graph: ControlFlowGraph<(), ControlTransfer>,
+    /// A map from the location to the path condition at that location.
+    pub path_conditions: BTreeMap<ProgramCounter, DNF<Condition<Value>>>,
 }
 
 /// A control flow graph.

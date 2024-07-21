@@ -5,11 +5,10 @@ use std::{
 };
 
 use crate::{
-    ir::{self, control_flow::ControlTransfer, MokaIRMethod, Operand},
+    analysis::fixed_point,
+    ir::{self, control_flow::ControlTransfer, ControlFlowGraph, Operand},
     jvm::{code::ProgramCounter, ConstantValue},
 };
-
-use super::fixed_point;
 
 /// Path condition in disjunctive normal form.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
@@ -171,19 +170,6 @@ where
     }
 }
 
-/// An analyzer for path conditions.
-#[derive(Debug)]
-pub struct Analyzer<'a> {
-    method: &'a MokaIRMethod,
-}
-
-impl<'a> Analyzer<'a> {
-    /// Creates a new path condition analyzer.
-    #[must_use]
-    pub fn new(method: &'a MokaIRMethod) -> Self {
-        Self { method }
-    }
-}
 /// A condition.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum Condition<V> {
@@ -287,12 +273,26 @@ impl From<ConstantValue> for Value {
     }
 }
 
+/// An analyzer for path conditions.
+#[derive(Debug)]
+pub struct Analyzer<'a> {
+    cfg: &'a ControlFlowGraph<(), ControlTransfer>,
+}
+
+impl<'a> Analyzer<'a> {
+    /// Creates a new path condition analyzer.
+    #[must_use]
+    pub fn new(cfg: &'a ControlFlowGraph<(), ControlTransfer>) -> Self {
+        Self { cfg }
+    }
+}
+
 impl fixed_point::Analyzer for Analyzer<'_> {
     type Location = ProgramCounter;
 
     type Fact = DNF<Condition<Value>>;
 
-    type Err = AnalysisError;
+    type Err = ();
 
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
@@ -306,8 +306,7 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
         Ok(self
-            .method
-            .control_flow_graph
+            .cfg
             .edges_from(*location)
             .into_iter()
             .flatten()
@@ -327,17 +326,6 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         result.simplify();
         Ok(result)
     }
-}
-
-/// Error when analyzing path conditions.
-#[derive(Debug, thiserror::Error, derive_more::Display)]
-pub enum AnalysisError {
-    /// Cannot find instruction.
-    #[display(fmt = "Cannot find instruction.")]
-    InstructionNotFound,
-    /// Malformed control flow in the method.
-    #[display(fmt = "Malformed control flow in the method.")]
-    MalformControlFlow,
 }
 
 #[cfg(test)]

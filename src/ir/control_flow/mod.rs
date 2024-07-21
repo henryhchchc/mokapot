@@ -1,9 +1,9 @@
 //! Control flow analysis
 
-use crate::{
-    analysis::path_condition::{Condition, Value, DNF},
-    jvm::{code::ProgramCounter, references::ClassRef},
-};
+pub mod path_condition;
+use path_condition::{Condition, Value, DNF};
+
+use crate::jvm::{code::ProgramCounter, references::ClassRef};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ControlFlowGraph;

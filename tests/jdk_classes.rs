@@ -1,10 +1,6 @@
 #![cfg(integration_test)]
 
-use mokapot::{
-    analysis::{fixed_point::Analyzer, path_condition},
-    ir::MokaIRMethodExt,
-    jvm::Class,
-};
+use mokapot::{ir::MokaIRMethodExt, jvm::Class};
 use rayon::prelude::*;
 use std::{env, fs, path::PathBuf};
 
@@ -43,15 +39,8 @@ fn works_with_jdk_classes() {
                         .for_each(|(_pc, insn)| {
                             let _ = insn.name();
                         });
-                    let ir_method = it.brew().unwrap_or_else(|e| {
+                    let _ir_method = it.brew().unwrap_or_else(|e| {
                         panic!("Failed to brew {}: {}", it.name, e);
-                    });
-                    let mut path_cond = path_condition::Analyzer::new(&ir_method);
-                    let _pc = path_cond.analyze().unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to analyze path conditions for {}: {}",
-                            ir_method.name, e
-                        );
                     });
                 }),
             Err(e) => {

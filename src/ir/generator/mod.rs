@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    analysis::path_condition::{Condition, DNF},
+    ir::control_flow::path_condition::{self, DNF},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
         method::{self},
@@ -143,7 +143,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .keys()
                     .map(|it| {
                         let val = ConstantValue::Integer(*it).into();
-                        Condition::NotEqual(match_value.clone().into(), val).into()
+                        path_condition::Condition::NotEqual(match_value.clone().into(), val).into()
                     })
                     .reduce(std::ops::BitAnd::bitand)
                     .unwrap_or_default();
@@ -151,7 +151,9 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .iter()
                     .map(|(&val, &pc)| {
                         let val = ConstantValue::Integer(val).into();
-                        let cond = Condition::Equal(match_value.clone().into(), val).into();
+                        let cond =
+                            path_condition::Condition::Equal(match_value.clone().into(), val)
+                                .into();
                         let edge = (location, pc, Conditional(cond));
                         (edge, frame.same_frame())
                     })
@@ -258,6 +260,8 @@ pub trait MokaIRMethodExt {
 impl MokaIRMethodExt for Method {
     fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
         let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
+        let mut pc_analyzer = path_condition::Analyzer::new(&control_flow_graph);
+        let path_conditions = pc_analyzer.analyze().expect("Unreachable");
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),
@@ -266,6 +270,7 @@ impl MokaIRMethodExt for Method {
             instructions,
             exception_table: self.body.as_ref().unwrap().exception_table.clone(),
             control_flow_graph,
+            path_conditions,
         })
     }
 }

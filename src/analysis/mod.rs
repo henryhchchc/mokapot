@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use crate::jvm::references::ClassRef;
 
 pub mod fixed_point;
-pub mod path_condition;
 
 /// A context for class resolution during analysis.
 #[derive(Debug)]
