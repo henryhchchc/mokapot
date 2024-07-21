@@ -3,7 +3,7 @@ use crate::{
     ir::{
         expression::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
-            MathOperation, NaNTreatment,
+            MathOperation, NaNTreatment, NumericType,
         },
         LocalValue, MokaInstruction as IR, Operand,
     },
@@ -187,36 +187,32 @@ impl MokaIRGenerator<'_> {
                 frame.swap()?;
                 IR::Nop
             }
-            IAdd | FAdd => binary_op_math(frame, def, MathOperation::Add)?,
-            LAdd | DAdd => binary_wide_math(frame, def, MathOperation::Add)?,
-            ISub | FSub => binary_op_math(frame, def, MathOperation::Subtract)?,
-            LSub | DSub => binary_wide_math(frame, def, MathOperation::Subtract)?,
-            IMul | FMul => binary_op_math(frame, def, MathOperation::Multiply)?,
-            LMul | DMul => binary_wide_math(frame, def, MathOperation::Multiply)?,
-            IDiv | FDiv => binary_op_math(frame, def, MathOperation::Divide)?,
-            LDiv | DDiv => binary_wide_math(frame, def, MathOperation::Divide)?,
-            IRem | FRem => binary_op_math(frame, def, MathOperation::Remainder)?,
-            LRem | DRem => binary_wide_math(frame, def, MathOperation::Remainder)?,
-            INeg | FNeg => {
-                let value = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
-                let math_op = MathOperation::Negate(value);
-                IR::Definition {
-                    value: def,
-                    expr: Expression::Math(math_op),
-                }
-            }
-            LNeg | DNeg => {
-                let operand = frame.pop_dual_slot_value()?;
-                frame.push_dual_slot_value(def.as_argument())?;
-                let math_op = MathOperation::Negate(operand);
-                IR::Definition {
-                    value: def,
-                    expr: Expression::Math(math_op),
-                }
-            }
-            IShl => binary_op_math(frame, def, MathOperation::ShiftLeft)?,
-            IShr => binary_op_math(frame, def, MathOperation::ShiftRight)?,
+            IAdd => binary_math(frame, def, MathOperation::Add, NumericType::Int)?,
+            FAdd => binary_math(frame, def, MathOperation::Add, NumericType::Float)?,
+            LAdd => binary_wide_math(frame, def, MathOperation::Add, NumericType::Long)?,
+            DAdd => binary_wide_math(frame, def, MathOperation::Add, NumericType::Double)?,
+            ISub => binary_math(frame, def, MathOperation::Subtract, NumericType::Int)?,
+            FSub => binary_math(frame, def, MathOperation::Subtract, NumericType::Float)?,
+            LSub => binary_wide_math(frame, def, MathOperation::Subtract, NumericType::Long)?,
+            DSub => binary_wide_math(frame, def, MathOperation::Subtract, NumericType::Double)?,
+            IMul => binary_math(frame, def, MathOperation::Multiply, NumericType::Int)?,
+            FMul => binary_math(frame, def, MathOperation::Multiply, NumericType::Float)?,
+            LMul => binary_wide_math(frame, def, MathOperation::Multiply, NumericType::Long)?,
+            DMul => binary_wide_math(frame, def, MathOperation::Multiply, NumericType::Double)?,
+            IDiv => binary_math(frame, def, MathOperation::Divide, NumericType::Int)?,
+            FDiv => binary_math(frame, def, MathOperation::Divide, NumericType::Float)?,
+            LDiv => binary_wide_math(frame, def, MathOperation::Divide, NumericType::Long)?,
+            DDiv => binary_wide_math(frame, def, MathOperation::Divide, NumericType::Double)?,
+            IRem => binary_math(frame, def, MathOperation::Remainder, NumericType::Int)?,
+            FRem => binary_math(frame, def, MathOperation::Remainder, NumericType::Float)?,
+            LRem => binary_wide_math(frame, def, MathOperation::Remainder, NumericType::Long)?,
+            DRem => binary_wide_math(frame, def, MathOperation::Remainder, NumericType::Double)?,
+            INeg => unitry_op_math(frame, def, MathOperation::Negate, NumericType::Int)?,
+            FNeg => unitry_op_math(frame, def, MathOperation::Negate, NumericType::Float)?,
+            LNeg => unitry_op_math(frame, def, MathOperation::Negate, NumericType::Long)?,
+            DNeg => unitry_op_math(frame, def, MathOperation::Negate, NumericType::Double)?,
+            IShl => binary_math(frame, def, MathOperation::ShiftLeft, NumericType::Int)?,
+            IShr => binary_math(frame, def, MathOperation::ShiftRight, NumericType::Int)?,
             LShl => {
                 let shift_amount = frame.pop_value()?;
                 let base = frame.pop_dual_slot_value()?;
@@ -224,7 +220,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::ShiftLeft(base, shift_amount);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Long),
                 }
             }
             LShr => {
@@ -234,7 +230,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::ShiftRight(base, shift_amount);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Long),
                 }
             }
             LUShr => {
@@ -244,23 +240,28 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Long),
                 }
             }
-            IUShr => binary_op_math(frame, def, MathOperation::LogicalShiftRight)?,
-            IAnd => binary_op_math(frame, def, MathOperation::BitwiseAnd)?,
-            LAnd => binary_wide_math(frame, def, MathOperation::BitwiseAnd)?,
-            IOr => binary_op_math(frame, def, MathOperation::BitwiseOr)?,
-            LOr => binary_wide_math(frame, def, MathOperation::BitwiseOr)?,
-            IXor => binary_op_math(frame, def, MathOperation::BitwiseXor)?,
-            LXor => binary_wide_math(frame, def, MathOperation::BitwiseXor)?,
+            IUShr => binary_math(
+                frame,
+                def,
+                MathOperation::LogicalShiftRight,
+                NumericType::Int,
+            )?,
+            IAnd => binary_math(frame, def, MathOperation::BitwiseAnd, NumericType::Int)?,
+            LAnd => binary_wide_math(frame, def, MathOperation::BitwiseAnd, NumericType::Int)?,
+            IOr => binary_math(frame, def, MathOperation::BitwiseOr, NumericType::Int)?,
+            LOr => binary_wide_math(frame, def, MathOperation::BitwiseOr, NumericType::Int)?,
+            IXor => binary_math(frame, def, MathOperation::BitwiseXor, NumericType::Int)?,
+            LXor => binary_wide_math(frame, def, MathOperation::BitwiseXor, NumericType::Int)?,
             IInc(idx, constant) => {
                 let base = frame.get_local(*idx)?;
                 frame.set_local(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Int),
                 }
             }
             Wide(WideInstruction::IInc(idx, constant)) => {
@@ -269,7 +270,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Int),
                 }
             }
             I2F => conversion_op::<_, false, false>(frame, def, Conversion::Int2Float)?,
@@ -294,7 +295,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Int),
                 }
             }
             FCmpL | FCmpG => {
@@ -309,7 +310,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Int),
                 }
             }
             DCmpL | DCmpG => {
@@ -324,7 +325,7 @@ impl MokaIRGenerator<'_> {
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
                     value: def,
-                    expr: Expression::Math(math_op),
+                    expr: Expression::Math(math_op, NumericType::Int),
                 }
             }
             IfEq(target) => unitary_conditional_jump(frame, *target, Condition::IsZero)?,
@@ -706,10 +707,11 @@ where
 }
 
 #[inline]
-fn binary_op_math<M>(
+fn binary_math<M>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
     math: M,
+    num_ty: NumericType,
 ) -> Result<IR, MokaIRBrewingError>
 where
     M: FnOnce(Operand, Operand) -> MathOperation,
@@ -717,7 +719,7 @@ where
     let lhs = frame.pop_value()?;
     let rhs = frame.pop_value()?;
     frame.push_value(def_id.as_argument())?;
-    let expr = Expression::Math(math(lhs, rhs));
+    let expr = Expression::Math(math(lhs, rhs), num_ty);
     Ok(IR::Definition {
         value: def_id,
         expr,
@@ -729,6 +731,7 @@ fn binary_wide_math<M>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
     math: M,
+    num_ty: NumericType,
 ) -> Result<IR, MokaIRBrewingError>
 where
     M: FnOnce(Operand, Operand) -> MathOperation,
@@ -736,9 +739,26 @@ where
     let lhs = frame.pop_dual_slot_value()?;
     let rhs = frame.pop_dual_slot_value()?;
     frame.push_dual_slot_value(def_id.as_argument())?;
-    let expr = Expression::Math(math(lhs, rhs));
+    let expr = Expression::Math(math(lhs, rhs), num_ty);
     Ok(IR::Definition {
         value: def_id,
         expr,
+    })
+}
+
+fn unitry_op_math<M>(
+    frame: &mut JvmStackFrame,
+    def: LocalValue,
+    math: M,
+    num_ty: NumericType,
+) -> Result<IR, MokaIRBrewingError>
+where
+    M: FnOnce(Operand) -> MathOperation,
+{
+    let value = frame.pop_value()?;
+    frame.push_value(def.as_argument())?;
+    Ok(IR::Definition {
+        value: def,
+        expr: Expression::Math(math(value), num_ty),
     })
 }

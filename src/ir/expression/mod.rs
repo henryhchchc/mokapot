@@ -30,7 +30,7 @@ pub use {
     conversion::Operaion as Conversion,
     field::Access as FieldAccess,
     lock::Operation as LockOperation,
-    math::{NaNTreatment, Operation as MathOperation},
+    math::{NaNTreatment, NumericType, Operation as MathOperation},
 };
 
 /// Represents an expression in the Moka IR.
@@ -68,7 +68,7 @@ pub enum Expression {
         closure_descriptor: MethodDescriptor,
     },
     /// A mathematical operation.
-    Math(MathOperation),
+    Math(MathOperation, NumericType),
     /// A field access.
     Field(FieldAccess),
     /// An array operation.
@@ -97,7 +97,7 @@ impl Expression {
         match self {
             Self::Call { this, args, .. } => this.iter().chain(args).flatten().copied().collect(),
             Self::Closure { captures, .. } => captures.iter().flatten().copied().collect(),
-            Self::Math(math_op) => math_op.uses(),
+            Self::Math(math_op, _) => math_op.uses(),
             Self::Field(field_op) => field_op.uses(),
             Self::Array(array_op) => array_op.uses(),
             Self::Conversion(conv_op) => conv_op.uses(),
@@ -118,7 +118,7 @@ impl Display for Expression {
             } => write!(f, "subroutine {target}, return to {return_address}"),
             Self::Field(field_op) => field_op.fmt(f),
             Self::Array(array_op) => array_op.fmt(f),
-            Self::Math(math_op) => math_op.fmt(f),
+            Self::Math(math_op, _) => math_op.fmt(f),
             Self::Throw(value) => write!(f, "throw {value}"),
             Self::Synchronization(monitor_op) => monitor_op.fmt(f),
             Self::New(class) => write!(f, "new {class}"),
