@@ -12,18 +12,22 @@ use crate::{
 
 /// Path condition in disjunctive normal form.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub struct DNF<T>(BTreeSet<BTreeSet<T>>);
+pub struct DNF<T> {
+    /// The set of conjunctive clauses.
+    /// An empty set of conjunctive clauses represents a tautology.
+    pub clauses: BTreeSet<BTreeSet<T>>,
+}
 
-impl<T> DNF<T>
-where
-    T: Ord + Clone + std::ops::Not<Output = T>,
-{
-    fn simplify(&mut self) {
+impl<T> DNF<T> {
+    fn simplify(&mut self)
+    where
+        T: Ord + Clone + std::ops::Not<Output = T>,
+    {
         let mut should_continue = true;
         while should_continue {
             should_continue = false;
             // Remove contradictory clauses.
-            self.0.retain(|conjunctive_clause| {
+            self.clauses.retain(|conjunctive_clause| {
                 // A term is contradictory if it contains both a condition and its negation.
                 let should_remove = conjunctive_clause
                     .iter()
@@ -32,8 +36,8 @@ where
                 !should_remove
             });
             // Remove redundant clauses.
-            let clauses_clone = self.0.clone();
-            self.0.retain(|it| {
+            let clauses_clone = self.clauses.clone();
+            self.clauses.retain(|it| {
                 // A clause is redundant if it is a supetset of another clause.
                 let should_remove = clauses_clone
                     .iter()
@@ -43,8 +47,8 @@ where
             });
             // Simplify pairs of clauses.
             // A pair of clauses can be simplified if their difference is negation of each other.
-            let clone1 = self.0.clone();
-            let clone2 = self.0.clone();
+            let clone1 = self.clauses.clone();
+            let clone2 = self.clauses.clone();
             clone1
                 .into_iter()
                 .flat_map(|l| clone2.clone().into_iter().map(move |r| (l.clone(), r)))
@@ -65,8 +69,8 @@ where
                     for it in &remove_from_rhs {
                         rhs.remove(it);
                     }
-                    self.0.insert(lhs);
-                    self.0.insert(rhs);
+                    self.clauses.insert(lhs);
+                    self.clauses.insert(rhs);
                 });
         }
     }
@@ -74,7 +78,9 @@ where
 
 impl<T> Default for DNF<T> {
     fn default() -> Self {
-        Self(BTreeSet::default())
+        Self {
+            clauses: BTreeSet::default(),
+        }
     }
 }
 
@@ -85,13 +91,13 @@ where
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        let DNF(lhs) = self;
-        let DNF(rhs) = rhs;
+        let DNF { clauses: lhs } = self;
+        let DNF { clauses: rhs } = rhs;
         if lhs.is_empty() || rhs.is_empty() {
             DNF::default()
         } else {
             let clauses: BTreeSet<_> = lhs.into_iter().chain(rhs).collect();
-            let mut result = DNF(clauses);
+            let mut result = DNF { clauses };
             result.simplify();
             result
         }
@@ -105,12 +111,12 @@ where
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        let DNF(this) = self;
-        let DNF(other) = rhs;
+        let DNF { clauses: this } = self;
+        let DNF { clauses: other } = rhs;
         if this.is_empty() {
-            DNF(other)
+            DNF { clauses: other }
         } else if other.is_empty() {
-            DNF(this)
+            DNF { clauses: this }
         } else {
             let clauses = this
                 .into_iter()
@@ -120,7 +126,7 @@ where
                     })
                 })
                 .collect();
-            let mut result = DNF(clauses);
+            let mut result = DNF { clauses };
             result.simplify();
             result
         }
@@ -134,9 +140,9 @@ where
     type Output = Self;
 
     fn not(self) -> Self::Output {
-        let DNF(clauses) = self;
+        let DNF { clauses } = self;
         let clauses = BTreeSet::from([clauses.into_iter().flatten().map(|it| !it).collect()]);
-        let mut result = DNF(clauses);
+        let mut result = DNF { clauses };
         result.simplify();
         result
     }
@@ -147,7 +153,7 @@ where
     T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let DNF(clauses) = self;
+        let DNF { clauses } = self;
         for (i, conj) in clauses.iter().enumerate() {
             if i > 0 {
                 write!(f, " || ")?;
@@ -222,7 +228,9 @@ where
 
 impl<C: Ord> From<Condition<C>> for DNF<Condition<C>> {
     fn from(value: Condition<C>) -> Self {
-        DNF(BTreeSet::from([BTreeSet::from([value])]))
+        DNF {
+            clauses: BTreeSet::from([BTreeSet::from([value])]),
+        }
     }
 }
 
