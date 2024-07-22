@@ -1,24 +1,17 @@
 //! Data flow analysis.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use itertools::Itertools;
 
 use crate::jvm::code::ProgramCounter;
 
-use super::{Identifier, LocalValue, MokaIRMethod};
+use super::{DefUseChain, Identifier, LocalValue, MokaIRMethod};
 
-/// A def-use chain in data flow analysis.
-#[derive(Debug)]
-pub struct DefUseChain {
-    defs: HashMap<LocalValue, ProgramCounter>,
-    uses: HashMap<Identifier, BTreeSet<ProgramCounter>>,
-}
-
-impl DefUseChain {
+impl<'a> DefUseChain<'a> {
     /// Create a new def-use graph from a method.
     #[must_use]
-    pub fn new(method: &MokaIRMethod) -> Self {
+    pub fn new(method: &'a MokaIRMethod) -> Self {
         let defs = method
             .instructions
             .iter()
@@ -32,7 +25,7 @@ impl DefUseChain {
             .into_iter()
             .map(|(id, uses)| (id, uses.into_iter().collect()))
             .collect();
-        Self { defs, uses }
+        Self { method, defs, uses }
     }
 
     /// Get the location where an identifier is defined.

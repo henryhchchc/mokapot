@@ -1,15 +1,17 @@
 //! `MokaIR` is an intermediate representation of JVM bytecode.
 //! It is register based and is in SSA form, which make it easier to analyze.
 
-#[cfg(feature = "petgraph")]
-pub mod cfg_petgraph;
 pub mod control_flow;
 pub mod data_flow;
 pub mod expression;
 mod generator;
 mod moka_instruction;
+#[cfg(feature = "petgraph")]
+pub mod petgraph;
 
-use std::collections::BTreeMap;
+pub mod type_hierarchy;
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use control_flow::path_condition::{Condition, Value, DNF};
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
@@ -61,4 +63,26 @@ impl MokaIRMethod {
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph<N, E> {
     inner: BTreeMap<ProgramCounter, (N, BTreeMap<ProgramCounter, E>)>,
+}
+
+/// A def-use chain in data flow analysis.
+#[derive(Debug)]
+pub struct DefUseChain<'a> {
+    method: &'a MokaIRMethod,
+    defs: HashMap<LocalValue, ProgramCounter>,
+    uses: HashMap<Identifier, BTreeSet<ProgramCounter>>,
+}
+
+/// A class hierarchy based on super class relationships.
+#[derive(Debug, Clone)]
+pub struct ClassHierarchy {
+    inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
+    super_classes: HashMap<ClassRef, ClassRef>,
+}
+
+/// A class hierarchy based on interface implementations.
+#[derive(Debug, Clone)]
+pub struct InterfaceImplHierarchy {
+    implementations: HashMap<ClassRef, HashSet<ClassRef>>,
+    implementors: HashMap<ClassRef, HashSet<ClassRef>>,
 }

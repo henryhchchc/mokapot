@@ -1,6 +1,9 @@
 package org.mokapot.test;
 
-public class MyClass implements Cloneable {
+import java.io.Closeable;
+import java.io.IOException;
+
+public class MyClass implements Closeable {
 
   public static long test = 233;
 
@@ -14,5 +17,10 @@ public class MyClass implements Cloneable {
   public int add(int a, int b) {
     int x = a + b;
     return x;
+  }
+
+  @Override
+  public void close() throws IOException {
+    throw new UnsupportedOperationException("Unimplemented method 'close'");
   }
 }

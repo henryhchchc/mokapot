@@ -10,9 +10,7 @@ use petgraph::{
     Directed, Direction,
 };
 
-use crate::jvm::code::ProgramCounter;
-
-use super::ControlFlowGraph;
+use crate::{ir::ControlFlowGraph, jvm::code::ProgramCounter};
 
 impl<N, E> Data for ControlFlowGraph<N, E> {
     type NodeWeight = N;

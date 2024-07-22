@@ -2,7 +2,7 @@
 
 use mokapot::{
     ir::{
-        data_flow::DefUseChain, expression::Expression, Identifier, LocalValue, MokaIRMethodExt,
+        expression::Expression, DefUseChain, Identifier, LocalValue, MokaIRMethodExt,
         MokaInstruction, Operand,
     },
     jvm::{code::ProgramCounter, Class, ConstantValue, JavaString, Method},
