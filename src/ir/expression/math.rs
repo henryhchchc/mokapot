@@ -51,7 +51,6 @@ pub enum Operation {
     #[display(fmt = "cmp({_0}, {_1}) {_2}")]
     FloatingPointComparison(Operand, Operand, NaNTreatment),
 }
-
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
@@ -85,19 +84,6 @@ pub enum NaNTreatment {
     /// NaNs are treated as the smallest possible value.
     #[display(fmt = "NaN == Min")]
     IsSmallest,
-}
-
-/// A numeric type in matn operations.
-#[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
-pub enum NumericType {
-    /// The operation produces an integer.
-    Int,
-    /// The operation produces a long.
-    Long,
-    /// The operation produces a float.
-    Float,
-    /// The operation produces a double.
-    Double,
 }
 
 #[cfg(test)]

@@ -18,10 +18,10 @@ pub use moka_instruction::*;
 use crate::{
     jvm::{
         code::{ExceptionTableEntry, InstructionList, ProgramCounter},
-        method,
+        method::{self},
         references::ClassRef,
     },
-    types::method_descriptor::{MethodDescriptor, ReturnType},
+    types::method_descriptor::MethodDescriptor,
 };
 
 use self::control_flow::ControlTransfer;
@@ -45,25 +45,6 @@ pub struct MokaIRMethod {
     pub control_flow_graph: ControlFlowGraph<(), ControlTransfer>,
     /// A map from the location to the path condition at that location.
     pub path_conditions: BTreeMap<ProgramCounter, DNF<Condition<Value>>>,
-}
-
-impl MokaIRMethod {
-    /// Checks is the method is static.
-    #[must_use]
-    pub const fn is_static(&self) -> bool {
-        self.access_flags.contains(method::AccessFlags::STATIC)
-    }
-}
-
-/// A type in JVM.
-#[derive(Debug, Clone)]
-pub enum JvmType {
-    /// A type declarec in the Java language.
-    Java(ReturnType),
-    /// The retuen address of a subroutine.
-    SubRoutine,
-    /// An exception caught by a `catch` block.
-    CaughtException,
 }
 
 /// A control flow graph.

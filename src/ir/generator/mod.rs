@@ -11,6 +11,7 @@ use crate::{
     ir::control_flow::path_condition::{self, DNF},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
+        method::{self},
         references::ClassRef,
         ConstantValue, Method,
     },
@@ -65,7 +66,9 @@ impl Analyzer for MokaIRGenerator<'_> {
             .0
             .to_owned();
         JvmStackFrame::new(
-            self.method.is_static(),
+            self.method
+                .access_flags
+                .contains(method::AccessFlags::STATIC),
             &self.method.descriptor,
             self.body.max_locals,
             self.body.max_stack,
@@ -79,6 +82,7 @@ impl Analyzer for MokaIRGenerator<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
+        use ControlTransfer::{Conditional, Unconditional};
         let location = location.to_owned();
         let mut frame = fact.same_frame();
         let insn = self
@@ -86,140 +90,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             .instruction_at(location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
         let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
-        let edges_and_frames = self.analyze_control_flow(&ir_instruction, location, frame)?;
-        self.ir_instructions.insert(location, ir_instruction);
-
-        let (affected_locations, edges) = edges_and_frames
-            .into_iter()
-            .map(|(edge, frame)| ((edge.1, frame), edge))
-            .unzip();
-        let edges: BTreeSet<_> = edges;
-        self.control_flow_edges
-            .extend(edges.into_iter().map(|it| ((it.0, it.1), it.2)));
-        Ok(affected_locations)
-    }
-
-    fn merge_facts(
-        &self,
-        current_fact: &Self::Fact,
-        incoming_fact: Self::Fact,
-    ) -> Result<Self::Fact, Self::Err> {
-        current_fact
-            .merge(incoming_fact)
-            .map_err(MokaIRBrewingError::MergeError)
-    }
-}
-
-impl<'m> MokaIRGenerator<'m> {
-    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBrewingError> {
-        self.body
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)
-    }
-
-    fn for_method(method: &'m Method) -> Result<Self, <Self as Analyzer>::Err> {
-        let body = method
-            .body
-            .as_ref()
-            .ok_or(MokaIRBrewingError::NoMethodBody)?;
-        Ok(Self {
-            ir_instructions: BTreeMap::default(),
-            method,
-            body,
-            control_flow_edges: BTreeMap::default(),
-        })
-    }
-
-    fn exception_edges(
-        exception_table: &[ExceptionTableEntry],
-        pc: ProgramCounter,
-        frame: &JvmStackFrame,
-    ) -> Vec<(
-        (ProgramCounter, ProgramCounter, ControlTransfer),
-        JvmStackFrame,
-    )> {
-        exception_table
-            .iter()
-            .filter(|&it| it.covers(pc))
-            .into_group_map_by(|&it| it.handler_pc)
-            .into_iter()
-            .map(|(handler_pc, entries)| {
-                let caught_exception_ref = Operand::Just(Identifier::CaughtException);
-                let handler_frame =
-                    frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
-                let exceptions = entries
-                    .into_iter()
-                    .map(|it| {
-                        it.catch_type
-                            .clone()
-                            .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
-                    })
-                    .collect();
-                (
-                    (pc, handler_pc, ControlTransfer::Exception(exceptions)),
-                    handler_frame,
-                )
-            })
-            .collect()
-    }
-}
-
-type ControlFlowEdge = (ProgramCounter, ProgramCounter, ControlTransfer);
-
-/// An extension trait for [`Method`] that generates Moka IR.
-pub trait MokaIRMethodExt {
-    /// Genreates Moka IR for the method.
-    /// # Errors
-    /// See [`MokaIRBrewingError`] for more information.
-    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError>;
-}
-
-impl MokaIRMethodExt for Method {
-    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
-        let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
-        let mut pc_analyzer = path_condition::Analyzer::new(&control_flow_graph);
-        let path_conditions = pc_analyzer.analyze().expect("Unreachable");
-        Ok(MokaIRMethod {
-            access_flags: self.access_flags,
-            name: self.name.clone(),
-            owner: self.owner.clone(),
-            descriptor: self.descriptor.clone(),
-            instructions,
-            exception_table: self.body.as_ref().unwrap().exception_table.clone(),
-            control_flow_graph,
-            path_conditions,
-        })
-    }
-}
-
-impl MokaIRGenerator<'_> {
-    fn generate(
-        mut self,
-    ) -> Result<
-        (
-            InstructionList<MokaInstruction>,
-            ControlFlowGraph<(), ControlTransfer>,
-        ),
-        MokaIRBrewingError,
-    > {
-        self.analyze()?;
-        let cfg = ControlFlowGraph::from_edges(
-            self.control_flow_edges
-                .into_iter()
-                .map(|(k, v)| (k.0, k.1, v)),
-        );
-        Ok((InstructionList::from(self.ir_instructions), cfg))
-    }
-
-    fn analyze_control_flow(
-        &mut self,
-        ir_instruction: &MokaInstruction,
-        location: ProgramCounter,
-        mut frame: JvmStackFrame,
-    ) -> Result<Vec<(ControlFlowEdge, JvmStackFrame)>, <Self as Analyzer>::Err> {
-        use ControlTransfer::{Conditional, Unconditional};
-        let edges_and_frames = match ir_instruction {
+        let edges_and_frames = match &ir_instruction {
             MokaInstruction::Nop => {
                 let next_pc = self.next_pc_of(location)?;
                 let edge = (location, next_pc, Unconditional);
@@ -300,6 +171,126 @@ impl MokaIRGenerator<'_> {
                 })
                 .collect(),
         };
-        Ok(edges_and_frames)
+        self.ir_instructions.insert(location, ir_instruction);
+
+        let (affected_locations, edges) = edges_and_frames
+            .into_iter()
+            .map(|(edge, frame)| ((edge.1, frame), edge))
+            .unzip();
+        let edges: BTreeSet<_> = edges;
+        self.control_flow_edges
+            .extend(edges.into_iter().map(|it| ((it.0, it.1), it.2)));
+        Ok(affected_locations)
+    }
+
+    fn merge_facts(
+        &self,
+        current_fact: &Self::Fact,
+        incoming_fact: Self::Fact,
+    ) -> Result<Self::Fact, Self::Err> {
+        current_fact
+            .merge(incoming_fact)
+            .map_err(MokaIRBrewingError::MergeError)
+    }
+}
+
+impl<'m> MokaIRGenerator<'m> {
+    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBrewingError> {
+        self.body
+            .instructions
+            .next_pc_of(&pc)
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)
+    }
+
+    fn for_method(method: &'m Method) -> Result<Self, <Self as Analyzer>::Err> {
+        let body = method
+            .body
+            .as_ref()
+            .ok_or(MokaIRBrewingError::NoMethodBody)?;
+        Ok(Self {
+            ir_instructions: BTreeMap::default(),
+            method,
+            body,
+            control_flow_edges: BTreeMap::default(),
+        })
+    }
+
+    fn exception_edges(
+        exception_table: &[ExceptionTableEntry],
+        pc: ProgramCounter,
+        frame: &JvmStackFrame,
+    ) -> Vec<(
+        (ProgramCounter, ProgramCounter, ControlTransfer),
+        JvmStackFrame,
+    )> {
+        exception_table
+            .iter()
+            .filter(|&it| it.covers(pc))
+            .into_group_map_by(|&it| it.handler_pc)
+            .into_iter()
+            .map(|(handler_pc, entries)| {
+                let caught_exception_ref = Operand::Just(Identifier::CaughtException);
+                let handler_frame =
+                    frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
+                let exceptions = entries
+                    .into_iter()
+                    .map(|it| {
+                        it.catch_type
+                            .clone()
+                            .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
+                    })
+                    .collect();
+                (
+                    (pc, handler_pc, ControlTransfer::Exception(exceptions)),
+                    handler_frame,
+                )
+            })
+            .collect()
+    }
+}
+
+/// An extension trait for [`Method`] that generates Moka IR.
+pub trait MokaIRMethodExt {
+    /// Genreates Moka IR for the method.
+    /// # Errors
+    /// See [`MokaIRBrewingError`] for more information.
+    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError>;
+}
+
+impl MokaIRMethodExt for Method {
+    fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
+        let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
+        let mut pc_analyzer = path_condition::Analyzer::new(&control_flow_graph);
+        let path_conditions = pc_analyzer.analyze().expect("Unreachable");
+        Ok(MokaIRMethod {
+            access_flags: self.access_flags,
+            name: self.name.clone(),
+            owner: self.owner.clone(),
+            descriptor: self.descriptor.clone(),
+            instructions,
+            exception_table: self.body.as_ref().unwrap().exception_table.clone(),
+            control_flow_graph,
+            path_conditions,
+        })
+    }
+}
+
+impl MokaIRGenerator<'_> {
+    fn generate(
+        mut self,
+    ) -> Result<
+        (
+            InstructionList<MokaInstruction>,
+            ControlFlowGraph<(), ControlTransfer>,
+        ),
+        MokaIRBrewingError,
+    > {
+        self.analyze()?;
+        let cfg = ControlFlowGraph::from_edges(
+            self.control_flow_edges
+                .into_iter()
+                .map(|(k, v)| (k.0, k.1, v)),
+        );
+        Ok((InstructionList::from(self.ir_instructions), cfg))
     }
 }

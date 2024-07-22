@@ -25,12 +25,6 @@ impl Method {
         self.name == Self::CLASS_INITIALIZER_NAME
     }
 
-    /// Checks if the method is static.
-    #[must_use]
-    pub const fn is_static(&self) -> bool {
-        self.access_flags.contains(AccessFlags::STATIC)
-    }
-
     /// Creates a [`MethodRef`] pointting to this method.
     #[must_use]
     pub fn as_ref(&self) -> MethodRef {
