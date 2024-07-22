@@ -10,6 +10,7 @@ use crate::{
     jvm::{code::ProgramCounter, ConstantValue},
 };
 
+// FIXME: Buggy implementation.
 /// Path condition in disjunctive normal form.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct DNF<T> {
@@ -47,31 +48,31 @@ impl<T> DNF<T> {
             });
             // Simplify pairs of clauses.
             // A pair of clauses can be simplified if their difference is negation of each other.
-            let clone1 = self.clauses.clone();
-            let clone2 = self.clauses.clone();
-            clone1
-                .into_iter()
-                .flat_map(|l| clone2.clone().into_iter().map(move |r| (l.clone(), r)))
-                .for_each(|(mut lhs, mut rhs)| {
-                    let remove_from_lhs: BTreeSet<_> = lhs
-                        .iter()
-                        .filter(|&it| rhs.contains(&!it.clone()))
-                        .cloned()
-                        .collect();
-                    let remove_from_rhs: BTreeSet<_> = rhs
-                        .iter()
-                        .filter(|&it| rhs.contains(&!it.clone()))
-                        .cloned()
-                        .collect();
-                    for it in &remove_from_lhs {
-                        lhs.remove(it);
-                    }
-                    for it in &remove_from_rhs {
-                        rhs.remove(it);
-                    }
-                    self.clauses.insert(lhs);
-                    self.clauses.insert(rhs);
-                });
+            //let clone1 = self.clauses.clone();
+            //let clone2 = self.clauses.clone();
+            //clone1
+            //    .into_iter()
+            //    .flat_map(|l| clone2.clone().into_iter().map(move |r| (l.clone(), r)))
+            //    .for_each(|(mut lhs, mut rhs)| {
+            //        let remove_from_lhs: BTreeSet<_> = lhs
+            //            .iter()
+            //            .filter(|&it| rhs.contains(&!it.clone()))
+            //            .cloned()
+            //            .collect();
+            //        let remove_from_rhs: BTreeSet<_> = rhs
+            //            .iter()
+            //            .filter(|&it| rhs.contains(&!it.clone()))
+            //            .cloned()
+            //            .collect();
+            //        for it in &remove_from_lhs {
+            //            lhs.remove(it);
+            //        }
+            //        for it in &remove_from_rhs {
+            //            rhs.remove(it);
+            //        }
+            //        self.clauses.insert(lhs);
+            //        self.clauses.insert(rhs);
+            //    });
         }
     }
 }
@@ -141,8 +142,13 @@ where
 
     fn not(self) -> Self::Output {
         let DNF { clauses } = self;
-        let clauses = BTreeSet::from([clauses.into_iter().flatten().map(|it| !it).collect()]);
-        let mut result = DNF { clauses };
+        let mut result = clauses
+            .into_iter()
+            .map(|conj| DNF {
+                clauses: conj.into_iter().map(|it| BTreeSet::from([!it])).collect(),
+            })
+            .reduce(|lhs, rhs| lhs | rhs)
+            .unwrap();
         result.simplify();
         result
     }
