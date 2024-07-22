@@ -48,7 +48,7 @@ fn test_parse_my_class() {
         my_class.super_class
     );
     assert_eq!(
-        Some(&ClassRef::new("java/lang/Cloneable")),
+        Some(&ClassRef::new("java/io/Closeable")),
         my_class.interfaces.first()
     );
     assert_eq!(2, my_class.fields.len());
