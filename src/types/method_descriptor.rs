@@ -30,6 +30,12 @@ pub enum ReturnType {
     Void,
 }
 
+impl From<FieldType> for ReturnType {
+    fn from(t: FieldType) -> Self {
+        ReturnType::Some(t)
+    }
+}
+
 impl Display for ReturnType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -296,8 +296,11 @@ impl fixed_point::Analyzer for Analyzer<'_> {
 
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
-    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
-        Ok((ProgramCounter::ZERO, Self::Fact::default()))
+    fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
+        Ok(BTreeMap::from([(
+            ProgramCounter::ZERO,
+            Self::Fact::default(),
+        )]))
     }
 
     fn analyze_location(

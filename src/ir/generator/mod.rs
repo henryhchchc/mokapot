@@ -57,7 +57,7 @@ impl Analyzer for MokaIRGenerator<'_> {
     type Err = MokaIRBrewingError;
     type AffectedLocations = Vec<(Self::Location, Self::Fact)>;
 
-    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err> {
+    fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
         let first_pc = self
             .body
             .instructions
@@ -73,7 +73,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             self.body.max_locals,
             self.body.max_stack,
         )
-        .map(|frame| (first_pc, frame))
+        .map(|frame| vec![(first_pc, frame)])
         .map_err(Into::into)
     }
 

@@ -16,7 +16,7 @@ pub trait Analyzer {
     /// Creates the fact at the entry point of the method being analyzed.
     /// # Errors
     /// - [`Err`] If the fail to create the entry fact.
-    fn entry_fact(&self) -> Result<(Self::Location, Self::Fact), Self::Err>;
+    fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err>;
 
     /// Executes the method at the given location with the given fact, and returns an iterator over
     /// the affected locations and the corresponding facts.
@@ -47,8 +47,12 @@ pub trait Analyzer {
         Self::Fact: Ord + Eq,
     {
         let mut facts: BTreeMap<Self::Location, Self::Fact> = BTreeMap::new();
-        let (entry_point, entry_fact) = self.entry_fact()?;
-        let mut dirty_nodes = BTreeMap::from([(entry_point, BTreeSet::from([entry_fact]))]);
+        let mut dirty_nodes: BTreeMap<_, _> = self
+            .entry_fact()?
+            .into_iter()
+            .map(|(loc, fact)| (loc, BTreeSet::from([fact])))
+            .collect();
+        //let mut dirty_nodes = BTreeMap::from([(entry_point, BTreeSet::from([entry_fact]))]);
 
         while let Some((location, incoming_facts)) = dirty_nodes.pop_first() {
             let incoming_fact = {
@@ -75,10 +79,7 @@ pub trait Analyzer {
 
             if let Some(fact) = maybe_updated_fact {
                 for (loc, new_fact) in self.analyze_location(&location, &fact)? {
-                    dirty_nodes
-                        .entry(loc)
-                        .or_insert_with(BTreeSet::new)
-                        .insert(new_fact);
+                    dirty_nodes.entry(loc).or_default().insert(new_fact);
                 }
                 facts.insert(location, fact);
             }

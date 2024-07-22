@@ -47,6 +47,14 @@ pub struct MokaIRMethod {
     pub path_conditions: BTreeMap<ProgramCounter, DNF<Condition<Value>>>,
 }
 
+impl MokaIRMethod {
+    /// Checks if the method is `static`.
+    #[must_use]
+    pub const fn is_static(&self) -> bool {
+        self.access_flags.contains(method::AccessFlags::STATIC)
+    }
+}
+
 /// A control flow graph.
 ///
 /// It is generic over the data associated with each node and edge.
