@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    ir::control_flow::path_condition::{self, DNF},
+    ir::control_flow::path_condition::{self, PathCondition},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
         method::{self},
@@ -122,7 +122,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             }
             MokaInstruction::Jump { condition, target } => {
                 if let Some(condition) = condition {
-                    let cond: DNF<_> = condition.clone().into();
+                    let cond: PathCondition<_> = condition.clone().into();
                     let target_edge = (location, *target, Conditional(cond.clone()));
                     let next_pc = self.next_pc_of(location)?;
                     let next_pc_edge = (location, next_pc, Conditional(!cond));
@@ -143,7 +143,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .keys()
                     .map(|it| {
                         let val = ConstantValue::Integer(*it).into();
-                        path_condition::Condition::NotEqual(match_value.clone().into(), val).into()
+                        path_condition::Predicate::NotEqual(match_value.clone().into(), val).into()
                     })
                     .reduce(std::ops::BitAnd::bitand)
                     .unwrap_or_default();
@@ -152,7 +152,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .map(|(&val, &pc)| {
                         let val = ConstantValue::Integer(val).into();
                         let cond =
-                            path_condition::Condition::Equal(match_value.clone().into(), val)
+                            path_condition::Predicate::Equal(match_value.clone().into(), val)
                                 .into();
                         let edge = (location, pc, Conditional(cond));
                         (edge, frame.same_frame())

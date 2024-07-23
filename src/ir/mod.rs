@@ -13,7 +13,7 @@ pub mod type_hierarchy;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use control_flow::path_condition::{Condition, Value, DNF};
+use control_flow::path_condition::{PathCondition, Predicate, Value};
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
@@ -46,7 +46,7 @@ pub struct MokaIRMethod {
     /// The control flow graph of the method.
     pub control_flow_graph: ControlFlowGraph<(), ControlTransfer>,
     /// A map from the location to the path condition at that location.
-    pub path_conditions: BTreeMap<ProgramCounter, DNF<Condition<Value>>>,
+    pub path_conditions: BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>>,
 }
 
 impl MokaIRMethod {

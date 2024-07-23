@@ -4,122 +4,130 @@ use std::{
     fmt::Display,
 };
 
+use itertools::Itertools;
+
 use crate::{
     analysis::fixed_point,
     ir::{self, control_flow::ControlTransfer, ControlFlowGraph, Operand},
     jvm::{code::ProgramCounter, ConstantValue},
 };
 
-// FIXME: Buggy implementation.
 /// Path condition in disjunctive normal form.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub struct DNF<T> {
+pub struct PathCondition<T> {
     /// The set of conjunctive clauses.
     /// An empty set of conjunctive clauses represents a tautology.
-    pub clauses: BTreeSet<BTreeSet<T>>,
+    pub products: BTreeSet<BTreeSet<T>>,
 }
 
-impl<T> DNF<T> {
+impl<T> PathCondition<T> {
     fn simplify(&mut self)
     where
         T: Ord + Clone + std::ops::Not<Output = T>,
     {
-        let mut should_continue = true;
-        while should_continue {
-            should_continue = false;
-            // Remove contradictory clauses.
-            self.clauses.retain(|conjunctive_clause| {
-                // A term is contradictory if it contains both a condition and its negation.
-                let should_remove = conjunctive_clause
-                    .iter()
-                    .any(|term| conjunctive_clause.contains(&!term.clone()));
-                should_continue = should_continue || should_remove;
-                !should_remove
+        // We need a loop here since a simplification step may enable further simplifications.
+        loop {
+            let mut any_removal = false;
+            // Remove contridictory products.
+            self.products.retain(|product| {
+                // If a product contains a condition and its negation, the product is contridictory.
+                let shoule_remove = product.iter().any(|it| product.contains(&!it.clone()));
+                any_removal |= shoule_remove;
+                !shoule_remove
             });
-            // Remove redundant clauses.
-            let clauses_clone = self.clauses.clone();
-            self.clauses.retain(|it| {
-                // A clause is redundant if it is a supetset of another clause.
-                let should_remove = clauses_clone
-                    .iter()
-                    .any(|other| it.is_superset(other) && it.len() > other.len());
-                should_continue = should_continue || should_remove;
-                !should_remove
-            });
-            // Simplify pairs of clauses.
-            // A pair of clauses can be simplified if their difference is negation of each other.
-            //let clone1 = self.clauses.clone();
-            //let clone2 = self.clauses.clone();
-            //clone1
-            //    .into_iter()
-            //    .flat_map(|l| clone2.clone().into_iter().map(move |r| (l.clone(), r)))
-            //    .for_each(|(mut lhs, mut rhs)| {
-            //        let remove_from_lhs: BTreeSet<_> = lhs
-            //            .iter()
-            //            .filter(|&it| rhs.contains(&!it.clone()))
-            //            .cloned()
-            //            .collect();
-            //        let remove_from_rhs: BTreeSet<_> = rhs
-            //            .iter()
-            //            .filter(|&it| rhs.contains(&!it.clone()))
-            //            .cloned()
-            //            .collect();
-            //        for it in &remove_from_lhs {
-            //            lhs.remove(it);
-            //        }
-            //        for it in &remove_from_rhs {
-            //            rhs.remove(it);
-            //        }
-            //        self.clauses.insert(lhs);
-            //        self.clauses.insert(rhs);
-            //    });
+
+            // Remove redundant products.
+            let to_remove: BTreeSet<_> = self
+                .products
+                .iter()
+                .filter(|product| {
+                    // If a product is a super set of another product, the product is redundant.
+                    self.products.iter().any(|another_product| {
+                        *product != another_product && product.is_superset(another_product)
+                    })
+                })
+                .cloned()
+                .collect();
+            any_removal |= !to_remove.is_empty();
+            self.products.retain(|product| !to_remove.contains(product));
+
+            // Apply absorption laws.
+            // i.e. Aa + A!ab = Aa + Ab
+            let pairs_of_products: Vec<_> = self
+                .products
+                .iter()
+                .flat_map(|lhs| self.products.iter().map(move |rhs| (lhs, rhs)))
+                .collect();
+
+            let new_products: BTreeSet<_> = pairs_of_products
+                .into_iter()
+                .filter_map(|(lhs, rhs)| {
+                    if let Some((single,)) = lhs.difference(rhs).collect_tuple() {
+                        let mut rhs_diff = rhs.difference(lhs).collect::<BTreeSet<_>>();
+                        if rhs_diff.contains(&!single.clone()) {
+                            rhs_diff.remove(&!single.clone());
+                            let factor: BTreeSet<_> = lhs.intersection(rhs).collect();
+                            let new_rhs = rhs_diff.union(&factor).map(|it| (*it).clone()).collect();
+                            return Some(new_rhs);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            // Adding simplified new products will lead to removal in the next iteration.
+            any_removal |= !new_products.is_empty();
+            self.products.extend(new_products);
+
+            if !any_removal {
+                break;
+            }
         }
     }
 }
 
-impl<T> Default for DNF<T> {
+impl<T> Default for PathCondition<T> {
     fn default() -> Self {
         Self {
-            clauses: BTreeSet::default(),
+            products: BTreeSet::default(),
         }
     }
 }
 
-impl<T> std::ops::BitOr for DNF<T>
+impl<T> std::ops::BitOr for PathCondition<T>
 where
     T: Ord + Clone + std::ops::Not<Output = T>,
 {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        let DNF { clauses: lhs } = self;
-        let DNF { clauses: rhs } = rhs;
-        if lhs.is_empty() || rhs.is_empty() {
-            DNF::default()
+        let PathCondition { products: lhs } = self;
+        let PathCondition { products: rhs } = rhs;
+        let mut result = if lhs.is_empty() || rhs.is_empty() {
+            PathCondition::default()
         } else {
-            let clauses: BTreeSet<_> = lhs.into_iter().chain(rhs).collect();
-            let mut result = DNF { clauses };
-            result.simplify();
-            result
-        }
+            let products: BTreeSet<_> = lhs.into_iter().chain(rhs).collect();
+            PathCondition { products }
+        };
+        result.simplify();
+        result
     }
 }
 
-impl<T> std::ops::BitAnd for DNF<T>
+impl<T> std::ops::BitAnd for PathCondition<T>
 where
     T: Ord + Clone + std::ops::Not<Output = T>,
 {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        let DNF { clauses: this } = self;
-        let DNF { clauses: other } = rhs;
+        let PathCondition { products: this } = self;
+        let PathCondition { products: other } = rhs;
         if this.is_empty() {
-            DNF { clauses: other }
+            PathCondition { products: other }
         } else if other.is_empty() {
-            DNF { clauses: this }
+            PathCondition { products: this }
         } else {
-            let clauses = this
+            let products = this
                 .into_iter()
                 .flat_map(|lhs_con| {
                     other.clone().into_iter().map(move |rhs_con| {
@@ -127,39 +135,39 @@ where
                     })
                 })
                 .collect();
-            let mut result = DNF { clauses };
+            let mut result = PathCondition { products };
             result.simplify();
             result
         }
     }
 }
 
-impl<T> std::ops::Not for DNF<T>
+impl<T> std::ops::Not for PathCondition<T>
 where
     T: Ord + Clone + std::ops::Not<Output = T>,
 {
     type Output = Self;
 
     fn not(self) -> Self::Output {
-        let DNF { clauses } = self;
+        let PathCondition { products: clauses } = self;
         let mut result = clauses
             .into_iter()
-            .map(|conj| DNF {
-                clauses: conj.into_iter().map(|it| BTreeSet::from([!it])).collect(),
+            .map(|conj| PathCondition {
+                products: conj.into_iter().map(|it| BTreeSet::from([!it])).collect(),
             })
             .reduce(|lhs, rhs| lhs | rhs)
-            .unwrap();
+            .unwrap_or_default();
         result.simplify();
         result
     }
 }
 
-impl<T> Display for DNF<T>
+impl<T> Display for PathCondition<T>
 where
     T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let DNF { clauses } = self;
+        let PathCondition { products: clauses } = self;
         for (i, conj) in clauses.iter().enumerate() {
             if i > 0 {
                 write!(f, " || ")?;
@@ -184,7 +192,7 @@ where
 
 /// A condition.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub enum Condition<V> {
+pub enum Predicate<V> {
     /// The left-hand side is equal to the right-hand side.
     Equal(V, V),
     /// The left-hand side is not equal to the right-hand side.
@@ -199,12 +207,12 @@ pub enum Condition<V> {
     IsNotNull(V),
 }
 
-impl<V> std::ops::Not for Condition<V> {
+impl<V> std::ops::Not for Predicate<V> {
     type Output = Self;
 
     fn not(self) -> Self::Output {
         #[allow(clippy::enum_glob_use)]
-        use Condition::*;
+        use Predicate::*;
         match self {
             Equal(lhs, rhs) => NotEqual(lhs, rhs),
             NotEqual(lhs, rhs) => Equal(lhs, rhs),
@@ -216,7 +224,7 @@ impl<V> std::ops::Not for Condition<V> {
     }
 }
 
-impl<V> Display for Condition<V>
+impl<V> Display for Predicate<V>
 where
     V: Display,
 {
@@ -232,35 +240,35 @@ where
     }
 }
 
-impl<C: Ord> From<Condition<C>> for DNF<Condition<C>> {
-    fn from(value: Condition<C>) -> Self {
-        DNF {
-            clauses: BTreeSet::from([BTreeSet::from([value])]),
+impl<C: Ord> From<Predicate<C>> for PathCondition<Predicate<C>> {
+    fn from(value: Predicate<C>) -> Self {
+        PathCondition {
+            products: BTreeSet::from([BTreeSet::from([value])]),
         }
     }
 }
 
-impl From<ir::expression::Condition> for DNF<Condition<Value>> {
+impl From<ir::expression::Condition> for PathCondition<Predicate<Value>> {
     fn from(value: ir::expression::Condition) -> Self {
         #[allow(clippy::enum_glob_use)]
         use ir::expression::Condition::*;
 
         let zero = ConstantValue::Integer(0).into();
         let cond = match value {
-            IsZero(value) => Condition::Equal(value.into(), zero),
-            IsNonZero(value) => Condition::NotEqual(value.into(), zero),
-            IsPositive(value) => Condition::LessThan(zero, value.into()),
-            IsNegative(value) => Condition::LessThan(value.into(), zero),
-            IsNonPositive(value) => Condition::LessThanOrEqual(value.into(), zero),
-            IsNonNegative(value) => Condition::LessThanOrEqual(zero, value.into()),
-            Equal(lhs, rhs) => Condition::Equal(lhs.into(), rhs.into()),
-            NotEqual(lhs, rhs) => Condition::NotEqual(lhs.into(), rhs.into()),
-            LessThan(lhs, rhs) => Condition::LessThan(lhs.into(), rhs.into()),
-            LessThanOrEqual(lhs, rhs) => Condition::LessThanOrEqual(lhs.into(), rhs.into()),
-            GreaterThan(lhs, rhs) => Condition::LessThan(rhs.into(), lhs.into()),
-            GreaterThanOrEqual(lhs, rhs) => Condition::LessThanOrEqual(rhs.into(), lhs.into()),
-            IsNull(value) => Condition::IsNull(value.into()),
-            IsNotNull(value) => Condition::IsNotNull(value.into()),
+            IsZero(value) => Predicate::Equal(value.into(), zero),
+            IsNonZero(value) => Predicate::NotEqual(value.into(), zero),
+            IsPositive(value) => Predicate::LessThan(zero, value.into()),
+            IsNegative(value) => Predicate::LessThan(value.into(), zero),
+            IsNonPositive(value) => Predicate::LessThanOrEqual(value.into(), zero),
+            IsNonNegative(value) => Predicate::LessThanOrEqual(zero, value.into()),
+            Equal(lhs, rhs) => Predicate::Equal(lhs.into(), rhs.into()),
+            NotEqual(lhs, rhs) => Predicate::NotEqual(lhs.into(), rhs.into()),
+            LessThan(lhs, rhs) => Predicate::LessThan(lhs.into(), rhs.into()),
+            LessThanOrEqual(lhs, rhs) => Predicate::LessThanOrEqual(lhs.into(), rhs.into()),
+            GreaterThan(lhs, rhs) => Predicate::LessThan(rhs.into(), lhs.into()),
+            GreaterThanOrEqual(lhs, rhs) => Predicate::LessThanOrEqual(rhs.into(), lhs.into()),
+            IsNull(value) => Predicate::IsNull(value.into()),
+            IsNotNull(value) => Predicate::IsNotNull(value.into()),
         };
         cond.into()
     }
@@ -269,15 +277,15 @@ impl From<ir::expression::Condition> for DNF<Condition<Value>> {
 /// A value.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord, derive_more::Display)]
 pub enum Value {
-    /// An operand.
-    Operand(Operand),
+    /// A variable.
+    Variable(Operand),
     /// A constant value.
     Constant(ConstantValue),
 }
 
 impl From<ir::Operand> for Value {
     fn from(value: ir::Operand) -> Self {
-        Self::Operand(value)
+        Self::Variable(value)
     }
 }
 
@@ -304,7 +312,7 @@ impl<'a> Analyzer<'a> {
 impl fixed_point::Analyzer for Analyzer<'_> {
     type Location = ProgramCounter;
 
-    type Fact = DNF<Condition<Value>>;
+    type Fact = PathCondition<Predicate<Value>>;
 
     type Err = ();
 
