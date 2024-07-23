@@ -45,8 +45,6 @@ pub struct MokaIRMethod {
     pub exception_table: Vec<ExceptionTableEntry>,
     /// The control flow graph of the method.
     pub control_flow_graph: ControlFlowGraph<(), ControlTransfer>,
-    /// A map from the location to the path condition at that location.
-    pub path_conditions: BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>>,
 }
 
 impl MokaIRMethod {

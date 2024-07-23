@@ -3,7 +3,10 @@
 pub mod path_condition;
 use path_condition::{PathCondition, Predicate, Value};
 
-use crate::jvm::{code::ProgramCounter, references::ClassRef};
+use crate::{
+    analysis::fixed_point::Analyzer,
+    jvm::{code::ProgramCounter, references::ClassRef},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ControlFlowGraph;
@@ -99,6 +102,16 @@ impl<E> ControlFlowGraph<(), E> {
             inner.entry(dst).or_default();
         });
         Self { inner }
+    }
+}
+
+impl ControlFlowGraph<(), ControlTransfer> {
+    /// Analyzes the control flow graph to determine the path conditions at each program counter.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
+    pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>> {
+        let mut analyzer = path_condition::Analyzer::new(self);
+        analyzer.analyze().expect("Never panics")
     }
 }
 

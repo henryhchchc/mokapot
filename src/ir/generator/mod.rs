@@ -146,7 +146,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                         path_condition::Predicate::NotEqual(match_value.clone().into(), val).into()
                     })
                     .reduce(std::ops::BitAnd::bitand)
-                    .unwrap_or_default();
+                    .unwrap_or(PathCondition::tautology());
                 branches
                     .iter()
                     .map(|(&val, &pc)| {
@@ -261,7 +261,6 @@ impl MokaIRMethodExt for Method {
     fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
         let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
         let mut pc_analyzer = path_condition::Analyzer::new(&control_flow_graph);
-        let path_conditions = pc_analyzer.analyze().expect("Unreachable");
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),
@@ -270,7 +269,6 @@ impl MokaIRMethodExt for Method {
             instructions,
             exception_table: self.body.as_ref().unwrap().exception_table.clone(),
             control_flow_graph,
-            path_conditions,
         })
     }
 }
