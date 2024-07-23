@@ -170,6 +170,7 @@ jobs:
         env:
           JDK_CLASSES: ./jdk_classes
           INTEGRATION_TEST: TRUE
+        timeout-minutes: 10
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
