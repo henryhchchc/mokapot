@@ -111,7 +111,7 @@ fn du_chain_uses() {
 #[cfg(feature = "petgraph")]
 fn cfg_to_dot() {
     use itertools::Itertools;
-    use mokapot::ir::control_flow::{path_condition, ControlTransfer};
+    use mokapot::ir::control_flow::ControlTransfer;
 
     let method = get_test_method();
     let ir = method.brew().unwrap();

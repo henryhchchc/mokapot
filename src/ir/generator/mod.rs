@@ -251,7 +251,7 @@ impl<'m> MokaIRGenerator<'m> {
 
 /// An extension trait for [`Method`] that generates Moka IR.
 pub trait MokaIRMethodExt {
-    /// Genreates Moka IR for the method.
+    /// Generates Moka IR for the method.
     /// # Errors
     /// See [`MokaIRBrewingError`] for more information.
     fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError>;
@@ -260,7 +260,6 @@ pub trait MokaIRMethodExt {
 impl MokaIRMethodExt for Method {
     fn brew(&self) -> Result<MokaIRMethod, MokaIRBrewingError> {
         let (instructions, control_flow_graph) = MokaIRGenerator::for_method(self)?.generate()?;
-        let mut pc_analyzer = path_condition::Analyzer::new(&control_flow_graph);
         Ok(MokaIRMethod {
             access_flags: self.access_flags,
             name: self.name.clone(),
