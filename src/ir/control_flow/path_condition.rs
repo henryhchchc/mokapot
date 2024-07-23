@@ -354,4 +354,55 @@ impl fixed_point::Analyzer for Analyzer<'_> {
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use std::collections::HashMap;
+
+    use itertools::Itertools;
+    use proptest::prelude::*;
+
+    use super::PathCondition;
+
+    #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord, proptest_derive::Arbitrary)]
+    struct TestPredicate(pub String, pub bool);
+
+    impl std::ops::Not for TestPredicate {
+        type Output = Self;
+
+        fn not(self) -> Self::Output {
+            Self(self.0, !self.1)
+        }
+    }
+
+    fn evaluate(cond: PathCondition<TestPredicate>, value_map: &HashMap<String, bool>) -> bool {
+        cond.products
+            .into_iter()
+            .map(|product| product.into_iter().all(|it| (value_map[&it.0] == it.1)))
+            .fold(true, |acc, it| acc || it)
+    }
+
+    proptest! {
+        #[test]
+        fn simplify(
+            products in prop::collection::btree_set(
+                prop::collection::btree_set(any::<TestPredicate>(), 1..10),
+                1..10
+            )
+        ) {
+            let mut rng = rand::thread_rng();
+            let pred_values = products
+                .iter()
+                .flatten()
+                .map(|it|&it.0)
+                .dedup()
+                .map(|it| (it.clone(), rng.gen::<bool>()))
+                .collect::<HashMap<_,_>>();
+            let path_condition = super::PathCondition { products };
+            let mut simplified = path_condition.clone();
+            simplified.simplify();
+            assert_eq!(
+                evaluate(dbg!(path_condition), dbg!(&pred_values)),
+                evaluate(dbg!(simplified), &pred_values),
+            );
+        }
+    }
+}

@@ -28,6 +28,7 @@ proptest = "1"
 proptest-derive = "0.5"
 walkdir = "2"
 tempdir = "0.3"
+rand = "0.8"
 rayon = "1"
 
 [build-dependencies]
