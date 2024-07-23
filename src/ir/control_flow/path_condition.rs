@@ -16,55 +16,17 @@ use crate::{
 /// Path condition in disjunctive normal form.
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct PathCondition<P> {
-    /// The set of conjunctive clauses.
-    /// The set should never be empty.
-    products: BTreeSet<BTreeSet<Terminal<P>>>,
+    /// The clauses in the disjunctive normal form.
+    /// An empry set represents a contradiction.
+    /// An singleton of an empty set represents a tautology.
+    products: BTreeSet<BTreeSet<P>>,
 }
 
 impl<P> Deref for PathCondition<P> {
-    type Target = BTreeSet<BTreeSet<Terminal<P>>>;
+    type Target = BTreeSet<BTreeSet<P>>;
 
     fn deref(&self) -> &Self::Target {
         &self.products
-    }
-}
-
-/// A terminal in a path condition.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub enum Terminal<P> {
-    /// The constant true.
-    True,
-    /// The constant false.
-    False,
-    /// A predicate.
-    Predicate(P),
-}
-
-impl<P> std::ops::Not for Terminal<P>
-where
-    P: std::ops::Not<Output = P>,
-{
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Self::True => Self::False,
-            Self::False => Self::True,
-            Self::Predicate(pred) => Self::Predicate(!pred),
-        }
-    }
-}
-
-impl<P> Display for Terminal<P>
-where
-    P: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::True => write!(f, "true"),
-            Self::False => write!(f, "false"),
-            Self::Predicate(pred) => pred.fmt(f),
-        }
     }
 }
 
@@ -76,7 +38,7 @@ impl<P> PathCondition<P> {
         P: Ord,
     {
         Self {
-            products: BTreeSet::from([BTreeSet::from([Terminal::True])]),
+            products: BTreeSet::from([BTreeSet::default()]),
         }
     }
 
@@ -87,61 +49,28 @@ impl<P> PathCondition<P> {
         P: Ord,
     {
         Self {
-            products: BTreeSet::from([BTreeSet::from([Terminal::False])]),
+            products: BTreeSet::default(),
         }
     }
 
-    fn simplify(&mut self)
+    /// Creates a conjuction of predicates.
+    #[must_use]
+    pub fn conjuction_of(predicates: impl IntoIterator<Item = P>) -> Self
+    where
+        P: Ord,
+    {
+        Self {
+            products: BTreeSet::from([BTreeSet::from_iter(predicates)]),
+        }
+    }
+
+    /// Simplifies the path condition.
+    pub fn simplify(&mut self)
     where
         P: Ord + Clone + std::ops::Not<Output = P>,
     {
-        // We need a loop here since a simplification step may enable further simplifications.
         loop {
             let mut any_removal = false;
-            // Remove contridictory products.
-            // Insert a literal contradiction product is any removed.
-            let mut literal_contradition = false;
-            self.products.retain(|product| {
-                // If a product contains a condition and its negation, the product is contridictory.
-                let mut should_remove = product.iter().any(|it| product.contains(&!it.clone()));
-                should_remove |= product.len() > 1 && product.contains(&Terminal::False);
-                literal_contradition |= should_remove;
-                any_removal |= should_remove;
-                !should_remove
-            });
-            if literal_contradition {
-                self.products.insert(BTreeSet::from([Terminal::False]));
-            }
-
-            // Remove true from products.
-            let to_insert: BTreeSet<_> = self
-                .products
-                .iter()
-                .filter(|product| product.len() > 1 && product.contains(&Terminal::True))
-                .map(|product| {
-                    let mut simplified = product.clone();
-                    simplified.remove(&Terminal::True);
-                    simplified
-                })
-                .collect();
-            any_removal |= !to_insert.is_empty();
-            self.products.extend(to_insert);
-
-            // Remove redundant products.
-            let to_remove: BTreeSet<_> = self
-                .products
-                .iter()
-                .filter(|product| {
-                    // If a product is a super set of another product, the product is redundant.
-                    self.products.iter().any(|another_product| {
-                        *product != another_product && product.is_superset(another_product)
-                    })
-                })
-                .cloned()
-                .collect();
-            any_removal |= !to_remove.is_empty();
-            self.products.retain(|product| !to_remove.contains(product));
-
             // Apply absorption laws.
             // i.e. Aa + A!ab = Aa + Ab
             let pairs_of_products: Vec<_> = self
@@ -169,15 +98,25 @@ impl<P> PathCondition<P> {
             any_removal |= !new_products.is_empty();
             self.products.extend(new_products);
 
-            if self.products.len() > 1 {
-                any_removal |= self.products.remove(&BTreeSet::from([Terminal::False]));
-            }
+            // Remove redundant products.
+            let to_remove: BTreeSet<_> = self
+                .products
+                .iter()
+                .filter(|product| {
+                    // If a product is a super set of another product, the product is redundant.
+                    self.products.iter().any(|another_product| {
+                        *product != another_product && product.is_superset(another_product)
+                    })
+                })
+                .cloned()
+                .collect();
+            any_removal |= !to_remove.is_empty();
+            self.products.retain(|product| !to_remove.contains(product));
 
             if !any_removal {
                 break;
             }
         }
-        debug_assert!(!self.products.is_empty());
     }
 }
 
@@ -188,10 +127,9 @@ where
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        let products = self.products.into_iter().chain(rhs.products).collect();
-        let mut result = PathCondition { products };
-        result.simplify();
-        result
+        let mut products = self.products;
+        products.extend(rhs.products);
+        PathCondition { products }
     }
 }
 
@@ -204,56 +142,41 @@ where
     fn bitand(self, rhs: Self) -> Self::Output {
         let PathCondition { products: this } = self;
         let PathCondition { products: other } = rhs;
-        if this.is_empty() {
-            PathCondition { products: other }
-        } else if other.is_empty() {
-            PathCondition { products: this }
-        } else {
-            let products = this
-                .into_iter()
-                .flat_map(|lhs_prod| {
-                    other.clone().into_iter().map(move |rhs_prod| {
-                        lhs_prod
-                            .clone()
-                            .into_iter()
-                            .chain(rhs_prod.clone())
-                            .collect()
-                    })
-                })
-                .collect();
-            let mut result = PathCondition { products };
-            result.simplify();
-            result
-        }
-    }
-}
-
-impl<T> std::ops::Not for PathCondition<T>
-where
-    T: Ord + Clone + std::ops::Not<Output = T>,
-{
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        let PathCondition { products: clauses } = self;
-        let mut result = clauses
+        let products = this
             .into_iter()
-            .map(|product| PathCondition {
-                products: product
-                    .into_iter()
-                    .map(|it| BTreeSet::from([!it]))
-                    .collect(),
+            .flat_map(|lhs_prod| {
+                other.clone().into_iter().map(move |rhs_prod| {
+                    let mut prod = lhs_prod.clone();
+                    prod.extend(rhs_prod);
+                    prod
+                })
             })
-            .reduce(|lhs, rhs| {
-                let mut result = lhs & rhs;
-                result.simplify();
-                result
-            })
-            .unwrap();
-        result.simplify();
-        result
+            .filter(|product| !product.iter().any(|it| product.contains(&!it.clone())))
+            .collect();
+        PathCondition { products }
     }
 }
+
+//impl<T> std::ops::Not for PathCondition<T>
+//where
+//    T: Ord + Clone + std::ops::Not<Output = T>,
+//{
+//    type Output = Self;
+//
+//    fn not(self) -> Self::Output {
+//        let PathCondition { products: clauses } = self;
+//        clauses
+//            .into_iter()
+//            .map(|product| PathCondition {
+//                products: product
+//                    .into_iter()
+//                    .map(|it| BTreeSet::from([!it]))
+//                    .collect(),
+//            })
+//            .reduce(|lhs, rhs| lhs & rhs)
+//            .unwrap_or(PathCondition::contradiction())
+//    }
+//}
 
 impl<T> Display for PathCondition<T>
 where
@@ -336,12 +259,12 @@ where
 impl<C: Ord> From<Predicate<C>> for PathCondition<Predicate<C>> {
     fn from(value: Predicate<C>) -> Self {
         PathCondition {
-            products: BTreeSet::from([BTreeSet::from([Terminal::Predicate(value)])]),
+            products: BTreeSet::from([BTreeSet::from([value])]),
         }
     }
 }
 
-impl From<ir::expression::Condition> for PathCondition<Predicate<Value>> {
+impl From<ir::expression::Condition> for Predicate<Value> {
     fn from(value: ir::expression::Condition) -> Self {
         #[allow(clippy::enum_glob_use)]
         use ir::expression::Condition::*;
@@ -363,7 +286,8 @@ impl From<ir::expression::Condition> for PathCondition<Predicate<Value>> {
             IsNull(value) => Predicate::IsNull(value.into()),
             IsNotNull(value) => Predicate::IsNotNull(value.into()),
         };
-        cond.into()
+        cond
+        //cond.into()
     }
 }
 
@@ -430,8 +354,7 @@ impl fixed_point::Analyzer for Analyzer<'_> {
             .flatten()
             .map(|(_, dst, trx)| match trx {
                 ControlTransfer::Conditional(cond) => {
-                    let mut new_cond = cond.clone() & fact.clone();
-                    new_cond.simplify();
+                    let new_cond = cond.clone() & fact.clone();
                     (dst, new_cond)
                 }
                 _ => (dst, fact.clone()),
@@ -457,7 +380,7 @@ mod test {
     use itertools::Itertools;
     use proptest::prelude::*;
 
-    use super::{PathCondition, Terminal};
+    use super::PathCondition;
 
     #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord, proptest_derive::Arbitrary)]
     struct TestPredicate(pub u32, pub bool);
@@ -473,15 +396,9 @@ mod test {
     fn evaluate(cond: PathCondition<TestPredicate>, value_map: &HashMap<u32, bool>) -> bool {
         cond.products
             .into_iter()
-            .map(|product| {
-                product.into_iter().all(|it| match it {
-                    Terminal::True => true,
-                    Terminal::False => false,
-                    Terminal::Predicate(pred) => value_map[&pred.0] == pred.1,
-                })
-            })
+            .map(|product| product.into_iter().all(|it| value_map[&it.0] == it.1))
             .reduce(|lhs, rhs| lhs || rhs)
-            .unwrap()
+            .unwrap_or_default()
     }
 
     proptest! {
@@ -500,7 +417,6 @@ mod test {
                 .dedup()
                 .map(|it| (*it, rng.gen::<bool>()))
                 .collect::<HashMap<_,_>>();
-            let products = products.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
             let path_condition = super::PathCondition { products };
             let mut simplified = path_condition.clone();
             simplified.simplify();
@@ -530,8 +446,6 @@ mod test {
                 .dedup()
                 .map(|it| (*it, rng.gen::<bool>()))
                 .collect::<HashMap<_,_>>();
-            let lhs = lhs.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
-            let rhs = rhs.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
             let lhs = super::PathCondition { products: lhs };
             let rhs = super::PathCondition { products: rhs };
             let lhs_eval = evaluate(lhs.clone(), &pred_values);
@@ -561,8 +475,6 @@ mod test {
                 .dedup()
                 .map(|it| (*it, rng.gen::<bool>()))
                 .collect::<HashMap<_,_>>();
-            let lhs = lhs.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
-            let rhs = rhs.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
             let lhs = super::PathCondition { products: lhs };
             let rhs = super::PathCondition { products: rhs };
             let lhs_eval = evaluate(lhs.clone(), &pred_values);
@@ -572,31 +484,27 @@ mod test {
             assert_eq!(lhs_eval || rhs_eval, disjunction_eval);
         }
 
-        #[test]
-        fn not(
-            products in prop::collection::btree_set(
-                prop::collection::btree_set(any::<TestPredicate>(), 1..5),
-                1..5
-            )
-        ) {
-            let mut rng = rand::thread_rng();
-            let pred_values = products
-                .iter()
-                .flatten()
-                .map(|it|&it.0)
-                .dedup()
-                .map(|it| (*it, rng.gen::<bool>()))
-                .collect::<HashMap<_,_>>();
-            let products = products.into_iter().map(|prod|prod.into_iter().map(Terminal::Predicate).collect()).collect();
-            let path_condition = super::PathCondition { products };
-            let negated = !path_condition.clone();
-            eprintln!("pred_values: {pred_values:?}");
-            eprintln!("path_condition: {path_condition:?}");
-            eprintln!("negated: {negated:?}");
-            let path_eval = evaluate(path_condition.clone(), &pred_values);
-            let negated_eval = evaluate(negated.clone(), &pred_values);
-            assert_eq!(!path_eval, negated_eval);
-        }
+        //#[test]
+        //fn not(
+        //    products in prop::collection::btree_set(
+        //        prop::collection::btree_set(any::<TestPredicate>(), 1..10),
+        //        1..5
+        //    )
+        //) {
+        //    let mut rng = rand::thread_rng();
+        //    let pred_values = products
+        //        .iter()
+        //        .flatten()
+        //        .map(|it|&it.0)
+        //        .dedup()
+        //        .map(|it| (*it, rng.gen::<bool>()))
+        //        .collect::<HashMap<_,_>>();
+        //    let path_condition = super::PathCondition { products };
+        //    let negated = !path_condition.clone();
+        //    let path_eval = evaluate(path_condition.clone(), &pred_values);
+        //    let negated_eval = evaluate(negated.clone(), &pred_values);
+        //    assert_eq!(!path_eval, negated_eval);
+        //}
 
     }
 }

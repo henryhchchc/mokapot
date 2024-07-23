@@ -8,10 +8,10 @@ use std::{
 };
 
 use crate::{
-    ir::control_flow::path_condition::{self, PathCondition},
+    ir::control_flow::path_condition::{self, PathCondition, Predicate},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
-        method::{self},
+        method,
         references::ClassRef,
         ConstantValue, Method,
     },
@@ -122,10 +122,10 @@ impl Analyzer for MokaIRGenerator<'_> {
             }
             MokaInstruction::Jump { condition, target } => {
                 if let Some(condition) = condition {
-                    let cond: PathCondition<_> = condition.clone().into();
-                    let target_edge = (location, *target, Conditional(cond.clone()));
+                    let cond: Predicate<_> = condition.clone().into();
+                    let target_edge = (location, *target, Conditional(cond.clone().into()));
                     let next_pc = self.next_pc_of(location)?;
-                    let next_pc_edge = (location, next_pc, Conditional(!cond));
+                    let next_pc_edge = (location, next_pc, Conditional((!cond).into()));
                     vec![
                         (target_edge, frame.same_frame()),
                         (next_pc_edge, frame.same_frame()),
@@ -139,14 +139,10 @@ impl Analyzer for MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = branches
-                    .keys()
-                    .map(|it| {
-                        let val = ConstantValue::Integer(*it).into();
-                        path_condition::Predicate::NotEqual(match_value.clone().into(), val).into()
-                    })
-                    .reduce(std::ops::BitAnd::bitand)
-                    .unwrap_or(PathCondition::tautology());
+                let default_cond = PathCondition::conjuction_of(branches.keys().map(|it| {
+                    let val = ConstantValue::Integer(*it).into();
+                    Predicate::NotEqual(match_value.clone().into(), val)
+                }));
                 branches
                     .iter()
                     .map(|(&val, &pc)| {
