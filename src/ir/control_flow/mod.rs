@@ -1,13 +1,14 @@
 //! Control flow analysis
 
 pub mod path_condition;
-use path_condition::{PathCondition, Predicate, Value};
 
 use crate::{
     analysis::fixed_point::Analyzer,
     jvm::{code::ProgramCounter, references::ClassRef},
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+use self::path_condition::{PathCondition, Predicate, Value};
 
 use super::ControlFlowGraph;
 
@@ -23,6 +24,7 @@ pub enum ControlTransfer {
     /// A control transfer caused by subroutine return.
     SubroutineReturn,
 }
+
 impl<N, E> ControlFlowGraph<N, E> {
     /// Returns the entry point of the control flow graph.
     #[must_use]

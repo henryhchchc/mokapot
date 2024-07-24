@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    ir::control_flow::path_condition::{self, PathCondition, Predicate},
+    ir::control_flow::path_condition::{PathCondition, Predicate},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
         method,
@@ -147,9 +147,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                     .iter()
                     .map(|(&val, &pc)| {
                         let val = ConstantValue::Integer(val).into();
-                        let cond =
-                            path_condition::Predicate::Equal(match_value.clone().into(), val)
-                                .into();
+                        let cond = Predicate::Equal(match_value.clone().into(), val).into();
                         let edge = (location, pc, Conditional(cond));
                         (edge, frame.same_frame())
                     })
