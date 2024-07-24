@@ -141,10 +141,7 @@ impl<P> PathCondition<P> {
     where
         P: Ord + Clone + std::ops::Not<Output = P>,
     {
-        let mut counter = 0usize;
         loop {
-            counter += 1;
-            debug_assert!(counter < 1000);
             let mut any_removal = false;
             // Apply absorption laws.
             // i.e. Aa + A!ab = Aa + Ab

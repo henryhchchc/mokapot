@@ -12,17 +12,13 @@ use super::PathCondition;
 #[derive(Debug)]
 pub struct Analyzer<'a> {
     cfg: &'a ControlFlowGraph<(), ControlTransfer>,
-    visited_count: BTreeMap<ProgramCounter, usize>,
 }
 
 impl<'a> Analyzer<'a> {
     /// Creates a new path condition analyzer.
     #[must_use]
     pub fn new(cfg: &'a ControlFlowGraph<(), ControlTransfer>) -> Self {
-        Self {
-            cfg,
-            visited_count: BTreeMap::new(),
-        }
+        Self { cfg }
     }
 }
 
@@ -47,12 +43,6 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
-        let count = self
-            .visited_count
-            .entry(*location)
-            .and_modify(|it| *it += 1)
-            .or_default();
-        debug_assert!(*count < 100usize, "{fact}");
         if let Some(outgoing_edges) = self.cfg.edges_from(*location) {
             let result = outgoing_edges
                 .map(|(_, dst, trx)| match trx {
