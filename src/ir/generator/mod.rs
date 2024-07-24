@@ -280,7 +280,7 @@ impl MokaIRGenerator<'_> {
         let cfg = ControlFlowGraph::from_edges(
             self.control_flow_edges
                 .into_iter()
-                .map(|(k, v)| (k.0, k.1, v)),
+                .map(|((src, dst), trx)| (src, dst, trx)),
         );
         Ok((InstructionList::from(self.ir_instructions), cfg))
     }

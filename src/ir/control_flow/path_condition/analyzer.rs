@@ -37,7 +37,7 @@ impl fixed_point::Analyzer for Analyzer<'_> {
 
     fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
         Ok(BTreeMap::from([(
-            ProgramCounter::ZERO,
+            self.cfg.entry_point(),
             PathCondition::tautology(),
         )]))
     }
@@ -53,18 +53,23 @@ impl fixed_point::Analyzer for Analyzer<'_> {
             .and_modify(|it| *it += 1)
             .or_default();
         debug_assert!(*count < 100usize, "{fact}");
-        Ok(self
-            .cfg
-            .edges_from(*location)
-            .expect("Fuck")
-            .map(|(_, dst, trx)| match trx {
-                ControlTransfer::Conditional(cond) => {
-                    let new_cond = cond.clone() & fact.clone();
-                    (dst, new_cond)
-                }
-                _ => (dst, fact.clone()),
-            })
-            .collect())
+        if let Some(outgoing_edges) = self.cfg.edges_from(*location) {
+            let result = outgoing_edges
+                .map(|(_, dst, trx)| match trx {
+                    ControlTransfer::Conditional(cond) => {
+                        let new_cond = cond.clone() & fact.clone();
+                        (dst, new_cond)
+                    }
+                    _ => (dst, fact.clone()),
+                })
+                .collect();
+            Ok(result)
+        } else {
+            panic!(
+                "No outgoing edges from {:?} \n CFG: {:?}",
+                location, self.cfg
+            );
+        }
     }
 
     fn merge_facts(
