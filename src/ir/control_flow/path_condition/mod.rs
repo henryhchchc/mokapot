@@ -47,6 +47,16 @@ impl<P> Conjunction<P> {
     }
 }
 
+impl<P: Display> Display for Conjunction<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            write!(f, "⊤")
+        } else {
+            write!(f, "{}", self.0.iter().format(" && "))
+        }
+    }
+}
+
 impl<P> Deref for Conjunction<P> {
     type Target = BTreeSet<P>;
 
@@ -177,7 +187,8 @@ impl<P> PathCondition<P> {
                 .filter(|product| {
                     // If a product is a super set of another product, the product is redundant.
                     self.products.iter().any(|another_product| {
-                        *product != another_product && product.is_superset(another_product)
+                        product.len() > another_product.len()
+                            && product.is_superset(another_product)
                     })
                 })
                 .cloned()
@@ -229,52 +240,17 @@ where
     }
 }
 
-//impl<T> std::ops::Not for PathCondition<T>
-//where
-//    T: Ord + Clone + std::ops::Not<Output = T>,
-//{
-//    type Output = Self;
-//
-//    fn not(self) -> Self::Output {
-//        let PathCondition { products: clauses } = self;
-//        clauses
-//            .into_iter()
-//            .map(|product| PathCondition {
-//                products: product
-//                    .into_iter()
-//                    .map(|it| BTreeSet::from([!it]))
-//                    .collect(),
-//            })
-//            .reduce(|lhs, rhs| lhs & rhs)
-//            .unwrap_or(PathCondition::contradiction())
-//    }
-//}
-
 impl<T> Display for PathCondition<T>
 where
     T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let PathCondition { products: clauses } = self;
-        for (i, conj) in clauses.iter().enumerate() {
-            if i > 0 {
-                write!(f, " || ")?;
-            }
-            if conj.len() > 1 {
-                write!(f, "(")?;
-            }
-            for (j, cond) in conj.iter().enumerate() {
-                if j > 0 {
-                    write!(f, " && ")?;
-                }
-                write!(f, "{cond}")?;
-            }
-            if conj.len() > 1 {
-                write!(f, ")")?;
-            }
+        let PathCondition { products } = self;
+        if products.is_empty() {
+            write!(f, "⊥")
+        } else {
+            write!(f, "{}", products.iter().format(" || "))
         }
-
-        Ok(())
     }
 }
 #[cfg(test)]
