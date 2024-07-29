@@ -7,6 +7,8 @@ fn main() {
 const INTEGRATION_TEST: &str = "INTEGRATION_TEST";
 
 fn compile_java_test_data() {
+    println!("cargo::rustc-check-cfg=cfg(integration_test)");
+    println!("cargo::rustc-check-cfg=cfg(unstable)");
     println!("cargo::rerun-if-env-changed={INTEGRATION_TEST}");
     if env::var(INTEGRATION_TEST).is_ok() {
         println!("cargo::rustc-cfg=integration_test");
