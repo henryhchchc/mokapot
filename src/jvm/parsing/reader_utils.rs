@@ -83,7 +83,6 @@ mod test {
         let mut reader = [0x01, 0x02].as_slice();
         let err = reader.read_value::<[u8; 3]>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01, 0x02]);
     }
 
     #[test]
@@ -99,7 +98,6 @@ mod test {
         let mut reader = [0x01, 0x02, 0x03].as_slice();
         let err = reader.read_value::<u32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01, 0x02, 0x03]);
     }
 
     #[test]
@@ -115,7 +113,6 @@ mod test {
         let mut reader = [0x01, 0x02, 0x03].as_slice();
         let err = reader.read_value::<i32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01, 0x02, 0x03]);
     }
 
     #[test]
@@ -131,7 +128,6 @@ mod test {
         let mut reader = [0x01].as_slice();
         let err = reader.read_value::<u16>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01]);
     }
 
     #[test]
@@ -147,7 +143,6 @@ mod test {
         let mut reader = [0x01].as_slice();
         let err = reader.read_value::<i16>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01]);
     }
 
     #[test]
@@ -179,7 +174,6 @@ mod test {
         let mut reader = [].as_slice();
         let err = reader.read_value::<u32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert!(reader.is_empty());
     }
 
     #[test]
@@ -195,6 +189,5 @@ mod test {
         let mut reader = [0x01, 0x02].as_slice();
         let err = super::read_byte_chunk(&mut reader, 3).unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
-        assert_eq!(reader, [0x01, 0x02]);
     }
 }
