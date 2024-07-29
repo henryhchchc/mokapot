@@ -16,7 +16,7 @@ fn moka_ir() -> Result<MokaIRMethod, Box<dyn std::error::Error>> {
 }
 ```
 
-The following is an example of the generated IR from the method `test()` in [TestAnalysis.java](test_data/mokapot/org/mokapot/test/TestAnalysis.java).
+The following is an example of the generated IR from the method `test()` in [TestAnalysis.java](/test_data/mokapot/org/mokapot/test/TestAnalysis.java).
 
 You may notice that there are lots of `nop`s in the generated MokaIR.
 This because we indent to maintain a bijection between the original bytecode and the generated MokaIR.
@@ -29,7 +29,7 @@ Such a bijection facilitates the analysis involving dynamic execution - the runt
 #0004: istore           => nop
 #0006: iload_1          => nop
 #0007: iload            => nop
-#0009: iadd             => %9 = %3 + %arg0
+#0009: iadd             => %9 = %arg0 + %3
 #000A: istore           => nop
 #000C: iload_1          => nop
 #000D: ifge             => if %arg0 >= 0 goto #0013
@@ -51,7 +51,7 @@ Such a bijection facilitates the analysis involving dynamic execution - the runt
 #0029: istore_3         => nop
 #002A: iload_3          => nop
 #002B: iload_2          => nop
-#002C: if_icmpge        => if %arg1 >= Phi(%40, %64) goto #0046
+#002C: if_icmpge        => if Phi(%40, %64) >= %arg1 goto #0046
 #002F: getstatic        => %47 = read java/lang/System.out
 #0032: ldc              => %50 = String(0x61 0x02 0xED 0xA0 0x80 0x62 0x63 0x64 0x65 0x66) // Invalid UTF-8
 #0034: invokevirtual    => %52 = call void %47@java/io/PrintStream::println(%50)
@@ -97,7 +97,7 @@ Such a bijection facilitates the analysis involving dynamic execution - the runt
 #0078: aload            => nop
 #007A: iconst_0         => %122 = int(0)
 #007B: iload_1          => nop
-#007C: iadd             => %124 = %arg0 + %122
+#007C: iadd             => %124 = %122 + %arg0
 #007D: iaload           => %125 = %104[%124]
 #007E: istore           => nop
 #0080: aload            => nop

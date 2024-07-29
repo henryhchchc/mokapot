@@ -288,8 +288,8 @@ impl MokaIRGenerator<'_> {
             I2C => conversion_op::<_, false, false>(frame, def, Conversion::Int2Char)?,
             I2S => conversion_op::<_, false, false>(frame, def, Conversion::Int2Short)?,
             LCmp => {
-                let lhs = frame.pop_dual_slot_value()?;
                 let rhs = frame.pop_dual_slot_value()?;
+                let lhs = frame.pop_dual_slot_value()?;
                 frame.push_value(def.as_argument())?;
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Definition {
@@ -298,8 +298,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             FCmpL | FCmpG => {
-                let lhs = frame.pop_value()?;
                 let rhs = frame.pop_value()?;
+                let lhs = frame.pop_value()?;
                 frame.push_value(def.as_argument())?;
                 let nan_treatment = match insn {
                     FCmpG => NaNTreatment::IsLargest,
@@ -313,8 +313,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             DCmpL | DCmpG => {
-                let lhs = frame.pop_dual_slot_value()?;
                 let rhs = frame.pop_dual_slot_value()?;
+                let lhs = frame.pop_dual_slot_value()?;
                 frame.push_value(def.as_argument())?;
                 let nan_treatment = match insn {
                     DCmpG => NaNTreatment::IsLargest,
@@ -672,8 +672,8 @@ fn binary_conditional_jump<C>(
 where
     C: FnOnce(Operand, Operand) -> Condition,
 {
-    let lhs = frame.pop_value()?;
     let rhs = frame.pop_value()?;
+    let lhs = frame.pop_value()?;
     Ok(IR::Jump {
         condition: Some(condition(lhs, rhs)),
         target,
@@ -714,8 +714,8 @@ fn binary_op_math<M>(
 where
     M: FnOnce(Operand, Operand) -> MathOperation,
 {
-    let lhs = frame.pop_value()?;
     let rhs = frame.pop_value()?;
+    let lhs = frame.pop_value()?;
     frame.push_value(def_id.as_argument())?;
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
@@ -733,8 +733,8 @@ fn binary_wide_math<M>(
 where
     M: FnOnce(Operand, Operand) -> MathOperation,
 {
-    let lhs = frame.pop_dual_slot_value()?;
     let rhs = frame.pop_dual_slot_value()?;
+    let lhs = frame.pop_dual_slot_value()?;
     frame.push_dual_slot_value(def_id.as_argument())?;
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
