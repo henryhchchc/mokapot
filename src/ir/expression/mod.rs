@@ -27,7 +27,7 @@ mod math;
 pub use {
     array::Operation as ArrayOperation,
     condition::Condition,
-    conversion::Operaion as Conversion,
+    conversion::Operation as Conversion,
     field::Access as FieldAccess,
     lock::Operation as LockOperation,
     math::{NaNTreatment, Operation as MathOperation},
