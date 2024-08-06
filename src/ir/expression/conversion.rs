@@ -7,7 +7,7 @@ use super::super::Operand;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operaion {
+pub enum Operation {
     /// Converts an `int` to a `long`.
     #[display(fmt = "{_0} as long")]
     Int2Long(Operand),
@@ -60,7 +60,7 @@ pub enum Operaion {
     #[display(fmt = "{_0} is {}", "_1.descriptor()")]
     InstanceOf(Operand, FieldType),
 }
-impl Operaion {
+impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
     pub fn uses(&self) -> BTreeSet<Identifier> {
@@ -103,23 +103,23 @@ mod tests {
         ) {
             let arg_ids: BTreeSet<_> = arg.clone().into_iter().collect();
             let conversions = [
-                Operaion::Int2Long(arg.clone()),
-                Operaion::Int2Float(arg.clone()),
-                Operaion::Int2Double(arg.clone()),
-                Operaion::Long2Int(arg.clone()),
-                Operaion::Long2Float(arg.clone()),
-                Operaion::Long2Double(arg.clone()),
-                Operaion::Float2Int(arg.clone()),
-                Operaion::Float2Long(arg.clone()),
-                Operaion::Float2Double(arg.clone()),
-                Operaion::Double2Int(arg.clone()),
-                Operaion::Double2Long(arg.clone()),
-                Operaion::Double2Float(arg.clone()),
-                Operaion::Int2Byte(arg.clone()),
-                Operaion::Int2Char(arg.clone()),
-                Operaion::Int2Short(arg.clone()),
-                Operaion::CheckCast(arg.clone(), target_type.clone()),
-                Operaion::InstanceOf(arg.clone(), target_type.clone()),
+                Operation::Int2Long(arg.clone()),
+                Operation::Int2Float(arg.clone()),
+                Operation::Int2Double(arg.clone()),
+                Operation::Long2Int(arg.clone()),
+                Operation::Long2Float(arg.clone()),
+                Operation::Long2Double(arg.clone()),
+                Operation::Float2Int(arg.clone()),
+                Operation::Float2Long(arg.clone()),
+                Operation::Float2Double(arg.clone()),
+                Operation::Double2Int(arg.clone()),
+                Operation::Double2Long(arg.clone()),
+                Operation::Double2Float(arg.clone()),
+                Operation::Int2Byte(arg.clone()),
+                Operation::Int2Char(arg.clone()),
+                Operation::Int2Short(arg.clone()),
+                Operation::CheckCast(arg.clone(), target_type.clone()),
+                Operation::InstanceOf(arg.clone(), target_type.clone()),
             ];
 
             for conv in conversions {
