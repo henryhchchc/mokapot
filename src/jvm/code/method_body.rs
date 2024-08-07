@@ -123,12 +123,27 @@ impl<I> InstructionList<I> {
         self.0.first_key_value()
     }
 
+    /// Returns the last instruction in the list.
+    #[must_use]
+    pub fn exit_point(&self) -> Option<(&ProgramCounter, &I)> {
+        self.0.last_key_value()
+    }
+
     /// Returns the program counter of the next instruction after the given one.
     #[must_use]
     pub fn next_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
         self.0
             .range((Bound::Excluded(pc), Bound::Unbounded))
             .next()
+            .map(|(k, _)| *k)
+    }
+
+    /// Returns the program counter of the previous instruction before the given one.
+    #[must_use]
+    pub fn prev_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
+        self.0
+            .range((Bound::Unbounded, Bound::Excluded(pc)))
+            .next_back()
             .map(|(k, _)| *k)
     }
 
