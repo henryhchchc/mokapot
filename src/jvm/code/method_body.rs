@@ -125,7 +125,7 @@ impl<I> InstructionList<I> {
 
     /// Returns the last instruction in the list.
     #[must_use]
-    pub fn exit_point(&self) -> Option<(&ProgramCounter, &I)> {
+    pub fn last_instruction(&self) -> Option<(&ProgramCounter, &I)> {
         self.0.last_key_value()
     }
 
