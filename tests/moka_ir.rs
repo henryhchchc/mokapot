@@ -99,11 +99,9 @@ fn du_chain_uses() {
         (124, 0x7D),
     ];
     for (local_idx, pc) in test_data {
-        let pc = ProgramCounter::from(pc);
-        assert!(matches!(
-            du_chain.used_at(&Identifier::Local(LocalValue::new(local_idx))),
-            Some(uses) if uses.contains(&pc)
-        ));
+        let def = Identifier::Local(LocalValue::new(local_idx));
+        let use_site = ProgramCounter::from(pc);
+        assert!(du_chain.used_at(&def).contains(&use_site));
     }
 }
 
