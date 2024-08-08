@@ -36,7 +36,7 @@ impl<'a> DefUseChain<'a> {
 
     /// Get the locations where an identifier is used.
     #[must_use]
-    pub fn used_at(&self, id: &Identifier) -> Option<BTreeSet<ProgramCounter>> {
-        self.uses.get(id).cloned()
+    pub fn used_at(&self, id: &Identifier) -> BTreeSet<ProgramCounter> {
+        self.uses.get(id).cloned().unwrap_or_default()
     }
 }
