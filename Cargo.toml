@@ -13,7 +13,7 @@ categories = ["parsing", "development-tools"]
 [dependencies]
 bitflags = "2.4"
 cesu8 = "1.1"
-derive_more = "0"
+derive_more = "1"
 document-features = "0.2"
 itertools = "0.13"
 petgraph = { version = "0.6", optional = true }
