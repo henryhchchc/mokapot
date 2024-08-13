@@ -177,7 +177,10 @@ impl InstructionList<RawInstruction> {
 
 #[cfg(test)]
 mod test {
-    use crate::jvm::code::{Instruction, InstructionList};
+    use crate::{
+        ir::MokaInstruction,
+        jvm::code::{Instruction, InstructionList},
+    };
 
     use super::MethodBody;
     use Instruction::*;
@@ -201,6 +204,42 @@ mod test {
             free_attributes: vec![],
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
+    }
+
+    #[test]
+    fn last_instruction() {
+        let instruction_list = InstructionList::from([
+            (0.into(), MokaInstruction::Nop),
+            (
+                1.into(),
+                MokaInstruction::Jump {
+                    condition: None,
+                    target: 1.into(),
+                },
+            ),
+            (2.into(), MokaInstruction::Return(None)),
+        ]);
+        assert_eq!(
+            Some((&2.into(), &MokaInstruction::Return(None))),
+            instruction_list.last_instruction()
+        );
+    }
+
+    #[test]
+    fn previous_pc() {
+        let instruction_list = InstructionList::from([
+            (0.into(), MokaInstruction::Nop),
+            (
+                1.into(),
+                MokaInstruction::Jump {
+                    condition: None,
+                    target: 1.into(),
+                },
+            ),
+            (2.into(), MokaInstruction::Return(None)),
+        ]);
+        assert_eq!(Some(0.into()), instruction_list.prev_pc_of(&1.into()));
+        assert_eq!(None, instruction_list.prev_pc_of(&0.into()));
     }
 }
 
