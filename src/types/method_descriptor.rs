@@ -1,10 +1,7 @@
 //! Non-generic JVM method descriptors.
 
 use itertools::Itertools;
-use std::{
-    fmt::Display,
-    str::{Chars, FromStr},
-};
+use std::str::{Chars, FromStr};
 
 use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
@@ -13,7 +10,11 @@ use super::field_type::{FieldType, PrimitiveType};
 /// The descriptor of a method.
 /// Consists of the parameters types and the return type.
 #[doc = see_jvm_spec!(4, 3, 3)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
+#[display(
+    "({}){return_type}",
+    parameters_types.iter().map(FieldType::descriptor).join("")
+)]
 pub struct MethodDescriptor {
     /// The type of the parameters.
     pub parameters_types: Vec<FieldType>,
@@ -22,38 +23,15 @@ pub struct MethodDescriptor {
 }
 
 /// Denotes the return type of a method.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display, derive_more::From,
+)]
 pub enum ReturnType {
     /// The method returns a specific type.
     Some(FieldType),
     /// The return type of the method is `void`.
+    #[display("void")]
     Void,
-}
-
-impl From<FieldType> for ReturnType {
-    fn from(t: FieldType) -> Self {
-        ReturnType::Some(t)
-    }
-}
-
-impl Display for ReturnType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReturnType::Some(t) => t.fmt(f),
-            ReturnType::Void => write!(f, "void"),
-        }
-    }
-}
-
-impl Display for MethodDescriptor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(")?;
-        for param in &self.parameters_types {
-            write!(f, "{}", param.descriptor())?;
-        }
-        write!(f, ")")?;
-        write!(f, "{}", self.return_type.descriptor())
-    }
 }
 
 impl MethodDescriptor {

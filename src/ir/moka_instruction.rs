@@ -1,6 +1,5 @@
 use std::{
     collections::{btree_set, BTreeMap, BTreeSet},
-    fmt::{self, Display, Formatter},
     iter::{self, Once},
     ops::BitOr,
 };
@@ -11,11 +10,13 @@ use itertools::{Either, Itertools};
 use super::expression::{Condition, Expression};
 
 /// Represents a single instruction in the Moka IR.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum MokaInstruction {
     /// A no-op instruction.
+    #[display("nop")]
     Nop,
     /// Creates a definition by evaluating an [`Expression`].
+    #[display("{value} = {expr}")]
     Definition {
         /// The value defined by the expression.
         value: LocalValue,
@@ -24,6 +25,7 @@ pub enum MokaInstruction {
     },
     /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
     /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
+    #[display("{}goto {target}", condition.as_ref().map(|cond| format!("if {cond} ")).unwrap_or_default())]
     Jump {
         /// The condition that must hold for the jump to occur.
         /// It denotes an Unconditional jump if it is [`None`].
@@ -33,6 +35,12 @@ pub enum MokaInstruction {
     },
     /// Jump to the [`target`](MokaInstruction::Switch::default) corresponding to [`match_value`](MokaInstruction::Switch::match_value).
     /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
+    #[display(
+        "switch {} {{ {}, else => {} }}",
+        match_value,
+        branches.iter().map(|(key, target)| format!("{key} => {target}")).join(", "),
+        default
+    )]
     Switch {
         /// The value to match against the branches.
         match_value: Operand,
@@ -43,8 +51,10 @@ pub enum MokaInstruction {
     },
     /// Returns from the current method with a value if it is [`Some`].
     /// Otherwise, returns from the current method with `void`.
+    #[display("return{}", _0.as_ref().map(|it| format!(" {it}")).unwrap_or_default())]
     Return(Option<Operand>),
     /// Returns from a subroutine.
+    #[display("subroutine_ret {_0}")]
     SubroutineRet(Operand),
 }
 
@@ -78,75 +88,21 @@ impl MokaInstruction {
     }
 }
 
-impl Display for MokaInstruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Nop => write!(f, "nop"),
-            Self::Definition {
-                value: def_id,
-                expr,
-            } => write!(f, "{def_id} = {expr}"),
-            Self::Jump {
-                condition: Some(condition),
-                target,
-            } => {
-                write!(f, "if {condition} goto {target}")
-            }
-            Self::Jump {
-                condition: None,
-                target,
-            } => {
-                write!(f, "goto {target}")
-            }
-            Self::Switch {
-                match_value,
-                default,
-                branches,
-            } => {
-                write!(
-                    f,
-                    "switch {} {{ {}, else => {} }}",
-                    match_value,
-                    branches
-                        .iter()
-                        .map(|(key, target)| format!("{key} => {target}"))
-                        .join(", "),
-                    default
-                )
-            }
-            Self::Return(Some(value)) => write!(f, "return {value}"),
-            Self::Return(None) => write!(f, "return"),
-            Self::SubroutineRet(target) => write!(f, "subroutine_ret {target}"),
-        }
-    }
-}
-
 /// Represents a reference to a value in the Moka IR.
 #[deprecated = "Use `Operand` instead."]
 pub type Argument = Operand;
 
 /// Represents a reference to a value in the Moka IR.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Operand {
     /// A reference to a value defined in the current scope.
+    #[display("{_0}")]
     Just(Identifier),
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
+    #[display("Phi({})", _0.iter().map(ToString::to_string).join(", "))]
     Phi(BTreeSet<Identifier>),
-}
-
-impl Display for Operand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Just(id) => id.fmt(f),
-            Self::Phi(ids) => write!(
-                f,
-                "Phi({})",
-                ids.iter().map(|id| format!("{id}")).join(", ")
-            ),
-        }
-    }
 }
 
 impl From<Identifier> for Operand {
@@ -236,29 +192,20 @@ impl LocalValue {
 }
 
 /// Represents an identifier of a value in the current scope.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Identifier {
     /// The `this` value in an instance method.
+    #[display("%this")]
     This,
     /// An argument of the current method.
+    #[display("%arg{_0}")]
     Arg(u16),
     /// A locally defined value.
     Local(LocalValue),
     /// The exception caught by a `catch` block.
+    #[display("%caught_exception")]
     CaughtException,
-}
-
-impl Display for Identifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use Identifier::{Arg, CaughtException, Local, This};
-        match self {
-            This => write!(f, "%this"),
-            Arg(idx) => write!(f, "%arg{idx}"),
-            Local(idx) => idx.fmt(f),
-            CaughtException => write!(f, "%caught_exception"),
-        }
-    }
 }
 
 impl From<LocalValue> for Identifier {

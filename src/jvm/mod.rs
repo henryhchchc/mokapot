@@ -1,6 +1,5 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
-use std::fmt::Display;
 
 use itertools::Itertools;
 
@@ -215,26 +214,15 @@ pub struct Module {
 }
 
 /// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.
+    #[display("String(\"{_0}\")")]
     Utf8(String),
     /// An string that is not valid UTF-8.
+    #[display("String({}) // Invalid UTF-8", _0.iter().map(|it| format!("0x{it:02X}")).join(" "))]
     InvalidUtf8(Vec<u8>),
-}
-
-impl Display for JavaString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            JavaString::Utf8(value) => write!(f, "String(\"{value}\")"),
-            JavaString::InvalidUtf8(value) => write!(
-                f,
-                "String({}) // Invalid UTF-8",
-                value.iter().map(|it| format!("0x{it:02X}")).join(" ")
-            ),
-        }
-    }
 }
 
 /// Denotes a compile-time constant value.
