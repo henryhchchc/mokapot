@@ -15,7 +15,7 @@ use std::{fmt::Debug, ops::Add};
     derive_more::Display,
 )]
 #[repr(transparent)]
-#[display(fmt = "#{_0:04X}")]
+#[display("#{_0:04X}")]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {

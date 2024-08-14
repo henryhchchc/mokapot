@@ -242,34 +242,34 @@ impl Display for JavaString {
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum ConstantValue {
     /// The `null` value.
-    #[display(fmt = "null")]
+    #[display("null")]
     Null,
     /// A primitive integer value (i.e., `int`).
-    #[display(fmt = "int({_0})")]
+    #[display("int({_0})")]
     Integer(i32),
     /// A primitive floating point value (i.e., `float`).
-    #[display(fmt = "float({_0})")]
+    #[display("float({_0})")]
     Float(f32),
     /// A primitive long value (i.e., `long`).
-    #[display(fmt = "long({_0})")]
+    #[display("long({_0})")]
     Long(i64),
     /// A primitive double value (i.e., `double`).
-    #[display(fmt = "double({_0})")]
+    #[display("double({_0})")]
     Double(f64),
     /// A string literal.
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     String(JavaString),
     /// A class literal.
-    #[display(fmt = "{_0}.class")]
+    #[display("{_0}.class")]
     Class(ClassRef),
     /// A method handle.
-    #[display(fmt = "{_0:?}")]
+    #[display("{_0:?}")]
     Handle(MethodHandle),
     /// A method type.
-    #[display(fmt = "{_0:?}")]
+    #[display("{_0:?}")]
     MethodType(MethodDescriptor),
     /// A dynamic constant.
-    #[display(fmt = "Dynamic({_0}, {_1}, {_2})")]
+    #[display("Dynamic({_0}, {_1}, {_2})")]
     Dynamic(u16, String, FieldType),
 }
 

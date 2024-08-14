@@ -8,10 +8,10 @@ use super::super::Operand;
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operation {
     /// Acquires the lock.
-    #[display(fmt = "acquire {_0}")]
+    #[display("acquire {_0}")]
     Acquire(Operand),
     /// Releases the lock.
-    #[display(fmt = "release {_0}")]
+    #[display("release {_0}")]
     Release(Operand),
 }
 

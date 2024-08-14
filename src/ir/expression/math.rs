@@ -6,49 +6,49 @@ use crate::ir::{Identifier, Operand};
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs`).
-    #[display(fmt = "{_0} + {_1}")]
+    #[display("{_0} + {_1}")]
     Add(Operand, Operand),
     /// Subtracts the second argument from the first (i.e., `lhs - rhs`).
-    #[display(fmt = "{_0} - {_1}")]
+    #[display("{_0} - {_1}")]
     Subtract(Operand, Operand),
     /// Multiplies the two arguments (i.e., `lhs * rhs`).
-    #[display(fmt = "{_0} * {_1}")]
+    #[display("{_0} * {_1}")]
     Multiply(Operand, Operand),
     /// Divides the first argument by the second (i.e., `lhs / rhs`).
-    #[display(fmt = "{_0} / {_1}")]
+    #[display("{_0} / {_1}")]
     Divide(Operand, Operand),
     /// Computes the remainder of the first argument divided by the second (i.e., `lhs mod rhs`).
-    #[display(fmt = "{_0} mod {_1}")]
+    #[display("{_0} mod {_1}")]
     Remainder(Operand, Operand),
     /// Negates the argument (i.e., `-arg`).
-    #[display(fmt = "-{_0}")]
+    #[display("-{_0}")]
     Negate(Operand),
     /// Increments the argument by a constant (i.e., `arg + N`).
-    #[display(fmt = "{_0} + {_1}")]
+    #[display("{_0} + {_1}")]
     Increment(Operand, i32),
     /// Shifts the first argument left by the second (i.e., `lhs << rhs`).
-    #[display(fmt = "{_0} << {_1}")]
+    #[display("{_0} << {_1}")]
     ShiftLeft(Operand, Operand),
     /// Shifts the first argument right by the second (i.e., `lhs >> rhs`).
-    #[display(fmt = "{_0} >> {_1}")]
+    #[display("{_0} >> {_1}")]
     ShiftRight(Operand, Operand),
     /// Shifts the first argument right by the second, filling the leftmost bits with zeros (i.e., `lhs >>> rhs`).
-    #[display(fmt = "{_0} >>> {_1}")]
+    #[display("{_0} >>> {_1}")]
     LogicalShiftRight(Operand, Operand),
     /// Computes the bitwise AND of the two arguments (i.e., `lhs & rhs`).
-    #[display(fmt = "{_0} & {_1}")]
+    #[display("{_0} & {_1}")]
     BitwiseAnd(Operand, Operand),
     /// Computes the bitwise OR of the two arguments (i.e., `lhs | rhs`).
-    #[display(fmt = "{_0} | {_1}")]
+    #[display("{_0} | {_1}")]
     BitwiseOr(Operand, Operand),
     /// Computes the bitwise XOR of the two arguments (i.e., `lhs ^ rhs`).
-    #[display(fmt = "{_0} ^ {_1}")]
+    #[display("{_0} ^ {_1}")]
     BitwiseXor(Operand, Operand),
     /// Compares the two arguments as longs (i.e., `lhs lcmp rhs`).
-    #[display(fmt = "cmp({_0}, {_1})")]
+    #[display("cmp({_0}, {_1})")]
     LongComparison(Operand, Operand),
     /// Compares the two arguments as floating point numbers (i.e., `lhs fcmp rhs`).
-    #[display(fmt = "cmp({_0}, {_1}) {_2}")]
+    #[display("cmp({_0}, {_1}) with {_2}")]
     FloatingPointComparison(Operand, Operand, NaNTreatment),
 }
 impl Operation {
@@ -79,10 +79,10 @@ impl Operation {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum NaNTreatment {
     /// NaNs are treated as the largest possible value.
-    #[display(fmt = "NaN == Max")]
+    #[display("NaN == Max")]
     IsLargest,
     /// NaNs are treated as the smallest possible value.
-    #[display(fmt = "NaN == Min")]
+    #[display("NaN == Min")]
     IsSmallest,
 }
 
