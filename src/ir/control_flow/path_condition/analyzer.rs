@@ -9,7 +9,6 @@ use crate::{
 use super::PathCondition;
 
 /// An analyzer for path conditions.
-#[stability::unstable(feature = "path-condition", issue = "10")]
 #[derive(Debug)]
 pub struct Analyzer<'a> {
     cfg: &'a ControlFlowGraph<(), ControlTransfer>,
