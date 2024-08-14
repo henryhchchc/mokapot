@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use itertools::Itertools;
+
 use crate::{
     ir::{Identifier, Operand},
     types::field_type::FieldType,
@@ -19,7 +21,7 @@ pub enum Operation {
     /// Create a new multidimensional array.
     #[display(
         "new {element_type}[{}]",
-        "dimensions.iter().map(std::string::ToString::to_string).join(\", \")"
+        dimensions.iter().map(std::string::ToString::to_string).join(", ")
     )]
     NewMultiDim {
         /// The type of the elements in the array.

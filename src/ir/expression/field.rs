@@ -23,7 +23,7 @@ pub enum Access {
         value: Operand,
     },
     /// Reads an instance field.
-    #[display("read {object_ref}.{}", "field.name")]
+    #[display("read {object_ref}.{}", field.name)]
     ReadInstance {
         /// The object to read from.
         object_ref: Operand,
@@ -31,7 +31,7 @@ pub enum Access {
         field: FieldRef,
     },
     /// Writes to an instance field.
-    #[display("write {object_ref}.{}, {value}", "field.name")]
+    #[display("write {object_ref}.{}, {value}", field.name)]
     WriteInstance {
         /// The object to write to.
         object_ref: Operand,

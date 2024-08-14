@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Display, iter::once};
+use std::{collections::BTreeSet, iter::once};
 
 use crate::{
     ir::{Identifier, Operand},
@@ -378,22 +378,14 @@ impl JvmStackFrame {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) enum Entry {
     Value(Operand),
+    #[display("<top>")]
     Top,
+    #[display("<uninitialized_local>")]
     UninitializedLocal,
-}
-
-impl Display for Entry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Value(id) => id.fmt(f),
-            Self::Top => write!(f, "Top"),
-            Self::UninitializedLocal => write!(f, "<uninitialized_local>"),
-        }
-    }
 }
 
 impl Entry {

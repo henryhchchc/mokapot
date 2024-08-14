@@ -1,5 +1,5 @@
 //! Non-generic JVM type system
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 
 use itertools::Itertools;
 
@@ -8,24 +8,32 @@ use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 /// A primitive type in Java.
 #[doc = see_jvm_spec!(4, 3, 2)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
     /// The `boolean` type.
+    #[display("boolean")]
     Boolean,
     /// The `char` type.
+    #[display("char")]
     Char,
     /// The `float` type.
+    #[display("float")]
     Float,
     /// The `double` type.
+    #[display("double")]
     Double,
     /// The `byte` type.
+    #[display("byte")]
     Byte,
     /// The `short` type.
+    #[display("short")]
     Short,
     /// The `int` type.
+    #[display("int")]
     Int,
     /// The `long` type.
+    #[display("long")]
     Long,
 }
 
@@ -42,21 +50,6 @@ impl PrimitiveType {
             Self::Short => 'S',
             Self::Int => 'I',
             Self::Long => 'J',
-        }
-    }
-}
-
-impl Display for PrimitiveType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Boolean => write!(f, "boolean"),
-            Self::Char => write!(f, "char"),
-            Self::Float => write!(f, "float"),
-            Self::Double => write!(f, "double"),
-            Self::Byte => write!(f, "byte"),
-            Self::Short => write!(f, "short"),
-            Self::Int => write!(f, "int"),
-            Self::Long => write!(f, "long"),
         }
     }
 }
@@ -92,13 +85,14 @@ impl FromStr for PrimitiveType {
 }
 
 /// A field type (non-generic) in Java.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 pub enum FieldType {
     /// A primitive type.
     Base(PrimitiveType),
     /// A reference type (except arrays).
     Object(ClassRef),
     /// An array type.
+    #[display("{_0}[]")]
     Array(Box<FieldType>),
 }
 
@@ -110,16 +104,6 @@ impl FieldType {
             Self::Base(pt) => pt.to_string(),
             Self::Object(ClassRef { binary_name }) => binary_name.replace('/', "."),
             Self::Array(inner) => format!("{}[]", inner.qualified_name()),
-        }
-    }
-}
-
-impl Display for FieldType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Base(it) => it.fmt(f),
-            Self::Object(it) => it.fmt(f),
-            Self::Array(it) => write!(f, "{it}[]"),
         }
     }
 }

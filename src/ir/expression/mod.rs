@@ -1,8 +1,5 @@
 //! Module for the expressions in Moka IR.
-use std::{
-    collections::BTreeSet,
-    fmt::{Display, Formatter},
-};
+use std::collections::BTreeSet;
 
 use itertools::Itertools;
 
@@ -35,7 +32,7 @@ pub use {
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),
@@ -45,6 +42,14 @@ pub enum Expression {
     /// - `invokevirtual`
     /// - `invokespecial`
     /// - `invokeinterface`
+    #[display(
+        "call {} {}{}::{}({})",
+        method.descriptor.return_type,
+        this.as_ref().map(|it| format!("{it}@")).unwrap_or_default(),
+        method.owner,
+        method.name,
+        args.iter().map(std::string::ToString::to_string).join(", "),
+    )]
     Call {
         /// The method being called.
         method: MethodRef,
@@ -57,6 +62,13 @@ pub enum Expression {
     /// A call to a bootstrap method to create a closure.  
     /// Corresponds to the following JVM instructions:
     /// - `invokedynamic`
+    #[display(
+        "closure {} {}#{}({})",
+        closure_descriptor.return_type,
+        name,
+        bootstrap_method_index,
+        captures.iter().map(ToString::to_string).join(", "),
+    )]
     Closure {
         /// The name of the closure.
         name: String,
@@ -76,12 +88,15 @@ pub enum Expression {
     /// A type conversion.
     Conversion(Conversion),
     /// Throws an exception.
+    #[display("throw {_0}")]
     Throw(Operand),
     /// An operation on a monitor.
     Synchronization(LockOperation),
     /// Creates a new object.
+    #[display("new {_0}")]
     New(ClassRef),
     /// A return address.
+    #[display("subroutine {target}, ret {return_address}")]
     Subroutine {
         /// The address to return to.
         return_address: ProgramCounter,
@@ -104,65 +119,6 @@ impl Expression {
             Self::Throw(arg) => arg.iter().copied().collect(),
             Self::Synchronization(monitor_op) => monitor_op.uses(),
             _ => BTreeSet::default(),
-        }
-    }
-}
-
-impl Display for Expression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Const(c) => c.fmt(f),
-            Self::Subroutine {
-                target,
-                return_address,
-            } => write!(f, "subroutine {target}, return to {return_address}"),
-            Self::Field(field_op) => field_op.fmt(f),
-            Self::Array(array_op) => array_op.fmt(f),
-            Self::Math(math_op) => math_op.fmt(f),
-            Self::Throw(value) => write!(f, "throw {value}"),
-            Self::Synchronization(monitor_op) => monitor_op.fmt(f),
-            Self::New(class) => write!(f, "new {class}"),
-            Self::Conversion(conv_op) => conv_op.fmt(f),
-            Self::Call {
-                method,
-                this: None,
-                args,
-            } => write!(
-                f,
-                "call {} {}({})",
-                method.descriptor.return_type,
-                method,
-                args.iter().map(std::string::ToString::to_string).join(", "),
-            ),
-            Self::Call {
-                method,
-                this: Some(receiver),
-                args,
-            } => write!(
-                f,
-                "call {} {}@{}::{}({})",
-                method.descriptor.return_type,
-                receiver,
-                method.owner,
-                method.name,
-                args.iter().map(std::string::ToString::to_string).join(", "),
-            ),
-            Self::Closure {
-                bootstrap_method_index,
-                name,
-                captures,
-                closure_descriptor,
-            } => write!(
-                f,
-                "closure {} {}#{}({})",
-                closure_descriptor.return_type,
-                name,
-                bootstrap_method_index,
-                captures
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .join(", "),
-            ),
         }
     }
 }
