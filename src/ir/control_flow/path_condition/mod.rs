@@ -147,6 +147,8 @@ impl<P> PathCondition<P> {
     }
 
     /// Simplifies the path condition.
+    #[stability::unstable(feature = "path-condition", issue = "10")]
+    // FIXME: The current implementation is buggy. See Issue #10.
     pub fn simplify(&mut self)
     where
         P: Ord + Clone + std::ops::Not<Output = P>,
