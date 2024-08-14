@@ -1,6 +1,5 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
-
 use itertools::Itertools;
 
 use crate::{
