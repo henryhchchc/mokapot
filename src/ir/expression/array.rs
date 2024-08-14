@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use itertools::Itertools;
-
 use crate::{
     ir::{Identifier, Operand},
     types::field_type::FieldType,
@@ -11,7 +9,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Operation {
     /// Create a new array.
-    #[display(fmt = "new {element_type}[{length}]")]
+    #[display("new {element_type}[{length}]")]
     New {
         /// The type of the elements in the array.
         element_type: FieldType,
@@ -20,7 +18,7 @@ pub enum Operation {
     },
     /// Create a new multidimensional array.
     #[display(
-        fmt = "new {element_type}[{}]",
+        "new {element_type}[{}]",
         "dimensions.iter().map(std::string::ToString::to_string).join(\", \")"
     )]
     NewMultiDim {
@@ -30,7 +28,7 @@ pub enum Operation {
         dimensions: Vec<Operand>,
     },
     /// Gets an element from an array.
-    #[display(fmt = "{array_ref}[{index}]")]
+    #[display("{array_ref}[{index}]")]
     Read {
         /// The array to read from.
         array_ref: Operand,
@@ -38,7 +36,7 @@ pub enum Operation {
         index: Operand,
     },
     /// Sets an element in an array.
-    #[display(fmt = "{array_ref}[{index}] = {value}")]
+    #[display("{array_ref}[{index}] = {value}")]
     Write {
         /// The array to write to.
         array_ref: Operand,
@@ -48,7 +46,7 @@ pub enum Operation {
         value: Operand,
     },
     /// Gets the length of an array.
-    #[display(fmt = "array_len({array_ref})")]
+    #[display("array_len({array_ref})")]
     Length {
         /// The array to get the length of.
         array_ref: Operand,

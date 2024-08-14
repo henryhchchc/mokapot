@@ -218,7 +218,7 @@ impl Operand {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
-#[display(fmt = "%{_0}")]
+#[display("%{_0}")]
 pub struct LocalValue(u16);
 
 impl LocalValue {

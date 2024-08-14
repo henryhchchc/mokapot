@@ -9,13 +9,13 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 pub enum Access {
     /// Reads a static field.
-    #[display(fmt = "read {field}")]
+    #[display("read {field}")]
     ReadStatic {
         /// The field to read.
         field: FieldRef,
     },
     /// Writes to a static field.
-    #[display(fmt = "write {field}, {value}")]
+    #[display("write {field}, {value}")]
     WriteStatic {
         /// The field to write to.
         field: FieldRef,
@@ -23,7 +23,7 @@ pub enum Access {
         value: Operand,
     },
     /// Reads an instance field.
-    #[display(fmt = "read {object_ref}.{}", "field.name")]
+    #[display("read {object_ref}.{}", "field.name")]
     ReadInstance {
         /// The object to read from.
         object_ref: Operand,
@@ -31,7 +31,7 @@ pub enum Access {
         field: FieldRef,
     },
     /// Writes to an instance field.
-    #[display(fmt = "write {object_ref}.{}, {value}", "field.name")]
+    #[display("write {object_ref}.{}, {value}", "field.name")]
     WriteInstance {
         /// The object to write to.
         object_ref: Operand,

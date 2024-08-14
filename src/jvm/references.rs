@@ -9,7 +9,7 @@ use super::Method;
 
 /// A reference to a [`Class`](crate::jvm::Class).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, derive_more::Display)]
-#[display(fmt = "{binary_name}")]
+#[display("{binary_name}")]
 pub struct ClassRef {
     /// The binary name of the class.
     pub binary_name: String,
@@ -26,7 +26,7 @@ impl ClassRef {
 
 /// A reference to a [`Field`](crate::jvm::Field).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
-#[display(fmt = "{owner}.{name}")]
+#[display("{owner}.{name}")]
 pub struct FieldRef {
     /// A reference to the class that contains the field.
     pub owner: ClassRef,
@@ -38,7 +38,7 @@ pub struct FieldRef {
 
 /// A reference to a [`Method`].
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
-#[display(fmt = "{owner}::{name}")]
+#[display("{owner}::{name}")]
 pub struct MethodRef {
     /// The reference to the class containing the method.
     pub owner: ClassRef,
