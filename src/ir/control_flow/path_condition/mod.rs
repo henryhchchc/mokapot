@@ -1,9 +1,5 @@
 //! Path constraint analysis.
-use std::{
-    collections::BTreeSet,
-    fmt::Display,
-    ops::{Deref, DerefMut},
-};
+use std::{collections::BTreeSet, fmt::Display};
 
 use itertools::Itertools;
 
@@ -27,6 +23,20 @@ pub struct Conjunction<P>(BTreeSet<P>);
 impl<P: Ord> FromIterator<P> for Conjunction<P> {
     fn from_iter<T: IntoIterator<Item = P>>(iter: T) -> Self {
         Self(BTreeSet::from_iter(iter))
+    }
+}
+
+impl<P> std::ops::BitAnd for Conjunction<P>
+where
+    P: Ord,
+{
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let Conjunction(mut new) = self;
+        let Conjunction(rhs) = rhs;
+        new.extend(rhs);
+        Conjunction(new)
     }
 }
 
@@ -57,20 +67,6 @@ impl<P: Display> Display for Conjunction<P> {
     }
 }
 
-impl<P> Deref for Conjunction<P> {
-    type Target = BTreeSet<P>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<P> DerefMut for Conjunction<P> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl<P> IntoIterator for Conjunction<P> {
     type Item = P;
     type IntoIter = std::collections::btree_set::IntoIter<P>;
@@ -85,10 +81,9 @@ where
     P: PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self.len() == other.len() {
-            self.0.partial_cmp(&other.0)
-        } else {
-            self.len().partial_cmp(&other.len())
+        match self.0.len().partial_cmp(&other.0.len()) {
+            Some(std::cmp::Ordering::Equal) => self.0.partial_cmp(&other.0),
+            it => it,
         }
     }
 }
@@ -98,19 +93,10 @@ where
     P: Ord,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.len() == other.len() {
-            self.0.cmp(&other.0)
-        } else {
-            self.len().cmp(&other.len())
+        match self.0.len().cmp(&other.0.len()) {
+            std::cmp::Ordering::Equal => self.0.cmp(&other.0),
+            it => it,
         }
-    }
-}
-
-impl<P> Deref for PathCondition<P> {
-    type Target = BTreeSet<Conjunction<P>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.products
     }
 }
 
@@ -165,11 +151,11 @@ impl<P> PathCondition<P> {
             let new_products: BTreeSet<_> = pairs_of_products
                 .into_iter()
                 .filter_map(|(lhs, rhs)| {
-                    if let Some((single,)) = lhs.difference(rhs).collect_tuple() {
-                        let mut rhs_diff = rhs.difference(lhs).collect::<BTreeSet<_>>();
+                    if let Some((single,)) = lhs.0.difference(&rhs.0).collect_tuple() {
+                        let mut rhs_diff = rhs.0.difference(&lhs.0).collect::<BTreeSet<_>>();
                         if rhs_diff.contains(&!single.clone()) {
                             rhs_diff.remove(&!single.clone());
-                            let factor: BTreeSet<_> = lhs.intersection(rhs).collect();
+                            let factor: BTreeSet<_> = lhs.0.intersection(&rhs.0).collect();
                             let new_rhs = rhs_diff.union(&factor).map(|it| (*it).clone()).collect();
                             return Some(new_rhs);
                         }
@@ -188,8 +174,8 @@ impl<P> PathCondition<P> {
                 .filter(|product| {
                     // If a product is a super set of another product, the product is redundant.
                     self.products.iter().any(|another_product| {
-                        product.len() > another_product.len()
-                            && product.is_superset(another_product)
+                        product.0.len() > another_product.0.len()
+                            && product.0.is_superset(&another_product.0)
                     })
                 })
                 .cloned()
@@ -229,13 +215,11 @@ where
         let products = this
             .into_iter()
             .flat_map(|lhs_prod| {
-                other.clone().into_iter().map(move |rhs_prod| {
-                    let mut prod = lhs_prod.clone();
-                    prod.extend(rhs_prod);
-                    prod
-                })
+                other
+                    .clone()
+                    .into_iter()
+                    .map(move |rhs_prod| lhs_prod.clone() & rhs_prod)
             })
-            .filter(|product| !product.iter().any(|it| product.contains(&!it.clone())))
             .collect();
         PathCondition { products }
     }
@@ -287,11 +271,12 @@ mod test {
 
     fn generate_pred_values(cond: &PathCondition<TestPredicate>) -> HashMap<u32, bool> {
         let mut rng = rand::thread_rng();
-        cond.iter()
-            .flat_map(|it| it.iter())
-            .map(|it| &it.0)
+        cond.products
+            .iter()
+            .flat_map(|it| it.0.iter())
+            .map(|it| it.0)
             .dedup()
-            .map(|it| (*it, rng.gen::<bool>()))
+            .map(|it| (it, rng.gen::<bool>()))
             .collect()
     }
 
