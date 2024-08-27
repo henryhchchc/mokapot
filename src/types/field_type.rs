@@ -1,8 +1,6 @@
 //! Non-generic JVM type system
 use std::str::FromStr;
 
-use itertools::Itertools;
-
 use super::method_descriptor::InvalidDescriptor;
 use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
@@ -112,23 +110,21 @@ impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let mut chars = descriptor.chars();
-        match chars.next() {
-            Some('[') => Self::from_str(chars.as_str())
-                .map(FieldType::into_array_type)
-                .map_err(|_| InvalidDescriptor),
-            Some('L') => {
-                let type_name = chars.take_while_ref(|&it| it != ';').collect::<String>();
-                match (chars.next(), chars.next()) {
-                    (Some(';'), None) => Ok(Self::Object(ClassRef::new(type_name))),
-                    _ => Err(InvalidDescriptor),
-                }
+        if descriptor.chars().count() == 1 {
+            PrimitiveType::from_str(descriptor).map(Into::into)
+        } else if descriptor.starts_with('[') {
+            let element_type_desc = &descriptor['['.len_utf8()..];
+            Self::from_str(element_type_desc).map(FieldType::into_array_type)
+        } else if descriptor.starts_with('L') && descriptor.ends_with(';') {
+            let binary_name = &descriptor['L'.len_utf8()..(descriptor.len() - ';'.len_utf8())];
+            if binary_name.is_empty() || binary_name.contains(';') {
+                Err(InvalidDescriptor)
+            } else {
+                let class_ref = ClassRef::new(binary_name);
+                Ok(Self::Object(class_ref))
             }
-            Some(c) => match chars.next() {
-                None => PrimitiveType::try_from(c).map(Self::Base),
-                _ => Err(InvalidDescriptor),
-            },
-            None => Err(InvalidDescriptor),
+        } else {
+            Err(InvalidDescriptor)
         }
     }
 }

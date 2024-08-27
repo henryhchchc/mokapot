@@ -1,7 +1,7 @@
 //! Non-generic JVM method descriptors.
 
 use itertools::Itertools;
-use std::str::{Chars, FromStr};
+use std::str::FromStr;
 
 use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
@@ -34,63 +34,45 @@ pub enum ReturnType {
     Void,
 }
 
-impl MethodDescriptor {
-    /// Parses a method descriptor from a string and advances the iterator.
-    /// For an input as follows.
-    /// ```text
-    ///   L      java/lang/String;IJB)V
-    ///   ^      ^
-    ///   prefix remaining
-    /// ````
-    /// It returns a [`FieldType::Object`] with `"java/lang/String"` and the [remaining] is as
-    /// follows.
-    /// ```text
-    ///   ...;IJB)V
-    ///       ^
-    ///       remaining
-    /// ````
-    fn parse_single_param(
-        prefix: char,
-        remaining: &mut Chars<'_>,
-    ) -> Result<FieldType, InvalidDescriptor> {
-        if let Ok(p) = PrimitiveType::try_from(prefix) {
-            Ok(FieldType::Base(p))
-        } else {
-            match prefix {
-                'L' => {
-                    let binary_name: String = remaining.take_while_ref(|c| *c != ';').collect();
-                    match remaining.next() {
-                        Some(';') => Ok(FieldType::Object(ClassRef::new(binary_name))),
-                        _ => Err(InvalidDescriptor),
-                    }
-                }
-                '[' => {
-                    let next_prefix = remaining.next().ok_or(InvalidDescriptor)?;
-                    Self::parse_single_param(next_prefix, remaining).map(FieldType::into_array_type)
-                }
-                _ => Err(InvalidDescriptor),
-            }
-        }
-    }
-}
-
 impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let mut chars = descriptor.chars();
+        if !descriptor.starts_with('(') {
+            return Err(InvalidDescriptor);
+        }
+        let mut remaining = &descriptor['('.len_utf8()..];
         let mut parameters_types = Vec::new();
-        let return_type = loop {
-            match chars.next() {
-                Some('(') => {}
-                Some(')') => break ReturnType::from_str(chars.as_str())?,
-                Some(c) => {
-                    let param = Self::parse_single_param(c, &mut chars)?;
-                    parameters_types.push(param);
+        loop {
+            if remaining.starts_with(')') {
+                remaining = &remaining[')'.len_utf8()..];
+                break;
+            } else {
+                let mut array_dim = 0u8;
+                while remaining.starts_with('[') {
+                    array_dim += 1;
+                    remaining = &remaining['['.len_utf8()..];
                 }
-                None => Err(InvalidDescriptor)?,
+                let mut next_param = match remaining.chars().next() {
+                    Some(ch @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J')) => {
+                        remaining = &remaining[ch.len_utf8()..];
+                        PrimitiveType::try_from(ch).map(Into::into)?
+                    }
+                    Some('L') => {
+                        let semicolon_loc = remaining.find(';').ok_or(InvalidDescriptor)?;
+                        let binary_name = &remaining['L'.len_utf8()..semicolon_loc];
+                        remaining = &remaining[semicolon_loc + ';'.len_utf8()..];
+                        FieldType::Object(ClassRef::new(binary_name))
+                    }
+                    _ => Err(InvalidDescriptor)?,
+                };
+                for _ in 0..array_dim {
+                    next_param = next_param.into_array_type();
+                }
+                parameters_types.push(next_param);
             }
-        };
+        }
+        let return_type = ReturnType::from_str(remaining)?;
         Ok(Self {
             parameters_types,
             return_type,

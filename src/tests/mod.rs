@@ -19,7 +19,7 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
         0x01, // Tag: Utf8
         0x00, 0x0A, // Length of string: 10
         0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x57, 0x6F, 0x72, 0x6C, 0x64, // "Helloworld"
-        0x00, 0x01, // Access flags: public 
+        0x00, 0x01, // Access flags: public
         0x00, 0x01, // This class index
         0x00, 0x01, // Super class index
         0x00, 0x00, // Interfaces count
@@ -65,7 +65,7 @@ impl Default for Class {
 
 pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
     let arb_ident = prop::string::string_regex(r"[a-zA-Z][\w\$_]*").expect("The regex is invalid");
-    prop::collection::vec(arb_ident, 0..10).prop_map(|v| v.join("/"))
+    prop::collection::vec(arb_ident, 1..10).prop_map(|v| v.join("/"))
 }
 
 pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
