@@ -47,30 +47,29 @@ impl FromStr for MethodDescriptor {
             if remaining.starts_with(')') {
                 remaining = &remaining[')'.len_utf8()..];
                 break;
-            } else {
-                let mut array_dim = 0u8;
-                while remaining.starts_with('[') {
-                    array_dim += 1;
-                    remaining = &remaining['['.len_utf8()..];
-                }
-                let mut next_param = match remaining.chars().next() {
-                    Some(ch @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J')) => {
-                        remaining = &remaining[ch.len_utf8()..];
-                        PrimitiveType::try_from(ch).map(Into::into)?
-                    }
-                    Some('L') => {
-                        let semicolon_loc = remaining.find(';').ok_or(InvalidDescriptor)?;
-                        let binary_name = &remaining['L'.len_utf8()..semicolon_loc];
-                        remaining = &remaining[semicolon_loc + ';'.len_utf8()..];
-                        FieldType::Object(ClassRef::new(binary_name))
-                    }
-                    _ => Err(InvalidDescriptor)?,
-                };
-                for _ in 0..array_dim {
-                    next_param = next_param.into_array_type();
-                }
-                parameters_types.push(next_param);
             }
+            let mut array_dim = 0u8;
+            while remaining.starts_with('[') {
+                array_dim += 1;
+                remaining = &remaining['['.len_utf8()..];
+            }
+            let mut next_param = match remaining.chars().next() {
+                Some(ch @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J')) => {
+                    remaining = &remaining[ch.len_utf8()..];
+                    PrimitiveType::try_from(ch).map(Into::into)?
+                }
+                Some('L') => {
+                    let semicolon_loc = remaining.find(';').ok_or(InvalidDescriptor)?;
+                    let binary_name = &remaining['L'.len_utf8()..semicolon_loc];
+                    remaining = &remaining[semicolon_loc + ';'.len_utf8()..];
+                    FieldType::Object(ClassRef::new(binary_name))
+                }
+                _ => Err(InvalidDescriptor)?,
+            };
+            for _ in 0..array_dim {
+                next_param = next_param.into_array_type();
+            }
+            parameters_types.push(next_param);
         }
         let return_type = ReturnType::from_str(remaining)?;
         Ok(Self {
