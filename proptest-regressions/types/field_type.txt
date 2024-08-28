@@ -1,8 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 2b792641d8411194cad0e7a56c72bb9530ff6275f2b0d0a7950b05b5ed539c7a # shrinks to base_type = Object(ClassRef { binary_name: "" }), dimention = 1
-cc 48c582ee2104fa38dd677941d5c4bf6120b490b85e7547db7fde51b3be62afd4 # shrinks to class_name = ""
