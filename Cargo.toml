@@ -11,7 +11,7 @@ categories = ["parsing", "development-tools"]
 
 
 [dependencies]
-bitflags = "2.4"
+bitflags = "2.6"
 cesu8 = "1.1"
 derive_more = { version = "1", features = ["full"] }
 document-features = "0.2"
@@ -19,7 +19,7 @@ itertools = "0.13"
 petgraph = { version = "0.6", optional = true }
 thiserror = "1.0"
 walkdir = "2"
-zip = { version = "2.1", optional = true, default-features = false, features = [
+zip = { version = "2.2", optional = true, default-features = false, features = [
   "deflate",
 ] }
 
