@@ -1,5 +1,6 @@
 # MokaPot
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-henryhchchc%2Fmokapot-orange?style=flat-square&logo=GitHub)](https://github.com/henryhchchc/mokapot)
 [![CI - GitHub Actions](https://img.shields.io/github/actions/workflow/status/henryhchchc/mokapot/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml)
 [![Codecov](https://img.shields.io/codecov/c/github/henryhchchc/mokapot?style=flat-square&logo=codecov&logoColor=white&label=Coverage)](https://app.codecov.io/gh/henryhchchc/mokapot/)
 [![Crates.io](https://img.shields.io/crates/v/mokapot?style=flat-square&logo=rust&logoColor=white)](https://crates.io/crates/mokapot)
@@ -8,8 +9,7 @@
 
 MokaPot is a Java bytecode analysis library written in Rust.
 
-> [!WARNING]
-> **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
+> [!WARNING] > **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
 > Documentations are incomplete, which will be added when the basic functionalities works.
 > Using this project for production is currently NOT RECOMMENDED.
 
@@ -23,6 +23,7 @@ The documentation of the latest commit is available at [github.io](https://henry
 ### Adding the dependency
 
 Run the following command in the root directory of your project.
+
 ```sh
 cargo add mokapot
 ```
