@@ -9,8 +9,8 @@
 
 MokaPot is a Java bytecode analysis library written in Rust.
 
-> [!WARNING] > **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
-> Documentations are incomplete, which will be added when the basic functionalities works.
+> [!WARNING]
+> **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
 > Using this project for production is currently NOT RECOMMENDED.
 
 ## Documentation
