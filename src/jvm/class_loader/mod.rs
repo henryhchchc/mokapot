@@ -92,12 +92,6 @@ impl<P> CachingClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    #[allow(
-        clippy::missing_panics_doc,
-        // TODO: Uncomment the following when lint reason is stabalized.
-        //       See https://github.com/rust-lang/rust/issues/54503
-        // reason = "The unwrap is garenteed to not panic."
-    )]
     pub fn load_class<N>(&self, binary_name: &N) -> Result<&Class, Error>
     where
         P: ClassPath,
