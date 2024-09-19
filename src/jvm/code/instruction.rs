@@ -246,6 +246,7 @@ pub enum Instruction {
     MonitorExit = 0xc3,
 
     // Extended
+    #[deprecated(note = "Use the inner instruction instead")]
     Wide(WideInstruction) = 0xc4,
     MultiANewArray(FieldType, u8) = 0xc5,
     IfNull(ProgramCounter) = 0xc6,
