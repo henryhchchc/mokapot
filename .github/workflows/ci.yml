@@ -24,7 +24,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  JAVA_VERSION: 22
+  JAVA_VERSION: 23
 
 jobs:
   style_rustfmt:

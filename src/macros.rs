@@ -54,7 +54,7 @@ macro_rules! malform {
 }
 
 macro_rules! see_jvm_spec {
-    (__latest_jdk) => { 22 };
+    (__latest_jdk) => { 23 };
     ($sec:literal $(, $sub_sec:literal )*) => {
         concat!(
             "See the [JVM Specification §", $sec, $( ".", $sub_sec, )* "]",
