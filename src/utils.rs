@@ -39,7 +39,7 @@ impl<K, V> Cache<K, V> {
                 Ok(it) => it,
                 Err(poison_err) => poison_err.into_inner(),
             };
-            // It is possible that the class is loaded before we get the write lock.
+            // It is possible that the item is added to the cache before we get the write lock.
             // Therefore, we need to check the cache again.
             let item_box = if let Some(b) = cache.get(key) {
                 b
