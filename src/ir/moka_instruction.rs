@@ -191,6 +191,12 @@ impl LocalValue {
     }
 }
 
+impl From<LocalValue> for u16 {
+    fn from(value: LocalValue) -> Self {
+        value.0
+    }
+}
+
 /// Represents an identifier of a value in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
