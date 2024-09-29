@@ -225,6 +225,15 @@ pub(super) mod test {
     use super::*;
     use proptest::prelude::*;
 
+    proptest! {
+        #[test]
+        fn local_value_inner_convertion(id in 0..u16::MAX) {
+            let value = LocalValue::new(id);
+            let id: u16 = value.into();
+            assert_eq!(id, value.0);
+        }
+    }
+
     pub(crate) fn arb_argument() -> impl Strategy<Value = Operand> {
         prop_oneof![
             any::<Identifier>().prop_map(Operand::Just),
