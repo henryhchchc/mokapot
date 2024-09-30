@@ -612,7 +612,10 @@ fn load_local<const SLOT: SlotType>(
         SINGLE_SLOT => frame.get_local(idx),
         DUAL_SLOT => frame.get_dual_slot_local(idx),
     }?;
-    frame.push_value(value)?;
+    match SLOT {
+        SINGLE_SLOT => frame.push_value(value),
+        DUAL_SLOT => frame.push_dual_slot_value(value),
+    }?;
     Ok(IR::Nop)
 }
 
@@ -698,9 +701,9 @@ where
         DUAL_SLOT => (frame.pop_dual_slot_value()?, frame.pop_dual_slot_value()?),
     };
     match SLOT {
-        SINGLE_SLOT => frame.push_value(def_id.as_argument())?,
-        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument())?,
-    }
+        SINGLE_SLOT => frame.push_value(def_id.as_argument()),
+        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument()),
+    }?;
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
         value: def_id,
