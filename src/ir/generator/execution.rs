@@ -80,16 +80,18 @@ impl MokaIRGenerator<'_> {
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
-            ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local(frame, u16::from(*idx))?,
-            LLoad(idx) | DLoad(idx) => load_dual_slot_local(frame, u16::from(*idx))?,
-            ILoad0 | FLoad0 | ALoad0 => load_local(frame, 0)?,
-            ILoad1 | FLoad1 | ALoad1 => load_local(frame, 1)?,
-            ILoad2 | FLoad2 | ALoad2 => load_local(frame, 2)?,
-            ILoad3 | FLoad3 | ALoad3 => load_local(frame, 3)?,
-            LLoad0 | DLoad0 => load_dual_slot_local(frame, 0)?,
-            LLoad1 | DLoad1 => load_dual_slot_local(frame, 1)?,
-            LLoad2 | DLoad2 => load_dual_slot_local(frame, 2)?,
-            LLoad3 | DLoad3 => load_dual_slot_local(frame, 3)?,
+            ILoad(idx) | FLoad(idx) | ALoad(idx) => {
+                load_local::<SINGLE_SLOT>(frame, u16::from(*idx))?
+            }
+            LLoad(idx) | DLoad(idx) => load_local::<DUAL_SLOT>(frame, u16::from(*idx))?,
+            ILoad0 | FLoad0 | ALoad0 => load_local::<SINGLE_SLOT>(frame, 0)?,
+            ILoad1 | FLoad1 | ALoad1 => load_local::<SINGLE_SLOT>(frame, 1)?,
+            ILoad2 | FLoad2 | ALoad2 => load_local::<SINGLE_SLOT>(frame, 2)?,
+            ILoad3 | FLoad3 | ALoad3 => load_local::<SINGLE_SLOT>(frame, 3)?,
+            LLoad0 | DLoad0 => load_local::<DUAL_SLOT>(frame, 0)?,
+            LLoad1 | DLoad1 => load_local::<DUAL_SLOT>(frame, 1)?,
+            LLoad2 | DLoad2 => load_local::<DUAL_SLOT>(frame, 2)?,
+            LLoad3 | DLoad3 => load_local::<DUAL_SLOT>(frame, 3)?,
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
                 let index = frame.pop_value()?;
                 let array_ref = frame.pop_value()?;
@@ -112,16 +114,18 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Array(array_op),
                 }
             }
-            IStore(idx) | FStore(idx) | AStore(idx) => store_local(frame, u16::from(*idx))?,
-            LStore(idx) | DStore(idx) => store_dual_slot_local(frame, u16::from(*idx))?,
-            IStore0 | FStore0 | AStore0 => store_local(frame, 0)?,
-            IStore1 | FStore1 | AStore1 => store_local(frame, 1)?,
-            IStore2 | FStore2 | AStore2 => store_local(frame, 2)?,
-            IStore3 | FStore3 | AStore3 => store_local(frame, 3)?,
-            LStore0 | DStore0 => store_dual_slot_local(frame, 0)?,
-            LStore1 | DStore1 => store_dual_slot_local(frame, 1)?,
-            LStore2 | DStore2 => store_dual_slot_local(frame, 2)?,
-            LStore3 | DStore3 => store_dual_slot_local(frame, 3)?,
+            IStore(idx) | FStore(idx) | AStore(idx) => {
+                store_local::<SINGLE_SLOT>(frame, u16::from(*idx))?
+            }
+            LStore(idx) | DStore(idx) => store_local::<DUAL_SLOT>(frame, u16::from(*idx))?,
+            IStore0 | FStore0 | AStore0 => store_local::<SINGLE_SLOT>(frame, 0)?,
+            IStore1 | FStore1 | AStore1 => store_local::<SINGLE_SLOT>(frame, 1)?,
+            IStore2 | FStore2 | AStore2 => store_local::<SINGLE_SLOT>(frame, 2)?,
+            IStore3 | FStore3 | AStore3 => store_local::<SINGLE_SLOT>(frame, 3)?,
+            LStore0 | DStore0 => store_local::<DUAL_SLOT>(frame, 0)?,
+            LStore1 | DStore1 => store_local::<DUAL_SLOT>(frame, 1)?,
+            LStore2 | DStore2 => store_local::<DUAL_SLOT>(frame, 2)?,
+            LStore3 | DStore3 => store_local::<DUAL_SLOT>(frame, 3)?,
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
                 let value = frame.pop_value()?;
                 let index = frame.pop_value()?;
@@ -151,52 +155,31 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Array(array_op),
                 }
             }
-            Pop => {
-                frame.pop()?;
+            Pop | Pop2 | Dup | DupX1 | DupX2 | Dup2 | Dup2X1 | Dup2X2 | Swap => {
+                match insn {
+                    Pop => frame.pop()?,
+                    Pop2 => frame.pop2()?,
+                    Dup => frame.dup()?,
+                    DupX1 => frame.dup_x1()?,
+                    DupX2 => frame.dup_x2()?,
+                    Dup2 => frame.dup2()?,
+                    Dup2X1 => frame.dup2_x1()?,
+                    Dup2X2 => frame.dup2_x2()?,
+                    Swap => frame.swap()?,
+                    _ => unreachable!("By outer match arm"),
+                }
                 IR::Nop
             }
-            Pop2 => {
-                frame.pop2()?;
-                IR::Nop
-            }
-            Dup => {
-                frame.dup()?;
-                IR::Nop
-            }
-            DupX1 => {
-                frame.dup_x1()?;
-                IR::Nop
-            }
-            DupX2 => {
-                frame.dup_x2()?;
-                IR::Nop
-            }
-            Dup2 => {
-                frame.dup2()?;
-                IR::Nop
-            }
-            Dup2X1 => {
-                frame.dup2_x1()?;
-                IR::Nop
-            }
-            Dup2X2 => {
-                frame.dup2_x2()?;
-                IR::Nop
-            }
-            Swap => {
-                frame.swap()?;
-                IR::Nop
-            }
-            IAdd | FAdd => binary_op_math(frame, def, MathOperation::Add)?,
-            LAdd | DAdd => binary_wide_math(frame, def, MathOperation::Add)?,
-            ISub | FSub => binary_op_math(frame, def, MathOperation::Subtract)?,
-            LSub | DSub => binary_wide_math(frame, def, MathOperation::Subtract)?,
-            IMul | FMul => binary_op_math(frame, def, MathOperation::Multiply)?,
-            LMul | DMul => binary_wide_math(frame, def, MathOperation::Multiply)?,
-            IDiv | FDiv => binary_op_math(frame, def, MathOperation::Divide)?,
-            LDiv | DDiv => binary_wide_math(frame, def, MathOperation::Divide)?,
-            IRem | FRem => binary_op_math(frame, def, MathOperation::Remainder)?,
-            LRem | DRem => binary_wide_math(frame, def, MathOperation::Remainder)?,
+            IAdd | FAdd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Add)?,
+            LAdd | DAdd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Add)?,
+            ISub | FSub => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Subtract)?,
+            LSub | DSub => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Subtract)?,
+            IMul | FMul => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Multiply)?,
+            LMul | DMul => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Multiply)?,
+            IDiv | FDiv => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Divide)?,
+            LDiv | DDiv => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Divide)?,
+            IRem | FRem => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Remainder)?,
+            LRem | DRem => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Remainder)?,
             INeg | FNeg => {
                 let value = frame.pop_value()?;
                 frame.push_value(def.as_argument())?;
@@ -215,8 +198,8 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            IShl => binary_op_math(frame, def, MathOperation::ShiftLeft)?,
-            IShr => binary_op_math(frame, def, MathOperation::ShiftRight)?,
+            IShl => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftLeft)?,
+            IShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftRight)?,
             LShl => {
                 let shift_amount = frame.pop_value()?;
                 let base = frame.pop_dual_slot_value()?;
@@ -247,13 +230,13 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            IUShr => binary_op_math(frame, def, MathOperation::LogicalShiftRight)?,
-            IAnd => binary_op_math(frame, def, MathOperation::BitwiseAnd)?,
-            LAnd => binary_wide_math(frame, def, MathOperation::BitwiseAnd)?,
-            IOr => binary_op_math(frame, def, MathOperation::BitwiseOr)?,
-            LOr => binary_wide_math(frame, def, MathOperation::BitwiseOr)?,
-            IXor => binary_op_math(frame, def, MathOperation::BitwiseXor)?,
-            LXor => binary_wide_math(frame, def, MathOperation::BitwiseXor)?,
+            IUShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::LogicalShiftRight)?,
+            IAnd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
+            LAnd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
+            IOr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseOr)?,
+            LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
+            IXor => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseXor)?,
+            LXor => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseXor)?,
             IInc(idx, constant) => {
                 let base = frame.get_local(*idx)?;
                 frame.set_local(*idx, def.as_argument())?;
@@ -272,21 +255,21 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            I2F => conversion_op::<_, false, false>(frame, def, Conversion::Int2Float)?,
-            I2L => conversion_op::<_, false, true>(frame, def, Conversion::Int2Long)?,
-            I2D => conversion_op::<_, false, true>(frame, def, Conversion::Int2Double)?,
-            L2I => conversion_op::<_, true, false>(frame, def, Conversion::Long2Int)?,
-            L2F => conversion_op::<_, true, false>(frame, def, Conversion::Long2Float)?,
-            L2D => conversion_op::<_, true, true>(frame, def, Conversion::Long2Double)?,
-            F2I => conversion_op::<_, false, false>(frame, def, Conversion::Float2Int)?,
-            F2L => conversion_op::<_, false, true>(frame, def, Conversion::Float2Long)?,
-            F2D => conversion_op::<_, false, true>(frame, def, Conversion::Float2Double)?,
-            D2I => conversion_op::<_, true, false>(frame, def, Conversion::Double2Int)?,
-            D2L => conversion_op::<_, true, true>(frame, def, Conversion::Double2Long)?,
-            D2F => conversion_op::<_, true, false>(frame, def, Conversion::Double2Float)?,
-            I2B => conversion_op::<_, false, false>(frame, def, Conversion::Int2Byte)?,
-            I2C => conversion_op::<_, false, false>(frame, def, Conversion::Int2Char)?,
-            I2S => conversion_op::<_, false, false>(frame, def, Conversion::Int2Short)?,
+            I2F => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Float)?,
+            I2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Int2Long)?,
+            I2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Int2Double)?,
+            L2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Long2Int)?,
+            L2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Long2Float)?,
+            L2D => conversion_op::<DUAL_SLOT, DUAL_SLOT>(frame, def, Conversion::Long2Double)?,
+            F2I => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Float2Int)?,
+            F2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Float2Long)?,
+            F2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Float2Double)?,
+            D2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Double2Int)?,
+            D2L => conversion_op::<DUAL_SLOT, DUAL_SLOT>(frame, def, Conversion::Double2Long)?,
+            D2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Double2Float)?,
+            I2B => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Byte)?,
+            I2C => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Char)?,
+            I2S => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Short)?,
             LCmp => {
                 let rhs = frame.pop_dual_slot_value()?;
                 let lhs = frame.pop_dual_slot_value()?;
@@ -304,7 +287,7 @@ impl MokaIRGenerator<'_> {
                 let nan_treatment = match insn {
                     FCmpG => NaNTreatment::IsLargest,
                     FCmpL => NaNTreatment::IsSmallest,
-                    _ => unreachable!(),
+                    _ => unreachable!("By outer match arm"),
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
@@ -319,7 +302,7 @@ impl MokaIRGenerator<'_> {
                 let nan_treatment = match insn {
                     DCmpG => NaNTreatment::IsLargest,
                     DCmpL => NaNTreatment::IsSmallest,
-                    _ => unreachable!(),
+                    _ => unreachable!("By outer match arm"),
                 };
                 let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
                 IR::Definition {
@@ -327,28 +310,20 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::Math(math_op),
                 }
             }
-            IfEq(target) => unitary_conditional_jump(frame, *target, Condition::IsZero)?,
-            IfNe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonZero)?,
-            IfLt(target) => unitary_conditional_jump(frame, *target, Condition::IsNegative)?,
-            IfGe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonNegative)?,
-            IfGt(target) => unitary_conditional_jump(frame, *target, Condition::IsPositive)?,
-            IfLe(target) => unitary_conditional_jump(frame, *target, Condition::IsNonPositive)?,
-            IfNull(target) => unitary_conditional_jump(frame, *target, Condition::IsNull)?,
-            IfNonNull(target) => unitary_conditional_jump(frame, *target, Condition::IsNotNull)?,
-            IfICmpEq(target) | IfACmpEq(target) => {
-                binary_conditional_jump(frame, *target, Condition::Equal)?
-            }
-            IfICmpNe(target) | IfACmpNe(target) => {
-                binary_conditional_jump(frame, *target, Condition::NotEqual)?
-            }
-            IfICmpGe(target) => {
-                binary_conditional_jump(frame, *target, Condition::GreaterThanOrEqual)?
-            }
-            IfICmpLt(target) => binary_conditional_jump(frame, *target, Condition::LessThan)?,
-            IfICmpGt(target) => binary_conditional_jump(frame, *target, Condition::GreaterThan)?,
-            IfICmpLe(target) => {
-                binary_conditional_jump(frame, *target, Condition::LessThanOrEqual)?
-            }
+            IfEq(target) => conditional_jump(frame, *target, Condition::IsZero)?,
+            IfNe(target) => conditional_jump(frame, *target, Condition::IsNonZero)?,
+            IfLt(target) => conditional_jump(frame, *target, Condition::IsNegative)?,
+            IfGe(target) => conditional_jump(frame, *target, Condition::IsNonNegative)?,
+            IfGt(target) => conditional_jump(frame, *target, Condition::IsPositive)?,
+            IfLe(target) => conditional_jump(frame, *target, Condition::IsNonPositive)?,
+            IfNull(target) => conditional_jump(frame, *target, Condition::IsNull)?,
+            IfNonNull(target) => conditional_jump(frame, *target, Condition::IsNotNull)?,
+            IfICmpEq(target) | IfACmpEq(target) => cmp_jump(frame, *target, Condition::Equal)?,
+            IfICmpNe(target) | IfACmpNe(target) => cmp_jump(frame, *target, Condition::NotEqual)?,
+            IfICmpGe(target) => cmp_jump(frame, *target, Condition::GreaterThanOrEqual)?,
+            IfICmpLt(target) => cmp_jump(frame, *target, Condition::LessThan)?,
+            IfICmpGt(target) => cmp_jump(frame, *target, Condition::GreaterThan)?,
+            IfICmpLe(target) => cmp_jump(frame, *target, Condition::LessThanOrEqual)?,
             Goto(target) | GotoW(target) => IR::Jump {
                 condition: None,
                 target: *target,
@@ -568,12 +543,16 @@ impl MokaIRGenerator<'_> {
                 let expr = Expression::Throw(exception_ref);
                 IR::Definition { value: def, expr }
             }
-            CheckCast(target_type) => conversion_op::<_, false, false>(frame, def, |value| {
-                Conversion::CheckCast(value, target_type.clone())
-            })?,
-            InstanceOf(target_type) => conversion_op::<_, false, false>(frame, def, |value| {
-                Conversion::InstanceOf(value, target_type.clone())
-            })?,
+            CheckCast(target_type) => {
+                conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, |value| {
+                    Conversion::CheckCast(value, target_type.clone())
+                })?
+            }
+            InstanceOf(target_type) => {
+                conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, |value| {
+                    Conversion::InstanceOf(value, target_type.clone())
+                })?
+            }
             MonitorEnter => {
                 let object_ref = frame.pop_value()?;
                 let monitor_op = LockOperation::Acquire(object_ref);
@@ -619,36 +598,40 @@ impl MokaIRGenerator<'_> {
     }
 }
 
-#[inline]
-fn store_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.pop_dual_slot_value()?;
-    frame.set_dual_slot_local(idx, value)?;
-    Ok(IR::Nop)
-}
+type SlotType = bool;
+const SINGLE_SLOT: SlotType = false;
+const DUAL_SLOT: SlotType = true;
 
 #[inline]
-fn store_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.pop_value()?;
-    frame.set_local(idx, value)?;
-    Ok(IR::Nop)
-}
-
-#[inline]
-fn load_dual_slot_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.get_dual_slot_local(idx)?;
-    frame.push_dual_slot_value(value)?;
-    Ok(IR::Nop)
-}
-
-#[inline]
-fn load_local(frame: &mut JvmStackFrame, idx: u16) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.get_local(idx)?;
+#[allow(clippy::match_bool, reason = "For better readability")]
+fn load_local<const SLOT: SlotType>(
+    frame: &mut JvmStackFrame,
+    idx: u16,
+) -> Result<IR, MokaIRBrewingError> {
+    let value = match SLOT {
+        SINGLE_SLOT => frame.get_local(idx),
+        DUAL_SLOT => frame.get_dual_slot_local(idx),
+    }?;
     frame.push_value(value)?;
     Ok(IR::Nop)
 }
 
 #[inline]
-fn unitary_conditional_jump<C>(
+#[allow(clippy::match_bool, reason = "For better readability")]
+fn store_local<const SLOT: SlotType>(
+    frame: &mut JvmStackFrame,
+    idx: u16,
+) -> Result<IR, MokaIRBrewingError> {
+    let value = frame.pop_value()?;
+    match SLOT {
+        SINGLE_SLOT => frame.set_local(idx, value),
+        DUAL_SLOT => frame.set_dual_slot_local(idx, value),
+    }?;
+    Ok(IR::Nop)
+}
+
+#[inline]
+fn conditional_jump<C>(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
     condition: C,
@@ -664,7 +647,7 @@ where
 }
 
 #[inline]
-fn binary_conditional_jump<C>(
+fn cmp_jump<C>(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
     condition: C,
@@ -681,24 +664,20 @@ where
 }
 
 #[inline]
-fn conversion_op<C, const OPERAND_WIDE: bool, const RESULT_WIDE: bool>(
+#[allow(clippy::match_bool, reason = "For better readability")]
+fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
-    conversion: C,
-) -> Result<IR, MokaIRBrewingError>
-where
-    C: FnOnce(Operand) -> Conversion,
-{
-    let operand = if OPERAND_WIDE {
-        frame.pop_dual_slot_value()?
-    } else {
-        frame.pop_value()?
-    };
-    if RESULT_WIDE {
-        frame.push_dual_slot_value(def_id.as_argument())?;
-    } else {
-        frame.push_value(def_id.as_argument())?;
-    }
+    conversion: impl FnOnce(Operand) -> Conversion,
+) -> Result<IR, MokaIRBrewingError> {
+    let operand = match OPERAND_SLOT {
+        SINGLE_SLOT => frame.pop_value(),
+        DUAL_SLOT => frame.pop_dual_slot_value(),
+    }?;
+    match RESULT_SLOT {
+        SINGLE_SLOT => frame.push_value(def_id.as_argument()),
+        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument()),
+    }?;
     Ok(IR::Definition {
         value: def_id,
         expr: Expression::Conversion(conversion(operand)),
@@ -706,36 +685,19 @@ where
 }
 
 #[inline]
-fn binary_op_math<M>(
+fn binary_op_math<const SLOT: SlotType>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
-    math: M,
+    math: impl FnOnce(Operand, Operand) -> MathOperation,
 ) -> Result<IR, MokaIRBrewingError>
 where
-    M: FnOnce(Operand, Operand) -> MathOperation,
 {
-    let rhs = frame.pop_value()?;
-    let lhs = frame.pop_value()?;
+    #[allow(clippy::match_bool, reason = "For better readability")]
+    let (rhs, lhs) = match SLOT {
+        SINGLE_SLOT => (frame.pop_value()?, frame.pop_value()?),
+        DUAL_SLOT => (frame.pop_dual_slot_value()?, frame.pop_dual_slot_value()?),
+    };
     frame.push_value(def_id.as_argument())?;
-    let expr = Expression::Math(math(lhs, rhs));
-    Ok(IR::Definition {
-        value: def_id,
-        expr,
-    })
-}
-
-#[inline]
-fn binary_wide_math<M>(
-    frame: &mut JvmStackFrame,
-    def_id: LocalValue,
-    math: M,
-) -> Result<IR, MokaIRBrewingError>
-where
-    M: FnOnce(Operand, Operand) -> MathOperation,
-{
-    let rhs = frame.pop_dual_slot_value()?;
-    let lhs = frame.pop_dual_slot_value()?;
-    frame.push_dual_slot_value(def_id.as_argument())?;
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
         value: def_id,
