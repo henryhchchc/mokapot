@@ -171,14 +171,14 @@ impl MokaIRGenerator<'_> {
                 IR::Nop
             }
             IAdd | FAdd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Add)?,
-            LAdd | DAdd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Add)?,
             ISub | FSub => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Subtract)?,
-            LSub | DSub => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Subtract)?,
             IMul | FMul => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Multiply)?,
-            LMul | DMul => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Multiply)?,
             IDiv | FDiv => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Divide)?,
-            LDiv | DDiv => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Divide)?,
             IRem | FRem => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Remainder)?,
+            LDiv | DDiv => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Divide)?,
+            LAdd | DAdd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Add)?,
+            LSub | DSub => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Subtract)?,
+            LMul | DMul => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Multiply)?,
             LRem | DRem => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Remainder)?,
             INeg | FNeg => {
                 let value = frame.pop_value()?;
@@ -232,10 +232,10 @@ impl MokaIRGenerator<'_> {
             }
             IUShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::LogicalShiftRight)?,
             IAnd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
-            LAnd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
             IOr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseOr)?,
-            LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
             IXor => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseXor)?,
+            LAnd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
+            LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
             LXor => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseXor)?,
             IInc(idx, constant) => {
                 let base = frame.get_local(*idx)?;
@@ -685,6 +685,7 @@ fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
 }
 
 #[inline]
+#[allow(clippy::match_bool, reason = "For better readability")]
 fn binary_op_math<const SLOT: SlotType>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
@@ -692,12 +693,14 @@ fn binary_op_math<const SLOT: SlotType>(
 ) -> Result<IR, MokaIRBrewingError>
 where
 {
-    #[allow(clippy::match_bool, reason = "For better readability")]
     let (rhs, lhs) = match SLOT {
         SINGLE_SLOT => (frame.pop_value()?, frame.pop_value()?),
         DUAL_SLOT => (frame.pop_dual_slot_value()?, frame.pop_dual_slot_value()?),
     };
-    frame.push_value(def_id.as_argument())?;
+    match SLOT {
+        SINGLE_SLOT => frame.push_value(def_id.as_argument())?,
+        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument())?,
+    }
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
         value: def_id,
