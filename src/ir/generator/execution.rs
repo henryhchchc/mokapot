@@ -625,7 +625,10 @@ fn store_local<const SLOT: SlotType>(
     frame: &mut JvmStackFrame,
     idx: u16,
 ) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.pop_value()?;
+    let value = match SLOT {
+        SINGLE_SLOT => frame.pop_value(),
+        DUAL_SLOT => frame.pop_dual_slot_value(),
+    }?;
     match SLOT {
         SINGLE_SLOT => frame.set_local(idx, value),
         DUAL_SLOT => frame.set_dual_slot_local(idx, value),
@@ -634,14 +637,11 @@ fn store_local<const SLOT: SlotType>(
 }
 
 #[inline]
-fn conditional_jump<C>(
+fn conditional_jump(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
-    condition: C,
-) -> Result<IR, MokaIRBrewingError>
-where
-    C: FnOnce(Operand) -> Condition,
-{
+    condition: impl FnOnce(Operand) -> Condition,
+) -> Result<IR, MokaIRBrewingError> {
     let operand = frame.pop_value()?;
     Ok(IR::Jump {
         condition: Some(condition(operand)),
@@ -650,14 +650,11 @@ where
 }
 
 #[inline]
-fn cmp_jump<C>(
+fn cmp_jump(
     frame: &mut JvmStackFrame,
     target: ProgramCounter,
-    condition: C,
-) -> Result<IR, MokaIRBrewingError>
-where
-    C: FnOnce(Operand, Operand) -> Condition,
-{
+    condition: impl FnOnce(Operand, Operand) -> Condition,
+) -> Result<IR, MokaIRBrewingError> {
     let rhs = frame.pop_value()?;
     let lhs = frame.pop_value()?;
     Ok(IR::Jump {
@@ -670,7 +667,7 @@ where
 #[allow(clippy::match_bool, reason = "For better readability")]
 fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
     frame: &mut JvmStackFrame,
-    def_id: LocalValue,
+    def: LocalValue,
     conversion: impl FnOnce(Operand) -> Conversion,
 ) -> Result<IR, MokaIRBrewingError> {
     let operand = match OPERAND_SLOT {
@@ -678,11 +675,11 @@ fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
         DUAL_SLOT => frame.pop_dual_slot_value(),
     }?;
     match RESULT_SLOT {
-        SINGLE_SLOT => frame.push_value(def_id.as_argument()),
-        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument()),
+        SINGLE_SLOT => frame.push_value(def.as_argument()),
+        DUAL_SLOT => frame.push_dual_slot_value(def.as_argument()),
     }?;
     Ok(IR::Definition {
-        value: def_id,
+        value: def,
         expr: Expression::Conversion(conversion(operand)),
     })
 }
@@ -693,9 +690,7 @@ fn binary_op_math<const SLOT: SlotType>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
     math: impl FnOnce(Operand, Operand) -> MathOperation,
-) -> Result<IR, MokaIRBrewingError>
-where
-{
+) -> Result<IR, MokaIRBrewingError> {
     let (rhs, lhs) = match SLOT {
         SINGLE_SLOT => (frame.pop_value()?, frame.pop_value()?),
         DUAL_SLOT => (frame.pop_dual_slot_value()?, frame.pop_dual_slot_value()?),
