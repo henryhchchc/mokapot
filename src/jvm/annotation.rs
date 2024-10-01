@@ -11,7 +11,7 @@ use super::{
 
 /// A value of an annotation field.
 #[doc = see_jvm_spec!(4, 7, 16, 1)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ElementValue {
     /// A constant value in primitive type.
     Primitive(PrimitiveType, ConstantValue),
@@ -37,7 +37,7 @@ pub enum ElementValue {
 
 /// Information about the target of a [`TypeAnnotation`](super::TypeAnnotation).
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetInfo {
     /// Idicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
     TypeParameter {
@@ -97,7 +97,7 @@ pub enum TargetInfo {
 
 /// Identifies a part of a type that is annotated.
 #[doc = see_jvm_spec!(4, 7, 20, 2)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypePathElement {
     /// Annotation is deeper in an array type.
     Array,

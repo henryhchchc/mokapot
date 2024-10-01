@@ -91,7 +91,7 @@ pub struct Class {
 
 /// An annotation on a class, field, method, or parameter.
 #[doc = see_jvm_spec!(4, 7, 16)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Annotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
@@ -101,8 +101,11 @@ pub struct Annotation {
 
 /// An type annotation on a class, field, method, or parameter.
 #[doc = see_jvm_spec!(4, 7, 20)]
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions, /* reason = "To be consistent with JVM spec" */)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(
+    clippy::module_name_repetitions,
+    reason = "To be consistent with JVM spec"
+)]
 pub struct TypeAnnotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
