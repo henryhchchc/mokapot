@@ -173,9 +173,9 @@ impl JvmStackFrame {
 
     pub(super) fn get_local<const SLOT: SlotWidth>(
         &self,
-        idx: impl Into<u16>,
+        idx: u16,
     ) -> Result<Operand, ExecutionError> {
-        let idx = usize::from(idx.into());
+        let idx = usize::from(idx);
         let lower_slot = self
             .local_variables
             .get(idx)
@@ -201,10 +201,10 @@ impl JvmStackFrame {
 
     pub(super) fn set_local<const SLOT: SlotWidth>(
         &mut self,
-        idx: impl Into<u16>,
+        idx: u16,
         value: Operand,
     ) -> Result<(), ExecutionError> {
-        let idx = usize::from(idx.into());
+        let idx = usize::from(idx);
         let lower_slot = self
             .local_variables
             .get_mut(idx)

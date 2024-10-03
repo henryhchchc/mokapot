@@ -288,8 +288,9 @@ impl MokaIRGenerator<'_> {
             LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
             LXor => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseXor)?,
             IInc(idx, constant) => {
-                let base = frame.get_local::<SINGLE_SLOT>(*idx)?;
-                frame.set_local::<SINGLE_SLOT>(*idx, def.as_argument())?;
+                let idx = (*idx).into();
+                let base = frame.get_local::<SINGLE_SLOT>(idx)?;
+                frame.set_local::<SINGLE_SLOT>(idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
@@ -403,7 +404,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             Ret(idx) => {
-                let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
+                let idx = (*idx).into();
+                let return_address = frame.get_local::<SINGLE_SLOT>(idx)?;
                 IR::SubroutineRet(return_address)
             }
             Wide(WideInstruction::Ret(idx)) => {
