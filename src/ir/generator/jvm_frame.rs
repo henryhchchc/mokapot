@@ -10,6 +10,10 @@ use crate::{
 };
 use itertools::Itertools;
 
+pub(super) type SlotWidth = bool;
+pub(super) const SINGLE_SLOT: SlotWidth = false;
+pub(super) const DUAL_SLOT: SlotWidth = true;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct JvmStackFrame {
     max_locals: u16,
@@ -110,30 +114,29 @@ impl JvmStackFrame {
             .ok_or(ExecutionError::StackUnderflow)
     }
 
-    pub(super) fn pop_value(&mut self) -> Result<Operand, ExecutionError> {
-        match self.pop_raw()? {
+    pub(super) fn pop_value<const SLOT: SlotWidth>(&mut self) -> Result<Operand, ExecutionError> {
+        let value = match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
-            // `UninitializedLocal` is never pushed to the stack
-            Entry::UninitializedLocal => unreachable!(),
+            Entry::UninitializedLocal => unreachable!("It is never pushed to the stack"),
+        }?;
+        if SLOT == DUAL_SLOT {
+            match self.pop_raw()? {
+                Entry::Top => Ok(()),
+                Entry::Value(_) => Err(ExecutionError::ValueMismatch),
+                Entry::UninitializedLocal => unreachable!("It is never pushed to the stack"),
+            }?;
         }
+        Ok(value)
     }
 
-    pub(super) fn pop_dual_slot_value(&mut self) -> Result<Operand, ExecutionError> {
-        match (self.pop_raw()?, self.pop_raw()?) {
-            (Entry::Value(it), Entry::Top) => Ok(it),
-            // `UninitializedLocal` is never pushed to the stack
-            (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => unreachable!(),
-            _ => Err(ExecutionError::ValueMismatch),
+    pub(super) fn push_value<const SLOT: SlotWidth>(
+        &mut self,
+        value: Operand,
+    ) -> Result<(), ExecutionError> {
+        if SLOT == DUAL_SLOT {
+            self.push_raw(Entry::Top)?;
         }
-    }
-
-    pub(super) fn push_value(&mut self, value: Operand) -> Result<(), ExecutionError> {
-        self.push_raw(Entry::Value(value))
-    }
-
-    pub(super) fn push_dual_slot_value(&mut self, value: Operand) -> Result<(), ExecutionError> {
-        self.push_raw(Entry::Top)?;
         self.push_raw(Entry::Value(value))
     }
 
@@ -146,9 +149,9 @@ impl JvmStackFrame {
         let mut args = Vec::with_capacity(descriptor.parameters_types.len());
         for param_type in descriptor.parameters_types.iter().rev() {
             let arg = if let Base(Long | Double) = param_type {
-                self.pop_dual_slot_value()?
+                self.pop_value::<DUAL_SLOT>()?
             } else {
-                self.pop_value()?
+                self.pop_value::<SINGLE_SLOT>()?
             };
             args.push(arg);
         }
@@ -161,75 +164,61 @@ impl JvmStackFrame {
         value_type: &FieldType,
         value: Operand,
     ) -> Result<(), ExecutionError> {
-        match value_type {
-            FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => {
-                self.push_dual_slot_value(value)
-            }
-            _ => self.push_value(value),
+        if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
+            self.push_value::<DUAL_SLOT>(value)
+        } else {
+            self.push_value::<SINGLE_SLOT>(value)
         }
     }
 
-    pub(super) fn get_local(&self, idx: impl Into<u16>) -> Result<Operand, ExecutionError> {
-        let idx = idx.into();
-        let frame_value = &self.local_variables[usize::from(idx)];
-        match frame_value {
-            Entry::Value(it) => Ok(it.clone()),
-            Entry::Top => Err(ExecutionError::ValueMismatch),
-            Entry::UninitializedLocal => Err(ExecutionError::LocalUninitialized),
-        }
-    }
-
-    pub(super) fn get_dual_slot_local(
+    pub(super) fn get_local<const SLOT: SlotWidth>(
         &self,
         idx: impl Into<u16>,
     ) -> Result<Operand, ExecutionError> {
-        let idx: usize = idx.into().into();
-        let [lower_slot, higher_slot] = self
+        let idx = usize::from(idx.into());
+        let lower_slot = self
             .local_variables
-            .get(idx..=idx + 1)
-            .ok_or(ExecutionError::LocalLimitExceed)?
-        else {
-            unreachable!("There will be always two elements")
-        };
-        match (lower_slot, higher_slot) {
-            (Entry::Value(it), Entry::Top) => Ok(it.clone()),
-            (Entry::UninitializedLocal, _) | (_, Entry::UninitializedLocal) => {
-                Err(ExecutionError::LocalUninitialized)
-            }
-            _ => Err(ExecutionError::ValueMismatch),
-        }
-    }
-
-    pub(super) fn set_local(
-        &mut self,
-        idx: impl Into<u16>,
-        value: Operand,
-    ) -> Result<(), ExecutionError> {
-        let idx = idx.into();
-        let slot = self
-            .local_variables
-            .get_mut(usize::from(idx))
+            .get(idx)
             .ok_or(ExecutionError::LocalLimitExceed)?;
-        *slot = Entry::Value(value);
-        Ok(())
+        let value = match lower_slot {
+            Entry::Value(it) => Ok(it.clone()),
+            Entry::Top => Err(ExecutionError::ValueMismatch),
+            Entry::UninitializedLocal => Err(ExecutionError::LocalUninitialized),
+        }?;
+        if SLOT == DUAL_SLOT {
+            let higher_slot = self
+                .local_variables
+                .get(idx + 1)
+                .ok_or(ExecutionError::LocalLimitExceed)?;
+            match higher_slot {
+                Entry::Top => Ok(()),
+                _ => Err(ExecutionError::ValueMismatch),
+            }?;
+        }
+
+        Ok(value)
     }
 
-    pub(super) fn set_dual_slot_local(
+    pub(super) fn set_local<const SLOT: SlotWidth>(
         &mut self,
         idx: impl Into<u16>,
         value: Operand,
     ) -> Result<(), ExecutionError> {
-        let idx: usize = idx.into().into();
-        let [lower_slot, higher_slot] = self
+        let idx = usize::from(idx.into());
+        let lower_slot = self
             .local_variables
-            .get_mut(idx..=idx + 1)
-            .ok_or(ExecutionError::LocalLimitExceed)?
-        else {
-            unreachable!("There will be always two elements");
-        };
-
+            .get_mut(idx)
+            .ok_or(ExecutionError::LocalLimitExceed)?;
         *lower_slot = Entry::Value(value);
-        *higher_slot = Entry::Top;
+
+        if SLOT == DUAL_SLOT {
+            let higher_slot = self
+                .local_variables
+                .get_mut(idx + 1)
+                .ok_or(ExecutionError::LocalLimitExceed)?;
+            *higher_slot = Entry::Top;
+        }
+
         Ok(())
     }
 
@@ -414,7 +403,7 @@ mod test {
         types::method_descriptor::MethodDescriptor,
     };
 
-    use super::{Entry, JvmStackFrame};
+    use super::*;
 
     #[test]
     fn merge_value_ref() {
@@ -463,10 +452,10 @@ mod test {
                 args.len().try_into().unwrap(),
             ).unwrap();
             for arg in &args {
-                stack_frame.push_value(arg.clone()).expect("Fail to push");
+                stack_frame.push_value::<SINGLE_SLOT>(arg.clone()).expect("Fail to push");
             }
             for arg in args.iter().rev() {
-                let popped = stack_frame.pop_value().expect("Fail to pop");
+                let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
                 assert_eq!(popped, arg.clone());
             }
         }
@@ -480,10 +469,10 @@ mod test {
                 (args.len() * 2).try_into().unwrap(),
             ).unwrap();
             for arg in &args {
-                stack_frame.push_dual_slot_value(arg.clone()).expect("Fail to push");
+                stack_frame.push_value::<DUAL_SLOT>(arg.clone()).expect("Fail to push");
             }
             for arg in args.iter().rev() {
-                let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+                let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
                 assert_eq!(popped, arg.clone());
             }
         }
@@ -500,10 +489,10 @@ mod test {
             for i in 0..push_count {
                 let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
                 if i < capacity {
-                    stack_frame.push_value(value).expect("Fail to push");
+                    stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
                 } else {
                     assert!(matches!(
-                        stack_frame.push_value(value),
+                        stack_frame.push_value::<SINGLE_SLOT>(value),
                         Err(ExecutionError::StackOverflow),
                     ));
                 }
@@ -520,14 +509,14 @@ mod test {
             ).unwrap();
             for i in 0..push_count {
                 let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
-                stack_frame.push_value(value).expect("Fail to push");
+                stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             }
             for _ in 0..push_count {
-                stack_frame.pop_value().expect("Fail to pop");
+                stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             }
             for _ in push_count..pop_count {
                 assert!(matches!(
-                    stack_frame.pop_value(),
+                    stack_frame.pop_value::<SINGLE_SLOT>(),
                     Err(ExecutionError::StackUnderflow),
                 ));
             }
@@ -541,10 +530,10 @@ mod test {
                 0,
                 2,
             ).unwrap();
-            stack_frame.push_dual_slot_value(valus.clone()).unwrap();
-            stack_frame.pop_value().unwrap();
+            stack_frame.push_value::<DUAL_SLOT>(valus.clone()).unwrap();
+            stack_frame.pop_value::<SINGLE_SLOT>().unwrap();
             assert!(matches!(
-                stack_frame.pop_value(),
+                stack_frame.pop_value::<SINGLE_SLOT>(),
                 Err(ExecutionError::ValueMismatch),
             ));
         }
@@ -559,16 +548,16 @@ mod test {
             ).unwrap();
             for (i, value) in values.iter().enumerate() {
                 if i % 2 == 0 {
-                    stack_frame.push_dual_slot_value(value.clone()).expect("Fail to push");
+                    stack_frame.push_value::<DUAL_SLOT>(value.clone()).expect("Fail to push");
                 } else {
-                    stack_frame.push_value(value.clone()).expect("Fail to push");
+                    stack_frame.push_value::<SINGLE_SLOT>(value.clone()).expect("Fail to push");
                 }
             }
             for (i, value) in values.iter().enumerate().rev() {
                 let popped = if i % 2 == 0 {
-                    stack_frame.pop_dual_slot_value().expect("Fail to pop")
+                    stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop")
                 } else {
-                    stack_frame.pop_value().expect("Fail to pop")
+                    stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop")
                 };
                 assert_eq!(popped, value.clone());
             }
@@ -584,7 +573,7 @@ mod test {
             ).unwrap();
             for i in 0..pop_count {
                 let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
-                stack_frame.push_value(value).expect("Fail to push");
+                stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             }
             for _ in 0..pop_count {
                 stack_frame.pop().expect("Fail to pop");
@@ -605,7 +594,7 @@ mod test {
             ).unwrap();
             for i in 0..(pop_count * 2) {
                 let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
-                stack_frame.push_value(value).expect("Fail to push");
+                stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             }
             for _ in 0..pop_count {
                 stack_frame.pop2().expect("Fail to pop");
@@ -624,11 +613,11 @@ mod test {
                 0,
                 2,
             ).unwrap();
-            stack_frame.push_value(value.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(value.clone()).expect("Fail to push");
             stack_frame.dup().expect("Fail to dup");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, value);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, value);
         }
 
@@ -640,14 +629,14 @@ mod test {
                 0,
                 3,
             ).unwrap();
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup_x1().expect("Fail to dup_x1");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 
@@ -665,17 +654,17 @@ mod test {
             //    ..., value1, value3, value2, value1
             //    where value1, value2, and value3 are all values of a category 1
             //    computational type (§2.11.1).
-            stack_frame.push_value(v3.clone()).expect("Fail to push");
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v3.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup_x2().expect("Fail to dup_x2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v3);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
 
             // Form 2:
@@ -683,14 +672,14 @@ mod test {
             //    ..., value1, value2, value1
             //    where value1 is a value of a category 1 computational type and
             //    value2 is a value of a category 2 computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup_x2().expect("Fail to dup_x2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 
@@ -708,27 +697,27 @@ mod test {
             //     ..., value2, value1, value2, value1
             //     where both value1 and value2 are values of a category 1 computational type
             //     (§2.11.1).
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2().expect("Fail to dup2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
 
             // Form 2:
             //     ..., value →
             //     ..., value, value
             //     where value is a value of a category 2 computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2().expect("Fail to dup2");
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 
@@ -746,19 +735,19 @@ mod test {
             //     ..., value2, value1, value3, value2, value1
             //     where value1, value2, and value3 are all values of a category 1
             //     computational type (§2.11.1).
-            stack_frame.push_value(v3.clone()).expect("Fail to push");
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v3.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x1().expect("Fail to dup2_x1");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v3);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
 
             // Form 2:
@@ -766,14 +755,14 @@ mod test {
             //     ..., value1, value2, value1
             //     where value1 is a value of a category 1 computational type and
             //     value2 is a value of a category 2 computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x1().expect("Fail to dup2_x1");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 
@@ -792,22 +781,22 @@ mod test {
             //     ..., value2, value1, value4, value3, value2, value1
             //     where value1, value2, value3, and value4 are all values of a category 1
             //     computational type (§2.11.1).
-            stack_frame.push_value(v4.clone()).expect("Fail to push");
-            stack_frame.push_value(v3.clone()).expect("Fail to push");
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v4.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v3.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x2().expect("Fail to dup2_x2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v3);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v4);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
 
             // Form 2:
@@ -816,19 +805,19 @@ mod test {
             //    where value1 and value2 are both values of a category 1
             //    computational type and value3 is a value of a category 2
             //    computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v3.clone()).expect("Fail to push");
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v3.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x2().expect("Fail to dup2_x2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v3);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
 
 
@@ -837,19 +826,19 @@ mod test {
             //     ..., value1, value3, value2, value1
             //     where value1 and value2 are both values of a category 1 computational type
             //     and value3 is a value of a category 2 computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v3.clone()).expect("Fail to push");
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v3.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x2().expect("Fail to dup2_x2");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v3);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
 
             // Form 4:
@@ -857,14 +846,14 @@ mod test {
             //    ..., value1, value2, value1
             //    where value1 and value2 are both values of a category 2
             //    computational type (§2.11.1).
-            stack_frame.push_dual_slot_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_dual_slot_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.dup2_x2().expect("Fail to dup2_x2");
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_dual_slot_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 
@@ -876,12 +865,12 @@ mod test {
                 0,
                 2,
             ).unwrap();
-            stack_frame.push_value(v2.clone()).expect("Fail to push");
-            stack_frame.push_value(v1.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
             stack_frame.swap().expect("Fail to swap");
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v2);
-            let popped = stack_frame.pop_value().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
             assert_eq!(popped, v1);
         }
 

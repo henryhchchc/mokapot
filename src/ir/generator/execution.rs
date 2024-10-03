@@ -1,4 +1,7 @@
-use super::{jvm_frame::JvmStackFrame, MokaIRBrewingError, MokaIRGenerator};
+use super::{
+    jvm_frame::{JvmStackFrame, SlotWidth, DUAL_SLOT, SINGLE_SLOT},
+    MokaIRBrewingError, MokaIRGenerator,
+};
 use crate::{
     ir::{
         expression::{
@@ -32,51 +35,63 @@ impl MokaIRGenerator<'_> {
         let ir_instruction = match insn {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Null);
                 IR::Definition { value: def, expr }
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let int_value = i32::from(insn.opcode()) - 3;
                 let expr = Expression::Const(ConstantValue::Integer(int_value));
                 IR::Definition { value: def, expr }
             }
             LConst0 | LConst1 => {
-                frame.push_dual_slot_value(def.as_argument())?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let long_value = i64::from(insn.opcode()) - 9;
                 let expr = Expression::Const(ConstantValue::Long(long_value));
                 IR::Definition { value: def, expr }
             }
             FConst0 | FConst1 | FConst2 => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let float_value = f32::from(insn.opcode()) - 11.0;
                 let expr = Expression::Const(ConstantValue::Float(float_value));
                 IR::Definition { value: def, expr }
             }
             DConst0 | DConst1 => {
-                frame.push_dual_slot_value(def.as_argument())?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let double_value = f64::from(insn.opcode()) - 14.0;
                 let expr = Expression::Const(ConstantValue::Double(double_value));
                 IR::Definition { value: def, expr }
             }
             BiPush(value) => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             SiPush(value) => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             Ldc(value) | LdcW(value) => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
             Ldc2W(value) => {
-                frame.push_dual_slot_value(def.as_argument())?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
@@ -93,22 +108,26 @@ impl MokaIRGenerator<'_> {
             LLoad2 | DLoad2 => load_local::<DUAL_SLOT>(frame, 2)?,
             LLoad3 | DLoad3 => load_local::<DUAL_SLOT>(frame, 3)?,
             IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
-                let index = frame.pop_value()?;
-                let array_ref = frame.pop_value()?;
+                let index = frame.pop_value::<SINGLE_SLOT>()?;
+                let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_value(Operand::Just(def.into()))?;
+                frame.push_value::<SINGLE_SLOT>(Operand::Just(def.into()))?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),
                 }
             }
             LALoad | DALoad => {
-                let index = frame.pop_value()?;
-                let array_ref = frame.pop_value()?;
+                let index = frame.pop_value::<SINGLE_SLOT>()?;
+                let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_dual_slot_value(Operand::Just(def.into()))?;
+                {
+                    let this = &mut *frame;
+                    let value = Operand::Just(def.into());
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),
@@ -127,9 +146,9 @@ impl MokaIRGenerator<'_> {
             LStore2 | DStore2 => store_local::<DUAL_SLOT>(frame, 2)?,
             LStore3 | DStore3 => store_local::<DUAL_SLOT>(frame, 3)?,
             IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => {
-                let value = frame.pop_value()?;
-                let index = frame.pop_value()?;
-                let array_ref = frame.pop_value()?;
+                let value = frame.pop_value::<SINGLE_SLOT>()?;
+                let index = frame.pop_value::<SINGLE_SLOT>()?;
+                let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Write {
                     array_ref,
                     index,
@@ -142,9 +161,12 @@ impl MokaIRGenerator<'_> {
                 }
             }
             LAStore | DAStore => {
-                let value = frame.pop_dual_slot_value()?;
-                let index = frame.pop_value()?;
-                let array_ref = frame.pop_value()?;
+                let value = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                let index = frame.pop_value::<SINGLE_SLOT>()?;
+                let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Write {
                     array_ref,
                     index,
@@ -181,8 +203,8 @@ impl MokaIRGenerator<'_> {
             LMul | DMul => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Multiply)?,
             LRem | DRem => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Remainder)?,
             INeg | FNeg => {
-                let value = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
+                let value = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let math_op = MathOperation::Negate(value);
                 IR::Definition {
                     value: def,
@@ -190,8 +212,15 @@ impl MokaIRGenerator<'_> {
                 }
             }
             LNeg | DNeg => {
-                let operand = frame.pop_dual_slot_value()?;
-                frame.push_dual_slot_value(def.as_argument())?;
+                let operand = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let math_op = MathOperation::Negate(operand);
                 IR::Definition {
                     value: def,
@@ -201,9 +230,16 @@ impl MokaIRGenerator<'_> {
             IShl => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftLeft)?,
             IShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftRight)?,
             LShl => {
-                let shift_amount = frame.pop_value()?;
-                let base = frame.pop_dual_slot_value()?;
-                frame.push_dual_slot_value(def.as_argument())?;
+                let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
+                let base = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let math_op = MathOperation::ShiftLeft(base, shift_amount);
                 IR::Definition {
                     value: def,
@@ -211,9 +247,16 @@ impl MokaIRGenerator<'_> {
                 }
             }
             LShr => {
-                let shift_amount = frame.pop_value()?;
-                let base = frame.pop_dual_slot_value()?;
-                frame.push_dual_slot_value(def.as_argument())?;
+                let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
+                let base = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let math_op = MathOperation::ShiftRight(base, shift_amount);
                 IR::Definition {
                     value: def,
@@ -221,9 +264,16 @@ impl MokaIRGenerator<'_> {
                 }
             }
             LUShr => {
-                let shift_amount = frame.pop_value()?;
-                let base = frame.pop_dual_slot_value()?;
-                frame.push_dual_slot_value(def.as_argument())?;
+                let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
+                let base = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                {
+                    let this = &mut *frame;
+                    let value = def.as_argument();
+                    this.push_value::<DUAL_SLOT>(value)
+                }?;
                 let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
                 IR::Definition {
                     value: def,
@@ -238,8 +288,8 @@ impl MokaIRGenerator<'_> {
             LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
             LXor => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseXor)?,
             IInc(idx, constant) => {
-                let base = frame.get_local(*idx)?;
-                frame.set_local(*idx, def.as_argument())?;
+                let base = frame.get_local::<SINGLE_SLOT>(*idx)?;
+                frame.set_local::<SINGLE_SLOT>(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
@@ -247,8 +297,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             Wide(WideInstruction::IInc(idx, constant)) => {
-                let base = frame.get_local(*idx)?;
-                frame.set_local(*idx, def.as_argument())?;
+                let base = frame.get_local::<SINGLE_SLOT>(*idx)?;
+                frame.set_local::<SINGLE_SLOT>(*idx, def.as_argument())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
@@ -271,9 +321,15 @@ impl MokaIRGenerator<'_> {
             I2C => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Char)?,
             I2S => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Short)?,
             LCmp => {
-                let rhs = frame.pop_dual_slot_value()?;
-                let lhs = frame.pop_dual_slot_value()?;
-                frame.push_value(def.as_argument())?;
+                let rhs = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                let lhs = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Definition {
                     value: def,
@@ -281,9 +337,9 @@ impl MokaIRGenerator<'_> {
                 }
             }
             FCmpL | FCmpG => {
-                let rhs = frame.pop_value()?;
-                let lhs = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
+                let rhs = frame.pop_value::<SINGLE_SLOT>()?;
+                let lhs = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let nan_treatment = match insn {
                     FCmpG => NaNTreatment::IsLargest,
                     FCmpL => NaNTreatment::IsSmallest,
@@ -296,9 +352,15 @@ impl MokaIRGenerator<'_> {
                 }
             }
             DCmpL | DCmpG => {
-                let rhs = frame.pop_dual_slot_value()?;
-                let lhs = frame.pop_dual_slot_value()?;
-                frame.push_value(def.as_argument())?;
+                let rhs = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                let lhs = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let nan_treatment = match insn {
                     DCmpG => NaNTreatment::IsLargest,
                     DCmpL => NaNTreatment::IsSmallest,
@@ -334,18 +396,18 @@ impl MokaIRGenerator<'_> {
                     return_address: next_pc,
                     target: *target,
                 };
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 IR::Definition {
                     value: def,
                     expr: value,
                 }
             }
             Ret(idx) => {
-                let return_address = frame.get_local(*idx)?;
+                let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
                 IR::SubroutineRet(return_address)
             }
             Wide(WideInstruction::Ret(idx)) => {
-                let return_address = frame.get_local(*idx)?;
+                let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
                 IR::SubroutineRet(return_address)
             }
             TableSwitch {
@@ -353,7 +415,7 @@ impl MokaIRGenerator<'_> {
                 jump_targets,
                 default,
             } => {
-                let condition = frame.pop_value()?;
+                let condition = frame.pop_value::<SINGLE_SLOT>()?;
                 let branches = range.clone().zip(jump_targets.clone()).collect();
                 IR::Switch {
                     match_value: condition,
@@ -365,7 +427,7 @@ impl MokaIRGenerator<'_> {
                 default,
                 match_targets,
             } => {
-                let condition = frame.pop_value()?;
+                let condition = frame.pop_value::<SINGLE_SLOT>()?;
                 IR::Switch {
                     match_value: condition,
                     default: *default,
@@ -373,11 +435,14 @@ impl MokaIRGenerator<'_> {
                 }
             }
             IReturn | FReturn | AReturn => {
-                let value = frame.pop_value()?;
+                let value = frame.pop_value::<SINGLE_SLOT>()?;
                 IR::Return(Some(value))
             }
             LReturn | DReturn => {
-                let value = frame.pop_dual_slot_value()?;
+                let value = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
                 IR::Return(Some(value))
             }
             Return => IR::Return(None),
@@ -392,7 +457,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             GetField(field) => {
-                let object_ref = frame.pop_value()?;
+                let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 frame.typed_push(&field.field_type, def.as_argument())?;
                 let field_op = FieldAccess::ReadInstance {
                     object_ref,
@@ -406,9 +471,12 @@ impl MokaIRGenerator<'_> {
             PutStatic(field) => {
                 use PrimitiveType::{Double, Long};
                 let value = if let FieldType::Base(Double | Long) = field.field_type {
-                    frame.pop_dual_slot_value()?
+                    {
+                        let this = &mut *frame;
+                        this.pop_value::<DUAL_SLOT>()
+                    }?
                 } else {
-                    frame.pop_value()?
+                    frame.pop_value::<SINGLE_SLOT>()?
                 };
                 let field_op = FieldAccess::WriteStatic {
                     field: field.clone(),
@@ -422,11 +490,14 @@ impl MokaIRGenerator<'_> {
             PutField(field) => {
                 use PrimitiveType::{Double, Long};
                 let value = if let FieldType::Base(Double | Long) = field.field_type {
-                    frame.pop_dual_slot_value()?
+                    {
+                        let this = &mut *frame;
+                        this.pop_value::<DUAL_SLOT>()
+                    }?
                 } else {
-                    frame.pop_value()?
+                    frame.pop_value::<SINGLE_SLOT>()?
                 };
-                let object_ref = frame.pop_value()?;
+                let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let field_op = FieldAccess::WriteInstance {
                     object_ref,
                     field: field.clone(),
@@ -441,7 +512,7 @@ impl MokaIRGenerator<'_> {
             | InvokeSpecial(method_ref)
             | InvokeInterface(method_ref, _) => {
                 let arguments = frame.pop_args(&method_ref.descriptor)?;
-                let object_ref = frame.pop_value()?;
+                let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let rhs = Expression::Call {
                     method: method_ref.clone(),
                     this: Some(object_ref),
@@ -491,15 +562,15 @@ impl MokaIRGenerator<'_> {
                 }
             }
             New(class) => {
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 IR::Definition {
                     value: def,
                     expr: Expression::New(class.clone()),
                 }
             }
             ANewArray(class_ref) => {
-                let count = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
+                let count = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let array_op = ArrayOperation::New {
                     element_type: FieldType::Object(class_ref.clone()),
                     length: count,
@@ -510,8 +581,8 @@ impl MokaIRGenerator<'_> {
                 }
             }
             NewArray(prim_type) => {
-                let count = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
+                let count = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let array_op = ArrayOperation::New {
                     element_type: FieldType::Base(*prim_type),
                     length: count,
@@ -523,9 +594,9 @@ impl MokaIRGenerator<'_> {
             }
             MultiANewArray(element_type, dimension) => {
                 let counts: Vec<_> = (0..*dimension)
-                    .map(|_| frame.pop_value())
+                    .map(|_| frame.pop_value::<SINGLE_SLOT>())
                     .collect::<Result<_, _>>()?;
-                frame.push_value(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Array(ArrayOperation::NewMultiDim {
                     element_type: element_type.clone(),
                     dimensions: counts,
@@ -533,13 +604,13 @@ impl MokaIRGenerator<'_> {
                 IR::Definition { value: def, expr }
             }
             ArrayLength => {
-                let array_ref = frame.pop_value()?;
-                frame.push_value(def.as_argument())?;
+                let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
                 let expr = Expression::Array(ArrayOperation::Length { array_ref });
                 IR::Definition { value: def, expr }
             }
             AThrow => {
-                let exception_ref = frame.pop_value()?;
+                let exception_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let expr = Expression::Throw(exception_ref);
                 IR::Definition { value: def, expr }
             }
@@ -554,13 +625,13 @@ impl MokaIRGenerator<'_> {
                 })?
             }
             MonitorEnter => {
-                let object_ref = frame.pop_value()?;
+                let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let monitor_op = LockOperation::Acquire(object_ref);
                 let expr = Expression::Synchronization(monitor_op);
                 IR::Definition { value: def, expr }
             }
             MonitorExit => {
-                let object_ref = frame.pop_value()?;
+                let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let monitor_op = LockOperation::Release(object_ref);
                 let expr = Expression::Synchronization(monitor_op);
                 IR::Definition { value: def, expr }
@@ -570,13 +641,13 @@ impl MokaIRGenerator<'_> {
                 | WideInstruction::FLoad(idx)
                 | WideInstruction::ALoad(idx),
             ) => {
-                let value = frame.get_local(*idx)?;
-                frame.push_value(value)?;
+                let value = frame.get_local::<SINGLE_SLOT>(*idx)?;
+                frame.push_value::<SINGLE_SLOT>(value)?;
                 IR::Nop
             }
             Wide(WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx)) => {
-                let value = frame.get_dual_slot_local(*idx)?;
-                frame.push_dual_slot_value(value)?;
+                let value = frame.get_local::<DUAL_SLOT>(*idx)?;
+                frame.push_value::<DUAL_SLOT>(value)?;
                 IR::Nop
             }
             Wide(
@@ -584,13 +655,19 @@ impl MokaIRGenerator<'_> {
                 | WideInstruction::FStore(idx)
                 | WideInstruction::AStore(idx),
             ) => {
-                let value = frame.pop_value()?;
-                frame.set_local(*idx, value)?;
+                let value = frame.pop_value::<SINGLE_SLOT>()?;
+                frame.set_local::<SINGLE_SLOT>(*idx, value)?;
                 IR::Nop
             }
             Wide(WideInstruction::LStore(idx) | WideInstruction::DStore(idx)) => {
-                let value = frame.pop_dual_slot_value()?;
-                frame.set_dual_slot_local(*idx, value)?;
+                let value = {
+                    let this = &mut *frame;
+                    this.pop_value::<DUAL_SLOT>()
+                }?;
+                {
+                    let idx = *idx;
+                    frame.set_local::<DUAL_SLOT>(idx, value)
+                }?;
                 IR::Nop
             }
         };
@@ -598,41 +675,23 @@ impl MokaIRGenerator<'_> {
     }
 }
 
-type SlotType = bool;
-const SINGLE_SLOT: SlotType = false;
-const DUAL_SLOT: SlotType = true;
-
 #[inline]
-#[allow(clippy::match_bool, reason = "For better readability")]
-fn load_local<const SLOT: SlotType>(
+fn load_local<const SLOT: SlotWidth>(
     frame: &mut JvmStackFrame,
     idx: u16,
 ) -> Result<IR, MokaIRBrewingError> {
-    let value = match SLOT {
-        SINGLE_SLOT => frame.get_local(idx),
-        DUAL_SLOT => frame.get_dual_slot_local(idx),
-    }?;
-    match SLOT {
-        SINGLE_SLOT => frame.push_value(value),
-        DUAL_SLOT => frame.push_dual_slot_value(value),
-    }?;
+    let value = frame.get_local::<SLOT>(idx)?;
+    frame.push_value::<SLOT>(value)?;
     Ok(IR::Nop)
 }
 
 #[inline]
-#[allow(clippy::match_bool, reason = "For better readability")]
-fn store_local<const SLOT: SlotType>(
+fn store_local<const SLOT: SlotWidth>(
     frame: &mut JvmStackFrame,
     idx: u16,
 ) -> Result<IR, MokaIRBrewingError> {
-    let value = match SLOT {
-        SINGLE_SLOT => frame.pop_value(),
-        DUAL_SLOT => frame.pop_dual_slot_value(),
-    }?;
-    match SLOT {
-        SINGLE_SLOT => frame.set_local(idx, value),
-        DUAL_SLOT => frame.set_dual_slot_local(idx, value),
-    }?;
+    let value = frame.pop_value::<SLOT>()?;
+    frame.set_local::<SLOT>(idx, value)?;
     Ok(IR::Nop)
 }
 
@@ -642,7 +701,7 @@ fn conditional_jump(
     target: ProgramCounter,
     condition: impl FnOnce(Operand) -> Condition,
 ) -> Result<IR, MokaIRBrewingError> {
-    let operand = frame.pop_value()?;
+    let operand = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(IR::Jump {
         condition: Some(condition(operand)),
         target,
@@ -655,8 +714,8 @@ fn cmp_jump(
     target: ProgramCounter,
     condition: impl FnOnce(Operand, Operand) -> Condition,
 ) -> Result<IR, MokaIRBrewingError> {
-    let rhs = frame.pop_value()?;
-    let lhs = frame.pop_value()?;
+    let rhs = frame.pop_value::<SINGLE_SLOT>()?;
+    let lhs = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(IR::Jump {
         condition: Some(condition(lhs, rhs)),
         target,
@@ -664,20 +723,13 @@ fn cmp_jump(
 }
 
 #[inline]
-#[allow(clippy::match_bool, reason = "For better readability")]
-fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
+fn conversion_op<const OPERAND_SLOT: SlotWidth, const RESULT_SLOT: SlotWidth>(
     frame: &mut JvmStackFrame,
     def: LocalValue,
     conversion: impl FnOnce(Operand) -> Conversion,
 ) -> Result<IR, MokaIRBrewingError> {
-    let operand = match OPERAND_SLOT {
-        SINGLE_SLOT => frame.pop_value(),
-        DUAL_SLOT => frame.pop_dual_slot_value(),
-    }?;
-    match RESULT_SLOT {
-        SINGLE_SLOT => frame.push_value(def.as_argument()),
-        DUAL_SLOT => frame.push_dual_slot_value(def.as_argument()),
-    }?;
+    let operand = frame.pop_value::<OPERAND_SLOT>()?;
+    frame.push_value::<RESULT_SLOT>(def.as_argument())?;
     Ok(IR::Definition {
         value: def,
         expr: Expression::Conversion(conversion(operand)),
@@ -686,19 +738,16 @@ fn conversion_op<const OPERAND_SLOT: SlotType, const RESULT_SLOT: SlotType>(
 
 #[inline]
 #[allow(clippy::match_bool, reason = "For better readability")]
-fn binary_op_math<const SLOT: SlotType>(
+fn binary_op_math<const SLOT: SlotWidth>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
     math: impl FnOnce(Operand, Operand) -> MathOperation,
 ) -> Result<IR, MokaIRBrewingError> {
-    let (rhs, lhs) = match SLOT {
-        SINGLE_SLOT => (frame.pop_value()?, frame.pop_value()?),
-        DUAL_SLOT => (frame.pop_dual_slot_value()?, frame.pop_dual_slot_value()?),
-    };
-    match SLOT {
-        SINGLE_SLOT => frame.push_value(def_id.as_argument()),
-        DUAL_SLOT => frame.push_dual_slot_value(def_id.as_argument()),
-    }?;
+    let rhs = frame.pop_value::<SLOT>()?;
+    let lhs = frame.pop_value::<SLOT>()?;
+    let value = def_id.as_argument();
+    frame.push_value::<SLOT>(value)?;
+
     let expr = Expression::Math(math(lhs, rhs));
     Ok(IR::Definition {
         value: def_id,
