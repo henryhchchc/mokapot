@@ -89,7 +89,9 @@ impl<'i, I> IntoIterator for &'i InstructionList<I> {
 impl<I> InstructionList<I> {
     /// Creates an iterator over the instructions.
     #[must_use]
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&ProgramCounter, &I)> {
+    pub fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&ProgramCounter, &I)> + ExactSizeIterator {
         self.into_iter()
     }
 }
