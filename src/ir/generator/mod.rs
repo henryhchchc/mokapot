@@ -172,7 +172,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             .map(|(edge, frame)| ((edge.1, frame), edge))
             .unzip();
         self.control_flow_edges
-            .extend(BTreeSet::into_iter(edges).map(|(src,tgt, ctr)| ((src, tgt), ctr)));
+            .extend(BTreeSet::into_iter(edges).map(|(src, tgt, ctr)| ((src, tgt), ctr)));
         Ok(affected_locations)
     }
 
