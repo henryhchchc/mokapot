@@ -671,7 +671,6 @@ fn conversion_op<const OPERAND_SLOT: SlotWidth, const RESULT_SLOT: SlotWidth>(
 }
 
 #[inline]
-#[allow(clippy::match_bool, reason = "For better readability")]
 fn binary_op_math<const SLOT: SlotWidth>(
     frame: &mut JvmStackFrame,
     def_id: LocalValue,
