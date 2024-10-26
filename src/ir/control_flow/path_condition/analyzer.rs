@@ -10,19 +10,19 @@ use super::PathCondition;
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
-pub struct Analyzer<'a> {
-    cfg: &'a ControlFlowGraph<(), ControlTransfer>,
+pub struct Analyzer<'a, N> {
+    cfg: &'a ControlFlowGraph<N, ControlTransfer>,
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a, N> Analyzer<'a, N> {
     /// Creates a new path condition analyzer.
     #[must_use]
-    pub fn new(cfg: &'a ControlFlowGraph<(), ControlTransfer>) -> Self {
+    pub fn new(cfg: &'a ControlFlowGraph<N, ControlTransfer>) -> Self {
         Self { cfg }
     }
 }
 
-impl fixed_point::Analyzer for Analyzer<'_> {
+impl<'a, N> fixed_point::Analyzer for Analyzer<'a, N> {
     type Location = ProgramCounter;
 
     type Fact = PathCondition<Predicate<Value>>;
@@ -43,23 +43,19 @@ impl fixed_point::Analyzer for Analyzer<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
-        if let Some(outgoing_edges) = self.cfg.edges_from(*location) {
-            let result = outgoing_edges
-                .map(|(_, dst, trx)| match trx {
-                    ControlTransfer::Conditional(cond) => {
-                        let new_cond = cond.clone() & fact.clone();
-                        (dst, new_cond)
-                    }
-                    _ => (dst, fact.clone()),
-                })
-                .collect();
-            Ok(result)
-        } else {
-            panic!(
-                "No outgoing edges from {:?} \n CFG: {:?}",
-                location, self.cfg
-            );
-        }
+        let Some(outgoing_edges) = self.cfg.edges_from(*location) else {
+            return Ok(BTreeMap::default());
+        };
+        let result = outgoing_edges
+            .map(|(_, dst, trx)| match trx {
+                ControlTransfer::Conditional(cond) => {
+                    let new_cond = cond.clone() & fact.clone();
+                    (dst, new_cond)
+                }
+                _ => (dst, fact.clone()),
+            })
+            .collect();
+        Ok(result)
     }
 
     fn merge_facts(

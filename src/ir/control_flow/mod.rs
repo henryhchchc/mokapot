@@ -108,7 +108,7 @@ impl<E> ControlFlowGraph<(), E> {
     }
 }
 
-impl ControlFlowGraph<(), ControlTransfer> {
+impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
     #[must_use]
     pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>> {
