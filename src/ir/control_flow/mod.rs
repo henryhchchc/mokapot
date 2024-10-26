@@ -111,15 +111,10 @@ impl<E> ControlFlowGraph<(), E> {
 impl ControlFlowGraph<(), ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
     #[must_use]
-    #[allow(
-        clippy::missing_panics_doc,
-        reason = "Never panics implied by implementation"
-    )]
     pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>> {
         let mut analyzer = path_condition::Analyzer::new(self);
-        analyzer
-            .analyze()
-            .expect("Never panics implied by implementation")
+        let Ok(path_conditions) = analyzer.analyze();
+        path_conditions
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, convert::Infallible, fmt::Display};
 
 use crate::{
     analysis::fixed_point,
@@ -27,7 +27,7 @@ impl fixed_point::Analyzer for Analyzer<'_> {
 
     type Fact = PathCondition<Predicate<Value>>;
 
-    type Err = ();
+    type Err = Infallible;
 
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
