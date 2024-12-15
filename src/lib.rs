@@ -22,5 +22,6 @@ pub(crate) mod macros;
 pub mod types;
 pub(crate) mod utils;
 
+/// Test utilities
 #[cfg(test)]
 pub mod tests;

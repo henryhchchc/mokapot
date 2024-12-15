@@ -10,7 +10,7 @@ impl GraphBase for DefUseChain<'_> {
     type EdgeId = (Identifier, Identifier);
 }
 
-impl<'a> IntoNeighbors for &'a DefUseChain<'_> {
+impl IntoNeighbors for &DefUseChain<'_> {
     type Neighbors = <BTreeSet<Identifier> as IntoIterator>::IntoIter;
 
     fn neighbors(self, node: Identifier) -> Self::Neighbors {

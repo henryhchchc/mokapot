@@ -7,7 +7,15 @@ use crate::{
 
 #[rustfmt::skip]
 #[must_use]
-pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8;40] {
+/// Creates an empty class with the specified major and minor version numbers.
+///
+/// # Parameters
+/// - `major`: The major version number.
+/// - `minor`: The minor version number.
+///
+/// # Returns
+/// A byte array representing the class file structure of an empty class.
+pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8; 40] {
     [
         0xCA, 0xFE, 0xBA, 0xBE, // Magic
         minor.to_be_bytes()[0], minor.to_be_bytes()[1], // Minor version

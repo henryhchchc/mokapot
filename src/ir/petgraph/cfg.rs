@@ -71,7 +71,7 @@ impl<N, E> Visitable for ControlFlowGraph<N, E> {
     }
 }
 
-impl<'a, N, E> IntoNodeIdentifiers for &'a ControlFlowGraph<N, E> {
+impl<N, E> IntoNodeIdentifiers for &ControlFlowGraph<N, E> {
     type NodeIdentifiers = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn node_identifiers(self) -> Self::NodeIdentifiers {
@@ -83,7 +83,7 @@ impl<'a, N, E> IntoNodeIdentifiers for &'a ControlFlowGraph<N, E> {
     }
 }
 
-impl<'a, N, E> IntoNeighbors for &'a ControlFlowGraph<N, E> {
+impl<N, E> IntoNeighbors for &ControlFlowGraph<N, E> {
     type Neighbors = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
@@ -91,7 +91,7 @@ impl<'a, N, E> IntoNeighbors for &'a ControlFlowGraph<N, E> {
     }
 }
 
-impl<'a, N, E> IntoNeighborsDirected for &'a ControlFlowGraph<N, E> {
+impl<N, E> IntoNeighborsDirected for &ControlFlowGraph<N, E> {
     type NeighborsDirected = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
 
     fn neighbors_directed(self, n: Self::NodeId, d: Direction) -> Self::NeighborsDirected {

@@ -22,7 +22,7 @@ impl<'a, N> Analyzer<'a, N> {
     }
 }
 
-impl<'a, N> fixed_point::Analyzer for Analyzer<'a, N> {
+impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
     type Location = ProgramCounter;
 
     type Fact = PathCondition<Predicate<Value>>;
