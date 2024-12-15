@@ -27,6 +27,15 @@ env:
   JAVA_VERSION: 23
 
 jobs:
+  style_vale:
+    name: Style / vale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout source code
+      - name: Check code style with vale
+        uses: errata-ai/vale-action@v2
+  
   style_rustfmt:
     name: Style / rustfmt
     runs-on: ubuntu-latest
