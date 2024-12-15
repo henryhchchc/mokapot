@@ -17,7 +17,7 @@ use super::ControlFlowGraph;
 pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
-    /// A conditional contol transfer.
+    /// A conditional control transfer.
     Conditional(PathCondition<Predicate<Value>>),
     /// A control transfer to the exception handler.
     Exception(BTreeSet<ClassRef>),

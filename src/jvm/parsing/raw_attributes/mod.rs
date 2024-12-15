@@ -9,7 +9,7 @@ use super::reader_utils::read_byte_chunk;
 use super::reader_utils::ReadBytes;
 use super::reader_utils::ValueReaderExt;
 
-/// The `Code` atribute.
+/// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
 pub struct Code {
     pub max_stack: u16,
@@ -24,7 +24,7 @@ impl ReadBytes for Code {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;
-        let code_length = usize::try_from(code_length).expect("32-bit size is not supportted.");
+        let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
         let instruction_bytes = read_byte_chunk(reader, code_length)?;
         let exception_table_length: u16 = reader.read_value()?;
         let exception_table = (0..exception_table_length)

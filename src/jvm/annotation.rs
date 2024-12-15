@@ -39,7 +39,7 @@ pub enum ElementValue {
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetInfo {
-    /// Idicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
+    /// Indicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
     TypeParameter {
         /// The index of the type parameter declaration.
         index: u8,

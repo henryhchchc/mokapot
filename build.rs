@@ -30,7 +30,7 @@ fn compile_java_files(path: &str) {
         "{}/**/*.java",
         test_data_path
             .to_str()
-            .expect("Test folder is not named with vaild UTF-8")
+            .expect("Test folder is not named with valid UTF-8")
     );
     let java_source_files: Vec<_> = glob::glob(&glob_pattern)
         .expect("The glob pattern is invalid.")

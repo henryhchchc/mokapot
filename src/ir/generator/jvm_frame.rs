@@ -523,14 +523,14 @@ mod test {
         }
 
         #[test]
-        fn slot_mismatch(valus in any::<Operand>()) {
+        fn slot_mismatch(values in any::<Operand>()) {
             let mut stack_frame = JvmStackFrame::new(
                 true,
                 &"()V".parse().expect("Invalid method desc"),
                 0,
                 2,
             ).unwrap();
-            stack_frame.push_value::<DUAL_SLOT>(valus.clone()).unwrap();
+            stack_frame.push_value::<DUAL_SLOT>(values.clone()).unwrap();
             stack_frame.pop_value::<SINGLE_SLOT>().unwrap();
             assert!(matches!(
                 stack_frame.pop_value::<SINGLE_SLOT>(),

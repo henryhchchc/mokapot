@@ -21,7 +21,7 @@ impl<K, V> Cache<K, V> {
         let cache = match self.inner.read() {
             Ok(it) => it,
             Err(poison_err) => {
-                // The operaion on `self.cache` should not panic.
+                // The operation on `self.cache` should not panic.
                 // When the other thread holding the lock get panic, the panic should happen before
                 // modifying the cache.
                 // Therefore, it is safe to take the lock even if it is poisoned.

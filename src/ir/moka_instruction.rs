@@ -227,7 +227,7 @@ pub(super) mod test {
 
     proptest! {
         #[test]
-        fn local_value_inner_convertion(id in 0..u16::MAX) {
+        fn local_value_inner_conversion(id in 0..u16::MAX) {
             let value = LocalValue::new(id);
             let id: u16 = value.into();
             assert_eq!(id, value.0);

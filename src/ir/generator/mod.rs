@@ -139,7 +139,7 @@ impl Analyzer for MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = PathCondition::conjuction_of(branches.keys().map(|it| {
+                let default_cond = PathCondition::conjunction_of(branches.keys().map(|it| {
                     let val = ConstantValue::Integer(*it).into();
                     Predicate::NotEqual(match_value.clone().into(), val)
                 }));

@@ -99,7 +99,7 @@ mod tests {
             arg1 in arb_argument(),
             arg2 in arb_argument(),
             num in any::<i32>(),
-            nan_treament in any::<NaNTreatment>()
+            nan_treatment in any::<NaNTreatment>()
         ) {
             let bin_ops = [
                 Operation::Add(arg1.clone(), arg2.clone()),
@@ -114,7 +114,7 @@ mod tests {
                 Operation::BitwiseOr(arg1.clone(), arg2.clone()),
                 Operation::BitwiseXor(arg1.clone(), arg2.clone()),
                 Operation::LongComparison(arg1.clone(), arg2.clone()),
-                Operation::FloatingPointComparison(arg1.clone(), arg2.clone(), nan_treament.clone()),
+                Operation::FloatingPointComparison(arg1.clone(), arg2.clone(), nan_treatment.clone()),
             ];
             let bin_ops_ids = arg1.iter().chain(arg2.iter()).copied().collect::<BTreeSet<_>>();
             for op in &bin_ops {

@@ -26,7 +26,7 @@ pub enum Operation {
     NewMultiDim {
         /// The type of the elements in the array.
         element_type: FieldType,
-        /// The legths of each of the dimensions of the array.
+        /// The lengths of each of the dimensions of the array.
         dimensions: Vec<Operand>,
     },
     /// Gets an element from an array.

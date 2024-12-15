@@ -265,11 +265,11 @@ mod tests {
         #[test]
         fn field_type_from_str_array(
             base_type in arb_non_array_field_type(),
-            dimention in 1..=u8::MAX
+            dimension in 1..=u8::MAX
         ) {
-            let s = format!("{}{}", "[".repeat(usize::from(dimention)), base_type.descriptor());
+            let s = format!("{}{}", "[".repeat(usize::from(dimension)), base_type.descriptor());
             let mut parsed = s.parse().expect("Failed to parse field type");
-            for _ in 0..dimention {
+            for _ in 0..dimension {
                 if let FieldType::Array(element_type) = parsed {
                     // TODO: change to the following line
                     //       when `Box::into_inner` is stable
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn misisng_array_element() {
+    fn missing_array_element() {
         assert!(FieldType::from_str("[").is_err());
     }
 

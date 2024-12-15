@@ -33,7 +33,7 @@ macro_rules! test_data_class {
 #[test]
 fn test_parse_my_class() {
     let bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-    let my_class = Class::from_reader(bytes).expect("Faied to parse class");
+    let my_class = Class::from_reader(bytes).expect("Failed to parse class");
 
     assert_eq!(class::MAX_MAJOR_VERSION, my_class.version.major());
     assert_eq!(0, my_class.version.minor());
@@ -108,10 +108,10 @@ fn parse_record() {
     let bytes = test_data_class!("mokapot", "org/mokapot/test/RecordTest");
     let class = Class::from_reader(bytes).unwrap();
     assert_eq!("org/mokapot/test/RecordTest", class.binary_name);
-    let Some(componenets) = class.record else {
+    let Some(components) = class.record else {
         panic!("Record components not found.");
     };
-    let mut rec_iter = componenets.into_iter();
+    let mut rec_iter = components.into_iter();
     assert!(matches!(
         rec_iter.next(),
         Some(RecordComponent { name, component_type, .. })

@@ -65,7 +65,7 @@ pub struct Class {
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// The bootstrap methods of the class, which are used to generate dynamic callsites.
     pub bootstrap_methods: Vec<class::BootstrapMethod>,
-    /// The infomation of the module if the class is `module-info`.
+    /// The information of the module if the class is `module-info`.
     pub module: Option<Module>,
     /// The packages of the module.
     pub module_packages: Vec<PackageRef>,
@@ -136,7 +136,7 @@ pub struct Field {
     /// Indicates if the field is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates if the field is deprecated.
-    pub is_deperecated: bool,
+    pub is_deprecated: bool,
     /// The generic signature.
     pub signature: Option<field::Signature>,
     /// The runtime visible annotations.

@@ -121,7 +121,7 @@ where
 
 impl<C: Ord> From<Predicate<C>> for PathCondition<Predicate<C>> {
     fn from(value: Predicate<C>) -> Self {
-        PathCondition::conjuction_of([value])
+        PathCondition::conjunction_of([value])
     }
 }
 

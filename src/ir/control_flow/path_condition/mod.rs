@@ -121,9 +121,9 @@ impl<P> PathCondition<P> {
         Self { products }
     }
 
-    /// Creates a conjuction of predicates.
+    /// Creates a conjunction of predicates.
     #[must_use]
-    pub fn conjuction_of(predicates: impl IntoIterator<Item = P>) -> Self
+    pub fn conjunction_of(predicates: impl IntoIterator<Item = P>) -> Self
     where
         P: Ord,
     {
@@ -309,9 +309,9 @@ mod test {
             pred_values.extend(generate_pred_values(&rhs));
             let lhs_eval = evaluate(lhs.clone(), &pred_values);
             let rhs_eval = evaluate(rhs.clone(), &pred_values);
-            let conjuction = lhs.clone() & rhs.clone();
-            let conjuction_eval = evaluate(conjuction.clone(), &pred_values);
-            assert_eq!(lhs_eval && rhs_eval, conjuction_eval);
+            let conjunction = lhs.clone() & rhs.clone();
+            let conjunction_eval = evaluate(conjunction.clone(), &pred_values);
+            assert_eq!(lhs_eval && rhs_eval, conjunction_eval);
         }
 
         #[test]
