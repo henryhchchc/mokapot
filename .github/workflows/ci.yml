@@ -32,9 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
-        run: |
-          rustup update stable \
-            && rustup default stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -50,9 +50,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
-        run: |
-          rustup update stable \
-            && rustup default stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -60,18 +60,8 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
-      - name: Cargo Update
-        run: cargo update --verbose
       - name: Restore Rust Build Cache
-        uses: actions/cache/restore@v4
-        with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+        uses: Leafwing-Studios/cargo-cache@v2
       - run: cargo check --all-targets --all-features --verbose
         name: Cargo check
       - name: Run clippy
@@ -83,29 +73,18 @@ jobs:
     needs: [style_rustfmt, style_clippy_check]
     steps:
       - name: Setup Rust
-        run: |
-          rustup update stable \
-            && rustup default stable \
-            && rustup component add llvm-tools-preview
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
       - name: Setup Build Tools
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - uses: actions/checkout@v4
         name: Checkout source code
-      - name: Cargo Update
-        run: cargo update --verbose
       - name: Cache Rust Build Stuff
-        uses: actions/cache@v4
-        with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
+        uses: Leafwing-Studios/cargo-cache@v2
       - name: Test
         run: |
           cargo llvm-cov clean --workspace
@@ -123,10 +102,10 @@ jobs:
     needs: [style_rustfmt, style_clippy_check]
     steps:
       - name: Setup Rust
-        run: |
-          rustup update stable \
-            && rustup default stable \
-            && rustup component add llvm-tools-preview
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
       - name: Setup Build Tools
         uses: taiki-e/install-action@v2
         with:
@@ -153,19 +132,8 @@ jobs:
       - name: Extract JDK classes
         if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
         run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
-      - name: Cargo Update
-        run: cargo update --verbose
       - name: Cache Rust Build Stuff
-        uses: actions/cache@v4
-        with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
+        uses: Leafwing-Studios/cargo-cache@v2
       - name: Test
         env:
           JDK_CLASSES: ./jdk_classes
@@ -219,9 +187,9 @@ jobs:
     needs: [unit_test, integration_test]
     steps:
       - name: Setup Rust
-        run: |
-          rustup update nightly \
-            && rustup default nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Build docs
@@ -269,21 +237,10 @@ jobs:
         run: rustup update && rustup default
       - uses: actions/checkout@v4
         name: Checkout source code
-      - name: Cargo Update
-        run: cargo update --verbose
-      - name: Restore Rust Build Cache
-        uses: actions/cache@v4
-        with:
-          key: cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-build-
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
       - uses: actions/checkout@v4
         name: Checkout source code
+      - name: Cache Rust Build Stuff
+        uses: Leafwing-Studios/cargo-cache@v2
       - name: Publish to crates.io
         run: cargo publish --all-features --verbose
         env:
