@@ -17,11 +17,14 @@ derive_more = { version = "2", features = ["full"] }
 document-features = "0.2"
 itertools = "0.14"
 petgraph = { version = "0.7", optional = true }
+inkwell = { version = "0.5", features = [
+  "llvm18-0-prefer-dynamic",
+], optional = true }
 thiserror = "2.0"
 trait-gen = "0.3"
 walkdir = "2"
 zip = { version = "2.2", optional = true, default-features = false, features = [
-    "deflate",
+  "deflate",
 ] }
 
 [dev-dependencies]
@@ -40,6 +43,9 @@ default = ["jar", "petgraph"]
 
 ## Enables loading classes from `.jar` files
 jar = ["dep:zip"]
+
+## Enables support for emitting LLVM IR from MokaIR
+llvm-ir = ["dep:inkwell"]
 
 ## Enables the analysis of control flow graphs with `petgraph`.
 petgraph = ["dep:petgraph"]
