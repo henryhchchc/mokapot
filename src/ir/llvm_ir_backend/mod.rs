@@ -2,9 +2,13 @@
 //! infrastructure.
 
 use inkwell::{
-    basic_block::BasicBlock, builder::Builder, module::Module, values::BasicValueEnum, IntPredicate,
+    basic_block::BasicBlock, builder::Builder, module::Module, values::BasicValueEnum,
+    AddressSpace, IntPredicate,
 };
 
+use crate::ir::expression::{Expression, MathOperation};
+use crate::ir::Identifier;
+use crate::jvm::ConstantValue;
 use crate::{
     ir::{expression::Condition, MokaInstruction, Operand},
     jvm::code::ProgramCounter,
@@ -15,6 +19,7 @@ mod intrinsics;
 mod utils;
 
 /// Trait representing a struct that can be lowered into LLVM IR.
+// TODO(Derppening): Determine if this trait can be used for all lower-able constructs.
 pub trait IRLowering {
     /// Lowers the LLVM IR representation of this struct and inserts it into the
     /// [`Module`].
@@ -122,7 +127,7 @@ impl IRLowering for Condition {
                         panic!("Expect LHS operand {lhs:?} to lower to a BasicValue")
                     };
                     let Some(rhs) = rhs.lower(module, builder, pc) else {
-                        panic!("Expect LHS operand {rhs:?} to lower to a BasicValue")
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
                     };
 
                     match (lhs, rhs) {
@@ -132,7 +137,7 @@ impl IRLowering for Condition {
 
                         (BasicValueEnum::PointerValue(lhs), BasicValueEnum::PointerValue(rhs)) => {
                             let ctx = module.get_context();
-                            
+
                             // TODO(Derppening): Should we be assuming 32-bit pointer types?
                             let lhs = builder.build_ptr_to_int(lhs, ctx.i32_type(), "").unwrap();
                             let rhs = builder.build_ptr_to_int(rhs, ctx.i32_type(), "").unwrap();
@@ -153,7 +158,7 @@ impl IRLowering for Condition {
                         panic!("Expect LHS operand {lhs:?} to lower to a BasicValue")
                     };
                     let Some(rhs) = rhs.lower(module, builder, pc) else {
-                        panic!("Expect LHS operand {rhs:?} to lower to a BasicValue")
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
                     };
 
                     match (lhs, rhs) {
@@ -177,6 +182,58 @@ impl IRLowering for Condition {
                             panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or PointerValue")
                         }
                     }
+                }
+
+                Condition::LessThan(lhs, rhs) => {
+                    let Some(BasicValueEnum::IntValue(lhs)) = lhs.lower(module, builder, pc) else {
+                        panic!("Expect LHS operand {lhs:?} to lower to an IntValue")
+                    };
+                    let Some(BasicValueEnum::IntValue(rhs)) = rhs.lower(module, builder, pc) else {
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
+                    };
+
+                    builder
+                        .build_int_compare(IntPredicate::SLT, lhs, rhs, "")
+                        .unwrap()
+                }
+
+                Condition::LessThanOrEqual(lhs, rhs) => {
+                    let Some(BasicValueEnum::IntValue(lhs)) = lhs.lower(module, builder, pc) else {
+                        panic!("Expect LHS operand {lhs:?} to lower to an IntValue")
+                    };
+                    let Some(BasicValueEnum::IntValue(rhs)) = rhs.lower(module, builder, pc) else {
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
+                    };
+
+                    builder
+                        .build_int_compare(IntPredicate::SLE, lhs, rhs, "")
+                        .unwrap()
+                }
+
+                Condition::GreaterThan(lhs, rhs) => {
+                    let Some(BasicValueEnum::IntValue(lhs)) = lhs.lower(module, builder, pc) else {
+                        panic!("Expect LHS operand {lhs:?} to lower to an IntValue")
+                    };
+                    let Some(BasicValueEnum::IntValue(rhs)) = rhs.lower(module, builder, pc) else {
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
+                    };
+
+                    builder
+                        .build_int_compare(IntPredicate::SGT, lhs, rhs, "")
+                        .unwrap()
+                }
+
+                Condition::GreaterThanOrEqual(lhs, rhs) => {
+                    let Some(BasicValueEnum::IntValue(lhs)) = lhs.lower(module, builder, pc) else {
+                        panic!("Expect LHS operand {lhs:?} to lower to an IntValue")
+                    };
+                    let Some(BasicValueEnum::IntValue(rhs)) = rhs.lower(module, builder, pc) else {
+                        panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
+                    };
+
+                    builder
+                        .build_int_compare(IntPredicate::SGE, lhs, rhs, "")
+                        .unwrap()
                 }
 
                 Condition::IsNull(operand) => {
@@ -233,10 +290,124 @@ impl IRLowering for Condition {
                         .unwrap()
                 }
 
-                _ => todo!("Unimplemented lowering for {self}"),
+                Condition::IsPositive(operand) => {
+                    let Some(BasicValueEnum::IntValue(operand)) =
+                        operand.lower(module, builder, pc)
+                    else {
+                        panic!("Expect {operand:?} to lower to an IntValue")
+                    };
+
+                    builder
+                        .build_int_compare(
+                            IntPredicate::SGT,
+                            operand,
+                            operand.get_type().const_zero(),
+                            "",
+                        )
+                        .unwrap()
+                }
+
+                Condition::IsNegative(operand) => {
+                    let Some(BasicValueEnum::IntValue(operand)) =
+                        operand.lower(module, builder, pc)
+                    else {
+                        panic!("Expect {operand:?} to lower to an IntValue")
+                    };
+
+                    builder
+                        .build_int_compare(
+                            IntPredicate::SLT,
+                            operand,
+                            operand.get_type().const_zero(),
+                            "",
+                        )
+                        .unwrap()
+                }
+
+                Condition::IsNonNegative(operand) => {
+                    let Some(BasicValueEnum::IntValue(operand)) =
+                        operand.lower(module, builder, pc)
+                    else {
+                        panic!("Expect {operand:?} to lower to an IntValue")
+                    };
+
+                    builder
+                        .build_int_compare(
+                            IntPredicate::SGE,
+                            operand,
+                            operand.get_type().const_zero(),
+                            "",
+                        )
+                        .unwrap()
+                }
+
+                Condition::IsNonPositive(operand) => {
+                    let Some(BasicValueEnum::IntValue(operand)) =
+                        operand.lower(module, builder, pc)
+                    else {
+                        panic!("Expect {operand:?} to lower to an IntValue")
+                    };
+
+                    builder
+                        .build_int_compare(
+                            IntPredicate::SLE,
+                            operand,
+                            operand.get_type().const_zero(),
+                            "",
+                        )
+                        .unwrap()
+                }
             }
             .into(),
         )
+    }
+}
+
+impl IRLowering for ConstantValue {
+    fn lower<'ctx>(
+        &self,
+        module: &Module<'ctx>,
+        builder: &Builder<'ctx>,
+        _: ProgramCounter,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let ctx = module.get_context();
+
+        Some(match self {
+            ConstantValue::Null => ctx.ptr_type(AddressSpace::default()).const_null().into(),
+            ConstantValue::Integer(v) => ctx.i32_type().const_int(*v as u64, true).into(),
+            ConstantValue::Float(v) => ctx.f32_type().const_float(*v as f64).into(),
+            ConstantValue::Long(v) => ctx.i64_type().const_int(*v as u64, true).into(),
+            ConstantValue::Double(v) => ctx.f64_type().const_float(*v).into(),
+
+            _ => todo!("Unimplemented lowering for {self}"),
+        })
+    }
+}
+
+impl IRLowering for Expression {
+    fn lower<'ctx>(
+        &self,
+        module: &Module<'ctx>,
+        builder: &Builder<'ctx>,
+        pc: ProgramCounter,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        Some(match self {
+            Expression::Const(value) => value.lower(module, builder, pc).unwrap(),
+            Expression::Math(op) => op.lower(module, builder, pc).unwrap(),
+
+            _ => todo!("Unimplemented lowering for {self}"),
+        })
+    }
+}
+
+impl IRLowering for Identifier {
+    fn lower<'ctx>(
+        &self,
+        module: &Module<'ctx>,
+        builder: &Builder<'ctx>,
+        pc: ProgramCounter,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        todo!("Unimplemented lowering for {self}")
     }
 }
 
@@ -248,5 +419,39 @@ impl IRLowering for Operand {
         pc: ProgramCounter,
     ) -> Option<BasicValueEnum<'ctx>> {
         todo!("Unimplemented lowering for {self}")
+    }
+}
+
+impl IRLowering for MathOperation {
+    fn lower<'ctx>(
+        &self,
+        module: &Module<'ctx>,
+        builder: &Builder<'ctx>,
+        pc: ProgramCounter,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        Some(match self {
+            MathOperation::Add(lhs, rhs) => {
+                let Some(lhs) = lhs.lower(module, builder, pc) else {
+                    panic!("Expect LHS operand {lhs:?} to lower to a BasicValue")
+                };
+                let Some(rhs) = rhs.lower(module, builder, pc) else {
+                    panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
+                };
+
+                match (lhs, rhs) {
+                    (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
+                        builder.build_int_add(lhs, rhs, "").unwrap().into()
+                    }
+                    (BasicValueEnum::FloatValue(lhs), BasicValueEnum::FloatValue(rhs)) => {
+                        builder.build_float_add(lhs, rhs, "").unwrap().into()
+                    }
+                    (_, _) => {
+                        panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            _ => todo!("Unimplemented lowering for {self}"),
+        })
     }
 }
