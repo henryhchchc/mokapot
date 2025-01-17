@@ -26,6 +26,9 @@ env:
   CARGO_TERM_COLOR: always
   JAVA_VERSION: 23
 
+permissions:
+  checks: write
+
 jobs:
   style_rustfmt:
     name: Style / rustfmt
@@ -65,7 +68,11 @@ jobs:
       - run: cargo check --all-targets --all-features --verbose
         name: Cargo check
       - name: Run clippy
-        run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
+        uses: auguwu/clippy-action@1.4.0
+        with:
+          check-args: --all-targets --all-features --verbose
+          args: -D warnings
+          token: ${{secrets.GITHUB_TOKEN}}
 
   unit_test:
     name: Test / unit
