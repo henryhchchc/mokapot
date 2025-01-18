@@ -8,7 +8,7 @@ use super::{Class, ClassLoader};
 
 /// An error that can occur while loading a class.
 #[derive(thiserror::Error, Debug)]
-pub enum    Error {
+pub enum Error {
     /// The class could not be found.
     #[error("Class not found")]
     NotFound,
@@ -38,7 +38,6 @@ where
     <T as Deref>::Target: ClassPath,
 {
     fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
-        let x = 10;
         self.deref().find_class(binary_name)
     }
 }
