@@ -38,18 +38,13 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: corretto
       - uses: actions/checkout@v4
         name: Checkout source code
       - name: Check code formatting with rustfmt
-        run: cargo fmt --check
+        uses: actions-rust-lang/rustfmt@v1
 
   style_clippy_check:
-    name: Style / clippy & check
+    name: Style / clippy
     runs-on: ubuntu-latest
     steps:
       - name: Setup Rust
@@ -65,8 +60,6 @@ jobs:
         name: Checkout source code
       - name: Restore Rust Build Cache
         uses: Leafwing-Studios/cargo-cache@v2
-      - run: cargo check --all-targets --all-features --verbose
-        name: Cargo check
       - name: Run clippy
         uses: auguwu/clippy-action@1.4.0
         with:
