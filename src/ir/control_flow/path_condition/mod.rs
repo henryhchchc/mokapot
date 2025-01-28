@@ -270,13 +270,12 @@ mod test {
     }
 
     fn generate_pred_values(cond: &PathCondition<TestPredicate>) -> HashMap<u32, bool> {
-        let mut rng = rand::thread_rng();
         cond.products
             .iter()
             .flat_map(|it| it.0.iter())
             .map(|it| it.0)
             .dedup()
-            .map(|it| (it, rng.gen::<bool>()))
+            .map(|it| (it, rand::random()))
             .collect()
     }
 
