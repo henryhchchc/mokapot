@@ -34,49 +34,69 @@ pub enum ReturnType {
     Void,
 }
 
+const PARAM_START: char = '(';
+const PARAM_END: char = ')';
+const ARRAY_MARKER: char = '[';
+const OBJECT_MARKER: char = 'L';
+const OBJECT_END: char = ';';
+
 impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        if !descriptor.starts_with('(') {
-            return Err(InvalidDescriptor);
-        }
-        let mut remaining = &descriptor['('.len_utf8()..];
-        let mut parameters_types = Vec::new();
-        loop {
-            if remaining.starts_with(')') {
-                remaining = &remaining[')'.len_utf8()..];
-                break;
-            }
-            let mut array_dim = 0u8;
-            while remaining.starts_with('[') {
-                array_dim += 1;
-                remaining = &remaining['['.len_utf8()..];
-            }
-            let mut next_param = match remaining.chars().next() {
-                Some(ch @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J')) => {
-                    remaining = &remaining[ch.len_utf8()..];
-                    PrimitiveType::try_from(ch).map(Into::into)?
-                }
-                Some('L') => {
-                    let semicolon_loc = remaining.find(';').ok_or(InvalidDescriptor)?;
-                    let binary_name = &remaining['L'.len_utf8()..semicolon_loc];
-                    remaining = &remaining[semicolon_loc + ';'.len_utf8()..];
-                    FieldType::Object(ClassRef::new(binary_name))
-                }
-                _ => Err(InvalidDescriptor)?,
-            };
-            for _ in 0..array_dim {
-                next_param = next_param.into_array_type();
-            }
-            parameters_types.push(next_param);
-        }
+        let remaining = descriptor
+            .strip_prefix(PARAM_START)
+            .ok_or(InvalidDescriptor)?;
+        let (parameters_types, remaining) = parse_params(remaining)?;
         let return_type = ReturnType::from_str(remaining)?;
         Ok(Self {
             parameters_types,
             return_type,
         })
     }
+}
+
+fn parse_params(
+    mut remaining: &str,
+) -> Result<(Vec<FieldType>, &str), <MethodDescriptor as FromStr>::Err> {
+    let mut parameters_types = Vec::new();
+    loop {
+        if let Some(remaining) = remaining.strip_prefix(PARAM_END) {
+            return Ok((parameters_types, remaining));
+        }
+        let (dimension, after_dim) = parse_array_dimension(remaining)?;
+        let (base_type, after_param) = parse_next_param(after_dim)?;
+        let param_type = (0..dimension).fold(base_type, |type_acc, _| type_acc.into_array_type());
+        parameters_types.push(param_type);
+        remaining = after_param;
+    }
+}
+
+fn parse_next_param(input: &str) -> Result<(FieldType, &str), <MethodDescriptor as FromStr>::Err> {
+    let (first_char, remaining) = input
+        .chars()
+        .next()
+        .map(|c| (c, &input[c.len_utf8()..]))
+        .ok_or(InvalidDescriptor)?;
+
+    match first_char {
+        primitive @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J') => {
+            let param_type = PrimitiveType::try_from(primitive).map(Into::into)?;
+            Ok((param_type, remaining))
+        }
+        OBJECT_MARKER => {
+            let (class_name, rest) = remaining.split_once(OBJECT_END).ok_or(InvalidDescriptor)?;
+            Ok((FieldType::Object(ClassRef::new(class_name)), rest))
+        }
+        _ => Err(InvalidDescriptor),
+    }
+}
+
+fn parse_array_dimension(input: &str) -> Result<(u8, &str), InvalidDescriptor> {
+    let count = input.chars().take_while(|&c| c == ARRAY_MARKER).count();
+    let remaining = &input[count..];
+    let dimension = u8::try_from(count).map_err(|_| InvalidDescriptor)?;
+    Ok((dimension, remaining))
 }
 
 /// An error indicating that the descriptor string is invalid.
