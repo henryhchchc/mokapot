@@ -22,8 +22,8 @@ impl ClassPath for DirectoryClassPath {
         let class_file_path = self.directory.join(binary_name).with_extension("class");
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
-            let buf_read = BufReader::new(class_file);
-            let class = Class::from_reader(buf_read)?;
+            let mut buf_read = BufReader::new(class_file);
+            let class = Class::from_reader(&mut buf_read)?;
             Ok(class)
         } else {
             Err(Error::NotFound)

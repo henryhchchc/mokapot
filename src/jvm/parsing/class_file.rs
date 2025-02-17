@@ -39,12 +39,11 @@ impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
     /// See [`Error`] for more information.
-    pub fn from_reader<R>(reader: R) -> Result<Class, Error>
+    pub fn from_reader<R>(reader: &mut R) -> Result<Class, Error>
     where
-        R: std::io::Read,
+        R: std::io::Read + ?Sized,
     {
-        let mut reader = reader;
-        let class_file = ClassFile::read_bytes(&mut reader)?;
+        let class_file = ClassFile::read_bytes(reader)?;
         Class::from_raw(class_file)
     }
 }
