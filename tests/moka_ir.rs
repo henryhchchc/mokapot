@@ -11,11 +11,12 @@ use petgraph::dot::Dot;
 use proptest::{arbitrary::any, proptest};
 
 fn get_test_class() -> Class {
-    let bytes = include_bytes!(concat!(
+    let mut bytes = include_bytes!(concat!(
         env!("OUT_DIR"),
         "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
-    ));
-    Class::from_reader(&bytes[..]).unwrap()
+    ))
+    .as_slice();
+    Class::from_reader(&mut bytes).unwrap()
 }
 
 fn get_test_method() -> Method {
