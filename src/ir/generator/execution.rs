@@ -388,10 +388,7 @@ impl MokaIRGenerator<'_> {
                 IR::Return(Some(value))
             }
             LReturn | DReturn => {
-                let value = {
-                    let this = &mut *frame;
-                    this.pop_value::<DUAL_SLOT>()
-                }?;
+                let value = frame.pop_value::<DUAL_SLOT>()?;
                 IR::Return(Some(value))
             }
             Return => IR::Return(None),
