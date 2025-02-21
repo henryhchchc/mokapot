@@ -3,8 +3,8 @@
 use std::collections::HashSet;
 
 use petgraph::{
-    visit::{GraphBase, GraphRef, IntoNeighbors, IntoNeighborsDirected, Visitable},
     Direction,
+    visit::{GraphBase, GraphRef, IntoNeighbors, IntoNeighborsDirected, Visitable},
 };
 
 use crate::{

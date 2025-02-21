@@ -20,10 +20,10 @@ use crate::{
 };
 
 use super::{
+    Context, Error,
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::{ReadBytes, ValueReaderExt},
-    Context, Error,
 };
 
 #[derive(Debug)]

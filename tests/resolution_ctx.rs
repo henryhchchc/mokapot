@@ -11,9 +11,10 @@ const TEST_CP: &str = concat!(env!("OUT_DIR"), "/mokapot/java_classes");
 fn load_classes() {
     let app_cp = DirectoryClassPath::new(TEST_CP);
     let ctx = ResolutionContext::new(&[app_cp], &[]);
-    assert!(ctx
-        .application_classes
-        .contains_key(&ClassRef::new("org/mokapot/test/TestAnalysis")));
+    assert!(
+        ctx.application_classes
+            .contains_key(&ClassRef::new("org/mokapot/test/TestAnalysis"))
+    );
 }
 
 #[test]
@@ -23,7 +24,9 @@ fn interfaces_impl() {
     let implements = ctx
         .interface_implementations
         .implemented_interfaces(&ClassRef::new("org/mokapot/test/MyClass"));
-    assert!(implements
-        .iter()
-        .any(|it| it == &ClassRef::new("java/io/Closeable")));
+    assert!(
+        implements
+            .iter()
+            .any(|it| it == &ClassRef::new("java/io/Closeable"))
+    );
 }

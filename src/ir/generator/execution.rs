@@ -1,18 +1,18 @@
 use super::{
-    jvm_frame::{JvmStackFrame, SlotWidth, DUAL_SLOT, SINGLE_SLOT},
     MokaIRBrewingError, MokaIRGenerator,
+    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT, SlotWidth},
 };
 use crate::{
     ir::{
+        LocalValue, MokaInstruction as IR, Operand,
         expression::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
-        LocalValue, MokaInstruction as IR, Operand,
     },
     jvm::{
-        code::{Instruction, ProgramCounter, WideInstruction},
         ConstantValue,
+        code::{Instruction, ProgramCounter, WideInstruction},
     },
     types::{
         field_type::{FieldType, PrimitiveType},

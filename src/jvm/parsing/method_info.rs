@@ -2,20 +2,20 @@ use std::io::{self, Read};
 
 use crate::{
     jvm::{
+        Method,
         method::{self},
         parsing::Context,
         references::ClassRef,
-        Method,
     },
     macros::{extract_attributes, malform, see_jvm_spec},
     types::method_descriptor::MethodDescriptor,
 };
 
 use super::{
+    Error,
     attribute::AttributeInfo,
     jvm_element_parser::ClassElement,
     reader_utils::{ReadBytes, ValueReaderExt},
-    Error,
 };
 
 /// The raw representation of a `method_info` structure.

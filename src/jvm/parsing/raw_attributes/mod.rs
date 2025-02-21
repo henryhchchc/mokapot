@@ -5,9 +5,9 @@ use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 
 use super::attribute::AttributeInfo;
-use super::reader_utils::read_byte_chunk;
 use super::reader_utils::ReadBytes;
 use super::reader_utils::ValueReaderExt;
+use super::reader_utils::read_byte_chunk;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]

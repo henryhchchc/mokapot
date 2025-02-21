@@ -7,9 +7,9 @@ use super::{Identifier, Operand};
 
 use crate::{
     jvm::{
+        ConstantValue,
         code::ProgramCounter,
         references::{ClassRef, MethodRef},
-        ConstantValue,
     },
     types::method_descriptor::MethodDescriptor,
 };

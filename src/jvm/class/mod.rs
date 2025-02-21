@@ -12,11 +12,11 @@ use crate::{
 };
 
 use super::{
+    Annotation, Class, ConstantValue, Field, Method,
     annotation::ElementValue,
     field,
     parsing::Error,
     references::{ClassRef, FieldRef, MethodRef},
-    Annotation, Class, ConstantValue, Field, Method,
 };
 
 /// A generic type signature for a class.

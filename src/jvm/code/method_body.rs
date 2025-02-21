@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    jvm::{class::ConstantPool, parsing::Error, references::ClassRef, TypeAnnotation},
+    jvm::{TypeAnnotation, class::ConstantPool, parsing::Error, references::ClassRef},
     macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
 };

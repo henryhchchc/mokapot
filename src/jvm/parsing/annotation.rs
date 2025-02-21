@@ -1,14 +1,14 @@
 use crate::{
     jvm::{
+        Annotation, ConstantValue, TypeAnnotation,
         annotation::{ElementValue, TargetInfo, TypePathElement},
         class::constant_pool,
         code::LocalVariableId,
-        Annotation, ConstantValue, TypeAnnotation,
     },
     types::field_type::PrimitiveType,
 };
 
-use super::{jvm_element_parser::ClassElement, raw_attributes, Context, Error};
+use super::{Context, Error, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for TypePathElement {
     type Raw = (u8, u8);

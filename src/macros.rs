@@ -48,7 +48,7 @@ macro_rules! extract_attributes {
 }
 
 macro_rules! malform {
-    ($msg:expr) => {
+    ($msg:expr_2021) => {
         Err(Error::Other($msg))?
     };
 }

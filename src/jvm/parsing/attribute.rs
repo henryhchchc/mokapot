@@ -4,21 +4,21 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
+        Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         method::ParameterInfo,
         references::{ClassRef, PackageRef},
-        Annotation, ConstantValue, Module, TypeAnnotation,
     },
     macros::see_jvm_spec,
 };
 
 use super::{
+    Context, Error,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::ClassElement,
-    reader_utils::{read_byte_chunk, ReadBytes, ValueReaderExt},
-    Context, Error,
+    reader_utils::{ReadBytes, ValueReaderExt, read_byte_chunk},
 };
 
 /// Represent an attribute of a class file, method, field, or code.
@@ -121,15 +121,15 @@ impl Attribute {
 }
 
 macro_rules! parse {
-    ($reader:expr, $ctx:expr $(=> $attr:ident )?) => {{
+    ($reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
         let raw = $reader.read_value()?;
         ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
     }};
-    ($len_type:ty; $reader:expr, || $with:expr $(=> $attr:ident )?) => {{
+    ($len_type:ty; $reader:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
         let count: $len_type = $reader.read_value()?;
         (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
-    ($len_type:ty; $reader:expr, $ctx:expr $(=> $attr:ident )?) => {
+    ($len_type:ty; $reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
         parse![$len_type; $reader, || parse!($reader, $ctx)] $( .map(Self::$attr) )?
     };
 }

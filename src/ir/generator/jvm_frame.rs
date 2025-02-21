@@ -399,7 +399,7 @@ mod test {
     use std::collections::BTreeSet;
 
     use crate::{
-        ir::{generator::ExecutionError, Identifier, LocalValue, Operand},
+        ir::{Identifier, LocalValue, Operand, generator::ExecutionError},
         types::method_descriptor::MethodDescriptor,
     };
 

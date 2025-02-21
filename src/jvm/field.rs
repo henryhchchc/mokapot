@@ -1,6 +1,6 @@
 //! JVM fields and constant values.
 
-use super::{references::FieldRef, Field};
+use super::{Field, references::FieldRef};
 
 impl Field {
     /// Creates a [`FieldRef`] referring to the field.

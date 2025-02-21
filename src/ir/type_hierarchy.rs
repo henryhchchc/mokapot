@@ -1,9 +1,9 @@
 //! Type hierarchy analysis components.
 use std::collections::{HashMap, HashSet};
 
-use petgraph::visit::{depth_first_search, Control, DfsEvent, Reversed};
+use petgraph::visit::{Control, DfsEvent, Reversed, depth_first_search};
 
-use crate::jvm::{references::ClassRef, Class};
+use crate::jvm::{Class, references::ClassRef};
 
 use super::{ClassHierarchy, InterfaceImplHierarchy};
 

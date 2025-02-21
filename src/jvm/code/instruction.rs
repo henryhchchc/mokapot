@@ -2,8 +2,8 @@ use std::{collections::BTreeMap, ops::RangeInclusive, ptr};
 
 use crate::{
     jvm::{
-        references::{ClassRef, FieldRef, MethodRef},
         ConstantValue,
+        references::{ClassRef, FieldRef, MethodRef},
     },
     macros::see_jvm_spec,
     types::{

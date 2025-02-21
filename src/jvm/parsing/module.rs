@@ -1,10 +1,10 @@
 use crate::jvm::{
+    Module,
     class::constant_pool::Entry,
     module::{Export, Open, Provide, Require},
-    Module,
 };
 
-use super::{jvm_element_parser::ClassElement, raw_attributes, Context, Error};
+use super::{Context, Error, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;

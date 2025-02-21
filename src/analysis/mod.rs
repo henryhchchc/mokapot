@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ir::{ClassHierarchy, InterfaceImplHierarchy},
-    jvm::{class_loader::ClassPath, references::ClassRef, Class},
+    jvm::{Class, class_loader::ClassPath, references::ClassRef},
 };
 
 pub mod fixed_point;

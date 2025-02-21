@@ -2,18 +2,18 @@ use std::io::{self, Read};
 
 use crate::{
     jvm::{
+        Field,
         field::{self},
         references::ClassRef,
-        Field,
     },
     macros::{extract_attributes, see_jvm_spec},
 };
 
 use super::{
+    Context, Error,
     attribute::AttributeInfo,
     jvm_element_parser::ClassElement,
     reader_utils::{ReadBytes, ValueReaderExt},
-    Context, Error,
 };
 
 /// The raw representation of a `field_info` structure.

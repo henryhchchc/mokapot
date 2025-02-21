@@ -6,11 +6,11 @@ use std::{
 };
 
 use mokapot::jvm::{
-    class_loader::{
-        class_paths::{DirectoryClassPath, JarClassPath},
-        CachingClassLoader, ClassPath, Error,
-    },
     Class, ClassLoader,
+    class_loader::{
+        CachingClassLoader, ClassPath, Error,
+        class_paths::{DirectoryClassPath, JarClassPath},
+    },
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -87,9 +87,11 @@ fn jar_class_path() {
     let jar_cp = JarClassPath::new(jar_path);
     let class_loader = ClassLoader::new([jar_cp]);
 
-    assert!(class_loader
-        .load_class("jdk/internal/jimage/ImageReader")
-        .is_ok());
+    assert!(
+        class_loader
+            .load_class("jdk/internal/jimage/ImageReader")
+            .is_ok()
+    );
 }
 
 #[test]

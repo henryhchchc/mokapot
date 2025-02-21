@@ -10,10 +10,10 @@ use std::{
 use crate::{
     ir::control_flow::path_condition::{PathCondition, Predicate},
     jvm::{
+        ConstantValue, Method,
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
         method,
         references::ClassRef,
-        ConstantValue, Method,
     },
 };
 
@@ -24,7 +24,7 @@ use self::jvm_frame::{Entry, JvmStackFrame};
 use itertools::Itertools;
 pub use jvm_frame::ExecutionError;
 
-use super::{control_flow::ControlTransfer, expression::Expression, ControlFlowGraph};
+use super::{ControlFlowGraph, control_flow::ControlTransfer, expression::Expression};
 use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
 
 /// An error that occurs when generating Moka IR.

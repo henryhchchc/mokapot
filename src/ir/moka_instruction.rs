@@ -1,5 +1,5 @@
 use std::{
-    collections::{btree_set, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, btree_set},
     iter::{self, Once},
     ops::BitOr,
 };

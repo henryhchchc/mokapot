@@ -2,8 +2,8 @@ use std::{collections::BTreeMap, convert::Infallible, fmt::Display};
 
 use crate::{
     analysis::fixed_point,
-    ir::{self, control_flow::ControlTransfer, ControlFlowGraph, Operand},
-    jvm::{code::ProgramCounter, ConstantValue},
+    ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer},
+    jvm::{ConstantValue, code::ProgramCounter},
 };
 
 use super::PathCondition;

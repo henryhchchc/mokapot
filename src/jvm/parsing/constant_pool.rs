@@ -4,14 +4,14 @@ use std::{
 };
 
 use super::{
-    reader_utils::{read_byte_chunk, ValueReaderExt},
     Error,
+    reader_utils::{ValueReaderExt, read_byte_chunk},
 };
 use crate::{
     jvm::{
-        class::{constant_pool::Entry, ConstantPool, MethodHandle},
-        references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
         ConstantValue, JavaString,
+        class::{ConstantPool, MethodHandle, constant_pool::Entry},
+        references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
     types::field_type::FieldType,

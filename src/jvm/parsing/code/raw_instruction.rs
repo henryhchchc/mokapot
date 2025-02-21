@@ -3,7 +3,7 @@ use std::{
     io::{self, Cursor},
 };
 
-use super::super::{reader_utils::ValueReaderExt, Error};
+use super::super::{Error, reader_utils::ValueReaderExt};
 use crate::{
     jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
     macros::malform,

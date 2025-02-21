@@ -2,7 +2,7 @@
 
 use bitflags::bitflags;
 
-use super::{references::MethodRef, Method};
+use super::{Method, references::MethodRef};
 
 /// A generic type signature for a method.
 pub type Signature = String;

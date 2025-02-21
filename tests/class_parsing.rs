@@ -4,10 +4,10 @@ use std::io::{self};
 
 use mokapot::{
     jvm::{
+        Class,
         class::{self, AccessFlags, RecordComponent},
         parsing::Error,
         references::ClassRef,
-        Class,
     },
     types::{
         field_type::{FieldType, PrimitiveType},
@@ -52,9 +52,11 @@ fn test_parse_my_class() {
         my_class.interfaces.first()
     );
     assert_eq!(2, my_class.fields.len());
-    assert!(my_class
-        .get_field("test", FieldType::Base(PrimitiveType::Long))
-        .is_some());
+    assert!(
+        my_class
+            .get_field("test", FieldType::Base(PrimitiveType::Long))
+            .is_some()
+    );
 
     let main_method = &my_class
         .get_method(

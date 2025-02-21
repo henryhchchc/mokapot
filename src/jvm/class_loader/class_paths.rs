@@ -3,11 +3,11 @@
 use std::{collections::HashSet, fs::File, io::BufReader};
 
 #[cfg(feature = "jar")]
-use zip::{result::ZipError, ZipArchive};
+use zip::{ZipArchive, result::ZipError};
 
 use crate::{
     analysis::ClassRefs,
-    jvm::{references::ClassRef, Class},
+    jvm::{Class, references::ClassRef},
 };
 
 use super::{ClassPath, Error};

@@ -2,10 +2,10 @@
 
 use mokapot::{
     ir::{
-        expression::Expression, DefUseChain, Identifier, LocalValue, MokaIRMethodExt,
-        MokaInstruction, Operand,
+        DefUseChain, Identifier, LocalValue, MokaIRMethodExt, MokaInstruction, Operand,
+        expression::Expression,
     },
-    jvm::{code::ProgramCounter, Class, ConstantValue, JavaString, Method},
+    jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
 use petgraph::dot::Dot;
 use proptest::{arbitrary::any, proptest};

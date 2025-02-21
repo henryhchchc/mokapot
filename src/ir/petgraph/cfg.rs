@@ -3,11 +3,11 @@
 use std::collections::BTreeSet;
 
 use petgraph::{
+    Directed, Direction,
     visit::{
         Data, GraphBase, GraphProp, IntoEdgeReferences, IntoNeighbors, IntoNeighborsDirected,
         IntoNodeIdentifiers, IntoNodeReferences, NodeIndexable, VisitMap, Visitable,
     },
-    Directed, Direction,
 };
 
 use crate::{ir::ControlFlowGraph, jvm::code::ProgramCounter};

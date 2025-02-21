@@ -1,6 +1,6 @@
 use crate::jvm::{
     code::{ProgramCounter, StackMapFrame, VerificationType},
-    parsing::{jvm_element_parser::ClassElement, raw_attributes, Context, Error},
+    parsing::{Context, Error, jvm_element_parser::ClassElement, raw_attributes},
 };
 
 impl ClassElement for StackMapFrame {

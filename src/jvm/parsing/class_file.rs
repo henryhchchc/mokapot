@@ -2,20 +2,21 @@ use std::io::{self, Read};
 
 use crate::{
     jvm::{
+        Class,
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
         },
         parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
-        Class,
     },
     macros::{extract_attributes, malform, see_jvm_spec},
 };
 
 use super::{
-    attribute::AttributeInfo, field_info::FieldInfo, jvm_element_parser::ClassElement,
-    method_info::MethodInfo, raw_attributes, reader_utils::ReadBytes, Context, Error,
+    Context, Error, attribute::AttributeInfo, field_info::FieldInfo,
+    jvm_element_parser::ClassElement, method_info::MethodInfo, raw_attributes,
+    reader_utils::ReadBytes,
 };
 
 /// The raw representation of a class file.
