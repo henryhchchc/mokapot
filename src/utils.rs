@@ -34,6 +34,7 @@ impl<K, V> Cache<K, V> {
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
             unsafe { transmute::<&V, &'c V>(b.as_ref()) }
         } else {
+            drop(cache);
             let mut cache = match self.inner.write() {
                 Ok(it) => it,
                 Err(poison_err) => poison_err.into_inner(),
