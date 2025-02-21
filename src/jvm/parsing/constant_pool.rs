@@ -219,16 +219,16 @@ impl Entry {
         let tag: u8 = reader.read_value()?;
         match tag {
             1 => Self::parse_utf8(reader),
-            3 => reader.read_value().map(Self::Integer).map_err(Into::into),
-            4 => reader.read_value().map(Self::Float).map_err(Into::into),
-            5 => reader.read_value().map(Self::Long).map_err(Into::into),
-            6 => reader.read_value().map(Self::Double).map_err(Into::into),
-            7 => Ok(Self::Class {
-                name_index: reader.read_value()?,
-            }),
-            8 => Ok(Self::String {
-                string_index: reader.read_value()?,
-            }),
+            3 => reader.read_value().map(Self::Integer),
+            4 => reader.read_value().map(Self::Float),
+            5 => reader.read_value().map(Self::Long),
+            6 => reader.read_value().map(Self::Double),
+            7 => reader
+                .read_value()
+                .map(|name_index| Self::Class { name_index }),
+            8 => reader
+                .read_value()
+                .map(|string_index| Self::String { string_index }),
             9 => Ok(Self::FieldRef {
                 class_index: reader.read_value()?,
                 name_and_type_index: reader.read_value()?,
@@ -260,12 +260,12 @@ impl Entry {
                 bootstrap_method_attr_index: reader.read_value()?,
                 name_and_type_index: reader.read_value()?,
             }),
-            19 => Ok(Self::Module {
-                name_index: reader.read_value()?,
-            }),
-            20 => Ok(Self::Package {
-                name_index: reader.read_value()?,
-            }),
+            19 => reader
+                .read_value()
+                .map(|name_index| Self::Module { name_index }),
+            20 => reader
+                .read_value()
+                .map(|name_index| Self::Package { name_index }),
             it => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Invalid constant pool tag: {it}"),
