@@ -1,4 +1,7 @@
-use std::io::{self, Read};
+use std::{
+    collections::VecDeque,
+    io::{self, Read},
+};
 
 use itertools::Itertools;
 
@@ -140,7 +143,7 @@ impl ClassElement for Attribute {
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let reader = &mut info.as_slice();
+        let reader = &mut VecDeque::from(info);
 
         let result = match name {
             "ConstantValue" => {
@@ -217,14 +220,13 @@ impl ClassElement for Attribute {
                 .map(|bytes| Attribute::Unrecognized(name.to_owned(), bytes))
                 .map_err(Into::into),
         }?;
-        match reader.read(&mut [0]) {
-            Ok(0) => Ok(result),
-            Ok(1) => Err(Error::IO(io::Error::new(
+        if reader.is_empty() {
+            Ok(result)
+        } else {
+            Err(Error::IO(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
-            ))),
-            Err(e) => Err(e.into()),
-            _ => unreachable!(),
+            )))
         }
     }
 }
