@@ -60,14 +60,11 @@ pub trait Analyzer {
                 //       See https://github.com/rust-lang/rust/issues/87053.
                 let mut merged_fact = None;
                 for incoming_fact in incoming_facts {
-                    match merged_fact {
-                        Some(ref merged) => {
-                            let new = self.merge_facts(merged, incoming_fact)?;
-                            merged_fact.replace(new);
-                        }
-                        _ => {
-                            merged_fact.replace(incoming_fact);
-                        }
+                    if let Some(ref merged) = merged_fact {
+                        let new = self.merge_facts(merged, incoming_fact)?;
+                        merged_fact.replace(new);
+                    } else {
+                        merged_fact.replace(incoming_fact);
                     }
                 }
                 merged_fact.unwrap()
