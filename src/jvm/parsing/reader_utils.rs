@@ -32,20 +32,15 @@ impl ReadBytes for ProgramCounter {
     }
 }
 
-macro_rules! impl_read_bytes_for {
-    ($($t:ty),*) => {
-        $(
-            impl ReadBytes for $t {
-                fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-                    let buf = reader.read_value()?;
-                    Ok(Self::from_be_bytes(buf))
-                }
-            }
-        )*
-    };
+#[trait_gen::trait_gen(T ->
+    u8, u16, u32, i8, i16, i32, i64, f32, f64
+)]
+impl ReadBytes for T {
+    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+        let buf = reader.read_value()?;
+        Ok(Self::from_be_bytes(buf))
+    }
 }
-
-impl_read_bytes_for![u8, u16, u32, i8, i16, i32, i64, f32, f64];
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
 pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>

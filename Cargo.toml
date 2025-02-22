@@ -18,6 +18,7 @@ document-features = "0.2"
 itertools = "0.14"
 petgraph = { version = "0.7", optional = true }
 thiserror = "2.0"
+trait-gen = "0.3"
 walkdir = "2"
 zip = { version = "2.2", optional = true, default-features = false, features = [
     "deflate",
