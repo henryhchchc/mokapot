@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     io::{self, Read},
+    iter,
 };
 
 use super::super::{Error, reader_utils::ValueReaderExt};
@@ -19,18 +20,15 @@ impl RawInstruction {
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
-        let mut inner = BTreeMap::new();
-        while let Some((pc, instruction)) = RawInstruction::parse_one(&mut reader)? {
-            inner.insert(pc, instruction);
-        }
+        let inner: BTreeMap<_, _> =
+            iter::from_fn(|| RawInstruction::read_one(&mut reader).transpose())
+                .collect::<Result<_, _>>()?;
         Ok(InstructionList::from(inner))
     }
 
     /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
-    fn parse_one<R>(
-        reader: &mut PositionTracker<R>,
-    ) -> Result<Option<(ProgramCounter, Self)>, Error>
+    fn read_one<R>(reader: &mut PositionTracker<R>) -> Result<Option<(ProgramCounter, Self)>, Error>
     where
         PositionTracker<R>: Read,
     {

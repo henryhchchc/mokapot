@@ -50,15 +50,12 @@ impl MethodBody {
 #[derive(Debug, Clone)]
 pub struct InstructionList<I>(BTreeMap<ProgramCounter, I>);
 
-impl<I> From<BTreeMap<ProgramCounter, I>> for InstructionList<I> {
-    fn from(map: BTreeMap<ProgramCounter, I>) -> Self {
-        Self(map)
-    }
-}
-
-impl<I, const N: usize> From<[(ProgramCounter, I); N]> for InstructionList<I> {
-    fn from(value: [(ProgramCounter, I); N]) -> Self {
-        Self::from(BTreeMap::from(value))
+impl<I, T> From<T> for InstructionList<I>
+where
+    BTreeMap<ProgramCounter, I>: From<T>,
+{
+    fn from(value: T) -> Self {
+        Self(value.into())
     }
 }
 
