@@ -13,7 +13,7 @@ use crate::{
     macros::malform,
 };
 
-impl RawInstruction {
+impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`Error`] for more information.
@@ -25,7 +25,9 @@ impl RawInstruction {
                 .collect::<Result<_, _>>()?;
         Ok(InstructionList::from(inner))
     }
+}
 
+impl RawInstruction {
     /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
     fn read_one<R>(reader: &mut PositionTracker<R>) -> Result<Option<(ProgramCounter, Self)>, Error>

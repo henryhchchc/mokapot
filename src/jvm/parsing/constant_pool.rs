@@ -47,30 +47,30 @@ impl ConstantPool {
 
     pub(super) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, Error> {
         let entry = self.get_entry(value_index)?;
-        match entry {
-            &Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
-            &Entry::Long(it) => Ok(ConstantValue::Long(it)),
-            &Entry::Float(it) => Ok(ConstantValue::Float(it)),
-            &Entry::Double(it) => Ok(ConstantValue::Double(it)),
-            &Entry::String { string_index } => {
+        match *entry {
+            Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
+            Entry::Long(it) => Ok(ConstantValue::Long(it)),
+            Entry::Float(it) => Ok(ConstantValue::Float(it)),
+            Entry::Double(it) => Ok(ConstantValue::Double(it)),
+            Entry::String { string_index } => {
                 if let Entry::Utf8(java_str) = self.get_entry(string_index)? {
                     Ok(ConstantValue::String(java_str.clone()))
                 } else {
                     mismatch("Utf8", entry)
                 }
             }
-            &Entry::MethodType { descriptor_index } => self
+            Entry::MethodType { descriptor_index } => self
                 .get_str(descriptor_index)
                 .and_then(|it| it.parse().map_err(Into::into))
                 .map(ConstantValue::MethodType),
-            &Entry::Class { name_index } => self
+            Entry::Class { name_index } => self
                 .get_str(name_index)
                 .map(ClassRef::new)
                 .map(ConstantValue::Class),
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
                 .map(ConstantValue::Handle),
-            &Entry::Dynamic {
+            Entry::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type_index,
             } => {
@@ -81,7 +81,7 @@ impl ConstantPool {
                     descriptor,
                 ))
             }
-            unexpected => mismatch(
+            ref unexpected => mismatch(
                 concat!(
                     "Integer | Long | Float | Double | String ",
                     "| MethodType | Class | MethodHandle | Dynamic"

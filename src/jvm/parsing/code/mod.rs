@@ -10,8 +10,8 @@ use std::{
 use crate::{
     jvm::{
         code::{
-            ExceptionTableEntry, LineNumberTableEntry, LocalVariableId, LocalVariableTable,
-            MethodBody, ProgramCounter, RawInstruction,
+            ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
+            LocalVariableTable, MethodBody, ProgramCounter, RawInstruction,
         },
         method::{ParameterAccessFlags, ParameterInfo},
     },
@@ -165,7 +165,7 @@ impl ClassElement for MethodBody {
             attributes,
         } = raw;
 
-        let raw_instructions = RawInstruction::from_bytes(instruction_bytes)?;
+        let raw_instructions = InstructionList::<RawInstruction>::from_bytes(instruction_bytes)?;
         let instructions = ClassElement::from_raw(raw_instructions, ctx)?;
 
         let exception_table = exception_table
