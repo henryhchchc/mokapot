@@ -34,7 +34,7 @@ pub(crate) struct ClassFile {
     methods: Vec<MethodInfo>,
     attributes: Vec<AttributeInfo>,
 }
-const JAVA_CLASS_MAIGC: u32 = 0xCAFE_BABE;
+const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
 
 impl Class {
     /// Parses a class file from the given reader.
@@ -52,7 +52,7 @@ impl Class {
 impl FromReader for ClassFile {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let magic: u32 = reader.read_value()?;
-        if magic != JAVA_CLASS_MAIGC {
+        if magic != JAVA_CLASS_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "This is not a Java class file",
