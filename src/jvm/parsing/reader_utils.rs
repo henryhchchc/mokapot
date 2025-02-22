@@ -58,6 +58,36 @@ where
     Ok(buf)
 }
 
+#[derive(Debug)]
+pub(super) struct PositionTracker<R> {
+    reader: R,
+    position: usize,
+}
+
+impl<R> PositionTracker<R> {
+    pub const fn new(reader: R) -> Self {
+        Self {
+            reader,
+            position: 0,
+        }
+    }
+
+    pub const fn position(&self) -> usize {
+        self.position
+    }
+}
+
+impl<R> Read for PositionTracker<R>
+where
+    R: Read,
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let n = self.reader.read(buf)?;
+        self.position += n;
+        Ok(n)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::ValueReaderExt;

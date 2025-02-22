@@ -1,11 +1,14 @@
 use std::{
-    collections::BTreeMap,
-    io::{self, Cursor},
+    collections::{BTreeMap, VecDeque},
+    io::{self, Read},
 };
 
 use super::super::{Error, reader_utils::ValueReaderExt};
 use crate::{
-    jvm::code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
+    jvm::{
+        code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
+        parsing::reader_utils::PositionTracker,
+    },
     macros::malform,
 };
 
@@ -14,16 +17,23 @@ impl RawInstruction {
     /// # Errors
     /// See [`Error`] for more information.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
-        let mut cursor = Cursor::new(bytes);
+        let bytes = VecDeque::from(bytes);
+        let mut reader = PositionTracker::new(bytes);
         let mut inner = BTreeMap::new();
-        while let Some((pc, instruction)) = RawInstruction::parse(&mut cursor)? {
+        while let Some((pc, instruction)) = RawInstruction::parse_one(&mut reader)? {
             inner.insert(pc, instruction);
         }
         Ok(InstructionList::from(inner))
     }
 
+    /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
-    fn parse(reader: &mut Cursor<Vec<u8>>) -> Result<Option<(ProgramCounter, Self)>, Error> {
+    fn parse_one<R>(
+        reader: &mut PositionTracker<R>,
+    ) -> Result<Option<(ProgramCounter, Self)>, Error>
+    where
+        PositionTracker<R>: Read,
+    {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
