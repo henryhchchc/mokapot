@@ -23,7 +23,7 @@ use super::{
     Context, Error,
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
-    reader_utils::{ReadBytes, ValueReaderExt},
+    reader_utils::{FromReader, ValueReaderExt},
 };
 
 #[derive(Debug)]
@@ -48,8 +48,8 @@ impl ClassElement for LineNumberTableEntry {
     }
 }
 
-impl ReadBytes for LineNumberTableEntry {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for LineNumberTableEntry {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
         Ok(LineNumberTableEntry {

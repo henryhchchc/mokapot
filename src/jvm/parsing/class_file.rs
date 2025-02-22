@@ -16,7 +16,7 @@ use crate::{
 use super::{
     Context, Error, attribute::AttributeInfo, field_info::FieldInfo,
     jvm_element_parser::ClassElement, method_info::MethodInfo, raw_attributes,
-    reader_utils::ReadBytes,
+    reader_utils::FromReader,
 };
 
 /// The raw representation of a class file.
@@ -44,13 +44,13 @@ impl Class {
     where
         R: std::io::Read + ?Sized,
     {
-        let class_file = ClassFile::read_bytes(reader)?;
+        let class_file = ClassFile::from_reader(reader)?;
         Class::from_raw(class_file)
     }
 }
 
-impl ReadBytes for ClassFile {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ClassFile {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let magic: u32 = reader.read_value()?;
         if magic != JAVA_CLASS_MAIGC {
             return Err(io::Error::new(
@@ -71,15 +71,15 @@ impl ReadBytes for ClassFile {
             .collect::<io::Result<_>>()?;
         let fields_count: u16 = reader.read_value()?;
         let fields = (0..fields_count)
-            .map(|_| FieldInfo::read_bytes(reader))
+            .map(|_| FieldInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
         let methods_count: u16 = reader.read_value()?;
         let methods = (0..methods_count)
-            .map(|_| MethodInfo::read_bytes(reader))
+            .map(|_| MethodInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
         let attributes_count: u16 = reader.read_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::read_bytes(reader))
+            .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
 
         Ok(Self {

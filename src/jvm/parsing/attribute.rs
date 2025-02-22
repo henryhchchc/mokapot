@@ -18,7 +18,7 @@ use super::{
     Context, Error,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::ClassElement,
-    reader_utils::{ReadBytes, ValueReaderExt, read_byte_chunk},
+    reader_utils::{FromReader, ValueReaderExt, read_byte_chunk},
 };
 
 /// Represent an attribute of a class file, method, field, or code.
@@ -35,8 +35,8 @@ impl AttributeInfo {
     }
 }
 
-impl ReadBytes for AttributeInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for AttributeInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_idx = reader.read_value()?;
         let attribute_length: u32 = reader.read_value()?;
         let attribute_length = usize::try_from(attribute_length)

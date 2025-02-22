@@ -5,7 +5,7 @@ use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 
 use super::attribute::AttributeInfo;
-use super::reader_utils::ReadBytes;
+use super::reader_utils::FromReader;
 use super::reader_utils::ValueReaderExt;
 use super::reader_utils::read_byte_chunk;
 
@@ -19,8 +19,8 @@ pub struct Code {
     pub attributes: Vec<AttributeInfo>,
 }
 
-impl ReadBytes for Code {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+impl FromReader for Code {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;
@@ -53,8 +53,8 @@ pub struct ExceptionTableEntry {
     pub catch_type_idx: u16,
 }
 
-impl ReadBytes for ExceptionTableEntry {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+impl FromReader for ExceptionTableEntry {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         Ok(Self {
             start_pc: reader.read_value()?,
             end_pc: reader.read_value()?,
@@ -97,8 +97,8 @@ pub enum StackMapFrameInfo {
     },
 }
 
-impl ReadBytes for StackMapFrameInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for StackMapFrameInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let frame_type: u8 = reader.read_value()?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
@@ -164,8 +164,8 @@ pub enum VerificationTypeInfo {
     Uninitialized { offset: u16 },
 }
 
-impl ReadBytes for VerificationTypeInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for VerificationTypeInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let tag: u8 = reader.read_value()?;
         match tag {
             0 => Ok(Self::Top),
@@ -196,8 +196,8 @@ pub struct InnerClass {
     pub access_flags: u16,
 }
 
-impl ReadBytes for InnerClass {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for InnerClass {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             info_index: reader.read_value()?,
             outer_class_info_index: reader.read_value()?,
@@ -212,8 +212,8 @@ pub struct EnclosingMethod {
     pub method_index: u16,
 }
 
-impl ReadBytes for EnclosingMethod {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for EnclosingMethod {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             class_index: reader.read_value()?,
             method_index: reader.read_value()?,
@@ -229,8 +229,8 @@ pub struct LocalVariableInfo {
     pub index: u16,
 }
 
-impl ReadBytes for LocalVariableInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for LocalVariableInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             start_pc: reader.read_value()?,
             length: reader.read_value()?,
@@ -246,8 +246,8 @@ pub struct Annotation {
     pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
 }
 
-impl ReadBytes for Annotation {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for Annotation {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let type_index = reader.read_value()?;
         let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
@@ -275,8 +275,8 @@ pub enum ElementValueInfo {
     Array(Vec<ElementValueInfo>),
 }
 
-impl ReadBytes for ElementValueInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ElementValueInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let tag: u8 = reader.read_value()?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
@@ -310,8 +310,8 @@ pub struct TypeAnnotation {
     pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
 }
 
-impl ReadBytes for TypeAnnotation {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for TypeAnnotation {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let target_info = reader.read_value()?;
         let target_path_length: u8 = reader.read_value()?;
         let target_path = (0..target_path_length)
@@ -352,8 +352,8 @@ pub enum TargetInfo {
     TypeArgument { offset: ProgramCounter, index: u8 },
 }
 
-impl ReadBytes for TargetInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for TargetInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let target_type: u8 = reader.read_value()?;
         let target_info = match target_type {
             0x00 | 0x01 => Self::TypeParameter {
@@ -407,8 +407,8 @@ pub struct BootstrapMethod {
     pub arguments: Vec<u16>,
 }
 
-impl ReadBytes for BootstrapMethod {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for BootstrapMethod {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let method_ref_idx = reader.read_value()?;
         let num_arguments: u16 = reader.read_value()?;
         let arguments = (0..num_arguments)
@@ -423,8 +423,8 @@ impl ReadBytes for BootstrapMethod {
 
 pub struct ParameterInfo(pub u16, pub u16);
 
-impl ReadBytes for ParameterInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ParameterInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self(reader.read_value()?, reader.read_value()?))
     }
 }
@@ -440,8 +440,8 @@ pub struct ModuleInfo {
     pub provides: Vec<ProvidesInfo>,
 }
 
-impl ReadBytes for ModuleInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ModuleInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let info_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let version_index = reader.read_value()?;
@@ -484,8 +484,8 @@ pub struct RequiresInfo {
     pub version_index: u16,
 }
 
-impl ReadBytes for RequiresInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for RequiresInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             requires_index: reader.read_value()?,
             flags: reader.read_value()?,
@@ -500,8 +500,8 @@ pub struct ExportsInfo {
     pub to: Vec<u16>,
 }
 
-impl ReadBytes for ExportsInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ExportsInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let exports_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let to_count: u16 = reader.read_value()?;
@@ -522,8 +522,8 @@ pub struct OpensInfo {
     pub to: Vec<u16>,
 }
 
-impl ReadBytes for OpensInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for OpensInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let opens_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let to_count: u16 = reader.read_value()?;
@@ -543,8 +543,8 @@ pub struct ProvidesInfo {
     pub with: Vec<u16>,
 }
 
-impl ReadBytes for ProvidesInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for ProvidesInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let provides_index = reader.read_value()?;
         let with_count: u16 = reader.read_value()?;
         let with = (0..with_count)
@@ -563,8 +563,8 @@ pub struct RecordComponentInfo {
     pub attributes: Vec<AttributeInfo>,
 }
 
-impl ReadBytes for RecordComponentInfo {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+impl FromReader for RecordComponentInfo {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_index = reader.read_value()?;
         let descriptor_index = reader.read_value()?;
         let attributes_count: u16 = reader.read_value()?;

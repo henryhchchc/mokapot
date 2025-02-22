@@ -3,31 +3,31 @@ use std::io::{Read, Result};
 use crate::jvm::code::ProgramCounter;
 
 pub(super) trait ValueReaderExt: Read {
-    fn read_value<T: ReadBytes>(&mut self) -> Result<T>;
+    fn read_value<T: FromReader>(&mut self) -> Result<T>;
 }
-pub(super) trait ReadBytes {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
+pub(super) trait FromReader {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
     where
         Self: Sized;
 }
 
 impl<R: Read + ?Sized> ValueReaderExt for R {
-    fn read_value<T: ReadBytes>(&mut self) -> Result<T> {
-        T::read_bytes(self)
+    fn read_value<T: FromReader>(&mut self) -> Result<T> {
+        T::from_reader(self)
     }
 }
 
-impl<const N: usize> ReadBytes for [u8; N] {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+impl<const N: usize> FromReader for [u8; N] {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
     }
 }
 
-impl ReadBytes for ProgramCounter {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let inner = u16::read_bytes(reader)?;
+impl FromReader for ProgramCounter {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+        let inner = u16::from_reader(reader)?;
         Ok(inner.into())
     }
 }
@@ -35,8 +35,8 @@ impl ReadBytes for ProgramCounter {
 #[trait_gen::trait_gen(T ->
     u8, u16, u32, i8, i16, i32, i64, f32, f64
 )]
-impl ReadBytes for T {
-    fn read_bytes<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+impl FromReader for T {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let buf = reader.read_value()?;
         Ok(Self::from_be_bytes(buf))
     }
