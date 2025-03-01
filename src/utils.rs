@@ -25,6 +25,7 @@ impl<K, V> Cache<K, V> {
                 // When the other thread holding the lock get panic, the panic should happen before
                 // modifying the cache.
                 // Therefore, it is safe to take the lock even if it is poisoned.
+                self.inner.clear_poison();
                 poison_err.into_inner()
             }
         };
@@ -34,10 +35,13 @@ impl<K, V> Cache<K, V> {
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
             unsafe { transmute::<&V, &'c V>(b.as_ref()) }
         } else {
-            drop(cache);
+            drop(cache); // Release the 
             let mut cache = match self.inner.write() {
                 Ok(it) => it,
-                Err(poison_err) => poison_err.into_inner(),
+                Err(poison_err) => {
+                    self.inner.clear_poison();
+                    poison_err.into_inner()
+                },
             };
             // It is possible that the item is added to the cache before we get the write lock.
             // Therefore, we need to check the cache again.

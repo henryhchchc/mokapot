@@ -17,12 +17,12 @@ impl ClassHierarchy {
         let mut inheritance: HashMap<ClassRef, HashSet<ClassRef>> = HashMap::new();
         let mut super_classes: HashMap<ClassRef, ClassRef> = HashMap::new();
         for class in classes {
-            if let Some(super_class) = class.super_class.as_ref() {
+            if let Some(ref super_class) = class.super_class {
                 inheritance
                     .entry(super_class.clone())
                     .or_default()
-                    .insert(class.as_ref());
-                super_classes.insert(class.as_ref(), super_class.clone());
+                    .insert(class.make_ref());
+                super_classes.insert(class.make_ref(), super_class.clone());
             }
         }
         Self {
@@ -69,22 +69,22 @@ impl InterfaceImplHierarchy {
         I: IntoIterator<Item = &'a Class>,
     {
         let mut implementations: HashMap<ClassRef, HashSet<ClassRef>> = HashMap::new();
-        let mut implementors: HashMap<ClassRef, HashSet<ClassRef>> = HashMap::new();
+        let mut implementers: HashMap<ClassRef, HashSet<ClassRef>> = HashMap::new();
         for class in classes {
             for interface in &class.interfaces {
                 implementations
-                    .entry(class.as_ref())
+                    .entry(class.make_ref())
                     .or_default()
                     .insert(interface.clone());
-                implementors
+                implementers
                     .entry(interface.clone())
                     .or_default()
-                    .insert(class.as_ref());
+                    .insert(class.make_ref());
             }
         }
         Self {
             implementations,
-            implementors,
+            implementers,
         }
     }
 
@@ -107,19 +107,19 @@ impl InterfaceImplHierarchy {
 
     /// Returns the set of classes that implement the given interface.
     #[must_use]
-    pub fn implementors(&self, interface: &ClassRef) -> HashSet<ClassRef> {
-        let mut implementors = HashSet::new();
+    pub fn implementers(&self, interface: &ClassRef) -> HashSet<ClassRef> {
+        let mut implementers = HashSet::new();
         let rev_impl_graph = Reversed(self);
         depth_first_search(&rev_impl_graph, [interface], |event| {
             if let DfsEvent::TreeEdge(_, i) = event {
-                implementors.insert(i);
+                implementers.insert(i);
             }
             if let DfsEvent::BackEdge(_, _) = event {
                 return Control::<()>::Prune;
             }
             Control::<()>::Continue
         });
-        implementors.remove(interface);
-        implementors.into_iter().cloned().collect()
+        implementers.remove(interface);
+        implementers.into_iter().cloned().collect()
     }
 }

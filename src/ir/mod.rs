@@ -81,5 +81,5 @@ pub struct ClassHierarchy {
 #[derive(Debug, Clone)]
 pub struct InterfaceImplHierarchy {
     implementations: HashMap<ClassRef, HashSet<ClassRef>>,
-    implementors: HashMap<ClassRef, HashSet<ClassRef>>,
+    implementers: HashMap<ClassRef, HashSet<ClassRef>>,
 }

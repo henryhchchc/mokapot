@@ -66,7 +66,7 @@ where
                     cp.find_class(&cr.binary_name)
                         .expect("Class ref yielded by the class path must be found.")
                 })
-                .map(|it| (it.as_ref(), it))
+                .map(|it| (it.make_ref(), it))
         })
         .collect()
 }

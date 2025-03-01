@@ -76,7 +76,7 @@ impl<'a> IntoNeighborsDirected for &'a InterfaceImplHierarchy {
         if d == Direction::Outgoing {
             self.neighbors(a)
         } else {
-            self.implementors
+            self.implementers
                 .get(a)
                 .into_iter()
                 .flatten()
