@@ -1,7 +1,9 @@
 //! Constant pool in a JVM class file.
 
 use std::io::{self, Read};
+use std::ptr;
 
+use crate::jvm::parsing::{ToWriter, ToWriterError};
 use crate::macros::see_jvm_spec;
 
 use crate::jvm::JavaString;
@@ -48,6 +50,108 @@ impl ConstantPool {
             Some(Slot::Entry(entry)) => Ok(entry),
             _ => Err(BadConstantPoolIndex(index)),
         }
+    }
+
+    /// Gets the count of the constant pool. Note that this is NOT the number of entries.
+    #[doc = see_jvm_spec!(4, 1)]
+    #[must_use]
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "When constructing the constant pool, \
+                  we ensured that the index is within the bounds of u16. \
+                  Therefore, it is safe to cast the length to u16."
+    )]
+    pub fn count(&self) -> u16 {
+        self.inner.len() as u16
+    }
+}
+
+impl ToWriter for ConstantPool {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.count().to_be_bytes())?;
+        for entry in &self.inner {
+            entry.to_writer(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl ToWriter for Slot {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        if let Self::Entry(entry) = self {
+            entry.to_writer(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl ToWriter for Entry {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.tag().to_be_bytes())?;
+        match self {
+            Self::Utf8(value) => value.to_writer(writer)?,
+            Self::Integer(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Long(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Double(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Class { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+            Self::String { string_index } => writer.write_all(&string_index.to_be_bytes())?,
+            Self::FieldRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::MethodRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::InterfaceMethodRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::NameAndType {
+                name_index,
+                descriptor_index,
+            } => {
+                writer.write_all(&name_index.to_be_bytes())?;
+                writer.write_all(&descriptor_index.to_be_bytes())?;
+            }
+            Self::MethodHandle {
+                reference_kind,
+                reference_index,
+            } => {
+                writer.write_all(&[*reference_kind])?;
+                writer.write_all(&reference_index.to_be_bytes())?;
+            }
+            Self::MethodType { descriptor_index } => {
+                writer.write_all(&descriptor_index.to_be_bytes())?;
+            }
+            Self::Dynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::InvokeDynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::Module { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+            Self::Package { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+        }
+        Ok(())
     }
 }
 
@@ -181,6 +285,16 @@ pub enum Entry {
 }
 
 impl Entry {
+    /// Returns the tag of this constant pool entry.
+    #[must_use]
+    pub const fn tag(&self) -> u8 {
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
+        unsafe { *ptr::from_ref(self).cast::<u8>() }
+    }
+
     /// Gets the kind of this constant pool entry.
     #[must_use]
     pub const fn constant_kind<'a>(&self) -> &'a str {
@@ -209,25 +323,8 @@ impl Entry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvm::parsing::constant_pool::tests::arb_constant_pool_info;
+    use crate::jvm::parsing::constant_pool::tests::arb_constant_pool_bytes;
     use proptest::prelude::*;
-
-    prop_compose! {
-        fn arb_constant_pool_bytes()(
-            entries in prop::collection::vec(arb_constant_pool_info(), 1..=50)
-        ) -> (u16, Vec<u8>) {
-            let count = {
-                let mut len = entries.len();
-                len += entries.iter().filter(|&it| {
-                    it.first().is_some_and(|&it| it == 5 || it == 6)
-                }).count();
-                len += 1;
-                u16::try_from(len).unwrap()
-            };
-            let bytes = entries.into_iter().flatten().collect();
-            (count, bytes)
-        }
-    }
 
     proptest! {
 

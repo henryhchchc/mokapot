@@ -4,8 +4,9 @@ use std::{
 };
 
 use super::{
-    Error,
+    Error, ToWriter,
     reader_utils::{ValueReaderExt, read_byte_chunk},
+    write_length,
 };
 use crate::{
     jvm::{
@@ -283,8 +284,27 @@ impl Entry {
     }
 }
 
+impl ToWriter for JavaString {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
+        match self {
+            Self::Utf8(str) => {
+                let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
+                write_length::<u16, _>(writer, crsu8_bytes.len())?;
+                writer.write_all(crsu8_bytes.as_ref())?;
+            }
+            Self::InvalidUtf8(bytes) => {
+                write_length::<u16, _>(writer, bytes.len())?;
+                writer.write_all(bytes)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
+
+    use crate::jvm::parsing::ToWriter;
 
     use super::*;
     use proptest::prelude::*;
@@ -318,6 +338,35 @@ pub(crate) mod tests {
                 20 => assert!(matches!(parsed, Ok(Entry::Package { .. }))),
                 _ => unreachable!()
             }
+        }
+
+        #[test]
+        fn read_write((count, content) in arb_constant_pool_bytes()) {
+            let mut reader = content.as_slice();
+            let pool = ConstantPool::from_reader(&mut reader, count).unwrap();
+            let mut buf = Vec::new();
+            pool.to_writer(&mut buf)?;
+            let (len_bytes, written) = buf.split_at(2);
+            let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
+            assert_eq!(len, count);
+            assert_eq!(written, content);
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_constant_pool_bytes()(
+            entries in prop::collection::vec(arb_constant_pool_info(), 1..=50)
+        ) -> (u16, Vec<u8>) {
+            let count = {
+                let mut len = entries.len();
+                len += entries.iter().filter(|&it| {
+                    it.first().is_some_and(|&it| it == 5 || it == 6)
+                }).count();
+                len += 1;
+                u16::try_from(len).unwrap()
+            };
+            let bytes = entries.into_iter().flatten().collect();
+            (count, bytes)
         }
     }
 
