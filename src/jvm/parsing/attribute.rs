@@ -18,10 +18,11 @@ use crate::{
 };
 
 use super::{
-    Context, Error,
+    Context, Error, ToWriter, ToWriterError,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     jvm_element_parser::ClassElement,
     reader_utils::{FromReader, ValueReaderExt, read_byte_chunk},
+    write_length,
 };
 
 /// Represent an attribute of a class file, method, field, or code.
@@ -46,6 +47,24 @@ impl FromReader for AttributeInfo {
             .expect("32-bit size is not supported on the current platform");
         let info = read_byte_chunk(reader, attribute_length)?;
         Ok(Self::from_raw_parts(name_idx, info))
+    }
+}
+
+impl ToWriter for AttributeInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.name_idx.to_be_bytes())?;
+        writer.write_all(&self.info)?;
+        Ok(())
+    }
+}
+
+impl ToWriter for Vec<AttributeInfo> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        write_length::<u16, _>(writer, self.len())?;
+        for attr in self {
+            attr.to_writer(writer)?;
+        }
+        Ok(())
     }
 }
 

@@ -17,6 +17,7 @@ derive_more = { version = "2", features = ["full"] }
 document-features = "0.2"
 itertools = "0.14"
 petgraph = { version = "0.7", optional = true }
+num-traits = "0.2"
 thiserror = "2.0"
 trait-gen = "0.3"
 walkdir = "2"
