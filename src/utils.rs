@@ -41,7 +41,7 @@ impl<K, V> Cache<K, V> {
                 Err(poison_err) => {
                     self.inner.clear_poison();
                     poison_err.into_inner()
-                },
+                }
             };
             // It is possible that the item is added to the cache before we get the write lock.
             // Therefore, we need to check the cache again.
