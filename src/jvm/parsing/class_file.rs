@@ -14,9 +14,9 @@ use crate::{
 };
 
 use super::{
-    Context, Error, attribute::AttributeInfo, field_info::FieldInfo,
+    Context, Error, ToWriter, ToWriterError, attribute::AttributeInfo, field_info::FieldInfo,
     jvm_element_parser::ClassElement, method_info::MethodInfo, raw_attributes,
-    reader_utils::FromReader,
+    reader_utils::FromReader, write_length,
 };
 
 /// The raw representation of a class file.
@@ -34,6 +34,7 @@ pub(crate) struct ClassFile {
     methods: Vec<MethodInfo>,
     attributes: Vec<AttributeInfo>,
 }
+
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
 
 impl Class {
@@ -94,6 +95,32 @@ impl FromReader for ClassFile {
             methods,
             attributes,
         })
+    }
+}
+
+impl ToWriter for ClassFile {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
+        writer.write_all(&self.minor_version.to_be_bytes())?;
+        writer.write_all(&self.major_version.to_be_bytes())?;
+        self.constant_pool.to_writer(writer)?;
+        writer.write_all(&self.access_flags.to_be_bytes())?;
+        writer.write_all(&self.this_class.to_be_bytes())?;
+        writer.write_all(&self.super_class.to_be_bytes())?;
+        write_length::<u16, _>(writer, self.interfaces.len())?;
+        for interface_idx in &self.interfaces {
+            writer.write_all(&interface_idx.to_be_bytes())?;
+        }
+        write_length::<u16, _>(writer, self.fields.len())?;
+        for field in &self.fields {
+            field.to_writer(writer)?;
+        }
+        write_length::<u16, _>(writer, self.methods.len())?;
+        for method in &self.methods {
+            method.to_writer(writer)?;
+        }
+        self.attributes.to_writer(writer)?;
+        Ok(())
     }
 }
 

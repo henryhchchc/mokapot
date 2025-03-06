@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    Error,
+    Error, ToWriter, ToWriterError,
     attribute::AttributeInfo,
     jvm_element_parser::ClassElement,
     reader_utils::{FromReader, ValueReaderExt},
@@ -43,6 +43,16 @@ impl FromReader for MethodInfo {
             descriptor_index,
             attributes,
         })
+    }
+}
+
+impl ToWriter for MethodInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.access_flags.to_be_bytes())?;
+        writer.write_all(&self.name_index.to_be_bytes())?;
+        writer.write_all(&self.descriptor_index.to_be_bytes())?;
+        self.attributes.to_writer(writer)?;
+        Ok(())
     }
 }
 
