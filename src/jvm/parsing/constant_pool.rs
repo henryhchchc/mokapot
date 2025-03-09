@@ -38,7 +38,7 @@ impl ConstantPool {
 
     pub(super) fn put_string(&mut self, value: String) -> Result<u16, Error> {
         let entry = Entry::Utf8(JavaString::Utf8(value));
-        self.push_entry(entry).map_err(Into::into)
+        self.put_entry(entry).map_err(Into::into)
     }
 
     pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassRef, Error> {
@@ -54,14 +54,14 @@ impl ConstantPool {
     pub(super) fn put_class_ref(&mut self, value: ClassRef) -> Result<u16, Error> {
         let name_index = self.put_string(value.binary_name)?;
         let entry = Entry::Class { name_index };
-        let idx = self.push_entry(entry)?;
+        let idx = self.put_entry(entry)?;
         Ok(idx)
     }
 
     pub(super) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, Error> {
         let class_index = self.put_class_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, value.field_type)?;
-        self.push_entry(Entry::FieldRef {
+        self.put_entry(Entry::FieldRef {
             class_index,
             name_and_type_index,
         })
@@ -71,7 +71,7 @@ impl ConstantPool {
     pub(super) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, Error> {
         let class_index = self.put_class_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, value.descriptor)?;
-        self.push_entry(Entry::MethodRef {
+        self.put_entry(Entry::MethodRef {
             class_index,
             name_and_type_index,
         })
@@ -132,28 +132,11 @@ impl ConstantPool {
             ConstantValue::Double(val) => Entry::Double(val),
             ConstantValue::String(java_string) => {
                 let utf8_entry = Entry::Utf8(java_string);
-                let string_index = self.push_entry(utf8_entry)?;
+                let string_index = self.put_entry(utf8_entry)?;
                 Entry::String { string_index }
             }
             ConstantValue::Class(value) => return self.put_class_ref(value),
-            ConstantValue::Handle(method_handle) => {
-                let reference_kind = method_handle.reference_kind();
-                let reference_index = match method_handle {
-                    MethodHandle::RefGetField(f)
-                    | MethodHandle::RefGetStatic(f)
-                    | MethodHandle::RefPutField(f)
-                    | MethodHandle::RefPutStatic(f) => self.put_field_ref(f)?,
-                    MethodHandle::RefInvokeVirtual(m)
-                    | MethodHandle::RefInvokeStatic(m)
-                    | MethodHandle::RefInvokeSpecial(m)
-                    | MethodHandle::RefNewInvokeSpecial(m)
-                    | MethodHandle::RefInvokeInterface(m) => self.put_method_ref(m)?,
-                };
-                Entry::MethodHandle {
-                    reference_kind,
-                    reference_index,
-                }
-            }
+            ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
             ConstantValue::MethodType(method_descriptor) => {
                 let descriptor_index = self.put_string(method_descriptor.to_string())?;
                 Entry::MethodType { descriptor_index }
@@ -169,7 +152,7 @@ impl ConstantPool {
                 return Err(Error::Other("Null should not be put into constant pull"));
             }
         };
-        self.push_entry(entry).map_err(Into::into)
+        self.put_entry(entry).map_err(Into::into)
     }
 
     pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, Error> {
@@ -185,7 +168,7 @@ impl ConstantPool {
     pub(super) fn put_module_ref(&mut self, value: ModuleRef) -> Result<u16, Error> {
         let name_index = self.put_string(value.name)?;
         let entry = Entry::Module { name_index };
-        self.push_entry(entry).map_err(Into::into)
+        self.put_entry(entry).map_err(Into::into)
     }
 
     pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageRef, Error> {
@@ -199,11 +182,11 @@ impl ConstantPool {
             mismatch("Package", entry)
         }
     }
-    
+
     pub(super) fn put_package_ref(&mut self, value: PackageRef) -> Result<u16, Error> {
         let name_index = self.put_string(value.binary_name)?;
         let entry = Entry::Package { name_index };
-        self.push_entry(entry).map_err(Into::into)
+        self.put_entry(entry).map_err(Into::into)
     }
 
     pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldRef, Error> {
@@ -256,7 +239,7 @@ impl ConstantPool {
     {
         let name_index = self.put_string(name)?;
         let descriptor_index = self.put_string(descriptor.to_string())?;
-        self.push_entry(Entry::NameAndType {
+        self.put_entry(Entry::NameAndType {
             name_index,
             descriptor_index,
         })
@@ -310,6 +293,26 @@ impl ConstantPool {
             9 => self.get_method_ref(idx).map(RefInvokeInterface),
             _ => malform!("Invalid reference kind in method handle"),
         }
+    }
+
+    pub(super) fn put_method_handle(&mut self, value: MethodHandle) -> Result<u16, Error> {
+        let reference_kind = value.reference_kind();
+        let reference_index = match value {
+            MethodHandle::RefGetField(f)
+            | MethodHandle::RefGetStatic(f)
+            | MethodHandle::RefPutField(f)
+            | MethodHandle::RefPutStatic(f) => self.put_field_ref(f)?,
+            MethodHandle::RefInvokeVirtual(m)
+            | MethodHandle::RefInvokeStatic(m)
+            | MethodHandle::RefInvokeSpecial(m)
+            | MethodHandle::RefNewInvokeSpecial(m)
+            | MethodHandle::RefInvokeInterface(m) => self.put_method_ref(m)?,
+        };
+        self.put_entry(Entry::MethodHandle {
+            reference_kind,
+            reference_index,
+        })
+        .map_err(Into::into)
     }
 
     pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, Error> {

@@ -1,5 +1,7 @@
 use std::io::{self, Read};
 
+use itertools::Itertools;
+
 use crate::{
     jvm::{
         Class,
@@ -10,13 +12,18 @@ use crate::{
         parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
     },
-    macros::{extract_attributes, malform, see_jvm_spec},
+    macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
 };
 
 use super::{
-    Context, Error, ToWriter, ToWriterError, attribute::AttributeInfo, field_info::FieldInfo,
-    jvm_element_parser::ClassElement, method_info::MethodInfo, raw_attributes,
-    reader_utils::FromReader, write_length,
+    Context, Error, ToWriter, ToWriterError,
+    attribute::{Attribute, AttributeInfo},
+    field_info::FieldInfo,
+    jvm_element_parser::ClassElement,
+    method_info::MethodInfo,
+    raw_attributes,
+    reader_utils::FromReader,
+    write_length,
 };
 
 /// The raw representation of a class file.
@@ -246,6 +253,19 @@ impl ClassElement for BootstrapMethod {
             .collect::<Result<_, _>>()?;
         Ok(Self { method, arguments })
     }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let method_ref_idx = cp.put_method_handle(self.method)?;
+        let arguments = self
+            .arguments
+            .into_iter()
+            .map(|arg| cp.put_constant_value(arg))
+            .try_collect()?;
+        Ok(Self::Raw {
+            method_ref_idx,
+            arguments,
+        })
+    }
 }
 
 impl ClassElement for InnerClassInfo {
@@ -276,6 +296,27 @@ impl ClassElement for InnerClassInfo {
             inner_class,
             outer_class,
             inner_name,
+            access_flags,
+        })
+    }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let info_index = cp.put_class_ref(self.inner_class)?;
+        let outer_class_info_index = self
+            .outer_class
+            .map(|it| cp.put_class_ref(it))
+            .transpose()?
+            .unwrap_or(0);
+        let inner_name_index = self
+            .inner_name
+            .map(|it| cp.put_string(it))
+            .transpose()?
+            .unwrap_or(0);
+        let access_flags = self.access_flags.into_raw(cp)?;
+        Ok(Self::Raw {
+            info_index,
+            outer_class_info_index,
+            inner_name_index,
             access_flags,
         })
     }
@@ -320,6 +361,23 @@ impl ClassElement for RecordComponent {
             free_attributes,
         })
     }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let name_index = cp.put_string(self.name)?;
+        let descriptor_index = cp.put_string(self.component_type.to_string())?;
+        let attributes = self
+            .signature
+            .map(Attribute::Signature)
+            .into_iter()
+            .chain(attributes_into_iter!(self))
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        Ok(Self::Raw {
+            name_index,
+            descriptor_index,
+            attributes,
+        })
+    }
 }
 
 impl ClassElement for EnclosingMethod {
@@ -340,6 +398,20 @@ impl ClassElement for EnclosingMethod {
         Ok(EnclosingMethod {
             class,
             method_name_and_desc,
+        })
+    }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let class_index = cp.put_class_ref(self.class)?;
+        let method_index = self
+            .method_name_and_desc
+            .map(|(name, desc)| cp.put_name_and_type(name, desc))
+            .transpose()?
+            .unwrap_or(0);
+
+        Ok(Self::Raw {
+            class_index,
+            method_index,
         })
     }
 }

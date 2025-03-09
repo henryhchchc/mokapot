@@ -46,6 +46,10 @@ impl ClassElement for LineNumberTableEntry {
     fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
         Ok(raw)
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 
 impl FromReader for LineNumberTableEntry {
@@ -84,6 +88,10 @@ impl ClassElement for ExceptionTableEntry {
             catch_type,
         })
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 
 impl ClassElement for LocalVariableDescAttr {
@@ -111,6 +119,10 @@ impl ClassElement for LocalVariableDescAttr {
             field_type,
         })
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 impl ClassElement for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableInfo;
@@ -136,6 +148,10 @@ impl ClassElement for LocalVariableTypeAttr {
             signature,
         })
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 impl ClassElement for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
@@ -150,6 +166,10 @@ impl ClassElement for ParameterInfo {
         let access_flags = ParameterAccessFlags::from_bits(access_flags)
             .ok_or(Error::UnknownFlags("ParameterAccessFlags", access_flags))?;
         Ok(ParameterInfo { name, access_flags })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
     }
 }
 
@@ -213,5 +233,9 @@ impl ClassElement for MethodBody {
             runtime_invisible_type_annotations,
             free_attributes,
         })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
     }
 }

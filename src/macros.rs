@@ -64,6 +64,32 @@ macro_rules! see_jvm_spec {
     };
 }
 
+macro_rules! attributes_into_iter {
+    ($val: expr) => {
+        [
+            Some($val.runtime_visible_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeVisibleAnnotations),
+            Some($val.runtime_invisible_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeInvisibleAnnotations),
+            Some($val.runtime_visible_type_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeVisibleTypeAnnotations),
+            Some($val.runtime_invisible_type_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeInvisibleTypeAnnotations),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(
+            $val.free_attributes.into_iter()
+                .map(|(name, data)| Attribute::Unrecognized(name, data)),
+        )
+    };
+}
+
 pub(crate) use extract_attributes;
 pub(crate) use malform;
 pub(crate) use see_jvm_spec;
+pub(crate) use attributes_into_iter;

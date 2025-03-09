@@ -9,7 +9,7 @@ use crate::{
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
-        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
+        class::{BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         method::ParameterInfo,
         references::{ClassRef, PackageRef},
@@ -246,6 +246,50 @@ impl ClassElement for Attribute {
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
             )))
+        }
+    }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let name_idx = cp.put_string(self.name().to_owned())?;
+        let info = self.into_bytes(cp)?;
+        Ok(Self::Raw { name_idx, info })
+    }
+}
+
+impl Attribute {
+    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, Error> {
+        match self {
+            Attribute::ConstantValue(constant_value) => todo!(),
+            Attribute::Code(method_body) => todo!(),
+            Attribute::StackMapTable(vec) => todo!(),
+            Attribute::Exceptions(vec) => todo!(),
+            Attribute::SourceFile(_) => todo!(),
+            Attribute::LineNumberTable(vec) => todo!(),
+            Attribute::InnerClasses(vec) => todo!(),
+            Attribute::Synthetic => todo!(),
+            Attribute::Deprecated => todo!(),
+            Attribute::EnclosingMethod(enclosing_method) => todo!(),
+            Attribute::Signature(_) => todo!(),
+            Attribute::SourceDebugExtension(vec) => todo!(),
+            Attribute::LocalVariableTable(vec) => todo!(),
+            Attribute::LocalVariableTypeTable(vec) => todo!(),
+            Attribute::RuntimeVisibleAnnotations(vec) => todo!(),
+            Attribute::RuntimeInvisibleAnnotations(vec) => todo!(),
+            Attribute::RuntimeVisibleParameterAnnotations(vec) => todo!(),
+            Attribute::RuntimeInvisibleParameterAnnotations(vec) => todo!(),
+            Attribute::RuntimeVisibleTypeAnnotations(vec) => todo!(),
+            Attribute::RuntimeInvisibleTypeAnnotations(vec) => todo!(),
+            Attribute::AnnotationDefault(element_value) => todo!(),
+            Attribute::BootstrapMethods(vec) => todo!(),
+            Attribute::MethodParameters(vec) => todo!(),
+            Attribute::Module(module) => todo!(),
+            Attribute::ModulePackages(vec) => todo!(),
+            Attribute::ModuleMainClass(class_ref) => todo!(),
+            Attribute::NestHost(class_ref) => todo!(),
+            Attribute::NestMembers(vec) => todo!(),
+            Attribute::Record(vec) => todo!(),
+            Attribute::PermittedSubclasses(vec) => todo!(),
+            Attribute::Unrecognized(_, vec) => todo!(),
         }
     }
 }

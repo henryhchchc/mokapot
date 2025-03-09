@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::jvm::{
     Module,
     class::constant_pool::Entry,
@@ -27,6 +29,21 @@ impl ClassElement for Require {
             version,
         })
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let requires_index = cp.put_module_ref(self.module)?;
+        let flags = self.flags.into_raw(cp)?;
+        let version_index = self
+            .version
+            .map(|it| cp.put_string(it))
+            .transpose()?
+            .unwrap_or(0);
+        Ok(Self::Raw {
+            requires_index,
+            flags,
+            version_index,
+        })
+    }
 }
 
 impl ClassElement for Export {
@@ -46,6 +63,21 @@ impl ClassElement for Export {
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
             .collect::<Result<_, _>>()?;
         Ok(Export { package, flags, to })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let exports_index = cp.put_package_ref(self.package)?;
+        let flags = self.flags.into_raw(cp)?;
+        let to = self
+            .to
+            .into_iter()
+            .map(|it| cp.put_module_ref(it))
+            .collect::<Result<_, _>>()?;
+        Ok(Self::Raw {
+            exports_index,
+            to,
+            flags,
+        })
     }
 }
 
@@ -67,6 +99,21 @@ impl ClassElement for Open {
             .collect::<Result<_, _>>()?;
         Ok(Open { package, flags, to })
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let opens_index = cp.put_package_ref(self.package)?;
+        let flags = self.flags.into_raw(cp)?;
+        let to = self
+            .to
+            .into_iter()
+            .map(|it| cp.put_module_ref(it))
+            .collect::<Result<_, _>>()?;
+        Ok(Self::Raw {
+            opens_index,
+            to,
+            flags,
+        })
+    }
 }
 
 impl ClassElement for Provide {
@@ -83,6 +130,19 @@ impl ClassElement for Provide {
             .map(|idx| ctx.constant_pool.get_class_ref(idx))
             .collect::<Result<_, _>>()?;
         Ok(Provide { service, with })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let provides_index = cp.put_class_ref(self.service)?;
+        let with = self
+            .with
+            .into_iter()
+            .map(|it| cp.put_class_ref(it))
+            .collect::<Result<_, _>>()?;
+        Ok(Self::Raw {
+            provides_index,
+            with,
+        })
     }
 }
 
@@ -138,6 +198,52 @@ impl ClassElement for Module {
             name,
             flags,
             version,
+            requires,
+            exports,
+            opens,
+            uses,
+            provides,
+        })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let name_index = cp.put_string(self.name)?;
+        let info_index = cp.put_entry(Entry::Module { name_index })?;
+        let flags = self.flags.into_raw(cp)?;
+        let version_index = self
+            .version
+            .map(|it| cp.put_string(it))
+            .transpose()?
+            .unwrap_or(0);
+        let requires = self
+            .requires
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let exports = self
+            .exports
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let opens = self
+            .opens
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let provides = self
+            .provides
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let uses = self
+            .uses
+            .into_iter()
+            .map(|it| cp.put_class_ref(it))
+            .try_collect()?;
+        Ok(Self::Raw {
+            info_index,
+            flags,
+            version_index,
             requires,
             exports,
             opens,

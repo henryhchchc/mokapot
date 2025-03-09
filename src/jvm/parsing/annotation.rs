@@ -1,8 +1,10 @@
+use itertools::Itertools;
+
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
         annotation::{ElementValue, TargetInfo, TypePathElement},
-        class::constant_pool,
+        class::{ConstantPool, constant_pool},
         code::LocalVariableId,
     },
     types::field_type::PrimitiveType,
@@ -20,6 +22,15 @@ impl ClassElement for TypePathElement {
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
             _ => Err(Error::InvalidTypePathKind),
+        }
+    }
+
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        match self {
+            Self::Array => Ok((0, 0)),
+            Self::Nested => Ok((1, 0)),
+            Self::Bound => Ok((2, 0)),
+            Self::TypeArgument(idx) => Ok((3, idx)),
         }
     }
 }
@@ -46,7 +57,25 @@ impl ClassElement for Annotation {
             element_value_pairs,
         })
     }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let type_index = cp.put_string(self.annotation_type.to_string())?;
+        let element_value_pairs = self
+            .element_value_pairs
+            .into_iter()
+            .map(|(name, value)| {
+                let name_index = cp.put_string(name)?;
+                let raw_value = value.into_raw(cp)?;
+                Ok((name_index, raw_value))
+            })
+            .collect::<Result<_, Error>>()?;
+        Ok(Self::Raw {
+            type_index,
+            element_value_pairs,
+        })
+    }
 }
+
 impl ClassElement for TypeAnnotation {
     type Raw = raw_attributes::TypeAnnotation;
 
@@ -76,6 +105,31 @@ impl ClassElement for TypeAnnotation {
             annotation_type,
             target_info,
             target_path,
+            element_value_pairs,
+        })
+    }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let target_info = self.target_info.into_raw(cp)?;
+        let target_path = self
+            .target_path
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let type_index = cp.put_string(self.annotation_type.to_string())?;
+        let element_value_pairs = self
+            .element_value_pairs
+            .into_iter()
+            .map(|(name, value)| -> Result<_, Error> {
+                let name_index = cp.put_string(name)?;
+                let value = value.into_raw(cp)?;
+                Ok((name_index, value))
+            })
+            .try_collect()?;
+        Ok(Self::Raw {
+            target_info,
+            target_path,
+            type_index,
             element_value_pairs,
         })
     }
@@ -119,6 +173,43 @@ impl ClassElement for TargetInfo {
             Self::Raw::TypeArgument { offset, index } => Ok(Self::TypeArgument { offset, index }),
         }
     }
+
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let raw = match self {
+            Self::TypeParameter { index } => Self::Raw::TypeParameter { index },
+            Self::SuperType { index } => Self::Raw::SuperType { index },
+            Self::TypeParameterBound {
+                type_parameter_index: type_parameter,
+                bound_index,
+            } => Self::Raw::TypeParameterBound {
+                type_parameter,
+                bound_index,
+            },
+            Self::Empty => Self::Raw::Empty,
+            Self::FormalParameter { index } => Self::Raw::FormalParameter { index },
+            Self::Throws { index } => Self::Raw::Throws { index },
+            Self::LocalVar(table) => Self::Raw::LocalVariable(
+                table
+                    .into_iter()
+                    .map(|var| {
+                        let LocalVariableId {
+                            effective_range,
+                            index,
+                        } = var;
+                        let start = effective_range.start;
+                        let len = u16::from(effective_range.end) - u16::from(effective_range.start);
+                        (start, index, len)
+                    })
+                    .collect(),
+            ),
+            Self::Catch { index } => Self::Raw::Catch {
+                exception_table_index: index,
+            },
+            Self::Offset(offset) => Self::Raw::Offset(offset),
+            Self::TypeArgument { offset, index } => Self::Raw::TypeArgument { offset, index },
+        };
+        Ok(raw)
+    }
 }
 
 impl ClassElement for ElementValue {
@@ -127,38 +218,24 @@ impl ClassElement for ElementValue {
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
         let cp = &ctx.constant_pool;
         match raw {
-            Self::Raw::Const(b'B', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Byte, it)),
-                _ => Err(Error::Other("Expected integer constant value")),
-            },
-            Self::Raw::Const(b'C', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Char, it)),
-                _ => Err(Error::Other("Expected integer constant value")),
-            },
-            Self::Raw::Const(b'I', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Int, it)),
-                _ => Err(Error::Other("Expected integer constant value")),
-            },
-            Self::Raw::Const(b'S', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Short, it)),
-                _ => Err(Error::Other("Expected integer constant value")),
-            },
-            Self::Raw::Const(b'Z', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Integer(_) => Ok(Self::Primitive(PrimitiveType::Boolean, it)),
-                _ => Err(Error::Other("Expected integer constant value")),
-            },
-            Self::Raw::Const(b'D', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Double(_) => Ok(Self::Primitive(PrimitiveType::Double, it)),
-                _ => Err(Error::Other("Expected double constant value")),
-            },
-            Self::Raw::Const(b'F', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Float(_) => Ok(Self::Primitive(PrimitiveType::Float, it)),
-                _ => Err(Error::Other("Expected float constant value")),
-            },
-            Self::Raw::Const(b'J', idx) => match cp.get_constant_value(idx)? {
-                it @ ConstantValue::Long(_) => Ok(Self::Primitive(PrimitiveType::Long, it)),
-                _ => Err(Error::Other("Expected long constant value")),
-            },
+            Self::Raw::Const(
+                tag @ (b'B' | b'C' | b'I' | b'S' | b'Z' | b'F' | b'D' | b'J'),
+                idx,
+            ) => {
+                use ConstantValue::{Double, Float, Integer, Long};
+                let value = cp.get_constant_value(idx)?;
+                match (tag, value) {
+                    (b'B', it @ Integer(_)) => Ok(Self::Primitive(PrimitiveType::Byte, it)),
+                    (b'C', it @ Integer(_)) => Ok(Self::Primitive(PrimitiveType::Char, it)),
+                    (b'I', it @ Integer(_)) => Ok(Self::Primitive(PrimitiveType::Int, it)),
+                    (b'S', it @ Integer(_)) => Ok(Self::Primitive(PrimitiveType::Short, it)),
+                    (b'Z', it @ Integer(_)) => Ok(Self::Primitive(PrimitiveType::Boolean, it)),
+                    (b'F', it @ Float(_)) => Ok(Self::Primitive(PrimitiveType::Float, it)),
+                    (b'D', it @ Double(_)) => Ok(Self::Primitive(PrimitiveType::Double, it)),
+                    (b'J', it @ Long(_)) => Ok(Self::Primitive(PrimitiveType::Long, it)),
+                    _ => Err(Error::Other("Constant value type mismatch")),
+                }
+            }
             Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
                 constant_pool::Entry::Utf8(s) => {
                     Ok(Self::String(ConstantValue::String(s.to_owned())))
@@ -192,5 +269,53 @@ impl ClassElement for ElementValue {
                 Ok(Self::Array(values))
             }
         }
+    }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        let raw = match self {
+            ElementValue::Primitive(primitive_type, constant_value) => {
+                let tag = match primitive_type {
+                    PrimitiveType::Byte => b'B',
+                    PrimitiveType::Char => b'C',
+                    PrimitiveType::Double => b'D',
+                    PrimitiveType::Float => b'F',
+                    PrimitiveType::Int => b'I',
+                    PrimitiveType::Long => b'J',
+                    PrimitiveType::Short => b'S',
+                    PrimitiveType::Boolean => b'Z',
+                };
+                let value_idx = cp.put_constant_value(constant_value)?;
+                Self::Raw::Const(tag, value_idx)
+            }
+            ElementValue::String(constant_value) => {
+                let value_idx = cp.put_constant_value(constant_value)?;
+                Self::Raw::Const(b'S', value_idx)
+            }
+            ElementValue::EnumConstant {
+                enum_type_name,
+                const_name,
+            } => {
+                let type_name_index = cp.put_string(enum_type_name)?;
+                let const_name_index = cp.put_string(const_name)?;
+                Self::Raw::Enum {
+                    type_name_index,
+                    const_name_index,
+                }
+            }
+            ElementValue::Class { return_descriptor } => {
+                let class_name_index = cp.put_string(return_descriptor.descriptor())?;
+                Self::Raw::ClassInfo(class_name_index)
+            }
+            ElementValue::AnnotationInterface(annotation) => {
+                Self::Raw::Annotation(annotation.into_raw(cp)?)
+            }
+            ElementValue::Array(elements) => Self::Raw::Array(
+                elements
+                    .into_iter()
+                    .map(|it| it.into_raw(cp))
+                    .try_collect()?,
+            ),
+        };
+        Ok(raw)
     }
 }

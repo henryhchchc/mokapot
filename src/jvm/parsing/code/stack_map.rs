@@ -66,6 +66,10 @@ impl ClassElement for StackMapFrame {
             }
         }
     }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 
 impl ClassElement for VerificationType {
@@ -86,5 +90,9 @@ impl ClassElement for VerificationType {
                 offset: ProgramCounter::from(offset),
             }),
         }
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
     }
 }
