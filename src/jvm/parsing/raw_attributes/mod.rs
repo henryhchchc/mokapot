@@ -1,15 +1,17 @@
 use std::io;
+use std::io::Write;
 use std::io::prelude::Read;
+use std::result::Result;
 
 use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 
 use super::ToWriter;
+use super::ToWriterError;
 use super::attribute::AttributeInfo;
 use super::reader_utils::FromReader;
 use super::reader_utils::ValueReaderExt;
 use super::reader_utils::read_byte_chunk;
-use super::ToWriterError;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -302,6 +304,11 @@ impl FromReader for Annotation {
     }
 }
 
+impl ToWriter for Annotation {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
 
 pub enum ElementValueInfo {
     Const(u8, u16),
@@ -342,6 +349,12 @@ impl FromReader for ElementValueInfo {
     }
 }
 
+impl ToWriter for ElementValueInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct TypeAnnotation {
     pub target_info: TargetInfo,
     pub target_path: Vec<(u8, u8)>,
@@ -375,6 +388,12 @@ impl FromReader for TypeAnnotation {
             type_index,
             element_value_pairs,
         })
+    }
+}
+
+impl ToWriter for TypeAnnotation {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -460,11 +479,23 @@ impl FromReader for BootstrapMethod {
     }
 }
 
+impl ToWriter for BootstrapMethod {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct ParameterInfo(pub u16, pub u16);
 
 impl FromReader for ParameterInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self(reader.read_value()?, reader.read_value()?))
+    }
+}
+
+impl ToWriter for ParameterInfo {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -517,6 +548,12 @@ impl FromReader for ModuleInfo {
     }
 }
 
+impl ToWriter for ModuleInfo {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct RequiresInfo {
     pub requires_index: u16,
     pub flags: u16,
@@ -555,6 +592,12 @@ impl FromReader for ExportsInfo {
     }
 }
 
+impl ToWriter for ExportsInfo {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct OpensInfo {
     pub opens_index: u16,
     pub flags: u16,
@@ -577,6 +620,12 @@ impl FromReader for OpensInfo {
     }
 }
 
+impl ToWriter for OpensInfo {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct ProvidesInfo {
     pub provides_index: u16,
     pub with: Vec<u16>,
@@ -593,6 +642,12 @@ impl FromReader for ProvidesInfo {
             provides_index,
             with,
         })
+    }
+}
+
+impl ToWriter for ProvidesInfo {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -615,5 +670,11 @@ impl FromReader for RecordComponentInfo {
             descriptor_index,
             attributes,
         })
+    }
+}
+
+impl ToWriter for RecordComponentInfo {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
