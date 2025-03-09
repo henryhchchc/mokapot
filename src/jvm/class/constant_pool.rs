@@ -1,12 +1,12 @@
 //! Constant pool in a JVM class file.
 
 use std::io::{self, Read};
-use std::ptr;
 
 use crate::jvm::parsing::{ToWriter, ToWriterError};
 use crate::macros::see_jvm_spec;
 
 use crate::jvm::JavaString;
+use crate::utils::enum_discriminant;
 
 use super::ConstantPool;
 
@@ -17,6 +17,25 @@ pub(super) enum Slot {
 }
 
 impl ConstantPool {
+    /// Creates a new empty constant pool.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            inner: vec![Slot::Padding],
+        }
+    }
+
+    /// Creates a new constant pool with the given capacity.
+    /// # Parameters
+    /// - `count`: the maximum index of entries in the constant pool plus one.
+    #[must_use]
+    pub fn with_capacity(count: u16) -> Self {
+        // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
+        let mut inner = Vec::with_capacity((count + 1) as usize);
+        inner.push(Slot::Padding);
+        Self { inner }
+    }
+
     /// Parses a constant pool from the given bytes.
     /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one.
     #[doc = see_jvm_spec!(4, 1)]
@@ -26,30 +45,74 @@ impl ConstantPool {
     where
         R: Read + ?Sized,
     {
-        // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
-        let count: usize = constant_pool_count.into();
-        let mut inner = Vec::with_capacity(count);
-        inner.push(Slot::Padding);
-        while inner.len() < count {
+        let mut constant_pool = Self::with_capacity(constant_pool_count);
+        while constant_pool.count() < constant_pool_count {
             let entry = Entry::parse(reader)?;
-            if let entry @ (Entry::Long(_) | Entry::Double(_)) = entry {
-                inner.push(Slot::Entry(entry));
-                inner.push(Slot::Padding);
-            } else {
-                inner.push(Slot::Entry(entry));
-            }
+            constant_pool
+                .push_entry(entry)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         }
-        Ok(Self { inner })
+        Ok(constant_pool)
     }
 
     /// Gets the constant pool entry at the given index.
     /// # Errors
-    /// - [`BadConstantPoolIndex`] if `index` does not point to a valid entry.
-    pub fn get_entry(&self, index: u16) -> Result<&Entry, BadConstantPoolIndex> {
+    /// - [`Error::BadIndex`] if `index` does not point to a valid entry.
+    pub fn get_entry(&self, index: u16) -> Result<&Entry, Error> {
         match self.inner.get(usize::from(index)) {
             Some(Slot::Entry(entry)) => Ok(entry),
-            _ => Err(BadConstantPoolIndex(index)),
+            _ => Err(Error::BadIndex(index)),
         }
+    }
+
+    /// Pushes a constant pool entry to the end of the constant pool.
+    /// # Errors
+    /// - [`Error::Overflow`] if the constant pool is full.
+    pub fn push_entry(&mut self, entry: Entry) -> Result<u16, Error> {
+        if let Some(index) = self.find_index(|it| it == &entry) {
+            return Ok(index);
+        }
+        let new_index = self.count();
+        if matches!(entry, Entry::Long(_) | Entry::Double(_)) {
+            if self.inner.len() + 2 > u16::MAX as usize {
+                return Err(Error::Overflow);
+            }
+            self.inner.push(Slot::Entry(entry));
+            self.inner.push(Slot::Padding);
+        } else {
+            if self.inner.len() > u16::MAX as usize {
+                return Err(Error::Overflow);
+            }
+            self.inner.push(Slot::Entry(entry));
+        }
+        Ok(new_index)
+    }
+
+    /// Finds the first constant pool entry that satisfies the given predicate.
+    pub fn find<P>(&self, predicate: P) -> Option<(u16, &Entry)>
+    where
+        P: Fn(&Entry) -> bool,
+    {
+        self.inner
+            .iter()
+            .enumerate()
+            .find_map(|(idx, slot)| match slot {
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "When constructing the constant pool, \
+                              we ensured that the index is within the bounds of u16. \
+                              Therefore, it is safe to cast the length to u16."
+                )]
+                Slot::Entry(entry) if predicate(entry) => Some((idx as u16, entry)),
+                _ => None,
+            })
+    }
+
+    pub(crate) fn find_index<P>(&self, predicate: P) -> Option<u16>
+    where
+        P: Fn(&Entry) -> bool,
+    {
+        self.find(predicate).map(|(idx, _)| idx)
     }
 
     /// Gets the count of the constant pool. Note that this is NOT the number of entries.
@@ -63,6 +126,12 @@ impl ConstantPool {
     )]
     pub fn count(&self) -> u16 {
         self.inner.len() as u16
+    }
+}
+
+impl Default for ConstantPool {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -157,11 +226,17 @@ impl ToWriter for Entry {
 
 /// An error when getting an entry from the constant pool with an invalid index.
 #[derive(Debug, thiserror::Error)]
-#[error("Bad constant pool index: {0}")]
-pub struct BadConstantPoolIndex(pub u16);
+pub enum Error {
+    /// The index used to access the constant pool is invalid.
+    #[error("Bad constant pool index: {0}")]
+    BadIndex(u16),
+    /// The constant pool is full.
+    #[error("The constant pool is full")]
+    Overflow,
+}
 
 /// An entry in the [`ConstantPool`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(u8)]
 #[non_exhaustive]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -284,15 +359,14 @@ pub enum Entry {
     } = 20,
 }
 
+impl Eq for Entry {}
+
 impl Entry {
     /// Returns the tag of this constant pool entry.
     #[must_use]
     pub const fn tag(&self) -> u8 {
-        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
-        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
-        // field, so we can read the discriminant without offsetting the pointer.
-        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
-        unsafe { *ptr::from_ref(self).cast::<u8>() }
+        // Safery: Self is marked as repr(u8)
+        unsafe { enum_discriminant(self) }
     }
 
     /// Gets the kind of this constant pool entry.

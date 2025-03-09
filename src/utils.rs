@@ -1,5 +1,21 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, mem::transmute, sync::RwLock};
 
+/// Gets the discriminant of an enum.
+///
+/// # Safety:
+/// This function is safe to call as long as the enum is marked `repr(D)`.
+///
+pub(crate) const unsafe fn enum_discriminant<T, D>(value: &T) -> D
+where
+    D: Copy,
+{
+    // Because `Self` is marked `repr(D)`, its layout is a `repr(C)` `union`
+    // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+    // field, so we can read the discriminant without offsetting the pointer.
+    // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
+    unsafe { *std::ptr::from_ref(value).cast::<D>() }
+}
+
 #[derive(Debug)]
 pub(crate) struct Cache<K, V> {
     inner: RwLock<HashMap<K, Box<V>>>,
@@ -35,7 +51,7 @@ impl<K, V> Cache<K, V> {
             // Therefore, it is ok to extend the lifetime of the reference to the lifetime of `self`.
             unsafe { transmute::<&V, &'c V>(b.as_ref()) }
         } else {
-            drop(cache); // Release the 
+            drop(cache); // Release the
             let mut cache = match self.inner.write() {
                 Ok(it) => it,
                 Err(poison_err) => {

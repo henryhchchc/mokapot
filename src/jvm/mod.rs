@@ -259,6 +259,7 @@ pub enum ConstantValue {
     #[display("{_0:?}")]
     MethodType(MethodDescriptor),
     /// A dynamic constant.
+    // TODO: Extract the BSM from constant pool
     #[display("Dynamic({_0}, {_1}, {_2})")]
     Dynamic(u16, String, FieldType),
 }

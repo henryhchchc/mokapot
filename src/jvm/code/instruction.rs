@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, ops::RangeInclusive, ptr};
+use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use crate::{
     jvm::{
@@ -10,6 +10,7 @@ use crate::{
         field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
     },
+    utils::enum_discriminant,
 };
 
 use super::ProgramCounter;
@@ -281,15 +282,8 @@ impl Instruction {
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {
-        self.discriminant()
-    }
-
-    const fn discriminant(&self) -> u8 {
-        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
-        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
-        // field, so we can read the discriminant without offsetting the pointer.
-        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
-        unsafe { *ptr::from_ref(self).cast::<u8>() }
+        // Safery: Self is repr(u8) so it should be fine
+        unsafe { enum_discriminant(self) }
     }
 
     /// Gets the name of the [Instruction].
