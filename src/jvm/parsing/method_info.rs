@@ -172,8 +172,8 @@ impl ClassElement for Method {
                 .filter(|it| !it.is_empty())
                 .map(Attribute::Exceptions),
             self.annotation_default.map(Attribute::AnnotationDefault),
-            self.is_synthetic.then(|| Attribute::Synthetic),
-            self.is_deprecated.then(|| Attribute::Deprecated),
+            self.is_synthetic.then_some(Attribute::Synthetic),
+            self.is_deprecated.then_some(Attribute::Deprecated),
             self.signature.map(Attribute::Signature),
         ]
         .into_iter()

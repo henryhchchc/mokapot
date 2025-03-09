@@ -287,7 +287,7 @@ impl Attribute {
             Attribute::InnerClasses(classes) => serialize_vec::<u16>(classes, cp)?,
             Attribute::Synthetic | Attribute::Deprecated => Vec::default(),
             Attribute::EnclosingMethod(enclosing_method) => enclosing_method.into_bytes(cp)?,
-            Attribute::SourceDebugExtension(data) => data,
+            Attribute::SourceDebugExtension(data) | Attribute::Unrecognized(_, data) => data,
             Attribute::LocalVariableTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::LocalVariableTypeTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::RuntimeVisibleAnnotations(annotations)
@@ -334,8 +334,7 @@ impl Attribute {
                 buf
             }
             Attribute::Record(components) => serialize_vec::<u16>(components, cp)?,
-            Attribute::Unrecognized(_, data) => data,
-        };
+            };
         bytes.shrink_to_fit();
         Ok(bytes)
     }
