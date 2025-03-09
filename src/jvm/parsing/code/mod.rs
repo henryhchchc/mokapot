@@ -3,8 +3,7 @@ pub(super) mod raw_instruction;
 pub(super) mod stack_map;
 
 use std::{
-    io::{self, Read},
-    str::FromStr,
+    io::{self, Read, Write}, result::Result, str::FromStr
 };
 
 use crate::{
@@ -21,10 +20,7 @@ use crate::{
 };
 
 use super::{
-    Context, Error, ToWriterError,
-    jvm_element_parser::ClassElement,
-    raw_attributes::{self, Code},
-    reader_utils::{FromReader, ValueReaderExt},
+    jvm_element_parser::ClassElement, raw_attributes::{self, Code}, reader_utils::{FromReader, ValueReaderExt}, Context, Error, ToWriter, ToWriterError
 };
 
 #[derive(Debug)]
@@ -49,7 +45,7 @@ impl ClassElement for LineNumberTableEntry {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        Ok(self)
     }
 }
 
@@ -61,6 +57,14 @@ impl FromReader for LineNumberTableEntry {
             start_pc,
             line_number,
         })
+    }
+}
+
+impl ToWriter for LineNumberTableEntry {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
+        writer.write_all(&self.line_number.to_be_bytes())?;
+        Ok(())
     }
 }
 

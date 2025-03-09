@@ -1,9 +1,11 @@
 use std::{
     collections::VecDeque,
     io::{self, Read},
+    num::TryFromIntError,
 };
 
 use itertools::Itertools;
+use num_traits::ToBytes;
 
 use crate::{
     jvm::{
@@ -258,7 +260,7 @@ impl ClassElement for Attribute {
 
 impl Attribute {
     fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, ToWriterError> {
-        let bytes = match self {
+        let mut bytes = match self {
             Attribute::ConstantValue(constant_value) => {
                 let constant_value_idx = cp.put_constant_value(constant_value)?;
                 constant_value_idx.to_be_bytes().to_vec()
@@ -270,35 +272,71 @@ impl Attribute {
                     bytes.extend(frame.into_bytes(cp)?);
                 }
                 bytes
-            },
-            Attribute::Exceptions(vec) => todo!(),
-            Attribute::SourceFile(_) => todo!(),
-            Attribute::LineNumberTable(vec) => todo!(),
-            Attribute::InnerClasses(vec) => todo!(),
-            Attribute::Synthetic | Attribute::Deprecated => Vec::new(),
-            Attribute::EnclosingMethod(enclosing_method) => todo!(),
-            Attribute::Signature(_) => todo!(),
-            Attribute::SourceDebugExtension(vec) => todo!(),
-            Attribute::LocalVariableTable(vec) => todo!(),
-            Attribute::LocalVariableTypeTable(vec) => todo!(),
-            Attribute::RuntimeVisibleAnnotations(vec) => todo!(),
-            Attribute::RuntimeInvisibleAnnotations(vec) => todo!(),
-            Attribute::RuntimeVisibleParameterAnnotations(vec) => todo!(),
-            Attribute::RuntimeInvisibleParameterAnnotations(vec) => todo!(),
-            Attribute::RuntimeVisibleTypeAnnotations(vec) => todo!(),
-            Attribute::RuntimeInvisibleTypeAnnotations(vec) => todo!(),
-            Attribute::AnnotationDefault(element_value) => todo!(),
-            Attribute::BootstrapMethods(vec) => todo!(),
-            Attribute::MethodParameters(vec) => todo!(),
-            Attribute::Module(module) => todo!(),
-            Attribute::ModulePackages(vec) => todo!(),
-            Attribute::ModuleMainClass(class_ref) => todo!(),
-            Attribute::NestHost(class_ref) => todo!(),
-            Attribute::NestMembers(vec) => todo!(),
-            Attribute::Record(vec) => todo!(),
-            Attribute::PermittedSubclasses(vec) => todo!(),
-            Attribute::Unrecognized(_, vec) => todo!(),
+            }
+            Attribute::Exceptions(exception_types) => {
+                let indices: Vec<_> = exception_types
+                    .into_iter()
+                    .map(|it| cp.put_class_ref(it))
+                    .try_collect()?;
+                indices.into_iter().flat_map(u16::to_be_bytes).collect()
+            }
+            Attribute::Signature(str_value) | Attribute::SourceFile(str_value) => {
+                cp.put_string(str_value)?.to_be_bytes().into()
+            }
+            Attribute::LineNumberTable(entries) => serialize_vec::<u16>(entries, cp)?,
+            Attribute::InnerClasses(classes) => serialize_vec::<u16>(classes, cp)?,
+            Attribute::Synthetic | Attribute::Deprecated => Vec::default(),
+            Attribute::EnclosingMethod(enclosing_method) => enclosing_method.into_bytes(cp)?,
+            Attribute::SourceDebugExtension(data) => data,
+            Attribute::LocalVariableTable(entries) => serialize_vec::<u16>(entries, cp)?,
+            Attribute::LocalVariableTypeTable(entries) => serialize_vec::<u16>(entries, cp)?,
+            Attribute::RuntimeVisibleAnnotations(annotations)
+            | Attribute::RuntimeInvisibleAnnotations(annotations) => {
+                serialize_vec::<u16>(annotations, cp)?
+            }
+            Attribute::RuntimeVisibleTypeAnnotations(annotations)
+            | Attribute::RuntimeInvisibleTypeAnnotations(annotations) => {
+                serialize_vec::<u16>(annotations, cp)?
+            }
+            Attribute::RuntimeVisibleParameterAnnotations(outer)
+            | Attribute::RuntimeInvisibleParameterAnnotations(outer) => {
+                let mut buf = Vec::new();
+                let outer_len = u8::try_from(outer.len())?;
+                buf.push(outer_len);
+                for inner in outer {
+                    buf.extend(serialize_vec::<u16>(inner, cp)?);
+                }
+                buf
+            }
+            Attribute::AnnotationDefault(value) => value.into_bytes(cp)?,
+            Attribute::BootstrapMethods(bsms) => serialize_vec::<u16>(bsms, cp)?,
+            Attribute::MethodParameters(params) => serialize_vec::<u8>(params, cp)?,
+            Attribute::Module(module) => module.into_bytes(cp)?,
+            Attribute::ModulePackages(mod_pkg) => {
+                let mut buf = Vec::new();
+                let len = u16::try_from(mod_pkg.len())?;
+                buf.extend(len.to_be_bytes());
+                for pkg in mod_pkg {
+                    buf.extend(cp.put_package_ref(pkg)?.to_be_bytes());
+                }
+                buf
+            }
+            Attribute::NestHost(class_ref) | Attribute::ModuleMainClass(class_ref) => {
+                cp.put_class_ref(class_ref)?.to_be_bytes().to_vec()
+            }
+            Attribute::NestMembers(classes) | Attribute::PermittedSubclasses(classes) => {
+                let mut buf = Vec::new();
+                let len = u16::try_from(classes.len())?;
+                buf.extend(len.to_be_bytes());
+                for class in classes {
+                    buf.extend(cp.put_class_ref(class)?.to_be_bytes());
+                }
+                buf
+            }
+            Attribute::Record(components) => serialize_vec::<u16>(components, cp)?,
+            Attribute::Unrecognized(_, data) => data,
         };
+        bytes.shrink_to_fit();
         Ok(bytes)
     }
 }
@@ -307,4 +345,22 @@ impl Attribute {
 fn parse_string<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<String, Error> {
     let str_idx = reader.read_value()?;
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
+}
+
+#[inline]
+fn serialize_vec<Len>(
+    items: Vec<impl ClassElement<Raw: ToWriter>>,
+    cp: &mut ConstantPool,
+) -> Result<Vec<u8>, ToWriterError>
+where
+    Len: TryFrom<usize, Error = TryFromIntError> + ToBytes,
+    <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
+{
+    let mut buf = Vec::new();
+    let len = Len::try_from(items.len())?;
+    buf.extend(len.to_be_bytes());
+    for item in items {
+        buf.extend(item.into_bytes(cp)?);
+    }
+    Ok(buf)
 }
