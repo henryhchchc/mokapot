@@ -405,7 +405,7 @@ impl ClassElement for EnclosingMethod {
         let class_index = cp.put_class_ref(self.class)?;
         let method_index = self
             .method_name_and_desc
-            .map(|(name, desc)| cp.put_name_and_type(name, desc))
+            .map(|(name, desc)| cp.put_name_and_type(name, &desc))
             .transpose()?
             .unwrap_or(0);
 

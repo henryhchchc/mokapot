@@ -3,7 +3,9 @@ pub(super) mod raw_instruction;
 pub(super) mod stack_map;
 
 use std::{
-    io::{self, Read, Write}, result::Result, str::FromStr
+    io::{self, Read, Write},
+    result::Result,
+    str::FromStr,
 };
 
 use crate::{
@@ -20,7 +22,10 @@ use crate::{
 };
 
 use super::{
-    jvm_element_parser::ClassElement, raw_attributes::{self, Code}, reader_utils::{FromReader, ValueReaderExt}, Context, Error, ToWriter, ToWriterError
+    Context, Error, ToWriter, ToWriterError,
+    jvm_element_parser::ClassElement,
+    raw_attributes::{self, Code},
+    reader_utils::{FromReader, ValueReaderExt},
 };
 
 #[derive(Debug)]

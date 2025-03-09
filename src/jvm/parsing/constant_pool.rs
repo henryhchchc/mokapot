@@ -60,7 +60,7 @@ impl ConstantPool {
 
     pub(super) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, ToWriterError> {
         let class_index = self.put_class_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, value.field_type)?;
+        let name_and_type_index = self.put_name_and_type(value.name, &value.field_type)?;
         self.put_entry(Entry::FieldRef {
             class_index,
             name_and_type_index,
@@ -70,7 +70,7 @@ impl ConstantPool {
 
     pub(super) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, ToWriterError> {
         let class_index = self.put_class_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, value.descriptor)?;
+        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
         self.put_entry(Entry::MethodRef {
             class_index,
             name_and_type_index,
@@ -145,7 +145,7 @@ impl ConstantPool {
                 Entry::MethodType { descriptor_index }
             }
             ConstantValue::Dynamic(bsm_idx, name, field_type) => {
-                let name_and_type_index = self.put_name_and_type(name, field_type)?;
+                let name_and_type_index = self.put_name_and_type(name, &field_type)?;
                 Entry::Dynamic {
                     bootstrap_method_attr_index: bsm_idx,
                     name_and_type_index,
@@ -241,7 +241,7 @@ impl ConstantPool {
     pub(super) fn put_name_and_type<T>(
         &mut self,
         name: String,
-        descriptor: T,
+        descriptor: &T,
     ) -> Result<u16, ToWriterError>
     where
         T: ToString,

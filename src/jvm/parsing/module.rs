@@ -75,8 +75,8 @@ impl ClassElement for Export {
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             exports_index,
-            to,
             flags,
+            to,
         })
     }
 }
@@ -110,8 +110,8 @@ impl ClassElement for Open {
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             opens_index,
-            to,
             flags,
+            to,
         })
     }
 }

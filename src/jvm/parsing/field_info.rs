@@ -123,8 +123,8 @@ impl ClassElement for Field {
         let attributes = [
             self.constant_value.map(Attribute::ConstantValue),
             self.signature.map(Attribute::Signature),
-            self.is_synthetic.then(|| Attribute::Synthetic),
-            self.is_deprecated.then(|| Attribute::Deprecated),
+            self.is_synthetic.then_some(Attribute::Synthetic),
+            self.is_deprecated.then_some(Attribute::Deprecated),
         ]
         .into_iter()
         .flatten()
