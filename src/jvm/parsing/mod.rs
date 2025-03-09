@@ -49,6 +49,10 @@ pub enum ToWriterError {
     IO(#[from] io::Error),
     /// A list of elements is too long that it exceeds the data type for the length.
     ListTooLong(#[from] TryFromIntError),
+    /// Error forwarded from the constant pool.
+    ConstantPool(#[from] crate::jvm::class::constant_pool::Error),
+    /// Other error.
+    Other(&'static str),
 }
 
 pub(in crate::jvm::parsing) fn write_length<L, W>(

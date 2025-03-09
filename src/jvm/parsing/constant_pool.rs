@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::{
-    Error, ToWriter,
+    Error, ToWriter, ToWriterError,
     reader_utils::{ValueReaderExt, read_byte_chunk},
     write_length,
 };
@@ -36,7 +36,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_string(&mut self, value: String) -> Result<u16, Error> {
+    pub(super) fn put_string(&mut self, value: String) -> Result<u16, ToWriterError> {
         let entry = Entry::Utf8(JavaString::Utf8(value));
         self.put_entry(entry).map_err(Into::into)
     }
@@ -51,14 +51,14 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_class_ref(&mut self, value: ClassRef) -> Result<u16, Error> {
+    pub(super) fn put_class_ref(&mut self, value: ClassRef) -> Result<u16, ToWriterError> {
         let name_index = self.put_string(value.binary_name)?;
         let entry = Entry::Class { name_index };
         let idx = self.put_entry(entry)?;
         Ok(idx)
     }
 
-    pub(super) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, Error> {
+    pub(super) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, ToWriterError> {
         let class_index = self.put_class_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, value.field_type)?;
         self.put_entry(Entry::FieldRef {
@@ -68,7 +68,7 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(super) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, Error> {
+    pub(super) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, ToWriterError> {
         let class_index = self.put_class_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, value.descriptor)?;
         self.put_entry(Entry::MethodRef {
@@ -124,7 +124,10 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_constant_value(&mut self, value: ConstantValue) -> Result<u16, Error> {
+    pub(super) fn put_constant_value(
+        &mut self,
+        value: ConstantValue,
+    ) -> Result<u16, ToWriterError> {
         let entry = match value {
             ConstantValue::Integer(val) => Entry::Integer(val),
             ConstantValue::Long(val) => Entry::Long(val),
@@ -149,7 +152,9 @@ impl ConstantPool {
                 }
             }
             ConstantValue::Null => {
-                return Err(Error::Other("Null should not be put into constant pull"));
+                return Err(ToWriterError::Other(
+                    "Null should not be put into constant pull",
+                ));
             }
         };
         self.put_entry(entry).map_err(Into::into)
@@ -165,7 +170,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_module_ref(&mut self, value: ModuleRef) -> Result<u16, Error> {
+    pub(super) fn put_module_ref(&mut self, value: ModuleRef) -> Result<u16, ToWriterError> {
         let name_index = self.put_string(value.name)?;
         let entry = Entry::Module { name_index };
         self.put_entry(entry).map_err(Into::into)
@@ -183,7 +188,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_package_ref(&mut self, value: PackageRef) -> Result<u16, Error> {
+    pub(super) fn put_package_ref(&mut self, value: PackageRef) -> Result<u16, ToWriterError> {
         let name_index = self.put_string(value.binary_name)?;
         let entry = Entry::Package { name_index };
         self.put_entry(entry).map_err(Into::into)
@@ -233,7 +238,11 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_name_and_type<T>(&mut self, name: String, descriptor: T) -> Result<u16, Error>
+    pub(super) fn put_name_and_type<T>(
+        &mut self,
+        name: String,
+        descriptor: T,
+    ) -> Result<u16, ToWriterError>
     where
         T: ToString,
     {
@@ -295,7 +304,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn put_method_handle(&mut self, value: MethodHandle) -> Result<u16, Error> {
+    pub(super) fn put_method_handle(&mut self, value: MethodHandle) -> Result<u16, ToWriterError> {
         let reference_kind = value.reference_kind();
         let reference_index = match value {
             MethodHandle::RefGetField(f)

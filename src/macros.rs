@@ -83,13 +83,14 @@ macro_rules! attributes_into_iter {
         .into_iter()
         .flatten()
         .chain(
-            $val.free_attributes.into_iter()
+            $val.free_attributes
+                .into_iter()
                 .map(|(name, data)| Attribute::Unrecognized(name, data)),
         )
     };
 }
 
+pub(crate) use attributes_into_iter;
 pub(crate) use extract_attributes;
 pub(crate) use malform;
 pub(crate) use see_jvm_spec;
-pub(crate) use attributes_into_iter;

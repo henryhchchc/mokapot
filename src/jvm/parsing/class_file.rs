@@ -254,7 +254,7 @@ impl ClassElement for BootstrapMethod {
         Ok(Self { method, arguments })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let method_ref_idx = cp.put_method_handle(self.method)?;
         let arguments = self
             .arguments
@@ -300,7 +300,7 @@ impl ClassElement for InnerClassInfo {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let info_index = cp.put_class_ref(self.inner_class)?;
         let outer_class_info_index = self
             .outer_class
@@ -362,7 +362,7 @@ impl ClassElement for RecordComponent {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.component_type.to_string())?;
         let attributes = self
@@ -401,7 +401,7 @@ impl ClassElement for EnclosingMethod {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let class_index = cp.put_class_ref(self.class)?;
         let method_index = self
             .method_name_and_desc

@@ -4,10 +4,12 @@ use std::io::prelude::Read;
 use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 
+use super::ToWriter;
 use super::attribute::AttributeInfo;
 use super::reader_utils::FromReader;
 use super::reader_utils::ValueReaderExt;
 use super::reader_utils::read_byte_chunk;
+use super::ToWriterError;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -41,6 +43,12 @@ impl FromReader for Code {
             exception_table,
             attributes,
         })
+    }
+}
+
+impl ToWriter for Code {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -152,6 +160,12 @@ impl FromReader for StackMapFrameInfo {
     }
 }
 
+impl ToWriter for StackMapFrameInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub enum VerificationTypeInfo {
     Top,
     Integer,
@@ -189,6 +203,12 @@ impl FromReader for VerificationTypeInfo {
     }
 }
 
+impl ToWriter for VerificationTypeInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct InnerClass {
     pub info_index: u16,
     pub outer_class_info_index: u16,
@@ -207,6 +227,12 @@ impl FromReader for InnerClass {
     }
 }
 
+impl ToWriter for InnerClass {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
+    }
+}
+
 pub struct EnclosingMethod {
     pub class_index: u16,
     pub method_index: u16,
@@ -218,6 +244,12 @@ impl FromReader for EnclosingMethod {
             class_index: reader.read_value()?,
             method_index: reader.read_value()?,
         })
+    }
+}
+
+impl ToWriter for EnclosingMethod {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -238,6 +270,12 @@ impl FromReader for LocalVariableInfo {
             desc_or_signature_idx: reader.read_value()?,
             index: reader.read_value()?,
         })
+    }
+}
+
+impl ToWriter for LocalVariableInfo {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }
 
@@ -263,6 +301,7 @@ impl FromReader for Annotation {
         })
     }
 }
+
 
 pub enum ElementValueInfo {
     Const(u8, u16),
