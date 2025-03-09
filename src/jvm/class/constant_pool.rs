@@ -49,7 +49,7 @@ impl ConstantPool {
         while constant_pool.count() < constant_pool_count {
             let entry = Entry::parse(reader)?;
             constant_pool
-                .push_entry(entry)
+                .put_entry(entry)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         }
         Ok(constant_pool)
@@ -68,7 +68,7 @@ impl ConstantPool {
     /// Pushes a constant pool entry to the end of the constant pool.
     /// # Errors
     /// - [`Error::Overflow`] if the constant pool is full.
-    pub fn push_entry(&mut self, entry: Entry) -> Result<u16, Error> {
+    pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Error> {
         if let Some(index) = self.find_index(|it| it == &entry) {
             return Ok(index);
         }

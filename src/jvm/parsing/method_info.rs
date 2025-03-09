@@ -1,4 +1,9 @@
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    iter::once,
+};
+
+use itertools::Itertools;
 
 use crate::{
     jvm::{
@@ -7,13 +12,13 @@ use crate::{
         parsing::Context,
         references::ClassRef,
     },
-    macros::{extract_attributes, malform, see_jvm_spec},
+    macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
     types::method_descriptor::MethodDescriptor,
 };
 
 use super::{
     Error, ToWriter, ToWriterError,
-    attribute::AttributeInfo,
+    attribute::{Attribute, AttributeInfo},
     jvm_element_parser::ClassElement,
     reader_utils::{FromReader, ValueReaderExt},
 };
@@ -151,6 +156,35 @@ impl ClassElement for Method {
             is_deprecated,
             signature,
             free_attributes,
+        })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let access_flags = self.access_flags.into_raw(cp)?;
+        let name_index = cp.put_string(self.name)?;
+        let descriptor_index = cp.put_string(self.descriptor.to_string())?;
+        let attributes = [
+            self.body.map(Attribute::Code),
+            Some(self.exceptions)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::Exceptions),
+            self.annotation_default.map(Attribute::AnnotationDefault),
+            self.is_synthetic.then(|| Attribute::Synthetic),
+            self.is_deprecated.then(|| Attribute::Deprecated),
+            self.signature.map(Attribute::Signature),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(attributes_into_iter!(self))
+        .chain(once(Attribute::MethodParameters(self.parameters)))
+        .map(|it| it.into_raw(cp))
+        .try_collect()?;
+
+        Ok(Self::Raw {
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes,
         })
     }
 }

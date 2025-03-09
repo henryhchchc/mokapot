@@ -28,6 +28,10 @@ impl ClassElement for InstructionList<Instruction> {
             .try_collect()?;
         Ok(InstructionList::from(inner))
     }
+
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+        todo!()
+    }
 }
 
 impl Instruction {

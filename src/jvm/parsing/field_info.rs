@@ -1,17 +1,19 @@
 use std::io::{self, Read};
 
+use itertools::Itertools;
+
 use crate::{
     jvm::{
         Field,
         field::{self},
         references::ClassRef,
     },
-    macros::{extract_attributes, see_jvm_spec},
+    macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
 };
 
 use super::{
     Context, Error, ToWriter, ToWriterError,
-    attribute::AttributeInfo,
+    attribute::{Attribute, AttributeInfo},
     jvm_element_parser::ClassElement,
     reader_utils::{FromReader, ValueReaderExt},
 };
@@ -108,6 +110,29 @@ impl ClassElement for Field {
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
             free_attributes,
+        })
+    }
+
+    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+        let access_flags = self.access_flags.into_raw(cp)?;
+        let name_index = cp.put_string(self.name)?;
+        let descriptor_index = cp.put_string(self.field_type.to_string())?;
+        let attributes = [
+            self.constant_value.map(Attribute::ConstantValue),
+            self.signature.map(Attribute::Signature),
+            self.is_synthetic.then(|| Attribute::Synthetic),
+            self.is_deprecated.then(|| Attribute::Deprecated),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(attributes_into_iter!(self))
+        .map(|it| it.into_raw(cp))
+        .try_collect()?;
+        Ok(Self::Raw {
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes,
         })
     }
 }
