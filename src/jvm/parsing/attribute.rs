@@ -249,7 +249,7 @@ impl ClassElement for Attribute {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let name_idx = cp.put_string(self.name().to_owned())?;
         let info = self.into_bytes(cp)?;
         Ok(Self::Raw { name_idx, info })
@@ -257,17 +257,25 @@ impl ClassElement for Attribute {
 }
 
 impl Attribute {
-    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, Error> {
-        match self {
-            Attribute::ConstantValue(constant_value) => todo!(),
-            Attribute::Code(method_body) => todo!(),
-            Attribute::StackMapTable(vec) => todo!(),
+    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, ToWriterError> {
+        let bytes = match self {
+            Attribute::ConstantValue(constant_value) => {
+                let constant_value_idx = cp.put_constant_value(constant_value)?;
+                constant_value_idx.to_be_bytes().to_vec()
+            }
+            Attribute::Code(method_body) => method_body.into_bytes(cp)?,
+            Attribute::StackMapTable(entries) => {
+                let mut bytes = Vec::new();
+                for frame in entries {
+                    bytes.extend(frame.into_bytes(cp)?);
+                }
+                bytes
+            },
             Attribute::Exceptions(vec) => todo!(),
             Attribute::SourceFile(_) => todo!(),
             Attribute::LineNumberTable(vec) => todo!(),
             Attribute::InnerClasses(vec) => todo!(),
-            Attribute::Synthetic => todo!(),
-            Attribute::Deprecated => todo!(),
+            Attribute::Synthetic | Attribute::Deprecated => Vec::new(),
             Attribute::EnclosingMethod(enclosing_method) => todo!(),
             Attribute::Signature(_) => todo!(),
             Attribute::SourceDebugExtension(vec) => todo!(),
@@ -290,7 +298,8 @@ impl Attribute {
             Attribute::Record(vec) => todo!(),
             Attribute::PermittedSubclasses(vec) => todo!(),
             Attribute::Unrecognized(_, vec) => todo!(),
-        }
+        };
+        Ok(bytes)
     }
 }
 

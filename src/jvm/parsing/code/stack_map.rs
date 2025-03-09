@@ -1,6 +1,7 @@
 use crate::jvm::{
+    class::ConstantPool,
     code::{ProgramCounter, StackMapFrame, VerificationType},
-    parsing::{Context, Error, jvm_element_parser::ClassElement, raw_attributes},
+    parsing::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes},
 };
 
 impl ClassElement for StackMapFrame {
@@ -67,7 +68,7 @@ impl ClassElement for StackMapFrame {
         }
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -92,7 +93,7 @@ impl ClassElement for VerificationType {
         }
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }

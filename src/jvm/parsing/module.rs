@@ -2,11 +2,11 @@ use itertools::Itertools;
 
 use crate::jvm::{
     Module,
-    class::constant_pool::Entry,
+    class::{ConstantPool, constant_pool::Entry},
     module::{Export, Open, Provide, Require},
 };
 
-use super::{Context, Error, jvm_element_parser::ClassElement, raw_attributes};
+use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;
@@ -30,7 +30,7 @@ impl ClassElement for Require {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let requires_index = cp.put_module_ref(self.module)?;
         let flags = self.flags.into_raw(cp)?;
         let version_index = self
@@ -65,7 +65,7 @@ impl ClassElement for Export {
         Ok(Export { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let exports_index = cp.put_package_ref(self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -100,7 +100,7 @@ impl ClassElement for Open {
         Ok(Open { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let opens_index = cp.put_package_ref(self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -132,7 +132,7 @@ impl ClassElement for Provide {
         Ok(Provide { service, with })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let provides_index = cp.put_class_ref(self.service)?;
         let with = self
             .with
@@ -206,7 +206,7 @@ impl ClassElement for Module {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let name_index = cp.put_string(self.name)?;
         let info_index = cp.put_entry(Entry::Module { name_index })?;
         let flags = self.flags.into_raw(cp)?;

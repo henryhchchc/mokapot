@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     jvm::{
+        class::ConstantPool,
         code::{
             ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
             LocalVariableTable, MethodBody, ProgramCounter, RawInstruction,
@@ -20,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    Context, Error,
+    Context, Error, ToWriterError,
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::{FromReader, ValueReaderExt},
@@ -47,7 +48,7 @@ impl ClassElement for LineNumberTableEntry {
         Ok(raw)
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -89,7 +90,7 @@ impl ClassElement for ExceptionTableEntry {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -120,7 +121,7 @@ impl ClassElement for LocalVariableDescAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -149,7 +150,7 @@ impl ClassElement for LocalVariableTypeAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -168,7 +169,7 @@ impl ClassElement for ParameterInfo {
         Ok(ParameterInfo { name, access_flags })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }
@@ -235,7 +236,7 @@ impl ClassElement for MethodBody {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }

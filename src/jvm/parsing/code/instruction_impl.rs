@@ -9,7 +9,7 @@ use crate::{
             Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
             WideInstruction,
         },
-        parsing::{Context, Error, jvm_element_parser::ClassElement},
+        parsing::{Context, Error, ToWriterError, jvm_element_parser::ClassElement},
     },
     macros::malform,
     types::field_type::PrimitiveType,
@@ -29,7 +29,7 @@ impl ClassElement for InstructionList<Instruction> {
         Ok(InstructionList::from(inner))
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         todo!()
     }
 }

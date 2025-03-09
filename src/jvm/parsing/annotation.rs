@@ -10,7 +10,7 @@ use crate::{
     types::field_type::PrimitiveType,
 };
 
-use super::{Context, Error, jvm_element_parser::ClassElement, raw_attributes};
+use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for TypePathElement {
     type Raw = (u8, u8);
@@ -25,7 +25,7 @@ impl ClassElement for TypePathElement {
         }
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         match self {
             Self::Array => Ok((0, 0)),
             Self::Nested => Ok((1, 0)),
@@ -58,17 +58,17 @@ impl ClassElement for Annotation {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let type_index = cp.put_string(self.annotation_type.to_string())?;
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()
-            .map(|(name, value)| {
+            .map(|(name, value)| -> Result<_, ToWriterError> {
                 let name_index = cp.put_string(name)?;
                 let raw_value = value.into_raw(cp)?;
                 Ok((name_index, raw_value))
             })
-            .collect::<Result<_, Error>>()?;
+            .try_collect()?;
         Ok(Self::Raw {
             type_index,
             element_value_pairs,
@@ -109,7 +109,7 @@ impl ClassElement for TypeAnnotation {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let target_info = self.target_info.into_raw(cp)?;
         let target_path = self
             .target_path
@@ -120,7 +120,7 @@ impl ClassElement for TypeAnnotation {
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()
-            .map(|(name, value)| -> Result<_, Error> {
+            .map(|(name, value)| -> Result<_, ToWriterError> {
                 let name_index = cp.put_string(name)?;
                 let value = value.into_raw(cp)?;
                 Ok((name_index, value))
@@ -174,7 +174,7 @@ impl ClassElement for TargetInfo {
         }
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
             Self::TypeParameter { index } => Self::Raw::TypeParameter { index },
             Self::SuperType { index } => Self::Raw::SuperType { index },
@@ -271,7 +271,7 @@ impl ClassElement for ElementValue {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
             ElementValue::Primitive(primitive_type, constant_value) => {
                 let tag = match primitive_type {

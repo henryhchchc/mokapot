@@ -159,7 +159,10 @@ impl ClassElement for Method {
         })
     }
 
-    fn into_raw(self, cp: &mut crate::jvm::class::ConstantPool) -> Result<Self::Raw, Error> {
+    fn into_raw(
+        self,
+        cp: &mut crate::jvm::class::ConstantPool,
+    ) -> Result<Self::Raw, ToWriterError> {
         let access_flags = self.access_flags.into_raw(cp)?;
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.descriptor.to_string())?;
