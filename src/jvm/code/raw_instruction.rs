@@ -1,6 +1,4 @@
-use std::ptr;
-
-use crate::macros::see_jvm_spec;
+use crate::{macros::see_jvm_spec, utils::enum_discriminant};
 
 /// A raw JVM instruction without the information form the constant pool.
 #[doc = see_jvm_spec!(6, 5)]
@@ -352,15 +350,8 @@ impl RawInstruction {
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {
-        self.discriminant()
-    }
-
-    const fn discriminant(&self) -> u8 {
-        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
-        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
-        // field, so we can read the discriminant without offsetting the pointer.
-        // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
-        unsafe { *ptr::from_ref(self).cast::<u8>() }
+        // Safery: Self is repr(u8) so it should be fine
+        unsafe { enum_discriminant(self) }
     }
 }
 

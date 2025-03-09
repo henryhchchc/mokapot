@@ -1,5 +1,5 @@
 use crate::{
-    jvm::{class::constant_pool::BadConstantPoolIndex, code::InvalidOffset},
+    jvm::{class::constant_pool, code::InvalidOffset},
     types::method_descriptor::InvalidDescriptor,
 };
 
@@ -22,7 +22,7 @@ pub enum Error {
     },
     /// The constant pool index does not point to an entry.
     #[error("Error when accessing constant pool: {0}")]
-    BadConstantPoolIndex(#[from] BadConstantPoolIndex),
+    ConstantPool(#[from] constant_pool::Error),
     /// An known attribute is found in an unexpected location.
     #[error("Unexpected attribute {0} in {1}")]
     UnexpectedAttribute(String, String),

@@ -9,6 +9,7 @@ use bitflags::bitflags;
 use crate::{
     macros::see_jvm_spec,
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
+    utils::enum_discriminant,
 };
 
 use super::{
@@ -306,25 +307,35 @@ pub struct BootstrapMethod {
 /// A method handle.
 #[doc = see_jvm_spec!(4, 4, 8)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum MethodHandle {
     /// Get an instance field.
-    RefGetField(FieldRef),
+    RefGetField(FieldRef) = 1,
     /// Get a static field.
-    RefGetStatic(FieldRef),
+    RefGetStatic(FieldRef) = 2,
     /// Writes to an instance field.
-    RefPutField(FieldRef),
+    RefPutField(FieldRef) = 3,
     /// Writes to a static field.
-    RefPutStatic(FieldRef),
+    RefPutStatic(FieldRef) = 4,
     /// Invoke an instance method.
-    RefInvokeVirtual(MethodRef),
+    RefInvokeVirtual(MethodRef) = 5,
     /// Invoke a static method.
-    RefInvokeStatic(MethodRef),
+    RefInvokeStatic(MethodRef) = 6,
     /// Invoke a special method (e.g., a constructor).
-    RefInvokeSpecial(MethodRef),
+    RefInvokeSpecial(MethodRef) = 7,
     /// The new version a special method (e.g., a constructor).
-    RefNewInvokeSpecial(MethodRef),
+    RefNewInvokeSpecial(MethodRef) = 8,
     /// Invoke an interface method.
-    RefInvokeInterface(MethodRef),
+    RefInvokeInterface(MethodRef) = 9,
+}
+
+impl MethodHandle {
+    /// Gets the reference kind of this method handle.
+    #[must_use]
+    pub const fn reference_kind(&self) -> u8 {
+        // Safery: Self is marked as repr(u8)
+        unsafe { enum_discriminant(self) }
+    }
 }
 
 /// The record components of a [`Class`] that represents a `record`.
