@@ -47,10 +47,14 @@ impl ConstantPool {
     {
         let mut constant_pool = Self::with_capacity(constant_pool_count);
         while constant_pool.count() < constant_pool_count {
+            // NOTE: Do not use `put_entry` here since it will do deduplication.
             let entry = Entry::parse(reader)?;
-            constant_pool
-                .put_entry(entry)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            if let entry @ (Entry::Long(_) | Entry::Double(_)) = entry {
+                constant_pool.inner.push(Slot::Entry(entry));
+                constant_pool.inner.push(Slot::Padding);
+            } else {
+                constant_pool.inner.push(Slot::Entry(entry));
+            }
         }
         Ok(constant_pool)
     }
