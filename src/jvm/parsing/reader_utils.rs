@@ -1,4 +1,4 @@
-use std::io::{Read, Result};
+use std::io::{Read, Result, Write};
 
 use crate::jvm::code::ProgramCounter;
 
@@ -59,15 +59,15 @@ where
 }
 
 #[derive(Debug)]
-pub(super) struct PositionTracker<R> {
-    reader: R,
+pub(super) struct PositionTracker<RW> {
+    inner: RW,
     position: usize,
 }
 
 impl<R> PositionTracker<R> {
     pub const fn new(reader: R) -> Self {
         Self {
-            reader,
+            inner: reader,
             position: 0,
         }
     }
@@ -82,9 +82,24 @@ where
     R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let n = self.reader.read(buf)?;
+        let n = self.inner.read(buf)?;
         self.position += n;
         Ok(n)
+    }
+}
+
+impl<W> Write for PositionTracker<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.position += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
