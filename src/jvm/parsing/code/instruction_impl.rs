@@ -10,6 +10,7 @@ use crate::{
             WideInstruction,
         },
         parsing::{Context, Error, ToWriterError, jvm_element_parser::ClassElement},
+        references::ClassRef,
     },
     macros::malform,
     types::field_type::PrimitiveType,
@@ -452,11 +453,424 @@ impl Instruction {
     ///
     /// # Errors
     /// See [`ToWriterError`] for details.
+    #[allow(clippy::too_many_lines)]
     pub fn into_raw_instruction(
         self,
         pc: ProgramCounter,
         cp: &mut ConstantPool,
     ) -> Result<RawInstruction, ToWriterError> {
-        todo!()
+        #[allow(clippy::enum_glob_use)]
+        use RawInstruction::*;
+
+        let raw = match self {
+            // Constants
+            Self::Nop => Nop,
+            Self::AConstNull => AConstNull,
+            Self::IConstM1 => IConstM1,
+            Self::IConst0 => IConst0,
+            Self::IConst1 => IConst1,
+            Self::IConst2 => IConst2,
+            Self::IConst3 => IConst3,
+            Self::IConst4 => IConst4,
+            Self::IConst5 => IConst5,
+            Self::LConst0 => LConst0,
+            Self::LConst1 => LConst1,
+            Self::FConst0 => FConst0,
+            Self::FConst1 => FConst1,
+            Self::FConst2 => FConst2,
+            Self::DConst0 => DConst0,
+            Self::DConst1 => DConst1,
+            Self::BiPush(value) => BiPush { value },
+            Self::SiPush(value) => SiPush { value },
+            Self::Ldc(value) => Ldc {
+                const_index: cp.put_constant_value(value)?.try_into()?,
+            },
+            Self::LdcW(value) => LdcW {
+                const_index: cp.put_constant_value(value)?,
+            },
+            Self::Ldc2W(value) => Ldc2W {
+                const_index: cp.put_constant_value(value)?,
+            },
+
+            // Loads
+            Self::ILoad(index) => ILoad { index },
+            Self::LLoad(index) => LLoad { index },
+            Self::FLoad(index) => FLoad { index },
+            Self::DLoad(index) => DLoad { index },
+            Self::ALoad(index) => ALoad { index },
+            Self::ILoad0 => ILoad0,
+            Self::ILoad1 => ILoad1,
+            Self::ILoad2 => ILoad2,
+            Self::ILoad3 => ILoad3,
+            Self::LLoad0 => LLoad0,
+            Self::LLoad1 => LLoad1,
+            Self::LLoad2 => LLoad2,
+            Self::LLoad3 => LLoad3,
+            Self::FLoad0 => FLoad0,
+            Self::FLoad1 => FLoad1,
+            Self::FLoad2 => FLoad2,
+            Self::FLoad3 => FLoad3,
+            Self::DLoad0 => DLoad0,
+            Self::DLoad1 => DLoad1,
+            Self::DLoad2 => DLoad2,
+            Self::DLoad3 => DLoad3,
+            Self::ALoad0 => ALoad0,
+            Self::ALoad1 => ALoad1,
+            Self::ALoad2 => ALoad2,
+            Self::ALoad3 => ALoad3,
+            Self::IALoad => IALoad,
+            Self::LALoad => LALoad,
+            Self::FALoad => FALoad,
+            Self::DALoad => DALoad,
+            Self::AALoad => AALoad,
+            Self::BALoad => BALoad,
+            Self::CALoad => CALoad,
+            Self::SALoad => SALoad,
+
+            // Stores
+            Self::IStore(index) => IStore { index },
+            Self::LStore(index) => LStore { index },
+            Self::FStore(index) => FStore { index },
+            Self::DStore(index) => DStore { index },
+            Self::AStore(index) => AStore { index },
+            Self::IStore0 => IStore0,
+            Self::IStore1 => IStore1,
+            Self::IStore2 => IStore2,
+            Self::IStore3 => IStore3,
+            Self::LStore0 => LStore0,
+            Self::LStore1 => LStore1,
+            Self::LStore2 => LStore2,
+            Self::LStore3 => LStore3,
+            Self::FStore0 => FStore0,
+            Self::FStore1 => FStore1,
+            Self::FStore2 => FStore2,
+            Self::FStore3 => FStore3,
+            Self::DStore0 => DStore0,
+            Self::DStore1 => DStore1,
+            Self::DStore2 => DStore2,
+            Self::DStore3 => DStore3,
+            Self::AStore0 => AStore0,
+            Self::AStore1 => AStore1,
+            Self::AStore2 => AStore2,
+            Self::AStore3 => AStore3,
+            Self::IAStore => IAStore,
+            Self::LAStore => LAStore,
+            Self::FAStore => FAStore,
+            Self::DAStore => DAStore,
+            Self::AAStore => AAStore,
+            Self::BAStore => BAStore,
+            Self::CAStore => CAStore,
+            Self::SAStore => SAStore,
+
+            // Stack
+            Self::Pop => Pop,
+            Self::Pop2 => Pop2,
+            Self::Dup => Dup,
+            Self::DupX1 => DupX1,
+            Self::DupX2 => DupX2,
+            Self::Dup2 => Dup2,
+            Self::Dup2X1 => Dup2X1,
+            Self::Dup2X2 => Dup2X2,
+            Self::Swap => Swap,
+
+            // Math
+            Self::IAdd => IAdd,
+            Self::LAdd => LAdd,
+            Self::FAdd => FAdd,
+            Self::DAdd => DAdd,
+            Self::ISub => ISub,
+            Self::LSub => LSub,
+            Self::FSub => FSub,
+            Self::DSub => DSub,
+            Self::IMul => IMul,
+            Self::LMul => LMul,
+            Self::FMul => FMul,
+            Self::DMul => DMul,
+            Self::IDiv => IDiv,
+            Self::LDiv => LDiv,
+            Self::FDiv => FDiv,
+            Self::DDiv => DDiv,
+            Self::IRem => IRem,
+            Self::LRem => LRem,
+            Self::FRem => FRem,
+            Self::DRem => DRem,
+            Self::INeg => INeg,
+            Self::LNeg => LNeg,
+            Self::FNeg => FNeg,
+            Self::DNeg => DNeg,
+            Self::IShl => IShl,
+            Self::LShl => LShl,
+            Self::IShr => IShr,
+            Self::LShr => LShr,
+            Self::IUShr => IUShr,
+            Self::LUShr => LUShr,
+            Self::IAnd => IAnd,
+            Self::LAnd => LAnd,
+            Self::IOr => IOr,
+            Self::LOr => LOr,
+            Self::IXor => IXor,
+            Self::LXor => LXor,
+            Self::IInc(index, increment) => IInc {
+                index,
+                constant: i8::try_from(increment)?,
+            },
+
+            // Conversions
+            Self::I2L => I2L,
+            Self::I2F => I2F,
+            Self::I2D => I2D,
+            Self::L2I => L2I,
+            Self::L2F => L2F,
+            Self::L2D => L2D,
+            Self::F2I => F2I,
+            Self::F2L => F2L,
+            Self::F2D => F2D,
+            Self::D2I => D2I,
+            Self::D2L => D2L,
+            Self::D2F => D2F,
+            Self::I2B => I2B,
+            Self::I2C => I2C,
+            Self::I2S => I2S,
+
+            // Comparisons
+            Self::LCmp => LCmp,
+            Self::FCmpL => FCmpL,
+            Self::FCmpG => FCmpG,
+            Self::DCmpL => DCmpL,
+            Self::DCmpG => DCmpG,
+            Self::IfEq(target) => IfEq {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfNe(target) => IfNe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfLt(target) => IfLt {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfGe(target) => IfGe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfGt(target) => IfGt {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfLe(target) => IfLe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpEq(target) => IfICmpEq {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpNe(target) => IfICmpNe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpLt(target) => IfICmpLt {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpGe(target) => IfICmpGe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpGt(target) => IfICmpGt {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfICmpLe(target) => IfICmpLe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfACmpEq(target) => IfACmpEq {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfACmpNe(target) => IfACmpNe {
+                offset: try_offset(target, pc)?,
+            },
+            Self::Goto(target) => Goto {
+                offset: try_offset(target, pc)?,
+            },
+            Self::Jsr(target) => Jsr {
+                offset: try_offset(target, pc)?,
+            },
+            Self::Ret(index) => Ret { index },
+
+            Self::TableSwitch {
+                default,
+                range,
+                jump_targets,
+            } => {
+                let low = *range.start();
+                let high = *range.end();
+                let jump_offsets = jump_targets
+                    .into_iter()
+                    .map(|target| {
+                        let target: u16 = target.into();
+                        let pc: u16 = pc.into();
+                        (target - pc).into()
+                    })
+                    .collect();
+                TableSwitch {
+                    default: (u16::from(default) - u16::from(pc)).into(),
+                    low,
+                    high,
+                    jump_offsets,
+                }
+            }
+            Self::LookupSwitch {
+                default,
+                match_targets,
+            } => {
+                let match_offsets = match_targets
+                    .into_iter()
+                    .map(|(value, target)| {
+                        let target: u16 = target.into();
+                        let pc: u16 = pc.into();
+                        (value, (target - pc).into())
+                    })
+                    .collect();
+                LookupSwitch {
+                    default: (u16::from(default) - u16::from(pc)).into(),
+                    match_offsets,
+                }
+            }
+
+            // Return
+            Self::IReturn => IReturn,
+            Self::LReturn => LReturn,
+            Self::FReturn => FReturn,
+            Self::DReturn => DReturn,
+            Self::AReturn => AReturn,
+            Self::Return => Return,
+
+            // References
+            Self::GetStatic(field_ref) => GetStatic {
+                field_ref_index: cp.put_field_ref(field_ref)?,
+            },
+            Self::PutStatic(field_ref) => PutStatic {
+                field_ref_index: cp.put_field_ref(field_ref)?,
+            },
+            Self::GetField(field_ref) => GetField {
+                field_ref_index: cp.put_field_ref(field_ref)?,
+            },
+            Self::PutField(field_ref) => PutField {
+                field_ref_index: cp.put_field_ref(field_ref)?,
+            },
+            Self::InvokeVirtual(method_ref) => InvokeVirtual {
+                method_index: cp.put_method_ref(method_ref)?,
+            },
+            Self::InvokeSpecial(method_ref) => InvokeSpecial {
+                method_index: cp.put_method_ref(method_ref)?,
+            },
+            Self::InvokeStatic(method_ref) => InvokeStatic {
+                method_index: cp.put_method_ref(method_ref)?,
+            },
+            Self::InvokeInterface(method_ref, count) => InvokeInterface {
+                method_index: cp.put_method_ref(method_ref)?,
+                count,
+            },
+            Self::InvokeDynamic {
+                bootstrap_method_index,
+                name,
+                ref descriptor,
+            } => {
+                let name_and_type_index = cp.put_name_and_type(name, descriptor)?;
+                let entry = constant_pool::Entry::InvokeDynamic {
+                    bootstrap_method_attr_index: bootstrap_method_index,
+                    name_and_type_index,
+                };
+                let dynamic_index = cp.put_entry(entry)?;
+                InvokeDynamic { dynamic_index }
+            }
+            Self::New(class_ref) => New {
+                index: cp.put_class_ref(class_ref)?,
+            },
+            Self::NewArray(atype) => NewArray {
+                atype: match atype {
+                    PrimitiveType::Boolean => 4,
+                    PrimitiveType::Char => 5,
+                    PrimitiveType::Float => 6,
+                    PrimitiveType::Double => 7,
+                    PrimitiveType::Byte => 8,
+                    PrimitiveType::Short => 9,
+                    PrimitiveType::Int => 10,
+                    PrimitiveType::Long => 11,
+                },
+            },
+            Self::ANewArray(class_ref) => ANewArray {
+                index: cp.put_class_ref(class_ref)?,
+            },
+            Self::ArrayLength => ArrayLength,
+            Self::AThrow => AThrow,
+            Self::CheckCast(type_ref) => CheckCast {
+                target_type_index: cp.put_class_ref(ClassRef {
+                    binary_name: type_ref.descriptor(),
+                })?,
+            },
+            Self::InstanceOf(type_ref) => InstanceOf {
+                target_type_index: cp.put_class_ref(ClassRef {
+                    binary_name: type_ref.descriptor(),
+                })?,
+            },
+            Self::MonitorEnter => MonitorEnter,
+            Self::MonitorExit => MonitorExit,
+
+            // Extended
+            Self::Wide(raw_wide) => Wide(match raw_wide {
+                WideInstruction::ILoad(index) => RawWideInstruction::ILoad { index },
+                WideInstruction::LLoad(index) => RawWideInstruction::LLoad { index },
+                WideInstruction::FLoad(index) => RawWideInstruction::FLoad { index },
+                WideInstruction::DLoad(index) => RawWideInstruction::DLoad { index },
+                WideInstruction::ALoad(index) => RawWideInstruction::ALoad { index },
+                WideInstruction::IStore(index) => RawWideInstruction::IStore { index },
+                WideInstruction::LStore(index) => RawWideInstruction::LStore { index },
+                WideInstruction::FStore(index) => RawWideInstruction::FStore { index },
+                WideInstruction::DStore(index) => RawWideInstruction::DStore { index },
+                WideInstruction::AStore(index) => RawWideInstruction::AStore { index },
+                WideInstruction::IInc(index, increment) => RawWideInstruction::IInc {
+                    index,
+                    increment: increment.try_into()?,
+                },
+                WideInstruction::Ret(index) => RawWideInstruction::Ret { index },
+            }),
+            Self::MultiANewArray(element_type, dimensions) => {
+                let index = cp.put_class_ref(ClassRef {
+                    binary_name: element_type.descriptor(),
+                })?;
+                MultiANewArray { index, dimensions }
+            }
+            Self::IfNull(target) => IfNull {
+                offset: try_offset(target, pc)?,
+            },
+            Self::IfNonNull(target) => IfNonNull {
+                offset: try_offset(target, pc)?,
+            },
+            Self::GotoW(target) => GotoW {
+                offset: try_offset_wide(target, pc)?,
+            },
+            Self::JsrW(target) => JsrW {
+                offset: try_offset_wide(target, pc)?,
+            },
+
+            // Reserved
+            Self::Breakpoint => Breakpoint,
+            Self::ImpDep1 => ImpDep1,
+            Self::ImpDep2 => ImpDep2,
+        };
+
+        Ok(raw)
     }
+}
+
+fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, ToWriterError> {
+    let target: u16 = target.into();
+    let pc: u16 = pc.into();
+    let target: i32 = target.into();
+    let pc: i32 = pc.into();
+    let offset = target - pc;
+    let offset = i16::try_from(offset)?;
+    Ok(offset)
+}
+
+fn try_offset_wide(target: ProgramCounter, pc: ProgramCounter) -> Result<i32, ToWriterError> {
+    let target: u16 = target.into();
+    let pc: u16 = pc.into();
+    let target: i64 = target.into();
+    let pc: i64 = pc.into();
+    let offset = target - pc;
+    let offset = i32::try_from(offset)?;
+    Ok(offset)
 }
