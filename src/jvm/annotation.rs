@@ -43,6 +43,7 @@ pub enum TypeParameterLocation {
     /// The type parameter is declared in a method.
     Method,
 }
+
 /// Represents the kind of a variable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariableKind {
