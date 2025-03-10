@@ -203,7 +203,7 @@ impl ToWriter for Entry {
                 reference_kind,
                 reference_index,
             } => {
-                writer.write_all(&[*reference_kind])?;
+                writer.write_all(&reference_kind.to_be_bytes())?;
                 writer.write_all(&reference_index.to_be_bytes())?;
             }
             Self::MethodType { descriptor_index } => {
