@@ -2,7 +2,7 @@
 name = "mokapot"
 version = "0.18.0"
 edition = "2024"
-description = "A library for ananlyzing JVM bytecode"
+description = "A library for analyzing and manipulating JVM bytecode"
 documentation = "https://docs.rs/mokapot"
 license = "MIT"
 repository = "https://github.com/henryhchchc/mokapot"

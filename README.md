@@ -7,7 +7,7 @@
 [![docs.rs](https://img.shields.io/docsrs/mokapot?style=flat-square&logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa?style=flat-square&logo=contributorcovenant)](docs/CODE_OF_CONDUCT.md)
 
-MokaPot is a Java bytecode analysis library written in Rust.
+MokaPot is a library for analyzing and manipulating JVM bytecode. It is written in Rust for performance and safety.
 
 > [!WARNING]
 > **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
