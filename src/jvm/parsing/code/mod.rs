@@ -310,7 +310,10 @@ impl ClassElement for MethodBody {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        let instruction_bytes = self.instructions.into_bytes(cp)?;
+        let mut instruction_bytes = Vec::new();
+        self.instructions
+            .into_raw(cp)?
+            .to_writer(&mut instruction_bytes)?;
         let exception_table = self
             .exception_table
             .into_iter()
