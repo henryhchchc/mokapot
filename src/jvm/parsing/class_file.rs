@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 use itertools::Itertools;
 
@@ -54,6 +54,17 @@ impl Class {
     {
         let class_file = ClassFile::from_reader(reader)?;
         Class::from_raw(class_file)
+    }
+
+    /// Writes the class file to the given writer.
+    /// # Errors
+    /// See [`ToWriterError`] for more information.
+    pub fn to_writer<W>(self, writer: &mut W) -> Result<(), ToWriterError>
+    where
+        W: Write,
+    {
+        let class_file = self.into_raw()?;
+        class_file.to_writer(writer)
     }
 }
 
@@ -114,15 +125,15 @@ impl ToWriter for ClassFile {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.this_class.to_be_bytes())?;
         writer.write_all(&self.super_class.to_be_bytes())?;
-        write_length::<u16, _>(writer, self.interfaces.len())?;
+        write_length::<u16>(writer, self.interfaces.len())?;
         for interface_idx in &self.interfaces {
             writer.write_all(&interface_idx.to_be_bytes())?;
         }
-        write_length::<u16, _>(writer, self.fields.len())?;
+        write_length::<u16>(writer, self.fields.len())?;
         for field in &self.fields {
             field.to_writer(writer)?;
         }
-        write_length::<u16, _>(writer, self.methods.len())?;
+        write_length::<u16>(writer, self.methods.len())?;
         for method in &self.methods {
             method.to_writer(writer)?;
         }
@@ -235,6 +246,77 @@ impl Class {
             record,
             free_attributes,
         })
+    }
+
+    pub(crate) fn into_raw(self) -> Result<ClassFile, ToWriterError> {
+        let mut constant_pool = ConstantPool::new();
+        let this_class = constant_pool.put_class_ref(self.make_ref())?;
+        let super_class = self
+            .super_class
+            .map(|it| constant_pool.put_class_ref(it))
+            .transpose()?
+            .unwrap_or(0);
+        let interfaces = self
+            .interfaces
+            .into_iter()
+            .map(|it| constant_pool.put_class_ref(it))
+            .try_collect()?;
+        let fields = self
+            .fields
+            .into_iter()
+            .map(|it| it.into_raw(&mut constant_pool))
+            .try_collect()?;
+        let methods = self
+            .methods
+            .into_iter()
+            .map(|it| it.into_raw(&mut constant_pool))
+            .try_collect()?;
+        let attributes = [
+            self.source_file.map(Attribute::SourceFile),
+            Some(self.inner_classes)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::InnerClasses),
+            self.enclosing_method.map(Attribute::EnclosingMethod),
+            self.source_debug_extension
+                .map(Attribute::SourceDebugExtension),
+            Some(self.bootstrap_methods)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::BootstrapMethods),
+            self.module.map(Attribute::Module),
+            Some(self.module_packages)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::ModulePackages),
+            self.module_main_class.map(Attribute::ModuleMainClass),
+            self.nest_host.map(Attribute::NestHost),
+            Some(self.nest_members)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::NestMembers),
+            Some(self.permitted_subclasses)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::PermittedSubclasses),
+            self.signature.map(Attribute::Signature),
+            self.record.map(Attribute::Record),
+            self.is_synthetic.then_some(Attribute::Synthetic),
+            self.is_deprecated.then_some(Attribute::Deprecated),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(attributes_into_iter!(self))
+        .map(|it| it.into_raw(&mut constant_pool))
+        .try_collect()?;
+        let raw = ClassFile {
+            minor_version: self.version.minor(),
+            major_version: self.version.major(),
+            constant_pool,
+            access_flags: self.access_flags.bits(),
+            this_class,
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            attributes,
+        };
+        Ok(raw)
     }
 }
 

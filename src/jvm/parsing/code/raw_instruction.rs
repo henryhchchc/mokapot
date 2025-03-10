@@ -8,7 +8,7 @@ use super::super::{Error, reader_utils::ValueReaderExt};
 use crate::{
     jvm::{
         code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
-        parsing::reader_utils::PositionTracker,
+        parsing::{ToWriter, ToWriterError, reader_utils::PositionTracker},
     },
     macros::malform,
 };
@@ -447,5 +447,11 @@ impl RawInstruction {
             it => Err(Error::UnexpectedOpCode(it))?,
         };
         Ok(Some((pc, instruction)))
+    }
+}
+
+impl ToWriter for InstructionList<RawInstruction> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        todo!()
     }
 }

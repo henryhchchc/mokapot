@@ -3,7 +3,10 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
-        annotation::{ElementValue, TargetInfo, TypePathElement},
+        annotation::{
+            ElementValue, OffsetOf, TargetInfo, TypeArgumentLocation, TypeParameterLocation,
+            TypePathElement, VariableKind,
+        },
         class::{ConstantPool, constant_pool},
         code::LocalVariableId,
     },
@@ -138,75 +141,173 @@ impl ClassElement for TypeAnnotation {
 impl ClassElement for TargetInfo {
     type Raw = raw_attributes::TargetInfo;
 
+    #[allow(clippy::enum_glob_use)]
     fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
-        match raw {
-            Self::Raw::TypeParameter { index } => Ok(Self::TypeParameter { index }),
-            Self::Raw::SuperType { index } => Ok(Self::SuperType { index }),
-            Self::Raw::TypeParameterBound {
-                type_parameter: type_parameter_index,
-                bound_index,
-            } => Ok(Self::TypeParameterBound {
+        use OffsetOf::{InstanceOf, New};
+        use TypeArgumentLocation::*;
+        use TypeParameterLocation::*;
+        use VariableKind::*;
+
+        let lifted = match raw {
+            Self::Raw::TypeParameterOfClass { index } => Self::TypeParameter {
+                location: Class,
+                index,
+            },
+            Self::Raw::TypeParameterOfMethod { index } => Self::TypeParameter {
+                location: Method,
+                index,
+            },
+            Self::Raw::SuperType { index } => Self::SuperType { index },
+            Self::Raw::TypeParameterBoundOfClass {
                 type_parameter_index,
                 bound_index,
-            }),
-            Self::Raw::Empty => Ok(Self::Empty),
-            Self::Raw::FormalParameter { index } => Ok(Self::FormalParameter { index }),
-            Self::Raw::Throws { index } => Ok(Self::Throws { index }),
-            Self::Raw::LocalVariable(table) => Ok(Self::LocalVar(
-                table
+            } => Self::TypeParameterBound {
+                location: Class,
+                type_parameter_index,
+                bound_index,
+            },
+            Self::Raw::TypeParameterBoundOfMethod {
+                type_parameter_index,
+                bound_index,
+            } => Self::TypeParameterBound {
+                location: Method,
+                type_parameter_index,
+                bound_index,
+            },
+            Self::Raw::Field => Self::Field,
+            Self::Raw::TypeOfField => Self::FieldType,
+            Self::Raw::Receiver => Self::Receiver,
+            Self::Raw::FormalParameter { index } => Self::FormalParameter { index },
+            Self::Raw::Throws { index } => Self::Throws { index },
+            Self::Raw::LocalVariable(table) => {
+                let table = table
                     .into_iter()
-                    .map(|(start, len, index)| {
+                    .map(|(start, len, index)| -> Result<_, Error> {
                         let effective_range = start..(start + len)?;
                         Ok(LocalVariableId {
                             effective_range,
                             index,
                         })
                     })
-                    .collect::<Result<_, Error>>()?,
-            )),
-            Self::Raw::Catch {
-                exception_table_index,
-            } => Ok(Self::Catch {
-                index: exception_table_index,
-            }),
-            Self::Raw::Offset(offset) => Ok(Self::Offset(offset)),
-            Self::Raw::TypeArgument { offset, index } => Ok(Self::TypeArgument { offset, index }),
-        }
+                    .try_collect()?;
+                Self::LocalVar(Local, table)
+            }
+            Self::Raw::ResourceVariable(table) => {
+                let table = table
+                    .into_iter()
+                    .map(|(start, len, index)| -> Result<_, Error> {
+                        let effective_range = start..(start + len)?;
+                        Ok(LocalVariableId {
+                            effective_range,
+                            index,
+                        })
+                    })
+                    .try_collect()?;
+                Self::LocalVar(Resource, table)
+            }
+            Self::Raw::Catch { index } => Self::Catch { index },
+            Self::Raw::InstanceOf { offset } => Self::Offset(InstanceOf, offset),
+            Self::Raw::New { offset } => Self::Offset(New, offset),
+            Self::Raw::NewMethodReference { offset } => {
+                Self::Offset(OffsetOf::ConstructorReference, offset)
+            }
+            Self::Raw::VarMethodReference { offset } => {
+                Self::Offset(OffsetOf::MethodReference, offset)
+            }
+            Self::Raw::TypeInCast { offset, index } => Self::TypeArgument {
+                location: Cast,
+                offset,
+                index,
+            },
+            Self::Raw::TypeArgumentInConstructor { offset, index } => Self::TypeArgument {
+                location: Constructor,
+                offset,
+                index,
+            },
+            Self::Raw::TypeArgumentInCall { offset, index } => Self::TypeArgument {
+                location: MethodCall,
+                offset,
+                index,
+            },
+            Self::Raw::TypeArgumentInConstructorReference { offset, index } => Self::TypeArgument {
+                location: ConstructorReference,
+                offset,
+                index,
+            },
+            Self::Raw::TypeArgumentInMethodReference { offset, index } => Self::TypeArgument {
+                location: MethodReference,
+                offset,
+                index,
+            },
+        };
+        Ok(lifted)
     }
 
     fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
-            Self::TypeParameter { index } => Self::Raw::TypeParameter { index },
-            Self::SuperType { index } => Self::Raw::SuperType { index },
-            Self::TypeParameterBound {
-                type_parameter_index: type_parameter,
-                bound_index,
-            } => Self::Raw::TypeParameterBound {
-                type_parameter,
-                bound_index,
+            TargetInfo::TypeParameter { location, index } => match location {
+                TypeParameterLocation::Class => Self::Raw::TypeParameterOfClass { index },
+                TypeParameterLocation::Method => Self::Raw::TypeParameterOfMethod { index },
             },
-            Self::Empty => Self::Raw::Empty,
-            Self::FormalParameter { index } => Self::Raw::FormalParameter { index },
-            Self::Throws { index } => Self::Raw::Throws { index },
-            Self::LocalVar(table) => Self::Raw::LocalVariable(
-                table
+            TargetInfo::SuperType { index } => Self::Raw::SuperType { index },
+            TargetInfo::TypeParameterBound {
+                location,
+                type_parameter_index,
+                bound_index,
+            } => match location {
+                TypeParameterLocation::Class => Self::Raw::TypeParameterBoundOfClass {
+                    type_parameter_index,
+                    bound_index,
+                },
+                TypeParameterLocation::Method => Self::Raw::TypeParameterBoundOfMethod {
+                    type_parameter_index,
+                    bound_index,
+                },
+            },
+            TargetInfo::Field => Self::Raw::Field,
+            TargetInfo::FieldType => Self::Raw::TypeOfField,
+            TargetInfo::Receiver => Self::Raw::Receiver,
+            TargetInfo::FormalParameter { index } => Self::Raw::FormalParameter { index },
+            TargetInfo::Throws { index } => Self::Raw::Throws { index },
+            TargetInfo::LocalVar(variable_kind, table) => {
+                let table = table
                     .into_iter()
-                    .map(|var| {
-                        let LocalVariableId {
-                            effective_range,
-                            index,
-                        } = var;
-                        let start = effective_range.start;
-                        let len = u16::from(effective_range.end) - u16::from(effective_range.start);
-                        (start, index, len)
+                    .map(|entry| {
+                        let start_pc = entry.effective_range.start;
+                        let length = u16::from(entry.effective_range.end) - u16::from(start_pc);
+                        let index = entry.index;
+                        (start_pc, length, index)
                     })
-                    .collect(),
-            ),
-            Self::Catch { index } => Self::Raw::Catch {
-                exception_table_index: index,
+                    .collect();
+                match variable_kind {
+                    VariableKind::Local => Self::Raw::LocalVariable(table),
+                    VariableKind::Resource => Self::Raw::ResourceVariable(table),
+                }
+            }
+            TargetInfo::Catch { index } => Self::Raw::Catch { index },
+            TargetInfo::Offset(offset_of, offset) => match offset_of {
+                OffsetOf::InstanceOf => Self::Raw::InstanceOf { offset },
+                OffsetOf::New => Self::Raw::New { offset },
+                OffsetOf::MethodReference => Self::Raw::VarMethodReference { offset },
+                OffsetOf::ConstructorReference => Self::Raw::NewMethodReference { offset },
             },
-            Self::Offset(offset) => Self::Raw::Offset(offset),
-            Self::TypeArgument { offset, index } => Self::Raw::TypeArgument { offset, index },
+            TargetInfo::TypeArgument {
+                location,
+                offset,
+                index,
+            } => match location {
+                TypeArgumentLocation::Cast => Self::Raw::TypeInCast { offset, index },
+                TypeArgumentLocation::Constructor => {
+                    Self::Raw::TypeArgumentInConstructor { offset, index }
+                }
+                TypeArgumentLocation::MethodCall => Self::Raw::TypeArgumentInCall { offset, index },
+                TypeArgumentLocation::ConstructorReference => {
+                    Self::Raw::TypeArgumentInConstructorReference { offset, index }
+                }
+                TypeArgumentLocation::MethodReference => {
+                    Self::Raw::TypeArgumentInMethodReference { offset, index }
+                }
+            },
         };
         Ok(raw)
     }

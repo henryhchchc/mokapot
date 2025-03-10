@@ -62,7 +62,7 @@ impl ToWriter for AttributeInfo {
 
 impl ToWriter for Vec<AttributeInfo> {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
-        write_length::<u16, _>(writer, self.len())?;
+        write_length::<u16>(writer, self.len())?;
         for attr in self {
             attr.to_writer(writer)?;
         }
@@ -334,7 +334,7 @@ impl Attribute {
                 buf
             }
             Attribute::Record(components) => serialize_vec::<u16>(components, cp)?,
-            };
+        };
         bytes.shrink_to_fit();
         Ok(bytes)
     }

@@ -48,22 +48,21 @@ pub enum ToWriterError {
     /// Error from the underlying writer.
     IO(#[from] io::Error),
     /// A list of elements is too long that it exceeds the data type for the length.
-    ListTooLong(#[from] TryFromIntError),
+    OutOfRange(#[from] TryFromIntError),
     /// Error forwarded from the constant pool.
     ConstantPool(#[from] crate::jvm::class::constant_pool::Error),
     /// Other error.
     Other(&'static str),
 }
 
-pub(in crate::jvm::parsing) fn write_length<L, W>(
-    writer: &mut W,
+pub(in crate::jvm::parsing) fn write_length<Len>(
+    writer: &mut impl Write,
     length: usize,
 ) -> Result<(), ToWriterError>
 where
-    W: Write,
-    L: TryFrom<usize, Error = TryFromIntError> + ToBytes,
+    Len: TryFrom<usize, Error = TryFromIntError> + ToBytes,
 {
-    let length = L::try_from(length)?;
+    let length = Len::try_from(length)?;
     writer.write_all(length.to_be_bytes().as_ref())?;
     Ok(())
 }

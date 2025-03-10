@@ -409,11 +409,11 @@ impl ToWriter for JavaString {
         match self {
             Self::Utf8(str) => {
                 let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
-                write_length::<u16, _>(writer, crsu8_bytes.len())?;
+                write_length::<u16>(writer, crsu8_bytes.len())?;
                 writer.write_all(crsu8_bytes.as_ref())?;
             }
             Self::InvalidUtf8(bytes) => {
-                write_length::<u16, _>(writer, bytes.len())?;
+                write_length::<u16>(writer, bytes.len())?;
                 writer.write_all(bytes)?;
             }
         }
