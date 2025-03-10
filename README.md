@@ -41,7 +41,7 @@ cargo add --git https://github.com/henryhchchc/mokapot.git mokapot
 use mokapot::jvm::class::Class;
 
 fn parse_class() -> Result<Class, Box<dyn std::error::Error>> {
-    let reader = fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error>"Some reader for the byte code");
+    let reader = todo!("Some reader for the byte code");
     let class = Class::from_reader(&mut reader)?;
     Ok(class)
 }
