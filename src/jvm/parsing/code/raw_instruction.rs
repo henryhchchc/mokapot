@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    io::{self, Read},
+    io::{self, Read, Write},
     iter,
 };
 
@@ -8,7 +8,7 @@ use super::super::{Error, reader_utils::ValueReaderExt};
 use crate::{
     jvm::{
         code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
-        parsing::{ToWriter, ToWriterError, reader_utils::PositionTracker},
+        parsing::{ToWriterError, reader_utils::PositionTracker, write_length},
     },
     macros::malform,
 };
@@ -25,9 +25,163 @@ impl InstructionList<RawInstruction> {
                 .collect::<Result<_, _>>()?;
         Ok(InstructionList::from(inner))
     }
+
+    /// Writes a list of [`RawInstruction`]s to the given writer.
+    /// # Errors
+    /// See [`ToWriterError`] for more information.
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        let mut writer = PositionTracker::new(writer);
+
+        for (_, insn) in self.iter() {
+            insn.write_one(&mut writer)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl RawInstruction {
+    /// Writes a single [`RawInstruction`] to the given writer.
+    #[allow(clippy::too_many_lines)]
+    fn write_one<W>(&self, writer: &mut PositionTracker<W>) -> Result<(), ToWriterError>
+    where
+        PositionTracker<W>: io::Write,
+    {
+        #[allow(clippy::enum_glob_use)]
+        use RawInstruction::*;
+
+        let opcode = self.opcode();
+        writer.write_all(&opcode.to_be_bytes())?;
+
+        match self {
+            BiPush { value } => writer.write_all(&value.to_be_bytes())?,
+            SiPush { value } => writer.write_all(&value.to_be_bytes())?,
+            Ldc { const_index } => writer.write_all(&const_index.to_be_bytes())?,
+            LdcW { const_index } | Ldc2W { const_index } => {
+                writer.write_all(&const_index.to_be_bytes())?;
+            }
+            ILoad { index }
+            | LLoad { index }
+            | FLoad { index }
+            | DLoad { index }
+            | ALoad { index }
+            | IStore { index }
+            | LStore { index }
+            | FStore { index }
+            | DStore { index }
+            | AStore { index } => writer.write_all(&index.to_be_bytes())?,
+            IInc { index, constant } => {
+                writer.write_all(&index.to_be_bytes())?;
+                writer.write_all(&constant.to_be_bytes())?;
+            }
+            IfEq { offset }
+            | IfNe { offset }
+            | IfLt { offset }
+            | IfGe { offset }
+            | IfGt { offset }
+            | IfLe { offset }
+            | IfICmpEq { offset }
+            | IfICmpNe { offset }
+            | IfICmpLt { offset }
+            | IfICmpGe { offset }
+            | IfICmpGt { offset }
+            | IfICmpLe { offset }
+            | IfACmpEq { offset }
+            | IfACmpNe { offset }
+            | Goto { offset }
+            | Jsr { offset } => writer.write_all(&offset.to_be_bytes())?,
+            Ret { index } => writer.write_all(&index.to_be_bytes())?,
+            TableSwitch {
+                default,
+                low,
+                high,
+                jump_offsets,
+            } => {
+                while writer.position() % 4 != 0 {
+                    writer.write_all(&[0x00])?;
+                }
+                writer.write_all(&default.to_be_bytes())?;
+                writer.write_all(&low.to_be_bytes())?;
+                writer.write_all(&high.to_be_bytes())?;
+                write_length::<i32>(writer, jump_offsets.len())?;
+                for offset in jump_offsets {
+                    writer.write_all(&offset.to_be_bytes())?;
+                }
+            }
+            LookupSwitch {
+                default,
+                match_offsets,
+            } => {
+                while writer.position() % 4 != 0 {
+                    writer.write_all(&[0x00])?;
+                }
+                writer.write_all(&default.to_be_bytes())?;
+                write_length::<i32>(writer, match_offsets.len())?;
+                for (key, offset) in match_offsets {
+                    writer.write_all(&key.to_be_bytes())?;
+                    writer.write_all(&offset.to_be_bytes())?;
+                }
+            }
+            GetStatic { field_ref_index }
+            | PutStatic { field_ref_index }
+            | GetField { field_ref_index }
+            | PutField { field_ref_index } => writer.write_all(&field_ref_index.to_be_bytes())?,
+            InvokeVirtual { method_index }
+            | InvokeSpecial { method_index }
+            | InvokeStatic { method_index } => writer.write_all(&method_index.to_be_bytes())?,
+            InvokeInterface {
+                method_index,
+                count,
+            } => {
+                writer.write_all(&method_index.to_be_bytes())?;
+                writer.write_all(&count.to_be_bytes())?;
+            }
+            InvokeDynamic { dynamic_index } => {
+                writer.write_all(&dynamic_index.to_be_bytes())?;
+            }
+            New { index } => writer.write_all(&index.to_be_bytes())?,
+            NewArray { atype } => writer.write_all(&atype.to_be_bytes())?,
+            ANewArray { index } => writer.write_all(&index.to_be_bytes())?,
+            CheckCast { target_type_index } => {
+                writer.write_all(&target_type_index.to_be_bytes())?;
+            }
+            InstanceOf { target_type_index } => {
+                writer.write_all(&target_type_index.to_be_bytes())?;
+            }
+            Wide(raw_wide_instruction) => match raw_wide_instruction {
+                RawWideInstruction::ILoad { index }
+                | RawWideInstruction::LLoad { index }
+                | RawWideInstruction::FLoad { index }
+                | RawWideInstruction::DLoad { index }
+                | RawWideInstruction::ALoad { index }
+                | RawWideInstruction::IStore { index }
+                | RawWideInstruction::LStore { index }
+                | RawWideInstruction::FStore { index }
+                | RawWideInstruction::DStore { index }
+                | RawWideInstruction::AStore { index }
+                | RawWideInstruction::Ret { index } => {
+                    writer.write_all(&index.to_be_bytes())?;
+                }
+                RawWideInstruction::IInc { index, increment } => {
+                    writer.write_all(&index.to_be_bytes())?;
+                    writer.write_all(&increment.to_be_bytes())?;
+                }
+            },
+            MultiANewArray { index, dimensions } => {
+                writer.write_all(&index.to_be_bytes())?;
+                writer.write_all(&dimensions.to_be_bytes())?;
+            }
+            IfNull { offset } => writer.write_all(&offset.to_be_bytes())?,
+            IfNonNull { offset } => writer.write_all(&offset.to_be_bytes())?,
+            GotoW { offset } => writer.write_all(&offset.to_be_bytes())?,
+            JsrW { offset } => writer.write_all(&offset.to_be_bytes())?,
+            _ => {
+                // Empty variants should write nothing but the opcode.
+            }
+        }
+        Ok(())
+    }
+
     /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
     fn read_one<R>(reader: &mut PositionTracker<R>) -> Result<Option<(ProgramCounter, Self)>, Error>
@@ -447,11 +601,5 @@ impl RawInstruction {
             it => Err(Error::UnexpectedOpCode(it))?,
         };
         Ok(Some((pc, instruction)))
-    }
-}
-
-impl ToWriter for InstructionList<RawInstruction> {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
-        todo!()
     }
 }

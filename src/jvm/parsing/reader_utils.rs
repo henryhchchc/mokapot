@@ -59,13 +59,13 @@ where
 }
 
 #[derive(Debug)]
-pub(super) struct PositionTracker<RW> {
-    inner: RW,
+pub(super) struct PositionTracker<Inner> {
+    inner: Inner,
     position: usize,
 }
 
-impl<R> PositionTracker<R> {
-    pub const fn new(reader: R) -> Self {
+impl<Inner> PositionTracker<Inner> {
+    pub const fn new(reader: Inner) -> Self {
         Self {
             inner: reader,
             position: 0,
