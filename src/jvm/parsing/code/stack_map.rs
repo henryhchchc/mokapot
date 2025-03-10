@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::jvm::{
     class::ConstantPool,
     code::{ProgramCounter, StackMapFrame, VerificationType},
@@ -69,7 +71,47 @@ impl ClassElement for StackMapFrame {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let raw = match self {
+            Self::SameFrame { offset_delta } => u8::try_from(offset_delta).map_or_else(|_| Self::Raw::SameFrameExtended { offset_delta }, |frame_type| Self::Raw::SameFrame { frame_type }),
+            Self::SameLocals1StackItemFrame {
+                offset_delta,
+                stack,
+            } => {
+                let stack = stack.into_raw(cp)?;
+                if let Ok(frame_type) = u8::try_from(offset_delta + 64) {
+                    Self::Raw::SameLocals1StackItemFrame { frame_type, stack }
+                } else {
+                    Self::Raw::SameLocals1StackItemFrameExtended {
+                        offset_delta,
+                        stack,
+                    }
+                }
+            }
+            Self::ChopFrame {
+                offset_delta,
+                chop_count,
+            } => Self::Raw::ChopFrame {
+                offset_delta,
+                frame_type: 251 - chop_count,
+            },
+            Self::AppendFrame {
+                offset_delta,
+                locals,
+            } => Self::Raw::AppendFrame {
+                offset_delta,
+                locals: locals.into_iter().map(|it| it.into_raw(cp)).try_collect()?,
+            },
+            Self::FullFrame {
+                offset_delta,
+                locals,
+                stack,
+            } => Self::Raw::FullFrame {
+                offset_delta,
+                locals: locals.into_iter().map(|it| it.into_raw(cp)).try_collect()?,
+                stack: stack.into_iter().map(|it| it.into_raw(cp)).try_collect()?,
+            },
+        };
+        Ok(raw)
     }
 }
 
@@ -94,6 +136,20 @@ impl ClassElement for VerificationType {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        match self {
+            Self::TopVariable => Ok(Self::Raw::Top),
+            Self::IntegerVariable => Ok(Self::Raw::Integer),
+            Self::FloatVariable => Ok(Self::Raw::Float),
+            Self::DoubleVariable => Ok(Self::Raw::Double),
+            Self::LongVariable => Ok(Self::Raw::Long),
+            Self::NullVariable => Ok(Self::Raw::Null),
+            Self::UninitializedThisVariable => Ok(Self::Raw::UninitializedThis),
+            Self::ObjectVariable(class) => Ok(Self::Raw::Object {
+                class_info_index: cp.put_class_ref(class)?,
+            }),
+            Self::UninitializedVariable { offset } => Ok(Self::Raw::Uninitialized {
+                offset: offset.into(),
+            }),
+        }
     }
 }

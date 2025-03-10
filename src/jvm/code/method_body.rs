@@ -110,6 +110,12 @@ where
     }
 }
 
+impl<I> FromIterator<(ProgramCounter, I)> for InstructionList<I> {
+    fn from_iter<T: IntoIterator<Item = (ProgramCounter, I)>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl<I> InstructionList<I> {
     /// Returns the instruction at the given program counter.
     #[must_use]

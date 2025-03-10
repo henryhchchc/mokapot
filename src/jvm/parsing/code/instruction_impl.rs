@@ -30,7 +30,9 @@ impl ClassElement for InstructionList<Instruction> {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        self.into_iter()
+            .map(|(pc, insn)| insn.into_raw_instruction(pc, cp).map(|raw| (pc, raw)))
+            .try_collect()
     }
 }
 
@@ -444,5 +446,17 @@ impl Instruction {
         };
 
         Ok(result)
+    }
+
+    /// Lower the instruction into a raw instruction.
+    ///
+    /// # Errors
+    /// See [`ToWriterError`] for details.
+    pub fn into_raw_instruction(
+        self,
+        pc: ProgramCounter,
+        cp: &mut ConstantPool,
+    ) -> Result<RawInstruction, ToWriterError> {
+        todo!()
     }
 }

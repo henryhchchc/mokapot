@@ -35,12 +35,59 @@ pub enum ElementValue {
     Array(Vec<ElementValue>),
 }
 
+/// Represents the location of a type parameter in a class or method.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeParameterLocation {
+    /// The type parameter is declared in a class.
+    Class,
+    /// The type parameter is declared in a method.
+    Method,
+}
+/// Represents the kind of a variable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariableKind {
+    /// A local variable.
+    Local,
+    /// A resource variable declared in a `try-with-resources` statement.
+    Resource,
+}
+
+/// Represents the offset of a type annotation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OffsetOf {
+    /// Offset for an `instanceof` expression.
+    InstanceOf,
+    /// Offset for a `new` expression.
+    New,
+    /// Offset for a method reference expression.
+    MethodReference,
+    /// Offset for a constructor reference expression.
+    ConstructorReference,
+}
+
+/// Represents the location of a type argument.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeArgumentLocation {
+    /// Type argument in a cast expression.
+    Cast,
+    /// Type argument in a constructor invocation.
+    Constructor,
+    /// Type argument in a method call.
+    MethodCall,
+    /// Type argument in a constructor reference expression.
+    ConstructorReference,
+    /// Type argument in a method reference expression.
+    MethodReference,
+}
+
 /// Information about the target of a [`TypeAnnotation`](super::TypeAnnotation).
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetInfo {
     /// Indicates an annotation appears on a type parameter declaration of a generic class, interface, method, or constructor.
     TypeParameter {
+        /// The location of the type parameter declaration.
+        location: TypeParameterLocation,
         /// The index of the type parameter declaration.
         index: u8,
     },
@@ -52,14 +99,19 @@ pub enum TargetInfo {
     },
     /// Indicates that an annotation appears on a bound of a type parameter declaration of a generic class, interface, method, or constructor.
     TypeParameterBound {
+        /// The location of the type parameter which the bound applies to.
+        location: TypeParameterLocation,
         /// The index of the type parameter declaration.
         type_parameter_index: u8,
         /// The index of the bound of the type parameter declaration.
         bound_index: u8,
     },
-    /// Indicates that an annotation appears on either the type in a field declaration, the type in a record component declaration,
-    /// the return type of a method, the type of a newly constructed object, or the receiver type of a method or constructor.
-    Empty,
+    /// Indicates that an annotation appears on a field declaration or a record component declaration.
+    Field,
+    /// Indicates that an annotation appears on they type of a field declaration or a record component declaration.
+    FieldType,
+    /// Indicates that an annotation appears on the receiver type of a method.
+    Receiver,
     /// Indicates that an annotation appears on the type in a formal parameter declaration of a method, constructor, or lambda expression.
     FormalParameter {
         /// The index of the formal parameter declaration.
@@ -71,7 +123,7 @@ pub enum TargetInfo {
         index: u16,
     },
     /// Indicates that an annotation appears on the type in a local variable declaration, including a variable declared as a resource in a `try-with-resources` statement.
-    LocalVar(Vec<LocalVariableId>),
+    LocalVar(VariableKind, Vec<LocalVariableId>),
 
     /// Indicates that an annotation appears on a type in an exception parameter declaration.
     Catch {
@@ -80,7 +132,7 @@ pub enum TargetInfo {
     },
     /// Indicates that an annotation appears on either the type in an `instanceof` expression
     /// or a `new` expression, or the type before the `::` in a method reference expression.
-    Offset(u16),
+    Offset(OffsetOf, u16),
     /// Indicates that an annotation appears on a type in a cast expression,
     /// or on a type argument in the explicit type argument list for any of the following:
     /// - A new expression
@@ -88,6 +140,8 @@ pub enum TargetInfo {
     /// - A method invocation expression
     /// - A method reference expression.
     TypeArgument {
+        /// The location of the type argument.
+        location: TypeArgumentLocation,
         /// The location of the instruction
         offset: ProgramCounter,
         /// The index of the type argument.

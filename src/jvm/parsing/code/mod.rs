@@ -8,6 +8,8 @@ use std::{
     str::FromStr,
 };
 
+use itertools::Itertools;
+
 use crate::{
     jvm::{
         class::ConstantPool,
@@ -23,6 +25,7 @@ use crate::{
 
 use super::{
     Context, Error, ToWriter, ToWriterError,
+    attribute::Attribute,
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::{FromReader, ValueReaderExt},
@@ -49,7 +52,7 @@ impl ClassElement for LineNumberTableEntry {
         Ok(raw)
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         Ok(self)
     }
 }
@@ -100,7 +103,24 @@ impl ClassElement for ExceptionTableEntry {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let ExceptionTableEntry {
+            covered_pc,
+            handler_pc,
+            catch_type,
+        } = self;
+        let start_pc = (*covered_pc.start()).into();
+        let end_pc = (*covered_pc.end()).into();
+        let handler_pc = handler_pc.into();
+        let catch_type_idx = catch_type
+            .map(|it| cp.put_class_ref(it))
+            .transpose()?
+            .unwrap_or(0);
+        Ok(Self::Raw {
+            start_pc,
+            end_pc,
+            handler_pc,
+            catch_type_idx,
+        })
     }
 }
 
@@ -131,9 +151,21 @@ impl ClassElement for LocalVariableDescAttr {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let start_pc = self.id.effective_range.start;
+        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
+        let name_index = cp.put_string(self.name)?;
+        let desc_or_signature_idx = cp.put_string(self.field_type.to_string())?;
+        let index = self.id.index;
+        Ok(Self::Raw {
+            start_pc,
+            length,
+            name_index,
+            desc_or_signature_idx,
+            index,
+        })
     }
 }
+
 impl ClassElement for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableInfo;
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
@@ -160,14 +192,37 @@ impl ClassElement for LocalVariableTypeAttr {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let start_pc = self.id.effective_range.start;
+        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
+        let name_index = cp.put_string(self.name)?;
+        let desc_or_signature_idx = cp.put_string(self.signature)?;
+        let index = self.id.index;
+        Ok(Self::Raw {
+            start_pc,
+            length,
+            name_index,
+            desc_or_signature_idx,
+            index,
+        })
     }
 }
+
+impl ToWriter for ProgramCounter {
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        let inner = u16::from(*self);
+        writer.write_all(&inner.to_be_bytes())?;
+        Ok(())
+    }
+}
+
 impl ClassElement for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
-        let raw_attributes::ParameterInfo(name_index, access_flags) = raw;
+        let raw_attributes::ParameterInfo {
+            name_index,
+            access_flags,
+        } = raw;
         let name = if name_index == 0 {
             None
         } else {
@@ -179,7 +234,16 @@ impl ClassElement for ParameterInfo {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let name_index = self
+            .name
+            .map(|it| cp.put_string(it))
+            .transpose()?
+            .unwrap_or(0);
+        let access_flags = self.access_flags.into_raw(cp)?;
+        Ok(Self::Raw {
+            name_index,
+            access_flags,
+        })
     }
 }
 
@@ -246,6 +310,37 @@ impl ClassElement for MethodBody {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        todo!()
+        let instruction_bytes = self.instructions.into_bytes(cp)?;
+        let exception_table = self
+            .exception_table
+            .into_iter()
+            .map(|it| it.into_raw(cp))
+            .try_collect()?;
+        let attributes = [
+            self.line_number_table.map(Attribute::LineNumberTable),
+            self.stack_map_table.map(Attribute::StackMapTable),
+            Some(self.runtime_visible_type_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeVisibleTypeAnnotations),
+            Some(self.runtime_invisible_type_annotations)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeInvisibleTypeAnnotations),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(
+            self.free_attributes
+                .into_iter()
+                .map(|(name, data)| Attribute::Unrecognized(name, data)),
+        )
+        .map(|it| it.into_raw(cp))
+        .try_collect()?;
+        Ok(Self::Raw {
+            max_stack: self.max_stack,
+            max_locals: self.max_locals,
+            instruction_bytes,
+            exception_table,
+            attributes,
+        })
     }
 }
