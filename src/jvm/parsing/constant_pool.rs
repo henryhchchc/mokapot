@@ -3,15 +3,15 @@ use std::{
     str::FromStr,
 };
 
-use super::{
-    Error, ToWriter, ToWriterError,
-    reader_utils::{ValueReaderExt, read_byte_chunk},
-    write_length,
-};
 use crate::{
     jvm::{
         ConstantValue, JavaString,
         class::{ConstantPool, MethodHandle, constant_pool::Entry},
+        parsing::{
+            Error, ToWriter, ToWriterError,
+            reader_utils::{ValueReaderExt, read_byte_chunk},
+            write_length,
+        },
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
