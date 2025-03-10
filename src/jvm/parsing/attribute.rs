@@ -55,6 +55,7 @@ impl FromReader for AttributeInfo {
 impl ToWriter for AttributeInfo {
     fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.name_idx.to_be_bytes())?;
+        write_length::<u32>(writer, self.info.len())?;
         writer.write_all(&self.info)?;
         Ok(())
     }

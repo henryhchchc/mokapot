@@ -10,7 +10,7 @@ use crate::{
         class::{ConstantPool, constant_pool},
         code::LocalVariableId,
     },
-    types::field_type::PrimitiveType,
+    types::{Descriptor, field_type::PrimitiveType},
 };
 
 use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
@@ -62,7 +62,7 @@ impl ClassElement for Annotation {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        let type_index = cp.put_string(self.annotation_type.to_string())?;
+        let type_index = cp.put_string(self.annotation_type.descriptor())?;
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()
@@ -119,7 +119,7 @@ impl ClassElement for TypeAnnotation {
             .into_iter()
             .map(|it| it.into_raw(cp))
             .try_collect()?;
-        let type_index = cp.put_string(self.annotation_type.to_string())?;
+        let type_index = cp.put_string(self.annotation_type.descriptor())?;
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()

@@ -74,6 +74,19 @@ fn test_parse_my_class() {
 }
 
 #[test]
+fn from_bytes_to_class_and_wround() {
+    let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
+    let bytes_len = bytes.len();
+    let class = Class::from_reader(&mut bytes).unwrap();
+    let mut written_bytes = Vec::new();
+    class.write_to(&mut written_bytes).unwrap();
+    assert!(dbg!(written_bytes.len()) <= dbg!(bytes_len));
+    let mut reader = written_bytes.as_slice();
+    let reparsed = Class::from_reader(&mut reader).unwrap();
+    assert_eq!(reparsed.binary_name, "org/mokapot/test/MyClass");
+}
+
+#[test]
 fn parse_anno() {
     for mut bytes in [
         test_data_class!("mokapot", "org/mokapot/test/Anno"),

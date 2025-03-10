@@ -54,10 +54,10 @@ pub enum Operation {
     #[display("{_0} as short")]
     Int2Short(Operand),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
-    #[display("{_0} as {}", _1.descriptor())]
+    #[display("{_0} as {}", _1)]
     CheckCast(Operand, FieldType),
     /// Checks whether an object is an instance of a given type.
-    #[display("{_0} is {}", _1.descriptor())]
+    #[display("{_0} is {}", _1)]
     InstanceOf(Operand, FieldType),
 }
 impl Operation {

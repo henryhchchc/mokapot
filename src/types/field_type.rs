@@ -1,7 +1,7 @@
 //! Non-generic JVM type system
 use std::str::FromStr;
 
-use super::method_descriptor::InvalidDescriptor;
+use super::{Descriptor, method_descriptor::InvalidDescriptor};
 use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 /// A primitive type in Java.
@@ -106,6 +106,18 @@ impl FieldType {
     }
 }
 
+impl Descriptor for FieldType {
+    fn descriptor(&self) -> String {
+        match self {
+            FieldType::Base(it) => it.descriptor().to_string(),
+            FieldType::Object(ClassRef { binary_name }) => {
+                format!("L{binary_name};")
+            }
+            FieldType::Array(inner) => format!("[{}", inner.descriptor()),
+        }
+    }
+}
+
 impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
@@ -146,18 +158,6 @@ impl FieldType {
     #[must_use]
     pub fn array_of(inner: Self, dim: u8) -> Self {
         (0..dim).fold(inner, |acc, _| acc.into_array_type())
-    }
-
-    /// Returns the JVM descriptor for this type.
-    #[must_use]
-    pub fn descriptor(&self) -> String {
-        match self {
-            FieldType::Base(it) => it.descriptor().to_string(),
-            FieldType::Object(ClassRef { binary_name }) => {
-                format!("L{binary_name};")
-            }
-            FieldType::Array(inner) => format!("[{}", inner.descriptor()),
-        }
     }
 }
 

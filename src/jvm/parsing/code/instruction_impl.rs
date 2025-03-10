@@ -13,7 +13,7 @@ use crate::{
         references::ClassRef,
     },
     macros::malform,
-    types::field_type::PrimitiveType,
+    types::{Descriptor, field_type::PrimitiveType},
 };
 
 impl ClassElement for InstructionList<Instruction> {

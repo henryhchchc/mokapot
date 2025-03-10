@@ -20,7 +20,7 @@ use crate::{
         method::{ParameterAccessFlags, ParameterInfo},
     },
     macros::extract_attributes,
-    types::field_type::FieldType,
+    types::{Descriptor, field_type::FieldType},
 };
 
 use super::{
@@ -154,7 +154,7 @@ impl ClassElement for LocalVariableDescAttr {
         let start_pc = self.id.effective_range.start;
         let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
-        let desc_or_signature_idx = cp.put_string(self.field_type.to_string())?;
+        let desc_or_signature_idx = cp.put_string(self.field_type.descriptor())?;
         let index = self.id.index;
         Ok(Self::Raw {
             start_pc,
