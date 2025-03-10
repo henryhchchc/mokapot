@@ -2,13 +2,15 @@
 
 use std::io::{self, Read};
 
-use crate::jvm::parsing::{ToWriter, ToWriterError};
-use crate::macros::see_jvm_spec;
-
-use crate::jvm::JavaString;
-use crate::utils::enum_discriminant;
-
-use super::ConstantPool;
+use crate::{
+    jvm::{
+        JavaString,
+        class::ConstantPool,
+        parsing::{ToWriter, ToWriterError},
+    },
+    macros::see_jvm_spec,
+    utils::enum_discriminant,
+};
 
 #[derive(Debug, Clone)]
 pub(super) enum Slot {
@@ -369,7 +371,7 @@ impl Entry {
     /// Returns the tag of this constant pool entry.
     #[must_use]
     pub const fn tag(&self) -> u8 {
-        // Safery: Self is marked as repr(u8)
+        // Safety: Self is marked as repr(u8)
         unsafe { enum_discriminant(self) }
     }
 
