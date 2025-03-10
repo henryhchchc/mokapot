@@ -72,7 +72,10 @@ impl ClassElement for StackMapFrame {
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
-            Self::SameFrame { offset_delta } => u8::try_from(offset_delta).map_or_else(|_| Self::Raw::SameFrameExtended { offset_delta }, |frame_type| Self::Raw::SameFrame { frame_type }),
+            Self::SameFrame { offset_delta } => u8::try_from(offset_delta).map_or_else(
+                |_| Self::Raw::SameFrameExtended { offset_delta },
+                |frame_type| Self::Raw::SameFrame { frame_type },
+            ),
             Self::SameLocals1StackItemFrame {
                 offset_delta,
                 stack,
