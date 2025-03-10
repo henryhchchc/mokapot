@@ -15,7 +15,7 @@ use crate::{
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
-    types::field_type::FieldType,
+    types::{Descriptor, field_type::FieldType},
 };
 
 #[inline]
@@ -141,7 +141,7 @@ impl ConstantPool {
             ConstantValue::Class(value) => return self.put_class_ref(value),
             ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
             ConstantValue::MethodType(method_descriptor) => {
-                let descriptor_index = self.put_string(method_descriptor.to_string())?;
+                let descriptor_index = self.put_string(method_descriptor.descriptor())?;
                 Entry::MethodType { descriptor_index }
             }
             ConstantValue::Dynamic(bsm_idx, name, field_type) => {
@@ -244,10 +244,10 @@ impl ConstantPool {
         descriptor: &T,
     ) -> Result<u16, ToWriterError>
     where
-        T: ToString,
+        T: Descriptor,
     {
         let name_index = self.put_string(name)?;
-        let descriptor_index = self.put_string(descriptor.to_string())?;
+        let descriptor_index = self.put_string(descriptor.descriptor())?;
         self.put_entry(Entry::NameAndType {
             name_index,
             descriptor_index,

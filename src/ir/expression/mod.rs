@@ -59,7 +59,7 @@ pub enum Expression {
         /// A list of arguments.
         args: Vec<Operand>,
     },
-    /// A call to a bootstrap method to create a closure.  
+    /// A call to a bootstrap method to create a closure.
     /// Corresponds to the following JVM instructions:
     /// - `invokedynamic`
     #[display(

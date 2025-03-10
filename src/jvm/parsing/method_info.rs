@@ -13,7 +13,7 @@ use crate::{
         references::ClassRef,
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
-    types::method_descriptor::MethodDescriptor,
+    types::{Descriptor, method_descriptor::MethodDescriptor},
 };
 
 use super::{
@@ -165,7 +165,7 @@ impl ClassElement for Method {
     ) -> Result<Self::Raw, ToWriterError> {
         let access_flags = self.access_flags.into_raw(cp)?;
         let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.descriptor.to_string())?;
+        let descriptor_index = cp.put_string(self.descriptor.descriptor())?;
         let attributes = [
             self.body.map(Attribute::Code),
             Some(self.exceptions)

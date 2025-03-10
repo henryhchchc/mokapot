@@ -5,21 +5,37 @@ use std::str::FromStr;
 
 use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
-use super::field_type::{FieldType, PrimitiveType};
+use super::{
+    Descriptor,
+    field_type::{FieldType, PrimitiveType},
+};
 
 /// The descriptor of a method.
 /// Consists of the parameters types and the return type.
 #[doc = see_jvm_spec!(4, 3, 3)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display(
-    "({}){return_type}",
-    parameters_types.iter().map(FieldType::descriptor).join("")
+    "({}) -> {return_type}",
+    parameters_types.iter().map(FieldType::descriptor).join(", ")
 )]
 pub struct MethodDescriptor {
     /// The type of the parameters.
     pub parameters_types: Vec<FieldType>,
     /// The return type.
     pub return_type: ReturnType,
+}
+
+impl Descriptor for MethodDescriptor {
+    fn descriptor(&self) -> String {
+        format!(
+            "({}){}",
+            self.parameters_types
+                .iter()
+                .map(FieldType::descriptor)
+                .join(""),
+            self.return_type.descriptor()
+        )
+    }
 }
 
 /// Denotes the return type of a method.
@@ -32,6 +48,15 @@ pub enum ReturnType {
     /// The return type of the method is `void`.
     #[display("void")]
     Void,
+}
+
+impl Descriptor for ReturnType {
+    fn descriptor(&self) -> String {
+        match self {
+            ReturnType::Some(field_type) => field_type.descriptor(),
+            ReturnType::Void => "V".to_string(),
+        }
+    }
 }
 
 const PARAM_START: char = '(';

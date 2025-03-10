@@ -1049,7 +1049,6 @@ impl ToWriter for RecordComponentInfo {
     fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        writer.write_all(&self.attributes.len().to_be_bytes())?;
         self.attributes.write_to(writer)?;
         Ok(())
     }

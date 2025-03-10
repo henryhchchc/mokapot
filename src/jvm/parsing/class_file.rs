@@ -13,6 +13,7 @@ use crate::{
         references::ClassRef,
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
+    types::Descriptor,
 };
 
 use super::{
@@ -446,7 +447,7 @@ impl ClassElement for RecordComponent {
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.component_type.to_string())?;
+        let descriptor_index = cp.put_string(self.component_type.descriptor())?;
         let attributes = self
             .signature
             .map(Attribute::Signature)
