@@ -421,6 +421,76 @@ impl ToWriter for JavaString {
     }
 }
 
+impl ToWriter for Entry {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.tag().to_be_bytes())?;
+        match self {
+            Self::Utf8(value) => value.write_to(writer)?,
+            Self::Integer(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Long(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Double(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Class { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+            Self::String { string_index } => writer.write_all(&string_index.to_be_bytes())?,
+            Self::FieldRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::MethodRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::InterfaceMethodRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&class_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::NameAndType {
+                name_index,
+                descriptor_index,
+            } => {
+                writer.write_all(&name_index.to_be_bytes())?;
+                writer.write_all(&descriptor_index.to_be_bytes())?;
+            }
+            Self::MethodHandle {
+                reference_kind,
+                reference_index,
+            } => {
+                writer.write_all(&reference_kind.to_be_bytes())?;
+                writer.write_all(&reference_index.to_be_bytes())?;
+            }
+            Self::MethodType { descriptor_index } => {
+                writer.write_all(&descriptor_index.to_be_bytes())?;
+            }
+            Self::Dynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::InvokeDynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
+                writer.write_all(&name_and_type_index.to_be_bytes())?;
+            }
+            Self::Module { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+            Self::Package { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
 
