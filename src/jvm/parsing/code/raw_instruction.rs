@@ -29,7 +29,7 @@ impl InstructionList<RawInstruction> {
     /// Writes a list of [`RawInstruction`]s to the given writer.
     /// # Errors
     /// See [`ToWriterError`] for more information.
-    pub fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    pub fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         let mut writer = PositionTracker::new(writer);
 
         for (_, insn) in self.iter() {

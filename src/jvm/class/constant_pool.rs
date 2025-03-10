@@ -142,29 +142,29 @@ impl Default for ConstantPool {
 }
 
 impl ToWriter for ConstantPool {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.count().to_be_bytes())?;
         for entry in &self.inner {
-            entry.to_writer(writer)?;
+            entry.write_to(writer)?;
         }
         Ok(())
     }
 }
 
 impl ToWriter for Slot {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         if let Self::Entry(entry) = self {
-            entry.to_writer(writer)?;
+            entry.write_to(writer)?;
         }
         Ok(())
     }
 }
 
 impl ToWriter for Entry {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.tag().to_be_bytes())?;
         match self {
-            Self::Utf8(value) => value.to_writer(writer)?,
+            Self::Utf8(value) => value.write_to(writer)?,
             Self::Integer(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Long(value) => writer.write_all(&value.to_be_bytes())?,

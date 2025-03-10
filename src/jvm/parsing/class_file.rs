@@ -59,12 +59,12 @@ impl Class {
     /// Writes the class file to the given writer.
     /// # Errors
     /// See [`ToWriterError`] for more information.
-    pub fn to_writer<W>(self, writer: &mut W) -> Result<(), ToWriterError>
+    pub fn write_to<W>(self, writer: &mut W) -> Result<(), ToWriterError>
     where
         W: Write,
     {
         let class_file = self.into_raw()?;
-        class_file.to_writer(writer)
+        class_file.write_to(writer)
     }
 }
 
@@ -117,11 +117,11 @@ impl FromReader for ClassFile {
 }
 
 impl ToWriter for ClassFile {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
         writer.write_all(&self.minor_version.to_be_bytes())?;
         writer.write_all(&self.major_version.to_be_bytes())?;
-        self.constant_pool.to_writer(writer)?;
+        self.constant_pool.write_to(writer)?;
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.this_class.to_be_bytes())?;
         writer.write_all(&self.super_class.to_be_bytes())?;
@@ -131,13 +131,13 @@ impl ToWriter for ClassFile {
         }
         write_length::<u16>(writer, self.fields.len())?;
         for field in &self.fields {
-            field.to_writer(writer)?;
+            field.write_to(writer)?;
         }
         write_length::<u16>(writer, self.methods.len())?;
         for method in &self.methods {
-            method.to_writer(writer)?;
+            method.write_to(writer)?;
         }
-        self.attributes.to_writer(writer)?;
+        self.attributes.write_to(writer)?;
         Ok(())
     }
 }

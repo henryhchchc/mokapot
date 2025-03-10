@@ -69,7 +69,7 @@ impl FromReader for LineNumberTableEntry {
 }
 
 impl ToWriter for LineNumberTableEntry {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
         writer.write_all(&self.line_number.to_be_bytes())?;
         Ok(())
@@ -208,7 +208,7 @@ impl ClassElement for LocalVariableTypeAttr {
 }
 
 impl ToWriter for ProgramCounter {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         let inner = u16::from(*self);
         writer.write_all(&inner.to_be_bytes())?;
         Ok(())
@@ -313,7 +313,7 @@ impl ClassElement for MethodBody {
         let mut instruction_bytes = Vec::new();
         self.instructions
             .into_raw(cp)?
-            .to_writer(&mut instruction_bytes)?;
+            .write_to(&mut instruction_bytes)?;
         let exception_table = self
             .exception_table
             .into_iter()

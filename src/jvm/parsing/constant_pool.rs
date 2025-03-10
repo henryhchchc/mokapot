@@ -405,7 +405,7 @@ impl Entry {
 }
 
 impl ToWriter for JavaString {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
         match self {
             Self::Utf8(str) => {
                 let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
@@ -465,7 +465,7 @@ pub(crate) mod tests {
             let mut reader = content.as_slice();
             let pool = ConstantPool::from_reader(&mut reader, count).unwrap();
             let mut buf = Vec::new();
-            pool.to_writer(&mut buf)?;
+            pool.write_to(&mut buf)?;
             let (len_bytes, written) = buf.split_at(2);
             let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
             assert_eq!(len, count);
