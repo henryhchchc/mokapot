@@ -16,7 +16,7 @@ pub(super) trait ClassElement: Sized {
         Self::Raw: ToWriter,
     {
         let mut bytes = Vec::new();
-        self.into_raw(cp)?.to_writer(&mut bytes)?;
+        self.into_raw(cp)?.write_to(&mut bytes)?;
         Ok(bytes)
     }
 }

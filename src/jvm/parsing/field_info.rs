@@ -47,11 +47,11 @@ impl FromReader for FieldInfo {
 }
 
 impl ToWriter for FieldInfo {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: std::io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        self.attributes.to_writer(writer)?;
+        self.attributes.write_to(writer)?;
         Ok(())
     }
 }

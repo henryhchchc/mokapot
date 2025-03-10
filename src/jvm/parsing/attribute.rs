@@ -53,7 +53,7 @@ impl FromReader for AttributeInfo {
 }
 
 impl ToWriter for AttributeInfo {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.name_idx.to_be_bytes())?;
         writer.write_all(&self.info)?;
         Ok(())
@@ -61,10 +61,10 @@ impl ToWriter for AttributeInfo {
 }
 
 impl ToWriter for Vec<AttributeInfo> {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         write_length::<u16>(writer, self.len())?;
         for attr in self {
-            attr.to_writer(writer)?;
+            attr.write_to(writer)?;
         }
         Ok(())
     }
