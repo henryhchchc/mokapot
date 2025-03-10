@@ -275,11 +275,12 @@ impl Attribute {
                 bytes
             }
             Attribute::Exceptions(exception_types) => {
-                let indices: Vec<_> = exception_types
-                    .into_iter()
-                    .map(|it| cp.put_class_ref(it))
-                    .try_collect()?;
-                indices.into_iter().flat_map(u16::to_be_bytes).collect()
+                let mut bytes = Vec::new();
+                write_length::<u16>(&mut bytes, exception_types.len())?;
+                for exception_type in exception_types {
+                    bytes.extend(cp.put_class_ref(exception_type)?.to_be_bytes());
+                }
+                bytes
             }
             Attribute::Signature(str_value) | Attribute::SourceFile(str_value) => {
                 cp.put_string(str_value)?.to_be_bytes().into()
