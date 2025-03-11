@@ -338,9 +338,7 @@ impl ClassElement for ElementValue {
                 }
             }
             Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
-                constant_pool::Entry::Utf8(s) => {
-                    Ok(Self::String(ConstantValue::String(s.to_owned())))
-                }
+                constant_pool::Entry::Utf8(s) => Ok(Self::String(s.to_owned())),
                 _ => Err(Error::Other("Expected string constant value")),
             },
             Self::Raw::Const(_, _) => Err(Error::Other("Invalid constant value tag")),
@@ -388,9 +386,10 @@ impl ClassElement for ElementValue {
                 let value_idx = cp.put_constant_value(constant_value)?;
                 Self::Raw::Const(tag, value_idx)
             }
-            ElementValue::String(constant_value) => {
-                let value_idx = cp.put_constant_value(constant_value)?;
-                Self::Raw::Const(b'S', value_idx)
+            ElementValue::String(string) => {
+                let entry = constant_pool::Entry::Utf8(string);
+                let value_idx = cp.put_entry(entry)?;
+                Self::Raw::Const(b's', value_idx)
             }
             ElementValue::EnumConstant {
                 enum_type_name,

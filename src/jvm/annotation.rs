@@ -5,7 +5,7 @@ use crate::{
 };
 
 use super::{
-    Annotation, ConstantValue,
+    Annotation, ConstantValue, JavaString,
     code::{LocalVariableId, ProgramCounter},
 };
 
@@ -16,7 +16,7 @@ pub enum ElementValue {
     /// A constant value in primitive type.
     Primitive(PrimitiveType, ConstantValue),
     /// A constant value in String type.
-    String(ConstantValue),
+    String(JavaString),
     /// An enum constant.
     EnumConstant {
         /// The name of the enum type.
