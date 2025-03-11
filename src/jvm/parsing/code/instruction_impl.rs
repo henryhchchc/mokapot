@@ -857,8 +857,8 @@ impl Instruction {
 
 fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, ToWriterError> {
     let target: u16 = target.into();
-    let pc: u16 = pc.into();
     let target: i32 = target.into();
+    let pc: u16 = pc.into();
     let pc: i32 = pc.into();
     let offset = target - pc;
     let offset = i16::try_from(offset)?;
@@ -867,8 +867,8 @@ fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, ToWrite
 
 fn try_offset_wide(target: ProgramCounter, pc: ProgramCounter) -> Result<i32, ToWriterError> {
     let target: u16 = target.into();
-    let pc: u16 = pc.into();
     let target: i64 = target.into();
+    let pc: u16 = pc.into();
     let pc: i64 = pc.into();
     let offset = target - pc;
     let offset = i32::try_from(offset)?;

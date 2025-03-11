@@ -187,18 +187,19 @@ impl ToWriter for StackMapFrameInfo {
     fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         match self {
             Self::SameFrame { frame_type } => {
+                debug_assert!(
+                    (0..=63).contains(frame_type),
+                    "Invalid frame type in SameFrame"
+                );
                 writer.write_all(&frame_type.to_be_bytes())?;
             }
             Self::SameLocals1StackItemFrame { frame_type, stack } => {
+                debug_assert!(
+                    (64..=127).contains(frame_type),
+                    "Invalid frame type in SameLocals1StackItemFrame"
+                );
                 writer.write_all(&frame_type.to_be_bytes())?;
                 stack.write_to(writer)?;
-            }
-            Self::ChopFrame {
-                frame_type,
-                offset_delta,
-            } => {
-                writer.write_all(&frame_type.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
             }
             Self::SameLocals1StackItemFrameExtended {
                 offset_delta,
@@ -207,6 +208,17 @@ impl ToWriter for StackMapFrameInfo {
                 writer.write_all(&247u8.to_be_bytes())?;
                 writer.write_all(&offset_delta.to_be_bytes())?;
                 stack.write_to(writer)?;
+            }
+            Self::ChopFrame {
+                frame_type,
+                offset_delta,
+            } => {
+                debug_assert!(
+                    (248..=250).contains(frame_type),
+                    "Invalid frame type in ChopFrame"
+                );
+                writer.write_all(&frame_type.to_be_bytes())?;
+                writer.write_all(&offset_delta.to_be_bytes())?;
             }
             Self::SameFrameExtended { offset_delta } => {
                 writer.write_all(&251u8.to_be_bytes())?;
@@ -217,6 +229,10 @@ impl ToWriter for StackMapFrameInfo {
                 locals,
             } => {
                 let frame_type = u8::try_from(locals.len() + 251)?;
+                debug_assert!(
+                    (252..=254).contains(&frame_type),
+                    "Invalid frame type in AppendFrame"
+                );
                 writer.write_all(&frame_type.to_be_bytes())?;
                 writer.write_all(&offset_delta.to_be_bytes())?;
                 for local in locals {
@@ -720,8 +736,8 @@ impl FromReader for TargetInfo {
 impl ToWriter for TargetInfo {
     fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         // Safety: Self is marked as repr(u8) so it is fine to use enum_discriminant
-        let target_info_tag: u8 = unsafe { enum_discriminant(self) };
-        writer.write_all(&target_info_tag.to_be_bytes())?;
+        let target_type: u8 = unsafe { enum_discriminant(self) };
+        writer.write_all(&target_type.to_be_bytes())?;
         match self {
             TargetInfo::TypeParameterOfClass { index }
             | TargetInfo::TypeParameterOfMethod { index }
