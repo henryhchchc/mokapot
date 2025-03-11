@@ -21,31 +21,39 @@ fn works_with_jdk_classes() {
         let mut buf_reader = std::io::BufReader::new(reader);
         let class = Class::from_reader(&mut buf_reader);
         match class {
-            Ok(c) => c
-                .methods
-                .par_iter()
-                .filter(|it| {
-                    it.body
-                        .as_ref()
-                        // Skip large method to speed up the test
-                        .is_some_and(|it| it.instructions.len() < 512)
-                })
-                .for_each(|it| {
-                    it.body
-                        .as_ref()
-                        .unwrap()
-                        .instructions
-                        .iter()
-                        .for_each(|(_pc, insn)| {
-                            let _ = insn.name();
-                        });
-                    let _ir_method = it.brew().unwrap_or_else(|e| {
-                        panic!("Failed to brew {}: {}", it.name, e);
-                    });
-                }),
+            Ok(c) => test_a_class(c),
             Err(e) => {
                 panic!("Failed to parse {:?}: {}", class_file, e);
             }
         }
     });
+}
+
+fn test_a_class(class: Class) {
+    class
+        .methods
+        .par_iter()
+        .filter(|it| {
+            it.body
+                .as_ref()
+                // Skip large method to speed up the test
+                .is_some_and(|it| it.instructions.len() < 512)
+        })
+        .for_each(|it| {
+            it.body
+                .as_ref()
+                .unwrap()
+                .instructions
+                .iter()
+                .for_each(|(_pc, insn)| {
+                    let _ = insn.name();
+                });
+            let _ir_method = it.brew().unwrap_or_else(|e| {
+                panic!("Failed to brew {}: {}", it.name, e);
+            });
+        });
+
+    let mut class_bytes = Vec::new();
+    class.write_to(&mut class_bytes).unwrap();
+    Class::from_reader(&mut class_bytes.as_slice()).unwrap();
 }
