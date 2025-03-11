@@ -135,9 +135,11 @@ impl RawInstruction {
             } => {
                 writer.write_all(&method_index.to_be_bytes())?;
                 writer.write_all(&count.to_be_bytes())?;
+                writer.write_all(&0u16.to_be_bytes())?;
             }
             InvokeDynamic { dynamic_index } => {
                 writer.write_all(&dynamic_index.to_be_bytes())?;
+                writer.write_all(&0u16.to_be_bytes())?;
             }
             New { index } => writer.write_all(&index.to_be_bytes())?,
             NewArray { atype } => writer.write_all(&atype.to_be_bytes())?,

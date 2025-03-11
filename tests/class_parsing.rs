@@ -87,23 +87,31 @@ fn from_bytes_to_class_and_wround() {
 }
 
 #[test]
-fn parse_anno() {
+fn test_anno() {
     for mut bytes in [
         test_data_class!("mokapot", "org/mokapot/test/Anno"),
         test_data_class!("mokapot", "org/mokapot/test/Anno$Middle"),
     ] {
-        Class::from_reader(&mut bytes).unwrap();
+        let class = Class::from_reader(&mut bytes).unwrap();
+        let mut written_bytes = Vec::new();
+        class.write_to(&mut written_bytes).unwrap();
+        let mut reader = written_bytes.as_slice();
+        Class::from_reader(&mut reader).unwrap();
     }
 }
 
 #[test]
-fn parse_complicated_class() {
+fn test_complicated_class() {
     for mut bytes in [
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass"),
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$InnerClass"),
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$1Test"),
     ] {
-        Class::from_reader(&mut bytes).unwrap();
+        let class = Class::from_reader(&mut bytes).unwrap();
+        let mut written_bytes = Vec::new();
+        class.write_to(&mut written_bytes).unwrap();
+        let mut reader = written_bytes.as_slice();
+        Class::from_reader(&mut reader).unwrap();
     }
 }
 

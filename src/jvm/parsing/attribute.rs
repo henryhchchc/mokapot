@@ -303,8 +303,7 @@ impl Attribute {
             Attribute::RuntimeVisibleParameterAnnotations(outer)
             | Attribute::RuntimeInvisibleParameterAnnotations(outer) => {
                 let mut buf = Vec::new();
-                let outer_len = u8::try_from(outer.len())?;
-                buf.push(outer_len);
+                write_length::<u8>(&mut buf, outer.len())?;
                 for inner in outer {
                     buf.extend(serialize_vec::<u16>(inner, cp)?);
                 }
