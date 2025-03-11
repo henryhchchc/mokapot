@@ -267,13 +267,7 @@ impl Attribute {
                 constant_value_idx.to_be_bytes().to_vec()
             }
             Attribute::Code(method_body) => method_body.into_bytes(cp)?,
-            Attribute::StackMapTable(entries) => {
-                let mut bytes = Vec::new();
-                for frame in entries {
-                    bytes.extend(frame.into_bytes(cp)?);
-                }
-                bytes
-            }
+            Attribute::StackMapTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::Exceptions(exception_types) => {
                 let mut bytes = Vec::new();
                 write_length::<u16>(&mut bytes, exception_types.len())?;
@@ -282,14 +276,14 @@ impl Attribute {
                 }
                 bytes
             }
+            Attribute::InnerClasses(classes) => serialize_vec::<u16>(classes, cp)?,
+            Attribute::EnclosingMethod(enclosing_method) => enclosing_method.into_bytes(cp)?,
+            Attribute::Synthetic | Attribute::Deprecated => Vec::default(),
             Attribute::Signature(str_value) | Attribute::SourceFile(str_value) => {
                 cp.put_string(str_value)?.to_be_bytes().into()
             }
-            Attribute::LineNumberTable(entries) => serialize_vec::<u16>(entries, cp)?,
-            Attribute::InnerClasses(classes) => serialize_vec::<u16>(classes, cp)?,
-            Attribute::Synthetic | Attribute::Deprecated => Vec::default(),
-            Attribute::EnclosingMethod(enclosing_method) => enclosing_method.into_bytes(cp)?,
             Attribute::SourceDebugExtension(data) | Attribute::Unrecognized(_, data) => data,
+            Attribute::LineNumberTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::LocalVariableTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::LocalVariableTypeTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::RuntimeVisibleAnnotations(annotations)
@@ -315,8 +309,7 @@ impl Attribute {
             Attribute::Module(module) => module.into_bytes(cp)?,
             Attribute::ModulePackages(mod_pkg) => {
                 let mut buf = Vec::new();
-                let len = u16::try_from(mod_pkg.len())?;
-                buf.extend(len.to_be_bytes());
+                write_length::<u16>(&mut buf, mod_pkg.len())?;
                 for pkg in mod_pkg {
                     buf.extend(cp.put_package_ref(pkg)?.to_be_bytes());
                 }
@@ -327,8 +320,7 @@ impl Attribute {
             }
             Attribute::NestMembers(classes) | Attribute::PermittedSubclasses(classes) => {
                 let mut buf = Vec::new();
-                let len = u16::try_from(classes.len())?;
-                buf.extend(len.to_be_bytes());
+                write_length::<u16>(&mut buf, classes.len())?;
                 for class in classes {
                     buf.extend(cp.put_class_ref(class)?.to_be_bytes());
                 }
