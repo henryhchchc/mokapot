@@ -373,6 +373,22 @@ impl ClassElement for ElementValue {
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
             ElementValue::Primitive(primitive_type, constant_value) => {
+                // Validate that primitive_type is compatible with constant_value
+                match (primitive_type, &constant_value) {
+                    (PrimitiveType::Float, ConstantValue::Float(_))
+                    | (PrimitiveType::Double, ConstantValue::Double(_))
+                    | (PrimitiveType::Long, ConstantValue::Long(_))
+                    | (
+                        PrimitiveType::Byte
+                        | PrimitiveType::Char
+                        | PrimitiveType::Int
+                        | PrimitiveType::Short
+                        | PrimitiveType::Boolean,
+                        ConstantValue::Integer(_),
+                    ) => {}
+                    _ => return Err(ToWriterError::Other("Constant value type mismatch")),
+                }
+
                 let tag = match primitive_type {
                     PrimitiveType::Byte => b'B',
                     PrimitiveType::Char => b'C',

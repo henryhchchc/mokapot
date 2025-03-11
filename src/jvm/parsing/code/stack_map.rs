@@ -72,16 +72,22 @@ impl ClassElement for StackMapFrame {
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
-            Self::SameFrame { offset_delta } => u8::try_from(offset_delta).map_or_else(
-                |_| Self::Raw::SameFrameExtended { offset_delta },
-                |frame_type| Self::Raw::SameFrame { frame_type },
-            ),
+            Self::SameFrame { offset_delta } => {
+                if offset_delta < 64 {
+                    let frame_type = u8::try_from(offset_delta).expect("0 - 63 shold fit in u8");
+                    Self::Raw::SameFrame { frame_type }
+                } else {
+                    Self::Raw::SameFrameExtended { offset_delta }
+                }
+            }
             Self::SameLocals1StackItemFrame {
                 offset_delta,
                 stack,
             } => {
                 let stack = stack.into_raw(cp)?;
-                if let Ok(frame_type) = u8::try_from(offset_delta + 64) {
+                let frame_type = offset_delta + 64;
+                if (64..=127).contains(&frame_type) {
+                    let frame_type = u8::try_from(frame_type).expect("64 - 127 should fit in u8");
                     Self::Raw::SameLocals1StackItemFrame { frame_type, stack }
                 } else {
                     Self::Raw::SameLocals1StackItemFrameExtended {
