@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Read},
-    iter::once,
-};
+use std::io::{self, Read};
 
 use itertools::Itertools;
 
@@ -171,6 +168,9 @@ impl ClassElement for Method {
             Some(self.exceptions)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::Exceptions),
+            Some(self.parameters)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::MethodParameters),
             self.annotation_default.map(Attribute::AnnotationDefault),
             self.is_synthetic.then_some(Attribute::Synthetic),
             self.is_deprecated.then_some(Attribute::Deprecated),
@@ -179,7 +179,6 @@ impl ClassElement for Method {
         .into_iter()
         .flatten()
         .chain(attributes_into_iter!(self))
-        .chain(once(Attribute::MethodParameters(self.parameters)))
         .map(|it| it.into_raw(cp))
         .try_collect()?;
 
