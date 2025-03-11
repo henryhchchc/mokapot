@@ -319,6 +319,12 @@ impl ClassElement for MethodBody {
             .into_iter()
             .map(|it| it.into_raw(cp))
             .try_collect()?;
+        let (local_variable_table, local_variable_type_table) =
+            if let Some(local_var_table) = self.local_variable_table {
+                todo!()
+            } else {
+                (None, None)
+            };
         let attributes = [
             self.line_number_table.map(Attribute::LineNumberTable),
             self.stack_map_table.map(Attribute::StackMapTable),
@@ -328,6 +334,8 @@ impl ClassElement for MethodBody {
             Some(self.runtime_invisible_type_annotations)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeInvisibleTypeAnnotations),
+            local_variable_table.map(Attribute::LocalVariableTable),
+            local_variable_type_table.map(Attribute::LocalVariableTypeTable),
         ]
         .into_iter()
         .flatten()
