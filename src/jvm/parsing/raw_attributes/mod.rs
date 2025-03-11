@@ -572,10 +572,10 @@ impl ToWriter for TypeAnnotation {
 pub enum TargetInfo {
     TypeParameterOfClass {
         index: u8,
-    } = 0x01,
+    } = 0x00,
     TypeParameterOfMethod {
         index: u8,
-    } = 0x02,
+    } = 0x01,
     SuperType {
         index: u16,
     } = 0x10,
@@ -726,7 +726,7 @@ impl FromReader for TargetInfo {
             },
             unexpected => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Invalid target type: {unexpected}"),
+                format!("Invalid target type: {unexpected:x}"),
             ))?,
         };
         Ok(target_info)
