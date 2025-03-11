@@ -319,6 +319,15 @@ impl LocalVariableTable {
     }
 }
 
+impl IntoIterator for LocalVariableTable {
+    type Item = (LocalVariableId, LocalVariableTableEntry);
+    type IntoIter = <HashMap<LocalVariableId, LocalVariableTableEntry> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
+    }
+}
+
 /// The identifier of a local variable.
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct LocalVariableId {
