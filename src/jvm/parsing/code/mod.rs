@@ -321,7 +321,25 @@ impl ClassElement for MethodBody {
             .try_collect()?;
         let (local_variable_table, local_variable_type_table) =
             if let Some(local_var_table) = self.local_variable_table {
-                todo!()
+                let mut lvt = Vec::new();
+                let mut lvtt = Vec::new();
+                for (id, entry) in local_var_table {
+                    if let (Some(name), Some(field_type)) = (&entry.name, entry.var_type) {
+                        lvt.push(LocalVariableDescAttr {
+                            id: id.clone(),
+                            name: name.clone(),
+                            field_type,
+                        });
+                    }
+                    if let (Some(name), Some(signature)) = (entry.name, entry.signature) {
+                        lvtt.push(LocalVariableTypeAttr {
+                            id,
+                            name,
+                            signature,
+                        });
+                    }
+                }
+                (Some(lvt), Some(lvtt))
             } else {
                 (None, None)
             };
