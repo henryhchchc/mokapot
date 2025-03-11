@@ -333,6 +333,18 @@ impl ConstantPool {
         };
         Ok(field_type)
     }
+
+    pub(super) fn put_type_ref(&mut self, field_type: FieldType) -> Result<u16, ToWriterError> {
+        debug_assert!(!matches!(field_type, FieldType::Base(_)));
+        let idx = match field_type {
+            FieldType::Object(class_ref) => self.put_class_ref(class_ref)?,
+            arr_type @ FieldType::Array(_) => {
+                self.put_class_ref(ClassRef::new(arr_type.descriptor()))?
+            }
+            FieldType::Base(_) => unreachable!(),
+        };
+        Ok(idx)
+    }
 }
 
 impl Entry {

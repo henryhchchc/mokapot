@@ -796,14 +796,10 @@ impl Instruction {
             Self::ArrayLength => ArrayLength,
             Self::AThrow => AThrow,
             Self::CheckCast(type_ref) => CheckCast {
-                target_type_index: cp.put_class_ref(ClassRef {
-                    binary_name: type_ref.descriptor(),
-                })?,
+                target_type_index: cp.put_type_ref(type_ref)?,
             },
             Self::InstanceOf(type_ref) => InstanceOf {
-                target_type_index: cp.put_class_ref(ClassRef {
-                    binary_name: type_ref.descriptor(),
-                })?,
+                target_type_index: cp.put_type_ref(type_ref)?,
             },
             Self::MonitorEnter => MonitorEnter,
             Self::MonitorExit => MonitorExit,
