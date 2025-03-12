@@ -482,12 +482,14 @@ impl Instruction {
             Self::DConst1 => DConst1,
             Self::BiPush(value) => BiPush { value },
             Self::SiPush(value) => SiPush { value },
-            Self::Ldc(value) => Ldc {
-                const_index: cp.put_constant_value(value)?.try_into()?,
-            },
-            Self::LdcW(value) => LdcW {
-                const_index: cp.put_constant_value(value)?,
-            },
+            Self::Ldc(value) | Self::LdcW(value) => {
+                let const_index = cp.put_constant_value(value)?;
+                if let Ok(const_index) = u8::try_from(const_index) {
+                    Ldc { const_index }
+                } else {
+                    LdcW { const_index }
+                }
+            }
             Self::Ldc2W(value) => Ldc2W {
                 const_index: cp.put_constant_value(value)?,
             },
