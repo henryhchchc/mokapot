@@ -76,7 +76,6 @@ fn test_parse_my_class() {
 #[test]
 fn from_bytes_to_class_and_wround() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-    let bytes_len = bytes.len();
     let class = Class::from_reader(&mut bytes).unwrap();
     let mut written_bytes = Vec::new();
     class.write_to(&mut written_bytes).unwrap();
