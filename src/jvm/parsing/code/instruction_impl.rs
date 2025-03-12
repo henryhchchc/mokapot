@@ -699,12 +699,8 @@ impl Instruction {
                 let high = *range.end();
                 let jump_offsets = jump_targets
                     .into_iter()
-                    .map(|target| {
-                        let target: u16 = target.into();
-                        let pc: u16 = pc.into();
-                        (target - pc).into()
-                    })
-                    .collect();
+                    .map(|target| try_offset_wide(target, pc))
+                    .try_collect()?;
                 TableSwitch {
                     default: (u16::from(default) - u16::from(pc)).into(),
                     low,
@@ -719,11 +715,9 @@ impl Instruction {
                 let match_offsets = match_targets
                     .into_iter()
                     .map(|(value, target)| {
-                        let target: u16 = target.into();
-                        let pc: u16 = pc.into();
-                        (value, (target - pc).into())
+                        try_offset_wide(target, pc).map(|offset| (value, offset))
                     })
-                    .collect();
+                    .try_collect()?;
                 LookupSwitch {
                     default: (u16::from(default) - u16::from(pc)).into(),
                     match_offsets,
