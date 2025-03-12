@@ -695,8 +695,8 @@ impl Instruction {
                 let high = *range.end();
                 let jump_offsets = jump_targets
                     .into_iter()
-                    .map(|target| try_offset_wide(target, pc))
-                    .try_collect()?;
+                    .map(|target| offset_wide(target, pc))
+                    .collect();
                 TableSwitch {
                     default: (u16::from(default) - u16::from(pc)).into(),
                     low,
@@ -710,12 +710,10 @@ impl Instruction {
             } => {
                 let match_offsets = match_targets
                     .into_iter()
-                    .map(|(value, target)| {
-                        try_offset_wide(target, pc).map(|offset| (value, offset))
-                    })
-                    .try_collect()?;
+                    .map(|(value, target)| (value, offset_wide(target, pc)))
+                    .collect();
                 LookupSwitch {
-                    default: (u16::from(default) - u16::from(pc)).into(),
+                    default: offset_wide(default, pc),
                     match_offsets,
                 }
             }
@@ -827,10 +825,10 @@ impl Instruction {
                 offset: try_offset(target, pc)?,
             },
             Self::GotoW(target) => GotoW {
-                offset: try_offset_wide(target, pc)?,
+                offset: offset_wide(target, pc),
             },
             Self::JsrW(target) => JsrW {
-                offset: try_offset_wide(target, pc)?,
+                offset: offset_wide(target, pc),
             },
 
             // Reserved
@@ -844,21 +842,15 @@ impl Instruction {
 }
 
 fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, ToWriterError> {
-    let target: u16 = target.into();
     let target: i32 = target.into();
-    let pc: u16 = pc.into();
     let pc: i32 = pc.into();
     let offset = target - pc;
     let offset = i16::try_from(offset)?;
     Ok(offset)
 }
 
-fn try_offset_wide(target: ProgramCounter, pc: ProgramCounter) -> Result<i32, ToWriterError> {
-    let target: u16 = target.into();
-    let target: i64 = target.into();
-    let pc: u16 = pc.into();
-    let pc: i64 = pc.into();
-    let offset = target - pc;
-    let offset = i32::try_from(offset)?;
-    Ok(offset)
+fn offset_wide(target: ProgramCounter, pc: ProgramCounter) -> i32 {
+    let target: i32 = target.into();
+    let pc: i32 = pc.into();
+    target - pc
 }

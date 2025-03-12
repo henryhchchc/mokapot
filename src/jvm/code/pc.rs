@@ -86,6 +86,15 @@ impl ProgramCounter {
     pub const fn is_entry_point(&self) -> bool {
         self.0 == 0
     }
+
+    /// Converts the program counter into a different type.
+    #[must_use]
+    pub fn into<T>(self) -> T
+    where
+        T: From<u16>,
+    {
+        T::from(self.0)
+    }
 }
 
 impl Debug for ProgramCounter {
