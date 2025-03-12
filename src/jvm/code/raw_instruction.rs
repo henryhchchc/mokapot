@@ -346,7 +346,17 @@ pub enum RawWideInstruction {
     Ret { index: u16 } = 0xA9,
     IInc { index: u16, increment: i16 } = 0x84,
 }
+
 impl RawInstruction {
+    /// Gets the opcode.
+    #[must_use]
+    pub const fn opcode(&self) -> u8 {
+        // Safery: Self is repr(u8) so it should be fine
+        unsafe { enum_discriminant(self) }
+    }
+}
+
+impl RawWideInstruction {
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {

@@ -103,7 +103,7 @@ impl RawInstruction {
                 writer.write_all(&default.to_be_bytes())?;
                 writer.write_all(&low.to_be_bytes())?;
                 writer.write_all(&high.to_be_bytes())?;
-                write_length::<i32>(writer, jump_offsets.len())?;
+                // No need to write the length, as it's implicitly determined by high - low + 1
                 for offset in jump_offsets {
                     writer.write_all(&offset.to_be_bytes())?;
                 }
@@ -117,7 +117,9 @@ impl RawInstruction {
                 }
                 writer.write_all(&default.to_be_bytes())?;
                 write_length::<i32>(writer, match_offsets.len())?;
-                for (key, offset) in match_offsets {
+                let mut sorted_match_offsets = match_offsets.clone();
+                sorted_match_offsets.sort_by_key(|(key, _)| *key);
+                for (key, offset) in sorted_match_offsets {
                     writer.write_all(&key.to_be_bytes())?;
                     writer.write_all(&offset.to_be_bytes())?;
                 }
@@ -135,11 +137,11 @@ impl RawInstruction {
             } => {
                 writer.write_all(&method_index.to_be_bytes())?;
                 writer.write_all(&count.to_be_bytes())?;
-                writer.write_all(&0u16.to_be_bytes())?;
+                writer.write_all(&[0x00])?;
             }
             InvokeDynamic { dynamic_index } => {
                 writer.write_all(&dynamic_index.to_be_bytes())?;
-                writer.write_all(&0u16.to_be_bytes())?;
+                writer.write_all(&[0x00, 0x00])?;
             }
             New { index } => writer.write_all(&index.to_be_bytes())?,
             NewArray { atype } => writer.write_all(&atype.to_be_bytes())?,
@@ -150,25 +152,28 @@ impl RawInstruction {
             InstanceOf { target_type_index } => {
                 writer.write_all(&target_type_index.to_be_bytes())?;
             }
-            Wide(raw_wide_instruction) => match raw_wide_instruction {
-                RawWideInstruction::ILoad { index }
-                | RawWideInstruction::LLoad { index }
-                | RawWideInstruction::FLoad { index }
-                | RawWideInstruction::DLoad { index }
-                | RawWideInstruction::ALoad { index }
-                | RawWideInstruction::IStore { index }
-                | RawWideInstruction::LStore { index }
-                | RawWideInstruction::FStore { index }
-                | RawWideInstruction::DStore { index }
-                | RawWideInstruction::AStore { index }
-                | RawWideInstruction::Ret { index } => {
-                    writer.write_all(&index.to_be_bytes())?;
+            Wide(raw_wide_instruction) => {
+                writer.write_all(&[raw_wide_instruction.opcode()])?;
+                match raw_wide_instruction {
+                    RawWideInstruction::ILoad { index }
+                    | RawWideInstruction::LLoad { index }
+                    | RawWideInstruction::FLoad { index }
+                    | RawWideInstruction::DLoad { index }
+                    | RawWideInstruction::ALoad { index }
+                    | RawWideInstruction::IStore { index }
+                    | RawWideInstruction::LStore { index }
+                    | RawWideInstruction::FStore { index }
+                    | RawWideInstruction::DStore { index }
+                    | RawWideInstruction::AStore { index }
+                    | RawWideInstruction::Ret { index } => {
+                        writer.write_all(&index.to_be_bytes())?;
+                    }
+                    RawWideInstruction::IInc { index, increment } => {
+                        writer.write_all(&index.to_be_bytes())?;
+                        writer.write_all(&increment.to_be_bytes())?;
+                    }
                 }
-                RawWideInstruction::IInc { index, increment } => {
-                    writer.write_all(&index.to_be_bytes())?;
-                    writer.write_all(&increment.to_be_bytes())?;
-                }
-            },
+            }
             MultiANewArray { index, dimensions } => {
                 writer.write_all(&index.to_be_bytes())?;
                 writer.write_all(&dimensions.to_be_bytes())?;
