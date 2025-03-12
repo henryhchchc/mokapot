@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use itertools::Itertools;
 
 use crate::{
@@ -20,14 +18,12 @@ impl ClassElement for InstructionList<Instruction> {
     type Raw = InstructionList<RawInstruction>;
 
     fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
-        let inner: BTreeMap<_, _> = raw
-            .into_iter()
+        raw.into_iter()
             .map(|(pc, raw_insn)| {
                 Instruction::from_raw_instruction(raw_insn, pc, &ctx.constant_pool)
                     .map(|it| (pc, it))
             })
-            .try_collect()?;
-        Ok(InstructionList::from(inner))
+            .try_collect()
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
