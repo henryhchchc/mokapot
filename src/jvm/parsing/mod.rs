@@ -22,6 +22,8 @@ use derive_more::Display;
 pub use errors::Error;
 use num_traits::ToBytes;
 
+use super::code::InvalidOffset;
+
 /// Context used to parse a class file.
 #[derive(Debug, Clone)]
 pub struct Context {
@@ -49,6 +51,8 @@ pub enum ToWriterError {
     IO(#[from] io::Error),
     /// A list of elements is too long that it exceeds the data type for the length.
     OutOfRange(#[from] TryFromIntError),
+    /// Invalid offset.
+    InvalidOffset(#[from] InvalidOffset),
     /// Error forwarded from the constant pool.
     ConstantPool(#[from] crate::jvm::class::constant_pool::Error),
     /// Other error.
