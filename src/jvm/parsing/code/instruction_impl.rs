@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 
 use crate::{
@@ -27,9 +29,17 @@ impl ClassElement for InstructionList<Instruction> {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
-        self.into_iter()
-            .map(|(pc, insn)| insn.into_raw_instruction(pc, cp).map(|raw| (pc, raw)))
-            .try_collect()
+        let (raw_instructions, _) = self.into_iter().try_fold(
+            (BTreeMap::new(), Ok(ProgramCounter::default())),
+            |(mut acc, pc), (_, insn)| -> Result<_, ToWriterError> {
+                let pc = pc?;
+                let raw_insn = insn.into_raw_instruction(pc, cp)?;
+                let next_pc = pc + raw_insn.size(pc)?;
+                acc.insert(pc, raw_insn);
+                Ok((acc, next_pc))
+            },
+        )?;
+        Ok(raw_instructions.into())
     }
 }
 
