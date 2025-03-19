@@ -612,7 +612,8 @@ impl RawInstruction {
         Ok(Some((pc, instruction)))
     }
 
-    pub(crate) fn size(&self, pc: ProgramCounter) -> Result<u16, ToWriterError> {
+    /// Returns the number of bytes occupied by the instruction given its location in the instruction list.
+    pub(crate) fn num_bytes(&self, pc: ProgramCounter) -> Result<u16, ToWriterError> {
         #[allow(clippy::enum_glob_use, reason = "It's long by definition")]
         use RawInstruction::*;
 
