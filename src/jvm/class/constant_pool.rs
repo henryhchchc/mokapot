@@ -49,7 +49,8 @@ impl ConstantPool {
     {
         let mut constant_pool = Self::with_capacity(constant_pool_count);
         while constant_pool.count() < constant_pool_count {
-            // NOTE: Do not use `put_entry` here since it will do deduplication.
+            // NOTE: Do not use `put_entry` here since we want to maintain a one-to-one correspondence to the source constant pool
+            //       Otherwise we will get misaligned entries in subsequent parsing.
             let entry = Entry::parse(reader)?;
             if let entry @ (Entry::Long(_) | Entry::Double(_)) = entry {
                 constant_pool.inner.push(Slot::Entry(entry));
@@ -72,6 +73,7 @@ impl ConstantPool {
     }
 
     /// Pushes a constant pool entry to the end of the constant pool.
+    /// No-op if the entry already exists.
     /// # Errors
     /// - [`Error::Overflow`] if the constant pool is full.
     pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Error> {
