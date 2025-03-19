@@ -4,6 +4,6 @@ use mokapot::jvm::Class;
 
 fn main() {
     fuzz!(|data: &[u8]| {
-        let _ = Class::from_reader(data);
+        let _ = Class::read_from(data);
     });
 }

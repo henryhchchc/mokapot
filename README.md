@@ -42,7 +42,7 @@ use mokapot::jvm::class::Class;
 
 fn parse_class() -> Result<Class, Box<dyn std::error::Error>> {
     let reader = todo!("Some reader for the byte code");
-    let class = Class::from_reader(&mut reader)?;
+    let class = Class::read_from(&mut reader)?;
     Ok(class)
 }
 ```

@@ -43,7 +43,7 @@ impl ConstantPool {
     #[doc = see_jvm_spec!(4, 1)]
     /// # Errors
     /// See [`Error`](super::super::parsing::Error) for more information.
-    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
+    pub fn read_from<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
     where
         R: Read + ?Sized,
     {
@@ -341,17 +341,17 @@ mod tests {
     proptest! {
 
         #[test]
-        fn from_reader((count, bytes) in arb_constant_pool_bytes()) {
+        fn read_from((count, bytes) in arb_constant_pool_bytes()) {
             let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::from_reader(&mut reader, count);
+            let constant_pool = ConstantPool::read_from(&mut reader, count);
             assert!(constant_pool.is_ok());
             assert!(reader.is_empty());
         }
 
         #[test]
-        fn from_reader_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
+        fn read_from_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
             let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::from_reader(&mut reader, count + 1);
+            let constant_pool = ConstantPool::read_from(&mut reader, count + 1);
             assert!(constant_pool.is_err());
         }
 

@@ -42,7 +42,7 @@ impl AttributeInfo {
 }
 
 impl FromReader for AttributeInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_idx = reader.read_value()?;
         let attribute_length: u32 = reader.read_value()?;
         let attribute_length = usize::try_from(attribute_length)

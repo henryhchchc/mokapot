@@ -16,7 +16,7 @@ fn get_test_class() -> Class {
         "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
     ))
     .as_slice();
-    Class::from_reader(&mut bytes).unwrap()
+    Class::read_from(&mut bytes).unwrap()
 }
 
 fn get_test_method() -> Method {

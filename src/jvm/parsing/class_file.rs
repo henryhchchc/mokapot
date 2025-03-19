@@ -49,11 +49,11 @@ impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
     /// See [`Error`] for more information.
-    pub fn from_reader<R>(reader: &mut R) -> Result<Class, Error>
+    pub fn read_from<R>(reader: &mut R) -> Result<Class, Error>
     where
         R: std::io::Read + ?Sized,
     {
-        let class_file = ClassFile::from_reader(reader)?;
+        let class_file = ClassFile::read_from(reader)?;
         Class::from_raw(class_file)
     }
 
@@ -70,7 +70,7 @@ impl Class {
 }
 
 impl FromReader for ClassFile {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let magic: u32 = reader.read_value()?;
         if magic != JAVA_CLASS_MAGIC {
             return Err(io::Error::new(
@@ -81,7 +81,7 @@ impl FromReader for ClassFile {
         let minor_version = reader.read_value()?;
         let major_version = reader.read_value()?;
         let constant_pool_count = reader.read_value()?;
-        let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
+        let constant_pool = ConstantPool::read_from(reader, constant_pool_count)?;
         let access_flags = reader.read_value()?;
         let this_class = reader.read_value()?;
         let super_class = reader.read_value()?;
@@ -91,15 +91,15 @@ impl FromReader for ClassFile {
             .collect::<io::Result<_>>()?;
         let fields_count: u16 = reader.read_value()?;
         let fields = (0..fields_count)
-            .map(|_| FieldInfo::from_reader(reader))
+            .map(|_| FieldInfo::read_from(reader))
             .collect::<io::Result<_>>()?;
         let methods_count: u16 = reader.read_value()?;
         let methods = (0..methods_count)
-            .map(|_| MethodInfo::from_reader(reader))
+            .map(|_| MethodInfo::read_from(reader))
             .collect::<io::Result<_>>()?;
         let attributes_count: u16 = reader.read_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_reader(reader))
+            .map(|_| AttributeInfo::read_from(reader))
             .collect::<io::Result<_>>()?;
 
         Ok(Self {

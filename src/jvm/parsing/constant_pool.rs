@@ -545,7 +545,7 @@ pub(crate) mod tests {
         #[test]
         fn read_write((count, content) in arb_constant_pool_bytes()) {
             let mut reader = content.as_slice();
-            let pool = ConstantPool::from_reader(&mut reader, count).unwrap();
+            let pool = ConstantPool::read_from(&mut reader, count).unwrap();
             let mut buf = Vec::new();
             pool.write_to(&mut buf)?;
             let (len_bytes, written) = buf.split_at(2);
