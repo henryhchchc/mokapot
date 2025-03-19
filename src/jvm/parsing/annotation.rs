@@ -373,31 +373,16 @@ impl ClassElement for ElementValue {
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
         let raw = match self {
             ElementValue::Primitive(primitive_type, constant_value) => {
-                // Validate that primitive_type is compatible with constant_value
-                match (primitive_type, &constant_value) {
-                    (PrimitiveType::Float, ConstantValue::Float(_))
-                    | (PrimitiveType::Double, ConstantValue::Double(_))
-                    | (PrimitiveType::Long, ConstantValue::Long(_))
-                    | (
-                        PrimitiveType::Byte
-                        | PrimitiveType::Char
-                        | PrimitiveType::Int
-                        | PrimitiveType::Short
-                        | PrimitiveType::Boolean,
-                        ConstantValue::Integer(_),
-                    ) => {}
+                let tag = match (primitive_type, &constant_value) {
+                    (PrimitiveType::Byte, ConstantValue::Integer(_)) => b'B',
+                    (PrimitiveType::Char, ConstantValue::Integer(_)) => b'C',
+                    (PrimitiveType::Double, ConstantValue::Double(_)) => b'D',
+                    (PrimitiveType::Float, ConstantValue::Float(_)) => b'F',
+                    (PrimitiveType::Int, ConstantValue::Integer(_)) => b'I',
+                    (PrimitiveType::Long, ConstantValue::Long(_)) => b'J',
+                    (PrimitiveType::Short, ConstantValue::Integer(_)) => b'S',
+                    (PrimitiveType::Boolean, ConstantValue::Integer(_)) => b'Z',
                     _ => return Err(ToWriterError::Other("Constant value type mismatch")),
-                }
-
-                let tag = match primitive_type {
-                    PrimitiveType::Byte => b'B',
-                    PrimitiveType::Char => b'C',
-                    PrimitiveType::Double => b'D',
-                    PrimitiveType::Float => b'F',
-                    PrimitiveType::Int => b'I',
-                    PrimitiveType::Long => b'J',
-                    PrimitiveType::Short => b'S',
-                    PrimitiveType::Boolean => b'Z',
                 };
                 let value_idx = cp.put_constant_value(constant_value)?;
                 Self::Raw::Const(tag, value_idx)
