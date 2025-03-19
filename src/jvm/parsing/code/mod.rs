@@ -58,7 +58,7 @@ impl ClassElement for LineNumberTableEntry {
 }
 
 impl FromReader for LineNumberTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let start_pc = reader.read_value()?;
         let line_number = reader.read_value()?;
         Ok(LineNumberTableEntry {

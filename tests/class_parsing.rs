@@ -33,7 +33,7 @@ macro_rules! test_data_class {
 #[test]
 fn test_parse_my_class() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-    let my_class = Class::from_reader(&mut bytes).expect("Failed to parse class");
+    let my_class = Class::read_from(&mut bytes).expect("Failed to parse class");
 
     assert_eq!(class::MAX_MAJOR_VERSION, my_class.version.major());
     assert_eq!(0, my_class.version.minor());
@@ -76,11 +76,11 @@ fn test_parse_my_class() {
 #[test]
 fn from_bytes_to_class_and_wround() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-    let class = Class::from_reader(&mut bytes).unwrap();
+    let class = Class::read_from(&mut bytes).unwrap();
     let mut written_bytes = Vec::new();
     class.write_to(&mut written_bytes).unwrap();
     let mut reader = written_bytes.as_slice();
-    let reparsed = Class::from_reader(&mut reader).unwrap();
+    let reparsed = Class::read_from(&mut reader).unwrap();
     assert_eq!(reparsed.binary_name, "org/mokapot/test/MyClass");
 }
 
@@ -90,11 +90,11 @@ fn test_anno() {
         test_data_class!("mokapot", "org/mokapot/test/Anno"),
         test_data_class!("mokapot", "org/mokapot/test/Anno$Middle"),
     ] {
-        let class = Class::from_reader(&mut bytes).unwrap();
+        let class = Class::read_from(&mut bytes).unwrap();
         let mut written_bytes = Vec::new();
         class.write_to(&mut written_bytes).unwrap();
         let mut reader = written_bytes.as_slice();
-        Class::from_reader(&mut reader).unwrap();
+        Class::read_from(&mut reader).unwrap();
     }
 }
 
@@ -105,18 +105,18 @@ fn test_complicated_class() {
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$InnerClass"),
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass$1Test"),
     ] {
-        let class = Class::from_reader(&mut bytes).unwrap();
+        let class = Class::read_from(&mut bytes).unwrap();
         let mut written_bytes = Vec::new();
         class.write_to(&mut written_bytes).unwrap();
         let mut reader = written_bytes.as_slice();
-        Class::from_reader(&mut reader).unwrap();
+        Class::read_from(&mut reader).unwrap();
     }
 }
 
 #[test]
 fn parse_module_info() {
     let mut bytes = test_data_class!("mokapot", "module-info");
-    let class = Class::from_reader(&mut bytes).expect("Fail to parse module-info");
+    let class = Class::read_from(&mut bytes).expect("Fail to parse module-info");
     assert_eq!("module-info", class.binary_name);
     let module = class.module.expect("The class is a module-info");
     assert_eq!(1, module.exports.len());
@@ -127,7 +127,7 @@ fn parse_module_info() {
 #[test]
 fn parse_record() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/RecordTest");
-    let class = Class::from_reader(&mut bytes).unwrap();
+    let class = Class::read_from(&mut bytes).unwrap();
     assert_eq!("org/mokapot/test/RecordTest", class.binary_name);
     let Some(components) = class.record else {
         panic!("Record components not found.");
@@ -160,7 +160,7 @@ fn parse_record() {
 fn not_a_class_file() {
     let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
     assert!(matches!(
-        Class::from_reader(&mut bytes),
+        Class::read_from(&mut bytes),
         Err(Error::IO(e)) if e.kind() == io::ErrorKind::InvalidData
     ));
 }

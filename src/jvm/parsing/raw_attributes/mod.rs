@@ -26,7 +26,7 @@ pub struct Code {
 }
 
 impl FromReader for Code {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         let max_stack = reader.read_value()?;
         let max_locals = reader.read_value()?;
         let code_length: u32 = reader.read_value()?;
@@ -75,7 +75,7 @@ pub struct ExceptionTableEntry {
 }
 
 impl FromReader for ExceptionTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         Ok(Self {
             start_pc: reader.read_value()?,
             end_pc: reader.read_value()?,
@@ -129,7 +129,7 @@ pub enum StackMapFrameInfo {
 }
 
 impl FromReader for StackMapFrameInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let frame_type: u8 = reader.read_value()?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
@@ -281,7 +281,7 @@ impl VerificationTypeInfo {
 }
 
 impl FromReader for VerificationTypeInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let tag: u8 = reader.read_value()?;
         match tag {
             0 => Ok(Self::Top),
@@ -328,7 +328,7 @@ pub struct InnerClass {
 }
 
 impl FromReader for InnerClass {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             info_index: reader.read_value()?,
             outer_class_info_index: reader.read_value()?,
@@ -354,7 +354,7 @@ pub struct EnclosingMethod {
 }
 
 impl FromReader for EnclosingMethod {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             class_index: reader.read_value()?,
             method_index: reader.read_value()?,
@@ -379,7 +379,7 @@ pub struct LocalVariableInfo {
 }
 
 impl FromReader for LocalVariableInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             start_pc: reader.read_value()?,
             length: reader.read_value()?,
@@ -407,7 +407,7 @@ pub struct Annotation {
 }
 
 impl FromReader for Annotation {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let type_index = reader.read_value()?;
         let num_element_value_pairs: u16 = reader.read_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
@@ -448,7 +448,7 @@ pub enum ElementValueInfo {
 }
 
 impl FromReader for ElementValueInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let tag: u8 = reader.read_value()?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
@@ -522,7 +522,7 @@ pub struct TypeAnnotation {
 }
 
 impl FromReader for TypeAnnotation {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let target_info = reader.read_value()?;
         let target_path_length: u8 = reader.read_value()?;
         let target_path = (0..target_path_length)
@@ -636,7 +636,7 @@ pub enum TargetInfo {
 }
 
 impl FromReader for TargetInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let target_type: u8 = reader.read_value()?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
@@ -792,7 +792,7 @@ pub struct BootstrapMethod {
 }
 
 impl FromReader for BootstrapMethod {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let method_ref_idx = reader.read_value()?;
         let num_arguments: u16 = reader.read_value()?;
         let arguments = (0..num_arguments)
@@ -822,7 +822,7 @@ pub struct ParameterInfo {
 }
 
 impl FromReader for ParameterInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             name_index: reader.read_value()?,
             access_flags: reader.read_value()?,
@@ -850,7 +850,7 @@ pub struct ModuleInfo {
 }
 
 impl FromReader for ModuleInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let info_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let version_index = reader.read_value()?;
@@ -923,7 +923,7 @@ pub struct RequiresInfo {
 }
 
 impl FromReader for RequiresInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             requires_index: reader.read_value()?,
             flags: reader.read_value()?,
@@ -948,7 +948,7 @@ pub struct ExportsInfo {
 }
 
 impl FromReader for ExportsInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let exports_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let to_count: u16 = reader.read_value()?;
@@ -982,7 +982,7 @@ pub struct OpensInfo {
 }
 
 impl FromReader for OpensInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let opens_index = reader.read_value()?;
         let flags = reader.read_value()?;
         let to_count: u16 = reader.read_value()?;
@@ -1015,7 +1015,7 @@ pub struct ProvidesInfo {
 }
 
 impl FromReader for ProvidesInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let provides_index = reader.read_value()?;
         let with_count: u16 = reader.read_value()?;
         let with = (0..with_count)
@@ -1046,7 +1046,7 @@ pub struct RecordComponentInfo {
 }
 
 impl FromReader for RecordComponentInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_index = reader.read_value()?;
         let descriptor_index = reader.read_value()?;
         let attributes_count: u16 = reader.read_value()?;
