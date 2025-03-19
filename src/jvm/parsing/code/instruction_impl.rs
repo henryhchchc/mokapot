@@ -779,16 +779,7 @@ impl Instruction {
                 index: cp.put_class_ref(class_ref)?,
             },
             Self::NewArray(atype) => NewArray {
-                atype: match atype {
-                    PrimitiveType::Boolean => 4,
-                    PrimitiveType::Char => 5,
-                    PrimitiveType::Float => 6,
-                    PrimitiveType::Double => 7,
-                    PrimitiveType::Byte => 8,
-                    PrimitiveType::Short => 9,
-                    PrimitiveType::Int => 10,
-                    PrimitiveType::Long => 11,
-                },
+                atype: atype.new_array_type_tag(),
             },
             Self::ANewArray(class_ref) => ANewArray {
                 index: cp.put_class_ref(class_ref)?,

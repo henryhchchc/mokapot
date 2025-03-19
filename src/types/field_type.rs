@@ -50,6 +50,21 @@ impl PrimitiveType {
             Self::Long => 'J',
         }
     }
+
+    /// Returns the type tag for the `newarray` instruction.
+    #[must_use]
+    pub const fn new_array_type_tag(self) -> u8 {
+        match self {
+            PrimitiveType::Boolean => 4,
+            PrimitiveType::Char => 5,
+            PrimitiveType::Float => 6,
+            PrimitiveType::Double => 7,
+            PrimitiveType::Byte => 8,
+            PrimitiveType::Short => 9,
+            PrimitiveType::Int => 10,
+            PrimitiveType::Long => 11,
+        }
+    }
 }
 
 impl TryFrom<char> for PrimitiveType {
