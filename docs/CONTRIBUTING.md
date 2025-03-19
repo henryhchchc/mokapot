@@ -21,6 +21,21 @@ Before submitting a pull request, please do the following checks:
 
 MokaPot needs your contribution to be better. Please check [TODO.md](TODO.md) for a list of tasks that we are planning to do.
 
+## Testing
+
+`tests/jdk_classes.rs` contains integration test that runs MokaPot on JDK classes.
+Additional steps are required to run the test case.
+```bash
+# First, tell MokaPot to run integration tests.
+export INTEGRATION_TEST=1
+# Then, extract the JDK classes from the JDK distribution.
+jimage extract --dir="<extraction path>" "$JAVA_HOME/lib/modules"
+# Next, tell MokaPot where the extracted JDK classes are.
+export JDK_CLASSES="<extraction path>"
+# Finally, run the integration test.
+cargo nextest run --run-ignored=all
+```
+
 ## Developer Certificate of Origin
 
 By contributing to this project, you must certify that your contribution complies with the [Developer Certificate of Origin](https://developercertificate.org).
@@ -29,4 +44,3 @@ You may use the following `git` command to [sign-off](https://git-scm.com/docs/g
 ```bash
 git commit --signoff
 ```
-
