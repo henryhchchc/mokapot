@@ -34,7 +34,7 @@ impl ClassElement for InstructionList<Instruction> {
             |(mut acc, pc), (_, insn)| -> Result<_, ToWriterError> {
                 let pc = pc?;
                 let raw_insn = insn.into_raw_instruction(pc, cp)?;
-                let next_pc = pc + raw_insn.size(pc)?;
+                let next_pc = pc + raw_insn.num_bytes(pc)?;
                 acc.insert(pc, raw_insn);
                 Ok((acc, next_pc))
             },
