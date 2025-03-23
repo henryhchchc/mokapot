@@ -85,6 +85,11 @@ impl<P> MinTerm<P> {
     pub fn one() -> Self {
         Self(BTreeSet::default())
     }
+
+    /// Returns an iterator over the variables in the minterm.
+    pub fn iter(&self) -> impl Iterator<Item = &Variable<P>> {
+       self.into_iter()
+    }
 }
 
 impl<P: Display> Display for MinTerm<P> {
@@ -144,6 +149,9 @@ impl<P> SOP<P> {
     }
 
     /// Simplifies the path condition.
+    ///
+    /// # Panics
+    /// - When there are more than 26 variables (due to `quine_mccluskey` limitation)
     pub fn simplify(&mut self)
     where
         P: Ord + Clone,
@@ -157,7 +165,7 @@ impl<P> SOP<P> {
         let var_idx: BTreeMap<_, _> = variable_ids
             .iter()
             .enumerate()
-            .map(|(idx, var)| (*var, idx as u32))
+            .map(|(idx, var)| (*var, u32::try_from(idx).unwrap()))
             .collect();
         let var_map: BTreeMap<_, _> = qmc::DEFAULT_VARIABLES
             .into_iter()
@@ -204,7 +212,7 @@ impl<P> SOP<P> {
     {
         self.minterms
             .iter()
-            .flat_map(|term| term.into_iter())
+            .flatten()
             .map(Variable::id)
             .collect()
     }

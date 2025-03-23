@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    ir::control_flow::path_condition::{MinTerm, Predicate, Variable, SOP},
+    ir::control_flow::path_condition::{MinTerm, Predicate, Variable},
     jvm::{
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter}, method, references::ClassRef, ConstantValue, Method
     },
