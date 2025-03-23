@@ -8,7 +8,7 @@ use crate::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-use self::path_condition::{SOP, Predicate, Value};
+use self::path_condition::{Predicate, SOP, Value};
 
 use super::ControlFlowGraph;
 
