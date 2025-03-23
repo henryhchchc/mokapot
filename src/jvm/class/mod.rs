@@ -471,7 +471,7 @@ mod tests {
         }
 
         #[test]
-        fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..=u16::MAX) {
+        fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..u16::MAX) {
             assert!(Version::from_versions(major, minor).is_err());
         }
     }
