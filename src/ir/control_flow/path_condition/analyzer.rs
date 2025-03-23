@@ -104,62 +104,44 @@ impl From<ir::expression::Condition> for SOP<Predicate<Value>> {
 
 impl From<ir::expression::Condition> for Variable<Predicate<Value>> {
     fn from(value: ir::expression::Condition) -> Self {
+        use Variable::{Negative, Positive};
         #[allow(clippy::enum_glob_use)]
         use ir::expression::Condition::*;
 
-        let zero = ConstantValue::Integer(0).into();
+        let zero: Value = ConstantValue::Integer(0).into();
         match value {
-            IsZero(value) => Variable::Positive(Predicate::Equal(value.into(), zero)),
-            IsNonZero(value) => Variable::Negative(Predicate::Equal(value.into(), zero)),
-            IsPositive(value) => Variable::Negative(Predicate::LessThanOrEqual(value.into(), zero)),
-            IsNegative(value) => Variable::Positive(Predicate::LessThan(value.into(), zero)),
-            IsNonPositive(value) => {
-                Variable::Positive(Predicate::LessThanOrEqual(value.into(), zero))
+            IsNull(value) => Positive(Predicate::IsNull(value.into())),
+            IsNotNull(value) => Negative(Predicate::IsNull(value.into())),
+            // For binary operation involving zeros, we always put zero on the right.
+            IsZero(value) => Positive(Predicate::Equal(value.into(), zero)),
+            IsNonZero(value) => Negative(Predicate::Equal(value.into(), zero)),
+            IsPositive(value) => Negative(Predicate::LessThanOrEqual(value.into(), zero)),
+            IsNegative(value) => Positive(Predicate::LessThan(value.into(), zero)),
+            IsNonPositive(value) => Positive(Predicate::LessThanOrEqual(value.into(), zero)),
+            IsNonNegative(value) => Negative(Predicate::LessThan(value.into(), zero)),
+            // For binary operations, we establish a normalized form
+            // by placing the smaller value on the left-hand side.
+            Equal(lhs, rhs) if lhs < rhs => Positive(Predicate::Equal(lhs.into(), rhs.into())),
+            Equal(lhs, rhs) => Positive(Predicate::Equal(rhs.into(), lhs.into())),
+            NotEqual(lhs, rhs) if lhs < rhs => Negative(Predicate::Equal(lhs.into(), rhs.into())),
+            NotEqual(lhs, rhs) => Negative(Predicate::Equal(rhs.into(), lhs.into())),
+            LessThan(lhs, rhs) if lhs < rhs => {
+                Positive(Predicate::LessThan(lhs.into(), rhs.into()))
             }
-            IsNonNegative(value) => Variable::Negative(Predicate::LessThan(value.into(), zero)),
-            IsNull(value) => Variable::Positive(Predicate::IsNull(value.into())),
-            IsNotNull(value) => Variable::Negative(Predicate::IsNull(value.into())),
-            Equal(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Positive(Predicate::Equal(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Positive(Predicate::Equal(rhs.into(), lhs.into()))
-                }
+            LessThan(lhs, rhs) => Negative(Predicate::LessThanOrEqual(rhs.into(), lhs.into())),
+            LessThanOrEqual(lhs, rhs) if lhs < rhs => {
+                Positive(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
             }
-            NotEqual(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Negative(Predicate::Equal(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Negative(Predicate::Equal(rhs.into(), lhs.into()))
-                }
+            LessThanOrEqual(lhs, rhs) => Negative(Predicate::LessThan(rhs.into(), lhs.into())),
+            GreaterThan(lhs, rhs) if lhs < rhs => {
+                Negative(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
             }
-            LessThan(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Positive(Predicate::LessThan(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Negative(Predicate::LessThanOrEqual(rhs.into(), lhs.into()))
-                }
-            }
-            LessThanOrEqual(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Positive(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Negative(Predicate::LessThan(rhs.into(), lhs.into()))
-                }
-            }
-            GreaterThan(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Negative(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Positive(Predicate::LessThan(rhs.into(), lhs.into()))
-                }
+            GreaterThan(lhs, rhs) => Positive(Predicate::LessThan(rhs.into(), lhs.into())),
+            GreaterThanOrEqual(lhs, rhs) if lhs < rhs => {
+                Negative(Predicate::LessThan(lhs.into(), rhs.into()))
             }
             GreaterThanOrEqual(lhs, rhs) => {
-                if lhs < rhs {
-                    Variable::Negative(Predicate::LessThan(lhs.into(), rhs.into()))
-                } else {
-                    Variable::Positive(Predicate::LessThanOrEqual(rhs.into(), lhs.into()))
-                }
+                Positive(Predicate::LessThanOrEqual(rhs.into(), lhs.into()))
             }
         }
     }
