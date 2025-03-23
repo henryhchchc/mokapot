@@ -12,7 +12,7 @@ use crate::{
     utils::enum_discriminant,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Slot {
     Entry(Entry),
     Padding,
