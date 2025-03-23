@@ -142,15 +142,11 @@ impl Analyzer for MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = branches
-                    .keys()
-                    .map(|it| {
-                        let val = ConstantValue::Integer(*it).into();
-                        let it =
-                            Variable::Negative(Predicate::Equal(match_value.clone().into(), val));
-                        MinTerm::from_iter([it])
-                    })
-                    .collect();
+                let default_cond = branches.keys().fold(SOP::one(), |acc, it| {
+                    let val = ConstantValue::Integer(*it).into();
+                    let it = Variable::Negative(Predicate::Equal(match_value.clone().into(), val));
+                    acc & SOP::from_iter([MinTerm::from_iter([it])])
+                });
                 branches
                     .iter()
                     .map(|(&val, &pc)| {
