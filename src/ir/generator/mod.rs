@@ -10,7 +10,10 @@ use std::{
 use crate::{
     ir::control_flow::path_condition::{MinTerm, Predicate, Variable},
     jvm::{
-        code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter}, method, references::ClassRef, ConstantValue, Method
+        ConstantValue, Method,
+        code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
+        method,
+        references::ClassRef,
     },
 };
 
@@ -136,11 +139,17 @@ impl Analyzer for MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = branches.keys().map(|it| {
-                    let val = ConstantValue::Integer(*it).into();
-                    let it = Variable::Positive(Predicate::NotEqual(match_value.clone().into(), val));
-                    MinTerm::from_iter([it])
-                }).collect();
+                let default_cond = branches
+                    .keys()
+                    .map(|it| {
+                        let val = ConstantValue::Integer(*it).into();
+                        let it = Variable::Positive(Predicate::NotEqual(
+                            match_value.clone().into(),
+                            val,
+                        ));
+                        MinTerm::from_iter([it])
+                    })
+                    .collect();
                 branches
                     .iter()
                     .map(|(&val, &pc)| {
