@@ -88,7 +88,7 @@ impl<P> MinTerm<P> {
 
     /// Returns an iterator over the variables in the minterm.
     pub fn iter(&self) -> impl Iterator<Item = &Variable<P>> {
-       self.into_iter()
+        self.into_iter()
     }
 }
 
@@ -210,11 +210,7 @@ impl<P> SOP<P> {
     where
         P: Ord,
     {
-        self.minterms
-            .iter()
-            .flatten()
-            .map(Variable::id)
-            .collect()
+        self.minterms.iter().flatten().map(Variable::id).collect()
     }
 }
 
