@@ -158,12 +158,16 @@ impl<P> SOP<P> {
     {
         use quine_mccluskey as qmc;
         if self == &Self::one() || self == &Self::zero() {
+            // Return early to avoid causing errors in `quine_mccluskey`.
             return;
         }
         let variable_ids = self.variable_ids();
         let idx_count = variable_ids.len();
         if variable_ids.len() > qmc::DEFAULT_VARIABLES.len() {
-            todo!("Too many variables")
+            unimplemented!(
+                "`quine_mccluskey` supports only up to {} variables",
+                qmc::DEFAULT_VARIABLES.len()
+            );
         }
         let var_idx: BTreeMap<_, _> = variable_ids
             .iter()
@@ -231,17 +235,19 @@ impl<P> SOP<P> {
 
 impl<V: Ord> MinTerm<V> {
     fn index(&self, variable_map: &BTreeMap<&V, u32>) -> u32 {
-        debug_assert!(!variable_map.is_empty());
-        let mut result = 0u32;
-        let max_idx = u32::try_from(variable_map.len() - 1).expect("u32 cannot hold max idx");
-        for var in self {
+        let max_idx = u32::try_from(variable_map.len() - 1).expect(
+            "`quine_mccluskey` supports up to 26 variables. \
+                  The value should not exceed 26",
+        );
+        self.into_iter().fold(0u32, |acc, var| {
             let id = var.id();
-            let idx = variable_map[id];
+            let bit_shift = max_idx - variable_map[id];
             if let Variable::Positive(_) = var {
-                result |= 1 << (max_idx - idx);
+                acc | (1 << bit_shift)
+            } else {
+                acc
             }
-        }
-        result
+        })
     }
 }
 
