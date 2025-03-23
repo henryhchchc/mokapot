@@ -220,7 +220,8 @@ impl<P> SOP<P> {
         *self = new_sop;
     }
 
-    fn variable_ids(&self) -> BTreeSet<&P>
+    /// Returns a set of variable IDs used in the SOP.
+    pub fn variable_ids(&self) -> BTreeSet<&P>
     where
         P: Ord,
     {
