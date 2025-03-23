@@ -1,6 +1,11 @@
-#![cfg(integration_test)]
+// #![cfg(integration_test)]
 
-use mokapot::{ir::MokaIRMethodExt, jvm::Class};
+use itertools::{Either, Itertools};
+use mokapot::{
+    ir::{MokaIRMethodExt, control_flow::ControlTransfer},
+    jvm::Class,
+    types::Descriptor,
+};
 use rayon::prelude::*;
 use std::{env, fs, path::PathBuf};
 
@@ -48,9 +53,39 @@ fn test_a_class(class: Class) {
                 .for_each(|(_pc, insn)| {
                     let _ = insn.name();
                 });
-            let _ir_method = it.brew().unwrap_or_else(|e| {
+            let ir_method = it.brew().unwrap_or_else(|e| {
                 panic!("Failed to brew {}: {}", it.name, e);
             });
+            let variable_count = ir_method
+                .control_flow_graph
+                .edges()
+                .flat_map(|(_, _, cond)| {
+                    if let ControlTransfer::Conditional(it) = cond {
+                        Either::Left(it.variable_ids().into_iter())
+                    } else {
+                        Either::Right(std::iter::empty())
+                    }
+                })
+                .dedup()
+                .count();
+            // Theoritically this should be 26 due to the limit of the dependent library.
+            // Set it to lower value to make test faster
+            if variable_count <= 17 {
+                println!(
+                    "Analyzing path condition for: {}::{}{}",
+                    class.binary_name,
+                    it.name,
+                    it.descriptor.descriptor()
+                );
+                let _ = ir_method.control_flow_graph.path_conditions();
+            } else {
+                println!(
+                    "Skip path condition for: {}::{}{}",
+                    class.binary_name,
+                    it.name,
+                    it.descriptor.descriptor()
+                );
+            }
         });
 
     let mut class_bytes = Vec::new();
