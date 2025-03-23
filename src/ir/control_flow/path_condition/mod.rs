@@ -157,6 +157,9 @@ impl<P> SOP<P> {
         P: Ord + Clone,
     {
         use quine_mccluskey as qmc;
+        if self == &Self::one() || self == &Self::zero() {
+            return;
+        }
         let variable_ids = self.variable_ids();
         let idx_count = variable_ids.len();
         if variable_ids.len() > qmc::DEFAULT_VARIABLES.len() {
@@ -172,7 +175,7 @@ impl<P> SOP<P> {
             .zip(variable_ids)
             .collect();
         let minterms: Vec<_> = self.minterms.iter().map(|it| it.index(&var_idx)).collect();
-        let mut solutions = qmc::minimize_minterms(
+        let solutions = qmc::minimize_minterms(
             &qmc::DEFAULT_VARIABLES[..idx_count],
             &minterms,
             &[],
@@ -180,29 +183,40 @@ impl<P> SOP<P> {
             None,
         )
         .expect("There should be a result as no timeout is set.");
-        let qmc::Solution::SOP(sop_solution) = solutions
-            .pop()
-            .expect("There should be at least one solution")
-        else {
-            unreachable!("We are using minimize_minterms")
-        };
-        let new_sop = sop_solution
+        let shortest_solution = solutions
             .into_iter()
-            .map(|min_terms| {
-                min_terms
-                    .into_iter()
-                    .map(|var| {
-                        let id = (*var_map.get(var.name.as_str()).unwrap()).clone();
-                        if var.is_negated {
-                            Variable::Negative(id)
-                        } else {
-                            Variable::Positive(id)
-                        }
-                    })
-                    .collect()
+            .min_by_key(|sol| match sol {
+                quine_mccluskey::Solution::One | quine_mccluskey::Solution::Zero => 0,
+                quine_mccluskey::Solution::SOP(vec) => vec
+                    .iter()
+                    .flatten()
+                    .map(|it| it.name.as_str())
+                    .dedup()
+                    .count(),
+                quine_mccluskey::Solution::POS(_) => unreachable!(),
             })
-            .collect();
-
+            .expect("There should be at least one solution");
+        let new_sop = match shortest_solution {
+            qmc::Solution::SOP(sop_solution) => sop_solution
+                .into_iter()
+                .map(|min_terms| {
+                    min_terms
+                        .into_iter()
+                        .map(|var| {
+                            let id = (*var_map.get(var.name.as_str()).unwrap()).clone();
+                            if var.is_negated {
+                                Variable::Negative(id)
+                            } else {
+                                Variable::Positive(id)
+                            }
+                        })
+                        .collect()
+                })
+                .collect(),
+            qmc::Solution::One => SOP::one(),
+            qmc::Solution::Zero => SOP::zero(),
+            qmc::Solution::POS(_) => unreachable!("We are using `minimize_minterms`"),
+        };
         *self = new_sop;
     }
 
@@ -216,12 +230,14 @@ impl<P> SOP<P> {
 
 impl<V: Ord> MinTerm<V> {
     fn index(&self, variable_map: &BTreeMap<&V, u32>) -> u32 {
+        debug_assert!(!variable_map.is_empty());
         let mut result = 0u32;
+        let max_idx = u32::try_from(variable_map.len() - 1).expect("u32 cannot hold max idx");
         for var in self {
             let id = var.id();
             let idx = variable_map[id];
             if let Variable::Positive(_) = var {
-                result |= 1 << idx;
+                result |= 1 << (max_idx - idx);
             }
         }
         result
@@ -312,7 +328,12 @@ mod test {
     fn evaluate(cond: SOP<u32>, value_map: &HashMap<u32, bool>) -> bool {
         cond.minterms
             .into_iter()
-            .map(|product| product.into_iter().all(|it| value_map[it.id()]))
+            .map(|minterm| {
+                minterm.into_iter().all(|ref it| match it {
+                    Variable::Positive(id) => value_map[id],
+                    Variable::Negative(id) => !value_map[id],
+                })
+            })
             .reduce(|lhs, rhs| lhs || rhs)
             .unwrap_or_default()
     }
@@ -330,10 +351,10 @@ mod test {
 
     fn arb_test_cond() -> impl Strategy<Value = SOP<u32>> {
         btree_set(
-            btree_set(any::<Variable<u32>>(), 1..20).prop_map(MinTerm),
-            1..10,
+            btree_set(any::<Variable<u32>>(), 1..26).prop_map(MinTerm),
+            1..26,
         )
-        .prop_map(|products| SOP { minterms: products })
+        .prop_map(|minterms| SOP { minterms })
     }
 
     proptest! {
@@ -357,7 +378,8 @@ mod test {
             pred_values.extend(generate_pred_values(&rhs));
             let lhs_eval = evaluate(lhs.clone(), &pred_values);
             let rhs_eval = evaluate(rhs.clone(), &pred_values);
-            let conjunction = lhs.clone() & rhs.clone();
+            let mut conjunction = lhs.clone() & rhs.clone();
+            conjunction.simplify();
             let conjunction_eval = evaluate(conjunction.clone(), &pred_values);
             assert_eq!(lhs_eval && rhs_eval, conjunction_eval);
         }
@@ -371,7 +393,8 @@ mod test {
             pred_values.extend(generate_pred_values(&rhs));
             let lhs_eval = evaluate(lhs.clone(), &pred_values);
             let rhs_eval = evaluate(rhs.clone(), &pred_values);
-            let disjunction = lhs.clone() | rhs.clone();
+            let mut disjunction = lhs.clone() | rhs.clone();
+            disjunction.simplify();
             let disjunction_eval = evaluate(disjunction.clone(), &pred_values);
             assert_eq!(lhs_eval || rhs_eval, disjunction_eval);
         }
