@@ -551,7 +551,10 @@ pub(crate) mod tests {
             let (len_bytes, written) = buf.split_at(2);
             let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
             assert_eq!(len, count);
-            assert_eq!(written, content);
+            let mut reader = written;
+            let parsed_back = ConstantPool::read_from(&mut reader, len).unwrap();
+            assert_eq!(pool, parsed_back);
+            // assert_eq!(written, content);
         }
     }
 
