@@ -6,7 +6,7 @@ use crate::{
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
-use super::PathCondition;
+use super::{MinTerm, SOP, Variable};
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
@@ -25,17 +25,14 @@ impl<'a, N> Analyzer<'a, N> {
 impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
     type Location = ProgramCounter;
 
-    type Fact = PathCondition<Predicate<Value>>;
+    type Fact = SOP<Predicate<Value>>;
 
     type Err = Infallible;
 
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
     fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
-        Ok(BTreeMap::from([(
-            self.cfg.entry_point(),
-            PathCondition::tautology(),
-        )]))
+        Ok(BTreeMap::from([(self.cfg.entry_point(), SOP::one())]))
     }
 
     fn analyze_location(
@@ -119,9 +116,9 @@ where
     }
 }
 
-impl<C: Ord> From<Predicate<C>> for PathCondition<Predicate<C>> {
+impl<C: Ord> From<Predicate<C>> for SOP<Predicate<C>> {
     fn from(value: Predicate<C>) -> Self {
-        PathCondition::conjunction_of([value])
+        SOP::from_iter([MinTerm::from_iter([Variable::Positive(value)])])
     }
 }
 

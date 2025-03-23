@@ -8,7 +8,7 @@ use crate::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-use self::path_condition::{PathCondition, Predicate, Value};
+use self::path_condition::{SOP, Predicate, Value};
 
 use super::ControlFlowGraph;
 
@@ -18,7 +18,7 @@ pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
     /// A conditional control transfer.
-    Conditional(PathCondition<Predicate<Value>>),
+    Conditional(SOP<Predicate<Value>>),
     /// A control transfer to the exception handler.
     Exception(BTreeSet<ClassRef>),
     /// A control transfer caused by subroutine return.
@@ -111,7 +111,7 @@ impl<E> ControlFlowGraph<(), E> {
 impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
     #[must_use]
-    pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, PathCondition<Predicate<Value>>> {
+    pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, SOP<Predicate<Value>>> {
         let mut analyzer = path_condition::Analyzer::new(self);
         let Ok(path_conditions) = analyzer.analyze();
         path_conditions
