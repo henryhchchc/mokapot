@@ -31,13 +31,13 @@ pub(super) struct MethodInfo {
 }
 
 impl FromReader for MethodInfo {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let access_flags = reader.read_value()?;
         let name_index = reader.read_value()?;
         let descriptor_index = reader.read_value()?;
         let attributes_count: u16 = reader.read_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::read_from(reader))
+            .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             access_flags,
@@ -49,11 +49,11 @@ impl FromReader for MethodInfo {
 }
 
 impl ToWriter for MethodInfo {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        self.attributes.write_to(writer)?;
+        self.attributes.to_writer(writer)?;
         Ok(())
     }
 }

@@ -43,7 +43,7 @@ impl ConstantPool {
     #[doc = see_jvm_spec!(4, 1)]
     /// # Errors
     /// See [`Error`](super::super::parsing::Error) for more information.
-    pub fn read_from<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
+    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
     where
         R: Read + ?Sized,
     {
@@ -144,19 +144,19 @@ impl Default for ConstantPool {
 }
 
 impl ToWriter for ConstantPool {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.count().to_be_bytes())?;
         for entry in &self.inner {
-            entry.write_to(writer)?;
+            entry.to_writer(writer)?;
         }
         Ok(())
     }
 }
 
 impl ToWriter for Slot {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         if let Self::Entry(entry) = self {
-            entry.write_to(writer)?;
+            entry.to_writer(writer)?;
         }
         Ok(())
     }
@@ -341,17 +341,17 @@ mod tests {
     proptest! {
 
         #[test]
-        fn read_from((count, bytes) in arb_constant_pool_bytes()) {
+        fn from_reader((count, bytes) in arb_constant_pool_bytes()) {
             let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::read_from(&mut reader, count);
+            let constant_pool = ConstantPool::from_reader(&mut reader, count);
             assert!(constant_pool.is_ok());
             assert!(reader.is_empty());
         }
 
         #[test]
-        fn read_from_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
+        fn from_reader_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
             let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::read_from(&mut reader, count + 1);
+            let constant_pool = ConstantPool::from_reader(&mut reader, count + 1);
             assert!(constant_pool.is_err());
         }
 

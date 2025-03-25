@@ -42,7 +42,7 @@ impl AttributeInfo {
 }
 
 impl FromReader for AttributeInfo {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let name_idx = reader.read_value()?;
         let attribute_length: u32 = reader.read_value()?;
         let attribute_length = usize::try_from(attribute_length)
@@ -53,7 +53,7 @@ impl FromReader for AttributeInfo {
 }
 
 impl ToWriter for AttributeInfo {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.name_idx.to_be_bytes())?;
         write_length::<u32>(writer, self.info.len())?;
         writer.write_all(&self.info)?;
@@ -62,10 +62,10 @@ impl ToWriter for AttributeInfo {
 }
 
 impl ToWriter for Vec<AttributeInfo> {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         write_length::<u16>(writer, self.len())?;
         for attr in self {
-            attr.write_to(writer)?;
+            attr.to_writer(writer)?;
         }
         Ok(())
     }

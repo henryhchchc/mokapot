@@ -417,7 +417,7 @@ impl Entry {
 }
 
 impl ToWriter for JavaString {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
         match self {
             Self::Utf8(str) => {
                 let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
@@ -434,10 +434,10 @@ impl ToWriter for JavaString {
 }
 
 impl ToWriter for Entry {
-    fn write_to<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.tag().to_be_bytes())?;
         match self {
-            Self::Utf8(value) => value.write_to(writer)?,
+            Self::Utf8(value) => value.to_writer(writer)?,
             Self::Integer(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Long(value) => writer.write_all(&value.to_be_bytes())?,
@@ -545,14 +545,14 @@ pub(crate) mod tests {
         #[test]
         fn read_write((count, content) in arb_constant_pool_bytes()) {
             let mut reader = content.as_slice();
-            let pool = ConstantPool::read_from(&mut reader, count).unwrap();
+            let pool = ConstantPool::from_reader(&mut reader, count).unwrap();
             let mut buf = Vec::new();
-            pool.write_to(&mut buf)?;
+            pool.to_writer(&mut buf)?;
             let (len_bytes, written) = buf.split_at(2);
             let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
             assert_eq!(len, count);
             let mut reader = written;
-            let parsed_back = ConstantPool::read_from(&mut reader, len).unwrap();
+            let parsed_back = ConstantPool::from_reader(&mut reader, len).unwrap();
             assert_eq!(pool, parsed_back);
             // assert_eq!(written, content);
         }

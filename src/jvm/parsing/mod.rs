@@ -41,7 +41,7 @@ pub trait ToWriter {
     ///
     /// # Errors
     /// This function will only forward the error returned by the underlying writer.
-    fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError>;
+    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError>;
 }
 
 /// Error that can occur when writing a Raw JVM element to a writer.

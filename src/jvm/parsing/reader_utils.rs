@@ -6,19 +6,19 @@ pub(super) trait ValueReaderExt: Read {
     fn read_value<T: FromReader>(&mut self) -> Result<T>;
 }
 pub(super) trait FromReader {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self>
     where
         Self: Sized;
 }
 
 impl<R: Read + ?Sized> ValueReaderExt for R {
     fn read_value<T: FromReader>(&mut self) -> Result<T> {
-        T::read_from(self)
+        T::from_reader(self)
     }
 }
 
 impl<const N: usize> FromReader for [u8; N] {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
         Ok(buf)
@@ -26,8 +26,8 @@ impl<const N: usize> FromReader for [u8; N] {
 }
 
 impl FromReader for ProgramCounter {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let inner = u16::read_from(reader)?;
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+        let inner = u16::from_reader(reader)?;
         Ok(inner.into())
     }
 }
@@ -36,7 +36,7 @@ impl FromReader for ProgramCounter {
     u8, u16, u32, i8, i16, i32, i64, f32, f64
 )]
 impl FromReader for T {
-    fn read_from<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let buf = reader.read_value()?;
         Ok(Self::from_be_bytes(buf))
     }

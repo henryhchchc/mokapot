@@ -19,7 +19,7 @@ fn works_with_jdk_classes() {
     class_files.into_par_iter().for_each(|class_file| {
         let reader = fs::File::open(&class_file).unwrap();
         let mut buf_reader = std::io::BufReader::new(reader);
-        let class = Class::read_from(&mut buf_reader);
+        let class = Class::from_reader(&mut buf_reader);
         match class {
             Ok(c) => test_a_class(c),
             Err(e) => {
@@ -54,6 +54,6 @@ fn test_a_class(class: Class) {
         });
 
     let mut class_bytes = Vec::new();
-    class.write_to(&mut class_bytes).unwrap();
-    Class::read_from(&mut class_bytes.as_slice()).unwrap();
+    class.to_writer(&mut class_bytes).unwrap();
+    Class::from_reader(&mut class_bytes.as_slice()).unwrap();
 }

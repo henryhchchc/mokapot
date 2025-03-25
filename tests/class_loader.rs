@@ -62,7 +62,7 @@ impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
         self.counter.fetch_add(1, atomic::Ordering::Relaxed);
         let mut reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-        Class::read_from(&mut reader).map_err(Into::into)
+        Class::from_reader(&mut reader).map_err(Into::into)
     }
 }
 

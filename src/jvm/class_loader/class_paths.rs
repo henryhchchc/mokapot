@@ -23,7 +23,7 @@ impl ClassPath for DirectoryClassPath {
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
             let mut buf_read = BufReader::new(class_file);
-            let class = Class::read_from(&mut buf_read)?;
+            let class = Class::from_reader(&mut buf_read)?;
             Ok(class)
         } else {
             Err(Error::NotFound)
@@ -94,7 +94,7 @@ impl ClassPath for JarClassPath {
                 ZipError::Io(io_err) => Error::IO(io_err),
                 e => Error::Other(Box::new(e)),
             })?;
-        Class::read_from(&mut class_file).map_err(Into::into)
+        Class::from_reader(&mut class_file).map_err(Into::into)
     }
 }
 
