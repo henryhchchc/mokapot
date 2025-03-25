@@ -4,49 +4,49 @@ use crate::ir::{Identifier, Operand};
 
 /// A condition that can be used in a conditional jump.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Condition {
+pub enum Condition<OP = Operand> {
     /// The two arguments are equal (i.e., `lhs == rhs`).
     #[display("{_0} == {_1}")]
-    Equal(Operand, Operand),
+    Equal(OP, OP),
     /// The two arguments are not equal (i.e., `lhs != rhs`).
     #[display("{_0} != {_1}")]
-    NotEqual(Operand, Operand),
+    NotEqual(OP, OP),
     /// The first argument is less than the second (i.e., `lhs < rhs`).
     #[display("{_0} < {_1}")]
-    LessThan(Operand, Operand),
+    LessThan(OP, OP),
     /// The first argument is less than or equal to the second (i.e., `lhs <= rhs`).
     #[display("{_0} <= {_1}")]
-    LessThanOrEqual(Operand, Operand),
+    LessThanOrEqual(OP, OP),
     /// The first argument is greater than the second (i.e., `lhs > rhs`).
     #[display("{_0} > {_1}")]
-    GreaterThan(Operand, Operand),
+    GreaterThan(OP, OP),
     /// The first argument is greater than or equal to the second (i.e., `lhs >= rhs`).
     #[display("{_0} >= {_1}")]
-    GreaterThanOrEqual(Operand, Operand),
+    GreaterThanOrEqual(OP, OP),
     /// The argument is null (i.e., `arg == null`).
     #[display("{_0} == null")]
-    IsNull(Operand),
+    IsNull(OP),
     /// The argument is not null (i.e., `arg != null`).
     #[display("{_0} != null")]
-    IsNotNull(Operand),
+    IsNotNull(OP),
     /// The argument is zero (i.e., `arg == 0`).
     #[display("{_0} == 0")]
-    IsZero(Operand),
+    IsZero(OP),
     /// The argument is not zero (i.e., `arg != 0`).
     #[display("{_0} != 0")]
-    IsNonZero(Operand),
+    IsNonZero(OP),
     /// The argument is positive (i.e., `arg > 0`).
     #[display("{_0} > 0")]
-    IsPositive(Operand),
+    IsPositive(OP),
     /// The argument is negative (i.e., `arg < 0`).
     #[display("{_0} < 0")]
-    IsNegative(Operand),
+    IsNegative(OP),
     /// The argument is non-negative (i.e., `arg >= 0`).
     #[display("{_0} >= 0")]
-    IsNonNegative(Operand),
+    IsNonNegative(OP),
     /// The argument is non-positive (i.e., `arg <= 0`).
     #[display("{_0} <= 0")]
-    IsNonPositive(Operand),
+    IsNonPositive(OP),
 }
 
 impl Condition {
