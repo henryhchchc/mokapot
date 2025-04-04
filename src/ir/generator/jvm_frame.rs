@@ -544,7 +544,7 @@ mod test {
                 true,
                 &"()V".parse().expect("Invalid method desc"),
                 0,
-                (values.len() + (values.len() + 1) / 2).try_into().unwrap(),
+                (values.len() + values.len().div_ceil(2)).try_into().unwrap(),
             ).unwrap();
             for (i, value) in values.iter().enumerate() {
                 if i % 2 == 0 {

@@ -54,7 +54,7 @@ impl<P> ClassLoader<P> {
         for class_path in &self.class_path {
             match class_path.find_class(binary_name) {
                 Ok(class) => return Ok(class),
-                Err(Error::NotFound) => continue,
+                Err(Error::NotFound) => {},
                 Err(err) => return Err(err),
             }
         }
