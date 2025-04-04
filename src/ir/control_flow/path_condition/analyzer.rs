@@ -6,7 +6,7 @@ use crate::{
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
-use super::PathCondition;
+use super::{MinTerm, SOP, Variable};
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
@@ -25,17 +25,14 @@ impl<'a, N> Analyzer<'a, N> {
 impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
     type Location = ProgramCounter;
 
-    type Fact = PathCondition<Predicate<Value>>;
+    type Fact = SOP<Predicate<Value>>;
 
     type Err = Infallible;
 
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
     fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
-        Ok(BTreeMap::from([(
-            self.cfg.entry_point(),
-            PathCondition::tautology(),
-        )]))
+        Ok(BTreeMap::from([(self.cfg.entry_point(), SOP::one())]))
     }
 
     fn analyze_location(
@@ -49,7 +46,10 @@ impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
         let result = outgoing_edges
             .map(|(_, dst, trx)| match trx {
                 ControlTransfer::Conditional(cond) => {
-                    let new_cond = cond.clone() & fact.clone();
+                    let mut cond = cond.clone();
+                    cond.simplify();
+                    let mut new_cond = cond & fact.clone();
+                    new_cond.simplify();
                     (dst, new_cond)
                 }
                 _ => (dst, fact.clone()),
@@ -74,33 +74,12 @@ impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
 pub enum Predicate<V> {
     /// The left-hand side is equal to the right-hand side.
     Equal(V, V),
-    /// The left-hand side is not equal to the right-hand side.
-    NotEqual(V, V),
     /// The left-hand side is less than the right-hand side.
     LessThan(V, V),
     /// The left-hand side is less than or equal to the right-hand side.
     LessThanOrEqual(V, V),
     /// The value is null.
     IsNull(V),
-    /// The value is not null.
-    IsNotNull(V),
-}
-
-impl<V> std::ops::Not for Predicate<V> {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        #[allow(clippy::enum_glob_use)]
-        use Predicate::*;
-        match self {
-            Equal(lhs, rhs) => NotEqual(lhs, rhs),
-            NotEqual(lhs, rhs) => Equal(lhs, rhs),
-            LessThan(lhs, rhs) => LessThanOrEqual(rhs, lhs),
-            LessThanOrEqual(lhs, rhs) => LessThan(rhs, lhs),
-            IsNull(value) => IsNotNull(value),
-            IsNotNull(value) => IsNull(value),
-        }
-    }
 }
 
 impl<V> Display for Predicate<V>
@@ -110,42 +89,60 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Equal(lhs, rhs) => write!(f, "{lhs} == {rhs}"),
-            Self::NotEqual(lhs, rhs) => write!(f, "{lhs} != {rhs}"),
             Self::LessThan(lhs, rhs) => write!(f, "{lhs} < {rhs}"),
             Self::LessThanOrEqual(lhs, rhs) => write!(f, "{lhs} <= {rhs}"),
             Self::IsNull(value) => write!(f, "{value} == null"),
-            Self::IsNotNull(value) => write!(f, "{value} != null"),
         }
     }
 }
 
-impl<C: Ord> From<Predicate<C>> for PathCondition<Predicate<C>> {
-    fn from(value: Predicate<C>) -> Self {
-        PathCondition::conjunction_of([value])
+impl From<ir::expression::Condition> for SOP<Predicate<Value>> {
+    fn from(value: ir::expression::Condition) -> Self {
+        Self::from_iter([MinTerm::from_iter([value.into()])])
     }
 }
 
-impl From<ir::expression::Condition> for Predicate<Value> {
+impl From<ir::expression::Condition> for Variable<Predicate<Value>> {
     fn from(value: ir::expression::Condition) -> Self {
+        use Variable::{Negative, Positive};
         #[allow(clippy::enum_glob_use)]
         use ir::expression::Condition::*;
 
-        let zero = ConstantValue::Integer(0).into();
+        let zero: Value = ConstantValue::Integer(0).into();
         match value {
-            IsZero(value) => Predicate::Equal(value.into(), zero),
-            IsNonZero(value) => Predicate::NotEqual(value.into(), zero),
-            IsPositive(value) => Predicate::LessThan(zero, value.into()),
-            IsNegative(value) => Predicate::LessThan(value.into(), zero),
-            IsNonPositive(value) => Predicate::LessThanOrEqual(value.into(), zero),
-            IsNonNegative(value) => Predicate::LessThanOrEqual(zero, value.into()),
-            Equal(lhs, rhs) => Predicate::Equal(lhs.into(), rhs.into()),
-            NotEqual(lhs, rhs) => Predicate::NotEqual(lhs.into(), rhs.into()),
-            LessThan(lhs, rhs) => Predicate::LessThan(lhs.into(), rhs.into()),
-            LessThanOrEqual(lhs, rhs) => Predicate::LessThanOrEqual(lhs.into(), rhs.into()),
-            GreaterThan(lhs, rhs) => Predicate::LessThan(rhs.into(), lhs.into()),
-            GreaterThanOrEqual(lhs, rhs) => Predicate::LessThanOrEqual(rhs.into(), lhs.into()),
-            IsNull(value) => Predicate::IsNull(value.into()),
-            IsNotNull(value) => Predicate::IsNotNull(value.into()),
+            IsNull(value) => Positive(Predicate::IsNull(value.into())),
+            IsNotNull(value) => Negative(Predicate::IsNull(value.into())),
+            // For binary operation involving zeros, we always put zero on the right.
+            IsZero(value) => Positive(Predicate::Equal(value.into(), zero)),
+            IsNonZero(value) => Negative(Predicate::Equal(value.into(), zero)),
+            IsPositive(value) => Negative(Predicate::LessThanOrEqual(value.into(), zero)),
+            IsNegative(value) => Positive(Predicate::LessThan(value.into(), zero)),
+            IsNonPositive(value) => Positive(Predicate::LessThanOrEqual(value.into(), zero)),
+            IsNonNegative(value) => Negative(Predicate::LessThan(value.into(), zero)),
+            // For binary operations, we establish a normalized form
+            // by placing the smaller value on the left-hand side.
+            Equal(lhs, rhs) if lhs < rhs => Positive(Predicate::Equal(lhs.into(), rhs.into())),
+            Equal(lhs, rhs) => Positive(Predicate::Equal(rhs.into(), lhs.into())),
+            NotEqual(lhs, rhs) if lhs < rhs => Negative(Predicate::Equal(lhs.into(), rhs.into())),
+            NotEqual(lhs, rhs) => Negative(Predicate::Equal(rhs.into(), lhs.into())),
+            LessThan(lhs, rhs) if lhs < rhs => {
+                Positive(Predicate::LessThan(lhs.into(), rhs.into()))
+            }
+            LessThan(lhs, rhs) => Negative(Predicate::LessThanOrEqual(rhs.into(), lhs.into())),
+            LessThanOrEqual(lhs, rhs) if lhs < rhs => {
+                Positive(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
+            }
+            LessThanOrEqual(lhs, rhs) => Negative(Predicate::LessThan(rhs.into(), lhs.into())),
+            GreaterThan(lhs, rhs) if lhs < rhs => {
+                Negative(Predicate::LessThanOrEqual(lhs.into(), rhs.into()))
+            }
+            GreaterThan(lhs, rhs) => Positive(Predicate::LessThan(rhs.into(), lhs.into())),
+            GreaterThanOrEqual(lhs, rhs) if lhs < rhs => {
+                Negative(Predicate::LessThan(lhs.into(), rhs.into()))
+            }
+            GreaterThanOrEqual(lhs, rhs) => {
+                Positive(Predicate::LessThanOrEqual(rhs.into(), lhs.into()))
+            }
         }
     }
 }
