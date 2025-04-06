@@ -340,7 +340,7 @@ impl MethodHandle {
     /// Gets the reference kind of this method handle.
     #[must_use]
     pub const fn reference_kind(&self) -> u8 {
-        // Safery: Self is marked as repr(u8)
+        // SAFETY: Self is marked as repr(u8)
         unsafe { enum_discriminant(self) }
     }
 }
