@@ -6,7 +6,7 @@ use crate::{
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
-use super::{MinTerm, PathCondition, BooleanVariable};
+use super::{BooleanVariable, MinTerm, PathCondition};
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
@@ -32,7 +32,10 @@ impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
     type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
 
     fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
-        Ok(BTreeMap::from([(self.cfg.entry_point(), PathCondition::one())]))
+        Ok(BTreeMap::from([(
+            self.cfg.entry_point(),
+            PathCondition::one(),
+        )]))
     }
 
     fn analyze_location(
@@ -114,26 +117,38 @@ impl From<ir::expression::Condition> for BooleanVariable<NormalizedPredicate<Val
             IsNonZero(value) => Negative(NormalizedPredicate::Equal(value.into(), zero)),
             IsPositive(value) => Negative(NormalizedPredicate::LessThanOrEqual(value.into(), zero)),
             IsNegative(value) => Positive(NormalizedPredicate::LessThan(value.into(), zero)),
-            IsNonPositive(value) => Positive(NormalizedPredicate::LessThanOrEqual(value.into(), zero)),
+            IsNonPositive(value) => {
+                Positive(NormalizedPredicate::LessThanOrEqual(value.into(), zero))
+            }
             IsNonNegative(value) => Negative(NormalizedPredicate::LessThan(value.into(), zero)),
             // For binary operations, we establish a normalized form
             // by placing the smaller value on the left-hand side.
-            Equal(lhs, rhs) if lhs < rhs => Positive(NormalizedPredicate::Equal(lhs.into(), rhs.into())),
+            Equal(lhs, rhs) if lhs < rhs => {
+                Positive(NormalizedPredicate::Equal(lhs.into(), rhs.into()))
+            }
             Equal(lhs, rhs) => Positive(NormalizedPredicate::Equal(rhs.into(), lhs.into())),
-            NotEqual(lhs, rhs) if lhs < rhs => Negative(NormalizedPredicate::Equal(lhs.into(), rhs.into())),
+            NotEqual(lhs, rhs) if lhs < rhs => {
+                Negative(NormalizedPredicate::Equal(lhs.into(), rhs.into()))
+            }
             NotEqual(lhs, rhs) => Negative(NormalizedPredicate::Equal(rhs.into(), lhs.into())),
             LessThan(lhs, rhs) if lhs < rhs => {
                 Positive(NormalizedPredicate::LessThan(lhs.into(), rhs.into()))
             }
-            LessThan(lhs, rhs) => Negative(NormalizedPredicate::LessThanOrEqual(rhs.into(), lhs.into())),
+            LessThan(lhs, rhs) => {
+                Negative(NormalizedPredicate::LessThanOrEqual(rhs.into(), lhs.into()))
+            }
             LessThanOrEqual(lhs, rhs) if lhs < rhs => {
                 Positive(NormalizedPredicate::LessThanOrEqual(lhs.into(), rhs.into()))
             }
-            LessThanOrEqual(lhs, rhs) => Negative(NormalizedPredicate::LessThan(rhs.into(), lhs.into())),
+            LessThanOrEqual(lhs, rhs) => {
+                Negative(NormalizedPredicate::LessThan(rhs.into(), lhs.into()))
+            }
             GreaterThan(lhs, rhs) if lhs < rhs => {
                 Negative(NormalizedPredicate::LessThanOrEqual(lhs.into(), rhs.into()))
             }
-            GreaterThan(lhs, rhs) => Positive(NormalizedPredicate::LessThan(rhs.into(), lhs.into())),
+            GreaterThan(lhs, rhs) => {
+                Positive(NormalizedPredicate::LessThan(rhs.into(), lhs.into()))
+            }
             GreaterThanOrEqual(lhs, rhs) if lhs < rhs => {
                 Negative(NormalizedPredicate::LessThan(lhs.into(), rhs.into()))
             }
