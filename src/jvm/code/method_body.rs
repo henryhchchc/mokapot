@@ -52,7 +52,7 @@ pub struct InstructionList<I>(BTreeMap<ProgramCounter, I>);
 
 impl<I, T> From<T> for InstructionList<I>
 where
-    BTreeMap<ProgramCounter, I>: From<T>,
+    T: Into<BTreeMap<ProgramCounter, I>>,
 {
     fn from(value: T) -> Self {
         Self(value.into())

@@ -345,11 +345,12 @@ fn serialize_vec<Len>(
     cp: &mut ConstantPool,
 ) -> Result<Vec<u8>, ToWriterError>
 where
-    Len: TryFrom<usize, Error = TryFromIntError> + ToBytes,
+    usize: TryInto<Len, Error = TryFromIntError>,
+    Len: ToBytes,
     <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
 {
     let mut buf = Vec::new();
-    let len = Len::try_from(items.len())?;
+    let len = items.len().try_into()?;
     buf.extend(len.to_be_bytes());
     for item in items {
         buf.extend(item.into_bytes(cp)?);

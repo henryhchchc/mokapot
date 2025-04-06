@@ -64,9 +64,12 @@ pub(in crate::jvm::parsing) fn write_length<Len>(
     length: usize,
 ) -> Result<(), ToWriterError>
 where
-    Len: TryFrom<usize, Error = TryFromIntError> + ToBytes,
+    usize: TryInto<Len, Error = TryFromIntError>,
+    Len: ToBytes,
+    <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
+
 {
-    let length = Len::try_from(length)?;
+    let length = length.try_into()?;
     writer.write_all(length.to_be_bytes().as_ref())?;
     Ok(())
 }
