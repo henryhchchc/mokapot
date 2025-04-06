@@ -1,5 +1,9 @@
 //! Path constraint analysis.
+//!
+//! This module implements path condition analysis using disjunctive normal form (DNF).
+//! A path condition represents a boolean formula that must be satisfied for a path to be taken.
 use std::{
+    cmp::Ord,
     collections::{BTreeSet, btree_set},
     fmt::Display,
     ops::{BitAnd, BitOr, Not},
@@ -12,19 +16,25 @@ mod analyzer;
 pub use analyzer::*;
 
 /// Path condition in disjunctive normal form.
+///
+/// Represents a boolean formula as a disjunction of conjunctions (OR of ANDs).
+/// An empty set of minterms represents a contradiction (false).
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct PathCondition<P> {
     /// The clauses in the disjunctive normal form.
-    /// An empty set represents a contradiction.
-    /// An singleton of an empty set represents a tautology.
     minterms: BTreeSet<MinTerm<P>>,
 }
 
-/// A conjunction of predicates.
+/// A conjunction of predicates (a minterm in DNF).
+///
+/// Represents a conjunction (AND) of boolean variables.
+/// An empty set of variables represents a tautology (true).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct MinTerm<P>(BTreeSet<BooleanVariable<P>>);
 
 /// A variable in a path condition.
+///
+/// Represents either a positive or negative occurrence of a predicate.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BooleanVariable<P> {
     /// A positive variable.
@@ -37,14 +47,15 @@ impl<P> BooleanVariable<P> {
     /// Returns a reference to the inner id of the variable.
     pub const fn predicate(&self) -> &P {
         match self {
-            BooleanVariable::Negative(id) | BooleanVariable::Positive(id) => id,
+            Self::Negative(id) | Self::Positive(id) => id,
         }
     }
 
+    /// Creates a reference to the boolean variable.
     fn as_ref(&self) -> BooleanVariable<&P> {
         match self {
-            BooleanVariable::Positive(id) => BooleanVariable::Positive(id),
-            BooleanVariable::Negative(id) => BooleanVariable::Negative(id),
+            Self::Positive(id) => BooleanVariable::Positive(id),
+            Self::Negative(id) => BooleanVariable::Negative(id),
         }
     }
 }
@@ -55,8 +66,8 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BooleanVariable::Positive(id) => write!(f, "({id})"),
-            BooleanVariable::Negative(id) => write!(f, "~({id})"),
+            Self::Positive(id) => write!(f, "({id})"),
+            Self::Negative(id) => write!(f, "~({id})"),
         }
     }
 }
@@ -66,8 +77,8 @@ impl<V> Not for BooleanVariable<V> {
 
     fn not(self) -> Self::Output {
         match self {
-            BooleanVariable::Positive(id) => BooleanVariable::Negative(id),
-            BooleanVariable::Negative(id) => BooleanVariable::Positive(id),
+            Self::Positive(id) => Self::Negative(id),
+            Self::Negative(id) => Self::Positive(id),
         }
     }
 }
@@ -88,17 +99,39 @@ impl<P> MinTerm<P> {
         Self(BTreeSet::from([pred]))
     }
 
+    /// Creates a reference to the minterm.
     fn as_ref(&self) -> MinTerm<&P>
     where
         P: Ord,
     {
         MinTerm(self.0.iter().map(|it| it.as_ref()).collect())
     }
+
+    /// Checks if this minterm contains a variable.
+    fn contains(&self, var: &BooleanVariable<P>) -> bool
+    where
+        P: Ord,
+    {
+        self.0.contains(var)
+    }
+
+    /// Inserts a variable into this minterm.
+    fn insert(&mut self, var: BooleanVariable<P>) -> bool
+    where
+        P: Ord,
+    {
+        self.0.insert(var)
+    }
+
+    /// Returns true if this minterm is empty (represents a tautology).
+    fn is_tautology(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<P: Display> Display for MinTerm<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.is_empty() {
+        if self.is_tautology() {
             write!(f, "⊤")
         } else {
             write!(f, "{}", self.0.iter().format(" && "))
@@ -108,8 +141,7 @@ impl<P: Display> Display for MinTerm<P> {
 
 impl<V: Ord> FromIterator<BooleanVariable<V>> for MinTerm<V> {
     fn from_iter<T: IntoIterator<Item = BooleanVariable<V>>>(iter: T) -> Self {
-        let inner = iter.into_iter().collect();
-        MinTerm(inner)
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -123,7 +155,7 @@ impl<V> IntoIterator for MinTerm<V> {
 }
 
 impl<P> PathCondition<P> {
-    /// Creates a true value.
+    /// Creates a true value (tautology).
     #[must_use]
     pub fn one() -> Self
     where
@@ -134,7 +166,7 @@ impl<P> PathCondition<P> {
         }
     }
 
-    /// Creates a false value.
+    /// Creates a false value (contradiction).
     #[must_use]
     pub const fn zero() -> Self
     where
@@ -168,6 +200,7 @@ impl<P> PathCondition<P> {
             .collect()
     }
 
+    /// Creates a reference to the path condition.
     fn as_ref(&self) -> PathCondition<&P>
     where
         P: Ord,
@@ -175,6 +208,12 @@ impl<P> PathCondition<P> {
         PathCondition {
             minterms: self.minterms.iter().map(|it| it.as_ref()).collect(),
         }
+    }
+
+    /// Returns true if this path condition is a contradiction (false).
+    #[must_use]
+    pub fn is_contradiction(&self) -> bool {
+        self.minterms.is_empty()
     }
 }
 
@@ -187,27 +226,13 @@ where
     fn bitor(self, rhs: Self) -> Self::Output {
         let mut products = self.minterms;
         products.extend(rhs.minterms);
-        PathCondition { minterms: products }
-    }
-}
-
-impl<P> BitOr<BooleanVariable<P>> for PathCondition<P>
-where
-    P: Ord + Clone,
-{
-    type Output = Self;
-
-    fn bitor(self, rhs: BooleanVariable<P>) -> Self::Output {
-        let mut products = self.minterms;
-        products.extend([MinTerm::of(rhs)]);
-        PathCondition { minterms: products }
+        Self { minterms: products }
     }
 }
 
 impl<P> BitAnd<BooleanVariable<P>> for PathCondition<P>
 where
-    BooleanVariable<P>: Ord + Clone,
-    MinTerm<P>: Ord,
+    P: Ord + Clone,
 {
     type Output = Self;
 
@@ -216,12 +241,16 @@ where
             .minterms
             .into_iter()
             .filter_map(|minterm| {
-                let MinTerm(mut inner) = minterm;
-                if inner.contains(&rhs.clone().not()) {
+                // Check if the minterm contains the negation of the variable
+                // If so, this term becomes false (contradiction) and is dropped
+                if minterm.contains(&rhs.clone().not()) {
                     return None;
                 }
-                inner.insert(rhs.clone());
-                Some(MinTerm(inner))
+
+                // Add the variable to the minterm
+                let mut updated_minterm = minterm;
+                updated_minterm.insert(rhs.clone());
+                Some(updated_minterm)
             })
             .collect();
         Self { minterms }
@@ -235,24 +264,34 @@ where
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        let PathCondition { minterms: this } = self;
-        let PathCondition { minterms: other } = rhs;
-        let products = this
+        let products = self
+            .minterms
             .into_iter()
             .flat_map(|lhs_minterm| {
-                other.clone().into_iter().filter_map(move |rhs_minterm| {
-                    let MinTerm(mut result_inner) = lhs_minterm.clone();
-                    for var in rhs_minterm {
-                        if result_inner.contains(&var.clone().not()) {
-                            return None;
+                rhs.minterms
+                    .clone()
+                    .into_iter()
+                    .filter_map(move |rhs_minterm| {
+                        let mut result = lhs_minterm.clone();
+
+                        // Check for contradiction: if any variable appears with opposite signs
+                        for var in &rhs_minterm.0 {
+                            if result.contains(&var.clone().not()) {
+                                return None;
+                            }
                         }
-                        result_inner.insert(var);
-                    }
-                    Some(MinTerm(result_inner))
-                })
+
+                        // Combine the variables
+                        for var in rhs_minterm {
+                            result.insert(var);
+                        }
+
+                        Some(result)
+                    })
             })
             .collect();
-        PathCondition { minterms: products }
+
+        Self { minterms: products }
     }
 }
 
@@ -261,14 +300,14 @@ where
     P: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let PathCondition { minterms: products } = self;
-        if products.is_empty() {
+        if self.is_contradiction() {
             write!(f, "⊥")
         } else {
-            write!(f, "{}", products.iter().format(" || "))
+            write!(f, "{}", self.minterms.iter().format(" || "))
         }
     }
 }
+
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
@@ -328,7 +367,6 @@ mod test {
     }
 
     proptest! {
-
         #[test]
         fn and(
             lhs in arb_test_cond(),
