@@ -72,9 +72,13 @@ impl<P> MinTerm<P> {
         Self(BTreeSet::new())
     }
 
-    /// Returns an iterator over the variables in the minterm.
-    pub fn iter(&self) -> impl Iterator<Item = &BooleanVariable<P>> {
-        self.into_iter()
+    /// Creates a minterm containing a single variable.
+    #[must_use]
+    pub fn of(pred: BooleanVariable<P>) -> Self
+    where
+        P: Ord,
+    {
+        Self(BTreeSet::from([pred]))
     }
 }
 
@@ -104,15 +108,6 @@ impl<V> IntoIterator for MinTerm<V> {
     }
 }
 
-impl<'a, V> IntoIterator for &'a MinTerm<V> {
-    type Item = &'a BooleanVariable<V>;
-    type IntoIter = btree_set::Iter<'a, BooleanVariable<V>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
-
 impl<P> PathCondition<P> {
     /// Creates a true value.
     #[must_use]
@@ -120,8 +115,9 @@ impl<P> PathCondition<P> {
     where
         P: Ord,
     {
-        let minterms = BTreeSet::from([MinTerm::one()]);
-        Self { minterms }
+        Self {
+            minterms: BTreeSet::from([MinTerm::one()]),
+        }
     }
 
     /// Creates a false value.
@@ -130,27 +126,32 @@ impl<P> PathCondition<P> {
     where
         P: Ord,
     {
-        let minterms = BTreeSet::new();
-        Self { minterms }
+        Self {
+            minterms: BTreeSet::new(),
+        }
     }
 
-    /// Returns a set of variable IDs used in the SOP.
+    /// Creates a path condition from a single predicate.
+    #[must_use]
+    pub fn of(pred: BooleanVariable<P>) -> Self
+    where
+        P: Ord,
+    {
+        Self {
+            minterms: BTreeSet::from([MinTerm::of(pred)]),
+        }
+    }
+
+    /// Returns a set of variable IDs used in the path condition.
     pub fn predicates(&self) -> BTreeSet<&P>
     where
         P: Ord,
     {
         self.minterms
             .iter()
-            .flatten()
+            .flat_map(|it| it.0.iter())
             .map(BooleanVariable::predicate)
             .collect()
-    }
-}
-
-impl<V: Ord> FromIterator<MinTerm<V>> for PathCondition<V> {
-    fn from_iter<T: IntoIterator<Item = MinTerm<V>>>(iter: T) -> Self {
-        let minterms = iter.into_iter().collect();
-        Self { minterms }
     }
 }
 
@@ -164,6 +165,43 @@ where
         let mut products = self.minterms;
         products.extend(rhs.minterms);
         PathCondition { minterms: products }
+    }
+}
+
+impl<T> BitOr<BooleanVariable<T>> for PathCondition<T>
+where
+    T: Ord + Clone,
+{
+    type Output = Self;
+
+    fn bitor(self, rhs: BooleanVariable<T>) -> Self::Output {
+        let mut products = self.minterms;
+        products.extend([MinTerm::of(rhs)]);
+        PathCondition { minterms: products }
+    }
+}
+
+impl<V> BitAnd<BooleanVariable<V>> for PathCondition<V>
+where
+    BooleanVariable<V>: Ord + Clone,
+    MinTerm<V>: Ord,
+{
+    type Output = Self;
+
+    fn bitand(self, rhs: BooleanVariable<V>) -> Self::Output {
+        let minterms = self
+            .minterms
+            .into_iter()
+            .filter_map(|minterm| {
+                let MinTerm(mut inner) = minterm;
+                if inner.contains(&rhs.clone().not()) {
+                    return None;
+                }
+                inner.insert(rhs.clone());
+                Some(MinTerm(inner))
+            })
+            .collect();
+        Self { minterms }
     }
 }
 
@@ -182,8 +220,7 @@ where
                 other.clone().into_iter().filter_map(move |rhs_minterm| {
                     let MinTerm(mut result_inner) = lhs_minterm.clone();
                     for var in rhs_minterm {
-                        let neg_var = var.clone().not();
-                        if result_inner.contains(&neg_var) {
+                        if result_inner.contains(&var.clone().not()) {
                             return None;
                         }
                         result_inner.insert(var);

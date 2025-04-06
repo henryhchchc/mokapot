@@ -6,7 +6,7 @@ use crate::{
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
-use super::{BooleanVariable, MinTerm, PathCondition};
+use super::{BooleanVariable, PathCondition};
 
 /// An analyzer for path conditions.
 #[derive(Debug)]
@@ -43,17 +43,17 @@ impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
-        let Some(outgoing_edges) = self.cfg.edges_from(*location) else {
-            return Ok(BTreeMap::default());
+        let Some(outgoing_edges) = self.cfg.outgoing_edges(*location) else {
+            return Ok(BTreeMap::new());
         };
         let result = outgoing_edges
-            .map(|(_, dst, trx)| match trx {
-                ControlTransfer::Conditional(cond) => {
-                    let cond = cond.clone();
-                    let new_cond = cond & fact.clone();
-                    (dst, new_cond)
-                }
-                _ => (dst, fact.clone()),
+            .map(|edge| {
+                let new_fact = if let ControlTransfer::Conditional(cond) = edge.data {
+                    cond.clone() & fact.clone()
+                } else {
+                    fact.clone()
+                };
+                (edge.target, new_fact)
             })
             .collect();
         Ok(result)
@@ -93,12 +93,6 @@ where
             Self::LessThanOrEqual(lhs, rhs) => write!(f, "{lhs} <= {rhs}"),
             Self::IsNull(value) => write!(f, "{value} == null"),
         }
-    }
-}
-
-impl From<ir::expression::Condition> for PathCondition<NormalizedPredicate<Value>> {
-    fn from(value: ir::expression::Condition) -> Self {
-        Self::from_iter([MinTerm::from_iter([value.into()])])
     }
 }
 
