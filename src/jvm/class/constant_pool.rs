@@ -308,6 +308,7 @@ impl Entry {
     }
 
     /// Gets the kind of this constant pool entry.
+    #[doc = see_jvm_spec!(4, 4)]
     #[must_use]
     pub const fn constant_kind<'a>(&self) -> &'a str {
         match self {
