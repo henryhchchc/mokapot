@@ -24,7 +24,6 @@ walkdir = "2"
 zip = { version = "2.2", optional = true, default-features = false, features = [
     "deflate",
 ] }
-quine-mccluskey = "1.0.1"
 
 [dev-dependencies]
 proptest = "1"

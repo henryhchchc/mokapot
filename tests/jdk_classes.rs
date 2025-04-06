@@ -61,16 +61,16 @@ fn test_a_class(class: Class) {
                 .edges()
                 .flat_map(|(_, _, cond)| {
                     if let ControlTransfer::Conditional(it) = cond {
-                        Either::Left(it.variable_ids().into_iter())
+                        Either::Left(it.predicates().into_iter())
                     } else {
                         Either::Right(std::iter::empty())
                     }
                 })
                 .dedup()
                 .count();
-            // Theoritically this should be 26 due to the limit of the dependent library.
-            // Set it to lower value to make test faster
-            if variable_count <= 17 {
+            // Set a limit here due to high memory consumption.
+            // [TODO] optimized later.
+            if variable_count < 20 {
                 println!(
                     "Analyzing path condition for: {}::{}{}",
                     class.binary_name,
