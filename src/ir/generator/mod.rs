@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    ir::control_flow::path_condition::{MinTerm, Predicate, SOP, Value, Variable},
+    ir::control_flow::path_condition::{MinTerm, NormalizedPredicate, PathCondition, Value, BooleanVariable},
     jvm::{
         ConstantValue, Method,
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
@@ -122,10 +122,10 @@ impl Analyzer for MokaIRGenerator<'_> {
             }
             MokaInstruction::Jump { condition, target } => {
                 if let Some(condition) = condition {
-                    let cond: Variable<_> = condition.clone().into();
+                    let cond: BooleanVariable<_> = condition.clone().into();
                     let neg_cond = !cond.clone();
-                    let cond = SOP::from_iter([MinTerm::from_iter([cond])]);
-                    let neg_cond = SOP::from_iter([MinTerm::from_iter([neg_cond])]);
+                    let cond = PathCondition::from_iter([MinTerm::from_iter([cond])]);
+                    let neg_cond = PathCondition::from_iter([MinTerm::from_iter([neg_cond])]);
                     let target_edge = (location, *target, Conditional(cond));
                     let next_pc = self.next_pc_of(location)?;
                     let next_pc_edge = (location, next_pc, Conditional(neg_cond));
@@ -142,17 +142,17 @@ impl Analyzer for MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = branches.keys().fold(SOP::one(), |acc, it| {
+                let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
                     let val = ConstantValue::Integer(*it).into();
-                    let it = Variable::Negative(Predicate::Equal(match_value.clone().into(), val));
-                    acc & SOP::from_iter([MinTerm::from_iter([it])])
+                    let it = BooleanVariable::Negative(NormalizedPredicate::Equal(match_value.clone().into(), val));
+                    acc & PathCondition::from_iter([MinTerm::from_iter([it])])
                 });
                 branches
                     .iter()
                     .map(|(&val, &pc)| {
                         let val = Value::Constant(ConstantValue::Integer(val));
-                        let cond = Predicate::Equal(match_value.clone().into(), val);
-                        let cond = SOP::from_iter([MinTerm::from_iter([Variable::Positive(cond)])]);
+                        let cond = NormalizedPredicate::Equal(match_value.clone().into(), val);
+                        let cond = PathCondition::from_iter([MinTerm::from_iter([BooleanVariable::Positive(cond)])]);
                         let edge = (location, pc, Conditional(cond));
                         (edge, frame.same_frame())
                     })
