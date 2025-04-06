@@ -70,7 +70,7 @@ fn test_a_class(class: Class) {
                 .count();
             // Set a limit here due to high memory consumption.
             // [TODO] optimized later.
-            if variable_count < 20 {
+            if variable_count < 15 || env::var("CI").is_err() {
                 println!(
                     "Analyzing path condition for: {}::{}{}",
                     class.binary_name,
