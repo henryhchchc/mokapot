@@ -40,6 +40,13 @@ impl<P> BooleanVariable<P> {
             BooleanVariable::Negative(id) | BooleanVariable::Positive(id) => id,
         }
     }
+
+    fn as_ref(&self) -> BooleanVariable<&P> {
+        match self {
+            BooleanVariable::Positive(id) => BooleanVariable::Positive(id),
+            BooleanVariable::Negative(id) => BooleanVariable::Negative(id),
+        }
+    }
 }
 
 impl<V> Display for BooleanVariable<V>
@@ -79,6 +86,13 @@ impl<P> MinTerm<P> {
         P: Ord,
     {
         Self(BTreeSet::from([pred]))
+    }
+
+    fn as_ref(&self) -> MinTerm<&P>
+    where
+        P: Ord,
+    {
+        MinTerm(self.0.iter().map(|it| it.as_ref()).collect())
     }
 }
 
@@ -153,6 +167,15 @@ impl<P> PathCondition<P> {
             .map(BooleanVariable::predicate)
             .collect()
     }
+
+    fn as_ref(&self) -> PathCondition<&P>
+    where
+        P: Ord,
+    {
+        PathCondition {
+            minterms: self.minterms.iter().map(|it| it.as_ref()).collect(),
+        }
+    }
 }
 
 impl<T> BitOr for PathCondition<T>
@@ -181,14 +204,14 @@ where
     }
 }
 
-impl<V> BitAnd<BooleanVariable<V>> for PathCondition<V>
+impl<P> BitAnd<BooleanVariable<P>> for PathCondition<P>
 where
-    BooleanVariable<V>: Ord + Clone,
-    MinTerm<V>: Ord,
+    BooleanVariable<P>: Ord + Clone,
+    MinTerm<P>: Ord,
 {
     type Output = Self;
 
-    fn bitand(self, rhs: BooleanVariable<V>) -> Self::Output {
+    fn bitand(self, rhs: BooleanVariable<P>) -> Self::Output {
         let minterms = self
             .minterms
             .into_iter()

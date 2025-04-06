@@ -22,10 +22,10 @@ impl<'a, N> Analyzer<'a, N> {
     }
 }
 
-impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
+impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
     type Location = ProgramCounter;
 
-    type Fact = PathCondition<NormalizedPredicate<Value>>;
+    type Fact = PathCondition<&'cfg NormalizedPredicate<Value>>;
 
     type Err = Infallible;
 
@@ -49,7 +49,7 @@ impl<N> fixed_point::Analyzer for Analyzer<'_, N> {
         let result = outgoing_edges
             .map(|edge| {
                 let new_fact = if let ControlTransfer::Conditional(cond) = edge.data {
-                    cond.clone() & fact.clone()
+                    cond.as_ref() & fact.clone()
                 } else {
                     fact.clone()
                 };
