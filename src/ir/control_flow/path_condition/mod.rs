@@ -191,13 +191,13 @@ where
     }
 }
 
-impl<T> BitOr<BooleanVariable<T>> for PathCondition<T>
+impl<P> BitOr<BooleanVariable<P>> for PathCondition<P>
 where
-    T: Ord + Clone,
+    P: Ord + Clone,
 {
     type Output = Self;
 
-    fn bitor(self, rhs: BooleanVariable<T>) -> Self::Output {
+    fn bitor(self, rhs: BooleanVariable<P>) -> Self::Output {
         let mut products = self.minterms;
         products.extend([MinTerm::of(rhs)]);
         PathCondition { minterms: products }
@@ -228,9 +228,9 @@ where
     }
 }
 
-impl<V> BitAnd for PathCondition<V>
+impl<P> BitAnd for PathCondition<P>
 where
-    V: Ord + Clone,
+    P: Ord + Clone,
 {
     type Output = Self;
 
@@ -256,9 +256,9 @@ where
     }
 }
 
-impl<T> Display for PathCondition<T>
+impl<P> Display for PathCondition<P>
 where
-    T: Display,
+    P: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let PathCondition { minterms: products } = self;
