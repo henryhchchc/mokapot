@@ -91,7 +91,7 @@ impl ProgramCounter {
     #[must_use]
     pub fn into<T>(self) -> T
     where
-        u16: Into<T>
+        u16: Into<T>,
     {
         self.0.into()
     }

@@ -67,7 +67,6 @@ where
     usize: TryInto<Len, Error = TryFromIntError>,
     Len: ToBytes,
     <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
-
 {
     let length = length.try_into()?;
     writer.write_all(length.to_be_bytes().as_ref())?;
