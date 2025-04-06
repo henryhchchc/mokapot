@@ -15,7 +15,7 @@ pub use analyzer::*;
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct SOP<V> {
     /// The clauses in the disjunctive normal form.
-    /// An empry set represents a contradiction.
+    /// An empty set represents a contradiction.
     /// An singleton of an empty set represents a tautology.
     minterms: BTreeSet<MinTerm<V>>,
 }
