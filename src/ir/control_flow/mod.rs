@@ -105,14 +105,13 @@ impl<N, E> ControlFlowGraph<N, E> {
 
     /// Returns an iterator over the edges starting at the given node.
     #[must_use]
-    pub fn edges_from(
-        &self,
-        src: ProgramCounter,
-    ) -> Option<impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)>> {
-        self.inner.get(&src).map(|(_, outgoing_edges)| {
-            outgoing_edges
-                .iter()
-                .map(move |(dst, data)| (src, *dst, data))
+    pub fn outgoing_edges(&self, from: ProgramCounter) -> Option<impl Iterator<Item = Edge<&E>>> {
+        self.inner.get(&from).map(|(_, outgoing_edges)| {
+            outgoing_edges.iter().map(move |(&target, data)| Edge {
+                source: from,
+                target,
+                data,
+            })
         })
     }
 }
@@ -138,6 +137,8 @@ impl<E> ControlFlowGraph<(), E> {
 
 impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
+    /// # Performance
+    /// The memory consumption is exponential in the number of unique predicates in this control flow graph.
     #[must_use]
     pub fn path_conditions(
         &self,

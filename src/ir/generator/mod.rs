@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     ir::control_flow::path_condition::{
-        BooleanVariable, MinTerm, NormalizedPredicate, PathCondition, Value,
+        BooleanVariable, NormalizedPredicate, PathCondition, Value,
     },
     jvm::{
         ConstantValue, Method,
@@ -17,6 +17,7 @@ use crate::{
         method,
         references::ClassRef,
     },
+    types::method_descriptor::MethodDescriptor,
 };
 
 use crate::analysis::fixed_point::Analyzer;
@@ -52,7 +53,8 @@ pub enum MokaIRBrewingError {
 
 struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
-    method: &'m Method,
+    is_static: bool,
+    descriptor: &'m MethodDescriptor,
     body: &'m MethodBody,
     control_flow_edges: BTreeMap<(ProgramCounter, ProgramCounter), ControlTransfer>,
 }
@@ -72,10 +74,8 @@ impl Analyzer for MokaIRGenerator<'_> {
             .0
             .to_owned();
         JvmStackFrame::new(
-            self.method
-                .access_flags
-                .contains(method::AccessFlags::STATIC),
-            &self.method.descriptor,
+            self.is_static,
+            self.descriptor,
             self.body.max_locals,
             self.body.max_stack,
         )
@@ -138,9 +138,11 @@ impl<'m> MokaIRGenerator<'m> {
             .body
             .as_ref()
             .ok_or(MokaIRBrewingError::NoMethodBody)?;
+        let is_static = method.access_flags.contains(method::AccessFlags::STATIC);
         Ok(Self {
             ir_instructions: BTreeMap::default(),
-            method,
+            is_static,
+            descriptor: &method.descriptor,
             body,
             control_flow_edges: BTreeMap::default(),
         })
@@ -258,29 +260,32 @@ impl MokaIRGenerator<'_> {
                     .chain(once((Edge::new(location, next_pc, Unconditional), frame)))
                     .collect()
             }
-            MokaInstruction::Jump { condition, target } => {
-                if let Some(condition) = condition {
-                    let cond: BooleanVariable<_> = condition.clone().into();
-                    let neg_cond = !cond.clone();
-                    let target_edge = {
-                        let cond = PathCondition::from_iter([MinTerm::from_iter([cond])]);
-                        Edge::new(location, *target, Conditional(cond))
-                    };
-                    let next_pc_edge = {
-                        let neg_cond = PathCondition::from_iter([MinTerm::from_iter([neg_cond])]);
-                        let next_pc = self.next_pc_of(location)?;
-                        Edge::new(location, next_pc, Conditional(neg_cond))
-                    };
-                    vec![
-                        (target_edge, frame.same_frame()),
-                        (next_pc_edge, frame.same_frame()),
-                    ]
-                } else {
-                    vec![(
-                        Edge::new(location, *target, Unconditional),
-                        frame.same_frame(),
-                    )]
-                }
+            MokaInstruction::Jump {
+                condition: None,
+                target,
+            } => vec![(
+                Edge::new(location, *target, Unconditional),
+                frame.same_frame(),
+            )],
+            MokaInstruction::Jump {
+                condition: Some(condition),
+                target,
+            } => {
+                let cond: BooleanVariable<_> = condition.clone().into();
+                let neg_cond = !cond.clone();
+                let target_edge = {
+                    let cond = PathCondition::of(cond);
+                    Edge::new(location, *target, Conditional(cond))
+                };
+                let next_pc_edge = {
+                    let neg_cond = PathCondition::of(neg_cond);
+                    let next_pc = self.next_pc_of(location)?;
+                    Edge::new(location, next_pc, Conditional(neg_cond))
+                };
+                vec![
+                    (target_edge, frame.same_frame()),
+                    (next_pc_edge, frame.same_frame()),
+                ]
             }
             MokaInstruction::Switch {
                 default,
@@ -289,20 +294,19 @@ impl MokaIRGenerator<'_> {
             } => {
                 let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
                     let val = ConstantValue::Integer(*it).into();
-                    let it = BooleanVariable::Negative(NormalizedPredicate::Equal(
-                        match_value.clone().into(),
-                        val,
-                    ));
-                    acc & PathCondition::from_iter([MinTerm::from_iter([it])])
+                    let not_equal_to_match_value = BooleanVariable::Negative(
+                        NormalizedPredicate::Equal(match_value.clone().into(), val),
+                    );
+                    acc & not_equal_to_match_value
                 });
                 let default_edge = Edge::new(location, *default, Conditional(default_cond));
                 let branch_edges = branches.iter().map(|(&val, &pc)| {
                     let val = Value::Constant(ConstantValue::Integer(val));
-                    let cond = NormalizedPredicate::Equal(match_value.clone().into(), val);
-                    let cond = PathCondition::from_iter([MinTerm::from_iter([
-                        BooleanVariable::Positive(cond),
-                    ])]);
-                    let edge = Edge::new(location, pc, Conditional(cond));
+                    let cond = BooleanVariable::Positive(NormalizedPredicate::Equal(
+                        match_value.clone().into(),
+                        val,
+                    ));
+                    let edge = Edge::new(location, pc, Conditional(PathCondition::of(cond)));
                     (edge, frame.same_frame())
                 });
                 branch_edges
