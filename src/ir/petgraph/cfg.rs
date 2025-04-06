@@ -5,12 +5,16 @@ use std::collections::BTreeSet;
 use petgraph::{
     Directed, Direction,
     visit::{
-        Data, GraphBase, GraphProp, IntoEdgeReferences, IntoNeighbors, IntoNeighborsDirected,
-        IntoNodeIdentifiers, IntoNodeReferences, NodeIndexable, VisitMap, Visitable,
+        Data, EdgeRef, GraphBase, GraphProp, IntoEdgeReferences, IntoNeighbors,
+        IntoNeighborsDirected, IntoNodeIdentifiers, IntoNodeReferences, NodeIndexable, VisitMap,
+        Visitable,
     },
 };
 
-use crate::{ir::ControlFlowGraph, jvm::code::ProgramCounter};
+use crate::{
+    ir::{ControlFlowGraph, control_flow},
+    jvm::code::ProgramCounter,
+};
 
 impl<N, E> Data for ControlFlowGraph<N, E> {
     type NodeWeight = N;
@@ -30,7 +34,7 @@ impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
 }
 
 impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
-    type EdgeRef = (Self::NodeId, Self::NodeId, &'a Self::EdgeWeight);
+    type EdgeRef = control_flow::Edge<&'a E>;
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
@@ -38,6 +42,30 @@ impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
 
     fn edge_references(self) -> Self::EdgeReferences {
         self.edges().collect::<Vec<_>>().into_iter()
+    }
+}
+
+impl<E> EdgeRef for control_flow::Edge<&E> {
+    type NodeId = ProgramCounter;
+
+    type EdgeId = (Self::NodeId, Self::NodeId);
+
+    type Weight = E;
+
+    fn source(&self) -> Self::NodeId {
+        self.source
+    }
+
+    fn target(&self) -> Self::NodeId {
+        self.target
+    }
+
+    fn weight(&self) -> &Self::Weight {
+        self.data
+    }
+
+    fn id(&self) -> Self::EdgeId {
+        (self.source, self.target)
     }
 }
 

@@ -59,8 +59,8 @@ fn test_a_class(class: Class) {
             let variable_count = ir_method
                 .control_flow_graph
                 .edges()
-                .flat_map(|(_, _, cond)| {
-                    if let ControlTransfer::Conditional(it) = cond {
+                .flat_map(|edge| {
+                    if let ControlTransfer::Conditional(it) = edge.data {
                         Either::Left(it.predicates().into_iter())
                     } else {
                         Either::Right(std::iter::empty())
