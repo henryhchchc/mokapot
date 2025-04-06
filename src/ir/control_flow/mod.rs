@@ -111,7 +111,9 @@ impl<E> ControlFlowGraph<(), E> {
 impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
     #[must_use]
-    pub fn path_conditions(&self) -> BTreeMap<ProgramCounter, PathCondition<NormalizedPredicate<Value>>> {
+    pub fn path_conditions(
+        &self,
+    ) -> BTreeMap<ProgramCounter, PathCondition<NormalizedPredicate<Value>>> {
         let mut analyzer = path_condition::Analyzer::new(self);
         let Ok(path_conditions) = analyzer.analyze();
         path_conditions

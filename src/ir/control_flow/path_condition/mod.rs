@@ -139,10 +139,13 @@ impl<P> PathCondition<P> {
     where
         P: Ord,
     {
-        self.minterms.iter().flatten().map(BooleanVariable::predicate).collect()
+        self.minterms
+            .iter()
+            .flatten()
+            .map(BooleanVariable::predicate)
+            .collect()
     }
 }
-
 
 impl<V: Ord> FromIterator<MinTerm<V>> for PathCondition<V> {
     fn from_iter<T: IntoIterator<Item = MinTerm<V>>>(iter: T) -> Self {
@@ -176,20 +179,17 @@ where
         let products = this
             .into_iter()
             .flat_map(|lhs_minterm| {
-                other
-                    .clone()
-                    .into_iter()
-                    .filter_map(move |rhs_minterm| {
-                        let MinTerm(mut result_inner) = lhs_minterm.clone();
-                        for var in rhs_minterm {
-                            let neg_var = var.clone().not();
-                            if result_inner.contains(&neg_var) {
-                                return None;
-                            }
-                            result_inner.insert(var);
+                other.clone().into_iter().filter_map(move |rhs_minterm| {
+                    let MinTerm(mut result_inner) = lhs_minterm.clone();
+                    for var in rhs_minterm {
+                        let neg_var = var.clone().not();
+                        if result_inner.contains(&neg_var) {
+                            return None;
                         }
-                        Some(MinTerm(result_inner))
-                    })
+                        result_inner.insert(var);
+                    }
+                    Some(MinTerm(result_inner))
+                })
             })
             .collect();
         PathCondition { minterms: products }
@@ -219,7 +219,7 @@ mod test {
 
     use crate::ir::control_flow::path_condition::MinTerm;
 
-    use super::{PathCondition, BooleanVariable};
+    use super::{BooleanVariable, PathCondition};
 
     impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
         type Parameters = (u32, bool);
