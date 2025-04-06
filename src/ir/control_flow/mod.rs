@@ -25,6 +25,28 @@ pub enum ControlTransfer {
     SubroutineReturn,
 }
 
+/// An edge in the control flow graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Edge<D> {
+    /// The source program counter.
+    pub source: ProgramCounter,
+    /// The target program counter.
+    pub target: ProgramCounter,
+    /// The data associated with the edge.
+    pub data: D,
+}
+
+impl<D> Edge<D> {
+    /// Creates a new edge with the given source, target, and data.
+    pub const fn new(source: ProgramCounter, target: ProgramCounter, data: D) -> Self {
+        Self {
+            source,
+            target,
+            data,
+        }
+    }
+}
+
 impl<N, E> ControlFlowGraph<N, E> {
     /// Returns the entry point of the control flow graph.
     #[must_use]
@@ -61,10 +83,16 @@ impl<N, E> ControlFlowGraph<N, E> {
     }
 
     /// Returns an iterator over the edges
-    pub fn edges(&self) -> impl Iterator<Item = (ProgramCounter, ProgramCounter, &E)> {
-        self.inner.iter().flat_map(|(src, (_, outgoing_edges))| {
-            outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
-        })
+    pub fn edges(&self) -> impl Iterator<Item = Edge<&E>> {
+        self.inner
+            .iter()
+            .flat_map(|(&source, (_, outgoing_edges))| {
+                outgoing_edges.iter().map(move |(&target, data)| Edge {
+                    source,
+                    target,
+                    data,
+                })
+            })
     }
 
     /// Returns an iterator over the exits of the control flow graph.
@@ -171,7 +199,11 @@ mod tests {
         let edges = cfg.edges().collect::<BTreeSet<_>>();
         assert_eq!(edges.len(), 4);
         for i in 0..=3 {
-            assert!(edges.contains(&(i.into(), (i + 1).into(), &())));
+            assert!(edges.contains(&Edge {
+                source: i.into(),
+                target: (i + 1).into(),
+                data: &()
+            }));
         }
     }
 

@@ -26,7 +26,11 @@ use self::jvm_frame::{Entry, JvmStackFrame};
 use itertools::Itertools;
 pub use jvm_frame::ExecutionError;
 
-use super::{ControlFlowGraph, control_flow::ControlTransfer, expression::Expression};
+use super::{
+    ControlFlowGraph,
+    control_flow::{ControlTransfer, Edge},
+    expression::Expression,
+};
 use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
 
 /// An error that occurs when generating Moka IR.
@@ -84,7 +88,6 @@ impl Analyzer for MokaIRGenerator<'_> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::AffectedLocations, Self::Err> {
-        use ControlTransfer::{Conditional, Unconditional};
         let location = location.to_owned();
         let mut frame = fact.same_frame();
         let insn = self
@@ -92,99 +95,22 @@ impl Analyzer for MokaIRGenerator<'_> {
             .instruction_at(location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
         let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
-        let edges_and_frames = match &ir_instruction {
-            MokaInstruction::Nop => {
-                let next_pc = self.next_pc_of(location)?;
-                let edge = (location, next_pc, Unconditional);
-                vec![(edge, frame)]
-            }
-            MokaInstruction::Return(_) => Vec::default(),
-            MokaInstruction::Definition {
-                expr: Expression::Throw(_),
-                ..
-            } => Self::exception_edges(&self.body.exception_table, location, &frame),
-            MokaInstruction::Definition {
-                expr:
-                    Expression::Subroutine {
-                        target,
-                        return_address,
-                    },
-                ..
-            } => {
-                frame.possible_ret_addresses.insert(*return_address);
-                let edge = (location, *target, Unconditional);
-                vec![(edge, frame)]
-            }
-            MokaInstruction::Definition { .. } => {
-                let next_pc = self.next_pc_of(location)?;
-                Self::exception_edges(&self.body.exception_table, location, &frame)
-                    .into_iter()
-                    .chain(once(((location, next_pc, Unconditional), frame)))
-                    .collect()
-            }
-            MokaInstruction::Jump { condition, target } => {
-                if let Some(condition) = condition {
-                    let cond: BooleanVariable<_> = condition.clone().into();
-                    let neg_cond = !cond.clone();
-                    let cond = PathCondition::from_iter([MinTerm::from_iter([cond])]);
-                    let neg_cond = PathCondition::from_iter([MinTerm::from_iter([neg_cond])]);
-                    let target_edge = (location, *target, Conditional(cond));
-                    let next_pc = self.next_pc_of(location)?;
-                    let next_pc_edge = (location, next_pc, Conditional(neg_cond));
-                    vec![
-                        (target_edge, frame.same_frame()),
-                        (next_pc_edge, frame.same_frame()),
-                    ]
-                } else {
-                    vec![((location, *target, Unconditional), frame.same_frame())]
-                }
-            }
-            MokaInstruction::Switch {
-                default,
-                branches,
-                match_value,
-            } => {
-                let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
-                    let val = ConstantValue::Integer(*it).into();
-                    let it = BooleanVariable::Negative(NormalizedPredicate::Equal(
-                        match_value.clone().into(),
-                        val,
-                    ));
-                    acc & PathCondition::from_iter([MinTerm::from_iter([it])])
-                });
-                branches
-                    .iter()
-                    .map(|(&val, &pc)| {
-                        let val = Value::Constant(ConstantValue::Integer(val));
-                        let cond = NormalizedPredicate::Equal(match_value.clone().into(), val);
-                        let cond = PathCondition::from_iter([MinTerm::from_iter([
-                            BooleanVariable::Positive(cond),
-                        ])]);
-                        let edge = (location, pc, Conditional(cond));
-                        (edge, frame.same_frame())
-                    })
-                    .chain(once((
-                        (location, *default, Conditional(default_cond)),
-                        frame.same_frame(),
-                    )))
-                    .collect()
-            }
-            MokaInstruction::SubroutineRet(_) => mem::take(&mut frame.possible_ret_addresses)
-                .into_iter()
-                .map(|return_address| {
-                    let edge = (location, return_address, ControlTransfer::SubroutineReturn);
-                    (edge, frame.same_frame())
-                })
-                .collect(),
-        };
+        let edges_and_frames =
+            self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);
 
         let (affected_locations, edges) = edges_and_frames
             .into_iter()
-            .map(|(edge, frame)| ((edge.1, frame), edge))
+            .map(|(edge, frame)| ((edge.target, frame), edge))
             .unzip();
         self.control_flow_edges
-            .extend(BTreeSet::into_iter(edges).map(|(src, tgt, ctr)| ((src, tgt), ctr)));
+            .extend(BTreeSet::into_iter(edges).map(
+                |Edge {
+                     source,
+                     target,
+                     data,
+                 }| ((source, target), data),
+            ));
         Ok(affected_locations)
     }
 
@@ -224,10 +150,7 @@ impl<'m> MokaIRGenerator<'m> {
         exception_table: &[ExceptionTableEntry],
         pc: ProgramCounter,
         frame: &JvmStackFrame,
-    ) -> Vec<(
-        (ProgramCounter, ProgramCounter, ControlTransfer),
-        JvmStackFrame,
-    )> {
+    ) -> Vec<(Edge<ControlTransfer>, JvmStackFrame)> {
         exception_table
             .iter()
             .filter(|&it| it.covers(pc))
@@ -246,7 +169,7 @@ impl<'m> MokaIRGenerator<'m> {
                     })
                     .collect();
                 (
-                    (pc, handler_pc, ControlTransfer::Exception(exceptions)),
+                    Edge::new(pc, handler_pc, ControlTransfer::Exception(exceptions)),
                     handler_frame,
                 )
             })
@@ -294,5 +217,105 @@ impl MokaIRGenerator<'_> {
                 .map(|((src, dst), trx)| (src, dst, trx)),
         );
         Ok((InstructionList::from(self.ir_instructions), cfg))
+    }
+
+    fn analyze_frame_and_conditions(
+        &mut self,
+        location: ProgramCounter,
+        mut frame: JvmStackFrame,
+        ir_instruction: &MokaInstruction,
+    ) -> Result<Vec<(Edge<ControlTransfer>, JvmStackFrame)>, <MokaIRGenerator<'_> as Analyzer>::Err>
+    {
+        use ControlTransfer::{Conditional, SubroutineReturn, Unconditional};
+
+        Ok(match ir_instruction {
+            MokaInstruction::Nop => {
+                let next_pc = self.next_pc_of(location)?;
+                let edge = Edge::new(location, next_pc, Unconditional);
+                vec![(edge, frame)]
+            }
+            MokaInstruction::Return(_) => Vec::new(),
+            MokaInstruction::Definition {
+                expr: Expression::Throw(_),
+                ..
+            } => Self::exception_edges(&self.body.exception_table, location, &frame),
+            MokaInstruction::Definition {
+                expr:
+                    Expression::Subroutine {
+                        target,
+                        return_address,
+                    },
+                ..
+            } => {
+                frame.possible_ret_addresses.insert(*return_address);
+                let edge = Edge::new(location, *target, Unconditional);
+                vec![(edge, frame)]
+            }
+            MokaInstruction::Definition { .. } => {
+                let next_pc = self.next_pc_of(location)?;
+                Self::exception_edges(&self.body.exception_table, location, &frame)
+                    .into_iter()
+                    .chain(once((Edge::new(location, next_pc, Unconditional), frame)))
+                    .collect()
+            }
+            MokaInstruction::Jump { condition, target } => {
+                if let Some(condition) = condition {
+                    let cond: BooleanVariable<_> = condition.clone().into();
+                    let neg_cond = !cond.clone();
+                    let target_edge = {
+                        let cond = PathCondition::from_iter([MinTerm::from_iter([cond])]);
+                        Edge::new(location, *target, Conditional(cond))
+                    };
+                    let next_pc_edge = {
+                        let neg_cond = PathCondition::from_iter([MinTerm::from_iter([neg_cond])]);
+                        let next_pc = self.next_pc_of(location)?;
+                        Edge::new(location, next_pc, Conditional(neg_cond))
+                    };
+                    vec![
+                        (target_edge, frame.same_frame()),
+                        (next_pc_edge, frame.same_frame()),
+                    ]
+                } else {
+                    vec![(
+                        Edge::new(location, *target, Unconditional),
+                        frame.same_frame(),
+                    )]
+                }
+            }
+            MokaInstruction::Switch {
+                default,
+                branches,
+                match_value,
+            } => {
+                let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
+                    let val = ConstantValue::Integer(*it).into();
+                    let it = BooleanVariable::Negative(NormalizedPredicate::Equal(
+                        match_value.clone().into(),
+                        val,
+                    ));
+                    acc & PathCondition::from_iter([MinTerm::from_iter([it])])
+                });
+                let default_edge = Edge::new(location, *default, Conditional(default_cond));
+                let branch_edges = branches.iter().map(|(&val, &pc)| {
+                    let val = Value::Constant(ConstantValue::Integer(val));
+                    let cond = NormalizedPredicate::Equal(match_value.clone().into(), val);
+                    let cond = PathCondition::from_iter([MinTerm::from_iter([
+                        BooleanVariable::Positive(cond),
+                    ])]);
+                    let edge = Edge::new(location, pc, Conditional(cond));
+                    (edge, frame.same_frame())
+                });
+                branch_edges
+                    .chain(once((default_edge, frame.same_frame())))
+                    .collect()
+            }
+            MokaInstruction::SubroutineRet(_) => mem::take(&mut frame.possible_ret_addresses)
+                .into_iter()
+                .map(|return_address| {
+                    let edge = Edge::new(location, return_address, SubroutineReturn);
+                    (edge, frame.same_frame())
+                })
+                .collect(),
+        })
     }
 }
