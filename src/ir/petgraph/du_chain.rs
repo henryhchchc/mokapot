@@ -36,6 +36,10 @@ impl VisitMap<Identifier> for Visited {
     fn is_visited(&self, a: &Identifier) -> bool {
         self.contains(a)
     }
+
+    fn unvisit(&mut self, a: Identifier) -> bool {
+        self.remove(&a)
+    }
 }
 
 impl Visitable for DefUseChain<'_> {

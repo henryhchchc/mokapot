@@ -85,6 +85,10 @@ impl VisitMap<ProgramCounter> for Visited {
     fn is_visited(&self, a: &ProgramCounter) -> bool {
         self.contains(a)
     }
+
+    fn unvisit(&mut self, a: ProgramCounter) -> bool {
+        self.remove(&a)
+    }
 }
 
 impl<N, E> Visitable for ControlFlowGraph<N, E> {
