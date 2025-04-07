@@ -1,13 +1,12 @@
 //! Implementations for the traits in the `petgraph` crate.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use petgraph::{
     Directed, Direction,
     visit::{
         Data, EdgeRef, GraphBase, GraphProp, IntoEdgeReferences, IntoNeighbors,
-        IntoNeighborsDirected, IntoNodeIdentifiers, IntoNodeReferences, NodeIndexable, VisitMap,
-        Visitable,
+        IntoNeighborsDirected, IntoNodeIdentifiers, IntoNodeReferences, NodeIndexable, Visitable,
     },
 };
 
@@ -74,28 +73,11 @@ impl<N, E> GraphBase for ControlFlowGraph<N, E> {
     type EdgeId = (ProgramCounter, ProgramCounter);
 }
 
-/// A visit map for the control flow graph.
-pub type Visited = BTreeSet<ProgramCounter>;
-
-impl VisitMap<ProgramCounter> for Visited {
-    fn visit(&mut self, a: ProgramCounter) -> bool {
-        self.insert(a)
-    }
-
-    fn is_visited(&self, a: &ProgramCounter) -> bool {
-        self.contains(a)
-    }
-
-    fn unvisit(&mut self, a: ProgramCounter) -> bool {
-        self.remove(&a)
-    }
-}
-
 impl<N, E> Visitable for ControlFlowGraph<N, E> {
-    type Map = Visited;
+    type Map = HashSet<ProgramCounter>;
 
     fn visit_map(&self) -> Self::Map {
-        BTreeSet::new()
+        HashSet::new()
     }
 
     fn reset_map(&self, map: &mut Self::Map) {

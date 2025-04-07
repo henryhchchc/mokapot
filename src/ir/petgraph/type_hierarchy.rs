@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use petgraph::{
     Direction,
-    visit::{GraphBase, GraphRef, IntoNeighbors, IntoNeighborsDirected, VisitMap, Visitable},
+    visit::{GraphBase, GraphRef, IntoNeighbors, IntoNeighborsDirected, Visitable},
 };
 
 use crate::{
@@ -33,25 +33,8 @@ impl<'a> IntoNeighbors for &'a ClassHierarchy {
     }
 }
 
-/// A visit map for the class hierarchy.
-pub type Visited<'a> = HashSet<&'a ClassRef>;
-
-impl<'a> VisitMap<&'a ClassRef> for Visited<'a> {
-    fn visit(&mut self, a: &'a ClassRef) -> bool {
-        self.insert(a)
-    }
-
-    fn is_visited(&self, a: &&'a ClassRef) -> bool {
-        self.contains(a)
-    }
-
-    fn unvisit(&mut self, a: &'a ClassRef) -> bool {
-        self.remove(&a)
-    }
-}
-
 impl<'a> Visitable for &'a ClassHierarchy {
-    type Map = Visited<'a>;
+    type Map = HashSet<&'a ClassRef>;
 
     fn visit_map(&self) -> Self::Map {
         HashSet::default()
@@ -101,10 +84,10 @@ impl<'a> IntoNeighborsDirected for &'a InterfaceImplHierarchy {
 }
 
 impl<'a> Visitable for &'a InterfaceImplHierarchy {
-    type Map = Visited<'a>;
+    type Map = HashSet<&'a ClassRef>;
 
     fn visit_map(&self) -> Self::Map {
-        HashSet::default()
+        HashSet::new()
     }
 
     fn reset_map(&self, map: &mut Self::Map) {
