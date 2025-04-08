@@ -89,19 +89,13 @@ impl JvmStackFrame {
         &mut self,
         descriptor: &MethodDescriptor,
     ) -> Result<Vec<Operand>, ExecutionError> {
-        use FieldType::Base;
-        use PrimitiveType::{Double, Long};
-        let mut args = Vec::with_capacity(descriptor.parameters_types.len());
-        for param_type in descriptor.parameters_types.iter().rev() {
-            let arg = if let Base(Long | Double) = param_type {
-                self.pop_value::<DUAL_SLOT>()?
-            } else {
-                self.pop_value::<SINGLE_SLOT>()?
-            };
-            args.push(arg);
-        }
-        args.reverse();
-        Ok(args)
+        descriptor
+            .parameters_types
+            .iter()
+            .rev()
+            .map(|param_type| self.typed_pop(param_type))
+            .rev()
+            .collect()
     }
 
     pub(crate) fn typed_push(
@@ -113,6 +107,14 @@ impl JvmStackFrame {
             self.push_value::<DUAL_SLOT>(value)
         } else {
             self.push_value::<SINGLE_SLOT>(value)
+        }
+    }
+
+    pub(crate) fn typed_pop(&mut self, value_type: &FieldType) -> Result<Operand, ExecutionError> {
+        if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
+            self.pop_value::<DUAL_SLOT>()
+        } else {
+            self.pop_value::<SINGLE_SLOT>()
         }
     }
 
