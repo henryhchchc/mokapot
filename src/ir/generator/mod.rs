@@ -22,9 +22,10 @@ use crate::{
 
 use crate::analysis::fixed_point::Analyzer;
 
-use self::jvm_frame::{Entry, JvmStackFrame};
+use self::jvm_frame::JvmStackFrame;
 
 use itertools::Itertools;
+use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
 use super::{

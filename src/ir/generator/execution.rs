@@ -9,6 +9,7 @@ use crate::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
         },
+        generator::jvm_frame::StackOperations,
     },
     jvm::{
         ConstantValue,
