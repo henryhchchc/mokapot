@@ -29,9 +29,9 @@ impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
 
     type Err = Infallible;
 
-    type AffectedLocations = BTreeMap<Self::Location, Self::Fact>;
+    type PropagatedFacts = BTreeMap<Self::Location, Self::Fact>;
 
-    fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
+    fn entry_fact(&self) -> Result<Self::PropagatedFacts, Self::Err> {
         Ok(BTreeMap::from([(
             self.cfg.entry_point(),
             PathCondition::one(),
@@ -42,7 +42,7 @@ impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::AffectedLocations, Self::Err> {
+    ) -> Result<Self::PropagatedFacts, Self::Err> {
         let Some(outgoing_edges) = self.cfg.outgoing_edges(*location) else {
             return Ok(BTreeMap::new());
         };

@@ -63,9 +63,9 @@ impl Analyzer for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
     type Fact = JvmStackFrame;
     type Err = MokaIRBrewingError;
-    type AffectedLocations = Vec<(Self::Location, Self::Fact)>;
+    type PropagatedFacts = Vec<(Self::Location, Self::Fact)>;
 
-    fn entry_fact(&self) -> Result<Self::AffectedLocations, Self::Err> {
+    fn entry_fact(&self) -> Result<Self::PropagatedFacts, Self::Err> {
         let first_pc = self
             .body
             .instructions
@@ -87,7 +87,7 @@ impl Analyzer for MokaIRGenerator<'_> {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::AffectedLocations, Self::Err> {
+    ) -> Result<Self::PropagatedFacts, Self::Err> {
         let location = location.to_owned();
         let mut frame = fact.same_frame();
         let insn = self
