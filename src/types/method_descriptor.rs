@@ -167,6 +167,21 @@ mod test {
     }
 
     proptest! {
+        
+        #[test]
+        fn roundtrip(
+            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
+            ret in arb_return_type(),
+        ) {
+            let desc = MethodDescriptor {
+                parameters_types: params,
+                return_type: ret,
+            };
+            let str_desc = desc.descriptor();
+            let parsed = MethodDescriptor::from_str(&str_desc).expect("Failed to parse method descriptor");
+            assert_eq!(desc, parsed);
+        }
+
         #[test]
         fn method_desc_from_str(
             params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
