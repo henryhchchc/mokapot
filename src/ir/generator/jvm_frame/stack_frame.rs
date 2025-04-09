@@ -89,13 +89,14 @@ impl JvmStackFrame {
         &mut self,
         descriptor: &MethodDescriptor,
     ) -> Result<Vec<Operand>, ExecutionError> {
-        descriptor
+        let mut args: Vec<_> = descriptor
             .parameters_types
             .iter()
             .rev()
             .map(|param_type| self.typed_pop(param_type))
-            .rev()
-            .collect()
+            .try_collect()?;
+        args.reverse();
+        Ok(args)
     }
 
     pub(crate) fn typed_push(
