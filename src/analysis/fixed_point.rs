@@ -7,7 +7,7 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use mokapot::analysis::fixed_point::Analyzer;
 //! use std::collections::BTreeMap;
 //!

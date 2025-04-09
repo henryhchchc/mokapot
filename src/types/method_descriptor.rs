@@ -53,6 +53,7 @@ impl Descriptor for MethodDescriptor {
     /// # Examples
     ///
     /// ```
+    /// use std::str::FromStr;
     /// use mokapot::types::method_descriptor::MethodDescriptor;
     ///
     /// // Parse a method descriptor for: int add(int a, int b)

@@ -1,27 +1,28 @@
 //! Module for handling JVM field and method type descriptors.
-//! 
+//!
 //! This module provides types and functionality for parsing and representing JVM type
 //! descriptors according to the JVM specification. It supports primitive types, object
 //! references, and array types.
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! ```rust
-//! use mokapot::types::{FieldType, PrimitiveType};
+//! use mokapot::types::Descriptor;
+//! use mokapot::types::field_type::{FieldType, PrimitiveType};
 //! use std::str::FromStr;
-//! 
+//!
 //! // Parse a primitive type descriptor
 //! let int_type = FieldType::from_str("I").unwrap();
 //! assert!(matches!(int_type, FieldType::Base(PrimitiveType::Int)));
-//! 
+//!
 //! // Parse an object type descriptor
 //! let string_type = FieldType::from_str("Ljava/lang/String;").unwrap();
 //! assert!(matches!(string_type, FieldType::Object(_)));
-//! 
+//!
 //! // Parse an array type descriptor
 //! let int_array = FieldType::from_str("[I").unwrap();
 //! assert!(matches!(int_array, FieldType::Array(_)));
-//! 
+//!
 //! // Create and format a multi-dimensional array type
 //! let matrix = FieldType::array_of(FieldType::Base(PrimitiveType::Double), 2);
 //! assert_eq!(matrix.descriptor(), "[[D");
@@ -29,29 +30,31 @@
 //! ```
 //!
 //! See the JVM specification section 4.3.2 for the complete type descriptor format.
-//! 
+//!
 //! - [`PrimitiveType`] represents Java primitive types like `int`, `boolean`, etc.
 //! - [`FieldType`] represents any valid field type including primitives, object references, and arrays
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! ```
+//! use std::str::FromStr;
+//! use mokapot::types::Descriptor;
 //! use mokapot::types::field_type::{FieldType, PrimitiveType};
 //! use mokapot::jvm::references::ClassRef;
-//! 
+//!
 //! // Working with primitive types
 //! let int_type = FieldType::Base(PrimitiveType::Int);
 //! assert_eq!(int_type.descriptor(), "I");
-//! 
+//!
 //! // Working with object types
 //! let string_type = FieldType::Object(ClassRef::new("java/lang/String"));
 //! assert_eq!(string_type.descriptor(), "Ljava/lang/String;");
 //! assert_eq!(string_type.qualified_name(), "java.lang.String");
-//! 
+//!
 //! // Working with array types
 //! let int_array = FieldType::Base(PrimitiveType::Int).into_array_type();
 //! assert_eq!(int_array.descriptor(), "[I");
-//! 
+//!
 //! // Parsing field descriptors
 //! let object_array = FieldType::from_str("[Ljava/lang/Object;").unwrap();
 //! assert_eq!(object_array.qualified_name(), "java.lang.Object[]");
@@ -183,6 +186,8 @@ impl FromStr for PrimitiveType {
 /// # Examples
 ///
 /// ```
+/// use std::str::FromStr;
+/// use mokapot::types::Descriptor;
 /// use mokapot::types::field_type::{FieldType, PrimitiveType};
 /// use mokapot::jvm::references::ClassRef;
 ///
@@ -193,10 +198,12 @@ impl FromStr for PrimitiveType {
 /// let string_2d_array = FieldType::array_of(string_type, 2); // Creates String[][]
 ///
 /// // Parse from JVM field descriptors
+/// let int_type = FieldType::Base(PrimitiveType::Int);
 /// assert_eq!(FieldType::from_str("I").unwrap(), int_type); // int
 /// assert_eq!(FieldType::from_str("[[Ljava/lang/String;").unwrap(), string_2d_array); // String[][]
 ///
 /// // Convert to descriptors or qualified names
+/// let string_type = FieldType::Object(ClassRef::new("java/lang/String"));
 /// assert_eq!(int_array.descriptor(), "[I");
 /// assert_eq!(string_type.qualified_name(), "java.lang.String");
 /// ```
