@@ -29,7 +29,7 @@ pub struct ClassLoader<P> {
 }
 
 /// A JVM class
-#[doc = see_jvm_spec!(4)]
+#[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, Clone)]
 pub struct Class {
     /// The version of the class file.
@@ -112,7 +112,8 @@ pub struct TypeAnnotation {
     /// Denotes which type of declaration this annotation is on.
     #[doc = see_jvm_spec!(4, 7, 20, 1)]
     pub target_info: annotation::TargetInfo,
-    /// The path to the annotated type.
+    /// The path to the annotated type, describing precisely which part of a compound
+    /// type is annotated (e.g., which type argument in a generic type).
     #[doc = see_jvm_spec!(4, 7, 20, 2)]
     pub target_path: Vec<annotation::TypePathElement>,
     /// The names and values of the annotation's fields.
@@ -159,7 +160,7 @@ pub struct Method {
     pub access_flags: method::AccessFlags,
     /// The name of the method.
     pub name: String,
-    /// The descriptor of the method.
+    /// The descriptor of the method, encoding parameter types and return type.
     pub descriptor: MethodDescriptor,
     /// The class containing the method.
     pub owner: ClassRef,
@@ -175,25 +176,31 @@ pub struct Method {
     pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
     /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime visible parameter annotations.
+    /// The runtime visible annotations on method parameters.
     pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
-    /// The runtime invisible parameter annotations.
+    /// The runtime invisible annotations on method parameters.
     pub runtime_invisible_parameter_annotations: Vec<Vec<Annotation>>,
-    /// The default value of the annotation.
+    /// The default value of the annotation (only for annotation interface methods).
     pub annotation_default: Option<annotation::ElementValue>,
-    /// The parameters of the method.
+    /// The parameters of the method, including names and access flags.
     pub parameters: Vec<method::ParameterInfo>,
-    /// Indicates if the method is synthesized by the compiler.
+    /// Indicates if the method is synthesized by the compiler (not in source).
     pub is_synthetic: bool,
-    /// Indicates if the method is deprecated.
+    /// Indicates if the method is deprecated and should no longer be used.
     pub is_deprecated: bool,
-    /// The generic signature.
+    /// The generic signature for methods with type parameters or generic types.
     pub signature: Option<method::Signature>,
     /// Unrecognized JVM attributes.
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }
 
-/// A JVM module.
+/// A module in the Java Platform Module System (JPMS). Modules are containers for packages
+/// that provide strong encapsulation boundaries. A module is defined in a special class file
+/// named `module-info.class` and includes information about its dependencies, exported packages,
+/// and services it both uses and provides.
+///
+/// Modules were introduced in Java 9 as part of Project Jigsaw to support better componentization
+/// of the Java platform and applications.
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct Module {

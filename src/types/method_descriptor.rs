@@ -1,4 +1,8 @@
 //! Non-generic JVM method descriptors.
+//!
+//! This module provides functionality for parsing and representing JVM method descriptors,
+//! which encode the parameter types and return type of a method.
+#![doc = see_jvm_spec!(4, 3, 3)]
 
 use itertools::Itertools;
 use std::str::FromStr;
@@ -10,8 +14,24 @@ use super::{
     field_type::{FieldType, PrimitiveType},
 };
 
-/// The descriptor of a method.
-/// Consists of the parameters types and the return type.
+/// The descriptor of a method, representing its parameters and return type in JVM format.
+///
+/// A method descriptor encapsulates:
+/// - A list of parameter types in the order they appear in the method signature
+/// - A return type (which can be void)
+///
+/// # Examples
+///
+/// ```
+/// use std::str::FromStr;
+/// use mokapot::types::method_descriptor::MethodDescriptor;
+///
+/// // Parse a method descriptor for: void main(String[] args)
+/// let main_method = MethodDescriptor::from_str("([Ljava/lang/String;)V").unwrap();
+///
+/// // Parse a method descriptor for: int add(int a, int b)
+/// let add_method = MethodDescriptor::from_str("(II)I").unwrap();
+/// ```
 #[doc = see_jvm_spec!(4, 3, 3)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display(
@@ -19,13 +39,25 @@ use super::{
     parameters_types.iter().map(FieldType::descriptor).join(", ")
 )]
 pub struct MethodDescriptor {
-    /// The type of the parameters.
+    /// The types of the method parameters in order of declaration.
+    /// For instance, for a method `foo(int x, String y)`, this would contain
+    /// `[FieldType::Int, FieldType::Object("java/lang/String")]`.
     pub parameters_types: Vec<FieldType>,
-    /// The return type.
+    /// The return type of the method, which can be either a specific type or void.
     pub return_type: ReturnType,
 }
 
 impl Descriptor for MethodDescriptor {
+    /// Returns the descriptor string for this method descriptor.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mokapot::types::method_descriptor::MethodDescriptor;
+    ///
+    /// // Parse a method descriptor for: int add(int a, int b)
+    /// let add_method = MethodDescriptor::from_str("(II)I").unwrap();
+    /// ```
     fn descriptor(&self) -> String {
         format!(
             "({}){}",
@@ -38,14 +70,33 @@ impl Descriptor for MethodDescriptor {
     }
 }
 
-/// Denotes the return type of a method.
+/// The return type of a method in the JVM type system.
+///
+/// In the JVM, a method's return type can be either:
+/// - A specific type (primitive or reference type)
+/// - Void (representing no return value)
+///
+/// # Examples
+///
+/// ```
+/// use mokapot::types::method_descriptor::ReturnType;
+/// use mokapot::types::field_type::PrimitiveType;
+///
+/// // void return type
+/// let void_return = ReturnType::Void;
+///
+/// // int return type
+/// let int_return = ReturnType::Some(PrimitiveType::Int.into());
+/// ```
 #[derive(
     Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display, derive_more::From,
 )]
 pub enum ReturnType {
-    /// The method returns a specific type.
+    /// Represents a method that returns a specific type.
+    /// The contained `FieldType` can be either a primitive type or a reference type.
     Some(FieldType),
-    /// The return type of the method is `void`.
+    /// Represents a void return type (i.e., the method returns no value).
+    /// In JVM descriptor format, this is represented by the character 'V'.
     #[display("void")]
     Void,
 }
@@ -59,10 +110,15 @@ impl Descriptor for ReturnType {
     }
 }
 
+/// Character that starts a method descriptor's parameter list
 const PARAM_START: char = '(';
+/// Character that ends a method descriptor's parameter list
 const PARAM_END: char = ')';
+/// Character that indicates an array type
 const ARRAY_MARKER: char = '[';
+/// Character that starts an object type descriptor
 const OBJECT_MARKER: char = 'L';
+/// Character that ends an object type descriptor
 const OBJECT_END: char = ';';
 
 impl FromStr for MethodDescriptor {
@@ -81,6 +137,10 @@ impl FromStr for MethodDescriptor {
     }
 }
 
+/// Parses the parameter types portion of a method descriptor.
+///
+/// This function processes the characters between '(' and ')', extracting each parameter
+/// type descriptor and converting it into a `FieldType`.
 fn parse_params(
     mut remaining: &str,
 ) -> Result<(Vec<FieldType>, &str), <MethodDescriptor as FromStr>::Err> {
@@ -97,6 +157,20 @@ fn parse_params(
     }
 }
 
+/// Parses a single parameter type from a method descriptor.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+/// - The parsed field type
+/// - The remaining unparsed portion of the input string
+///
+/// # Errors
+///
+/// Returns `InvalidDescriptor` if:
+/// - The input string is empty
+/// - The type descriptor is invalid or malformed
+/// - An object type descriptor is not properly terminated with ';'
 fn parse_next_param(input: &str) -> Result<(FieldType, &str), <MethodDescriptor as FromStr>::Err> {
     let (first_char, remaining) = input
         .chars()
@@ -117,6 +191,19 @@ fn parse_next_param(input: &str) -> Result<(FieldType, &str), <MethodDescriptor 
     }
 }
 
+/// Parses array dimensions from a type descriptor.
+///
+/// Counts consecutive '[' characters to determine the array dimensions.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+/// - The number of array dimensions (number of '[' characters)
+/// - The remaining unparsed portion of the input string
+///
+/// # Errors
+///
+/// Returns `InvalidDescriptor` if the number of array dimensions exceeds 255
 fn parse_array_dimension(input: &str) -> Result<(u8, &str), InvalidDescriptor> {
     let count = input.chars().take_while(|&c| c == ARRAY_MARKER).count();
     let remaining = &input[count..];
@@ -124,7 +211,7 @@ fn parse_array_dimension(input: &str) -> Result<(u8, &str), InvalidDescriptor> {
     Ok((dimension, remaining))
 }
 
-/// An error indicating that the descriptor string is invalid.
+/// An error indicating that a method descriptor string is invalid according to the JVM specification.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 #[error("Invalid descriptor")]
 pub struct InvalidDescriptor;
@@ -141,7 +228,22 @@ impl FromStr for ReturnType {
 }
 
 impl ReturnType {
-    /// Returns the descriptor for return type.
+    /// Returns the JVM descriptor string representation of this return type.
+    ///
+    /// # Returns
+    ///
+    /// * "V" for void return type
+    /// * The field type descriptor for specific return types
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mokapot::types::method_descriptor::ReturnType;
+    /// use mokapot::types::field_type::PrimitiveType;
+    ///
+    /// assert_eq!(ReturnType::Void.descriptor(), "V");
+    /// assert_eq!(ReturnType::Some(PrimitiveType::Int.into()).descriptor(), "I");
+    /// ```
     #[must_use]
     pub fn descriptor(&self) -> String {
         match self {
@@ -167,7 +269,7 @@ mod test {
     }
 
     proptest! {
-        
+
         #[test]
         fn roundtrip(
             params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
