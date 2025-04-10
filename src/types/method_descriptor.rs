@@ -2,6 +2,7 @@
 //!
 //! This module provides functionality for parsing and representing JVM method descriptors,
 //! which encode the parameter types and return type of a method.
+//! 
 #![doc = see_jvm_spec!(4, 3, 3)]
 
 use itertools::Itertools;
@@ -20,6 +21,8 @@ use super::{
 /// - A list of parameter types in the order they appear in the method signature
 /// - A return type (which can be void)
 ///
+#[doc = see_jvm_spec!(4, 3, 3)]
+///
 /// # Examples
 ///
 /// ```
@@ -32,7 +35,6 @@ use super::{
 /// // Parse a method descriptor for: int add(int a, int b)
 /// let add_method = MethodDescriptor::from_str("(II)I").unwrap();
 /// ```
-#[doc = see_jvm_spec!(4, 3, 3)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display(
     "({}) -> {return_type}",

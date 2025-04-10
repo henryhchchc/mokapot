@@ -6,6 +6,7 @@
 //!
 //! - [`PrimitiveType`] represents Java primitive types like `int`, `boolean`, etc.
 //! - [`FieldType`] represents any valid field type including primitives, object references, and arrays
+//! 
 #![doc = see_jvm_spec!(4, 3, 2)]
 //!
 //! # Examples
