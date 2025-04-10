@@ -32,34 +32,6 @@
 //! assert_eq!(matrix.descriptor(), "[[D");
 //! assert_eq!(matrix.qualified_name(), "double[][]");
 //! ```
-//!
-//!
-//! # Examples
-//!
-//! ```
-//! use std::str::FromStr;
-//! use mokapot::types::Descriptor;
-//! use mokapot::types::field_type::{FieldType, PrimitiveType};
-//! use mokapot::jvm::references::ClassRef;
-//!
-//! // Working with primitive types
-//! let int_type = FieldType::Base(PrimitiveType::Int);
-//! assert_eq!(int_type.descriptor(), "I");
-//!
-//! // Working with object types
-//! let string_type = FieldType::Object(ClassRef::new("java/lang/String"));
-//! assert_eq!(string_type.descriptor(), "Ljava/lang/String;");
-//! assert_eq!(string_type.qualified_name(), "java.lang.String");
-//!
-//! // Working with array types
-//! let int_array = FieldType::Base(PrimitiveType::Int).into_array_type();
-//! assert_eq!(int_array.descriptor(), "[I");
-//!
-//! // Parsing field descriptors
-//! let object_array = FieldType::from_str("[Ljava/lang/Object;").unwrap();
-//! assert_eq!(object_array.qualified_name(), "java.lang.Object[]");
-//! ```
-//!
 use std::str::FromStr;
 
 use super::{Descriptor, method_descriptor::InvalidDescriptor};
