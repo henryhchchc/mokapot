@@ -4,6 +4,10 @@
 //! descriptors according to the JVM specification. It supports primitive types, object
 //! references, and array types.
 //!
+//! - [`PrimitiveType`] represents Java primitive types like `int`, `boolean`, etc.
+//! - [`FieldType`] represents any valid field type including primitives, object references, and arrays
+#![doc = see_jvm_spec!(4, 3, 2)]
+//!
 //! # Examples
 //!
 //! ```rust
@@ -29,10 +33,6 @@
 //! assert_eq!(matrix.qualified_name(), "double[][]");
 //! ```
 //!
-//! See the JVM specification section 4.3.2 for the complete type descriptor format.
-//!
-//! - [`PrimitiveType`] represents Java primitive types like `int`, `boolean`, etc.
-//! - [`FieldType`] represents any valid field type including primitives, object references, and arrays
 //!
 //! # Examples
 //!
@@ -84,7 +84,6 @@ use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 /// // Getting type name string
 /// assert_eq!(PrimitiveType::Long.to_string(), "long");
 /// ```
-#[doc = see_jvm_spec!(4, 3, 2)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
