@@ -1,4 +1,4 @@
-// #![cfg(integration_test)]
+#![cfg(integration_test)]
 
 use std::{env, fs, path::PathBuf};
 
