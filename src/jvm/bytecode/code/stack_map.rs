@@ -1,15 +1,18 @@
 use itertools::Itertools;
 
 use crate::jvm::{
+    bytecode::{
+        ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+        raw_attributes,
+    },
     class::ConstantPool,
     code::{ProgramCounter, StackMapFrame, VerificationType},
-    parsing::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes},
 };
 
 impl ClassElement for StackMapFrame {
     type Raw = raw_attributes::StackMapFrameInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         match raw {
             Self::Raw::SameFrame { frame_type } => Ok(Self::SameFrame {
                 offset_delta: u16::from(frame_type),
@@ -126,7 +129,7 @@ impl ClassElement for StackMapFrame {
 
 impl ClassElement for VerificationType {
     type Raw = raw_attributes::VerificationTypeInfo;
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         match raw {
             Self::Raw::Top => Ok(Self::TopVariable),
             Self::Raw::Integer => Ok(Self::IntegerVariable),

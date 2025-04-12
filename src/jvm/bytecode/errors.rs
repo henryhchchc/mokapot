@@ -1,3 +1,7 @@
+use std::{io, num::TryFromIntError};
+
+use derive_more::Display;
+
 use crate::{
     jvm::{class::constant_pool, code::InvalidOffset},
     types::method_descriptor::InvalidDescriptor,
@@ -5,7 +9,7 @@ use crate::{
 
 /// An error that occurs when parsing a Java class file.
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum ParsingError {
     /// An error that occurs when reading from a buffer.
     #[error("Failed to read from buffer: {0}")]
     IO(#[from] std::io::Error),
@@ -62,4 +66,19 @@ pub enum Error {
     /// The instruction list is too long.
     #[error("The instruction list is too long, it should be at most 65536 bytes")]
     TooLongInstructionList,
+}
+
+/// Error that can occur when writing a Raw JVM element to a writer.
+#[derive(Debug, Display, thiserror::Error)]
+pub enum ToWriterError {
+    /// Error from the underlying writer.
+    IO(#[from] io::Error),
+    /// A list of elements is too long that it exceeds the data type for the length.
+    OutOfRange(#[from] TryFromIntError),
+    /// Invalid offset.
+    InvalidOffset(#[from] InvalidOffset),
+    /// Error forwarded from the constant pool.
+    ConstantPool(#[from] crate::jvm::class::constant_pool::Error),
+    /// Other error.
+    Other(&'static str),
 }

@@ -11,11 +11,12 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    Context, Error, ToWriter, ToWriterError,
+    FromReader, ParsingContext, ParsingError, ToWriter,
     attribute::Attribute,
+    errors::ToWriterError,
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
-    reader_utils::{FromReader, ValueReaderExt},
+    reader_utils::ValueReaderExt,
 };
 use crate::{
     jvm::{
@@ -47,7 +48,7 @@ pub(crate) struct LocalVariableTypeAttr {
 impl ClassElement for LineNumberTableEntry {
     type Raw = Self;
 
-    fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
         Ok(raw)
     }
 
@@ -78,7 +79,7 @@ impl ToWriter for LineNumberTableEntry {
 impl ClassElement for ExceptionTableEntry {
     type Raw = raw_attributes::ExceptionTableEntry;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let raw_attributes::ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -125,7 +126,7 @@ impl ClassElement for ExceptionTableEntry {
 
 impl ClassElement for LocalVariableDescAttr {
     type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             start_pc,
             length,
@@ -167,7 +168,7 @@ impl ClassElement for LocalVariableDescAttr {
 
 impl ClassElement for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             start_pc,
             length,
@@ -217,7 +218,7 @@ impl ToWriter for ProgramCounter {
 impl ClassElement for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let raw_attributes::ParameterInfo {
             name_index,
             access_flags,
@@ -227,8 +228,9 @@ impl ClassElement for ParameterInfo {
         } else {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
-        let access_flags = ParameterAccessFlags::from_bits(access_flags)
-            .ok_or(Error::UnknownFlags("ParameterAccessFlags", access_flags))?;
+        let access_flags = ParameterAccessFlags::from_bits(access_flags).ok_or(
+            ParsingError::UnknownFlags("ParameterAccessFlags", access_flags),
+        )?;
         Ok(ParameterInfo { name, access_flags })
     }
 
@@ -249,7 +251,7 @@ impl ClassElement for ParameterInfo {
 impl ClassElement for MethodBody {
     type Raw = Code;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Code {
             max_stack,
             max_locals,

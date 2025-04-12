@@ -5,8 +5,8 @@ use std::io::{self};
 use mokapot::{
     jvm::{
         Class,
+        bytecode::ParsingError,
         class::{self, AccessFlags, RecordComponent},
-        parsing::Error,
         references::ClassRef,
     },
     types::{

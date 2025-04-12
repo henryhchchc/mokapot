@@ -8,10 +8,11 @@ use itertools::Itertools;
 use num_traits::ToBytes;
 
 use super::{
-    Context, Error, ToWriter, ToWriterError,
+    FromReader, ParsingContext, ParsingError, ToWriter,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+    errors::ToWriterError,
     jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt, read_byte_chunk},
+    reader_utils::{ValueReaderExt, read_byte_chunk},
     write_length,
 };
 use crate::{
@@ -161,7 +162,7 @@ macro_rules! parse {
 impl ClassElement for Attribute {
     type Raw = AttributeInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let reader = &mut VecDeque::from(info);
@@ -244,7 +245,7 @@ impl ClassElement for Attribute {
         if reader.is_empty() {
             Ok(result)
         } else {
-            Err(Error::IO(io::Error::new(
+            Err(ParsingError::IO(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
             )))
@@ -333,7 +334,10 @@ impl Attribute {
 }
 
 #[inline]
-fn parse_string<R: Read + ?Sized>(reader: &mut R, ctx: &Context) -> Result<String, Error> {
+fn parse_string<R: Read + ?Sized>(
+    reader: &mut R,
+    ctx: &ParsingContext,
+) -> Result<String, ParsingError> {
     let str_idx = reader.read_value()?;
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }

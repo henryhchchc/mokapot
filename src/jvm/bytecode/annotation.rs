@@ -1,6 +1,9 @@
 use itertools::Itertools;
 
-use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
+use super::{
+    ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+    raw_attributes,
+};
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
@@ -16,14 +19,14 @@ use crate::{
 
 impl ClassElement for TypePathElement {
     type Raw = (u8, u8);
-    fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let (kind, argument_index) = raw;
         match (kind, argument_index) {
             (0, 0) => Ok(Self::Array),
             (1, 0) => Ok(Self::Nested),
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
-            _ => Err(Error::InvalidTypePathKind),
+            _ => Err(ParsingError::InvalidTypePathKind),
         }
     }
 
@@ -40,7 +43,7 @@ impl ClassElement for TypePathElement {
 impl ClassElement for Annotation {
     type Raw = raw_attributes::Annotation;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             type_index,
             element_value_pairs,
@@ -53,7 +56,7 @@ impl ClassElement for Annotation {
                 let element_value = ElementValue::from_raw(raw_value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, Error>>()?;
+            .collect::<Result<_, ParsingError>>()?;
         Ok(Annotation {
             annotation_type,
             element_value_pairs,
@@ -81,7 +84,7 @@ impl ClassElement for Annotation {
 impl ClassElement for TypeAnnotation {
     type Raw = raw_attributes::TypeAnnotation;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             target_info,
             target_path,
@@ -102,7 +105,7 @@ impl ClassElement for TypeAnnotation {
                 let element_value = ClassElement::from_raw(value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, Error>>()?;
+            .collect::<Result<_, ParsingError>>()?;
         Ok(TypeAnnotation {
             annotation_type,
             target_info,
@@ -141,7 +144,7 @@ impl ClassElement for TargetInfo {
     type Raw = raw_attributes::TargetInfo;
 
     #[allow(clippy::enum_glob_use)]
-    fn from_raw(raw: Self::Raw, _ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
         use OffsetOf::{InstanceOf, New};
         use TypeArgumentLocation::*;
         use TypeParameterLocation::*;
@@ -181,7 +184,7 @@ impl ClassElement for TargetInfo {
             Self::Raw::LocalVariable(table) => {
                 let table = table
                     .into_iter()
-                    .map(|(start, len, index)| -> Result<_, Error> {
+                    .map(|(start, len, index)| -> Result<_, ParsingError> {
                         let effective_range = start..(start + len)?;
                         Ok(LocalVariableId {
                             effective_range,
@@ -194,7 +197,7 @@ impl ClassElement for TargetInfo {
             Self::Raw::ResourceVariable(table) => {
                 let table = table
                     .into_iter()
-                    .map(|(start, len, index)| -> Result<_, Error> {
+                    .map(|(start, len, index)| -> Result<_, ParsingError> {
                         let effective_range = start..(start + len)?;
                         Ok(LocalVariableId {
                             effective_range,
@@ -315,7 +318,7 @@ impl ClassElement for TargetInfo {
 impl ClassElement for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let cp = &ctx.constant_pool;
         match raw {
             Self::Raw::Const(
@@ -333,14 +336,14 @@ impl ClassElement for ElementValue {
                     (b'F', it @ Float(_)) => Ok(Self::Primitive(PrimitiveType::Float, it)),
                     (b'D', it @ Double(_)) => Ok(Self::Primitive(PrimitiveType::Double, it)),
                     (b'J', it @ Long(_)) => Ok(Self::Primitive(PrimitiveType::Long, it)),
-                    _ => Err(Error::Other("Constant value type mismatch")),
+                    _ => Err(ParsingError::Other("Constant value type mismatch")),
                 }
             }
             Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
                 constant_pool::Entry::Utf8(s) => Ok(Self::String(s.to_owned())),
-                _ => Err(Error::Other("Expected string constant value")),
+                _ => Err(ParsingError::Other("Expected string constant value")),
             },
-            Self::Raw::Const(_, _) => Err(Error::Other("Invalid constant value tag")),
+            Self::Raw::Const(_, _) => Err(ParsingError::Other("Invalid constant value tag")),
             Self::Raw::Enum {
                 type_name_index,
                 const_name_index,

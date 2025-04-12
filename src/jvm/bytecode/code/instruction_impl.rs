@@ -4,12 +4,14 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
+        bytecode::{
+            ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+        },
         class::{ConstantPool, constant_pool},
         code::{
             Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
             WideInstruction,
         },
-        parsing::{Context, Error, ToWriterError, jvm_element_parser::ClassElement},
         references::ClassRef,
     },
     macros::malform,
@@ -19,7 +21,7 @@ use crate::{
 impl ClassElement for InstructionList<Instruction> {
     type Raw = InstructionList<RawInstruction>;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         raw.into_iter()
             .map(|(pc, raw_insn)| {
                 Instruction::from_raw_instruction(raw_insn, pc, &ctx.constant_pool)
@@ -49,7 +51,7 @@ impl Instruction {
         raw_instruction: RawInstruction,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, ParsingError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
@@ -373,7 +375,7 @@ impl Instruction {
                     name_and_type_index,
                 } = entry
                 else {
-                    Err(Error::MismatchedConstantPoolEntryType {
+                    Err(ParsingError::MismatchedConstantPoolEntryType {
                         expected: "InvokeDynamic",
                         found: entry.constant_kind(),
                     })?

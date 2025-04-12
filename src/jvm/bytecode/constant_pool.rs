@@ -6,12 +6,12 @@ use std::{
 use crate::{
     jvm::{
         ConstantValue, JavaString,
-        class::{ConstantPool, MethodHandle, constant_pool::Entry},
-        parsing::{
-            Error, ToWriter, ToWriterError,
+        bytecode::{
+            ParsingError, ToWriter, ToWriterError,
             reader_utils::{ValueReaderExt, read_byte_chunk},
             write_length,
         },
+        class::{ConstantPool, MethodHandle, constant_pool::Entry},
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
@@ -19,19 +19,19 @@ use crate::{
 };
 
 #[inline]
-const fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, Error> {
-    Err(Error::MismatchedConstantPoolEntryType {
+const fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, ParsingError> {
+    Err(ParsingError::MismatchedConstantPoolEntryType {
         expected,
         found: entry.constant_kind(),
     })
 }
 
 impl ConstantPool {
-    pub(super) fn get_str(&self, index: u16) -> Result<&str, Error> {
+    pub(super) fn get_str(&self, index: u16) -> Result<&str, ParsingError> {
         let entry = self.get_entry(index)?;
         match entry {
             Entry::Utf8(JavaString::Utf8(string)) => Ok(string),
-            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(Error::BrokenUTF8),
+            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ParsingError::BrokenUTF8),
             it => mismatch("Utf8", it),
         }
     }
@@ -41,7 +41,7 @@ impl ConstantPool {
         self.put_entry(entry).map_err(Into::into)
     }
 
-    pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassRef, Error> {
+    pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassRef, ParsingError> {
         let entry = self.get_entry(index)?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
@@ -78,7 +78,10 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(super) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, Error> {
+    pub(super) fn get_constant_value(
+        &self,
+        value_index: u16,
+    ) -> Result<ConstantValue, ParsingError> {
         let entry = self.get_entry(value_index)?;
         match *entry {
             Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
@@ -160,7 +163,7 @@ impl ConstantPool {
         self.put_entry(entry).map_err(Into::into)
     }
 
-    pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, Error> {
+    pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, ParsingError> {
         let entry = self.get_entry(index)?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
@@ -176,7 +179,7 @@ impl ConstantPool {
         self.put_entry(entry).map_err(Into::into)
     }
 
-    pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageRef, Error> {
+    pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageRef, ParsingError> {
         let entry = self.get_entry(index)?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
@@ -194,7 +197,7 @@ impl ConstantPool {
         self.put_entry(entry).map_err(Into::into)
     }
 
-    pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldRef, Error> {
+    pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldRef, ParsingError> {
         let entry = self.get_entry(index)?;
         if let &Entry::FieldRef {
             class_index,
@@ -216,10 +219,10 @@ impl ConstantPool {
     pub(super) fn get_name_and_type<Descriptor>(
         &self,
         index: u16,
-    ) -> Result<(String, Descriptor), Error>
+    ) -> Result<(String, Descriptor), ParsingError>
     where
         Descriptor: FromStr,
-        <Descriptor as FromStr>::Err: Into<Error>,
+        <Descriptor as FromStr>::Err: Into<ParsingError>,
     {
         let entry = self.get_entry(index)?;
         if let &Entry::NameAndType {
@@ -255,7 +258,7 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodRef, Error> {
+    pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParsingError> {
         let entry = self.get_entry(index)?;
         if let &Entry::MethodRef {
             class_index,
@@ -278,7 +281,7 @@ impl ConstantPool {
         }
     }
 
-    pub(super) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, Error> {
+    pub(super) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, ParsingError> {
         #[allow(clippy::enum_glob_use)]
         use MethodHandle::*;
 
@@ -324,7 +327,7 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, Error> {
+    pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, ParsingError> {
         let ClassRef { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
             FieldType::from_str(name.as_str())?
@@ -417,7 +420,7 @@ impl Entry {
 }
 
 impl ToWriter for JavaString {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), super::ToWriterError> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         match self {
             Self::Utf8(str) => {
                 let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
@@ -509,7 +512,7 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::jvm::parsing::ToWriter;
+    use crate::jvm::bytecode::ToWriter;
 
     const MAX_BYTES: usize = 255;
 

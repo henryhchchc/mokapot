@@ -6,7 +6,7 @@ use std::{
 
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
-    jvm::{TypeAnnotation, class::ConstantPool, parsing::Error, references::ClassRef},
+    jvm::{TypeAnnotation, bytecode::ParsingError, class::ConstantPool, references::ClassRef},
     macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
 };
@@ -169,7 +169,10 @@ impl InstructionList<RawInstruction> {
     /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
     /// # Errors
     /// See [`Error`] for possible errors.
-    pub fn lift(self, constant_pool: &ConstantPool) -> Result<InstructionList<Instruction>, Error> {
+    pub fn lift(
+        self,
+        constant_pool: &ConstantPool,
+    ) -> Result<InstructionList<Instruction>, ParsingError> {
         let mut instructions = BTreeMap::new();
         for (pc, raw_instruction) in self {
             let instruction =
@@ -288,7 +291,7 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         field_type: FieldType,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ParsingError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
@@ -305,7 +308,7 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         signature: String,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ParsingError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {

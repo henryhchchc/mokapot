@@ -1,6 +1,8 @@
 use itertools::Itertools;
 
-use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
+use super::{
+    ParsingContext, ParsingError, ToWriterError, jvm_element_parser::ClassElement, raw_attributes,
+};
 use crate::jvm::{
     Module,
     class::{ConstantPool, constant_pool::Entry},
@@ -9,7 +11,7 @@ use crate::jvm::{
 
 impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             requires_index,
             flags,
@@ -48,7 +50,7 @@ impl ClassElement for Require {
 impl ClassElement for Export {
     type Raw = raw_attributes::ExportsInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             exports_index,
             to,
@@ -83,7 +85,7 @@ impl ClassElement for Export {
 impl ClassElement for Open {
     type Raw = raw_attributes::OpensInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             opens_index,
             to,
@@ -118,7 +120,7 @@ impl ClassElement for Open {
 impl ClassElement for Provide {
     type Raw = raw_attributes::ProvidesInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             provides_index,
             with,
@@ -148,7 +150,7 @@ impl ClassElement for Provide {
 impl ClassElement for Module {
     type Raw = raw_attributes::ModuleInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             info_index,
             flags,
@@ -161,7 +163,7 @@ impl ClassElement for Module {
         } = raw;
         let module_info_entry = ctx.constant_pool.get_entry(info_index)?;
         let &Entry::Module { name_index } = module_info_entry else {
-            Err(Error::MismatchedConstantPoolEntryType {
+            Err(ParsingError::MismatchedConstantPoolEntryType {
                 expected: "Module",
                 found: module_info_entry.constant_kind(),
             })?

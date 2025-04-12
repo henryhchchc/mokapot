@@ -3,10 +3,11 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    Context, Error, ToWriter, ToWriterError,
+    FromReader, ParsingContext, ParsingError, ToWriter,
     attribute::{Attribute, AttributeInfo},
+    errors::ToWriterError,
     jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt},
+    reader_utils::ValueReaderExt,
 };
 use crate::{
     jvm::{
@@ -59,7 +60,7 @@ impl ToWriter for FieldInfo {
 impl ClassElement for Field {
     type Raw = FieldInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let FieldInfo {
             access_flags,
             name_index,
@@ -67,7 +68,7 @@ impl ClassElement for Field {
             attributes,
         } = raw;
         let access_flags = field::AccessFlags::from_bits(access_flags)
-            .ok_or(Error::UnknownFlags("FieldAccessFlag", access_flags))?;
+            .ok_or(ParsingError::UnknownFlags("FieldAccessFlag", access_flags))?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let field_type = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
         let owner = ClassRef {

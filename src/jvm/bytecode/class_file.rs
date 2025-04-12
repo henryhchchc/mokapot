@@ -3,23 +3,22 @@ use std::io::{self, Read, Write};
 use itertools::Itertools;
 
 use super::{
-    Context, Error, ToWriter, ToWriterError,
+    FromReader, ParsingContext, ParsingError, ToWriter,
     attribute::{Attribute, AttributeInfo},
+    errors::ToWriterError,
     field_info::FieldInfo,
     jvm_element_parser::ClassElement,
     method_info::MethodInfo,
-    raw_attributes,
-    reader_utils::FromReader,
-    write_length,
+    raw_attributes, write_length,
 };
 use crate::{
     jvm::{
         Class,
+        bytecode::reader_utils::ValueReaderExt,
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
         },
-        parsing::reader_utils::ValueReaderExt,
         references::ClassRef,
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
@@ -48,7 +47,7 @@ impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
     /// See [`Error`] for more information.
-    pub fn from_reader<R>(reader: &mut R) -> Result<Class, Error>
+    pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParsingError>
     where
         R: std::io::Read + ?Sized,
     {
@@ -143,7 +142,7 @@ impl ToWriter for ClassFile {
 }
 
 impl Class {
-    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, Error> {
+    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, ParsingError> {
         let ClassFile {
             minor_version,
             major_version,
@@ -158,7 +157,7 @@ impl Class {
         } = raw;
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
-            .ok_or(Error::UnknownFlags("ClassAccessFlags", access_flags))?;
+            .ok_or(ParsingError::UnknownFlags("ClassAccessFlags", access_flags))?;
         let ClassRef { binary_name } = constant_pool.get_class_ref(this_class)?;
         let super_class = match super_class {
             0 if binary_name == "java/lang/Object" => None,
@@ -167,7 +166,7 @@ impl Class {
             it => Some(constant_pool.get_class_ref(it)?),
         };
 
-        let parsing_context = Context {
+        let parsing_context = ParsingContext {
             constant_pool,
             class_version: version,
             current_class_binary_name: binary_name.clone(),
@@ -323,7 +322,7 @@ impl Class {
 impl ClassElement for BootstrapMethod {
     type Raw = raw_attributes::BootstrapMethod;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             method_ref_idx,
             arguments,
@@ -353,7 +352,7 @@ impl ClassElement for BootstrapMethod {
 impl ClassElement for InnerClassInfo {
     type Raw = raw_attributes::InnerClass;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             info_index,
             outer_class_info_index,
@@ -372,8 +371,9 @@ impl ClassElement for InnerClassInfo {
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let access_flags = NestedClassAccessFlags::from_bits(access_flags)
-            .ok_or(Error::UnknownFlags("NextClassAccessFlags", access_flags))?;
+        let access_flags = NestedClassAccessFlags::from_bits(access_flags).ok_or(
+            ParsingError::UnknownFlags("NextClassAccessFlags", access_flags),
+        )?;
         Ok(Self {
             inner_class,
             outer_class,
@@ -406,7 +406,7 @@ impl ClassElement for InnerClassInfo {
 
 impl ClassElement for RecordComponent {
     type Raw = raw_attributes::RecordComponentInfo;
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             name_index,
             descriptor_index,
@@ -465,7 +465,7 @@ impl ClassElement for RecordComponent {
 impl ClassElement for EnclosingMethod {
     type Raw = raw_attributes::EnclosingMethod;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let Self::Raw {
             class_index,
             method_index,

@@ -4,13 +4,13 @@ use std::{
     iter,
 };
 
-use super::super::{Error, reader_utils::ValueReaderExt};
+use super::super::{ParsingError, reader_utils::ValueReaderExt};
 use crate::{
     jvm::{
+        bytecode::{errors::ToWriterError, reader_utils::PositionTracker, write_length},
         code::{
             InstructionList, InvalidOffset, ProgramCounter, RawInstruction, RawWideInstruction,
         },
-        parsing::{ToWriterError, reader_utils::PositionTracker, write_length},
     },
     macros::malform,
 };
@@ -19,7 +19,7 @@ impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`Error`] for more information.
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, Error> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParsingError> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
         let inner: BTreeMap<_, _> =
@@ -193,7 +193,9 @@ impl RawInstruction {
 
     /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
-    fn read_one<R>(reader: &mut PositionTracker<R>) -> Result<Option<(ProgramCounter, Self)>, Error>
+    fn read_one<R>(
+        reader: &mut PositionTracker<R>,
+    ) -> Result<Option<(ProgramCounter, Self)>, ParsingError>
     where
         PositionTracker<R>: Read,
     {
@@ -201,12 +203,12 @@ impl RawInstruction {
         use RawInstruction::*;
 
         let pc = u16::try_from(reader.position())
-            .map_err(|_| Error::TooLongInstructionList)?
+            .map_err(|_| ParsingError::TooLongInstructionList)?
             .into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => Err(Error::IO(e))?,
+            Err(e) => Err(ParsingError::IO(e))?,
         };
         let instruction = match opcode {
             0x32 => AALoad,
@@ -603,11 +605,11 @@ impl RawInstruction {
                     0xa9 => RawWideInstruction::Ret {
                         index: reader.read_value()?,
                     },
-                    _ => Err(Error::UnexpectedOpCode(wide_opcode))?,
+                    _ => Err(ParsingError::UnexpectedOpCode(wide_opcode))?,
                 };
                 Wide(wide_insn)
             }
-            it => Err(Error::UnexpectedOpCode(it))?,
+            it => Err(ParsingError::UnexpectedOpCode(it))?,
         };
         Ok(Some((pc, instruction)))
     }

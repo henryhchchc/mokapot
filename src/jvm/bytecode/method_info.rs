@@ -3,16 +3,17 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    Error, ToWriter, ToWriterError,
+    FromReader, ParsingError, ToWriter,
     attribute::{Attribute, AttributeInfo},
+    errors::ToWriterError,
     jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt},
+    reader_utils::ValueReaderExt,
 };
 use crate::{
     jvm::{
         Method,
+        bytecode::ParsingContext,
         method::{self},
-        parsing::Context,
         references::ClassRef,
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
@@ -60,15 +61,16 @@ impl ToWriter for MethodInfo {
 impl ClassElement for Method {
     type Raw = MethodInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &Context) -> Result<Self, Error> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
         let MethodInfo {
             access_flags,
             name_index,
             descriptor_index,
             attributes,
         } = raw;
-        let access_flags = method::AccessFlags::from_bits(access_flags)
-            .ok_or(Error::UnknownFlags("MethodAccessFlags", access_flags))?;
+        let access_flags = method::AccessFlags::from_bits(access_flags).ok_or(
+            ParsingError::UnknownFlags("MethodAccessFlags", access_flags),
+        )?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor: MethodDescriptor = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
         let owner = ClassRef {

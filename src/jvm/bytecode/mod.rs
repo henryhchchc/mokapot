@@ -13,26 +13,31 @@ mod raw_attributes;
 mod reader_utils;
 
 use std::{
-    io::{self, Write},
+    io::{self, Read, Write},
     num::TryFromIntError,
 };
 
-use derive_more::Display;
-pub use errors::Error;
+pub use errors::ParsingError;
+use errors::ToWriterError;
 use num_traits::ToBytes;
 
-use super::code::InvalidOffset;
 use crate::jvm::class::{ConstantPool, Version};
 
 /// Context used to parse a class file.
 #[derive(Debug, Clone)]
-pub struct Context {
+pub struct ParsingContext {
     /// The constant pool of the class file.
     pub constant_pool: ConstantPool,
     /// The version of the class file being parsed.
     pub class_version: Version,
     /// The binary name of the class being parsed.
     pub current_class_binary_name: String,
+}
+
+trait FromReader {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self>
+    where
+        Self: Sized;
 }
 
 /// Trait for writing a Raw JVM element to a writer.
@@ -44,25 +49,7 @@ pub trait ToWriter {
     fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError>;
 }
 
-/// Error that can occur when writing a Raw JVM element to a writer.
-#[derive(Debug, Display, thiserror::Error)]
-pub enum ToWriterError {
-    /// Error from the underlying writer.
-    IO(#[from] io::Error),
-    /// A list of elements is too long that it exceeds the data type for the length.
-    OutOfRange(#[from] TryFromIntError),
-    /// Invalid offset.
-    InvalidOffset(#[from] InvalidOffset),
-    /// Error forwarded from the constant pool.
-    ConstantPool(#[from] crate::jvm::class::constant_pool::Error),
-    /// Other error.
-    Other(&'static str),
-}
-
-pub(in crate::jvm::parsing) fn write_length<Len>(
-    writer: &mut impl Write,
-    length: usize,
-) -> Result<(), ToWriterError>
+fn write_length<Len>(writer: &mut impl Write, length: usize) -> Result<(), ToWriterError>
 where
     usize: TryInto<Len, Error = TryFromIntError>,
     Len: ToBytes,

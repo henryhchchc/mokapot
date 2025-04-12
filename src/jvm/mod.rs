@@ -12,13 +12,13 @@ use crate::{
 };
 
 pub mod annotation;
+pub mod bytecode;
 pub mod class;
 pub mod class_loader;
 pub mod code;
 pub mod field;
 pub mod method;
 pub mod module;
-pub mod parsing;
 pub mod references;
 
 /// A class loader that can load classes from a list of class paths.

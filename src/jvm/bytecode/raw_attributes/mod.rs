@@ -3,13 +3,14 @@ use std::io::Write;
 use std::io::prelude::Read;
 use std::result::Result;
 
-use super::ToWriter;
-use super::ToWriterError;
-use super::attribute::AttributeInfo;
-use super::reader_utils::FromReader;
-use super::reader_utils::ValueReaderExt;
-use super::reader_utils::read_byte_chunk;
+use super::FromReader;
 use super::write_length;
+use super::{
+    ToWriter,
+    attribute::AttributeInfo,
+    errors::ToWriterError,
+    reader_utils::{ValueReaderExt, read_byte_chunk},
+};
 use crate::jvm::code::ProgramCounter;
 use crate::macros::see_jvm_spec;
 use crate::utils::enum_discriminant;

@@ -5,8 +5,8 @@ use std::io::{self, Read};
 use crate::{
     jvm::{
         JavaString,
+        bytecode::{ToWriter, errors::ToWriterError},
         class::ConstantPool,
-        parsing::{ToWriter, ToWriterError},
     },
     macros::see_jvm_spec,
     utils::enum_discriminant,
@@ -338,7 +338,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::jvm::parsing::constant_pool::tests::arb_constant_pool_bytes;
+    use crate::jvm::bytecode::constant_pool::tests::arb_constant_pool_bytes;
 
     proptest! {
 

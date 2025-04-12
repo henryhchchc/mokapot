@@ -7,7 +7,7 @@ macro_rules! extract_attributes {
          $( match $attr_custom: pat => $var_custom: block, )*
          else let $unrecognized:ident
     }) => {
-        use crate::jvm::parsing::attribute::Attribute;
+        use crate::jvm::bytecode::attribute::Attribute;
         $( let mut $var = None; )*
         $( let mut $var_true = false; )*
         let mut $unrecognized = Vec::new();
@@ -22,7 +22,7 @@ macro_rules! extract_attributes {
                             " in a ",
                             $env
                         );
-                        Err(Error::Other(message))?;
+                        Err(ParsingError::Other(message))?;
                     },
                 )*
                 $(
@@ -35,7 +35,7 @@ macro_rules! extract_attributes {
                         $unrecognized.push((name, bytes));
                     }
                     unexpected => {
-                        Err(Error::UnexpectedAttribute(
+                        Err(ParsingError::UnexpectedAttribute(
                             unexpected.name().to_owned(),
                             $env.to_owned()
                         ))?;
@@ -49,7 +49,7 @@ macro_rules! extract_attributes {
 
 macro_rules! malform {
     ($msg:expr_2021) => {
-        Err(Error::Other($msg))?
+        Err(ParsingError::Other($msg))?
     };
 }
 
