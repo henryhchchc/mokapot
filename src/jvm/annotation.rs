@@ -1,12 +1,11 @@
 //! Module for the APIs for the annotation in JVM.
-use crate::{
-    macros::see_jvm_spec,
-    types::{field_type::PrimitiveType, method_descriptor::ReturnType},
-};
-
 use super::{
     Annotation, ConstantValue, JavaString,
     code::{LocalVariableId, ProgramCounter},
+};
+use crate::{
+    macros::see_jvm_spec,
+    types::{field_type::PrimitiveType, method_descriptor::ReturnType},
 };
 
 /// A value of an annotation field.

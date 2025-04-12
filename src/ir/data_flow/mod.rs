@@ -4,9 +4,8 @@ use std::collections::BTreeSet;
 
 use itertools::Itertools;
 
-use crate::jvm::code::ProgramCounter;
-
 use super::{DefUseChain, Identifier, LocalValue, MokaIRMethod};
+use crate::jvm::code::ProgramCounter;
 
 impl<'a> DefUseChain<'a> {
     /// Create a new def-use graph from a method.

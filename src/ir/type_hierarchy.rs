@@ -3,9 +3,8 @@ use std::collections::{HashMap, HashSet};
 
 use petgraph::visit::{Control, DfsEvent, Reversed, depth_first_search};
 
-use crate::jvm::{Class, references::ClassRef};
-
 use super::{ClassHierarchy, InterfaceImplHierarchy};
+use crate::jvm::{Class, references::ClassRef};
 
 impl ClassHierarchy {
     /// Creates a new [`ClassHierarchy`] from a list of classes.

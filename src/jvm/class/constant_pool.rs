@@ -335,9 +335,10 @@ impl Entry {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::jvm::parsing::constant_pool::tests::arb_constant_pool_bytes;
-    use proptest::prelude::*;
 
     proptest! {
 

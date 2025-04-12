@@ -316,9 +316,8 @@ mod test {
     use proptest::collection::btree_set;
     use proptest::prelude::*;
 
-    use crate::ir::control_flow::path_condition::MinTerm;
-
     use super::{BooleanVariable, PathCondition};
+    use crate::ir::control_flow::path_condition::MinTerm;
 
     impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
         type Parameters = (u32, bool);

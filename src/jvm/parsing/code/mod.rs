@@ -10,6 +10,13 @@ use std::{
 
 use itertools::Itertools;
 
+use super::{
+    Context, Error, ToWriter, ToWriterError,
+    attribute::Attribute,
+    jvm_element_parser::ClassElement,
+    raw_attributes::{self, Code},
+    reader_utils::{FromReader, ValueReaderExt},
+};
 use crate::{
     jvm::{
         class::ConstantPool,
@@ -21,14 +28,6 @@ use crate::{
     },
     macros::extract_attributes,
     types::{Descriptor, field_type::FieldType},
-};
-
-use super::{
-    Context, Error, ToWriter, ToWriterError,
-    attribute::Attribute,
-    jvm_element_parser::ClassElement,
-    raw_attributes::{self, Code},
-    reader_utils::{FromReader, ValueReaderExt},
 };
 
 #[derive(Debug)]

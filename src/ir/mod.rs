@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
 pub use moka_instruction::*;
 
+use self::control_flow::ControlTransfer;
 use crate::{
     jvm::{
         code::{ExceptionTableEntry, InstructionList, ProgramCounter},
@@ -24,8 +25,6 @@ use crate::{
     },
     types::method_descriptor::MethodDescriptor,
 };
-
-use self::control_flow::ControlTransfer;
 
 /// Represents a JVM method where the instructions have been converted to Moka IR.
 #[derive(Debug, Clone)]

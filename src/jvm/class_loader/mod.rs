@@ -2,9 +2,8 @@
 
 use std::{borrow::Borrow, ops::Deref};
 
-use crate::utils::Cache;
-
 use super::{Class, ClassLoader};
+use crate::utils::Cache;
 
 /// An error that can occur while loading a class.
 #[derive(thiserror::Error, Debug)]

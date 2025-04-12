@@ -1,11 +1,10 @@
 //! References to JVM elements.
 
+use super::Method;
 use crate::types::{
     field_type::FieldType,
     method_descriptor::{MethodDescriptor, ReturnType},
 };
-
-use super::Method;
 
 /// A reference to a [`Class`](crate::jvm::Class).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, derive_more::Display)]
@@ -81,10 +80,10 @@ pub struct PackageRef {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::tests::{arb_field_type, arb_identifier};
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::tests::{arb_field_type, arb_identifier};
 
     pub(crate) fn arb_class_ref() -> impl Strategy<Value = ClassRef> {
         arb_identifier().prop_map(ClassRef::new)

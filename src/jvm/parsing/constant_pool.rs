@@ -506,10 +506,10 @@ impl ToWriter for Entry {
 #[cfg(test)]
 pub(crate) mod tests {
 
-    use crate::jvm::parsing::ToWriter;
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::jvm::parsing::ToWriter;
 
     const MAX_BYTES: usize = 255;
 

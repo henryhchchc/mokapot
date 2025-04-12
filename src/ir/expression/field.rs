@@ -60,10 +60,10 @@ impl Access {
 #[cfg(test)]
 mod tests {
 
-    use crate::{ir::test::arb_argument, jvm::references::tests::arb_field_ref};
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::{ir::test::arb_argument, jvm::references::tests::arb_field_ref};
 
     proptest! {
 

@@ -2,6 +2,16 @@ use std::io::{self, Read, Write};
 
 use itertools::Itertools;
 
+use super::{
+    Context, Error, ToWriter, ToWriterError,
+    attribute::{Attribute, AttributeInfo},
+    field_info::FieldInfo,
+    jvm_element_parser::ClassElement,
+    method_info::MethodInfo,
+    raw_attributes,
+    reader_utils::FromReader,
+    write_length,
+};
 use crate::{
     jvm::{
         Class,
@@ -14,17 +24,6 @@ use crate::{
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
     types::Descriptor,
-};
-
-use super::{
-    Context, Error, ToWriter, ToWriterError,
-    attribute::{Attribute, AttributeInfo},
-    field_info::FieldInfo,
-    jvm_element_parser::ClassElement,
-    method_info::MethodInfo,
-    raw_attributes,
-    reader_utils::FromReader,
-    write_length,
 };
 
 /// The raw representation of a class file.

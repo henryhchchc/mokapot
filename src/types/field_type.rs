@@ -6,7 +6,7 @@
 //!
 //! - [`PrimitiveType`] represents Java primitive types like `int`, `boolean`, etc.
 //! - [`FieldType`] represents any valid field type including primitives, object references, and arrays
-//! 
+//!
 #![doc = see_jvm_spec!(4, 3, 2)]
 //!
 //! # Examples
@@ -267,9 +267,8 @@ pub struct TypeReference(pub FieldType);
 mod tests {
     use proptest::prelude::*;
 
-    use crate::tests::{arb_identifier, arb_non_array_field_type};
-
     use super::*;
+    use crate::tests::{arb_identifier, arb_non_array_field_type};
 
     #[test]
     fn primitive_type_descriptor() {

@@ -105,8 +105,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::ValueReaderExt;
     use std::io::ErrorKind::UnexpectedEof;
+
+    use super::ValueReaderExt;
 
     #[test]
     fn read_bytes_success() {

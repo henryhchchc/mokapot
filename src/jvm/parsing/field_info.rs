@@ -2,6 +2,12 @@ use std::io::{self, Read};
 
 use itertools::Itertools;
 
+use super::{
+    Context, Error, ToWriter, ToWriterError,
+    attribute::{Attribute, AttributeInfo},
+    jvm_element_parser::ClassElement,
+    reader_utils::{FromReader, ValueReaderExt},
+};
 use crate::{
     jvm::{
         Field,
@@ -10,13 +16,6 @@ use crate::{
     },
     macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
     types::Descriptor,
-};
-
-use super::{
-    Context, Error, ToWriter, ToWriterError,
-    attribute::{Attribute, AttributeInfo},
-    jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt},
 };
 
 /// The raw representation of a `field_info` structure.

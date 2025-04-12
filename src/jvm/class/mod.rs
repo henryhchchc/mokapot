@@ -6,18 +6,17 @@ use std::borrow::Borrow;
 
 use bitflags::bitflags;
 
-use crate::{
-    macros::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
-    utils::enum_discriminant,
-};
-
 use super::{
     Annotation, Class, ConstantValue, Field, Method,
     annotation::ElementValue,
     field,
     parsing::Error,
     references::{ClassRef, FieldRef, MethodRef},
+};
+use crate::{
+    macros::see_jvm_spec,
+    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
+    utils::enum_discriminant,
 };
 
 /// A generic type signature for a class.

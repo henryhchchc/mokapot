@@ -1,12 +1,11 @@
 use itertools::Itertools;
 
+use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 use crate::jvm::{
     Module,
     class::{ConstantPool, constant_pool::Entry},
     module::{Export, Open, Provide, Require},
 };
-
-use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;

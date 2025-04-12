@@ -5,12 +5,11 @@ use std::{collections::HashSet, fs::File, io::BufReader};
 #[cfg(feature = "jar")]
 use zip::{ZipArchive, result::ZipError};
 
+use super::{ClassPath, Error};
 use crate::{
     analysis::ClassRefs,
     jvm::{Class, references::ClassRef},
 };
-
-use super::{ClassPath, Error};
 /// A class path that searches for classes in a directory.
 #[derive(Debug)]
 pub struct DirectoryClassPath {

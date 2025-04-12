@@ -2,6 +2,12 @@ use std::io::{self, Read};
 
 use itertools::Itertools;
 
+use super::{
+    Error, ToWriter, ToWriterError,
+    attribute::{Attribute, AttributeInfo},
+    jvm_element_parser::ClassElement,
+    reader_utils::{FromReader, ValueReaderExt},
+};
 use crate::{
     jvm::{
         Method,
@@ -11,13 +17,6 @@ use crate::{
     },
     macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
     types::{Descriptor, method_descriptor::MethodDescriptor},
-};
-
-use super::{
-    Error, ToWriter, ToWriterError,
-    attribute::{Attribute, AttributeInfo},
-    jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt},
 };
 
 /// The raw representation of a `method_info` structure.

@@ -7,6 +7,13 @@ use std::{
 use itertools::Itertools;
 use num_traits::ToBytes;
 
+use super::{
+    Context, Error, ToWriter, ToWriterError,
+    code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+    jvm_element_parser::ClassElement,
+    reader_utils::{FromReader, ValueReaderExt, read_byte_chunk},
+    write_length,
+};
 use crate::{
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
@@ -17,14 +24,6 @@ use crate::{
         references::{ClassRef, PackageRef},
     },
     macros::see_jvm_spec,
-};
-
-use super::{
-    Context, Error, ToWriter, ToWriterError,
-    code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    jvm_element_parser::ClassElement,
-    reader_utils::{FromReader, ValueReaderExt, read_byte_chunk},
-    write_length,
 };
 
 /// Represent an attribute of a class file, method, field, or code.

@@ -2,15 +2,14 @@
 
 pub mod path_condition;
 
+use std::collections::{BTreeMap, BTreeSet};
+
+use self::path_condition::{NormalizedPredicate, PathCondition, Value};
+use super::ControlFlowGraph;
 use crate::{
     analysis::fixed_point::Analyzer,
     jvm::{code::ProgramCounter, references::ClassRef},
 };
-use std::collections::{BTreeMap, BTreeSet};
-
-use self::path_condition::{NormalizedPredicate, PathCondition, Value};
-
-use super::ControlFlowGraph;
 
 /// The kind of a control transfer.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

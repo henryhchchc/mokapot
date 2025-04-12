@@ -4,13 +4,12 @@ use std::{
     ops::{Bound, Range, RangeInclusive},
 };
 
+use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
     jvm::{TypeAnnotation, class::ConstantPool, parsing::Error, references::ClassRef},
     macros::{malform, see_jvm_spec},
     types::field_type::FieldType,
 };
-
-use super::{Instruction, ProgramCounter, RawInstruction};
 
 /// The body of a method.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -183,13 +182,13 @@ impl InstructionList<RawInstruction> {
 
 #[cfg(test)]
 mod test {
+    use Instruction::*;
+
+    use super::MethodBody;
     use crate::{
         ir::MokaInstruction,
         jvm::code::{Instruction, InstructionList},
     };
-
-    use super::MethodBody;
-    use Instruction::*;
 
     #[test]
     fn instruction_at() {

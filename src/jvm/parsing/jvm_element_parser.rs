@@ -1,8 +1,7 @@
 use bitflags::Flags;
 
-use crate::jvm::class::ConstantPool;
-
 use super::{Context, Error, ToWriter, ToWriterError};
+use crate::jvm::class::ConstantPool;
 
 pub(super) trait ClassElement: Sized {
     type Raw: Sized;

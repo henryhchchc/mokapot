@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 
 use super::{Identifier, Operand};
-
 use crate::{
     jvm::{
         ConstantValue,

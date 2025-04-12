@@ -84,9 +84,10 @@ impl<K, V> Cache<K, V> {
 mod tests {
     use std::sync::atomic::{self, AtomicUsize};
 
-    use super::*;
     use proptest::prelude::*;
     use rayon::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

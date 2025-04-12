@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
+use super::ProgramCounter;
 use crate::{
     jvm::{
         ConstantValue,
@@ -12,8 +13,6 @@ use crate::{
     },
     utils::enum_discriminant,
 };
-
-use super::ProgramCounter;
 
 /// A JVM instruction.
 #[doc = see_jvm_spec!(6, 5)]

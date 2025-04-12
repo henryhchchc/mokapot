@@ -1,5 +1,6 @@
-use itertools::Itertools;
 use std::{collections::BTreeSet, iter::once};
+
+use itertools::Itertools;
 
 use crate::{
     ir::{Identifier, Operand},

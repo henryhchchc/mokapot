@@ -82,10 +82,10 @@ impl Operation {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ir::test::arb_argument, tests::arb_field_type};
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::{ir::test::arb_argument, tests::arb_field_type};
 
     fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Operand>) {
         let uses = op.uses();

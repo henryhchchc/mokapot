@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
+use super::super::Operand;
 use crate::ir::Identifier;
 use crate::types::field_type::FieldType;
-
-use super::super::Operand;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -89,10 +88,10 @@ impl Operation {
 #[cfg(test)]
 mod tests {
 
-    use crate::{ir::test::arb_argument, tests::arb_field_type};
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::{ir::test::arb_argument, tests::arb_field_type};
 
     proptest! {
 

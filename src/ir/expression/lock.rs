@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
-use crate::ir::Identifier;
-
 use super::super::Operand;
+use crate::ir::Identifier;
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -28,10 +27,10 @@ impl Operation {
 #[cfg(test)]
 mod tests {
 
-    use crate::ir::test::arb_argument;
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::ir::test::arb_argument;
 
     proptest! {
 

@@ -7,6 +7,18 @@ use std::{
     mem,
 };
 
+use itertools::Itertools;
+use jvm_frame::Entry;
+pub use jvm_frame::ExecutionError;
+
+use self::jvm_frame::JvmStackFrame;
+use super::{
+    ControlFlowGraph,
+    control_flow::{ControlTransfer, Edge},
+    expression::Expression,
+};
+use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
+use crate::analysis::fixed_point::Analyzer;
 use crate::{
     ir::control_flow::path_condition::{
         BooleanVariable, NormalizedPredicate, PathCondition, Value,
@@ -19,21 +31,6 @@ use crate::{
     },
     types::method_descriptor::MethodDescriptor,
 };
-
-use crate::analysis::fixed_point::Analyzer;
-
-use self::jvm_frame::JvmStackFrame;
-
-use itertools::Itertools;
-use jvm_frame::Entry;
-pub use jvm_frame::ExecutionError;
-
-use super::{
-    ControlFlowGraph,
-    control_flow::{ControlTransfer, Edge},
-    expression::Expression,
-};
-use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]

@@ -3,10 +3,6 @@ use std::io::Write;
 use std::io::prelude::Read;
 use std::result::Result;
 
-use crate::jvm::code::ProgramCounter;
-use crate::macros::see_jvm_spec;
-use crate::utils::enum_discriminant;
-
 use super::ToWriter;
 use super::ToWriterError;
 use super::attribute::AttributeInfo;
@@ -14,6 +10,9 @@ use super::reader_utils::FromReader;
 use super::reader_utils::ValueReaderExt;
 use super::reader_utils::read_byte_chunk;
 use super::write_length;
+use crate::jvm::code::ProgramCounter;
+use crate::macros::see_jvm_spec;
+use crate::utils::enum_discriminant;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]

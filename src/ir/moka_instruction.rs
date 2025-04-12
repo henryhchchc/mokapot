@@ -4,10 +4,10 @@ use std::{
     ops::BitOr,
 };
 
-use crate::jvm::code::ProgramCounter;
 use itertools::{Either, Itertools};
 
 use super::expression::{Condition, Expression};
+use crate::jvm::code::ProgramCounter;
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -222,8 +222,9 @@ impl From<LocalValue> for Identifier {
 
 #[cfg(test)]
 pub(super) mod test {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]
@@ -243,9 +244,10 @@ pub(super) mod test {
 
     #[test]
     fn value_ref_merge() {
+        use std::collections::BTreeSet;
+
         use super::Identifier::*;
         use super::Operand::*;
-        use std::collections::BTreeSet;
 
         assert_eq!(Just(This) | Just(This), Just(This));
         assert_eq!(
@@ -276,9 +278,10 @@ pub(super) mod test {
 
     #[test]
     fn value_ref_iter() {
+        use std::collections::BTreeSet;
+
         use super::Identifier::*;
         use super::Operand::*;
-        use std::collections::BTreeSet;
 
         assert_eq!(
             Just(This).into_iter().collect::<BTreeSet<_>>(),
@@ -298,9 +301,10 @@ pub(super) mod test {
 
     #[test]
     fn value_ref_iter_over_refs() {
+        use std::collections::BTreeSet;
+
         use super::Identifier::*;
         use super::Operand::*;
-        use std::collections::BTreeSet;
 
         assert_eq!(
             (&Just(This)).into_iter().collect::<BTreeSet<_>>(),

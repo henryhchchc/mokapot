@@ -91,10 +91,10 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use crate::{jvm::references::ClassRef, tests::arb_identifier};
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::{jvm::references::ClassRef, tests::arb_identifier};
 
     fn empty_method(name: String) -> Method {
         Method {

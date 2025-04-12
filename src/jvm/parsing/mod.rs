@@ -17,12 +17,12 @@ use std::{
     num::TryFromIntError,
 };
 
-use crate::jvm::class::{ConstantPool, Version};
 use derive_more::Display;
 pub use errors::Error;
 use num_traits::ToBytes;
 
 use super::code::InvalidOffset;
+use crate::jvm::class::{ConstantPool, Version};
 
 /// Context used to parse a class file.
 #[derive(Debug, Clone)]

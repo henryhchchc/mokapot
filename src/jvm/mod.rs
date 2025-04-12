@@ -2,14 +2,13 @@
 
 use itertools::Itertools;
 
-use crate::{
-    macros::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
-};
-
 use self::{
     class::MethodHandle,
     references::{ClassRef, PackageRef},
+};
+use crate::{
+    macros::see_jvm_spec,
+    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 pub mod annotation;

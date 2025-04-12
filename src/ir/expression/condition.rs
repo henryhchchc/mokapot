@@ -74,10 +74,10 @@ impl Condition {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::test::arb_argument;
+    use proptest::prelude::*;
 
     use super::*;
-    use proptest::prelude::*;
+    use crate::ir::test::arb_argument;
 
     fn check_uses(cond: &Condition, ids: &BTreeSet<Identifier>) {
         let cond_ids = cond.uses();

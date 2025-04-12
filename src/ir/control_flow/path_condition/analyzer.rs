@@ -1,12 +1,11 @@
 use std::{collections::BTreeMap, convert::Infallible, fmt::Display};
 
+use super::{BooleanVariable, PathCondition};
 use crate::{
     analysis::fixed_point,
     ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer},
     jvm::{ConstantValue, code::ProgramCounter},
 };
-
-use super::{BooleanVariable, PathCondition};
 
 /// An analyzer for path conditions.
 #[derive(Debug)]

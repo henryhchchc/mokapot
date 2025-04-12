@@ -2,18 +2,18 @@
 //!
 //! This module provides functionality for parsing and representing JVM method descriptors,
 //! which encode the parameter types and return type of a method.
-//! 
+//!
 #![doc = see_jvm_spec!(4, 3, 3)]
 
-use itertools::Itertools;
 use std::str::FromStr;
 
-use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
+use itertools::Itertools;
 
 use super::{
     Descriptor,
     field_type::{FieldType, PrimitiveType},
 };
+use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
 
 /// The descriptor of a method, representing its parameters and return type in JVM format.
 ///
@@ -257,9 +257,9 @@ impl ReturnType {
 }
 #[cfg(test)]
 mod test {
-    use super::*;
     use proptest::prelude::*;
 
+    use super::*;
     use crate::{tests::arb_field_type, types::field_type::FieldType};
 
     const MAX_PARAMS: usize = 10;

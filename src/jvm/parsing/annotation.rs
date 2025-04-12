@@ -1,5 +1,6 @@
 use itertools::Itertools;
 
+use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
@@ -12,8 +13,6 @@ use crate::{
     },
     types::{Descriptor, field_type::PrimitiveType},
 };
-
-use super::{Context, Error, ToWriterError, jvm_element_parser::ClassElement, raw_attributes};
 
 impl ClassElement for TypePathElement {
     type Raw = (u8, u8);

@@ -1,9 +1,8 @@
 //! Modules in the JPMS.
 use bitflags::bitflags;
 
-use crate::macros::see_jvm_spec;
-
 use super::references::{ClassRef, ModuleRef, PackageRef};
+use crate::macros::see_jvm_spec;
 
 /// A service provided by a module.
 #[doc = see_jvm_spec!(4, 7, 25)]

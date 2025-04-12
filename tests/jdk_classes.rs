@@ -1,5 +1,7 @@
 // #![cfg(integration_test)]
 
+use std::{env, fs, path::PathBuf};
+
 use itertools::{Either, Itertools};
 use mokapot::{
     ir::{MokaIRMethodExt, control_flow::ControlTransfer},
@@ -7,7 +9,6 @@ use mokapot::{
     types::Descriptor,
 };
 use rayon::prelude::*;
-use std::{env, fs, path::PathBuf};
 
 #[test]
 #[ignore = "CI Only"]
