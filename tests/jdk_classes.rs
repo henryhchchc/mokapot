@@ -1,5 +1,3 @@
-#![cfg(integration_test)]
-
 use std::{env, fs, path::PathBuf};
 
 use itertools::{Either, Itertools};

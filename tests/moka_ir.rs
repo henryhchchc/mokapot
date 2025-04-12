@@ -1,5 +1,3 @@
-#![cfg(integration_test)]
-
 use mokapot::{
     ir::{
         DefUseChain, Identifier, LocalValue, MokaIRMethodExt, MokaInstruction, Operand,
@@ -11,11 +9,15 @@ use petgraph::dot::Dot;
 use proptest::{arbitrary::any, proptest};
 
 fn get_test_class() -> Class {
-    let mut bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
-    ))
-    .as_slice();
+    let mut bytes = if cfg!(integration_test) {
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
+        ))
+        .as_slice()
+    } else {
+        &[]
+    };
     Class::from_reader(&mut bytes).unwrap()
 }
 
@@ -29,11 +31,13 @@ fn get_test_method() -> Method {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn load_test_method() {
     get_test_method();
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn brew_ir() {
     let class = get_test_class();
     let method = get_test_method();

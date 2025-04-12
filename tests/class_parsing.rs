@@ -1,5 +1,3 @@
-#![cfg(integration_test)]
-
 use std::io::{self};
 
 use mokapot::{
@@ -18,19 +16,24 @@ use mokapot::{
 #[macro_export]
 macro_rules! test_data_class {
     ($folder:literal, $class_name:literal) => {
-        include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/",
-            $folder,
-            "/java_classes/",
-            $class_name,
-            ".class"
-        ))
-        .as_slice()
+        if cfg!(integration_test) {
+            include_bytes!(concat!(
+                env!("OUT_DIR"),
+                "/",
+                $folder,
+                "/java_classes/",
+                $class_name,
+                ".class"
+            ))
+            .as_slice()
+        } else {
+            &[]
+        }
     };
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn test_parse_my_class() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
     let my_class = Class::from_reader(&mut bytes).expect("Failed to parse class");
@@ -74,6 +77,7 @@ fn test_parse_my_class() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn from_bytes_to_class_and_wround() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/MyClass");
     let class = Class::from_reader(&mut bytes).unwrap();
@@ -85,6 +89,7 @@ fn from_bytes_to_class_and_wround() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn test_anno() {
     for mut bytes in [
         test_data_class!("mokapot", "org/mokapot/test/Anno"),
@@ -99,6 +104,7 @@ fn test_anno() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn test_complicated_class() {
     for mut bytes in [
         test_data_class!("mokapot", "org/mokapot/test/ComplicatedClass"),
@@ -114,6 +120,7 @@ fn test_complicated_class() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn parse_module_info() {
     let mut bytes = test_data_class!("mokapot", "module-info");
     let class = Class::from_reader(&mut bytes).expect("Fail to parse module-info");
@@ -125,6 +132,7 @@ fn parse_module_info() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn parse_record() {
     let mut bytes = test_data_class!("mokapot", "org/mokapot/test/RecordTest");
     let class = Class::from_reader(&mut bytes).unwrap();
@@ -157,6 +165,7 @@ fn parse_record() {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn not_a_class_file() {
     let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
     assert!(matches!(
