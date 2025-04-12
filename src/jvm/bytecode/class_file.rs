@@ -46,7 +46,7 @@ const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
 impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
-    /// See [`Error`] for more information.
+    /// See [`ParsingError`] for more information.
     pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParsingError>
     where
         R: std::io::Read + ?Sized,

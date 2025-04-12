@@ -168,7 +168,7 @@ impl<I> InstructionList<I> {
 impl InstructionList<RawInstruction> {
     /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
     /// # Errors
-    /// See [`Error`] for possible errors.
+    /// See [`ParsingError`] for possible errors.
     pub fn lift(
         self,
         constant_pool: &ConstantPool,

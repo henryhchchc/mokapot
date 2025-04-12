@@ -42,7 +42,7 @@ impl ConstantPool {
     /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one.
     #[doc = see_jvm_spec!(4, 1)]
     /// # Errors
-    /// See [`Error`](super::super::parsing::Error) for more information.
+    /// See [`io::Error`](std::io::Error) for more information.
     pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
     where
         R: Read + ?Sized,

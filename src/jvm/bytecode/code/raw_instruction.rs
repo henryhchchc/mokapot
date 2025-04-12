@@ -18,7 +18,7 @@ use crate::{
 impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
-    /// See [`Error`] for more information.
+    /// See [`ParsingError`] for more information.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParsingError> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
