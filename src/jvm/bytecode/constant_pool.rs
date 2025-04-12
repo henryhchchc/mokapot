@@ -354,7 +354,7 @@ impl ConstantPool {
 }
 
 impl ToWriter for ConstantPool {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.count().to_be_bytes())?;
         for slot in &self.inner {
             if let Slot::Entry(entry) = slot {
@@ -435,7 +435,7 @@ impl Entry {
 }
 
 impl ToWriter for JavaString {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         match self {
             Self::Utf8(str) => {
                 let crsu8_bytes = cesu8::to_java_cesu8(str.as_str());
@@ -452,7 +452,7 @@ impl ToWriter for JavaString {
 }
 
 impl ToWriter for Entry {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.tag().to_be_bytes())?;
         match self {
             Self::Utf8(value) => value.to_writer(writer)?,

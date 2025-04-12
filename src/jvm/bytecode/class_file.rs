@@ -60,7 +60,7 @@ impl Class {
     /// See [`ToWriterError`] for more information.
     pub fn to_writer<W>(self, writer: &mut W) -> Result<(), ToWriterError>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         let class_file = self.into_raw()?;
         class_file.to_writer(writer)
@@ -116,7 +116,7 @@ impl FromReader for ClassFile {
 }
 
 impl ToWriter for ClassFile {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
         writer.write_all(&self.minor_version.to_be_bytes())?;
         writer.write_all(&self.major_version.to_be_bytes())?;

@@ -49,7 +49,7 @@ impl FromReader for Code {
 }
 
 impl ToWriter for Code {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.max_stack.to_be_bytes())?;
         writer.write_all(&self.max_locals.to_be_bytes())?;
         write_length::<u32>(writer, self.instruction_bytes.len())?;
@@ -84,7 +84,7 @@ impl FromReader for ExceptionTableEntry {
 }
 
 impl ToWriter for ExceptionTableEntry {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.start_pc.to_be_bytes())?;
         writer.write_all(&self.end_pc.to_be_bytes())?;
         writer.write_all(&self.handler_pc.to_be_bytes())?;
@@ -182,7 +182,7 @@ impl FromReader for StackMapFrameInfo {
 }
 
 impl ToWriter for StackMapFrameInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         match self {
             Self::SameFrame { frame_type } => {
                 debug_assert!(
@@ -304,7 +304,7 @@ impl FromReader for VerificationTypeInfo {
 }
 
 impl ToWriter for VerificationTypeInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         let tag = self.tag();
         writer.write_all(&tag.to_be_bytes())?;
         match self {
@@ -337,7 +337,7 @@ impl FromReader for InnerClass {
 }
 
 impl ToWriter for InnerClass {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.info_index.to_be_bytes())?;
         writer.write_all(&self.outer_class_info_index.to_be_bytes())?;
         writer.write_all(&self.inner_name_index.to_be_bytes())?;
@@ -361,7 +361,7 @@ impl FromReader for EnclosingMethod {
 }
 
 impl ToWriter for EnclosingMethod {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.class_index.to_be_bytes())?;
         writer.write_all(&self.method_index.to_be_bytes())?;
         Ok(())
@@ -389,7 +389,7 @@ impl FromReader for LocalVariableInfo {
 }
 
 impl ToWriter for LocalVariableInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
         writer.write_all(&self.length.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;
@@ -423,7 +423,7 @@ impl FromReader for Annotation {
 }
 
 impl ToWriter for Annotation {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.type_index.to_be_bytes())?;
         write_length::<u16>(writer, self.element_value_pairs.len())?;
         for (element_name_index, element_value) in &self.element_value_pairs {
@@ -474,7 +474,7 @@ impl FromReader for ElementValueInfo {
 }
 
 impl ToWriter for ElementValueInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         let tag = self.tag();
         writer.write_all(&tag.to_be_bytes())?;
         match self {
@@ -549,7 +549,7 @@ impl FromReader for TypeAnnotation {
 }
 
 impl ToWriter for TypeAnnotation {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         self.target_info.to_writer(writer)?;
         write_length::<u8>(writer, self.target_path.len())?;
         for (type_path_kind, type_argument_index) in &self.target_path {
@@ -732,7 +732,7 @@ impl FromReader for TargetInfo {
 }
 
 impl ToWriter for TargetInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         // Safety: Self is marked as repr(u8) so it is fine to use enum_discriminant
         let target_type: u8 = unsafe { enum_discriminant(self) };
         writer.write_all(&target_type.to_be_bytes())?;
@@ -804,7 +804,7 @@ impl FromReader for BootstrapMethod {
 }
 
 impl ToWriter for BootstrapMethod {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.method_ref_idx.to_be_bytes())?;
         write_length::<u16>(writer, self.arguments.len())?;
         for argument in &self.arguments {
@@ -886,7 +886,7 @@ impl FromReader for ModuleInfo {
 }
 
 impl ToWriter for ModuleInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.info_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
         writer.write_all(&self.version_index.to_be_bytes())?;
@@ -931,7 +931,7 @@ impl FromReader for RequiresInfo {
 }
 
 impl ToWriter for RequiresInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.requires_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
         writer.write_all(&self.version_index.to_be_bytes())?;
@@ -962,7 +962,7 @@ impl FromReader for ExportsInfo {
 }
 
 impl ToWriter for ExportsInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.exports_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
         write_length::<u16>(writer, self.to.len())?;
@@ -996,7 +996,7 @@ impl FromReader for OpensInfo {
 }
 
 impl ToWriter for OpensInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.opens_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
         write_length::<u16>(writer, self.to.len())?;
@@ -1027,7 +1027,7 @@ impl FromReader for ProvidesInfo {
 }
 
 impl ToWriter for ProvidesInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         writer.write_all(&self.provides_index.to_be_bytes())?;
         write_length::<u16>(writer, self.with.len())?;
         for with in &self.with {
@@ -1060,7 +1060,10 @@ impl FromReader for RecordComponentInfo {
 }
 
 impl ToWriter for RecordComponentInfo {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W>(&self, writer: &mut W) -> Result<(), ToWriterError>
+    where
+        W: Write + ?Sized,
+    {
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
         self.attributes.to_writer(writer)?;

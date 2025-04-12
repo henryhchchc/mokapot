@@ -208,7 +208,7 @@ impl ClassElement for LocalVariableTypeAttr {
 }
 
 impl ToWriter for ProgramCounter {
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
         let inner = u16::from(*self);
         writer.write_all(&inner.to_be_bytes())?;
         Ok(())

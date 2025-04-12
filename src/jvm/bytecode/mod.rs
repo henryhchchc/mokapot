@@ -45,10 +45,12 @@ trait ToWriter {
     ///
     /// # Errors
     /// This function will only forward the error returned by the underlying writer.
-    fn to_writer<W: Write>(&self, writer: &mut W) -> Result<(), ToWriterError>;
+    fn to_writer<W>(&self, writer: &mut W) -> Result<(), ToWriterError>
+    where
+        W: Write + ?Sized;
 }
 
-fn write_length<Len>(writer: &mut impl Write, length: usize) -> Result<(), ToWriterError>
+fn write_length<Len>(writer: &mut (impl Write + ?Sized), length: usize) -> Result<(), ToWriterError>
 where
     usize: TryInto<Len, Error = TryFromIntError>,
     Len: ToBytes,
