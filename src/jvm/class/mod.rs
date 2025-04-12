@@ -90,7 +90,7 @@ impl Annotation {
 #[doc = see_jvm_spec!(4, 4)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstantPool {
-    inner: Vec<constant_pool::Slot>,
+    pub(crate) inner: Vec<constant_pool::Slot>,
 }
 
 /// The maximum supported major version of a class file.

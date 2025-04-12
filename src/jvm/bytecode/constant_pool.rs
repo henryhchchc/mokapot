@@ -11,7 +11,10 @@ use crate::{
             reader_utils::{ValueReaderExt, read_byte_chunk},
             write_length,
         },
-        class::{ConstantPool, MethodHandle, constant_pool::Entry},
+        class::{
+            ConstantPool, MethodHandle,
+            constant_pool::{Entry, Slot},
+        },
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
     macros::malform,
@@ -347,6 +350,18 @@ impl ConstantPool {
             FieldType::Base(_) => unreachable!(),
         };
         Ok(idx)
+    }
+}
+
+impl ToWriter for ConstantPool {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+        writer.write_all(&self.count().to_be_bytes())?;
+        for slot in &self.inner {
+            if let Slot::Entry(entry) = slot {
+                entry.to_writer(writer)?;
+            }
+        }
+        Ok(())
     }
 }
 

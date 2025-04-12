@@ -3,17 +3,13 @@
 use std::io::{self, Read};
 
 use crate::{
-    jvm::{
-        JavaString,
-        bytecode::{ToWriter, errors::ToWriterError},
-        class::ConstantPool,
-    },
+    jvm::{JavaString, class::ConstantPool},
     macros::see_jvm_spec,
     utils::enum_discriminant,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Slot {
+pub(crate) enum Slot {
     Entry(Entry),
     Padding,
 }
@@ -140,25 +136,6 @@ impl ConstantPool {
 impl Default for ConstantPool {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl ToWriter for ConstantPool {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
-        writer.write_all(&self.count().to_be_bytes())?;
-        for entry in &self.inner {
-            entry.to_writer(writer)?;
-        }
-        Ok(())
-    }
-}
-
-impl ToWriter for Slot {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), ToWriterError> {
-        if let Self::Entry(entry) = self {
-            entry.to_writer(writer)?;
-        }
-        Ok(())
     }
 }
 

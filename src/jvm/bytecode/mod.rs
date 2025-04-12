@@ -40,7 +40,7 @@ trait FromReader {
 }
 
 /// Trait for writing a Raw JVM element to a writer.
-pub trait ToWriter {
+trait ToWriter {
     /// Writes the Raw JVM element to the given writer.
     ///
     /// # Errors
