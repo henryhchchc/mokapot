@@ -161,6 +161,6 @@ fn not_a_class_file() {
     let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
     assert!(matches!(
         Class::from_reader(&mut bytes),
-        Err(Error::IO(e)) if e.kind() == io::ErrorKind::InvalidData
+        Err(ParsingError::IO(e)) if e.kind() == io::ErrorKind::InvalidData
     ));
 }
