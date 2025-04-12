@@ -13,13 +13,12 @@ pub use jvm_frame::ExecutionError;
 
 use self::jvm_frame::JvmStackFrame;
 use super::{
-    ControlFlowGraph,
+    ControlFlowGraph, Identifier, MokaIRMethod, MokaInstruction, Operand,
     control_flow::{ControlTransfer, Edge},
     expression::Expression,
 };
-use super::{Identifier, MokaIRMethod, MokaInstruction, Operand};
-use crate::analysis::fixed_point::Analyzer;
 use crate::{
+    analysis::fixed_point::Analyzer,
     ir::control_flow::path_condition::{
         BooleanVariable, NormalizedPredicate, PathCondition, Value,
     },

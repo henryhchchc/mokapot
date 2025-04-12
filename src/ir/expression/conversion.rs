@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
 use super::super::Operand;
-use crate::ir::Identifier;
-use crate::types::field_type::FieldType;
+use crate::{ir::Identifier, types::field_type::FieldType};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]

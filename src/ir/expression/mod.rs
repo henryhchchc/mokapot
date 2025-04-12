@@ -20,14 +20,12 @@ mod field;
 mod lock;
 mod math;
 
-pub use {
-    array::Operation as ArrayOperation,
-    condition::Condition,
-    conversion::Operation as Conversion,
-    field::Access as FieldAccess,
-    lock::Operation as LockOperation,
-    math::{NaNTreatment, Operation as MathOperation},
-};
+pub use array::Operation as ArrayOperation;
+pub use condition::Condition;
+pub use conversion::Operation as Conversion;
+pub use field::Access as FieldAccess;
+pub use lock::Operation as LockOperation;
+pub use math::{NaNTreatment, Operation as MathOperation};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.

@@ -313,8 +313,7 @@ mod test {
     use std::collections::HashMap;
 
     use itertools::Itertools;
-    use proptest::collection::btree_set;
-    use proptest::prelude::*;
+    use proptest::{collection::btree_set, prelude::*};
 
     use super::{BooleanVariable, PathCondition};
     use crate::ir::control_flow::path_condition::MinTerm;

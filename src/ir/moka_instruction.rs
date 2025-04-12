@@ -246,8 +246,7 @@ pub(super) mod test {
     fn value_ref_merge() {
         use std::collections::BTreeSet;
 
-        use super::Identifier::*;
-        use super::Operand::*;
+        use super::{Identifier::*, Operand::*};
 
         assert_eq!(Just(This) | Just(This), Just(This));
         assert_eq!(
@@ -280,8 +279,7 @@ pub(super) mod test {
     fn value_ref_iter() {
         use std::collections::BTreeSet;
 
-        use super::Identifier::*;
-        use super::Operand::*;
+        use super::{Identifier::*, Operand::*};
 
         assert_eq!(
             Just(This).into_iter().collect::<BTreeSet<_>>(),
@@ -303,8 +301,7 @@ pub(super) mod test {
     fn value_ref_iter_over_refs() {
         use std::collections::BTreeSet;
 
-        use super::Identifier::*;
-        use super::Operand::*;
+        use super::{Identifier::*, Operand::*};
 
         assert_eq!(
             (&Just(This)).into_iter().collect::<BTreeSet<_>>(),
