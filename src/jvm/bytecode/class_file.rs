@@ -14,14 +14,14 @@ use super::{
 use crate::{
     jvm::{
         Class,
-        bytecode::reader_utils::ValueReaderExt,
+        bytecode::{errors::ParsingErrorContext, reader_utils::ValueReaderExt},
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
         },
         references::ClassRef,
     },
-    macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
+    macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
     types::Descriptor,
 };
 
@@ -167,12 +167,14 @@ impl Class {
         } = raw;
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::UnknownFlags("ClassAccessFlags", access_flags))?;
+            .ok_or(ParsingError::malform("Invalid class access flags"))?;
         let ClassRef { binary_name } = constant_pool.get_class_ref(this_class)?;
         let super_class = match super_class {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
-            0 => malform!("Class must have a super type except for java/lang/Object or a module"),
+            0 => Err(ParsingError::malform(
+                "Class must have a super type except for java/lang/Object or a module",
+            ))?,
             it => Some(constant_pool.get_class_ref(it)?),
         };
 
@@ -381,9 +383,8 @@ impl ClassElement for InnerClassInfo {
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let access_flags = NestedClassAccessFlags::from_bits(access_flags).ok_or(
-            ParsingError::UnknownFlags("NextClassAccessFlags", access_flags),
-        )?;
+        let access_flags = NestedClassAccessFlags::from_bits(access_flags)
+            .ok_or(ParsingError::malform("Invalid nested class access flags"))?;
         Ok(Self {
             inner_class,
             outer_class,
@@ -423,7 +424,11 @@ impl ClassElement for RecordComponent {
             attributes,
         } = raw;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let component_type = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
+        let component_type = ctx
+            .constant_pool
+            .get_str(descriptor_index)?
+            .parse()
+            .context("Invalid component type descriptor")?;
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()

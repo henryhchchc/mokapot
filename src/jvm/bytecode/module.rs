@@ -1,7 +1,8 @@
 use itertools::Itertools;
 
 use super::{
-    ParsingContext, ParsingError, ToWriterError, jvm_element_parser::ClassElement, raw_attributes,
+    ParsingContext, ParsingError, ToWriterError, errors::ParsingErrorContext,
+    jvm_element_parser::ClassElement, raw_attributes,
 };
 use crate::jvm::{
     Module,
@@ -161,12 +162,15 @@ impl ClassElement for Module {
             uses,
             provides,
         } = raw;
-        let module_info_entry = ctx.constant_pool.get_entry(info_index)?;
+        let module_info_entry = ctx
+            .constant_pool
+            .get_entry(info_index)
+            .context("Invalid constant pool index")?;
         let &Entry::Module { name_index } = module_info_entry else {
-            Err(ParsingError::MismatchedConstantPoolEntryType {
-                expected: "Module",
-                found: module_info_entry.constant_kind(),
-            })?
+            Err(ParsingError::malform(format!(
+                "Mismatched constant pool type. Expected Module, but got {}.",
+                module_info_entry.constant_kind()
+            )))?
         };
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let flags = ClassElement::from_raw(flags, ctx)?;

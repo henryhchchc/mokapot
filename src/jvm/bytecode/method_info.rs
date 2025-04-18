@@ -12,11 +12,11 @@ use super::{
 use crate::{
     jvm::{
         Method,
-        bytecode::ParsingContext,
+        bytecode::{ParsingContext, errors::ParsingErrorContext},
         method::{self},
         references::ClassRef,
     },
-    macros::{attributes_into_iter, extract_attributes, malform, see_jvm_spec},
+    macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
     types::{Descriptor, method_descriptor::MethodDescriptor},
 };
 
@@ -68,11 +68,14 @@ impl ClassElement for Method {
             descriptor_index,
             attributes,
         } = raw;
-        let access_flags = method::AccessFlags::from_bits(access_flags).ok_or(
-            ParsingError::UnknownFlags("MethodAccessFlags", access_flags),
-        )?;
+        let access_flags = method::AccessFlags::from_bits(access_flags)
+            .ok_or(ParsingError::malform("Invalid method access flags"))?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor: MethodDescriptor = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
+        let descriptor: MethodDescriptor = ctx
+            .constant_pool
+            .get_str(descriptor_index)?
+            .parse()
+            .context("Invalid method descriptor")?;
         let owner = ClassRef {
             binary_name: ctx.current_class_binary_name.clone(),
         };
@@ -114,12 +117,12 @@ impl ClassElement for Method {
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
-                malform!("Unexpected code attribute");
+                Err(ParsingError::malform("Unexpected code attribute"))?;
             }
         } else {
             // Otherwise, its method_info structure must have exactly one Code attribute in its attributes table
             if body.is_none() {
-                malform!("The method must have a body");
+                Err(ParsingError::malform("The method must have a body"))?;
             }
         }
 
@@ -128,10 +131,10 @@ impl ClassElement for Method {
             if !access_flags.contains(method::AccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
-                malform!(concat!(
-                    "Class initializer in class version 51 or above",
-                    "must be static and takes no arguments"
-                ));
+                Err(ParsingError::malform(
+                    "Class initializer in class version 51 or above\
+                    must be static and takes no arguments",
+                ))?;
             }
         }
 

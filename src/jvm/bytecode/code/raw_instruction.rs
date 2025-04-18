@@ -5,14 +5,9 @@ use std::{
 };
 
 use super::super::{ParsingError, reader_utils::ValueReaderExt};
-use crate::{
-    jvm::{
-        bytecode::{errors::ToWriterError, reader_utils::PositionTracker, write_length},
-        code::{
-            InstructionList, InvalidOffset, ProgramCounter, RawInstruction, RawWideInstruction,
-        },
-    },
-    macros::malform,
+use crate::jvm::{
+    bytecode::{errors::ToWriterError, reader_utils::PositionTracker, write_length},
+    code::{InstructionList, InvalidOffset, ProgramCounter, RawInstruction, RawWideInstruction},
 };
 
 impl InstructionList<RawInstruction> {
@@ -203,12 +198,12 @@ impl RawInstruction {
         use RawInstruction::*;
 
         let pc = u16::try_from(reader.position())
-            .map_err(|_| ParsingError::TooLongInstructionList)?
+            .map_err(|_| ParsingError::malform("The instruction list is too long"))?
             .into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => Err(ParsingError::IO(e))?,
+            Err(e) => Err(ParsingError::from(e))?,
         };
         let instruction = match opcode {
             0x32 => AALoad,
@@ -409,7 +404,7 @@ impl RawInstruction {
                 let dynamic_index = reader.read_value()?;
                 let zero: u16 = reader.read_value()?;
                 if zero != 0 {
-                    malform!("Zero paddings are not zero");
+                    ParsingError::malform("Zero paddings are not zero");
                 }
                 InvokeDynamic { dynamic_index }
             }
@@ -418,7 +413,7 @@ impl RawInstruction {
                 let count: u8 = reader.read_value()?;
                 let zero: u8 = reader.read_value()?;
                 if zero != 0 {
-                    malform!("Zero paddings are not zero");
+                    Err(ParsingError::malform("Zero paddings are not zero"))?;
                 }
                 InvokeInterface {
                     method_index,
@@ -605,11 +600,11 @@ impl RawInstruction {
                     0xa9 => RawWideInstruction::Ret {
                         index: reader.read_value()?,
                     },
-                    _ => Err(ParsingError::UnexpectedOpCode(wide_opcode))?,
+                    _ => Err(ParsingError::malform("Invalid opcode"))?,
                 };
                 Wide(wide_insn)
             }
-            it => Err(ParsingError::UnexpectedOpCode(it))?,
+            _ => Err(ParsingError::malform("Invalid opcode"))?,
         };
         Ok(Some((pc, instruction)))
     }

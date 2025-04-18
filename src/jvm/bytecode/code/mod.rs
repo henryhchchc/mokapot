@@ -13,7 +13,7 @@ use itertools::Itertools;
 use super::{
     FromReader, ParsingContext, ParsingError, ToWriter,
     attribute::Attribute,
-    errors::ToWriterError,
+    errors::{ParsingErrorContext, ToWriterError},
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::ValueReaderExt,
@@ -135,10 +135,11 @@ impl ClassElement for LocalVariableDescAttr {
             index,
         } = raw;
 
-        let effective_range = start_pc..(start_pc + length)?;
+        let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx)?;
-        let field_type = FieldType::from_str(descriptor)?;
+        let field_type =
+            FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
         let id = LocalVariableId {
             effective_range,
             index,
@@ -177,7 +178,7 @@ impl ClassElement for LocalVariableTypeAttr {
             index,
         } = raw;
 
-        let effective_range = start_pc..(start_pc + length)?;
+        let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
         let id = LocalVariableId {
@@ -228,9 +229,8 @@ impl ClassElement for ParameterInfo {
         } else {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
-        let access_flags = ParameterAccessFlags::from_bits(access_flags).ok_or(
-            ParsingError::UnknownFlags("ParameterAccessFlags", access_flags),
-        )?;
+        let access_flags = ParameterAccessFlags::from_bits(access_flags)
+            .ok_or(ParsingError::malform("Invalid parameter access flags"))?;
         Ok(ParameterInfo { name, access_flags })
     }
 

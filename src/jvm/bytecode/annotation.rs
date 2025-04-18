@@ -1,7 +1,9 @@
 use itertools::Itertools;
 
 use super::{
-    ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+    ParsingContext, ParsingError,
+    errors::{ParsingErrorContext, ToWriterError},
+    jvm_element_parser::ClassElement,
     raw_attributes,
 };
 use crate::{
@@ -26,7 +28,7 @@ impl ClassElement for TypePathElement {
             (1, 0) => Ok(Self::Nested),
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
-            _ => Err(ParsingError::InvalidTypePathKind),
+            _ => Err(ParsingError::malform("Invalid type path kind")),
         }
     }
 
@@ -48,7 +50,11 @@ impl ClassElement for Annotation {
             type_index,
             element_value_pairs,
         } = raw;
-        let annotation_type = ctx.constant_pool.get_str(type_index)?.parse()?;
+        let annotation_type = ctx
+            .constant_pool
+            .get_str(type_index)?
+            .parse()
+            .context("Invalid annotation type descriptor")?;
         let element_value_pairs = element_value_pairs
             .into_iter()
             .map(|(name_idx, raw_value)| {
@@ -97,7 +103,11 @@ impl ClassElement for TypeAnnotation {
             .into_iter()
             .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
-        let annotation_type = ctx.constant_pool.get_str(type_index)?.parse()?;
+        let annotation_type = ctx
+            .constant_pool
+            .get_str(type_index)?
+            .parse()
+            .context("Invalid annotation type descriptor")?;
         let element_value_pairs = element_value_pairs
             .into_iter()
             .map(|(name_idx, value)| {
@@ -185,7 +195,8 @@ impl ClassElement for TargetInfo {
                 let table = table
                     .into_iter()
                     .map(|(start, len, index)| -> Result<_, ParsingError> {
-                        let effective_range = start..(start + len)?;
+                        let effective_range =
+                            start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId {
                             effective_range,
                             index,
@@ -198,7 +209,8 @@ impl ClassElement for TargetInfo {
                 let table = table
                     .into_iter()
                     .map(|(start, len, index)| -> Result<_, ParsingError> {
-                        let effective_range = start..(start + len)?;
+                        let effective_range =
+                            start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId {
                             effective_range,
                             index,
@@ -336,14 +348,16 @@ impl ClassElement for ElementValue {
                     (b'F', it @ Float(_)) => Ok(Self::Primitive(PrimitiveType::Float, it)),
                     (b'D', it @ Double(_)) => Ok(Self::Primitive(PrimitiveType::Double, it)),
                     (b'J', it @ Long(_)) => Ok(Self::Primitive(PrimitiveType::Long, it)),
-                    _ => Err(ParsingError::Other("Constant value type mismatch")),
+                    _ => Err(ParsingError::malform("Constant value type mismatch")),
                 }
             }
-            Self::Raw::Const(b's', idx) => match cp.get_entry(idx)? {
-                constant_pool::Entry::Utf8(s) => Ok(Self::String(s.to_owned())),
-                _ => Err(ParsingError::Other("Expected string constant value")),
-            },
-            Self::Raw::Const(_, _) => Err(ParsingError::Other("Invalid constant value tag")),
+            Self::Raw::Const(b's', idx) => {
+                match cp.get_entry(idx).context("Invalid constant pool index")? {
+                    constant_pool::Entry::Utf8(s) => Ok(Self::String(s.to_owned())),
+                    _ => Err(ParsingError::malform("Expected string constant value")),
+                }
+            }
+            Self::Raw::Const(_, _) => Err(ParsingError::malform("Invalid constant value tag")),
             Self::Raw::Enum {
                 type_name_index,
                 const_name_index,
@@ -356,7 +370,10 @@ impl ClassElement for ElementValue {
                 })
             }
             Self::Raw::ClassInfo(idx) => {
-                let return_descriptor = cp.get_str(idx)?.parse()?;
+                let return_descriptor = cp
+                    .get_str(idx)?
+                    .parse()
+                    .context("Invalid return type descriptor")?;
                 Ok(Self::Class { return_descriptor })
             }
             Self::Raw::Annotation(annotation_info) => Ok(Self::AnnotationInterface(

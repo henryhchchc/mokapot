@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     io::{self, Read},
     str::FromStr,
 };
@@ -17,24 +18,27 @@ use crate::{
         },
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
-    macros::malform,
     types::{Descriptor, field_type::FieldType},
 };
 
+use super::errors::ParsingErrorContext;
+
 #[inline]
-const fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, ParsingError> {
-    Err(ParsingError::MismatchedConstantPoolEntryType {
-        expected,
-        found: entry.constant_kind(),
-    })
+fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, ParsingError> {
+    Err(ParsingError::malform(format!(
+        "Mismatched constant pool type. Expected: {expected} but got {}.",
+        entry.constant_kind()
+    )))
 }
 
 impl ConstantPool {
     pub(super) fn get_str(&self, index: u16) -> Result<&str, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         match entry {
             Entry::Utf8(JavaString::Utf8(string)) => Ok(string),
-            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ParsingError::BrokenUTF8),
+            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ParsingError::malform("Broken UTF-8")),
             it => mismatch("Utf8", it),
         }
     }
@@ -45,7 +49,9 @@ impl ConstantPool {
     }
 
     pub(super) fn get_class_ref(&self, index: u16) -> Result<ClassRef, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
             Ok(ClassRef::new(name))
@@ -85,14 +91,19 @@ impl ConstantPool {
         &self,
         value_index: u16,
     ) -> Result<ConstantValue, ParsingError> {
-        let entry = self.get_entry(value_index)?;
+        let entry = self
+            .get_entry(value_index)
+            .context("Invalid constant pool index")?;
         match *entry {
             Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
             Entry::Long(it) => Ok(ConstantValue::Long(it)),
             Entry::Float(it) => Ok(ConstantValue::Float(it)),
             Entry::Double(it) => Ok(ConstantValue::Double(it)),
             Entry::String { string_index } => {
-                if let Entry::Utf8(java_str) = self.get_entry(string_index)? {
+                if let Entry::Utf8(java_str) = self
+                    .get_entry(string_index)
+                    .context("Invalid constant pool index")?
+                {
                     Ok(ConstantValue::String(java_str.clone()))
                 } else {
                     mismatch("Utf8", entry)
@@ -100,7 +111,7 @@ impl ConstantPool {
             }
             Entry::MethodType { descriptor_index } => self
                 .get_str(descriptor_index)
-                .and_then(|it| it.parse().map_err(Into::into))
+                .and_then(|it| it.parse().context("Invalid method descriptor"))
                 .map(ConstantValue::MethodType),
             Entry::Class { name_index } => self
                 .get_str(name_index)
@@ -167,7 +178,9 @@ impl ConstantPool {
     }
 
     pub(super) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::Module { name_index } = entry {
             let name = self.get_str(name_index)?.to_owned();
             Ok(ModuleRef { name })
@@ -183,7 +196,9 @@ impl ConstantPool {
     }
 
     pub(super) fn get_package_ref(&self, index: u16) -> Result<PackageRef, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
             Ok(PackageRef {
@@ -201,7 +216,9 @@ impl ConstantPool {
     }
 
     pub(super) fn get_field_ref(&self, index: u16) -> Result<FieldRef, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::FieldRef {
             class_index,
             name_and_type_index,
@@ -225,9 +242,11 @@ impl ConstantPool {
     ) -> Result<(String, Descriptor), ParsingError>
     where
         Descriptor: FromStr,
-        <Descriptor as FromStr>::Err: Into<ParsingError>,
+        <Descriptor as FromStr>::Err: Display,
     {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::NameAndType {
             name_index,
             descriptor_index,
@@ -237,7 +256,7 @@ impl ConstantPool {
             let descriptor = self
                 .get_str(descriptor_index)?
                 .parse()
-                .map_err(Into::into)?;
+                .context("Invalid descriptor for name_and_type")?;
             Ok((name.to_owned(), descriptor))
         } else {
             mismatch("NameAndType", entry)
@@ -262,7 +281,9 @@ impl ConstantPool {
     }
 
     pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParsingError> {
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constnat pool index")?;
         if let &Entry::MethodRef {
             class_index,
             name_and_type_index,
@@ -288,7 +309,9 @@ impl ConstantPool {
         #[allow(clippy::enum_glob_use)]
         use MethodHandle::*;
 
-        let entry = self.get_entry(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         let &Entry::MethodHandle {
             reference_kind,
             reference_index: idx,
@@ -306,7 +329,9 @@ impl ConstantPool {
             7 => self.get_method_ref(idx).map(RefInvokeSpecial),
             8 => self.get_method_ref(idx).map(RefNewInvokeSpecial),
             9 => self.get_method_ref(idx).map(RefInvokeInterface),
-            _ => malform!("Invalid reference kind in method handle"),
+            _ => Err(ParsingError::malform(
+                "Invalid reference kind in method handle",
+            ))?,
         }
     }
 
@@ -333,7 +358,7 @@ impl ConstantPool {
     pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, ParsingError> {
         let ClassRef { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
-            FieldType::from_str(name.as_str())?
+            FieldType::from_str(name.as_str()).context("Invalid descriptor for type reference")?
         } else {
             FieldType::Object(ClassRef::new(name))
         };

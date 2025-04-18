@@ -245,7 +245,7 @@ impl ClassElement for Attribute {
         if reader.is_empty() {
             Ok(result)
         } else {
-            Err(ParsingError::IO(io::Error::new(
+            Err(ParsingError::from(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
             )))

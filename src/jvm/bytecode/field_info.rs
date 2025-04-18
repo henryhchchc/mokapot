@@ -12,6 +12,7 @@ use super::{
 use crate::{
     jvm::{
         Field,
+        bytecode::errors::ParsingErrorContext,
         field::{self},
         references::ClassRef,
     },
@@ -68,9 +69,13 @@ impl ClassElement for Field {
             attributes,
         } = raw;
         let access_flags = field::AccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::UnknownFlags("FieldAccessFlag", access_flags))?;
+            .ok_or(ParsingError::malform("Invalid field access flags"))?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let field_type = ctx.constant_pool.get_str(descriptor_index)?.parse()?;
+        let field_type = ctx
+            .constant_pool
+            .get_str(descriptor_index)?
+            .parse()
+            .context("Invalid field descriptor")?;
         let owner = ClassRef {
             binary_name: ctx.current_class_binary_name.clone(),
         };
