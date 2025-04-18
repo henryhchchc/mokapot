@@ -20,7 +20,7 @@ pub struct NopClassPath;
 
 impl NopClassPath {
     /// An empty class path.
-    pub const EMPRY: [NopClassPath; 0] = [];
+    pub const EMPTY: [NopClassPath; 0] = [];
 }
 
 impl ClassPath for NopClassPath {
