@@ -10,6 +10,31 @@ use crate::{
     analysis::ClassRefs,
     jvm::{Class, references::ClassRef},
 };
+
+/// A class path that does nothing.
+///
+/// This is used as a type place holder when an empry collection of class paths is required.
+/// See [`NopClassPath::EMPTY`].
+#[derive(Debug)]
+pub struct NopClassPath;
+
+impl NopClassPath {
+    /// An empty class path.
+    pub const EMPRY: [NopClassPath; 0] = [];
+}
+
+impl ClassPath for NopClassPath {
+    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
+        Err(Error::NotFound)
+    }
+}
+
+impl ClassRefs for NopClassPath {
+    fn class_refs(&self) -> HashSet<ClassRef> {
+        HashSet::new()
+    }
+}
+
 /// A class path that searches for classes in a directory.
 #[derive(Debug)]
 pub struct DirectoryClassPath {
