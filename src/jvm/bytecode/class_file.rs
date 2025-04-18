@@ -47,6 +47,16 @@ impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
     /// See [`ParsingError`] for more information.
+    /// # Example
+    /// ```no_run
+    /// use mokapot::jvm::Class;
+    /// use std::fs::File;
+    /// use std::io::BufReader;
+    ///
+    /// let file = File::open("path/to/class/file").unwrap();
+    /// let reader = BufReader::new(file);
+    /// let class = Class::from_reader(reader).unwrap();
+    /// ```
     pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParsingError>
     where
         R: std::io::Read + ?Sized,
