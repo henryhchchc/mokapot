@@ -17,7 +17,7 @@ use std::{
     num::TryFromIntError,
 };
 
-pub use errors::{ParsingError, ToWriterError};
+pub use errors::{ParsingError, ParsingErrorKind, ToWriterError};
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};

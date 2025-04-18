@@ -27,10 +27,7 @@ where
     type Raw = u16;
 
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
-        T::from_bits(raw).ok_or(ParsingError::UnknownFlags(
-            std::any::type_name::<Self>(),
-            raw,
-        ))
+        T::from_bits(raw).ok_or(ParsingError::malform("Invalid access flag"))
     }
 
     fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {

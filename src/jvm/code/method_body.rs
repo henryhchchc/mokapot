@@ -7,7 +7,7 @@ use std::{
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
     jvm::{TypeAnnotation, bytecode::ParsingError, class::ConstantPool, references::ClassRef},
-    macros::{malform, see_jvm_spec},
+    macros::see_jvm_spec,
     types::field_type::FieldType,
 };
 
@@ -295,7 +295,9 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                malform!("Name of local variable does not match");
+                Err(ParsingError::malform(
+                    "Name of local variable does not match",
+                ))?;
             }
         }
         entry.name = Some(name);
@@ -312,7 +314,9 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                malform!("Name of local variable does not match");
+                Err(ParsingError::malform(
+                    "Name of local variable does not match",
+                ))?;
             }
         }
         entry.name = Some(name);

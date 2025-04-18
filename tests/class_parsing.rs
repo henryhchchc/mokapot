@@ -1,9 +1,7 @@
-use std::io::{self};
-
 use mokapot::{
     jvm::{
         Class,
-        bytecode::ParsingError,
+        bytecode::ParsingErrorKind,
         class::{self, AccessFlags, RecordComponent},
         references::ClassRef,
     },
@@ -168,8 +166,6 @@ fn parse_record() {
 #[cfg_attr(not(integration_test), ignore)]
 fn not_a_class_file() {
     let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
-    assert!(matches!(
-        Class::from_reader(&mut bytes),
-        Err(ParsingError::IO(e)) if e.kind() == io::ErrorKind::InvalidData
-    ));
+    let result = Class::from_reader(&mut bytes);
+    assert!(result.is_err_and(|err| err.kind() == ParsingErrorKind::IO));
 }

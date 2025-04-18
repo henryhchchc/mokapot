@@ -22,7 +22,7 @@ macro_rules! extract_attributes {
                             " in a ",
                             $env
                         );
-                        Err(ParsingError::Other(message))?;
+                        Err(ParsingError::malform(message))?;
                     },
                 )*
                 $(
@@ -35,21 +35,15 @@ macro_rules! extract_attributes {
                         $unrecognized.push((name, bytes));
                     }
                     unexpected => {
-                        Err(ParsingError::UnexpectedAttribute(
-                            unexpected.name().to_owned(),
-                            $env.to_owned()
-                        ))?;
+                        Err(ParsingError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
+                            unexpected.name(),
+                            $env
+                        )))?;
                     }
                 }
             }
         }
         $( $(let $var = $var.$uw();)? )*
-    };
-}
-
-macro_rules! malform {
-    ($msg:expr_2021) => {
-        Err(ParsingError::Other($msg))?
     };
 }
 
@@ -92,5 +86,4 @@ macro_rules! attributes_into_iter {
 
 pub(crate) use attributes_into_iter;
 pub(crate) use extract_attributes;
-pub(crate) use malform;
 pub(crate) use see_jvm_spec;

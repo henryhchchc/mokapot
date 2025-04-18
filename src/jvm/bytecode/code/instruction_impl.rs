@@ -5,7 +5,9 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         bytecode::{
-            ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+            ParsingContext, ParsingError,
+            errors::{ParsingErrorContext, ToWriterError},
+            jvm_element_parser::ClassElement,
         },
         class::{ConstantPool, constant_pool},
         code::{
@@ -14,7 +16,6 @@ use crate::{
         },
         references::ClassRef,
     },
-    macros::malform,
     types::{Descriptor, field_type::PrimitiveType},
 };
 
@@ -232,67 +233,67 @@ impl Instruction {
             DCmpL => Self::DCmpL,
             DCmpG => Self::DCmpG,
             IfEq { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfEq(target)
             }
             IfNe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfNe(target)
             }
             IfLt { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfLt(target)
             }
             IfGe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfGe(target)
             }
             IfGt { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfGt(target)
             }
             IfLe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfLe(target)
             }
             IfICmpEq { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpEq(target)
             }
             IfICmpNe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpNe(target)
             }
             IfICmpLt { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpLt(target)
             }
             IfICmpGe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpGe(target)
             }
             IfICmpGt { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpGt(target)
             }
             IfICmpLe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfICmpLe(target)
             }
             IfACmpEq { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfACmpEq(target)
             }
             IfACmpNe { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::IfACmpNe(target)
             }
             Goto { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::Goto(target)
             }
             Jsr { offset } => {
-                let target = (pc + offset)?;
+                let target = (pc + offset).context("Invalid jump offset")?;
                 Self::Jsr(target)
             }
             Ret { index } => Self::Ret(index),
@@ -304,10 +305,10 @@ impl Instruction {
             } => {
                 let targets = jump_offsets
                     .into_iter()
-                    .map(|offset| (pc + offset))
+                    .map(|offset| (pc + offset).context("Invalid jump offset"))
                     .try_collect()?;
                 Self::TableSwitch {
-                    default: (pc + default)?,
+                    default: (pc + default).context("Invalid jump offset")?,
                     range: low..=high,
                     jump_targets: targets,
                 }
@@ -318,10 +319,14 @@ impl Instruction {
             } => {
                 let targets = match_offsets
                     .into_iter()
-                    .map(|(value, offset)| (pc + offset).map(|target| (value, target)))
+                    .map(|(value, offset)| {
+                        (pc + offset)
+                            .map(|target| (value, target))
+                            .context("Invalid jump offset")
+                    })
                     .try_collect()?;
                 Self::LookupSwitch {
-                    default: (pc + default)?,
+                    default: (pc + default).context("Invalid jump offset")?,
                     match_targets: targets,
                 }
             }
@@ -369,16 +374,18 @@ impl Instruction {
                 Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
-                let entry = constant_pool.get_entry(dynamic_index)?;
+                let entry = constant_pool
+                    .get_entry(dynamic_index)
+                    .context("Invalid constant pool index")?;
                 let &constant_pool::Entry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
                 } = entry
                 else {
-                    Err(ParsingError::MismatchedConstantPoolEntryType {
-                        expected: "InvokeDynamic",
-                        found: entry.constant_kind(),
-                    })?
+                    Err(ParsingError::malform(format!(
+                        "Mismatched constant pool type. Expected InvokeDynamic, but got {}",
+                        entry.constant_kind()
+                    )))?
                 };
                 let (name, descriptor) = constant_pool.get_name_and_type(name_and_type_index)?;
                 Self::InvokeDynamic {
@@ -401,7 +408,9 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => malform!("NewArray must create an array of primitive types"),
+                    _ => Err(ParsingError::malform(
+                        "NewArray must create an array of primitive types",
+                    ))?,
                 };
                 Self::NewArray(element_type)
             }
@@ -443,10 +452,10 @@ impl Instruction {
                 let class_ref = constant_pool.get_type_ref(index)?;
                 Self::MultiANewArray(class_ref, dimensions)
             }
-            IfNull { offset } => Self::IfNull((pc + offset)?),
-            IfNonNull { offset } => Self::IfNonNull((pc + offset)?),
-            GotoW { offset } => Self::GotoW((pc + offset)?),
-            JsrW { offset } => Self::JsrW((pc + offset)?),
+            IfNull { offset } => Self::IfNull((pc + offset).context("Invalid jump offset")?),
+            IfNonNull { offset } => Self::IfNonNull((pc + offset).context("Invalid jump offset")?),
+            GotoW { offset } => Self::GotoW((pc + offset).context("Invalid jump offset")?),
+            JsrW { offset } => Self::JsrW((pc + offset).context("Invalid jump offset")?),
 
             // Reserved
             Breakpoint => Self::Breakpoint,

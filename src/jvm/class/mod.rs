@@ -150,7 +150,7 @@ pub enum Version {
     Jdk24(bool),
 }
 impl Version {
-    pub(crate) const fn from_versions(major: u16, minor: u16) -> Result<Self, ParsingError> {
+    pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParsingError> {
         match (major, minor) {
             (45, minor) => Ok(Self::Jdk1_1(minor)),
             (46, 0x0000) => Ok(Self::Jdk1_2),
@@ -190,9 +190,9 @@ impl Version {
             (68, 0x0000) => Ok(Self::Jdk24(false)),
             (68, 0xFFFF) => Ok(Self::Jdk24(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
-                Err(ParsingError::Other("Unsupportted class version"))
+                Err(ParsingError::malform("Unsupportted class version"))
             }
-            _ => Err(ParsingError::Other("Invalid class version")),
+            _ => Err(ParsingError::malform("Invalid class version")),
         }
     }
 
