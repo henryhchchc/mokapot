@@ -358,7 +358,8 @@ impl ConstantPool {
     pub(super) fn get_type_ref(&self, index: u16) -> Result<FieldType, ParsingError> {
         let ClassRef { binary_name: name } = self.get_class_ref(index)?;
         let field_type = if name.starts_with('[') {
-            FieldType::from_str(name.as_str()).context("Invalid descriptor for type reference")?
+            FieldType::from_str(name.as_str())
+                .with_context(|_| format!("Invalid descriptor for type reference: {name}"))?
         } else {
             FieldType::Object(ClassRef::new(name))
         };

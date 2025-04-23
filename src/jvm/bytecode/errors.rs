@@ -1,10 +1,4 @@
-use std::{
-    backtrace::Backtrace,
-    error::Error,
-    fmt::{self},
-    io,
-    num::TryFromIntError,
-};
+use std::{backtrace::Backtrace, error::Error, fmt, io, num::TryFromIntError};
 
 use derive_more::Display;
 
@@ -19,7 +13,11 @@ pub struct ParsingError {
     backtrace: Backtrace,
 }
 
-impl Error for ParsingError {}
+impl Error for ParsingError {
+    fn cause(&self) -> Option<&dyn Error> {
+        Some(self.cause.as_ref())
+    }
+}
 
 impl fmt::Display for ParsingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -35,9 +33,9 @@ impl fmt::Display for ParsingError {
 }
 
 impl ParsingError {
-    pub(crate) fn malform(message: impl Into<String>) -> Self {
+    pub(crate) fn malform(message: impl fmt::Display) -> Self {
         Self {
-            cause: message.into().into(),
+            cause: format!("{message}").into(),
             kind: ParsingErrorKind::Malformed,
             #[cfg(debug_assertions)]
             backtrace: Backtrace::capture(),
@@ -73,7 +71,16 @@ pub enum ParsingErrorKind {
 
 pub(crate) trait ParsingErrorContext {
     type Output;
-    fn context(self, message: impl Into<String>) -> Result<Self::Output, ParsingError>;
+    type Error;
+
+    fn context<Message>(self, message: Message) -> Result<Self::Output, ParsingError>
+    where
+        Message: fmt::Display;
+
+    fn with_context<F, Message>(self, message_fn: F) -> Result<Self::Output, ParsingError>
+    where
+        F: FnOnce(Self::Error) -> Message,
+        Message: fmt::Display;
 }
 
 impl<T, E> ParsingErrorContext for Result<T, E>
@@ -81,9 +88,44 @@ where
     E: fmt::Display,
 {
     type Output = T;
+    type Error = E;
 
-    fn context(self, message: impl Into<String>) -> Result<Self::Output, ParsingError> {
-        self.map_err(|err| ParsingError::malform(format!("{}: {err}", message.into())))
+    fn context<Message>(self, message: Message) -> Result<Self::Output, ParsingError>
+    where
+        Message: fmt::Display,
+    {
+        self.with_context(|err| format!("{message}: {err}"))
+    }
+
+    fn with_context<F, Message>(self, message_fn: F) -> Result<Self::Output, ParsingError>
+    where
+        F: FnOnce(Self::Error) -> Message,
+        Message: fmt::Display,
+    {
+        self.map_err(|err| ParsingError::malform(message_fn(err)))
+    }
+}
+
+impl<T> ParsingErrorContext for Option<T> {
+    type Output = T;
+    type Error = ();
+
+    fn context<Message>(self, message: Message) -> Result<Self::Output, ParsingError>
+    where
+        Message: fmt::Display,
+    {
+        self.with_context(|()| message)
+    }
+
+    fn with_context<F, Message>(self, message_fn: F) -> Result<Self::Output, ParsingError>
+    where
+        F: FnOnce(Self::Error) -> Message,
+        Message: fmt::Display,
+    {
+        self.ok_or_else(|| {
+            let message = message_fn(());
+            ParsingError::malform(message)
+        })
     }
 }
 
