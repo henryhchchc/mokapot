@@ -295,9 +295,7 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ParseError::malform(
-                    "Name of local variable does not match",
-                ))?;
+                Err(ParseError::malform("Name of local variable does not match"))?;
             }
         }
         entry.name = Some(name);
@@ -314,9 +312,7 @@ impl LocalVariableTable {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ParseError::malform(
-                    "Name of local variable does not match",
-                ))?;
+                Err(ParseError::malform("Name of local variable does not match"))?;
             }
         }
         entry.name = Some(name);

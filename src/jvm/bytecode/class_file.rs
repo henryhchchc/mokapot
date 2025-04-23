@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParseError, ToWriter,
+    FromReader, ParseError, ParsingContext, ToWriter,
     attribute::{Attribute, AttributeInfo},
     errors::GenerationError,
     field_info::FieldInfo,

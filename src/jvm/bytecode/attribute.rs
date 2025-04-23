@@ -8,7 +8,7 @@ use itertools::Itertools;
 use num_traits::ToBytes;
 
 use super::{
-    FromReader, ParsingContext, ParseError, ToWriter,
+    FromReader, ParseError, ParsingContext, ToWriter,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     errors::GenerationError,
     jvm_element_parser::ClassElement,

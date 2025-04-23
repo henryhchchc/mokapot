@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use super::{
-    GenerationError, ParsingContext, ParseError, errors::ParsingErrorContext,
+    GenerationError, ParseError, ParsingContext, errors::ParsingErrorContext,
     jvm_element_parser::ClassElement, raw_attributes,
 };
 use crate::jvm::{
