@@ -17,7 +17,7 @@ use std::{
     num::TryFromIntError,
 };
 
-pub use errors::{ParsingError, ParsingErrorKind, ToWriterError};
+pub use errors::{GenerationError, ParseError, ParsingErrorKind};
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};
@@ -62,7 +62,7 @@ trait ToWriter {
     /// # Errors
     /// Returns a `ToWriterError` if writing to the stream fails or if the data
     /// cannot be properly serialized (e.g., if a numeric value is out of range).
-    fn to_writer<W>(&self, writer: &mut W) -> Result<(), ToWriterError>
+    fn to_writer<W>(&self, writer: &mut W) -> Result<(), GenerationError>
     where
         W: Write + ?Sized;
 }
@@ -79,7 +79,10 @@ trait ToWriter {
 /// Returns a `ToWriterError` if:
 /// - The length value cannot fit in the target type
 /// - Writing to the output stream fails
-fn write_length<Len>(writer: &mut (impl Write + ?Sized), length: usize) -> Result<(), ToWriterError>
+fn write_length<Len>(
+    writer: &mut (impl Write + ?Sized),
+    length: usize,
+) -> Result<(), GenerationError>
 where
     usize: TryInto<Len, Error = TryFromIntError>,
     Len: ToBytes,

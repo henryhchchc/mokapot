@@ -3,9 +3,9 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParsingError, ToWriter,
+    FromReader, ParsingContext, ParseError, ToWriter,
     attribute::{Attribute, AttributeInfo},
-    errors::ToWriterError,
+    errors::GenerationError,
     jvm_element_parser::ClassElement,
     reader_utils::ValueReaderExt,
 };
@@ -49,7 +49,7 @@ impl FromReader for FieldInfo {
 }
 
 impl ToWriter for FieldInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
@@ -61,7 +61,7 @@ impl ToWriter for FieldInfo {
 impl ClassElement for Field {
     type Raw = FieldInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let FieldInfo {
             access_flags,
             name_index,
@@ -69,7 +69,7 @@ impl ClassElement for Field {
             attributes,
         } = raw;
         let access_flags = field::AccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::malform("Invalid field access flags"))?;
+            .ok_or(ParseError::malform("Invalid field access flags"))?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let field_type = ctx
             .constant_pool
@@ -122,7 +122,7 @@ impl ClassElement for Field {
     fn into_raw(
         self,
         cp: &mut crate::jvm::class::ConstantPool,
-    ) -> Result<Self::Raw, ToWriterError> {
+    ) -> Result<Self::Raw, GenerationError> {
         let access_flags = self.access_flags.into_raw(cp)?;
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.field_type.descriptor())?;

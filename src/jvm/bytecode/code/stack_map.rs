@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::jvm::{
     bytecode::{
-        ParsingContext, ParsingError, errors::ToWriterError, jvm_element_parser::ClassElement,
+        ParsingContext, ParseError, errors::GenerationError, jvm_element_parser::ClassElement,
         raw_attributes,
     },
     class::ConstantPool,
@@ -12,7 +12,7 @@ use crate::jvm::{
 impl ClassElement for StackMapFrame {
     type Raw = raw_attributes::StackMapFrameInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         match raw {
             Self::Raw::SameFrame { frame_type } => Ok(Self::SameFrame {
                 offset_delta: u16::from(frame_type),
@@ -73,7 +73,7 @@ impl ClassElement for StackMapFrame {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let raw = match self {
             Self::SameFrame { offset_delta } => {
                 if offset_delta < 64 {
@@ -129,7 +129,7 @@ impl ClassElement for StackMapFrame {
 
 impl ClassElement for VerificationType {
     type Raw = raw_attributes::VerificationTypeInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         match raw {
             Self::Raw::Top => Ok(Self::TopVariable),
             Self::Raw::Integer => Ok(Self::IntegerVariable),
@@ -147,7 +147,7 @@ impl ClassElement for VerificationType {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         match self {
             Self::TopVariable => Ok(Self::Raw::Top),
             Self::IntegerVariable => Ok(Self::Raw::Integer),

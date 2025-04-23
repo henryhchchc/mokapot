@@ -3,9 +3,9 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingError, ToWriter,
+    FromReader, ParseError, ToWriter,
     attribute::{Attribute, AttributeInfo},
-    errors::ToWriterError,
+    errors::GenerationError,
     jvm_element_parser::ClassElement,
     reader_utils::ValueReaderExt,
 };
@@ -49,7 +49,7 @@ impl FromReader for MethodInfo {
 }
 
 impl ToWriter for MethodInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.descriptor_index.to_be_bytes())?;
@@ -61,7 +61,7 @@ impl ToWriter for MethodInfo {
 impl ClassElement for Method {
     type Raw = MethodInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let MethodInfo {
             access_flags,
             name_index,
@@ -69,7 +69,7 @@ impl ClassElement for Method {
             attributes,
         } = raw;
         let access_flags = method::AccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::malform("Invalid method access flags"))?;
+            .ok_or(ParseError::malform("Invalid method access flags"))?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let descriptor: MethodDescriptor = ctx
             .constant_pool
@@ -117,12 +117,12 @@ impl ClassElement for Method {
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
-                Err(ParsingError::malform("Unexpected code attribute"))?;
+                Err(ParseError::malform("Unexpected code attribute"))?;
             }
         } else {
             // Otherwise, its method_info structure must have exactly one Code attribute in its attributes table
             if body.is_none() {
-                Err(ParsingError::malform("The method must have a body"))?;
+                Err(ParseError::malform("The method must have a body"))?;
             }
         }
 
@@ -131,7 +131,7 @@ impl ClassElement for Method {
             if !access_flags.contains(method::AccessFlags::STATIC)
                 || !descriptor.parameters_types.is_empty()
             {
-                Err(ParsingError::malform(
+                Err(ParseError::malform(
                     "Class initializer in class version 51 or above\
                     must be static and takes no arguments",
                 ))?;
@@ -163,7 +163,7 @@ impl ClassElement for Method {
     fn into_raw(
         self,
         cp: &mut crate::jvm::class::ConstantPool,
-    ) -> Result<Self::Raw, ToWriterError> {
+    ) -> Result<Self::Raw, GenerationError> {
         let access_flags = self.access_flags.into_raw(cp)?;
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.descriptor.descriptor())?;

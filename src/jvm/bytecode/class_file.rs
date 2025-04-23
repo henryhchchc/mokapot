@@ -3,9 +3,9 @@ use std::io::{self, Read, Write};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParsingError, ToWriter,
+    FromReader, ParsingContext, ParseError, ToWriter,
     attribute::{Attribute, AttributeInfo},
-    errors::ToWriterError,
+    errors::GenerationError,
     field_info::FieldInfo,
     jvm_element_parser::ClassElement,
     method_info::MethodInfo,
@@ -57,7 +57,7 @@ impl Class {
     /// let reader = BufReader::new(file);
     /// let class = Class::from_reader(reader).unwrap();
     /// ```
-    pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParsingError>
+    pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParseError>
     where
         R: std::io::Read + ?Sized,
     {
@@ -68,7 +68,7 @@ impl Class {
     /// Writes the class file to the given writer.
     /// # Errors
     /// See [`ToWriterError`] for more information.
-    pub fn to_writer<W>(self, writer: &mut W) -> Result<(), ToWriterError>
+    pub fn to_writer<W>(self, writer: &mut W) -> Result<(), GenerationError>
     where
         W: Write + ?Sized,
     {
@@ -126,7 +126,7 @@ impl FromReader for ClassFile {
 }
 
 impl ToWriter for ClassFile {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
         writer.write_all(&self.minor_version.to_be_bytes())?;
         writer.write_all(&self.major_version.to_be_bytes())?;
@@ -152,7 +152,7 @@ impl ToWriter for ClassFile {
 }
 
 impl Class {
-    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, ParsingError> {
+    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, ParseError> {
         let ClassFile {
             minor_version,
             major_version,
@@ -167,12 +167,12 @@ impl Class {
         } = raw;
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::malform("Invalid class access flags"))?;
+            .ok_or(ParseError::malform("Invalid class access flags"))?;
         let ClassRef { binary_name } = constant_pool.get_class_ref(this_class)?;
         let super_class = match super_class {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
-            0 => Err(ParsingError::malform(
+            0 => Err(ParseError::malform(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
             it => Some(constant_pool.get_class_ref(it)?),
@@ -259,7 +259,7 @@ impl Class {
         })
     }
 
-    pub(crate) fn into_raw(self) -> Result<ClassFile, ToWriterError> {
+    pub(crate) fn into_raw(self) -> Result<ClassFile, GenerationError> {
         let mut constant_pool = ConstantPool::new();
         let this_class = constant_pool.put_class_ref(self.make_ref())?;
         let super_class = self
@@ -334,7 +334,7 @@ impl Class {
 impl ClassElement for BootstrapMethod {
     type Raw = raw_attributes::BootstrapMethod;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             method_ref_idx,
             arguments,
@@ -347,7 +347,7 @@ impl ClassElement for BootstrapMethod {
         Ok(Self { method, arguments })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let method_ref_idx = cp.put_method_handle(self.method)?;
         let arguments = self
             .arguments
@@ -364,7 +364,7 @@ impl ClassElement for BootstrapMethod {
 impl ClassElement for InnerClassInfo {
     type Raw = raw_attributes::InnerClass;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             info_index,
             outer_class_info_index,
@@ -384,7 +384,7 @@ impl ClassElement for InnerClassInfo {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
         let access_flags = NestedClassAccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::malform("Invalid nested class access flags"))?;
+            .ok_or(ParseError::malform("Invalid nested class access flags"))?;
         Ok(Self {
             inner_class,
             outer_class,
@@ -393,7 +393,7 @@ impl ClassElement for InnerClassInfo {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let info_index = cp.put_class_ref(self.inner_class)?;
         let outer_class_info_index = self
             .outer_class
@@ -417,7 +417,7 @@ impl ClassElement for InnerClassInfo {
 
 impl ClassElement for RecordComponent {
     type Raw = raw_attributes::RecordComponentInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             name_index,
             descriptor_index,
@@ -459,7 +459,7 @@ impl ClassElement for RecordComponent {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.component_type.descriptor())?;
         let attributes = self
@@ -480,7 +480,7 @@ impl ClassElement for RecordComponent {
 impl ClassElement for EnclosingMethod {
     type Raw = raw_attributes::EnclosingMethod;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             class_index,
             method_index,
@@ -498,7 +498,7 @@ impl ClassElement for EnclosingMethod {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let class_index = cp.put_class_ref(self.class)?;
         let method_index = self
             .method_name_and_desc

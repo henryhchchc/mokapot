@@ -8,9 +8,9 @@ use itertools::Itertools;
 use num_traits::ToBytes;
 
 use super::{
-    FromReader, ParsingContext, ParsingError, ToWriter,
+    FromReader, ParsingContext, ParseError, ToWriter,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    errors::ToWriterError,
+    errors::GenerationError,
     jvm_element_parser::ClassElement,
     reader_utils::{ValueReaderExt, read_byte_chunk},
     write_length,
@@ -53,7 +53,7 @@ impl FromReader for AttributeInfo {
 }
 
 impl ToWriter for AttributeInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.name_idx.to_be_bytes())?;
         write_length::<u32>(writer, self.info.len())?;
         writer.write_all(&self.info)?;
@@ -62,7 +62,7 @@ impl ToWriter for AttributeInfo {
 }
 
 impl ToWriter for Vec<AttributeInfo> {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         write_length::<u16>(writer, self.len())?;
         for attr in self {
             attr.to_writer(writer)?;
@@ -162,7 +162,7 @@ macro_rules! parse {
 impl ClassElement for Attribute {
     type Raw = AttributeInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
         let reader = &mut VecDeque::from(info);
@@ -245,14 +245,14 @@ impl ClassElement for Attribute {
         if reader.is_empty() {
             Ok(result)
         } else {
-            Err(ParsingError::from(io::Error::new(
+            Err(ParseError::from(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Extra data at the end of the attribute",
             )))
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_idx = cp.put_string(self.name().to_owned())?;
         let info = self.into_bytes(cp)?;
         Ok(Self::Raw { name_idx, info })
@@ -260,7 +260,7 @@ impl ClassElement for Attribute {
 }
 
 impl Attribute {
-    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, ToWriterError> {
+    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, GenerationError> {
         let mut bytes = match self {
             Attribute::ConstantValue(constant_value) => {
                 let constant_value_idx = cp.put_constant_value(constant_value)?;
@@ -337,7 +337,7 @@ impl Attribute {
 fn parse_string<R: Read + ?Sized>(
     reader: &mut R,
     ctx: &ParsingContext,
-) -> Result<String, ParsingError> {
+) -> Result<String, ParseError> {
     let str_idx = reader.read_value()?;
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
@@ -346,7 +346,7 @@ fn parse_string<R: Read + ?Sized>(
 fn serialize_vec<Len>(
     items: Vec<impl ClassElement<Raw: ToWriter>>,
     cp: &mut ConstantPool,
-) -> Result<Vec<u8>, ToWriterError>
+) -> Result<Vec<u8>, GenerationError>
 where
     usize: TryInto<Len, Error = TryFromIntError>,
     Len: ToBytes,

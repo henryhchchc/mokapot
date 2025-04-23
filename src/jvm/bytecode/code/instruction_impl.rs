@@ -5,8 +5,8 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         bytecode::{
-            ParsingContext, ParsingError,
-            errors::{ParsingErrorContext, ToWriterError},
+            ParsingContext, ParseError,
+            errors::{GenerationError, ParsingErrorContext},
             jvm_element_parser::ClassElement,
         },
         class::{ConstantPool, constant_pool},
@@ -22,7 +22,7 @@ use crate::{
 impl ClassElement for InstructionList<Instruction> {
     type Raw = InstructionList<RawInstruction>;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         raw.into_iter()
             .map(|(pc, raw_insn)| {
                 Instruction::from_raw_instruction(raw_insn, pc, &ctx.constant_pool)
@@ -31,10 +31,10 @@ impl ClassElement for InstructionList<Instruction> {
             .try_collect()
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let (raw_instructions, _) = self.into_iter().try_fold(
             (BTreeMap::new(), Ok(ProgramCounter::default())),
-            |(mut acc, pc), (_, insn)| -> Result<_, ToWriterError> {
+            |(mut acc, pc), (_, insn)| -> Result<_, GenerationError> {
                 let pc = pc?;
                 let raw_insn = insn.into_raw_instruction(pc, cp)?;
                 let next_pc = pc + raw_insn.num_bytes(pc)?;
@@ -52,7 +52,7 @@ impl Instruction {
         raw_instruction: RawInstruction,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
-    ) -> Result<Self, ParsingError> {
+    ) -> Result<Self, ParseError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
@@ -382,7 +382,7 @@ impl Instruction {
                     name_and_type_index,
                 } = entry
                 else {
-                    Err(ParsingError::malform(format!(
+                    Err(ParseError::malform(format!(
                         "Mismatched constant pool type. Expected InvokeDynamic, but got {}",
                         entry.constant_kind()
                     )))?
@@ -408,7 +408,7 @@ impl Instruction {
                     9 => PrimitiveType::Short,
                     10 => PrimitiveType::Int,
                     11 => PrimitiveType::Long,
-                    _ => Err(ParsingError::malform(
+                    _ => Err(ParseError::malform(
                         "NewArray must create an array of primitive types",
                     ))?,
                 };
@@ -475,7 +475,7 @@ impl Instruction {
         self,
         pc: ProgramCounter,
         cp: &mut ConstantPool,
-    ) -> Result<RawInstruction, ToWriterError> {
+    ) -> Result<RawInstruction, GenerationError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
@@ -783,7 +783,7 @@ impl Instruction {
                     bootstrap_method_attr_index: bootstrap_method_index,
                     name_and_type_index,
                 };
-                let dynamic_index = cp.put_entry(entry)?;
+                let dynamic_index = cp.put_entry_dedup(entry)?;
                 InvokeDynamic { dynamic_index }
             }
             Self::New(class_ref) => New {
@@ -853,7 +853,7 @@ impl Instruction {
     }
 }
 
-fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, ToWriterError> {
+fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, GenerationError> {
     let target: i32 = target.into();
     let pc: i32 = pc.into();
     let offset = target - pc;
