@@ -6,7 +6,7 @@ use std::{
 
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
-    jvm::{TypeAnnotation, bytecode::ParsingError, class::ConstantPool, references::ClassRef},
+    jvm::{TypeAnnotation, bytecode::ParseError, class::ConstantPool, references::ClassRef},
     macros::see_jvm_spec,
     types::field_type::FieldType,
 };
@@ -172,7 +172,7 @@ impl InstructionList<RawInstruction> {
     pub fn lift(
         self,
         constant_pool: &ConstantPool,
-    ) -> Result<InstructionList<Instruction>, ParsingError> {
+    ) -> Result<InstructionList<Instruction>, ParseError> {
         let mut instructions = BTreeMap::new();
         for (pc, raw_instruction) in self {
             let instruction =
@@ -291,11 +291,11 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         field_type: FieldType,
-    ) -> Result<(), ParsingError> {
+    ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ParsingError::malform(
+                Err(ParseError::malform(
                     "Name of local variable does not match",
                 ))?;
             }
@@ -310,11 +310,11 @@ impl LocalVariableTable {
         key: LocalVariableId,
         name: String,
         signature: String,
-    ) -> Result<(), ParsingError> {
+    ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref() {
             if existing_name != &name {
-                Err(ParsingError::malform(
+                Err(ParseError::malform(
                     "Name of local variable does not match",
                 ))?;
             }

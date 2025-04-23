@@ -22,7 +22,7 @@ macro_rules! extract_attributes {
                             " in a ",
                             $env
                         );
-                        Err(ParsingError::malform(message))?;
+                        Err(ParseError::malform(message))?;
                     },
                 )*
                 $(
@@ -35,7 +35,7 @@ macro_rules! extract_attributes {
                         $unrecognized.push((name, bytes));
                     }
                     unexpected => {
-                        Err(ParsingError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
+                        Err(ParseError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
                             unexpected.name(),
                             $env
                         )))?;

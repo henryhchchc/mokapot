@@ -4,17 +4,17 @@ use std::{
     iter,
 };
 
-use super::super::{ParsingError, reader_utils::ValueReaderExt};
+use super::super::{ParseError, reader_utils::ValueReaderExt};
 use crate::jvm::{
-    bytecode::{errors::ToWriterError, reader_utils::PositionTracker, write_length},
-    code::{InstructionList, InvalidOffset, ProgramCounter, RawInstruction, RawWideInstruction},
+    bytecode::{errors::GenerationError, reader_utils::PositionTracker, write_length},
+    code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
 };
 
 impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`ParsingError`] for more information.
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParsingError> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParseError> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
         let inner: BTreeMap<_, _> =
@@ -26,7 +26,7 @@ impl InstructionList<RawInstruction> {
     /// Writes a list of [`RawInstruction`]s to the given writer.
     /// # Errors
     /// See [`ToWriterError`] for more information.
-    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let mut writer = PositionTracker::new(writer);
 
         for (_, insn) in self.iter() {
@@ -40,7 +40,7 @@ impl InstructionList<RawInstruction> {
 impl RawInstruction {
     /// Writes a single [`RawInstruction`] to the given writer.
     #[allow(clippy::too_many_lines)]
-    fn write_one<W>(&self, writer: &mut PositionTracker<W>) -> Result<(), ToWriterError>
+    fn write_one<W>(&self, writer: &mut PositionTracker<W>) -> Result<(), GenerationError>
     where
         PositionTracker<W>: io::Write,
     {
@@ -190,7 +190,7 @@ impl RawInstruction {
     #[allow(clippy::too_many_lines)]
     fn read_one<R>(
         reader: &mut PositionTracker<R>,
-    ) -> Result<Option<(ProgramCounter, Self)>, ParsingError>
+    ) -> Result<Option<(ProgramCounter, Self)>, ParseError>
     where
         PositionTracker<R>: Read,
     {
@@ -198,12 +198,12 @@ impl RawInstruction {
         use RawInstruction::*;
 
         let pc = u16::try_from(reader.position())
-            .map_err(|_| ParsingError::malform("The instruction list is too long"))?
+            .map_err(|_| ParseError::malform("The instruction list is too long"))?
             .into();
         let opcode: u8 = match reader.read_value() {
             Ok(it) => it,
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => Err(ParsingError::from(e))?,
+            Err(e) => Err(ParseError::from(e))?,
         };
         let instruction = match opcode {
             0x32 => AALoad,
@@ -404,7 +404,7 @@ impl RawInstruction {
                 let dynamic_index = reader.read_value()?;
                 let zero: u16 = reader.read_value()?;
                 if zero != 0 {
-                    ParsingError::malform("Zero paddings are not zero");
+                    ParseError::malform("Zero paddings are not zero");
                 }
                 InvokeDynamic { dynamic_index }
             }
@@ -413,7 +413,7 @@ impl RawInstruction {
                 let count: u8 = reader.read_value()?;
                 let zero: u8 = reader.read_value()?;
                 if zero != 0 {
-                    Err(ParsingError::malform("Zero paddings are not zero"))?;
+                    Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
                 InvokeInterface {
                     method_index,
@@ -600,17 +600,17 @@ impl RawInstruction {
                     0xa9 => RawWideInstruction::Ret {
                         index: reader.read_value()?,
                     },
-                    _ => Err(ParsingError::malform("Invalid opcode"))?,
+                    _ => Err(ParseError::malform("Invalid opcode"))?,
                 };
                 Wide(wide_insn)
             }
-            _ => Err(ParsingError::malform("Invalid opcode"))?,
+            _ => Err(ParseError::malform("Invalid opcode"))?,
         };
         Ok(Some((pc, instruction)))
     }
 
     /// Returns the number of bytes occupied by the instruction given its location in the instruction list.
-    pub(crate) fn num_bytes(&self, pc: ProgramCounter) -> Result<u16, ToWriterError> {
+    pub(crate) fn num_bytes(&self, pc: ProgramCounter) -> Result<u16, GenerationError> {
         #[allow(clippy::enum_glob_use, reason = "It's long by definition")]
         use RawInstruction::*;
 
@@ -699,15 +699,15 @@ impl RawInstruction {
             // Variable-length instructions require special handling
             TableSwitch { low, high, .. } => {
                 let padding = (4 - (u16::from(pc) + 1) % 4) % 4; // padding after opcode
-                let entries = u16::try_from(*high - *low + 1)
-                    .map_err(|_| ToWriterError::InvalidOffset(InvalidOffset))?;
+                let entries =
+                    u16::try_from(*high - *low + 1).map_err(|_| GenerationError::other("In"))?;
                 1 + padding + 12 + (4 * entries) // opcode + padding + default,low,high + entries
             }
 
             LookupSwitch { match_offsets, .. } => {
                 let padding = (4 - (u16::from(pc) + 1) % 4) % 4; // padding after opcode
                 let entries = u16::try_from(match_offsets.len())
-                    .map_err(|_| ToWriterError::InvalidOffset(InvalidOffset))?;
+                    .map_err(|_| GenerationError::other("Invalid jump offset"))?;
                 1 + padding + 8 + (8 * entries) // opcode + padding + default,npairs + (match,offset) pairs
             }
         })

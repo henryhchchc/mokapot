@@ -1,8 +1,8 @@
 use itertools::Itertools;
 
 use super::{
-    ParsingContext, ParsingError,
-    errors::{ParsingErrorContext, ToWriterError},
+    ParseError, ParsingContext,
+    errors::{GenerationError, ParsingErrorContext},
     jvm_element_parser::ClassElement,
     raw_attributes,
 };
@@ -21,18 +21,18 @@ use crate::{
 
 impl ClassElement for TypePathElement {
     type Raw = (u8, u8);
-    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         let (kind, argument_index) = raw;
         match (kind, argument_index) {
             (0, 0) => Ok(Self::Array),
             (1, 0) => Ok(Self::Nested),
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
-            _ => Err(ParsingError::malform("Invalid type path kind")),
+            _ => Err(ParseError::malform("Invalid type path kind")),
         }
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         match self {
             Self::Array => Ok((0, 0)),
             Self::Nested => Ok((1, 0)),
@@ -45,7 +45,7 @@ impl ClassElement for TypePathElement {
 impl ClassElement for Annotation {
     type Raw = raw_attributes::Annotation;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             type_index,
             element_value_pairs,
@@ -62,19 +62,19 @@ impl ClassElement for Annotation {
                 let element_value = ElementValue::from_raw(raw_value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, ParsingError>>()?;
+            .collect::<Result<_, ParseError>>()?;
         Ok(Annotation {
             annotation_type,
             element_value_pairs,
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let type_index = cp.put_string(self.annotation_type.descriptor())?;
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()
-            .map(|(name, value)| -> Result<_, ToWriterError> {
+            .map(|(name, value)| -> Result<_, GenerationError> {
                 let name_index = cp.put_string(name)?;
                 let raw_value = value.into_raw(cp)?;
                 Ok((name_index, raw_value))
@@ -90,7 +90,7 @@ impl ClassElement for Annotation {
 impl ClassElement for TypeAnnotation {
     type Raw = raw_attributes::TypeAnnotation;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             target_info,
             target_path,
@@ -115,7 +115,7 @@ impl ClassElement for TypeAnnotation {
                 let element_value = ClassElement::from_raw(value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
-            .collect::<Result<_, ParsingError>>()?;
+            .collect::<Result<_, ParseError>>()?;
         Ok(TypeAnnotation {
             annotation_type,
             target_info,
@@ -124,7 +124,7 @@ impl ClassElement for TypeAnnotation {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let target_info = self.target_info.into_raw(cp)?;
         let target_path = self
             .target_path
@@ -135,7 +135,7 @@ impl ClassElement for TypeAnnotation {
         let element_value_pairs = self
             .element_value_pairs
             .into_iter()
-            .map(|(name, value)| -> Result<_, ToWriterError> {
+            .map(|(name, value)| -> Result<_, GenerationError> {
                 let name_index = cp.put_string(name)?;
                 let value = value.into_raw(cp)?;
                 Ok((name_index, value))
@@ -154,7 +154,7 @@ impl ClassElement for TargetInfo {
     type Raw = raw_attributes::TargetInfo;
 
     #[allow(clippy::enum_glob_use)]
-    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         use OffsetOf::{InstanceOf, New};
         use TypeArgumentLocation::*;
         use TypeParameterLocation::*;
@@ -194,7 +194,7 @@ impl ClassElement for TargetInfo {
             Self::Raw::LocalVariable(table) => {
                 let table = table
                     .into_iter()
-                    .map(|(start, len, index)| -> Result<_, ParsingError> {
+                    .map(|(start, len, index)| -> Result<_, ParseError> {
                         let effective_range =
                             start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId {
@@ -208,7 +208,7 @@ impl ClassElement for TargetInfo {
             Self::Raw::ResourceVariable(table) => {
                 let table = table
                     .into_iter()
-                    .map(|(start, len, index)| -> Result<_, ParsingError> {
+                    .map(|(start, len, index)| -> Result<_, ParseError> {
                         let effective_range =
                             start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId {
@@ -257,7 +257,7 @@ impl ClassElement for TargetInfo {
         Ok(lifted)
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let raw = match self {
             TargetInfo::TypeParameter { location, index } => match location {
                 TypeParameterLocation::Class => Self::Raw::TypeParameterOfClass { index },
@@ -330,7 +330,7 @@ impl ClassElement for TargetInfo {
 impl ClassElement for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let cp = &ctx.constant_pool;
         match raw {
             Self::Raw::Const(
@@ -348,16 +348,16 @@ impl ClassElement for ElementValue {
                     (b'F', it @ Float(_)) => Ok(Self::Primitive(PrimitiveType::Float, it)),
                     (b'D', it @ Double(_)) => Ok(Self::Primitive(PrimitiveType::Double, it)),
                     (b'J', it @ Long(_)) => Ok(Self::Primitive(PrimitiveType::Long, it)),
-                    _ => Err(ParsingError::malform("Constant value type mismatch")),
+                    _ => Err(ParseError::malform("Constant value type mismatch")),
                 }
             }
             Self::Raw::Const(b's', idx) => {
                 match cp.get_entry(idx).context("Invalid constant pool index")? {
                     constant_pool::Entry::Utf8(s) => Ok(Self::String(s.to_owned())),
-                    _ => Err(ParsingError::malform("Expected string constant value")),
+                    _ => Err(ParseError::malform("Expected string constant value")),
                 }
             }
-            Self::Raw::Const(_, _) => Err(ParsingError::malform("Invalid constant value tag")),
+            Self::Raw::Const(_, _) => Err(ParseError::malform("Invalid constant value tag")),
             Self::Raw::Enum {
                 type_name_index,
                 const_name_index,
@@ -389,7 +389,7 @@ impl ClassElement for ElementValue {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let raw = match self {
             ElementValue::Primitive(primitive_type, constant_value) => {
                 let tag = match (primitive_type, &constant_value) {
@@ -401,14 +401,14 @@ impl ClassElement for ElementValue {
                     (PrimitiveType::Long, ConstantValue::Long(_)) => b'J',
                     (PrimitiveType::Short, ConstantValue::Integer(_)) => b'S',
                     (PrimitiveType::Boolean, ConstantValue::Integer(_)) => b'Z',
-                    _ => return Err(ToWriterError::Other("Constant value type mismatch")),
+                    _ => return Err(GenerationError::other("Constant value type mismatch")),
                 };
                 let value_idx = cp.put_constant_value(constant_value)?;
                 Self::Raw::Const(tag, value_idx)
             }
             ElementValue::String(string) => {
                 let entry = constant_pool::Entry::Utf8(string);
-                let value_idx = cp.put_entry(entry)?;
+                let value_idx = cp.put_entry_dedup(entry)?;
                 Self::Raw::Const(b's', value_idx)
             }
             ElementValue::EnumConstant {

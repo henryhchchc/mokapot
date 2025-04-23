@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use super::{
-    ParsingContext, ParsingError, ToWriterError, errors::ParsingErrorContext,
+    GenerationError, ParsingContext, ParseError, errors::ParsingErrorContext,
     jvm_element_parser::ClassElement, raw_attributes,
 };
 use crate::jvm::{
@@ -12,7 +12,7 @@ use crate::jvm::{
 
 impl ClassElement for Require {
     type Raw = raw_attributes::RequiresInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             requires_index,
             flags,
@@ -32,7 +32,7 @@ impl ClassElement for Require {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let requires_index = cp.put_module_ref(self.module)?;
         let flags = self.flags.into_raw(cp)?;
         let version_index = self
@@ -51,7 +51,7 @@ impl ClassElement for Require {
 impl ClassElement for Export {
     type Raw = raw_attributes::ExportsInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             exports_index,
             to,
@@ -67,7 +67,7 @@ impl ClassElement for Export {
         Ok(Export { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let exports_index = cp.put_package_ref(self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -86,7 +86,7 @@ impl ClassElement for Export {
 impl ClassElement for Open {
     type Raw = raw_attributes::OpensInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             opens_index,
             to,
@@ -102,7 +102,7 @@ impl ClassElement for Open {
         Ok(Open { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let opens_index = cp.put_package_ref(self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -121,7 +121,7 @@ impl ClassElement for Open {
 impl ClassElement for Provide {
     type Raw = raw_attributes::ProvidesInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             provides_index,
             with,
@@ -134,7 +134,7 @@ impl ClassElement for Provide {
         Ok(Provide { service, with })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let provides_index = cp.put_class_ref(self.service)?;
         let with = self
             .with
@@ -151,7 +151,7 @@ impl ClassElement for Provide {
 impl ClassElement for Module {
     type Raw = raw_attributes::ModuleInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             info_index,
             flags,
@@ -167,7 +167,7 @@ impl ClassElement for Module {
             .get_entry(info_index)
             .context("Invalid constant pool index")?;
         let &Entry::Module { name_index } = module_info_entry else {
-            Err(ParsingError::malform(format!(
+            Err(ParseError::malform(format!(
                 "Mismatched constant pool type. Expected Module, but got {}.",
                 module_info_entry.constant_kind()
             )))?
@@ -211,9 +211,9 @@ impl ClassElement for Module {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_index = cp.put_string(self.name)?;
-        let info_index = cp.put_entry(Entry::Module { name_index })?;
+        let info_index = cp.put_entry_dedup(Entry::Module { name_index })?;
         let flags = self.flags.into_raw(cp)?;
         let version_index = self
             .version

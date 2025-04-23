@@ -11,9 +11,9 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParsingError, ToWriter,
+    FromReader, ParsingContext, ParseError, ToWriter,
     attribute::Attribute,
-    errors::{ParsingErrorContext, ToWriterError},
+    errors::{GenerationError, ParsingErrorContext},
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
     reader_utils::ValueReaderExt,
@@ -48,11 +48,11 @@ pub(crate) struct LocalVariableTypeAttr {
 impl ClassElement for LineNumberTableEntry {
     type Raw = Self;
 
-    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         Ok(raw)
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         Ok(self)
     }
 }
@@ -69,7 +69,7 @@ impl FromReader for LineNumberTableEntry {
 }
 
 impl ToWriter for LineNumberTableEntry {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
         writer.write_all(&self.line_number.to_be_bytes())?;
         Ok(())
@@ -79,7 +79,7 @@ impl ToWriter for LineNumberTableEntry {
 impl ClassElement for ExceptionTableEntry {
     type Raw = raw_attributes::ExceptionTableEntry;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let raw_attributes::ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -102,7 +102,7 @@ impl ClassElement for ExceptionTableEntry {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let ExceptionTableEntry {
             covered_pc,
             handler_pc,
@@ -126,7 +126,7 @@ impl ClassElement for ExceptionTableEntry {
 
 impl ClassElement for LocalVariableDescAttr {
     type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             start_pc,
             length,
@@ -151,7 +151,7 @@ impl ClassElement for LocalVariableDescAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let start_pc = self.id.effective_range.start;
         let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
@@ -169,7 +169,7 @@ impl ClassElement for LocalVariableDescAttr {
 
 impl ClassElement for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             start_pc,
             length,
@@ -192,7 +192,7 @@ impl ClassElement for LocalVariableTypeAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let start_pc = self.id.effective_range.start;
         let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
@@ -209,7 +209,7 @@ impl ClassElement for LocalVariableTypeAttr {
 }
 
 impl ToWriter for ProgramCounter {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), ToWriterError> {
+    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let inner = u16::from(*self);
         writer.write_all(&inner.to_be_bytes())?;
         Ok(())
@@ -219,7 +219,7 @@ impl ToWriter for ProgramCounter {
 impl ClassElement for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let raw_attributes::ParameterInfo {
             name_index,
             access_flags,
@@ -230,11 +230,11 @@ impl ClassElement for ParameterInfo {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
         let access_flags = ParameterAccessFlags::from_bits(access_flags)
-            .ok_or(ParsingError::malform("Invalid parameter access flags"))?;
+            .ok_or(ParseError::malform("Invalid parameter access flags"))?;
         Ok(ParameterInfo { name, access_flags })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_index = self
             .name
             .map(|it| cp.put_string(it))
@@ -251,7 +251,7 @@ impl ClassElement for ParameterInfo {
 impl ClassElement for MethodBody {
     type Raw = Code;
 
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParsingError> {
+    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Code {
             max_stack,
             max_locals,
@@ -310,7 +310,7 @@ impl ClassElement for MethodBody {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, ToWriterError> {
+    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
         let mut instruction_bytes = Vec::new();
         self.instructions
             .into_raw(cp)?

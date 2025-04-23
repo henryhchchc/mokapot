@@ -59,37 +59,57 @@ impl ConstantPool {
     }
 
     /// Gets the constant pool entry at the given index.
-    /// # Errors
-    /// - [`Error::BadIndex`] if `index` does not point to a valid entry.
-    pub fn get_entry(&self, index: u16) -> Result<&Entry, Error> {
-        match self.inner.get(usize::from(index)) {
-            Some(Slot::Entry(entry)) => Ok(entry),
-            _ => Err(Error::BadIndex(index)),
+    ///
+    /// Returns [`None`] if the index is out of bounds or the index does not point to a valid slot.
+    #[must_use]
+    pub fn get_entry(&self, index: u16) -> Option<&Entry> {
+        if let Some(Slot::Entry(entry)) = self.inner.get(usize::from(index)) {
+            Some(entry)
+        } else {
+            None
         }
     }
 
-    /// Pushes a constant pool entry to the end of the constant pool.
-    /// No-op if the entry already exists.
+    /// Put a constant pool entry to the end of the constant pool and return the index of the inserted entry.
+    ///
     /// # Errors
-    /// - [`Error::Overflow`] if the constant pool is full.
-    pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Error> {
-        if let Some(index) = self.find_index(|it| it == &entry) {
-            return Ok(index);
-        }
+    /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
+    pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Overflow> {
         let new_index = self.count();
         if matches!(entry, Entry::Long(_) | Entry::Double(_)) {
             if self.inner.len() + 2 > u16::MAX as usize {
-                return Err(Error::Overflow);
+                return Err(Overflow(entry));
             }
             self.inner.push(Slot::Entry(entry));
             self.inner.push(Slot::Padding);
         } else {
             if self.inner.len() > u16::MAX as usize {
-                return Err(Error::Overflow);
+                return Err(Overflow(entry));
             }
             self.inner.push(Slot::Entry(entry));
         }
         Ok(new_index)
+    }
+
+    /// Pushes a constant pool entry to the end of the constant pool if it does not already exist.
+    ///
+    /// # Return Values
+    /// [`Ok`] with a tuple indicating the index of the entry within the constant pool, and whether the entry is freshly
+    /// inserted into the pool.
+    ///
+    /// # Errors
+    /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
+    pub fn put_entry_deduplicated(&mut self, entry: Entry) -> Result<(u16, bool), Overflow> {
+        if let Some(index) = self.find_index(|it| it == &entry) {
+            return Ok((index, false));
+        }
+        let new_index = self.put_entry(entry);
+        new_index.map(|idx| (idx, true))
+    }
+
+    pub(crate) fn put_entry_dedup(&mut self, entry: Entry) -> Result<u16, Overflow> {
+        let (idx, _) = self.put_entry_deduplicated(entry)?;
+        Ok(idx)
     }
 
     /// Finds the first constant pool entry that satisfies the given predicate.
@@ -139,16 +159,10 @@ impl Default for ConstantPool {
     }
 }
 
-/// An error when getting an entry from the constant pool with an invalid index.
+/// An error when an insertion to the constant pool causes an overflow.
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// The index used to access the constant pool is invalid.
-    #[error("Bad constant pool index: {0}")]
-    BadIndex(u16),
-    /// The constant pool is full.
-    #[error("The constant pool is full")]
-    Overflow,
-}
+#[error("The constant pool is full.")]
+pub struct Overflow(pub Entry);
 
 /// An entry in the [`ConstantPool`].
 #[derive(Debug, Clone, PartialEq)]
