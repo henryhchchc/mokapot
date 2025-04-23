@@ -11,7 +11,7 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParseError, ToWriter,
+    FromReader, ParseError, ParsingContext, ToWriter,
     attribute::Attribute,
     errors::{GenerationError, ParsingErrorContext},
     jvm_element_parser::ClassElement,

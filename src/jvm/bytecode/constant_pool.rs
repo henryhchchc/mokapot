@@ -87,10 +87,7 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(super) fn get_constant_value(
-        &self,
-        value_index: u16,
-    ) -> Result<ConstantValue, ParseError> {
+    pub(super) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, ParseError> {
         let entry = self
             .get_entry(value_index)
             .context("Invalid constant pool index")?;

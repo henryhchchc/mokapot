@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::{
     jvm::{
         bytecode::{
-            ParsingContext, ParseError,
+            ParseError, ParsingContext,
             errors::{GenerationError, ParsingErrorContext},
             jvm_element_parser::ClassElement,
         },

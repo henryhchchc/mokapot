@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParsingContext, ParseError, ToWriter,
+    FromReader, ParseError, ParsingContext, ToWriter,
     attribute::{Attribute, AttributeInfo},
     errors::GenerationError,
     jvm_element_parser::ClassElement,

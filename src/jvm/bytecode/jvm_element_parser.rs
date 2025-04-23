@@ -1,6 +1,6 @@
 use bitflags::Flags;
 
-use super::{ParsingContext, ParseError, ToWriter, errors::GenerationError};
+use super::{ParseError, ParsingContext, ToWriter, errors::GenerationError};
 use crate::jvm::class::ConstantPool;
 
 pub(super) trait ClassElement: Sized {
