@@ -1,23 +1,36 @@
-use std::{io, num::TryFromIntError};
+use std::{
+    backtrace::Backtrace,
+    error::Error,
+    fmt::{self},
+    io,
+    num::TryFromIntError,
+};
 
 use derive_more::Display;
 
 use crate::jvm::code::InvalidOffset;
 
 /// An error that occurs during parsing of a class file.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub struct ParsingError {
-    #[source]
-    cause: Box<dyn std::error::Error + Send + Sync>,
+    cause: Box<dyn Error + Send + Sync>,
     kind: ParsingErrorKind,
+    #[cfg(debug_assertions)]
+    backtrace: Backtrace,
 }
 
-impl std::fmt::Display for ParsingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Error for ParsingError {}
+
+impl fmt::Display for ParsingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ParsingErrorKind::IO => write!(f, "IO Error: {}", self.cause),
-            ParsingErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause),
+            ParsingErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
+            ParsingErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
         }
+        if cfg!(debug_assertions) {
+            write!(f, "Backtrace: \n{}", self.backtrace)?;
+        }
+        Ok(())
     }
 }
 
@@ -26,6 +39,8 @@ impl ParsingError {
         Self {
             cause: message.into().into(),
             kind: ParsingErrorKind::Malformed,
+            #[cfg(debug_assertions)]
+            backtrace: Backtrace::capture(),
         }
     }
 
@@ -41,6 +56,8 @@ impl From<std::io::Error> for ParsingError {
         Self {
             cause: value.into(),
             kind: ParsingErrorKind::IO,
+            #[cfg(debug_assertions)]
+            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -61,7 +78,7 @@ pub(crate) trait ParsingErrorContext {
 
 impl<T, E> ParsingErrorContext for Result<T, E>
 where
-    E: std::fmt::Display,
+    E: fmt::Display,
 {
     type Output = T;
 
