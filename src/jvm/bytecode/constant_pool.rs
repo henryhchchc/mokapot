@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use super::errors::ParsingErrorContext;
 use crate::{
     jvm::{
         ConstantValue, JavaString,
@@ -20,8 +21,6 @@ use crate::{
     },
     types::{Descriptor, field_type::FieldType},
 };
-
-use super::errors::ParsingErrorContext;
 
 #[inline]
 fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, ParseError> {
