@@ -30,7 +30,7 @@ impl fmt::Display for ParseError {
             ParsingErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
         }
         if cfg!(debug_assertions) {
-            write!(f, "Backtrace: \n{}", self.backtrace)?;
+            write!(f, "\nBacktrace: \n{}", self.backtrace)?;
         }
         Ok(())
     }
@@ -157,7 +157,7 @@ impl fmt::Display for GenerationError {
             GenerationErrorKind::Other => write!(f, "Other error: {}", self.cause)?,
         }
         if cfg!(debug_assertions) {
-            write!(f, "Backtrace: \n{}", self.backtrace)?;
+            write!(f, "\nBacktrace: \n{}", self.backtrace)?;
         }
         Ok(())
     }
