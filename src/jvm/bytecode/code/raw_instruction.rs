@@ -4,7 +4,7 @@ use std::{
     iter,
 };
 
-use super::super::{ParseError, reader_utils::ValueReaderExt};
+use super::super::{ParseError, reader_utils::BytecodeReader};
 use crate::jvm::{
     bytecode::{errors::GenerationError, reader_utils::PositionTracker, write_length},
     code::{InstructionList, ProgramCounter, RawInstruction, RawWideInstruction},
@@ -200,7 +200,7 @@ impl RawInstruction {
         let pc = u16::try_from(reader.position())
             .map_err(|_| ParseError::malform("The instruction list is too long"))?
             .into();
-        let opcode: u8 = match reader.read_value() {
+        let opcode: u8 = match reader.decode_value() {
             Ok(it) => it,
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => Err(ParseError::from(e))?,
@@ -210,19 +210,19 @@ impl RawInstruction {
             0x53 => AAStore,
             0x01 => AConstNull,
             0x19 => ALoad {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x2a => ALoad0,
             0x2b => ALoad1,
             0x2c => ALoad2,
             0x2d => ALoad3,
             0xbd => ANewArray {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0xb0 => AReturn,
             0xbe => ArrayLength,
             0x3a => AStore {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x4b => AStore0,
             0x4c => AStore1,
@@ -232,12 +232,12 @@ impl RawInstruction {
             0x33 => BALoad,
             0x54 => BAStore,
             0x10 => BiPush {
-                value: reader.read_value()?,
+                value: reader.decode_value()?,
             },
             0x34 => CALoad,
             0x55 => CAStore,
             0xc0 => CheckCast {
-                target_type_index: reader.read_value()?,
+                target_type_index: reader.decode_value()?,
             },
             0x90 => D2F,
             0x8e => D2I,
@@ -251,7 +251,7 @@ impl RawInstruction {
             0x0f => DConst1,
             0x6f => DDiv,
             0x18 => DLoad {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x26 => DLoad0,
             0x27 => DLoad1,
@@ -262,7 +262,7 @@ impl RawInstruction {
             0x73 => DRem,
             0xaf => DReturn,
             0x39 => DStore {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x47 => DStore0,
             0x48 => DStore1,
@@ -288,7 +288,7 @@ impl RawInstruction {
             0x0d => FConst2,
             0x6e => FDiv,
             0x17 => FLoad {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x22 => FLoad0,
             0x23 => FLoad1,
@@ -299,7 +299,7 @@ impl RawInstruction {
             0x72 => FRem,
             0xae => FReturn,
             0x38 => FStore {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x43 => FStore0,
             0x44 => FStore1,
@@ -307,16 +307,16 @@ impl RawInstruction {
             0x46 => FStore3,
             0x66 => FSub,
             0xb4 => GetField {
-                field_ref_index: reader.read_value()?,
+                field_ref_index: reader.decode_value()?,
             },
             0xb2 => GetStatic {
-                field_ref_index: reader.read_value()?,
+                field_ref_index: reader.decode_value()?,
             },
             0xa7 => Goto {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xc8 => GotoW {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x91 => I2B,
             0x92 => I2C,
@@ -337,59 +337,59 @@ impl RawInstruction {
             0x08 => IConst5,
             0x6c => IDiv,
             0xa5 => IfACmpEq {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa6 => IfACmpNe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9f => IfICmpEq {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa0 => IfICmpNe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa1 => IfICmpLt {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa2 => IfICmpGe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa3 => IfICmpGt {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xa4 => IfICmpLe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x99 => IfEq {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9a => IfNe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9b => IfLt {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9c => IfGe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9d => IfGt {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x9e => IfLe {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xc7 => IfNonNull {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xc6 => IfNull {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x84 => IInc {
-                index: reader.read_value()?,
-                constant: reader.read_value()?,
+                index: reader.decode_value()?,
+                constant: reader.decode_value()?,
             },
             0x15 => ILoad {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x1a => ILoad0,
             0x1b => ILoad1,
@@ -398,20 +398,20 @@ impl RawInstruction {
             0x68 => IMul,
             0x74 => INeg,
             0xc1 => InstanceOf {
-                target_type_index: reader.read_value()?,
+                target_type_index: reader.decode_value()?,
             },
             0xba => {
-                let dynamic_index = reader.read_value()?;
-                let zero: u16 = reader.read_value()?;
+                let dynamic_index = reader.decode_value()?;
+                let zero: u16 = reader.decode_value()?;
                 if zero != 0 {
                     ParseError::malform("Zero paddings are not zero");
                 }
                 InvokeDynamic { dynamic_index }
             }
             0xb9 => {
-                let method_index = reader.read_value()?;
-                let count: u8 = reader.read_value()?;
-                let zero: u8 = reader.read_value()?;
+                let method_index = reader.decode_value()?;
+                let count: u8 = reader.decode_value()?;
+                let zero: u8 = reader.decode_value()?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
@@ -421,13 +421,13 @@ impl RawInstruction {
                 }
             }
             0xb7 => InvokeSpecial {
-                method_index: reader.read_value()?,
+                method_index: reader.decode_value()?,
             },
             0xb8 => InvokeStatic {
-                method_index: reader.read_value()?,
+                method_index: reader.decode_value()?,
             },
             0xb6 => InvokeVirtual {
-                method_index: reader.read_value()?,
+                method_index: reader.decode_value()?,
             },
             0x80 => IOr,
             0x70 => IRem,
@@ -435,7 +435,7 @@ impl RawInstruction {
             0x78 => IShl,
             0x7a => IShr,
             0x36 => IStore {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x3b => IStore0,
             0x3c => IStore1,
@@ -445,10 +445,10 @@ impl RawInstruction {
             0x7c => IUShr,
             0x82 => IXor,
             0xa8 => Jsr {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0xc9 => JsrW {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x8a => L2D,
             0x89 => L2F,
@@ -461,17 +461,17 @@ impl RawInstruction {
             0x09 => LConst0,
             0x0a => LConst1,
             0x12 => Ldc {
-                const_index: reader.read_value()?,
+                const_index: reader.decode_value()?,
             },
             0x13 => LdcW {
-                const_index: reader.read_value()?,
+                const_index: reader.decode_value()?,
             },
             0x14 => Ldc2W {
-                const_index: reader.read_value()?,
+                const_index: reader.decode_value()?,
             },
             0x6d => LDiv,
             0x16 => LLoad {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x1e => LLoad0,
             0x1f => LLoad1,
@@ -481,14 +481,14 @@ impl RawInstruction {
             0x75 => LNeg,
             0xab => {
                 while reader.position() % 4 != 0 {
-                    let _padding_byte: u8 = reader.read_value()?;
+                    let _padding_byte: u8 = reader.decode_value()?;
                 }
-                let default = reader.read_value()?;
-                let npairs = reader.read_value()?;
+                let default = reader.decode_value()?;
+                let npairs = reader.decode_value()?;
                 let match_offsets = (0..npairs)
                     .map(|_| {
-                        let match_value = reader.read_value()?;
-                        let offset = reader.read_value()?;
+                        let match_value = reader.decode_value()?;
+                        let offset = reader.decode_value()?;
                         Ok((match_value, offset))
                     })
                     .collect::<io::Result<_>>()?;
@@ -499,13 +499,13 @@ impl RawInstruction {
             }
             0xaa => {
                 while reader.position() % 4 != 0 {
-                    let _padding_byte: u8 = reader.read_value()?;
+                    let _padding_byte: u8 = reader.decode_value()?;
                 }
-                let default = reader.read_value()?;
-                let low = reader.read_value()?;
-                let high = reader.read_value()?;
+                let default = reader.decode_value()?;
+                let low = reader.decode_value()?;
+                let high = reader.decode_value()?;
                 let jump_offsets = (low..=high)
-                    .map(|_| reader.read_value())
+                    .map(|_| reader.decode_value())
                     .collect::<io::Result<_>>()?;
                 TableSwitch {
                     default,
@@ -520,7 +520,7 @@ impl RawInstruction {
             0x79 => LShl,
             0x7b => LShr,
             0x37 => LStore {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x3f => LStore0,
             0x40 => LStore1,
@@ -532,73 +532,73 @@ impl RawInstruction {
             0xc2 => MonitorEnter,
             0xc3 => MonitorExit,
             0xc5 => MultiANewArray {
-                index: reader.read_value()?,
-                dimensions: reader.read_value()?,
+                index: reader.decode_value()?,
+                dimensions: reader.decode_value()?,
             },
             0xbb => New {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0xbc => NewArray {
-                atype: reader.read_value()?,
+                atype: reader.decode_value()?,
             },
             0x00 => Nop,
             0x57 => Pop,
             0x58 => Pop2,
             0xb5 => PutField {
-                field_ref_index: reader.read_value()?,
+                field_ref_index: reader.decode_value()?,
             },
             0xb3 => PutStatic {
-                field_ref_index: reader.read_value()?,
+                field_ref_index: reader.decode_value()?,
             },
             0xa9 => Ret {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0xb1 => Return,
             0x35 => SALoad,
             0x56 => SAStore,
             0x11 => SiPush {
-                value: reader.read_value()?,
+                value: reader.decode_value()?,
             },
             0x5f => Swap,
             0xc4 => {
-                let wide_opcode = reader.read_value()?;
+                let wide_opcode = reader.decode_value()?;
                 let wide_insn = match wide_opcode {
                     0x15 => RawWideInstruction::ILoad {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x16 => RawWideInstruction::LLoad {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x17 => RawWideInstruction::FLoad {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x18 => RawWideInstruction::DLoad {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x19 => RawWideInstruction::ALoad {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x36 => RawWideInstruction::IStore {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x37 => RawWideInstruction::LStore {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x38 => RawWideInstruction::FStore {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x39 => RawWideInstruction::DStore {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x3a => RawWideInstruction::AStore {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     0x84 => RawWideInstruction::IInc {
-                        index: reader.read_value()?,
-                        increment: reader.read_value()?,
+                        index: reader.decode_value()?,
+                        increment: reader.decode_value()?,
                     },
                     0xa9 => RawWideInstruction::Ret {
-                        index: reader.read_value()?,
+                        index: reader.decode_value()?,
                     },
                     _ => Err(ParseError::malform("Invalid opcode"))?,
                 };

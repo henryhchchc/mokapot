@@ -3,11 +3,11 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParseError, ParsingContext, ToWriter,
+    FromBytecode, ParseError, ParsingContext, ToBytecode,
     attribute::{Attribute, AttributeInfo},
     errors::GenerationError,
     jvm_element_parser::ClassElement,
-    reader_utils::ValueReaderExt,
+    reader_utils::BytecodeReader,
 };
 use crate::{
     jvm::{
@@ -30,12 +30,12 @@ pub(crate) struct FieldInfo {
     attributes: Vec<AttributeInfo>,
 }
 
-impl FromReader for FieldInfo {
+impl FromBytecode for FieldInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let access_flags = reader.read_value()?;
-        let name_index = reader.read_value()?;
-        let descriptor_index = reader.read_value()?;
-        let attributes_count: u16 = reader.read_value()?;
+        let access_flags = reader.decode_value()?;
+        let name_index = reader.decode_value()?;
+        let descriptor_index = reader.decode_value()?;
+        let attributes_count: u16 = reader.decode_value()?;
         let attributes = (0..attributes_count)
             .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
@@ -48,7 +48,7 @@ impl FromReader for FieldInfo {
     }
 }
 
-impl ToWriter for FieldInfo {
+impl ToBytecode for FieldInfo {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.access_flags.to_be_bytes())?;
         writer.write_all(&self.name_index.to_be_bytes())?;

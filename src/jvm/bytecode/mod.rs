@@ -41,7 +41,7 @@ pub struct ParsingContext {
 /// Enables parsing a raw JVM element from a binary stream.
 ///
 /// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a binary input stream.
-trait FromReader {
+trait FromBytecode {
     /// Parses an instance of this type from the given reader.
     ///
     /// # Errors
@@ -56,7 +56,7 @@ trait FromReader {
 ///
 /// This trait is implemented by raw JVM elements (after putting all the constants in the constant pool) that can be serialized to a class file format.
 /// It provides a standardized way to write JVM elements back to binary form.
-trait ToWriter {
+trait ToBytecode {
     /// Writes this element to the given writer in JVM class file format.
     ///
     /// # Errors
