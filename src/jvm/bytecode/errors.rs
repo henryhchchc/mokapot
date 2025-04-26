@@ -1,3 +1,15 @@
+//! Error handling for JVM bytecode parsing and generation.
+//!
+//! This module defines error types and utilities for handling errors that
+//! can occur during parsing JVM class files and generating JVM bytecode.
+//!
+//! The main error types are:
+//! - [`ParseError`] - Errors that occur during parsing of class files
+//! - [`GenerationError`] - Errors that occur during bytecode generation
+//!
+//! Additionally, this module provides the [`ParsingErrorContext`] trait, which
+//! allows for more context to be added to errors during parsing.
+
 use std::{
     backtrace::Backtrace,
     error::Error,
@@ -18,7 +30,7 @@ pub struct ParseError {
 }
 
 impl Error for ParseError {
-    fn cause(&self) -> Option<&dyn Error> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(self.cause.as_ref())
     }
 }
@@ -37,10 +49,29 @@ impl fmt::Display for ParseError {
 }
 
 impl ParseError {
+    /// Creates a new `ParseError` with the given message, indicating a malformed class file.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A message describing the error.
     pub(crate) fn malform(message: impl fmt::Display) -> Self {
         Self {
             cause: format!("{message}").into(),
             kind: ParsingErrorKind::Malformed,
+            #[cfg(debug_assertions)]
+            backtrace: Backtrace::capture(),
+        }
+    }
+
+    /// Creates a new `ParseError` with the kind `IO` and the given `std::io::Error` as its cause.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The IO error that caused this parse error.
+    pub(crate) fn io(error: io::Error) -> Self {
+        Self {
+            cause: error.into(),
+            kind: ParsingErrorKind::IO,
             #[cfg(debug_assertions)]
             backtrace: Backtrace::capture(),
         }
@@ -54,33 +85,55 @@ impl ParseError {
 }
 
 impl From<std::io::Error> for ParseError {
-    fn from(value: std::io::Error) -> Self {
-        Self {
-            cause: value.into(),
-            kind: ParsingErrorKind::IO,
-            #[cfg(debug_assertions)]
-            backtrace: Backtrace::capture(),
-        }
+    fn from(error: std::io::Error) -> Self {
+        Self::io(error)
     }
 }
 
-/// The Kind of [`ParsingError`].
+/// The kind of [`ParseError`].
+///
+/// This enum represents the different categories of errors that can occur
+/// during parsing of a class file.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ParsingErrorKind {
-    /// Due to an IO error in the underlying reader
+    /// An error occurred while reading from the underlying input source.
     IO,
-    /// Due to a malformed class file
+    /// The class file is malformed and does not conform to the JVM specification.
     Malformed,
 }
 
+/// A trait for providing context to errors during parsing.
+///
+/// This trait allows adding contextual information to errors that occur during
+/// parsing, making it easier to understand what went wrong. It is implemented for
+/// `Result` and `Option` types to provide a convenient way to handle errors.
 pub(crate) trait ParsingErrorContext {
+    /// The success type.
     type Output;
+
+    /// The error type.
     type Error;
 
+    /// Adds static context to an error.
+    ///
+    /// This method adds a static message to an error. The message is attached
+    /// to the error regardless of the error's value.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to add to the error.
     fn context<Message>(self, message: Message) -> Result<Self::Output, ParseError>
     where
         Message: fmt::Display;
 
+    /// Adds dynamic context to an error.
+    ///
+    /// This method adds a message to an error that is generated based on the error value.
+    /// This allows for more specific error messages that depend on the error value.
+    ///
+    /// # Arguments
+    ///
+    /// * `message_fn` - A function that takes the error value and returns a message.
     fn with_context<F, Message>(self, message_fn: F) -> Result<Self::Output, ParseError>
     where
         F: FnOnce(Self::Error) -> Message,
@@ -143,7 +196,7 @@ pub struct GenerationError {
 }
 
 impl Error for GenerationError {
-    fn cause(&self) -> Option<&dyn Error> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(self.cause.as_ref())
     }
 }
@@ -164,20 +217,34 @@ impl fmt::Display for GenerationError {
 }
 
 /// The kind of [`GenerationError`].
+///
+/// This enum represents the different categories of errors that can occur
+/// during bytecode generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenerationErrorKind {
-    /// Due to an IO error in the underlying writer
+    /// An error occurred while writing to the underlying output destination.
     IO,
-    /// The length of a list if beyond the max value of the data type to store the range. For instance an instruction list containing more than 65535 instructions.
+    /// A value exceeds the maximum allowed by the JVM specification.
+    ///
+    /// For example, an instruction list containing more than 65535 instructions,
+    /// which exceeds the maximum number that can be represented in a 16-bit field.
     OutOfRange,
-    /// An error when operating the constant pool
+    /// An error occurred when operating on the constant pool.
+    ///
+    /// This could be due to reaching the maximum number of entries
+    /// or trying to add an invalid entry.
     ConstantPool,
-    /// Other errors
+    /// Other errors that don't fall into the above categories.
     Other,
 }
 
 impl GenerationError {
     /// Creates a new `GenerationError` with the given cause and kind.
+    ///
+    /// # Arguments
+    ///
+    /// * `cause` - The underlying cause of the error.
+    /// * `kind` - The kind of error that occurred.
     #[must_use]
     pub fn new(cause: Box<dyn Error + Send + Sync>, kind: GenerationErrorKind) -> Self {
         Self {
@@ -188,7 +255,11 @@ impl GenerationError {
         }
     }
 
-    /// Creates a new `GenerationError` with the given message and kind.
+    /// Creates a new `GenerationError` with the given message and kind `Other`.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A message describing the error.
     #[must_use]
     pub fn other<Message>(message: Message) -> Self
     where
@@ -196,11 +267,27 @@ impl GenerationError {
     {
         Self::new(format!("{message}").into(), GenerationErrorKind::Other)
     }
+
+    /// Creates a new `GenerationError` with the kind `IO` and the given `std::io::Error` as its cause.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The IO error that caused this generation error.
+    #[must_use]
+    pub fn io(error: io::Error) -> Self {
+        Self::new(error.into(), GenerationErrorKind::IO)
+    }
+
+    /// Returns the kind of error.
+    #[must_use]
+    pub const fn kind(&self) -> GenerationErrorKind {
+        self.kind
+    }
 }
 
 impl From<io::Error> for GenerationError {
-    fn from(cause: io::Error) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::IO)
+    fn from(error: io::Error) -> Self {
+        Self::io(error)
     }
 }
 
