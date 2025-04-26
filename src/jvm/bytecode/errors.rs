@@ -24,7 +24,7 @@ use crate::jvm::{class::constant_pool, code::InvalidOffset};
 #[derive(Debug)]
 pub struct ParseError {
     cause: Box<dyn Error + Send + Sync>,
-    kind: ParsingErrorKind,
+    kind: ParseErrorKind,
     #[cfg(debug_assertions)]
     backtrace: Backtrace,
 }
@@ -38,8 +38,8 @@ impl Error for ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ParsingErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
-            ParsingErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
+            ParseErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
+            ParseErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
         }
         if cfg!(debug_assertions) {
             write!(f, "\nBacktrace: \n{}", self.backtrace)?;
@@ -57,7 +57,7 @@ impl ParseError {
     pub(crate) fn malform(message: impl fmt::Display) -> Self {
         Self {
             cause: format!("{message}").into(),
-            kind: ParsingErrorKind::Malformed,
+            kind: ParseErrorKind::Malformed,
             #[cfg(debug_assertions)]
             backtrace: Backtrace::capture(),
         }
@@ -71,7 +71,7 @@ impl ParseError {
     pub(crate) fn io(error: io::Error) -> Self {
         Self {
             cause: error.into(),
-            kind: ParsingErrorKind::IO,
+            kind: ParseErrorKind::IO,
             #[cfg(debug_assertions)]
             backtrace: Backtrace::capture(),
         }
@@ -79,7 +79,7 @@ impl ParseError {
 
     /// Returns the kind of error.
     #[must_use]
-    pub const fn kind(&self) -> ParsingErrorKind {
+    pub const fn kind(&self) -> ParseErrorKind {
         self.kind
     }
 }
@@ -95,7 +95,7 @@ impl From<std::io::Error> for ParseError {
 /// This enum represents the different categories of errors that can occur
 /// during parsing of a class file.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ParsingErrorKind {
+pub enum ParseErrorKind {
     /// An error occurred while reading from the underlying input source.
     IO,
     /// The class file is malformed and does not conform to the JVM specification.
