@@ -1,6 +1,6 @@
 use bitflags::Flags;
 
-use super::{ParseError, ParsingContext, ToWriter, errors::GenerationError};
+use super::{ParseError, ParsingContext, ToBytecode, errors::GenerationError};
 use crate::jvm::class::ConstantPool;
 
 pub(super) trait ClassElement: Sized {
@@ -12,7 +12,7 @@ pub(super) trait ClassElement: Sized {
 
     fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, GenerationError>
     where
-        Self::Raw: ToWriter,
+        Self::Raw: ToBytecode,
     {
         let mut bytes = Vec::new();
         self.into_raw(cp)?.to_writer(&mut bytes)?;

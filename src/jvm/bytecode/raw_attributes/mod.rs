@@ -5,10 +5,10 @@ use std::{
 };
 
 use super::{
-    FromReader, ToWriter,
+    FromBytecode, ToBytecode,
     attribute::AttributeInfo,
     errors::GenerationError,
-    reader_utils::{ValueReaderExt, read_byte_chunk},
+    reader_utils::{BytecodeReader, read_vec},
     write_length,
 };
 use crate::{jvm::code::ProgramCounter, macros::see_jvm_spec, utils::enum_discriminant};
@@ -23,20 +23,20 @@ pub struct Code {
     pub attributes: Vec<AttributeInfo>,
 }
 
-impl FromReader for Code {
+impl FromBytecode for Code {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
-        let max_stack = reader.read_value()?;
-        let max_locals = reader.read_value()?;
-        let code_length: u32 = reader.read_value()?;
+        let max_stack = reader.decode_value()?;
+        let max_locals = reader.decode_value()?;
+        let code_length: u32 = reader.decode_value()?;
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let instruction_bytes = read_byte_chunk(reader, code_length)?;
-        let exception_table_length: u16 = reader.read_value()?;
+        let instruction_bytes = read_vec(reader, code_length)?;
+        let exception_table_length: u16 = reader.decode_value()?;
         let exception_table = (0..exception_table_length)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<Vec<_>>>()?;
-        let attributes_count: u16 = reader.read_value()?;
+        let attributes_count: u16 = reader.decode_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<Vec<_>>>()?;
         Ok(Self {
             max_stack,
@@ -48,7 +48,7 @@ impl FromReader for Code {
     }
 }
 
-impl ToWriter for Code {
+impl ToBytecode for Code {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.max_stack.to_be_bytes())?;
         writer.write_all(&self.max_locals.to_be_bytes())?;
@@ -72,18 +72,18 @@ pub struct ExceptionTableEntry {
     pub catch_type_idx: u16,
 }
 
-impl FromReader for ExceptionTableEntry {
+impl FromBytecode for ExceptionTableEntry {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
         Ok(Self {
-            start_pc: reader.read_value()?,
-            end_pc: reader.read_value()?,
-            handler_pc: reader.read_value()?,
-            catch_type_idx: reader.read_value()?,
+            start_pc: reader.decode_value()?,
+            end_pc: reader.decode_value()?,
+            handler_pc: reader.decode_value()?,
+            catch_type_idx: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for ExceptionTableEntry {
+impl ToBytecode for ExceptionTableEntry {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.start_pc.to_be_bytes())?;
         writer.write_all(&self.end_pc.to_be_bytes())?;
@@ -126,35 +126,35 @@ pub enum StackMapFrameInfo {
     },
 }
 
-impl FromReader for StackMapFrameInfo {
+impl FromBytecode for StackMapFrameInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let frame_type: u8 = reader.read_value()?;
+        let frame_type: u8 = reader.decode_value()?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
                 frame_type,
-                stack: reader.read_value()?,
+                stack: reader.decode_value()?,
             }),
             frame_type @ 128..=246 => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Frame type {frame_type} is reserved for future use."),
             )),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: reader.read_value()?,
-                stack: reader.read_value()?,
+                offset_delta: reader.decode_value()?,
+                stack: reader.decode_value()?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: reader.read_value()?,
+                offset_delta: reader.decode_value()?,
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: reader.read_value()?,
+                offset_delta: reader.decode_value()?,
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = reader.read_value()?;
+                let offset_delta = reader.decode_value()?;
                 let locals = (0..locals_count)
-                    .map(|_| reader.read_value())
+                    .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
                 Ok(Self::AppendFrame {
                     offset_delta,
@@ -162,14 +162,14 @@ impl FromReader for StackMapFrameInfo {
                 })
             }
             255 => {
-                let offset_delta = reader.read_value()?;
-                let number_of_locals: u16 = reader.read_value()?;
+                let offset_delta = reader.decode_value()?;
+                let number_of_locals: u16 = reader.decode_value()?;
                 let locals = (0..number_of_locals)
-                    .map(|_| reader.read_value())
+                    .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
-                let number_of_stack_items: u16 = reader.read_value()?;
+                let number_of_stack_items: u16 = reader.decode_value()?;
                 let stack = (0..number_of_stack_items)
-                    .map(|_| reader.read_value())
+                    .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
                 Ok(Self::FullFrame {
                     offset_delta,
@@ -181,7 +181,7 @@ impl FromReader for StackMapFrameInfo {
     }
 }
 
-impl ToWriter for StackMapFrameInfo {
+impl ToBytecode for StackMapFrameInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         match self {
             Self::SameFrame { frame_type } => {
@@ -278,9 +278,9 @@ impl VerificationTypeInfo {
     }
 }
 
-impl FromReader for VerificationTypeInfo {
+impl FromBytecode for VerificationTypeInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let tag: u8 = reader.read_value()?;
+        let tag: u8 = reader.decode_value()?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -290,10 +290,10 @@ impl FromReader for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                class_info_index: reader.read_value()?,
+                class_info_index: reader.decode_value()?,
             }),
             8 => Ok(Self::Uninitialized {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -303,7 +303,7 @@ impl FromReader for VerificationTypeInfo {
     }
 }
 
-impl ToWriter for VerificationTypeInfo {
+impl ToBytecode for VerificationTypeInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let tag = self.tag();
         writer.write_all(&tag.to_be_bytes())?;
@@ -325,18 +325,18 @@ pub struct InnerClass {
     pub access_flags: u16,
 }
 
-impl FromReader for InnerClass {
+impl FromBytecode for InnerClass {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            info_index: reader.read_value()?,
-            outer_class_info_index: reader.read_value()?,
-            inner_name_index: reader.read_value()?,
-            access_flags: reader.read_value()?,
+            info_index: reader.decode_value()?,
+            outer_class_info_index: reader.decode_value()?,
+            inner_name_index: reader.decode_value()?,
+            access_flags: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for InnerClass {
+impl ToBytecode for InnerClass {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.info_index.to_be_bytes())?;
         writer.write_all(&self.outer_class_info_index.to_be_bytes())?;
@@ -351,16 +351,16 @@ pub struct EnclosingMethod {
     pub method_index: u16,
 }
 
-impl FromReader for EnclosingMethod {
+impl FromBytecode for EnclosingMethod {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            class_index: reader.read_value()?,
-            method_index: reader.read_value()?,
+            class_index: reader.decode_value()?,
+            method_index: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for EnclosingMethod {
+impl ToBytecode for EnclosingMethod {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.class_index.to_be_bytes())?;
         writer.write_all(&self.method_index.to_be_bytes())?;
@@ -376,19 +376,19 @@ pub struct LocalVariableInfo {
     pub index: u16,
 }
 
-impl FromReader for LocalVariableInfo {
+impl FromBytecode for LocalVariableInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            start_pc: reader.read_value()?,
-            length: reader.read_value()?,
-            name_index: reader.read_value()?,
-            desc_or_signature_idx: reader.read_value()?,
-            index: reader.read_value()?,
+            start_pc: reader.decode_value()?,
+            length: reader.decode_value()?,
+            name_index: reader.decode_value()?,
+            desc_or_signature_idx: reader.decode_value()?,
+            index: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for LocalVariableInfo {
+impl ToBytecode for LocalVariableInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
         writer.write_all(&self.length.to_be_bytes())?;
@@ -404,14 +404,14 @@ pub struct Annotation {
     pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
 }
 
-impl FromReader for Annotation {
+impl FromBytecode for Annotation {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let type_index = reader.read_value()?;
-        let num_element_value_pairs: u16 = reader.read_value()?;
+        let type_index = reader.decode_value()?;
+        let num_element_value_pairs: u16 = reader.decode_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = reader.read_value()?;
-                let element_value = reader.read_value()?;
+                let element_name_index = reader.decode_value()?;
+                let element_value = reader.decode_value()?;
                 Ok((element_name_index, element_value))
             })
             .collect::<io::Result<_>>()?;
@@ -422,7 +422,7 @@ impl FromReader for Annotation {
     }
 }
 
-impl ToWriter for Annotation {
+impl ToBytecode for Annotation {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.type_index.to_be_bytes())?;
         write_length::<u16>(writer, self.element_value_pairs.len())?;
@@ -445,23 +445,23 @@ pub enum ElementValueInfo {
     Array(Vec<ElementValueInfo>),
 }
 
-impl FromReader for ElementValueInfo {
+impl FromBytecode for ElementValueInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let tag: u8 = reader.read_value()?;
+        let tag: u8 = reader.decode_value()?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::Const(tag, reader.read_value()?))
+                Ok(Self::Const(tag, reader.decode_value()?))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: reader.read_value()?,
-                const_name_index: reader.read_value()?,
+                type_name_index: reader.decode_value()?,
+                const_name_index: reader.decode_value()?,
             }),
-            b'c' => Ok(Self::ClassInfo(reader.read_value()?)),
-            b'@' => Ok(Self::Annotation(reader.read_value()?)),
+            b'c' => Ok(Self::ClassInfo(reader.decode_value()?)),
+            b'@' => Ok(Self::Annotation(reader.decode_value()?)),
             b'[' => {
-                let num_values: u16 = reader.read_value()?;
+                let num_values: u16 = reader.decode_value()?;
                 let values = (0..num_values)
-                    .map(|_| reader.read_value())
+                    .map(|_| reader.decode_value())
                     .collect::<io::Result<_>>()?;
                 Ok(Self::Array(values))
             }
@@ -473,7 +473,7 @@ impl FromReader for ElementValueInfo {
     }
 }
 
-impl ToWriter for ElementValueInfo {
+impl ToBytecode for ElementValueInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let tag = self.tag();
         writer.write_all(&tag.to_be_bytes())?;
@@ -519,23 +519,23 @@ pub struct TypeAnnotation {
     pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
 }
 
-impl FromReader for TypeAnnotation {
+impl FromBytecode for TypeAnnotation {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let target_info = reader.read_value()?;
-        let target_path_length: u8 = reader.read_value()?;
+        let target_info = reader.decode_value()?;
+        let target_path_length: u8 = reader.decode_value()?;
         let target_path = (0..target_path_length)
             .map(|_| {
-                let type_path_kind = reader.read_value()?;
-                let type_argument_index = reader.read_value()?;
+                let type_path_kind = reader.decode_value()?;
+                let type_argument_index = reader.decode_value()?;
                 Ok((type_path_kind, type_argument_index))
             })
             .collect::<io::Result<_>>()?;
-        let type_index = reader.read_value()?;
-        let num_element_value_pairs: u16 = reader.read_value()?;
+        let type_index = reader.decode_value()?;
+        let num_element_value_pairs: u16 = reader.decode_value()?;
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = reader.read_value()?;
-                let element_value = reader.read_value()?;
+                let element_name_index = reader.decode_value()?;
+                let element_value = reader.decode_value()?;
                 Ok((element_name_index, element_value))
             })
             .collect::<io::Result<_>>()?;
@@ -548,7 +548,7 @@ impl FromReader for TypeAnnotation {
     }
 }
 
-impl ToWriter for TypeAnnotation {
+impl ToBytecode for TypeAnnotation {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         self.target_info.to_writer(writer)?;
         write_length::<u8>(writer, self.target_path.len())?;
@@ -633,94 +633,94 @@ pub enum TargetInfo {
     } = 0x4B,
 }
 
-impl FromReader for TargetInfo {
+impl FromBytecode for TargetInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let target_type: u8 = reader.read_value()?;
+        let target_type: u8 = reader.decode_value()?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x10 => Self::SuperType {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x11 => Self::TypeParameterBoundOfClass {
-                type_parameter_index: reader.read_value()?,
-                bound_index: reader.read_value()?,
+                type_parameter_index: reader.decode_value()?,
+                bound_index: reader.decode_value()?,
             },
             0x12 => Self::TypeParameterBoundOfMethod {
-                type_parameter_index: reader.read_value()?,
-                bound_index: reader.read_value()?,
+                type_parameter_index: reader.decode_value()?,
+                bound_index: reader.decode_value()?,
             },
             0x13 => Self::Field,
             0x14 => Self::TypeOfField,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x17 => Self::Throws {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x40 => {
-                let table_length: u16 = reader.read_value()?;
+                let table_length: u16 = reader.decode_value()?;
                 let table = (0..table_length)
                     .map(|_| {
-                        let start_pc = reader.read_value()?;
-                        let length = reader.read_value()?;
-                        let index = reader.read_value()?;
+                        let start_pc = reader.decode_value()?;
+                        let length = reader.decode_value()?;
+                        let index = reader.decode_value()?;
                         Ok((start_pc, length, index))
                     })
                     .collect::<io::Result<_>>()?;
                 Self::LocalVariable(table)
             }
             0x41 => {
-                let table_length: u16 = reader.read_value()?;
+                let table_length: u16 = reader.decode_value()?;
                 let table = (0..table_length)
                     .map(|_| {
-                        let start_pc = reader.read_value()?;
-                        let length = reader.read_value()?;
-                        let index = reader.read_value()?;
+                        let start_pc = reader.decode_value()?;
+                        let length = reader.decode_value()?;
+                        let index = reader.decode_value()?;
                         Ok((start_pc, length, index))
                     })
                     .collect::<io::Result<_>>()?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                index: reader.read_value()?,
+                index: reader.decode_value()?,
             },
             0x43 => Self::InstanceOf {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x44 => Self::New {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x45 => Self::NewMethodReference {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x46 => Self::VarMethodReference {
-                offset: reader.read_value()?,
+                offset: reader.decode_value()?,
             },
             0x47 => Self::TypeInCast {
-                offset: reader.read_value()?,
-                index: reader.read_value()?,
+                offset: reader.decode_value()?,
+                index: reader.decode_value()?,
             },
             0x48 => Self::TypeArgumentInConstructor {
-                offset: reader.read_value()?,
-                index: reader.read_value()?,
+                offset: reader.decode_value()?,
+                index: reader.decode_value()?,
             },
             0x49 => Self::TypeArgumentInCall {
-                offset: reader.read_value()?,
-                index: reader.read_value()?,
+                offset: reader.decode_value()?,
+                index: reader.decode_value()?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
-                offset: reader.read_value()?,
-                index: reader.read_value()?,
+                offset: reader.decode_value()?,
+                index: reader.decode_value()?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
-                offset: reader.read_value()?,
-                index: reader.read_value()?,
+                offset: reader.decode_value()?,
+                index: reader.decode_value()?,
             },
             unexpected => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -731,7 +731,7 @@ impl FromReader for TargetInfo {
     }
 }
 
-impl ToWriter for TargetInfo {
+impl ToBytecode for TargetInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         // Safety: Self is marked as repr(u8) so it is fine to use enum_discriminant
         let target_type: u8 = unsafe { enum_discriminant(self) };
@@ -789,12 +789,12 @@ pub struct BootstrapMethod {
     pub arguments: Vec<u16>,
 }
 
-impl FromReader for BootstrapMethod {
+impl FromBytecode for BootstrapMethod {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let method_ref_idx = reader.read_value()?;
-        let num_arguments: u16 = reader.read_value()?;
+        let method_ref_idx = reader.decode_value()?;
+        let num_arguments: u16 = reader.decode_value()?;
         let arguments = (0..num_arguments)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             method_ref_idx,
@@ -803,7 +803,7 @@ impl FromReader for BootstrapMethod {
     }
 }
 
-impl ToWriter for BootstrapMethod {
+impl ToBytecode for BootstrapMethod {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.method_ref_idx.to_be_bytes())?;
         write_length::<u16>(writer, self.arguments.len())?;
@@ -819,16 +819,16 @@ pub struct ParameterInfo {
     pub access_flags: u16,
 }
 
-impl FromReader for ParameterInfo {
+impl FromBytecode for ParameterInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            name_index: reader.read_value()?,
-            access_flags: reader.read_value()?,
+            name_index: reader.decode_value()?,
+            access_flags: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for ParameterInfo {
+impl ToBytecode for ParameterInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.name_index.to_be_bytes())?;
         writer.write_all(&self.access_flags.to_be_bytes())?;
@@ -847,30 +847,30 @@ pub struct ModuleInfo {
     pub provides: Vec<ProvidesInfo>,
 }
 
-impl FromReader for ModuleInfo {
+impl FromBytecode for ModuleInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let info_index = reader.read_value()?;
-        let flags = reader.read_value()?;
-        let version_index = reader.read_value()?;
-        let requires_count: u16 = reader.read_value()?;
+        let info_index = reader.decode_value()?;
+        let flags = reader.decode_value()?;
+        let version_index = reader.decode_value()?;
+        let requires_count: u16 = reader.decode_value()?;
         let requires = (0..requires_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let exports_count: u16 = reader.read_value()?;
+        let exports_count: u16 = reader.decode_value()?;
         let exports = (0..exports_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let opens_count: u16 = reader.read_value()?;
+        let opens_count: u16 = reader.decode_value()?;
         let opens = (0..opens_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let uses_count: u16 = reader.read_value()?;
+        let uses_count: u16 = reader.decode_value()?;
         let uses = (0..uses_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let provides_count: u16 = reader.read_value()?;
+        let provides_count: u16 = reader.decode_value()?;
         let provides = (0..provides_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             info_index,
@@ -885,7 +885,7 @@ impl FromReader for ModuleInfo {
     }
 }
 
-impl ToWriter for ModuleInfo {
+impl ToBytecode for ModuleInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.info_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
@@ -920,17 +920,17 @@ pub struct RequiresInfo {
     pub version_index: u16,
 }
 
-impl FromReader for RequiresInfo {
+impl FromBytecode for RequiresInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
-            requires_index: reader.read_value()?,
-            flags: reader.read_value()?,
-            version_index: reader.read_value()?,
+            requires_index: reader.decode_value()?,
+            flags: reader.decode_value()?,
+            version_index: reader.decode_value()?,
         })
     }
 }
 
-impl ToWriter for RequiresInfo {
+impl ToBytecode for RequiresInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.requires_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
@@ -945,13 +945,13 @@ pub struct ExportsInfo {
     pub to: Vec<u16>,
 }
 
-impl FromReader for ExportsInfo {
+impl FromBytecode for ExportsInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let exports_index = reader.read_value()?;
-        let flags = reader.read_value()?;
-        let to_count: u16 = reader.read_value()?;
+        let exports_index = reader.decode_value()?;
+        let flags = reader.decode_value()?;
+        let to_count: u16 = reader.decode_value()?;
         let to = (0..to_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             exports_index,
@@ -961,7 +961,7 @@ impl FromReader for ExportsInfo {
     }
 }
 
-impl ToWriter for ExportsInfo {
+impl ToBytecode for ExportsInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.exports_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
@@ -979,13 +979,13 @@ pub struct OpensInfo {
     pub to: Vec<u16>,
 }
 
-impl FromReader for OpensInfo {
+impl FromBytecode for OpensInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let opens_index = reader.read_value()?;
-        let flags = reader.read_value()?;
-        let to_count: u16 = reader.read_value()?;
+        let opens_index = reader.decode_value()?;
+        let flags = reader.decode_value()?;
+        let to_count: u16 = reader.decode_value()?;
         let to = (0..to_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             opens_index,
@@ -995,7 +995,7 @@ impl FromReader for OpensInfo {
     }
 }
 
-impl ToWriter for OpensInfo {
+impl ToBytecode for OpensInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.opens_index.to_be_bytes())?;
         writer.write_all(&self.flags.to_be_bytes())?;
@@ -1012,12 +1012,12 @@ pub struct ProvidesInfo {
     pub with: Vec<u16>,
 }
 
-impl FromReader for ProvidesInfo {
+impl FromBytecode for ProvidesInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let provides_index = reader.read_value()?;
-        let with_count: u16 = reader.read_value()?;
+        let provides_index = reader.decode_value()?;
+        let with_count: u16 = reader.decode_value()?;
         let with = (0..with_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             provides_index,
@@ -1026,7 +1026,7 @@ impl FromReader for ProvidesInfo {
     }
 }
 
-impl ToWriter for ProvidesInfo {
+impl ToBytecode for ProvidesInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.provides_index.to_be_bytes())?;
         write_length::<u16>(writer, self.with.len())?;
@@ -1043,13 +1043,13 @@ pub struct RecordComponentInfo {
     pub attributes: Vec<AttributeInfo>,
 }
 
-impl FromReader for RecordComponentInfo {
+impl FromBytecode for RecordComponentInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let name_index = reader.read_value()?;
-        let descriptor_index = reader.read_value()?;
-        let attributes_count: u16 = reader.read_value()?;
+        let name_index = reader.decode_value()?;
+        let descriptor_index = reader.decode_value()?;
+        let attributes_count: u16 = reader.decode_value()?;
         let attributes = (0..attributes_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
         Ok(Self {
             name_index,
@@ -1059,7 +1059,7 @@ impl FromReader for RecordComponentInfo {
     }
 }
 
-impl ToWriter for RecordComponentInfo {
+impl ToBytecode for RecordComponentInfo {
     fn to_writer<W>(&self, writer: &mut W) -> Result<(), GenerationError>
     where
         W: Write + ?Sized,

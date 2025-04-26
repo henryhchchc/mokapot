@@ -8,8 +8,8 @@ use crate::{
     jvm::{
         ConstantValue, JavaString,
         bytecode::{
-            GenerationError, ParseError, ToWriter,
-            reader_utils::{ValueReaderExt, read_byte_chunk},
+            GenerationError, ParseError, ToBytecode,
+            reader_utils::{BytecodeReader, read_vec},
             write_length,
         },
         class::{
@@ -377,7 +377,7 @@ impl ConstantPool {
     }
 }
 
-impl ToWriter for ConstantPool {
+impl ToBytecode for ConstantPool {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.count().to_be_bytes())?;
         for slot in &self.inner {
@@ -391,55 +391,55 @@ impl ToWriter for ConstantPool {
 
 impl Entry {
     pub(crate) fn parse<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let tag: u8 = reader.read_value()?;
+        let tag: u8 = reader.decode_value()?;
         match tag {
             1 => Self::parse_utf8(reader),
-            3 => reader.read_value().map(Self::Integer),
-            4 => reader.read_value().map(Self::Float),
-            5 => reader.read_value().map(Self::Long),
-            6 => reader.read_value().map(Self::Double),
+            3 => reader.decode_value().map(Self::Integer),
+            4 => reader.decode_value().map(Self::Float),
+            5 => reader.decode_value().map(Self::Long),
+            6 => reader.decode_value().map(Self::Double),
             7 => reader
-                .read_value()
+                .decode_value()
                 .map(|name_index| Self::Class { name_index }),
             8 => reader
-                .read_value()
+                .decode_value()
                 .map(|string_index| Self::String { string_index }),
             9 => Ok(Self::FieldRef {
-                class_index: reader.read_value()?,
-                name_and_type_index: reader.read_value()?,
+                class_index: reader.decode_value()?,
+                name_and_type_index: reader.decode_value()?,
             }),
             10 => Ok(Self::MethodRef {
-                class_index: reader.read_value()?,
-                name_and_type_index: reader.read_value()?,
+                class_index: reader.decode_value()?,
+                name_and_type_index: reader.decode_value()?,
             }),
             11 => Ok(Self::InterfaceMethodRef {
-                class_index: reader.read_value()?,
-                name_and_type_index: reader.read_value()?,
+                class_index: reader.decode_value()?,
+                name_and_type_index: reader.decode_value()?,
             }),
             12 => Ok(Self::NameAndType {
-                name_index: reader.read_value()?,
-                descriptor_index: reader.read_value()?,
+                name_index: reader.decode_value()?,
+                descriptor_index: reader.decode_value()?,
             }),
             15 => Ok(Self::MethodHandle {
-                reference_kind: reader.read_value()?,
-                reference_index: reader.read_value()?,
+                reference_kind: reader.decode_value()?,
+                reference_index: reader.decode_value()?,
             }),
             16 => Ok(Self::MethodType {
-                descriptor_index: reader.read_value()?,
+                descriptor_index: reader.decode_value()?,
             }),
             17 => Ok(Self::Dynamic {
-                bootstrap_method_attr_index: reader.read_value()?,
-                name_and_type_index: reader.read_value()?,
+                bootstrap_method_attr_index: reader.decode_value()?,
+                name_and_type_index: reader.decode_value()?,
             }),
             18 => Ok(Self::InvokeDynamic {
-                bootstrap_method_attr_index: reader.read_value()?,
-                name_and_type_index: reader.read_value()?,
+                bootstrap_method_attr_index: reader.decode_value()?,
+                name_and_type_index: reader.decode_value()?,
             }),
             19 => reader
-                .read_value()
+                .decode_value()
                 .map(|name_index| Self::Module { name_index }),
             20 => reader
-                .read_value()
+                .decode_value()
                 .map(|name_index| Self::Package { name_index }),
             it => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -449,8 +449,8 @@ impl Entry {
     }
 
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let length: u16 = reader.read_value()?;
-        let cesu8_content = read_byte_chunk(reader, length.into())?;
+        let length: u16 = reader.decode_value()?;
+        let cesu8_content = read_vec(reader, length.into())?;
         match cesu8::from_java_cesu8(cesu8_content.as_slice()) {
             Ok(result) => Ok(Self::Utf8(JavaString::Utf8(result.into_owned()))),
             Err(_) => Ok(Self::Utf8(JavaString::InvalidUtf8(cesu8_content))),
@@ -458,7 +458,7 @@ impl Entry {
     }
 }
 
-impl ToWriter for JavaString {
+impl ToBytecode for JavaString {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         match self {
             Self::Utf8(str) => {
@@ -475,7 +475,7 @@ impl ToWriter for JavaString {
     }
 }
 
-impl ToWriter for Entry {
+impl ToBytecode for Entry {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.tag().to_be_bytes())?;
         match self {
@@ -551,7 +551,7 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::jvm::bytecode::ToWriter;
+    use crate::jvm::bytecode::ToBytecode;
 
     const MAX_BYTES: usize = 255;
 

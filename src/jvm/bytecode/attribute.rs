@@ -8,11 +8,11 @@ use itertools::Itertools;
 use num_traits::ToBytes;
 
 use super::{
-    FromReader, ParseError, ParsingContext, ToWriter,
+    FromBytecode, ParseError, ParsingContext, ToBytecode,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     errors::GenerationError,
     jvm_element_parser::ClassElement,
-    reader_utils::{ValueReaderExt, read_byte_chunk},
+    reader_utils::{BytecodeReader, read_vec},
     write_length,
 };
 use crate::{
@@ -41,18 +41,18 @@ impl AttributeInfo {
     }
 }
 
-impl FromReader for AttributeInfo {
+impl FromBytecode for AttributeInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let name_idx = reader.read_value()?;
-        let attribute_length: u32 = reader.read_value()?;
+        let name_idx = reader.decode_value()?;
+        let attribute_length: u32 = reader.decode_value()?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = read_byte_chunk(reader, attribute_length)?;
+        let info = read_vec(reader, attribute_length)?;
         Ok(Self::from_raw_parts(name_idx, info))
     }
 }
 
-impl ToWriter for AttributeInfo {
+impl ToBytecode for AttributeInfo {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.name_idx.to_be_bytes())?;
         write_length::<u32>(writer, self.info.len())?;
@@ -61,7 +61,7 @@ impl ToWriter for AttributeInfo {
     }
 }
 
-impl ToWriter for Vec<AttributeInfo> {
+impl ToBytecode for Vec<AttributeInfo> {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         write_length::<u16>(writer, self.len())?;
         for attr in self {
@@ -147,11 +147,11 @@ impl Attribute {
 
 macro_rules! parse {
     ($reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
-        let raw = $reader.read_value()?;
+        let raw = $reader.decode_value()?;
         ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
     }};
     ($len_type:ty; $reader:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
-        let count: $len_type = $reader.read_value()?;
+        let count: $len_type = $reader.decode_value()?;
         (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
     ($len_type:ty; $reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
@@ -169,7 +169,7 @@ impl ClassElement for Attribute {
 
         let result = match name {
             "ConstantValue" => {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool
                     .get_constant_value(idx)
                     .map(Self::ConstantValue)
@@ -177,7 +177,7 @@ impl ClassElement for Attribute {
             "Code" => parse!(reader, ctx => Code),
             "StackMapTable" => parse![u16; reader, ctx => StackMapTable],
             "Exceptions" => parse![u16; reader, || {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool.get_class_ref(idx)
             } => Exceptions],
             "InnerClasses" => parse![u16; reader, ctx => InnerClasses],
@@ -213,27 +213,27 @@ impl ClassElement for Attribute {
             "MethodParameters" => parse![u8; reader, ctx => MethodParameters],
             "Module" => parse!(reader, ctx => Module),
             "ModulePackages" => parse![u16; reader, || {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool.get_package_ref(idx)
             } => ModulePackages],
             "ModuleMainClass" => {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool
                     .get_class_ref(idx)
                     .map(Self::ModuleMainClass)
             }
             "NestHost" => {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool.get_class_ref(idx).map(Self::NestHost)
             }
             "NestMembers" => parse![u16; reader, || {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool.get_class_ref(idx)
             }]
             .map(Self::NestMembers),
             "Record" => parse![u16; reader, ctx => Record],
             "PermittedSubclasses" => parse![u16; reader, || {
-                let idx = reader.read_value()?;
+                let idx = reader.decode_value()?;
                 ctx.constant_pool.get_class_ref(idx)
             } => PermittedSubclasses],
             name => reader
@@ -338,13 +338,13 @@ fn parse_string<R: Read + ?Sized>(
     reader: &mut R,
     ctx: &ParsingContext,
 ) -> Result<String, ParseError> {
-    let str_idx = reader.read_value()?;
+    let str_idx = reader.decode_value()?;
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 
 #[inline]
 fn serialize_vec<Len>(
-    items: Vec<impl ClassElement<Raw: ToWriter>>,
+    items: Vec<impl ClassElement<Raw: ToBytecode>>,
     cp: &mut ConstantPool,
 ) -> Result<Vec<u8>, GenerationError>
 where

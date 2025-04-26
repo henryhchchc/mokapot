@@ -11,12 +11,12 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParseError, ParsingContext, ToWriter,
+    FromBytecode, ParseError, ParsingContext, ToBytecode,
     attribute::Attribute,
     errors::{GenerationError, ParsingErrorContext},
     jvm_element_parser::ClassElement,
     raw_attributes::{self, Code},
-    reader_utils::ValueReaderExt,
+    reader_utils::BytecodeReader,
 };
 use crate::{
     jvm::{
@@ -57,10 +57,10 @@ impl ClassElement for LineNumberTableEntry {
     }
 }
 
-impl FromReader for LineNumberTableEntry {
+impl FromBytecode for LineNumberTableEntry {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let start_pc = reader.read_value()?;
-        let line_number = reader.read_value()?;
+        let start_pc = reader.decode_value()?;
+        let line_number = reader.decode_value()?;
         Ok(LineNumberTableEntry {
             start_pc,
             line_number,
@@ -68,7 +68,7 @@ impl FromReader for LineNumberTableEntry {
     }
 }
 
-impl ToWriter for LineNumberTableEntry {
+impl ToBytecode for LineNumberTableEntry {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
         writer.write_all(&self.line_number.to_be_bytes())?;
@@ -208,7 +208,7 @@ impl ClassElement for LocalVariableTypeAttr {
     }
 }
 
-impl ToWriter for ProgramCounter {
+impl ToBytecode for ProgramCounter {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let inner = u16::from(*self);
         writer.write_all(&inner.to_be_bytes())?;

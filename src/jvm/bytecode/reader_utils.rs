@@ -1,21 +1,24 @@
-use std::io::{Read, Result, Write};
+use std::{
+    io::{Read, Result, Write},
+    ops::AddAssign,
+};
 
 use trait_gen::trait_gen;
 
-use super::FromReader;
+use super::FromBytecode;
 use crate::jvm::code::ProgramCounter;
 
-pub(super) trait ValueReaderExt: Read {
-    fn read_value<T: FromReader>(&mut self) -> Result<T>;
+pub(super) trait BytecodeReader: Read {
+    fn decode_value<T: FromBytecode>(&mut self) -> Result<T>;
 }
 
-impl<R: Read + ?Sized> ValueReaderExt for R {
-    fn read_value<T: FromReader>(&mut self) -> Result<T> {
+impl<R: Read + ?Sized> BytecodeReader for R {
+    fn decode_value<T: FromBytecode>(&mut self) -> Result<T> {
         T::from_reader(self)
     }
 }
 
-impl<const N: usize> FromReader for [u8; N] {
+impl<const N: usize> FromBytecode for [u8; N] {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let mut buf = [0u8; N];
         reader.read_exact(&mut buf)?;
@@ -23,7 +26,7 @@ impl<const N: usize> FromReader for [u8; N] {
     }
 }
 
-impl FromReader for ProgramCounter {
+impl FromBytecode for ProgramCounter {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let inner = u16::from_reader(reader)?;
         Ok(inner.into())
@@ -31,15 +34,15 @@ impl FromReader for ProgramCounter {
 }
 
 #[trait_gen(T -> u8, u16, u32, i8, i16, i32, i64, f32, f64)]
-impl FromReader for T {
+impl FromBytecode for T {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let buf = reader.read_value()?;
+        let buf = reader.decode_value()?;
         Ok(Self::from_be_bytes(buf))
     }
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(super) fn read_byte_chunk<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
+pub(super) fn read_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read + ?Sized,
 {
@@ -103,12 +106,12 @@ where
 mod test {
     use std::io::ErrorKind::UnexpectedEof;
 
-    use super::ValueReaderExt;
+    use super::BytecodeReader;
 
     #[test]
     fn read_bytes_success() {
         let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: [u8; 3] = reader.read_value().unwrap();
+        let buf: [u8; 3] = reader.decode_value().unwrap();
         assert_eq!(buf, [0x01, 0x02, 0x03]);
         assert_eq!(reader, [0x04]);
     }
@@ -116,14 +119,14 @@ mod test {
     #[test]
     fn read_bytes_failed() {
         let mut reader = [0x01, 0x02].as_slice();
-        let err = reader.read_value::<[u8; 3]>().unwrap_err();
+        let err = reader.decode_value::<[u8; 3]>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_u32_success() {
         let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: u32 = reader.read_value().unwrap();
+        let buf: u32 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x0102_0304);
         assert!(reader.is_empty());
     }
@@ -131,14 +134,14 @@ mod test {
     #[test]
     fn read_u32_failed() {
         let mut reader = [0x01, 0x02, 0x03].as_slice();
-        let err = reader.read_value::<u32>().unwrap_err();
+        let err = reader.decode_value::<u32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_i32_success() {
         let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: i32 = reader.read_value().unwrap();
+        let buf: i32 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x0102_0304);
         assert!(reader.is_empty());
     }
@@ -146,14 +149,14 @@ mod test {
     #[test]
     fn read_i32_failed() {
         let mut reader = [0x01, 0x02, 0x03].as_slice();
-        let err = reader.read_value::<i32>().unwrap_err();
+        let err = reader.decode_value::<i32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_u16_success() {
         let mut reader = [0x01, 0x02].as_slice();
-        let buf: u16 = reader.read_value().unwrap();
+        let buf: u16 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x0102);
         assert!(reader.is_empty());
     }
@@ -161,14 +164,14 @@ mod test {
     #[test]
     fn read_u16_failed() {
         let mut reader = [0x01].as_slice();
-        let err = reader.read_value::<u16>().unwrap_err();
+        let err = reader.decode_value::<u16>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_i16_success() {
         let mut reader = [0x01, 0x02].as_slice();
-        let buf: i16 = reader.read_value().unwrap();
+        let buf: i16 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x0102);
         assert!(reader.is_empty());
     }
@@ -176,14 +179,14 @@ mod test {
     #[test]
     fn read_i16_failed() {
         let mut reader = [0x01].as_slice();
-        let err = reader.read_value::<i16>().unwrap_err();
+        let err = reader.decode_value::<i16>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_u8_success() {
         let mut reader = [0x01].as_slice();
-        let buf: u8 = reader.read_value().unwrap();
+        let buf: u8 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x01);
         assert!(reader.is_empty());
     }
@@ -191,7 +194,7 @@ mod test {
     #[test]
     fn read_u8_failed() {
         let mut reader = [].as_slice();
-        let err = reader.read_value::<u8>().unwrap_err();
+        let err = reader.decode_value::<u8>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
         assert!(reader.is_empty());
     }
@@ -199,7 +202,7 @@ mod test {
     #[test]
     fn read_i8_success() {
         let mut reader = [0x01].as_slice();
-        let buf: i8 = reader.read_value().unwrap();
+        let buf: i8 = reader.decode_value().unwrap();
         assert_eq!(buf, 0x01);
         assert!(reader.is_empty());
     }
@@ -207,14 +210,14 @@ mod test {
     #[test]
     fn read_i8_failed() {
         let mut reader = [].as_slice();
-        let err = reader.read_value::<u32>().unwrap_err();
+        let err = reader.decode_value::<u32>().unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
     #[test]
     fn read_bytes_vec_success() {
         let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: Vec<u8> = super::read_byte_chunk(&mut reader, 3).unwrap();
+        let buf: Vec<u8> = super::read_vec(&mut reader, 3).unwrap();
         assert_eq!(buf, [0x01, 0x02, 0x03]);
         assert_eq!(reader, [0x04]);
     }
@@ -222,7 +225,7 @@ mod test {
     #[test]
     fn read_bytes_vec_failed() {
         let mut reader = [0x01, 0x02].as_slice();
-        let err = super::read_byte_chunk(&mut reader, 3).unwrap_err();
+        let err = super::read_vec(&mut reader, 3).unwrap_err();
         assert_eq!(err.kind(), UnexpectedEof);
     }
 }

@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 use itertools::Itertools;
 
 use super::{
-    FromReader, ParseError, ParsingContext, ToWriter,
+    FromBytecode, ParseError, ParsingContext, ToBytecode,
     attribute::{Attribute, AttributeInfo},
     errors::GenerationError,
     field_info::FieldInfo,
@@ -14,7 +14,7 @@ use super::{
 use crate::{
     jvm::{
         Class,
-        bytecode::{errors::ParsingErrorContext, reader_utils::ValueReaderExt},
+        bytecode::{errors::ParsingErrorContext, reader_utils::BytecodeReader},
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
@@ -77,35 +77,35 @@ impl Class {
     }
 }
 
-impl FromReader for ClassFile {
+impl FromBytecode for ClassFile {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let magic: u32 = reader.read_value()?;
+        let magic: u32 = reader.decode_value()?;
         if magic != JAVA_CLASS_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "This is not a Java class file",
             ));
         }
-        let minor_version = reader.read_value()?;
-        let major_version = reader.read_value()?;
-        let constant_pool_count = reader.read_value()?;
+        let minor_version = reader.decode_value()?;
+        let major_version = reader.decode_value()?;
+        let constant_pool_count = reader.decode_value()?;
         let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
-        let access_flags = reader.read_value()?;
-        let this_class = reader.read_value()?;
-        let super_class = reader.read_value()?;
-        let interfaces_count: u16 = reader.read_value()?;
+        let access_flags = reader.decode_value()?;
+        let this_class = reader.decode_value()?;
+        let super_class = reader.decode_value()?;
+        let interfaces_count: u16 = reader.decode_value()?;
         let interfaces = (0..interfaces_count)
-            .map(|_| reader.read_value())
+            .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let fields_count: u16 = reader.read_value()?;
+        let fields_count: u16 = reader.decode_value()?;
         let fields = (0..fields_count)
             .map(|_| FieldInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
-        let methods_count: u16 = reader.read_value()?;
+        let methods_count: u16 = reader.decode_value()?;
         let methods = (0..methods_count)
             .map(|_| MethodInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
-        let attributes_count: u16 = reader.read_value()?;
+        let attributes_count: u16 = reader.decode_value()?;
         let attributes = (0..attributes_count)
             .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
@@ -125,7 +125,7 @@ impl FromReader for ClassFile {
     }
 }
 
-impl ToWriter for ClassFile {
+impl ToBytecode for ClassFile {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
         writer.write_all(&self.minor_version.to_be_bytes())?;
