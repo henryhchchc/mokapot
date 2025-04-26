@@ -699,8 +699,8 @@ impl RawInstruction {
             // Variable-length instructions require special handling
             TableSwitch { low, high, .. } => {
                 let padding = (4 - (u16::from(pc) + 1) % 4) % 4; // padding after opcode
-                let entries =
-                    u16::try_from(*high - *low + 1).map_err(|_| GenerationError::other("In"))?;
+                let entries = u16::try_from(*high - *low + 1)
+                    .map_err(|_| GenerationError::other("Invalid jump offset"))?;
                 1 + padding + 12 + (4 * entries) // opcode + padding + default,low,high + entries
             }
 

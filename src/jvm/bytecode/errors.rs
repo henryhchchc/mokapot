@@ -163,11 +163,16 @@ impl fmt::Display for GenerationError {
     }
 }
 
+/// The kind of [`GenerationError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenerationErrorKind {
+    /// Due to an IO error in the underlying writer
     IO,
+    /// The length of a list if beyond the max value of the data type to store the range. For instance an instruction list containing more than 65535 instructions.
     OutOfRange,
+    /// An error when operating the constant pool
     ConstantPool,
+    /// Other errors
     Other,
 }
 
