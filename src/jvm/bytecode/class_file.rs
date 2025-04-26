@@ -46,7 +46,7 @@ const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
 impl Class {
     /// Parses a class file from the given reader.
     /// # Errors
-    /// See [`ParsingError`] for more information.
+    /// See [`ParseError`] for more information.
     /// # Example
     /// ```no_run
     /// use mokapot::jvm::Class;
@@ -67,7 +67,7 @@ impl Class {
 
     /// Writes the class file to the given writer.
     /// # Errors
-    /// See [`ToWriterError`] for more information.
+    /// See [`GenerationError`] for more information.
     pub fn to_writer<W>(self, writer: &mut W) -> Result<(), GenerationError>
     where
         W: Write + ?Sized,

@@ -13,7 +13,7 @@ use crate::jvm::{
 impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
-    /// See [`ParsingError`] for more information.
+    /// See [`ParseError`] for more information.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParseError> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
@@ -25,7 +25,7 @@ impl InstructionList<RawInstruction> {
 
     /// Writes a list of [`RawInstruction`]s to the given writer.
     /// # Errors
-    /// See [`ToWriterError`] for more information.
+    /// See [`GenerationError`] for more information.
     pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let mut writer = PositionTracker::new(writer);
 

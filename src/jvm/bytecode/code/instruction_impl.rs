@@ -469,7 +469,7 @@ impl Instruction {
     /// Lower the instruction into a raw instruction.
     ///
     /// # Errors
-    /// See [`ToWriterError`] for details.
+    /// See [`GenerationError`] for details.
     #[allow(clippy::too_many_lines)]
     pub fn into_raw_instruction(
         self,
