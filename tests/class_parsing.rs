@@ -1,7 +1,7 @@
 use mokapot::{
     jvm::{
         Class,
-        bytecode::ParsingErrorKind,
+        bytecode::ParseErrorKind,
         class::{self, AccessFlags, RecordComponent},
         references::ClassRef,
     },
@@ -167,5 +167,5 @@ fn parse_record() {
 fn not_a_class_file() {
     let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
     let result = Class::from_reader(&mut bytes);
-    assert!(result.is_err_and(|err| err.kind() == ParsingErrorKind::IO));
+    assert!(result.is_err_and(|err| err.kind() == ParseErrorKind::IO));
 }
