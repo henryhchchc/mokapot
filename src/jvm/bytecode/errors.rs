@@ -95,6 +95,7 @@ impl From<std::io::Error> for ParseError {
 /// This enum represents the different categories of errors that can occur
 /// during parsing of a class file.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[non_exhaustive]
 pub enum ParseErrorKind {
     /// An error occurred while reading from the underlying input source.
     IO,
@@ -221,6 +222,7 @@ impl fmt::Display for GenerationError {
 /// This enum represents the different categories of errors that can occur
 /// during bytecode generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GenerationErrorKind {
     /// An error occurred while writing to the underlying output destination.
     IO,
