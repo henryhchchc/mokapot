@@ -81,9 +81,8 @@ where
     R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let n = self.inner.read(buf)?;
-        self.position += n;
-        Ok(n)
+        let Self { inner, position } = self;
+        inner.read(buf).inspect(|n| position.add_assign(n))
     }
 }
 
@@ -92,9 +91,8 @@ where
     W: Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let n = self.inner.write(buf)?;
-        self.position += n;
-        Ok(n)
+        let Self { inner, position } = self;
+        inner.write(buf).inspect(|n| position.add_assign(n))
     }
 
     fn flush(&mut self) -> Result<()> {
