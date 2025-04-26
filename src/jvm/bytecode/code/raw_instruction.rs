@@ -561,7 +561,7 @@ impl RawInstruction {
             },
             0x5f => Swap,
             0xc4 => {
-                let wide_opcode = reader.decode_value()?;
+                let wide_opcode: u8 = reader.decode_value()?;
                 let wide_insn = match wide_opcode {
                     0x15 => RawWideInstruction::ILoad {
                         index: reader.decode_value()?,
