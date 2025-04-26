@@ -190,7 +190,7 @@ impl Version {
             (68, 0x0000) => Ok(Self::Jdk24(false)),
             (68, 0xFFFF) => Ok(Self::Jdk24(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
-                Err(ParseError::malform("Unsupportted class version"))
+                Err(ParseError::malform("Unsupported class version"))
             }
             _ => Err(ParseError::malform("Invalid class version")),
         }

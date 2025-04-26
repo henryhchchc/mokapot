@@ -167,7 +167,7 @@ impl ConstantPool {
             }
             ConstantValue::Null => {
                 return Err(GenerationError::other(
-                    "Null should not be put into constant poll",
+                    "Null should not be put into constant pool",
                 ));
             }
         };
