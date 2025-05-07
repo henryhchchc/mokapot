@@ -41,7 +41,8 @@ impl fmt::Display for ParseError {
             ParseErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
             ParseErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
         }
-        if cfg!(debug_assertions) {
+        #[cfg(debug_assertions)]
+        {
             write!(f, "\nBacktrace: \n{}", self.backtrace)?;
         }
         Ok(())
@@ -210,7 +211,8 @@ impl fmt::Display for GenerationError {
             GenerationErrorKind::ConstantPool => write!(f, "Constant pool error: {}", self.cause)?,
             GenerationErrorKind::Other => write!(f, "Other error: {}", self.cause)?,
         }
-        if cfg!(debug_assertions) {
+        #[cfg(debug_assertions)]
+        {
             write!(f, "\nBacktrace: \n{}", self.backtrace)?;
         }
         Ok(())
