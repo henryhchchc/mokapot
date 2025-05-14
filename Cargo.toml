@@ -15,7 +15,9 @@ bitflags = "2.6"
 cesu8 = "1.1"
 derive_more = { version = "2", features = ["full"] }
 document-features = "0.2"
-inkwell = { version = "0.5", features = ["llvm18-0-prefer-dynamic"], optional = true }
+inkwell = { version = "0.6", features = [
+    "llvm18-1-prefer-dynamic",
+], optional = true }
 itertools = "0.14"
 petgraph = { version = "0.8", optional = true }
 num-traits = "0.2"
