@@ -1,8 +1,20 @@
 use std::str::FromStr;
 
 use inkwell::{basic_block::BasicBlock, context::ContextRef, values::FunctionValue};
+use num_traits::{AsPrimitive, NumCast, PrimInt};
 
 use crate::jvm::code::ProgramCounter;
+
+/// Sign-extends an integer number into [`u64`] for consumption by the LLVM API.
+pub(super) fn upcast_to_u64<T: PrimInt>(value: T) -> u64 {
+    assert!(size_of::<T>() * 8 <= u64::BITS as usize);
+
+    if value >= T::zero() {
+        <u64 as NumCast>::from(value).unwrap()
+    } else {
+        <i64 as NumCast>::from(value).map(AsPrimitive::as_).unwrap()
+    }
+}
 
 /// Retrieves an existing [`BasicBlock`] in the [`function_value`][FunctionValue], or inserts a new
 /// basic block in `function_value`, preserving the order of IR instructions using the provided
