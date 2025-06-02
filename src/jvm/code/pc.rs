@@ -16,6 +16,7 @@ use std::{fmt::Debug, ops::Add};
 )]
 #[repr(transparent)]
 #[display("#{_0:04X}")]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProgramCounter(u16);
 
 impl ProgramCounter {
