@@ -156,7 +156,7 @@ impl<'m> MokaIRGenerator<'m> {
             .into_group_map_by(|&it| it.handler_pc)
             .into_iter()
             .map(|(handler_pc, entries)| {
-                let caught_exception_ref = Operand::Just(Identifier::CaughtException);
+                let caught_exception_ref = Operand::Just(Identifier::CaughtException(handler_pc));
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
                 let exceptions = entries
