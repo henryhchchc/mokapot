@@ -210,8 +210,8 @@ pub enum Identifier {
     /// A locally defined value.
     Local(LocalValue),
     /// The exception caught by a `catch` block.
-    #[display("%caught_exception")]
-    CaughtException,
+    #[display("%caught_exception@{_0}")]
+    CaughtException(ProgramCounter),
 }
 
 impl From<LocalValue> for Identifier {
