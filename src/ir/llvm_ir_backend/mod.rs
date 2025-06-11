@@ -24,6 +24,9 @@ mod utils;
 /// Trait representing a struct that can be lowered into LLVM IR.
 // TODO(Derppening): Determine if this trait can be used for all lower-able constructs.
 pub trait IRLowering {
+    /// The type produced by the lowering operation.
+    type Output<'ctx>;
+
     /// Lowers the LLVM IR representation of this struct and inserts it into the
     /// [`Module`].
     fn lower<'ctx>(
@@ -31,7 +34,7 @@ pub trait IRLowering {
         module: &Module<'ctx>,
         builder: &Builder<'ctx>,
         pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>>;
+    ) -> Self::Output<'ctx>;
 
     /// Lowers an equality operation and inserts it into the [`Builder`].
     fn lower_eq_op<'ctx>(
@@ -43,12 +46,8 @@ pub trait IRLowering {
         rhs: &Operand,
         negated: bool,
     ) -> IntValue<'ctx> {
-        let Some(lhs) = lhs.lower(module, builder, pc) else {
-            panic!("Expect LHS operand {lhs:?} to lower to a BasicValue")
-        };
-        let Some(rhs) = rhs.lower(module, builder, pc) else {
-            panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
-        };
+        let lhs = lhs.lower(module, builder, pc);
+        let rhs = rhs.lower(module, builder, pc);
 
         let predicate = if negated {
             IntPredicate::NE
@@ -87,10 +86,10 @@ pub trait IRLowering {
         rhs: &Operand,
         llvm_cmpop: IntPredicate,
     ) -> IntValue<'ctx> {
-        let Some(BasicValueEnum::IntValue(lhs)) = lhs.lower(module, builder, pc) else {
+        let BasicValueEnum::IntValue(lhs) = lhs.lower(module, builder, pc) else {
             panic!("Expect LHS operand {lhs:?} to lower to an IntValue")
         };
-        let Some(BasicValueEnum::IntValue(rhs)) = rhs.lower(module, builder, pc) else {
+        let BasicValueEnum::IntValue(rhs) = rhs.lower(module, builder, pc) else {
             panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
         };
 
@@ -106,7 +105,7 @@ pub trait IRLowering {
         operand: &Operand,
         negated: bool,
     ) -> IntValue<'ctx> {
-        let Some(BasicValueEnum::PointerValue(operand)) = operand.lower(module, builder, pc) else {
+        let BasicValueEnum::PointerValue(operand) = operand.lower(module, builder, pc) else {
             panic!("Expect {operand:?} to lower to a PointerValue")
         };
 
@@ -128,7 +127,7 @@ pub trait IRLowering {
         operand: &Operand,
         llvm_cmpop: IntPredicate,
     ) -> IntValue<'ctx> {
-        let Some(BasicValueEnum::IntValue(operand)) = operand.lower(module, builder, pc) else {
+        let BasicValueEnum::IntValue(operand) = operand.lower(module, builder, pc) else {
             panic!("Expect {operand:?} to lower to an IntValue")
         };
 
@@ -139,12 +138,14 @@ pub trait IRLowering {
 }
 
 impl IRLowering for MokaInstruction {
+    type Output<'ctx> = ();
+
     fn lower<'ctx>(
         &self,
         module: &Module<'ctx>,
         builder: &Builder<'ctx>,
         pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
+    ) -> Self::Output<'ctx> {
         let func_val = builder
             .get_insert_block()
             .and_then(BasicBlock::get_parent)
@@ -169,11 +170,7 @@ impl IRLowering for MokaInstruction {
                     get_or_insert_basic_block_ordered(module.get_context(), func_val, *target);
 
                 if let Some(condition) = condition {
-                    let Some(BasicValueEnum::IntValue(condition)) =
-                        condition.lower(module, builder, pc)
-                    else {
-                        panic!("Expect {condition:?} to lower to an IntValue")
-                    };
+                    let condition = condition.lower(module, builder, pc);
 
                     let current_bb = builder.get_insert_block().unwrap();
                     let context = current_bb.get_context();
@@ -203,9 +200,7 @@ impl IRLowering for MokaInstruction {
 
             MokaInstruction::Return(operand) => {
                 if let Some(operand) = operand {
-                    let Some(operand) = operand.lower(module, builder, pc) else {
-                        panic!("Expect {operand:?} to lower to a BasicValue")
-                    };
+                    let operand = operand.lower(module, builder, pc);
 
                     builder.build_return(Some(&operand)).unwrap();
                 } else {
@@ -215,81 +210,76 @@ impl IRLowering for MokaInstruction {
 
             _ => todo!("Unimplemented lowering for {self}"),
         }
-
-        None
     }
 }
 
 impl IRLowering for Condition {
+    type Output<'ctx> = IntValue<'ctx>;
+
     fn lower<'ctx>(
         &self,
         module: &Module<'ctx>,
         builder: &Builder<'ctx>,
         pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
-        Some(
-            match self {
-                Condition::Equal(lhs, rhs) => {
-                    self.lower_eq_op(module, builder, pc, lhs, rhs, false)
-                }
-                Condition::NotEqual(lhs, rhs) => {
-                    self.lower_eq_op(module, builder, pc, lhs, rhs, true)
-                }
+    ) -> Self::Output<'ctx> {
+        match self {
+            Condition::Equal(lhs, rhs) => self.lower_eq_op(module, builder, pc, lhs, rhs, false),
+            Condition::NotEqual(lhs, rhs) => self.lower_eq_op(module, builder, pc, lhs, rhs, true),
 
-                Condition::LessThan(lhs, rhs) => {
-                    self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SLT)
-                }
-                Condition::LessThanOrEqual(lhs, rhs) => {
-                    self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SLE)
-                }
-                Condition::GreaterThan(lhs, rhs) => {
-                    self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SGT)
-                }
-                Condition::GreaterThanOrEqual(lhs, rhs) => {
-                    self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SGE)
-                }
-
-                Condition::IsNull(operand) => {
-                    self.lower_null_check(module, builder, pc, operand, false)
-                }
-                Condition::IsNotNull(operand) => {
-                    self.lower_null_check(module, builder, pc, operand, true)
-                }
-
-                Condition::IsZero(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::EQ)
-                }
-                Condition::IsNonZero(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::NE)
-                }
-                Condition::IsPositive(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SGT)
-                }
-                Condition::IsNegative(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SLT)
-                }
-                Condition::IsNonNegative(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SGE)
-                }
-                Condition::IsNonPositive(operand) => {
-                    self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SLE)
-                }
+            Condition::LessThan(lhs, rhs) => {
+                self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SLT)
             }
-            .into(),
-        )
+            Condition::LessThanOrEqual(lhs, rhs) => {
+                self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SLE)
+            }
+            Condition::GreaterThan(lhs, rhs) => {
+                self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SGT)
+            }
+            Condition::GreaterThanOrEqual(lhs, rhs) => {
+                self.lower_cmp_op(module, builder, pc, lhs, rhs, IntPredicate::SGE)
+            }
+
+            Condition::IsNull(operand) => {
+                self.lower_null_check(module, builder, pc, operand, false)
+            }
+            Condition::IsNotNull(operand) => {
+                self.lower_null_check(module, builder, pc, operand, true)
+            }
+
+            Condition::IsZero(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::EQ)
+            }
+            Condition::IsNonZero(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::NE)
+            }
+            Condition::IsPositive(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SGT)
+            }
+            Condition::IsNegative(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SLT)
+            }
+            Condition::IsNonNegative(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SGE)
+            }
+            Condition::IsNonPositive(operand) => {
+                self.lower_cmp_zero_op(module, builder, pc, operand, IntPredicate::SLE)
+            }
+        }
     }
 }
 
 impl IRLowering for ConstantValue {
+    type Output<'ctx> = BasicValueEnum<'ctx>;
+
     fn lower<'ctx>(
         &self,
         module: &Module<'ctx>,
         _builder: &Builder<'ctx>,
         _: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
+    ) -> Self::Output<'ctx> {
         let ctx = module.get_context();
 
-        Some(match self {
+        match self {
             ConstantValue::Null => ctx.ptr_type(AddressSpace::default()).const_null().into(),
             ConstantValue::Integer(v) => ctx.i32_type().const_int(upcast_to_u64(*v), true).into(),
             ConstantValue::Float(v) => ctx.f32_type().const_float(f64::from(*v)).into(),
@@ -297,63 +287,65 @@ impl IRLowering for ConstantValue {
             ConstantValue::Double(v) => ctx.f64_type().const_float(*v).into(),
 
             _ => todo!("Unimplemented lowering for {self}"),
-        })
+        }
     }
 }
 
 impl IRLowering for Expression {
+    type Output<'ctx> = BasicValueEnum<'ctx>;
+
     fn lower<'ctx>(
         &self,
         module: &Module<'ctx>,
         builder: &Builder<'ctx>,
         pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
-        Some(match self {
-            Expression::Const(value) => value.lower(module, builder, pc).unwrap(),
-            Expression::Math(op) => op.lower(module, builder, pc).unwrap(),
+    ) -> Self::Output<'ctx> {
+        match self {
+            Expression::Const(value) => value.lower(module, builder, pc),
+            Expression::Math(op) => op.lower(module, builder, pc),
 
             _ => todo!("Unimplemented lowering for {self}"),
-        })
+        }
     }
 }
 
 impl IRLowering for Identifier {
+    type Output<'ctx> = BasicValueEnum<'ctx>;
+
     fn lower<'ctx>(
         &self,
         _module: &Module<'ctx>,
         _builder: &Builder<'ctx>,
         _pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
+    ) -> Self::Output<'ctx> {
         todo!("Unimplemented lowering for {self}")
     }
 }
 
 impl IRLowering for Operand {
+    type Output<'ctx> = BasicValueEnum<'ctx>;
     fn lower<'ctx>(
         &self,
         _module: &Module<'ctx>,
         _builder: &Builder<'ctx>,
         _pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
+    ) -> Self::Output<'ctx> {
         todo!("Unimplemented lowering for {self}")
     }
 }
 
 impl IRLowering for MathOperation {
+    type Output<'ctx> = BasicValueEnum<'ctx>;
     fn lower<'ctx>(
         &self,
         module: &Module<'ctx>,
         builder: &Builder<'ctx>,
         pc: ProgramCounter,
-    ) -> Option<BasicValueEnum<'ctx>> {
-        Some(match self {
+    ) -> Self::Output<'ctx> {
+        match self {
             MathOperation::Add(lhs, rhs) => {
-                let Some(lhs) = lhs.lower(module, builder, pc) else {
-                    panic!("Expect LHS operand {lhs:?} to lower to a BasicValue")
-                };
-                let Some(rhs) = rhs.lower(module, builder, pc) else {
-                    panic!("Expect RHS operand {rhs:?} to lower to a BasicValue")
-                };
+                let lhs = lhs.lower(module, builder, pc);
+                let rhs = rhs.lower(module, builder, pc);
 
                 match (lhs, rhs) {
                     (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
@@ -369,6 +361,6 @@ impl IRLowering for MathOperation {
             }
 
             _ => todo!("Unimplemented lowering for {self}"),
-        })
+        }
     }
 }
