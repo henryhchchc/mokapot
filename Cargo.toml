@@ -18,6 +18,7 @@ document-features = "0.2"
 itertools = "0.14"
 petgraph = { version = "0.8", optional = true }
 num-traits = "0.2"
+instability = "0.3.7"
 thiserror = "2.0"
 trait-gen = "2.0"
 walkdir = "2"
@@ -26,6 +27,7 @@ zip = { version = "4.0", optional = true, default-features = false, features = [
 ] }
 
 [dev-dependencies]
+mokapot = { path = ".", features = ["unstable"] }
 proptest = "1"
 proptest-derive = "0.6"
 walkdir = "2"
@@ -42,5 +44,25 @@ default = ["jar", "petgraph"]
 ## Enables loading classes from `.jar` files
 jar = ["dep:zip"]
 
-## Enables the analysis of control flow graphs with `petgraph`.
+## Enables the analyses of control flow graphs with `petgraph`.
 petgraph = ["dep:petgraph"]
+
+## Experimental APIs
+unstable = [
+    "unstable-bytecode-generation",
+    "unstable-moka-ir",
+    "unstable-fixed-point-analyses",
+    "unstable-project-analyses",
+]
+
+## Experimental bytecode generation
+unstable-bytecode-generation = []
+
+## Experimental Moka IR
+unstable-moka-ir = []
+
+## Experimental fixed-point analyses
+unstable-fixed-point-analyses = []
+
+## Experimental project-wide analyses
+unstable-project-analyses = []

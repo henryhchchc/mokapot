@@ -11,6 +11,7 @@ pub mod fixed_point;
 
 /// A context for class resolution during analysis.
 #[derive(Debug)]
+#[instability::unstable(feature = "project-analyses")]
 pub struct ResolutionContext {
     /// The application classes.
     pub application_classes: HashMap<ClassRef, Class>,
@@ -23,6 +24,7 @@ pub struct ResolutionContext {
 }
 
 /// A trait that can provide an exhaustive list of [`ClassRef`].
+#[instability::unstable(feature = "project-analyses")]
 pub trait ClassRefs {
     /// List all classes.
     fn class_refs(&self) -> HashSet<ClassRef>;
@@ -52,6 +54,7 @@ impl ResolutionContext {
 
 /// An error that occurs during initialization of a [`ResolutionContext`].
 #[derive(Debug, derive_more::Display)]
+#[instability::unstable(feature = "project-analyses")]
 pub enum InitError {}
 
 fn load_classes<CP>(class_path: CP) -> HashMap<ClassRef, Class>

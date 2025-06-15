@@ -20,16 +20,23 @@ mod field;
 mod lock;
 mod math;
 
+#[instability::unstable(feature = "moka-ir")]
 pub use array::Operation as ArrayOperation;
+#[instability::unstable(feature = "moka-ir")]
 pub use condition::Condition;
+#[instability::unstable(feature = "moka-ir")]
 pub use conversion::Operation as Conversion;
+#[instability::unstable(feature = "moka-ir")]
 pub use field::Access as FieldAccess;
+#[instability::unstable(feature = "moka-ir")]
 pub use lock::Operation as LockOperation;
+#[instability::unstable(feature = "moka-ir")]
 pub use math::{NaNTreatment, Operation as MathOperation};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[instability::unstable(feature = "moka-ir")]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),
