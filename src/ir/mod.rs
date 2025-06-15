@@ -13,7 +13,9 @@ pub mod type_hierarchy;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+#[instability::unstable(feature = "moka-ir")]
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
+#[instability::unstable(feature = "moka-ir")]
 pub use moka_instruction::*;
 
 use self::control_flow::ControlTransfer;
