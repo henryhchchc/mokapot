@@ -68,6 +68,7 @@ impl Class {
     /// Writes the class file to the given writer.
     /// # Errors
     /// See [`GenerationError`] for more information.
+    #[instability::unstable(feature = "bytecode-generation")]
     pub fn to_writer<W>(self, writer: &mut W) -> Result<(), GenerationError>
     where
         W: Write + ?Sized,

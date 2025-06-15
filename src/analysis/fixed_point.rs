@@ -31,8 +31,9 @@ use std::collections::{BTreeMap, BTreeSet};
 /// by defining the data types and operations necessary for propagating facts through
 /// a control flow graph until a stable state is reached.
 ///
-/// Implementors must define how facts are created at entry points, how they're transformed
+/// Implementers must define how facts are created at entry points, how they're transformed
 /// at each location, and how they're merged when control flow paths join.
+#[instability::unstable(feature = "fixed-point-analyses")]
 pub trait Analyzer {
     /// The type representing a location in the control flow graph.
     ///
