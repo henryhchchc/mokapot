@@ -1,6 +1,7 @@
 //! Type hierarchy analysis components.
 use std::collections::{HashMap, HashSet};
 
+#[cfg(feature = "petgraph")]
 use petgraph::visit::{Control, DfsEvent, Reversed, depth_first_search};
 
 use super::{ClassHierarchy, InterfaceImplHierarchy};
@@ -44,6 +45,7 @@ impl ClassHierarchy {
 
     /// Returns the set of subclasses of the given class.
     #[must_use]
+    #[cfg(feature = "petgraph")]
     pub fn subclasses(&self, class: &ClassRef) -> HashSet<ClassRef> {
         let mut subclasses = HashSet::new();
         depth_first_search(self, [class], |event| {
@@ -89,6 +91,7 @@ impl InterfaceImplHierarchy {
 
     /// Returns the set of interfaces implemented by the given class.
     #[must_use]
+    #[cfg(feature = "petgraph")]
     pub fn implemented_interfaces(&self, class: &ClassRef) -> HashSet<ClassRef> {
         let mut interfaces = HashSet::new();
         depth_first_search(self, [class], |event| {
@@ -106,6 +109,7 @@ impl InterfaceImplHierarchy {
 
     /// Returns the set of classes that implement the given interface.
     #[must_use]
+    #[cfg(feature = "petgraph")]
     pub fn implementers(&self, interface: &ClassRef) -> HashSet<ClassRef> {
         let mut implementers = HashSet::new();
         let rev_impl_graph = Reversed(self);
