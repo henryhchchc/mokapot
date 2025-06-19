@@ -17,7 +17,10 @@ use std::{
     num::TryFromIntError,
 };
 
-pub use errors::{GenerationError, GenerationErrorKind, ParseError, ParseErrorKind};
+#[instability::unstable(feature = "bytecode-generation")]
+pub use errors::{GenerationError, GenerationErrorKind};
+
+pub use errors::{ParseError, ParseErrorKind};
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};
