@@ -5,6 +5,7 @@ use crate::ir::Identifier;
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[instability::unstable(feature = "moka-ir")]
 pub enum Operation {
     /// Acquires the lock.
     #[display("acquire {_0}")]

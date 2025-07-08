@@ -190,6 +190,7 @@ impl<T> ParsingErrorContext for Option<T> {
 
 /// An error that occurs during parsing of a class file.
 #[derive(Debug)]
+#[instability::unstable(feature = "bytecode-generation")]
 pub struct GenerationError {
     cause: Box<dyn Error + Send + Sync>,
     kind: GenerationErrorKind,
@@ -225,6 +226,7 @@ impl fmt::Display for GenerationError {
 /// during bytecode generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
+#[instability::unstable(feature = "bytecode-generation")]
 pub enum GenerationErrorKind {
     /// An error occurred while writing to the underlying output destination.
     IO,

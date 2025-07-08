@@ -5,6 +5,7 @@ use crate::{ir::Identifier, types::field_type::FieldType};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[instability::unstable(feature = "moka-ir")]
 pub enum Operation {
     /// Converts an `int` to a `long`.
     #[display("{_0} as long")]

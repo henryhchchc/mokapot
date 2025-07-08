@@ -4,6 +4,7 @@ use crate::ir::{Identifier, Operand};
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
+#[instability::unstable(feature = "moka-ir")]
 pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display("{_0} + {_1}")]
@@ -77,6 +78,7 @@ impl Operation {
 /// How NaNs are treated in floating point comparisons.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[instability::unstable(feature = "moka-ir")]
 pub enum NaNTreatment {
     /// NaNs are treated as the largest possible value.
     #[display("NaN == Max")]

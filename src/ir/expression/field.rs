@@ -7,6 +7,7 @@ use crate::{
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[instability::unstable(feature = "moka-ir")]
 pub enum Access {
     /// Reads a static field.
     #[display("read {field}")]

@@ -20,18 +20,31 @@ mod field;
 mod lock;
 mod math;
 
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use array::Operation as ArrayOperation;
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use condition::Condition;
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use conversion::Operation as Conversion;
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use field::Access as FieldAccess;
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use lock::Operation as LockOperation;
-#[instability::unstable(feature = "moka-ir")]
+#[cfg(feature = "unstable-moka-ir")]
 pub use math::{NaNTreatment, Operation as MathOperation};
+
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use array::Operation as ArrayOperation;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use condition::Condition;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use conversion::Operation as Conversion;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use field::Access as FieldAccess;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use lock::Operation as LockOperation;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) use math::{NaNTreatment, Operation as MathOperation};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
