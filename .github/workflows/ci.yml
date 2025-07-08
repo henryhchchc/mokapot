@@ -213,7 +213,7 @@ jobs:
         name: Checkout source code
       - name: Build docs
         env:
-          RUSTDOCFLAGS: --cfg unstable
+          RUSTDOCFLAGS: --cfg docsrs
         run: cargo doc --all-features --no-deps --verbose
       - name: Fix file permissions
         run: |
