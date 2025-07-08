@@ -138,7 +138,7 @@ fn cfg_to_dot() {
         },
     );
     let dot = Dot::with_config(&cfg_with_insn, &[]);
-    println!("{}", dot);
+    println!("{dot}");
 }
 
 #[test]

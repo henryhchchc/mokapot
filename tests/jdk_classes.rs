@@ -27,7 +27,7 @@ fn works_with_jdk_classes() {
         match class {
             Ok(c) => test_a_class(c),
             Err(e) => {
-                panic!("Failed to parse {:?}: {}", class_file, e);
+                panic!("Failed to parse {class_file:?}: {e}");
             }
         }
     });
