@@ -1,6 +1,6 @@
 [package]
 name = "mokapot"
-version = "0.20.0"
+version = "0.20.1"
 edition = "2024"
 description = "A library for analyzing and manipulating JVM bytecode"
 documentation = "https://docs.rs/mokapot"
