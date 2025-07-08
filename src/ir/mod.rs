@@ -71,7 +71,7 @@ pub struct ControlFlowGraph<N, E> {
 
 /// A def-use chain in data flow analysis.
 #[derive(Debug)]
-#[instability::unstable(feature = "project-analyses")]
+#[instability::unstable(feature = "moka-ir")]
 pub struct DefUseChain<'a> {
     method: &'a MokaIRMethod,
     defs: HashMap<LocalValue, ProgramCounter>,
