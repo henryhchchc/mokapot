@@ -88,11 +88,11 @@ impl Analyzer for MokaIRGenerator<'_> {
     ) -> Result<Self::PropagatedFacts, Self::Err> {
         let location = location.to_owned();
         let mut frame = fact.same_frame();
-        let insn = self
+        let jvm_instruction = self
             .body
             .instruction_at(location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-        let ir_instruction = self.run_instruction(insn, location, &mut frame)?;
+        let ir_instruction = self.run_instruction(jvm_instruction, location, &mut frame)?;
         let edges_and_frames =
             self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);

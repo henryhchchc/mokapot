@@ -25,7 +25,7 @@ use crate::{
 impl MokaIRGenerator<'_> {
     pub(super) fn run_instruction(
         &mut self,
-        insn: &Instruction,
+        jvm_instruction: &Instruction,
         pc: ProgramCounter,
         frame: &mut JvmStackFrame,
     ) -> Result<IR, MokaIRBrewingError> {
@@ -33,7 +33,7 @@ impl MokaIRGenerator<'_> {
         use Instruction::*;
 
         let def = LocalValue::new(pc.into());
-        let ir_instruction = match insn {
+        let ir_instruction = match jvm_instruction {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
                 frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
@@ -42,27 +42,27 @@ impl MokaIRGenerator<'_> {
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
                 frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
-                let int_value = i32::from(insn.opcode()) - 3;
+                let int_value = i32::from(jvm_instruction.opcode()) - 3;
                 let expr = Expression::Const(ConstantValue::Integer(int_value));
                 IR::Definition { value: def, expr }
             }
             LConst0 | LConst1 => {
                 let value = def.as_argument();
                 frame.push_value::<DUAL_SLOT>(value)?;
-                let long_value = i64::from(insn.opcode()) - 9;
+                let long_value = i64::from(jvm_instruction.opcode()) - 9;
                 let expr = Expression::Const(ConstantValue::Long(long_value));
                 IR::Definition { value: def, expr }
             }
             FConst0 | FConst1 | FConst2 => {
                 frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
-                let float_value = f32::from(insn.opcode()) - 11.0;
+                let float_value = f32::from(jvm_instruction.opcode()) - 11.0;
                 let expr = Expression::Const(ConstantValue::Float(float_value));
                 IR::Definition { value: def, expr }
             }
             DConst0 | DConst1 => {
                 let value = def.as_argument();
                 frame.push_value::<DUAL_SLOT>(value)?;
-                let double_value = f64::from(insn.opcode()) - 14.0;
+                let double_value = f64::from(jvm_instruction.opcode()) - 14.0;
                 let expr = Expression::Const(ConstantValue::Double(double_value));
                 IR::Definition { value: def, expr }
             }
@@ -162,7 +162,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             Pop | Pop2 | Dup | DupX1 | DupX2 | Dup2 | Dup2X1 | Dup2X2 | Swap => {
-                match insn {
+                match jvm_instruction {
                     Pop => frame.pop()?,
                     Pop2 => frame.pop2()?,
                     Dup => frame.dup()?,
@@ -295,7 +295,7 @@ impl MokaIRGenerator<'_> {
                 let rhs = frame.pop_value::<SINGLE_SLOT>()?;
                 let lhs = frame.pop_value::<SINGLE_SLOT>()?;
                 frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
-                let nan_treatment = match insn {
+                let nan_treatment = match jvm_instruction {
                     FCmpG => NaNTreatment::IsLargest,
                     FCmpL => NaNTreatment::IsSmallest,
                     _ => unreachable!("By outer match arm"),
@@ -310,7 +310,7 @@ impl MokaIRGenerator<'_> {
                 let rhs = frame.pop_value::<DUAL_SLOT>()?;
                 let lhs = frame.pop_value::<DUAL_SLOT>()?;
                 frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
-                let nan_treatment = match insn {
+                let nan_treatment = match jvm_instruction {
                     DCmpG => NaNTreatment::IsLargest,
                     DCmpL => NaNTreatment::IsSmallest,
                     _ => unreachable!("By outer match arm"),
