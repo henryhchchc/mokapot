@@ -1,20 +1,22 @@
 //! Java class file disassembler example
 //!
-//! This example demonstrates how to use the mokapot library to parse and 
+//! This example demonstrates how to use the mokapot library to parse and
 //! display the contents of Java class files. It provides functionality
 //! similar to the Java `javap` tool, showing class structure, fields,
 //! methods, and bytecode instructions.
 
-use std::fs::File;
-use std::io::{BufReader, Result as IoResult};
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, Result as IoResult},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use mokapot::jvm::{self, Class};
 use thiserror::Error;
 
 /// Command line arguments for the disassembler
-/// 
+///
 /// This struct mirrors the `javap` tool's command-line interface,
 /// allowing users to specify class files and output format options.
 #[derive(Parser)]
@@ -37,7 +39,7 @@ struct Args {
 }
 
 /// Custom error type for disassembler operations
-/// 
+///
 /// Uses thiserror to provide clean error handling with automatic
 /// conversion from common error types and formatted error messages.
 #[derive(Debug, Error)]
@@ -53,7 +55,7 @@ enum DisassemblerError {
 }
 
 /// Entry point for the disassembler
-/// 
+///
 /// Parses command-line arguments and processes the specified class files.
 /// Returns an I/O Result to properly handle potential errors.
 fn main() -> IoResult<()> {
@@ -65,7 +67,7 @@ fn main() -> IoResult<()> {
 }
 
 /// Formatters for Java class components
-/// 
+///
 /// This module contains types that implement Display for class components,
 /// converting JVM structures into human-readable text representations.
 /// It handles formatting of class access flags, field declarations,
@@ -73,14 +75,14 @@ fn main() -> IoResult<()> {
 mod formatters;
 
 /// Printer for class information
-/// 
+///
 /// This module contains the ClassPrinter that orchestrates the display of
 /// all class information, including class structure, fields, methods,
 /// and bytecode instructions when in verbose mode.
 mod printer;
 
 /// Process all specified class files
-/// 
+///
 /// Iterates through each class file path, attempts to parse it, and prints
 /// its contents. When processing multiple files, adds headers and separators.
 ///
@@ -136,7 +138,7 @@ fn process_class_files(class_files: &[PathBuf], verbose: bool) -> IoResult<()> {
 /// # Returns
 ///
 /// A Result containing either the parsed Class or a DisassemblerError
-/// 
+///
 /// # Error Handling
 ///
 /// This function will automatically convert I/O errors or parsing errors
@@ -145,12 +147,12 @@ fn process_class_files(class_files: &[PathBuf], verbose: bool) -> IoResult<()> {
 fn parse_class_file(path: &PathBuf) -> Result<Class, DisassemblerError> {
     // Open the file (may fail with IoError)
     let file = File::open(path)?;
-    
+
     // Create a buffered reader for efficient reading
     let mut reader = BufReader::new(file);
-    
+
     // Parse the class file (may fail with ParseError)
     let class = Class::from_reader(&mut reader)?;
-    
+
     Ok(class)
 }

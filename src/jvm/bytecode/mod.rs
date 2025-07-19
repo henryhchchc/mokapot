@@ -22,7 +22,6 @@ pub use errors::{GenerationError, GenerationErrorKind};
 #[cfg(not(feature = "unstable-bytecode-generation"))]
 pub(crate) use errors::{GenerationError, GenerationErrorKind};
 pub use errors::{ParseError, ParseErrorKind};
-
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};
