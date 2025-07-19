@@ -5,11 +5,7 @@
 //! similar to the Java `javap` tool, showing class structure, fields,
 //! methods, and bytecode instructions.
 
-use std::{
-    fs::File,
-    io::{BufReader, Result as IoResult},
-    path::PathBuf,
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use clap::Parser;
 use mokapot::jvm::{self, Class};
@@ -58,7 +54,7 @@ enum DisassemblerError {
 ///
 /// Parses command-line arguments and processes the specified class files.
 /// Returns an I/O Result to properly handle potential errors.
-fn main() -> IoResult<()> {
+fn main() {
     // Parse command line arguments using clap
     let args = Args::parse();
 
@@ -94,7 +90,7 @@ mod printer;
 /// # Returns
 ///
 /// An IoResult indicating success or any I/O errors that occurred
-fn process_class_files(class_files: &[PathBuf], verbose: bool) -> IoResult<()> {
+fn process_class_files(class_files: &[PathBuf], verbose: bool) {
     // Flag to determine if we need file headers and separators
     let multiple_files = class_files.len() > 1;
 
@@ -122,8 +118,6 @@ fn process_class_files(class_files: &[PathBuf], verbose: bool) -> IoResult<()> {
             println!("\n{}", "-".repeat(80));
         }
     }
-
-    Ok(())
 }
 
 /// Parse a class file into a Class structure
