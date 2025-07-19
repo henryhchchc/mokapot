@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, ops::RangeInclusive};
+use std::{collections::BTreeMap, fmt, ops::RangeInclusive};
+
+use itertools::Itertools;
 
 use super::ProgramCounter;
 use crate::{
@@ -502,9 +504,116 @@ impl Instruction {
     }
 }
 
+impl fmt::Display for WideInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WideInstruction::ILoad(idx) => write!(f, "iload {idx}"),
+            WideInstruction::LLoad(idx) => write!(f, "lload {idx}"),
+            WideInstruction::FLoad(idx) => write!(f, "fload {idx}"),
+            WideInstruction::DLoad(idx) => write!(f, "dload {idx}"),
+            WideInstruction::ALoad(idx) => write!(f, "aload {idx}"),
+            WideInstruction::IStore(idx) => write!(f, "istore {idx}"),
+            WideInstruction::LStore(idx) => write!(f, "lstore {idx}"),
+            WideInstruction::FStore(idx) => write!(f, "fstore {idx}"),
+            WideInstruction::DStore(idx) => write!(f, "dstore {idx}"),
+            WideInstruction::AStore(idx) => write!(f, "astore {idx}"),
+            WideInstruction::IInc(idx, value) => write!(f, "iinc {idx} {value}"),
+            WideInstruction::Ret(idx) => write!(f, "ret {idx}"),
+        }
+    }
+}
+
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        #[allow(clippy::enum_glob_use, reason = "JVM instructions are too many")]
+        use Instruction::*;
+
+        match self {
+            // Instructions with no operands - use name only
+            Nop | AConstNull | IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5
+            | LConst0 | LConst1 | FConst0 | FConst1 | FConst2 | DConst0 | DConst1
+            | ILoad0 | ILoad1 | ILoad2 | ILoad3 | LLoad0 | LLoad1 | LLoad2 | LLoad3
+            | FLoad0 | FLoad1 | FLoad2 | FLoad3 | DLoad0 | DLoad1 | DLoad2 | DLoad3
+            | ALoad0 | ALoad1 | ALoad2 | ALoad3 | IALoad | LALoad | FALoad | DALoad | AALoad | BALoad | CALoad | SALoad
+            | IStore0 | IStore1 | IStore2 | IStore3 | LStore0 | LStore1 | LStore2 | LStore3
+            | FStore0 | FStore1 | FStore2 | FStore3 | DStore0 | DStore1 | DStore2 | DStore3
+            | AStore0 | AStore1 | AStore2 | AStore3 | IAStore | LAStore | FAStore | DAStore | AAStore | BAStore | CAStore | SAStore
+            | Pop | Pop2 | Dup | DupX1 | DupX2 | Dup2 | Dup2X1 | Dup2X2 | Swap
+            | IAdd | LAdd | FAdd | DAdd | ISub | LSub | FSub | DSub | IMul | LMul | FMul | DMul
+            | IDiv | LDiv | FDiv | DDiv | IRem | LRem | FRem | DRem | INeg | LNeg | FNeg | DNeg
+            | IShl | LShl | IShr | LShr | IUShr | LUShr | IAnd | LAnd | IOr | LOr | IXor | LXor
+            | I2L | I2F | I2D | L2I | L2F | L2D | F2I | F2L | F2D | D2I | D2L | D2F | I2B | I2C | I2S
+            | LCmp | FCmpL | FCmpG | DCmpL | DCmpG
+            | IReturn | LReturn | FReturn | DReturn | AReturn | Return
+            | ArrayLength | AThrow | MonitorEnter | MonitorExit
+            | Breakpoint | ImpDep1 | ImpDep2 => write!(f, "{}", self.name()),
+
+            // Instructions with a single value operand
+            BiPush(value) => write!(f, "{} {}", self.name(), value),
+            SiPush(value) => write!(f, "{} {}", self.name(), value),
+
+            // Instructions with an index operand
+            ILoad(idx) | LLoad(idx) | FLoad(idx) | DLoad(idx) | ALoad(idx) |
+            IStore(idx) | LStore(idx) | FStore(idx) | DStore(idx) | AStore(idx) |
+            Ret(idx) => write!(f, "{} {}", self.name(), idx),
+
+            // Instructions with program counter operand
+            IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target) | IfLe(target) |
+            IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target) | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) |
+            IfACmpEq(target) | IfACmpNe(target) | Goto(target) | Jsr(target) | IfNull(target) | IfNonNull(target) |
+            GotoW(target) | JsrW(target) => write!(f, "{} {}", self.name(), target),
+
+            // Instructions with field reference operands
+            GetStatic(field_ref) | PutStatic(field_ref) | GetField(field_ref) | PutField(field_ref) =>
+                write!(f, "{} {}", self.name(), field_ref),
+
+            // Instructions with method reference operands
+            InvokeVirtual(method_ref) | InvokeSpecial(method_ref) | InvokeStatic(method_ref) =>
+                write!(f, "{} {}", self.name(), method_ref),
+
+            // Instructions with constant operands
+            Ldc(constant) | LdcW(constant) | Ldc2W(constant) => write!(f, "{} {}", self.name(), constant),
+
+            // Type-related instructions
+            New(class_ref) | ANewArray(class_ref) => write!(f, "{} {}", self.name(), class_ref),
+            NewArray(primitive_type) => write!(f, "{} {}", self.name(), primitive_type),
+            CheckCast(field_type) | InstanceOf(field_type) => write!(f, "{} {}", self.name(), field_type),
+
+            // Complex instructions with multiple operands
+            IInc(idx, value) => write!(f, "{} {} {}", self.name(), idx, value),
+            InvokeInterface(method_ref, count) => write!(f, "{} {} count {}", self.name(), method_ref, count),
+            InvokeDynamic { bootstrap_method_index, name, descriptor } => {
+                write!(f, "{} #{} {} {}", self.name(), bootstrap_method_index, name, descriptor)
+            },
+
+            // Complex control flow instructions
+            TableSwitch { range, jump_targets, default } => {
+                write!(f, "{} {{\n  range: {}..={}\n  default: {}\n", self.name(), range.start(), range.end(), default)?;
+                for (value, target) in range.clone().zip_eq(jump_targets){
+                    writeln!(f, "  {value}: {target}")?;
+                }
+                write!(f, "}}")
+            },
+            LookupSwitch { default, match_targets } => {
+                write!(f, "{} {{\n  default: {}\n", self.name(), default)?;
+                for (key, target) in match_targets {
+                    writeln!(f, "  {key}: {target}")?;
+                }
+                write!(f, "}}")
+            },
+
+            // Special cases
+            Wide(wide_instr) => write!(f, "{} {}", self.name(), wide_instr),
+            MultiANewArray(field_type, dimensions) => write!(f, "{} {} {}", self.name(), field_type, dimensions),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::Instruction::*;
+    use super::{Instruction::*, WideInstruction};
+    use super::super::ProgramCounter;
 
     #[test]
     fn test_opcode() {
@@ -512,5 +621,28 @@ mod test {
         assert_eq!(AConstNull.opcode(), 0x01);
         assert_eq!(IConstM1.opcode(), 0x02);
         assert_eq!(ILoad(233).opcode(), 0x15);
+    }
+
+    #[test]
+    fn test_display() {
+        // Simple instructions
+        assert_eq!(Nop.to_string(), "nop");
+        assert_eq!(AConstNull.to_string(), "aconst_null");
+        assert_eq!(ILoad(5).to_string(), "iload 5");
+        assert_eq!(BiPush(42).to_string(), "bipush 42");
+        assert_eq!(IInc(10, 5).to_string(), "iinc 10 5");
+
+        // Wide instructions
+        assert_eq!(Wide(WideInstruction::ILoad(1000)).to_string(), "wide iload 1000");
+        assert_eq!(Wide(WideInstruction::IInc(500, 50)).to_string(), "wide iinc 500 50");
+
+        // Mock toString for complex instructions
+        // Note: We can't construct ProgramCounter directly due to private fields
+        // This tests that our Display impl formats each component correctly
+        let if_eq_str = format!("{}", IfEq(ProgramCounter::ZERO));
+        assert_eq!(if_eq_str, "ifeq #0000");
+
+        let goto_str = format!("{}", Goto(ProgramCounter::ZERO));
+        assert_eq!(goto_str, "goto #0000");
     }
 }
