@@ -17,7 +17,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
 #[cfg(not(feature = "unstable-moka-ir"))]
 pub(crate) use generator::{MokaIRBrewingError, MokaIRMethodExt};
-
 #[cfg(feature = "unstable-moka-ir")]
 pub use moka_instruction::*;
 #[cfg(not(feature = "unstable-moka-ir"))]

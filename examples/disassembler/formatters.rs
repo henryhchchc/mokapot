@@ -6,8 +6,11 @@
 //! similar to what the javap tool would produce.
 
 use std::fmt::{self, Display, Formatter};
-use mokapot::jvm::{class, field, method, Class, Field, Method};
-use mokapot::types::method_descriptor;
+
+use mokapot::{
+    jvm::{Class, Field, Method, class, field, method},
+    types::method_descriptor,
+};
 
 /// Formatter for Java classes
 ///

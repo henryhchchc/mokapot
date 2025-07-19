@@ -5,8 +5,7 @@
 //! methods, and bytecode instructions in a format similar to
 //! what the `javap` tool produces.
 
-use mokapot::jvm::{Class, Field, Method};
-use mokapot::jvm::code::MethodBody;
+use mokapot::jvm::{Class, Field, Method, code::MethodBody};
 
 use crate::formatters::{ClassFormatter, FieldFormatter, MethodFormatter};
 
@@ -19,7 +18,7 @@ use crate::formatters::{ClassFormatter, FieldFormatter, MethodFormatter};
 pub struct ClassPrinter<'a> {
     /// Reference to the class being printed
     class: &'a Class,
-    
+
     /// Whether to print verbose details including bytecode instructions
     verbose: bool,
 }
@@ -178,11 +177,17 @@ impl<'a> ClassPrinter<'a> {
         }
         // Show count of runtime visible annotations (available at runtime via reflection)
         if !field.runtime_visible_annotations.is_empty() {
-            println!("    Runtime visible annotations: {}", field.runtime_visible_annotations.len());
+            println!(
+                "    Runtime visible annotations: {}",
+                field.runtime_visible_annotations.len()
+            );
         }
         // Show count of runtime invisible annotations (not available at runtime)
         if !field.runtime_invisible_annotations.is_empty() {
-            println!("    Runtime invisible annotations: {}", field.runtime_invisible_annotations.len());
+            println!(
+                "    Runtime invisible annotations: {}",
+                field.runtime_invisible_annotations.len()
+            );
         }
     }
 
@@ -289,14 +294,17 @@ impl<'a> ClassPrinter<'a> {
             // Get the start and end program counters of the protected region
             let start_pc = *entry.covered_pc.start();
             let end_pc = *entry.covered_pc.end();
-            
+
             // Get the exception type, or "any" for finally blocks (which catch all exceptions)
             let catch_type = match &entry.catch_type {
                 Some(class_ref) => &class_ref.binary_name,
                 None => "any", // "any" means a finally block or catch-all handler
             };
-            
-            println!("        {} {} {} {}", start_pc, end_pc, entry.handler_pc, catch_type);
+
+            println!(
+                "        {} {} {} {}",
+                start_pc, end_pc, entry.handler_pc, catch_type
+            );
         }
     }
 
