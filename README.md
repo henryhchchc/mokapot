@@ -1,11 +1,12 @@
 # MokaPot
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-henryhchchc%2Fmokapot-orange?style=flat-square&logo=GitHub)](https://github.com/henryhchchc/mokapot)
-[![CI - GitHub Actions](https://img.shields.io/github/actions/workflow/status/henryhchchc/mokapot/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/henryhchchc/mokapot?style=flat-square&logo=codecov&logoColor=white&label=Coverage)](https://app.codecov.io/gh/henryhchchc/mokapot/)
-[![Crates.io](https://img.shields.io/crates/v/mokapot?style=flat-square&logo=rust&logoColor=white)](https://crates.io/crates/mokapot)
-[![docs.rs](https://img.shields.io/docsrs/mokapot?style=flat-square&logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa?style=flat-square&logo=contributorcovenant)](docs/CODE_OF_CONDUCT.md)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-henryhchchc%2Fmokapot-orange?logo=GitHub)](https://github.com/henryhchchc/mokapot)
+[![CI - GitHub Actions](https://img.shields.io/github/actions/workflow/status/henryhchchc/mokapot/ci.yml?logo=githubactions&logoColor=white&label=CI)](https://github.com/henryhchchc/mokapot/actions/workflows/ci.yml)
+[![Codecov](https://img.shields.io/codecov/c/github/henryhchchc/mokapot?logo=codecov&logoColor=white&label=Coverage)](https://app.codecov.io/gh/henryhchchc/mokapot/)
+[![Crates.io](https://img.shields.io/crates/v/mokapot?logo=rust&logoColor=white)](https://crates.io/crates/mokapot)
+[![docs.rs](https://img.shields.io/docsrs/mokapot?logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa?logo=contributorcovenant)](docs/CODE_OF_CONDUCT.md)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/henryhchchc/mokapot)
 
 MokaPot is a library for analyzing and manipulating JVM bytecode. It is written in Rust for performance and safety.
 
