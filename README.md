@@ -48,6 +48,10 @@ fn parse_class() -> Result<Class, Box<dyn std::error::Error>> {
 }
 ```
 
+### More Examples
+
+More example usage of MokaPot can be found in the [examples](examples/) folder.
+
 ### MokaIR
 
 MokaIR is an intermediate representation of JVM bytecode in [mokapot](https://github.com/henryhchchc/mokapot).
