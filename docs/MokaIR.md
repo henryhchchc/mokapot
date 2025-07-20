@@ -4,7 +4,7 @@ MokaIR is an intermediate representation of JVM bytecode in [mokapot](https://gi
 It is in a register-based, SSA form, and is designed to be easy to analyze.
 Please checkout the module [`mokapot::ir`](https://docs.rs/mokapot/latest/mokapot/ir/index.html) for more information.
 
-> [!WARNING] MokaIR is currently unstable. APIs and implementations are subjected to breaking changes.
+🚧 MokaIR is currently unstable. APIs and implementations are subjected to breaking changes.
 
 To generate MokaIR from a method, use the following code.
 
