@@ -1,46 +1,61 @@
-# Contribution Guide
+# Contributing to MokaPot
 
-## Bug Report
+We welcome all contributions to MokaPot! Whether you're fixing bugs, adding features, improving documentation, or sharing feedback, your help is appreciated.
 
-For bug report, please open an issue at the [GitHub issue tracker](https://github.com/henryhchchc/mokapot/issues).
+For questions or help, open an issue or start a [GitHub Discussion](https://github.com/henryhchchc/mokapot/discussions).
 
-## Pull Request
+## Bug Reports and Feature Requests
 
-Please follow the [Conventional Commits](https://www.conventionalcommits.org/) when writing commit messages.
-It would be nice to include the scope in the commit message.
-Generally, the scope will be the name of the top level module.
-For changes in `src/x`, the scope will be `x`.
-For example, when making changes to `src/jvm/class.rs`, the commit message will be `feat(jvm): xxx` or `fix(jvm): xx`.
+- **Bug Reports:**
+  Open an issue at the [GitHub issue tracker](https://github.com/henryhchchc/mokapot/issues). Include details: steps to reproduce, expected and actual behavior, environment info.
 
-Before submitting a pull request, please do the following checks:
+- **Feature Requests:**
+  Open an issue describing your idea and motivation. Always check [existing issues](https://github.com/henryhchchc/mokapot/issues) to avoid duplicates.
 
-- Make sure `cargo fmt --check` does not complain.
-- Make sure `cargo clippy --all-targets --all-features -- -D warnings` does not complain.
+## Code Contributions
 
-## Tasks
-
-MokaPot needs your contribution to be better. Please check [TODO.md](TODO.md) for a list of tasks that we are planning to do.
+- Fork the repository and create a branch from `main`.
+- Write clear, conventional commit messages.
+  Follow [Conventional Commits](https://www.conventionalcommits.org/).
+  Include a scope (top-level module, e.g. `feat(jvm): ...` for changes in `src/jvm`).
+- Format code:
+  Run `cargo fmt --check`.
+- Lint code:
+  Run `cargo clippy --all-targets --all-features -- -D warnings`.
+- Add or update tests as needed.
+- For integration tests, see instructions below.
+- Push your branch and open a Pull Request (PR) against `main`.
+- Respond to review feedback and update your branch as needed.
+- PRs are merged after passing checks and review.
 
 ## Testing
 
-`tests/jdk_classes.rs` contains integration test that runs MokaPot on JDK classes.
-Additional steps are required to run the test case.
+- Unit tests are scattered throughout the codebase.
+- Integration tests are in the `tests/` directory.
+- `tests/jdk_classes.rs` contains integration tests for JDK classes.
+
 ```bash
-# First, tell MokaPot to run integration tests.
+# Enable integration tests
 export INTEGRATION_TEST=1
-# Then, extract the JDK classes from the JDK distribution.
+
+# Extract JDK classes from your JDK distribution
 jimage extract --dir="<extraction path>" "$JAVA_HOME/lib/modules"
-# Next, tell MokaPot where the extracted JDK classes are.
+
+# Set the path for extracted JDK classes
 export JDK_CLASSES="<extraction path>"
-# Finally, run the integration test.
+
+# Run the integration tests
 cargo nextest run --run-ignored=all
 ```
 
-## Developer Certificate of Origin
+## Developer Certificate of Origin (DCO)
 
-By contributing to this project, you must certify that your contribution complies with the [Developer Certificate of Origin](https://developercertificate.org).
-You may use the following `git` command to [sign-off](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s) your commit.
+Certify compliance with the [Developer Certificate of Origin](https://developercertificate.org) for all contributions.
+
+Sign off commits:
 
 ```bash
 git commit --signoff
 ```
+
+Thank you for contributing to MokaPot!
