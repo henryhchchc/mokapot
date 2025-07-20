@@ -10,10 +10,6 @@
 
 MokaPot is a library for analyzing and manipulating JVM bytecode. It is written in Rust for performance and safety.
 
-> [!WARNING]
-> **API Stability:** This project is in an early development stage and breaking changes can happen before v1.0.0.
-> Using this project for production is currently NOT RECOMMENDED.
-
 ## Documentation
 
 The documentation of the released version is available at [docs.rs](https://docs.rs/mokapot).
@@ -53,6 +49,9 @@ fn parse_class() -> Result<Class, Box<dyn std::error::Error>> {
 More example usage of MokaPot can be found in the [examples](examples/) folder.
 
 ### MokaIR
+
+> [!WARNING]
+> **API Stability:** MokaIR is currently considered unstable. APIs and implementations are subject to breaking changes.
 
 MokaIR is an intermediate representation of JVM bytecode in [mokapot](https://github.com/henryhchchc/mokapot).
 To learn more, please refer to [docs/MokaIR.md](docs/MokaIR.md)
