@@ -9,14 +9,10 @@ mod moka_instruction;
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
 
-pub mod type_hierarchy;
-
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[cfg(feature = "unstable-moka-ir")]
 pub use generator::{MokaIRBrewingError, MokaIRMethodExt};
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use generator::{MokaIRBrewingError, MokaIRMethodExt};
 #[cfg(feature = "unstable-moka-ir")]
 pub use moka_instruction::*;
 #[cfg(not(feature = "unstable-moka-ir"))]
@@ -34,7 +30,6 @@ use crate::{
 
 /// Represents a JVM method where the instructions have been converted to Moka IR.
 #[derive(Debug, Clone)]
-#[instability::unstable(feature = "moka-ir")]
 pub struct MokaIRMethod {
     /// The access flags of the method.
     pub access_flags: method::AccessFlags,
@@ -70,25 +65,8 @@ pub struct ControlFlowGraph<N, E> {
 
 /// A def-use chain in data flow analysis.
 #[derive(Debug)]
-#[instability::unstable(feature = "moka-ir")]
 pub struct DefUseChain<'a> {
     method: &'a MokaIRMethod,
     defs: HashMap<LocalValue, ProgramCounter>,
     uses: HashMap<Identifier, BTreeSet<ProgramCounter>>,
-}
-
-/// A class hierarchy based on super class relationships.
-#[derive(Debug, Clone)]
-#[instability::unstable(feature = "project-analyses")]
-pub struct ClassHierarchy {
-    inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
-    super_classes: HashMap<ClassRef, ClassRef>,
-}
-
-/// A class hierarchy based on interface implementations.
-#[derive(Debug, Clone)]
-#[instability::unstable(feature = "project-analyses")]
-pub struct InterfaceImplHierarchy {
-    implementations: HashMap<ClassRef, HashSet<ClassRef>>,
-    implementers: HashMap<ClassRef, HashSet<ClassRef>>,
 }

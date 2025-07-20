@@ -11,7 +11,6 @@ use crate::jvm::code::ProgramCounter;
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[instability::unstable(feature = "moka-ir")]
 pub enum MokaInstruction {
     /// A no-op instruction.
     #[display("nop")]
@@ -91,7 +90,6 @@ impl MokaInstruction {
 
 /// Represents a reference to a value in the Moka IR.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, derive_more::Display)]
-#[instability::unstable(feature = "moka-ir")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Operand {
     /// A reference to a value defined in the current scope.
@@ -173,7 +171,6 @@ impl Operand {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
 #[display("%{_0}")]
-#[instability::unstable(feature = "moka-ir")]
 pub struct LocalValue(u16);
 
 impl LocalValue {
@@ -199,7 +196,6 @@ impl From<LocalValue> for u16 {
 /// Represents an identifier of a value in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[instability::unstable(feature = "moka-ir")]
 pub enum Identifier {
     /// The `this` value in an instance method.
     #[display("%this")]

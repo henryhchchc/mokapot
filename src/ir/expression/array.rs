@@ -9,7 +9,6 @@ use crate::{
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[instability::unstable(feature = "moka-ir")]
 pub enum Operation {
     /// Create a new array.
     #[display("new {element_type}[{length}]")]

@@ -7,6 +7,9 @@ use petgraph::visit::{Control, DfsEvent, Reversed, depth_first_search};
 use super::{ClassHierarchy, InterfaceImplHierarchy};
 use crate::jvm::{Class, references::ClassRef};
 
+#[cfg(feature = "petgraph")]
+mod petgraph_impl;
+
 impl ClassHierarchy {
     /// Creates a new [`ClassHierarchy`] from a list of classes.
     #[must_use]

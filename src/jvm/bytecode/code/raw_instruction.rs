@@ -26,6 +26,7 @@ impl InstructionList<RawInstruction> {
     /// Writes a list of [`RawInstruction`]s to the given writer.
     /// # Errors
     /// See [`GenerationError`] for more information.
+    #[instability::unstable(feature = "bytecode-generation")]
     pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let mut writer = PositionTracker::new(writer);
 

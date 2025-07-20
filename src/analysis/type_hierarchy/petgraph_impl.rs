@@ -8,7 +8,7 @@ use petgraph::{
 };
 
 use crate::{
-    ir::{ClassHierarchy, InterfaceImplHierarchy},
+    analysis::{ClassHierarchy, InterfaceImplHierarchy},
     jvm::references::ClassRef,
 };
 

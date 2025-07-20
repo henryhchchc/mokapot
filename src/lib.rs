@@ -16,7 +16,10 @@
 
 pub mod analysis;
 
+#[cfg(feature = "unstable-moka-ir")]
 pub mod ir;
+#[cfg(not(feature = "unstable-moka-ir"))]
+pub(crate) mod ir;
 pub mod jvm;
 pub(crate) mod macros;
 pub mod types;
