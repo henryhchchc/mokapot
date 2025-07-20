@@ -18,9 +18,9 @@ For questions or help, open an issue or start a [GitHub Discussion](https://gith
 - Write clear, conventional commit messages.
   Follow [Conventional Commits](https://www.conventionalcommits.org/).
   Include a scope (top-level module, e.g. `feat(jvm): ...` for changes in `src/jvm`).
-- Format code:
+- Make sure code is correctly formatted.
   Run `cargo fmt --check`.
-- Lint code:
+- Make sure `clippy` does not report any warnings.
   Run `cargo clippy --all-targets --all-features -- -D warnings`.
 - Add or update tests as needed.
 - For integration tests, see instructions below.
