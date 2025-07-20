@@ -8,68 +8,79 @@
 [![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa?logo=contributorcovenant)](docs/CODE_OF_CONDUCT.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/henryhchchc/mokapot)
 
-MokaPot is a library for analyzing and manipulating JVM bytecode. It is written in Rust for performance and safety.
+## Overview
+
+MokaPot is a Rust library for working with JVM bytecode. You can use it to parse, inspect, and change Java class files.
+
+Main features:
+
+- Parse JVM bytecode
+- Work with an intermediate representation (MokaIR)
+- Build custom tools for JVM bytecode
+- Includes documentation and examples
 
 ## Documentation
 
-The documentation of the released version is available at [docs.rs](https://docs.rs/mokapot).
-The documentation of the latest commit is available at [github.io](https://henryhchchc.github.io/mokapot/mokapot/)
+- [Release documentation](https://docs.rs/mokapot)
+- [Latest commit documentation](https://henryhchchc.github.io/mokapot/mokapot/)
 
-## Usage
+## Installation
 
-### Adding the dependency
-
-Run the following command in the root directory of your project.
+To add MokaPot to your project, run:
 
 ```sh
 cargo add mokapot
 ```
 
-Alternatively, to follow the latest commit version, run the following command instead.
-Before building your project, run `cargo update` to fetch the latest commit.
+To use the latest commit from GitHub:
 
 ```sh
 cargo add --git https://github.com/henryhchchc/mokapot.git mokapot
+cargo update
 ```
 
-### Parsing a class
+## Usage
+
+### Parse a JVM class file
 
 ```rust
 use mokapot::jvm::class::Class;
+use std::fs::File;
 
-fn parse_class() -> Result<Class, Box<dyn std::error::Error>> {
-    let reader = todo!("Some reader for the byte code");
-    let class = Class::from_reader(&mut reader)?;
+fn parse_class_file(path: &str) -> Result<Class, Box<dyn std::error::Error>> {
+    let mut file = File::open(path)?;
+    let class = Class::from_reader(&mut file)?;
     Ok(class)
 }
 ```
 
 ### More Examples
 
-More example usage of MokaPot can be found in the [examples](examples/) folder.
+See the [examples](examples/) directory for more code samples.
 
 ### MokaIR
 
-> [!WARNING]
-> **API Stability:** MokaIR is currently considered unstable. APIs and implementations are subject to breaking changes.
-
-MokaIR is an intermediate representation of JVM bytecode in [mokapot](https://github.com/henryhchchc/mokapot).
-To learn more, please refer to [docs/MokaIR.md](docs/MokaIR.md)
+MokaIR is an intermediate representation of JVM bytecode in this library.
+See [docs/MokaIR.md](docs/MokaIR.md) for details.
 
 ## Building
 
-Make sure you have the following tools installed:
+Requirements:
 
-- The latest stable version of Rust
-- The latest release version of JDK
+- Rust (latest stable)
+- JDK (latest release, for compiling Java source files as test data)
 
-Compile the project and run the tests with the following command.
+To build and test:
 
-```bash
+```sh
 cargo build --all-features
 cargo test --all-features
 ```
 
 ## Contributing
 
-Cool. Contributions are welcomed. See the [contribution guide](docs/CONTRIBUTING.md) for more information.
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to contribute.
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.

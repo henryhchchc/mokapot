@@ -5,7 +5,7 @@ It is in a register-based, SSA form, and is designed to be easy to analyze.
 Please checkout the module [`mokapot::ir`](https://docs.rs/mokapot/latest/mokapot/ir/index.html) for more information.
 
 > [!WARNING]
-> **API Stability:** MokaIR is currently considered unstable. APIs and implementations are subject to breaking changes.
+> MokaIR is currently considered unstable. APIs and implementations are subject to breaking changes.
 
 To generate MokaIR from a method, use the following code.
 
