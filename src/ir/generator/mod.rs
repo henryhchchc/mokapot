@@ -33,7 +33,6 @@ use crate::{
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
-#[instability::unstable(feature = "moka-ir")]
 pub enum MokaIRBrewingError {
     /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]

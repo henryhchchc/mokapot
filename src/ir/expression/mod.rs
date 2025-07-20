@@ -20,35 +20,16 @@ mod field;
 mod lock;
 mod math;
 
-#[cfg(feature = "unstable-moka-ir")]
 pub use array::Operation as ArrayOperation;
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use array::Operation as ArrayOperation;
-#[cfg(feature = "unstable-moka-ir")]
 pub use condition::Condition;
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use condition::Condition;
-#[cfg(feature = "unstable-moka-ir")]
 pub use conversion::Operation as Conversion;
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use conversion::Operation as Conversion;
-#[cfg(feature = "unstable-moka-ir")]
 pub use field::Access as FieldAccess;
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use field::Access as FieldAccess;
-#[cfg(feature = "unstable-moka-ir")]
 pub use lock::Operation as LockOperation;
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use lock::Operation as LockOperation;
-#[cfg(feature = "unstable-moka-ir")]
 pub use math::{NaNTreatment, Operation as MathOperation};
-#[cfg(not(feature = "unstable-moka-ir"))]
-pub(crate) use math::{NaNTreatment, Operation as MathOperation};
 
 /// Represents an expression in the Moka IR.
 /// It may or may not generate a value.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[instability::unstable(feature = "moka-ir")]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),

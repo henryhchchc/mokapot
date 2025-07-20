@@ -4,7 +4,6 @@ use crate::ir::{Identifier, Operand};
 
 /// A condition that can be used in a conditional jump.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[instability::unstable(feature = "moka-ir")]
 pub enum Condition<OP = Operand> {
     /// The two arguments are equal (i.e., `lhs == rhs`).
     #[display("{_0} == {_1}")]

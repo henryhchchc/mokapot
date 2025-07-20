@@ -2,12 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    ir::{ClassHierarchy, InterfaceImplHierarchy},
-    jvm::{Class, class_loader::ClassPath, references::ClassRef},
-};
+use crate::jvm::{Class, class_loader::ClassPath, references::ClassRef};
 
 pub mod fixed_point;
+pub mod type_hierarchy;
 
 /// A context for class resolution during analysis.
 #[derive(Debug)]
@@ -73,4 +71,20 @@ where
                 .map(|it| (it.make_ref(), it))
         })
         .collect()
+}
+
+/// A class hierarchy based on super class relationships.
+#[derive(Debug, Clone)]
+#[instability::unstable(feature = "project-analyses")]
+pub struct ClassHierarchy {
+    inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
+    super_classes: HashMap<ClassRef, ClassRef>,
+}
+
+/// A class hierarchy based on interface implementations.
+#[derive(Debug, Clone)]
+#[instability::unstable(feature = "project-analyses")]
+pub struct InterfaceImplHierarchy {
+    implementations: HashMap<ClassRef, HashSet<ClassRef>>,
+    implementers: HashMap<ClassRef, HashSet<ClassRef>>,
 }
