@@ -83,7 +83,12 @@ impl<'a> ClassPrinter<'a> {
     fn print_header(&self) {
         // In verbose mode, show the source file information
         if self.verbose {
-            println!("Compiled from \"Unknown source\"");
+            let source_file = self
+                .class
+                .source_file
+                .as_deref()
+                .unwrap_or("Unknown source");
+            println!("Compiled from \"{source_file}\"",);
         }
 
         // Format access flags like public, final, abstract, etc.
