@@ -44,7 +44,7 @@ fn compile_java_files(path: &str) {
         .arg(build_path.join(path).join("java_classes"))
         .args(java_source_files.into_iter().map(|it| {
             it.to_str()
-                .expect("Java source file is not named with vaild UTF-8")
+                .expect("Java source file is not named with valid UTF-8")
                 .to_owned()
         }))
         .output()
