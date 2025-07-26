@@ -16,6 +16,7 @@ use super::{
     write_length,
 };
 use crate::{
+    intrinsics::see_jvm_spec,
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
@@ -24,7 +25,6 @@ use crate::{
         method::ParameterInfo,
         references::{ClassRef, PackageRef},
     },
-    macros::see_jvm_spec,
 };
 
 /// Represent an attribute of a class file, method, field, or code.

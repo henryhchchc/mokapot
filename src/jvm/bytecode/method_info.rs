@@ -10,13 +10,13 @@ use super::{
     reader_utils::BytecodeReader,
 };
 use crate::{
+    intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
         Method,
         bytecode::{ParsingContext, errors::ParsingErrorContext},
         method::{self},
         references::ClassRef,
     },
-    macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
     types::{Descriptor, method_descriptor::MethodDescriptor},
 };
 

@@ -7,7 +7,7 @@ use self::{
     references::{ClassRef, PackageRef},
 };
 use crate::{
-    macros::see_jvm_spec,
+    intrinsics::see_jvm_spec,
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 

@@ -1,5 +1,9 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, mem::transmute, sync::RwLock};
 
+mod macros;
+
+pub(crate) use macros::{attributes_into_iter, extract_attributes, see_jvm_spec};
+
 /// Gets the discriminant of an enum.
 ///
 /// # Safety:

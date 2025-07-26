@@ -11,7 +11,10 @@ use super::{
     reader_utils::{BytecodeReader, read_vec},
     write_length,
 };
-use crate::{jvm::code::ProgramCounter, macros::see_jvm_spec, utils::enum_discriminant};
+use crate::{
+    intrinsics::{enum_discriminant, see_jvm_spec},
+    jvm::code::ProgramCounter,
+};
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]

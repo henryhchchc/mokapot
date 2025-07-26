@@ -1,4 +1,4 @@
-use crate::{macros::see_jvm_spec, utils::enum_discriminant};
+use crate::intrinsics::{enum_discriminant, see_jvm_spec};
 
 /// A raw JVM instruction without the information form the constant pool.
 #[doc = see_jvm_spec!(6, 5)]

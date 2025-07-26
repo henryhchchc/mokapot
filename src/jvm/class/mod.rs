@@ -14,9 +14,8 @@ use super::{
     references::{ClassRef, FieldRef, MethodRef},
 };
 use crate::{
-    macros::see_jvm_spec,
+    intrinsics::{enum_discriminant, see_jvm_spec},
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
-    utils::enum_discriminant,
 };
 
 /// A generic type signature for a class.

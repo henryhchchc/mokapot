@@ -3,9 +3,8 @@
 use std::io::{self, Read};
 
 use crate::{
+    intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{JavaString, class::ConstantPool},
-    macros::see_jvm_spec,
-    utils::enum_discriminant,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,7 +4,7 @@ use super::{
     code::{LocalVariableId, ProgramCounter},
 };
 use crate::{
-    macros::see_jvm_spec,
+    intrinsics::see_jvm_spec,
     types::{field_type::PrimitiveType, method_descriptor::ReturnType},
 };
 

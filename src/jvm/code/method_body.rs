@@ -6,8 +6,8 @@ use std::{
 
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
+    intrinsics::see_jvm_spec,
     jvm::{TypeAnnotation, bytecode::ParseError, class::ConstantPool, references::ClassRef},
-    macros::see_jvm_spec,
     types::field_type::FieldType,
 };
 

@@ -13,7 +13,7 @@ use super::{
     Descriptor,
     field_type::{FieldType, PrimitiveType},
 };
-use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
+use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
 
 /// The descriptor of a method, representing its parameters and return type in JVM format.
 ///

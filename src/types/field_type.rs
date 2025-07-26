@@ -36,7 +36,7 @@
 use std::str::FromStr;
 
 use super::{Descriptor, method_descriptor::InvalidDescriptor};
-use crate::{jvm::references::ClassRef, macros::see_jvm_spec};
+use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
 
 /// A primitive type in Java.
 ///

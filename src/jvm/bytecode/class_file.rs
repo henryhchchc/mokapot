@@ -12,6 +12,7 @@ use super::{
     raw_attributes, write_length,
 };
 use crate::{
+    intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
         Class,
         bytecode::{errors::ParsingErrorContext, reader_utils::BytecodeReader},
@@ -21,7 +22,6 @@ use crate::{
         },
         references::ClassRef,
     },
-    macros::{attributes_into_iter, extract_attributes, see_jvm_spec},
     types::Descriptor,
 };
 

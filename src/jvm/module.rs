@@ -2,7 +2,7 @@
 use bitflags::bitflags;
 
 use super::references::{ClassRef, ModuleRef, PackageRef};
-use crate::macros::see_jvm_spec;
+use crate::intrinsics::see_jvm_spec;
 
 /// A service provided by a module.
 #[doc = see_jvm_spec!(4, 7, 25)]

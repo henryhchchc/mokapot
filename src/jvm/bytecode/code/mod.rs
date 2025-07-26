@@ -19,6 +19,7 @@ use super::{
     reader_utils::BytecodeReader,
 };
 use crate::{
+    intrinsics::extract_attributes,
     jvm::{
         class::ConstantPool,
         code::{
@@ -27,7 +28,6 @@ use crate::{
         },
         method::{ParameterAccessFlags, ParameterInfo},
     },
-    macros::extract_attributes,
     types::{Descriptor, field_type::FieldType},
 };
 

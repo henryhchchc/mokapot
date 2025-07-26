@@ -4,16 +4,15 @@ use itertools::Itertools;
 
 use super::ProgramCounter;
 use crate::{
+    intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
         ConstantValue,
         references::{ClassRef, FieldRef, MethodRef},
     },
-    macros::see_jvm_spec,
     types::{
         field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
     },
-    utils::enum_discriminant,
 };
 
 /// A JVM instruction.
