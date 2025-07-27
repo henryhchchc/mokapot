@@ -1,3 +1,5 @@
+//! Low-level utilities and abstractions used internally in this crate.
+
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, mem::transmute, sync::RwLock};
 
 mod macros;
