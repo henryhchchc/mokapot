@@ -14,13 +14,11 @@ impl IntoNeighbors for &DefUseChain<'_> {
     type Neighbors = <BTreeSet<Identifier> as IntoIterator>::IntoIter;
 
     fn neighbors(self, node: Identifier) -> Self::Neighbors {
-        if let Identifier::Local(loc) = node {
-            if let Some(pc) = self.defined_at(&loc) {
-                if let Some(insn) = self.method.instructions.get(&pc) {
+        if let Identifier::Local(loc) = node
+            && let Some(pc) = self.defined_at(&loc)
+                && let Some(insn) = self.method.instructions.get(&pc) {
                     return insn.uses().into_iter();
                 }
-            }
-        }
         BTreeSet::default().into_iter()
     }
 }

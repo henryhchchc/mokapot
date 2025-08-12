@@ -293,11 +293,10 @@ impl LocalVariableTable {
         field_type: FieldType,
     ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
-        if let Some(existing_name) = entry.name.as_ref() {
-            if existing_name != &name {
+        if let Some(existing_name) = entry.name.as_ref()
+            && existing_name != &name {
                 Err(ParseError::malform("Name of local variable does not match"))?;
             }
-        }
         entry.name = Some(name);
         entry.var_type = Some(field_type);
         Ok(())
@@ -310,11 +309,10 @@ impl LocalVariableTable {
         signature: String,
     ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
-        if let Some(existing_name) = entry.name.as_ref() {
-            if existing_name != &name {
+        if let Some(existing_name) = entry.name.as_ref()
+            && existing_name != &name {
                 Err(ParseError::malform("Name of local variable does not match"))?;
             }
-        }
         entry.name = Some(name);
         entry.signature = Some(signature);
         Ok(())
