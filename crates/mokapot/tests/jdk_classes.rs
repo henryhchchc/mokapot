@@ -20,6 +20,8 @@ fn works_with_jdk_classes() {
         .map(|it| it.into_path())
         .collect();
 
+    assert!(!class_files.is_empty(), "There is no class file to test.");
+
     class_files.into_par_iter().for_each(|class_file| {
         let reader = fs::File::open(&class_file).unwrap();
         let mut buf_reader = std::io::BufReader::new(reader);
