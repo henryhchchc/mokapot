@@ -1,69 +1,11 @@
-[package]
-name = "mokapot"
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
 version = "0.20.2"
 edition = "2024"
-description = "A library for analyzing and manipulating JVM bytecode"
-documentation = "https://docs.rs/mokapot"
 license = "MIT"
 repository = "https://github.com/henryhchchc/mokapot"
-keywords = ["jvm", "java", "analysis", "bytecode"]
 categories = ["parsing", "development-tools"]
-
-
-[dependencies]
-bitflags = "2.6"
-cesu8 = "1.1"
-derive_more = { version = "2", features = ["full"] }
-document-features = "0.2"
-itertools = "0.14"
-petgraph = { version = "0.8", optional = true }
-num-traits = "0.2"
-instability = "0.3.9"
-thiserror = "2.0"
-trait-gen = "2.0"
-walkdir = "2"
-zip = { version = "4.0", optional = true, default-features = false, features = [
-    "deflate",
-] }
-
-[dev-dependencies]
-mokapot = { path = ".", features = ["unstable"] }
-clap = { version = "4.5", features = ["derive"] }
-proptest = "1"
-proptest-derive = "0.6"
-walkdir = "2"
-rand = "0.9"
-rayon = "1"
-
-[build-dependencies]
-glob = "0.3"
-
-
-[features]
-default = ["jar", "petgraph"]
-
-## Enables loading classes from `.jar` files
-jar = ["dep:zip"]
-
-## Enables the analyses of control flow graphs with `petgraph`.
-petgraph = ["dep:petgraph"]
-
-## Experimental APIs
-unstable = [
-    "unstable-bytecode-generation",
-    "unstable-moka-ir",
-    "unstable-fixed-point-analyses",
-    "unstable-project-analyses",
-]
-
-## Experimental bytecode generation
-unstable-bytecode-generation = []
-
-## Experimental Moka IR
-unstable-moka-ir = []
-
-## Experimental fixed-point analyses
-unstable-fixed-point-analyses = []
-
-## Experimental project-wide analyses
-unstable-project-analyses = []
+keywords = ["jvm", "java", "analysis", "bytecode"]
