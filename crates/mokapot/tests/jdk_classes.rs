@@ -13,14 +13,18 @@ use rayon::prelude::*;
 fn works_with_jdk_classes() {
     let extracted_modules_images = env::var("JDK_CLASSES").unwrap();
     let extracted_modules_images = PathBuf::from(extracted_modules_images);
-    let class_files: Vec<_> = walkdir::WalkDir::new(extracted_modules_images)
+    let class_files: Vec<_> = walkdir::WalkDir::new(&extracted_modules_images)
         .into_iter()
         .filter_map(Result::ok)
         .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
         .map(|it| it.into_path())
         .collect();
 
-    assert!(!class_files.is_empty(), "There is no class file to test.");
+    assert!(
+        !class_files.is_empty(),
+        "There is no class file in '{}'.",
+        extracted_modules_images.display()
+    );
 
     class_files.into_par_iter().for_each(|class_file| {
         let reader = fs::File::open(&class_file).unwrap();
