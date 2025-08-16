@@ -155,10 +155,10 @@ jobs:
         uses: Leafwing-Studios/cargo-cache@v2
       - name: Test
         env:
-          JDK_CLASSES: ${GITHUB_WORKSPACE}/jdk_classes
           INTEGRATION_TEST: TRUE
         timeout-minutes: 10
         run: |
+          export JDK_CLASSES="${GITHUB_WORKSPACE}/jdk_classes"
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
           cargo llvm-cov report --codecov --output-path ./target/codecov-integration.json
