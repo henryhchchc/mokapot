@@ -21,7 +21,7 @@ instability = "0.3.9"
 thiserror = "2.0"
 trait-gen = "2.0"
 walkdir = "2"
-zip = { version = "4.0", optional = true, default-features = false, features = [
+zip = { version = "5.0", optional = true, default-features = false, features = [
     "deflate",
 ] }
 
