@@ -77,7 +77,7 @@ impl ClassElement for StackMapFrame {
         let raw = match self {
             Self::SameFrame { offset_delta } => {
                 if offset_delta < 64 {
-                    let frame_type = u8::try_from(offset_delta).expect("0 - 63 shold fit in u8");
+                    let frame_type = u8::try_from(offset_delta).expect("0 - 63 should fit in u8");
                     Self::Raw::SameFrame { frame_type }
                 } else {
                     Self::Raw::SameFrameExtended { offset_delta }
