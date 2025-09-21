@@ -95,7 +95,7 @@ impl RawInstruction {
                 high,
                 jump_offsets,
             } => {
-                while writer.position() % 4 != 0 {
+                while !writer.position().is_multiple_of(4) {
                     writer.write_all(&[0x00])?;
                 }
                 writer.write_all(&default.to_be_bytes())?;
@@ -110,7 +110,7 @@ impl RawInstruction {
                 default,
                 match_offsets,
             } => {
-                while writer.position() % 4 != 0 {
+                while !writer.position().is_multiple_of(4) {
                     writer.write_all(&[0x00])?;
                 }
                 writer.write_all(&default.to_be_bytes())?;
@@ -481,7 +481,7 @@ impl RawInstruction {
             0x69 => LMul,
             0x75 => LNeg,
             0xab => {
-                while reader.position() % 4 != 0 {
+                while !reader.position().is_multiple_of(4) {
                     let _padding_byte: u8 = reader.decode_value()?;
                 }
                 let default = reader.decode_value()?;
@@ -499,7 +499,7 @@ impl RawInstruction {
                 }
             }
             0xaa => {
-                while reader.position() % 4 != 0 {
+                while !reader.position().is_multiple_of(4) {
                     let _padding_byte: u8 = reader.decode_value()?;
                 }
                 let default = reader.decode_value()?;
