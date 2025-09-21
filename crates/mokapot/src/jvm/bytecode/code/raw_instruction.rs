@@ -67,7 +67,8 @@ impl RawInstruction {
             | LStore { index }
             | FStore { index }
             | DStore { index }
-            | AStore { index } => writer.write_all(&index.to_be_bytes())?,
+            | AStore { index }
+            | Ret { index } => writer.write_all(&index.to_be_bytes())?,
             IInc { index, constant } => {
                 writer.write_all(&index.to_be_bytes())?;
                 writer.write_all(&constant.to_be_bytes())?;
@@ -87,8 +88,9 @@ impl RawInstruction {
             | IfACmpEq { offset }
             | IfACmpNe { offset }
             | Goto { offset }
-            | Jsr { offset } => writer.write_all(&offset.to_be_bytes())?,
-            Ret { index } => writer.write_all(&index.to_be_bytes())?,
+            | Jsr { offset }
+            | IfNull { offset }
+            | IfNonNull { offset } => writer.write_all(&offset.to_be_bytes())?,
             TableSwitch {
                 default,
                 low,
@@ -141,13 +143,9 @@ impl RawInstruction {
                 writer.write_all(&dynamic_index.to_be_bytes())?;
                 writer.write_all(&[0x00, 0x00])?;
             }
-            New { index } => writer.write_all(&index.to_be_bytes())?,
+            New { index } | ANewArray { index } => writer.write_all(&index.to_be_bytes())?,
             NewArray { atype } => writer.write_all(&atype.to_be_bytes())?,
-            ANewArray { index } => writer.write_all(&index.to_be_bytes())?,
-            CheckCast { target_type_index } => {
-                writer.write_all(&target_type_index.to_be_bytes())?;
-            }
-            InstanceOf { target_type_index } => {
+            CheckCast { target_type_index } | InstanceOf { target_type_index } => {
                 writer.write_all(&target_type_index.to_be_bytes())?;
             }
             Wide(raw_wide_instruction) => {
@@ -176,10 +174,7 @@ impl RawInstruction {
                 writer.write_all(&index.to_be_bytes())?;
                 writer.write_all(&dimensions.to_be_bytes())?;
             }
-            IfNull { offset } => writer.write_all(&offset.to_be_bytes())?,
-            IfNonNull { offset } => writer.write_all(&offset.to_be_bytes())?,
-            GotoW { offset } => writer.write_all(&offset.to_be_bytes())?,
-            JsrW { offset } => writer.write_all(&offset.to_be_bytes())?,
+            GotoW { offset } | JsrW { offset } => writer.write_all(&offset.to_be_bytes())?,
             _ => {
                 // Empty variants should write nothing but the opcode.
             }

@@ -483,23 +483,19 @@ impl ToBytecode for Entry {
             Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Long(value) => writer.write_all(&value.to_be_bytes())?,
             Self::Double(value) => writer.write_all(&value.to_be_bytes())?,
-            Self::Class { name_index } => writer.write_all(&name_index.to_be_bytes())?,
+            Self::Class { name_index }
+            | Self::Module { name_index }
+            | Self::Package { name_index } => writer.write_all(&name_index.to_be_bytes())?,
             Self::String { string_index } => writer.write_all(&string_index.to_be_bytes())?,
             Self::FieldRef {
                 class_index,
                 name_and_type_index,
-            } => {
-                writer.write_all(&class_index.to_be_bytes())?;
-                writer.write_all(&name_and_type_index.to_be_bytes())?;
             }
-            Self::MethodRef {
+            | Self::MethodRef {
                 class_index,
                 name_and_type_index,
-            } => {
-                writer.write_all(&class_index.to_be_bytes())?;
-                writer.write_all(&name_and_type_index.to_be_bytes())?;
             }
-            Self::InterfaceMethodRef {
+            | Self::InterfaceMethodRef {
                 class_index,
                 name_and_type_index,
             } => {
@@ -526,19 +522,14 @@ impl ToBytecode for Entry {
             Self::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type_index,
-            } => {
-                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
-                writer.write_all(&name_and_type_index.to_be_bytes())?;
             }
-            Self::InvokeDynamic {
+            | Self::InvokeDynamic {
                 bootstrap_method_attr_index,
                 name_and_type_index,
             } => {
                 writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
                 writer.write_all(&name_and_type_index.to_be_bytes())?;
             }
-            Self::Module { name_index } => writer.write_all(&name_index.to_be_bytes())?,
-            Self::Package { name_index } => writer.write_all(&name_index.to_be_bytes())?,
         }
         Ok(())
     }
