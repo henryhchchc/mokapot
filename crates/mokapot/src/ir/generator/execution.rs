@@ -36,53 +36,53 @@ impl MokaIRGenerator<'_> {
         let ir_instruction = match jvm_instruction {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Const(ConstantValue::Null);
                 IR::Definition { value: def, expr }
             }
             IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let int_value = i32::from(jvm_instruction.opcode()) - 3;
                 let expr = Expression::Const(ConstantValue::Integer(int_value));
                 IR::Definition { value: def, expr }
             }
             LConst0 | LConst1 => {
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let long_value = i64::from(jvm_instruction.opcode()) - 9;
                 let expr = Expression::Const(ConstantValue::Long(long_value));
                 IR::Definition { value: def, expr }
             }
             FConst0 | FConst1 | FConst2 => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let float_value = f32::from(jvm_instruction.opcode()) - 11.0;
                 let expr = Expression::Const(ConstantValue::Float(float_value));
                 IR::Definition { value: def, expr }
             }
             DConst0 | DConst1 => {
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let double_value = f64::from(jvm_instruction.opcode()) - 14.0;
                 let expr = Expression::Const(ConstantValue::Double(double_value));
                 IR::Definition { value: def, expr }
             }
             BiPush(value) => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             SiPush(value) => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
                 IR::Definition { value: def, expr }
             }
             Ldc(value) | LdcW(value) => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
             Ldc2W(value) => {
-                frame.push_value::<DUAL_SLOT>(def.as_argument())?;
+                frame.push_value::<DUAL_SLOT>(def.as_operand())?;
                 let expr = Expression::Const(value.clone());
                 IR::Definition { value: def, expr }
             }
@@ -114,7 +114,7 @@ impl MokaIRGenerator<'_> {
                 let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_value::<DUAL_SLOT>(def.as_argument())?;
+                frame.push_value::<DUAL_SLOT>(def.as_operand())?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),
@@ -188,7 +188,7 @@ impl MokaIRGenerator<'_> {
             LRem | DRem => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Remainder)?,
             INeg | FNeg => {
                 let value = frame.pop_value::<SINGLE_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let math_op = MathOperation::Negate(value);
                 IR::Definition {
                     value: def,
@@ -197,7 +197,7 @@ impl MokaIRGenerator<'_> {
             }
             LNeg | DNeg => {
                 let operand = frame.pop_value::<DUAL_SLOT>()?;
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let math_op = MathOperation::Negate(operand);
                 IR::Definition {
@@ -210,7 +210,7 @@ impl MokaIRGenerator<'_> {
             LShl => {
                 let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
                 let base = frame.pop_value::<DUAL_SLOT>()?;
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let math_op = MathOperation::ShiftLeft(base, shift_amount);
                 IR::Definition {
@@ -221,7 +221,7 @@ impl MokaIRGenerator<'_> {
             LShr => {
                 let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
                 let base = frame.pop_value::<DUAL_SLOT>()?;
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let math_op = MathOperation::ShiftRight(base, shift_amount);
                 IR::Definition {
@@ -232,7 +232,7 @@ impl MokaIRGenerator<'_> {
             LUShr => {
                 let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
                 let base = frame.pop_value::<DUAL_SLOT>()?;
-                let value = def.as_argument();
+                let value = def.as_operand();
                 frame.push_value::<DUAL_SLOT>(value)?;
                 let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
                 IR::Definition {
@@ -250,7 +250,7 @@ impl MokaIRGenerator<'_> {
             IInc(idx, constant) => {
                 let idx = (*idx).into();
                 let base = frame.get_local::<SINGLE_SLOT>(idx)?;
-                frame.set_local::<SINGLE_SLOT>(idx, def.as_argument())?;
+                frame.set_local::<SINGLE_SLOT>(idx, def.as_operand())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
@@ -259,7 +259,7 @@ impl MokaIRGenerator<'_> {
             }
             Wide(WideInstruction::IInc(idx, constant)) => {
                 let base = frame.get_local::<SINGLE_SLOT>(*idx)?;
-                frame.set_local::<SINGLE_SLOT>(*idx, def.as_argument())?;
+                frame.set_local::<SINGLE_SLOT>(*idx, def.as_operand())?;
                 let math_op = MathOperation::Increment(base, *constant);
                 IR::Definition {
                     value: def,
@@ -284,7 +284,7 @@ impl MokaIRGenerator<'_> {
             LCmp => {
                 let rhs = frame.pop_value::<DUAL_SLOT>()?;
                 let lhs = frame.pop_value::<DUAL_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let math_op = MathOperation::LongComparison(lhs, rhs);
                 IR::Definition {
                     value: def,
@@ -294,7 +294,7 @@ impl MokaIRGenerator<'_> {
             FCmpL | FCmpG => {
                 let rhs = frame.pop_value::<SINGLE_SLOT>()?;
                 let lhs = frame.pop_value::<SINGLE_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let nan_treatment = match jvm_instruction {
                     FCmpG => NaNTreatment::IsLargest,
                     FCmpL => NaNTreatment::IsSmallest,
@@ -309,7 +309,7 @@ impl MokaIRGenerator<'_> {
             DCmpL | DCmpG => {
                 let rhs = frame.pop_value::<DUAL_SLOT>()?;
                 let lhs = frame.pop_value::<DUAL_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let nan_treatment = match jvm_instruction {
                     DCmpG => NaNTreatment::IsLargest,
                     DCmpL => NaNTreatment::IsSmallest,
@@ -345,7 +345,7 @@ impl MokaIRGenerator<'_> {
                     return_address: next_pc,
                     target: *target,
                 };
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 IR::Definition {
                     value: def,
                     expr: value,
@@ -394,7 +394,7 @@ impl MokaIRGenerator<'_> {
             }
             Return => IR::Return(None),
             GetStatic(field) => {
-                frame.typed_push(&field.field_type, def.as_argument())?;
+                frame.typed_push(&field.field_type, def.as_operand())?;
                 let field = field.clone();
                 let field_op = FieldAccess::ReadStatic { field };
                 IR::Definition {
@@ -405,7 +405,7 @@ impl MokaIRGenerator<'_> {
             GetField(field) => {
                 let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let field = field.clone();
-                frame.typed_push(&field.field_type, def.as_argument())?;
+                frame.typed_push(&field.field_type, def.as_operand())?;
                 let field_op = FieldAccess::ReadInstance { object_ref, field };
                 IR::Definition {
                     value: def,
@@ -457,7 +457,7 @@ impl MokaIRGenerator<'_> {
                     args: arguments,
                 };
                 if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                    frame.typed_push(return_type, def.as_argument())?;
+                    frame.typed_push(return_type, def.as_operand())?;
                 }
                 IR::Definition {
                     value: def,
@@ -472,7 +472,7 @@ impl MokaIRGenerator<'_> {
                     args: arguments,
                 };
                 if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                    frame.typed_push(return_type, def.as_argument())?;
+                    frame.typed_push(return_type, def.as_operand())?;
                 }
                 IR::Definition {
                     value: def,
@@ -492,7 +492,7 @@ impl MokaIRGenerator<'_> {
                     closure_descriptor: descriptor.to_owned(),
                 };
                 if let ReturnType::Some(ref return_type) = descriptor.return_type {
-                    frame.typed_push(return_type, def.as_argument())?;
+                    frame.typed_push(return_type, def.as_operand())?;
                 }
                 IR::Definition {
                     value: def,
@@ -500,7 +500,7 @@ impl MokaIRGenerator<'_> {
                 }
             }
             New(class) => {
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 IR::Definition {
                     value: def,
                     expr: Expression::New(class.clone()),
@@ -508,7 +508,7 @@ impl MokaIRGenerator<'_> {
             }
             ANewArray(class_ref) => {
                 let count = frame.pop_value::<SINGLE_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let array_op = ArrayOperation::New {
                     element_type: FieldType::Object(class_ref.clone()),
                     length: count,
@@ -520,7 +520,7 @@ impl MokaIRGenerator<'_> {
             }
             NewArray(prim_type) => {
                 let count = frame.pop_value::<SINGLE_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let array_op = ArrayOperation::New {
                     element_type: FieldType::Base(*prim_type),
                     length: count,
@@ -534,7 +534,7 @@ impl MokaIRGenerator<'_> {
                 let counts: Vec<_> = (0..*dimension)
                     .map(|_| frame.pop_value::<SINGLE_SLOT>())
                     .collect::<Result<_, _>>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Array(ArrayOperation::NewMultiDim {
                     element_type: element_type.clone(),
                     dimensions: counts,
@@ -543,7 +543,7 @@ impl MokaIRGenerator<'_> {
             }
             ArrayLength => {
                 let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
-                frame.push_value::<SINGLE_SLOT>(def.as_argument())?;
+                frame.push_value::<SINGLE_SLOT>(def.as_operand())?;
                 let expr = Expression::Array(ArrayOperation::Length { array_ref });
                 IR::Definition { value: def, expr }
             }
@@ -661,7 +661,7 @@ fn conversion_op<const OPERAND_SLOT: SlotWidth, const RESULT_SLOT: SlotWidth>(
     conversion: impl FnOnce(Operand) -> Conversion,
 ) -> Result<IR, MokaIRBrewingError> {
     let operand = frame.pop_value::<OPERAND_SLOT>()?;
-    frame.push_value::<RESULT_SLOT>(def.as_argument())?;
+    frame.push_value::<RESULT_SLOT>(def.as_operand())?;
     Ok(IR::Definition {
         value: def,
         expr: Expression::Conversion(conversion(operand)),
@@ -676,7 +676,7 @@ fn binary_op_math<const SLOT: SlotWidth>(
 ) -> Result<IR, MokaIRBrewingError> {
     let rhs = frame.pop_value::<SLOT>()?;
     let lhs = frame.pop_value::<SLOT>()?;
-    let value = def_id.as_argument();
+    let value = def_id.as_operand();
     frame.push_value::<SLOT>(value)?;
 
     let expr = Expression::Math(math(lhs, rhs));

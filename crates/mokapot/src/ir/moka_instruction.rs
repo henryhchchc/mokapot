@@ -182,7 +182,7 @@ impl LocalValue {
 
     /// Create an [`Operand`] by referencing this [`LocalValue`].
     #[must_use]
-    pub fn as_argument(&self) -> Operand {
+    pub fn as_operand(&self) -> Operand {
         Operand::Just((*self).into())
     }
 }
