@@ -286,6 +286,7 @@ impl GenerationError {
 
     /// Returns the kind of error.
     #[must_use]
+    #[instability::unstable(feature = "bytecode-generation")]
     pub const fn kind(&self) -> GenerationErrorKind {
         self.kind
     }

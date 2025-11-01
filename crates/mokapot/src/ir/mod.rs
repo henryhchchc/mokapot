@@ -62,6 +62,7 @@ pub struct ControlFlowGraph<N, E> {
 /// A def-use chain in data flow analysis.
 #[derive(Debug)]
 pub struct DefUseChain<'a> {
+    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
     method: &'a MokaIRMethod,
     defs: HashMap<LocalValue, ProgramCounter>,
     uses: HashMap<Identifier, BTreeSet<ProgramCounter>>,
