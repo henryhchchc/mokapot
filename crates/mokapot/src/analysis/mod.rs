@@ -2,7 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::jvm::{Class, class_loader::ClassPath, references::ClassRef};
+use crate::jvm::{Class, references::ClassRef};
+
+#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
+use crate::jvm::class_loader::ClassPath;
 
 pub mod fixed_point;
 pub mod type_hierarchy;
@@ -28,6 +31,7 @@ pub trait ClassRefs {
     fn class_refs(&self) -> HashSet<ClassRef>;
 }
 
+#[instability::unstable(feature = "project-analyses")]
 impl ResolutionContext {
     /// Create a new resolution context.
     #[must_use]
@@ -55,6 +59,7 @@ impl ResolutionContext {
 #[instability::unstable(feature = "project-analyses")]
 pub enum InitError {}
 
+#[cfg(feature = "unstable-project-analyses")]
 fn load_classes<CP>(class_path: CP) -> HashMap<ClassRef, Class>
 where
     CP: IntoIterator<Item: ClassPath + ClassRefs>,
@@ -77,6 +82,7 @@ where
 #[derive(Debug, Clone)]
 #[instability::unstable(feature = "project-analyses")]
 pub struct ClassHierarchy {
+    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
     inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
     super_classes: HashMap<ClassRef, ClassRef>,
 }
@@ -85,6 +91,8 @@ pub struct ClassHierarchy {
 #[derive(Debug, Clone)]
 #[instability::unstable(feature = "project-analyses")]
 pub struct InterfaceImplHierarchy {
+    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
     implementations: HashMap<ClassRef, HashSet<ClassRef>>,
+    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
     implementers: HashMap<ClassRef, HashSet<ClassRef>>,
 }
