@@ -47,7 +47,12 @@ jar = ["dep:zip"]
 ## Enables the analyses of control flow graphs with `petgraph`.
 petgraph = ["dep:petgraph"]
 
-## Experimental APIs
+#! ### Experimental APIs
+#!
+#! The following features are experimental and the APIs are unstable.
+#! The APIs provided by these features may undergo breaking changes from time to time.
+
+## All the experimental APIs
 unstable = [
   "unstable-bytecode-generation",
   "unstable-moka-ir",
@@ -55,14 +60,14 @@ unstable = [
   "unstable-project-analyses",
 ]
 
-## Experimental bytecode generation
+## Generate JVM bytecode from MokaPot data structures.
 unstable-bytecode-generation = []
 
-## Experimental Moka IR
+## Moka IR. A register-based, SSA intermediate representation.
 unstable-moka-ir = []
 
-## Experimental fixed-point analyses
+## Fixed-point analysis framework
 unstable-fixed-point-analyses = []
 
-## Experimental project-wide analyses
+## Project-wide analyses APIs
 unstable-project-analyses = []
