@@ -193,13 +193,7 @@ pub struct Method {
     pub free_attributes: Vec<(String, Vec<u8>)>,
 }
 
-/// A module in the Java Platform Module System (JPMS). Modules are containers for packages
-/// that provide strong encapsulation boundaries. A module is defined in a special class file
-/// named `module-info.class` and includes information about its dependencies, exported packages,
-/// and services it both uses and provides.
-///
-/// Modules were introduced in Java 9 as part of Project Jigsaw to support better componentization
-/// of the Java platform and applications.
+/// A module in the [Java Platform Module System (JPMS)](https://openjdk.org/projects/jigsaw/spec/).
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
 pub struct Module {
