@@ -15,7 +15,9 @@ macro_rules! extract_attributes {
             for attr in $attrs {
                 match attr {
                 $(
-                    Attribute::$attr(it) => if $var.replace(it).is_some() {
+                    Attribute::$attr(it) => if $var.is_none() {
+                        $var = Some(it);
+                    } else {
                         let message = concat!(
                             "There should be at most one ",
                             stringify!($attr),
