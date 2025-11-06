@@ -115,7 +115,7 @@ mod tests {
             is_synthetic: false,
             is_deprecated: false,
             signature: None,
-            free_attributes: vec![],
+            other_attributes: vec![],
         }
     }
 

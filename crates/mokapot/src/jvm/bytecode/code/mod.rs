@@ -292,7 +292,7 @@ impl ClassElement for MethodBody {
                         table.merge_signature(id, name, signature)?;
                     }
                 },
-                else let free_attributes
+                else let other_attributes
             }
         }
 
@@ -306,7 +306,7 @@ impl ClassElement for MethodBody {
             stack_map_table,
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
-            free_attributes,
+            other_attributes,
         })
     }
 
@@ -359,7 +359,7 @@ impl ClassElement for MethodBody {
         .into_iter()
         .flatten()
         .chain(
-            self.free_attributes
+            self.other_attributes
                 .into_iter()
                 .map(|(name, data)| Attribute::Unrecognized(name, data)),
         )

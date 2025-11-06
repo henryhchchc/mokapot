@@ -361,7 +361,7 @@ pub struct RecordComponent {
     /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<super::TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Vec<u8>)>,
 }
 
 bitflags! {

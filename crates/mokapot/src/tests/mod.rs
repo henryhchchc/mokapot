@@ -66,7 +66,7 @@ impl Default for Class {
             is_deprecated: false,
             signature: None,
             record: None,
-            free_attributes: Vec::default(),
+            other_attributes: Vec::default(),
         }
     }
 }

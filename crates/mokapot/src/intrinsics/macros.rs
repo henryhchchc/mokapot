@@ -77,7 +77,7 @@ macro_rules! attributes_into_iter {
         .into_iter()
         .flatten()
         .chain(
-            $val.free_attributes
+            $val.other_attributes
                 .into_iter()
                 .map(|(name, data)| Attribute::Unrecognized(name, data)),
         )

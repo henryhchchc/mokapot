@@ -105,7 +105,7 @@ impl ClassElement for Method {
                 let signature: Signature,
                 if let is_synthetic: Synthetic,
                 if let is_deprecated: Deprecated,
-                else let free_attributes
+                else let other_attributes
             }
         };
 
@@ -156,7 +156,7 @@ impl ClassElement for Method {
             is_synthetic,
             is_deprecated,
             signature,
-            free_attributes,
+            other_attributes,
         })
     }
 

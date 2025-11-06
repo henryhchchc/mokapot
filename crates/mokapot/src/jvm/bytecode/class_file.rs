@@ -225,7 +225,7 @@ impl Class {
                 let record: Record,
                 if let is_synthetic: Synthetic,
                 if let is_deprecated: Deprecated,
-                else let free_attributes
+                else let other_attributes
             }
         };
 
@@ -256,7 +256,7 @@ impl Class {
             is_deprecated,
             signature,
             record,
-            free_attributes,
+            other_attributes,
         })
     }
 
@@ -444,7 +444,7 @@ impl ClassElement for RecordComponent {
                     : RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations
                     : RuntimeInvisibleTypeAnnotations as unwrap_or_default,
-                else let free_attributes
+                else let other_attributes
             }
         }
 
@@ -456,7 +456,7 @@ impl ClassElement for RecordComponent {
             runtime_invisible_annotations,
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
-            free_attributes,
+            other_attributes,
         })
     }
 

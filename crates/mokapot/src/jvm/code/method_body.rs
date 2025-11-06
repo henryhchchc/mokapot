@@ -34,7 +34,7 @@ pub struct MethodBody {
     /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Vec<u8>)>,
 }
 
 impl MethodBody {
@@ -209,7 +209,7 @@ mod test {
             stack_map_table: None,
             runtime_visible_type_annotations: vec![],
             runtime_invisible_type_annotations: vec![],
-            free_attributes: vec![],
+            other_attributes: vec![],
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
     }

@@ -84,8 +84,8 @@ pub struct Class {
     pub signature: Option<class::Signature>,
     /// The record components of the class if the class is `record`.
     pub record: Option<Vec<class::RecordComponent>>,
-    /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
+    /// JVM attributes that are not specified in the JVM specification.
+    pub other_attributes: Vec<(String, Vec<u8>)>,
 }
 
 /// An annotation on a class, field, method, or parameter.
@@ -148,7 +148,7 @@ pub struct Field {
     /// The runtime invisible type annotations.
     pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Vec<u8>)>,
 }
 
 /// A JVM method.
@@ -190,7 +190,7 @@ pub struct Method {
     /// The generic signature for methods with type parameters or generic types.
     pub signature: Option<method::Signature>,
     /// Unrecognized JVM attributes.
-    pub free_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Vec<u8>)>,
 }
 
 /// A module in the [Java Platform Module System (JPMS)](https://openjdk.org/projects/jigsaw/spec/).

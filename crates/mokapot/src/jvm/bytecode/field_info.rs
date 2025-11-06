@@ -98,7 +98,7 @@ impl ClassElement for Field {
                     : RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 if let is_synthetic: Synthetic,
                 if let is_deprecated: Deprecated,
-                else let free_attributes
+                else let other_attributes
             }
         }
 
@@ -115,7 +115,7 @@ impl ClassElement for Field {
             runtime_invisible_annotations,
             runtime_visible_type_annotations,
             runtime_invisible_type_annotations,
-            free_attributes,
+            other_attributes,
         })
     }
 
