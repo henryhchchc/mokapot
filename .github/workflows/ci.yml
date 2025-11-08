@@ -84,7 +84,7 @@ jobs:
         uses: Leafwing-Studios/cargo-cache@v2
       - name: Test all feature combinations
         env:
-          RUSTFLAGS: -D unused,unfulfilled_lint_expectations
+          RUSTFLAGS: -D unused -D unfulfilled_lint_expectations
         run: |
           cargo hack check --feature-powerset --no-dev-deps
 
