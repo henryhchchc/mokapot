@@ -15,6 +15,7 @@ cesu8 = "1.1.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 document-features = "0.2.12"
 itertools = "0.14.0"
+inkwell = { version = "0.5.0", features = ["llvm18-0-prefer-dynamic"], optional = true }
 petgraph = { version = "0.8.3", optional = true }
 num-traits = "0.2.19"
 instability = "0.3.9"
@@ -62,6 +63,9 @@ unstable = [
 
 ## Generate JVM bytecode from MokaPot data structures.
 unstable-bytecode-generation = []
+
+## Enables support for emitting LLVM IR from MokaIR
+unstable-llvm-ir = ["dep:inkwell"]
 
 ## Moka IR. A register-based, SSA intermediate representation.
 unstable-moka-ir = []
