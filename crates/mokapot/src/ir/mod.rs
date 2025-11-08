@@ -5,7 +5,7 @@ pub mod control_flow;
 pub mod data_flow;
 pub mod expression;
 mod generator;
-#[cfg(feature = "llvm-ir")]
+#[cfg(feature = "unstable-llvm-ir")]
 pub mod llvm_ir_backend;
 mod moka_instruction;
 #[cfg(feature = "petgraph")]
