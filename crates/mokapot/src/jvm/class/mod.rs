@@ -95,6 +95,8 @@ pub struct ConstantPool {
 /// The maximum supported major version of a class file.
 pub const MAX_MAJOR_VERSION: u16 = 69;
 
+const PREVIEW_FEATURES: u16 = 0xFFFF;
+
 /// The version of a class file.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
@@ -165,33 +167,33 @@ impl Version {
             (54, 0x0000) => Ok(Self::Jdk10),
             (55, 0x0000) => Ok(Self::Jdk11),
             (56, 0x0000) => Ok(Self::Jdk12(false)),
-            (56, 0xFFFF) => Ok(Self::Jdk12(true)),
+            (56, PREVIEW_FEATURES) => Ok(Self::Jdk12(true)),
             (57, 0x0000) => Ok(Self::Jdk13(false)),
-            (57, 0xFFFF) => Ok(Self::Jdk13(true)),
+            (57, PREVIEW_FEATURES) => Ok(Self::Jdk13(true)),
             (58, 0x0000) => Ok(Self::Jdk14(false)),
-            (58, 0xFFFF) => Ok(Self::Jdk14(true)),
+            (58, PREVIEW_FEATURES) => Ok(Self::Jdk14(true)),
             (59, 0x0000) => Ok(Self::Jdk15(false)),
-            (59, 0xFFFF) => Ok(Self::Jdk15(true)),
+            (59, PREVIEW_FEATURES) => Ok(Self::Jdk15(true)),
             (60, 0x0000) => Ok(Self::Jdk16(false)),
-            (60, 0xFFFF) => Ok(Self::Jdk16(true)),
+            (60, PREVIEW_FEATURES) => Ok(Self::Jdk16(true)),
             (61, 0x0000) => Ok(Self::Jdk17(false)),
-            (61, 0xFFFF) => Ok(Self::Jdk17(true)),
+            (61, PREVIEW_FEATURES) => Ok(Self::Jdk17(true)),
             (62, 0x0000) => Ok(Self::Jdk18(false)),
-            (62, 0xFFFF) => Ok(Self::Jdk18(true)),
+            (62, PREVIEW_FEATURES) => Ok(Self::Jdk18(true)),
             (63, 0x0000) => Ok(Self::Jdk19(false)),
-            (63, 0xFFFF) => Ok(Self::Jdk19(true)),
+            (63, PREVIEW_FEATURES) => Ok(Self::Jdk19(true)),
             (64, 0x0000) => Ok(Self::Jdk20(false)),
-            (64, 0xFFFF) => Ok(Self::Jdk20(true)),
+            (64, PREVIEW_FEATURES) => Ok(Self::Jdk20(true)),
             (65, 0x0000) => Ok(Self::Jdk21(false)),
-            (65, 0xFFFF) => Ok(Self::Jdk21(true)),
+            (65, PREVIEW_FEATURES) => Ok(Self::Jdk21(true)),
             (66, 0x0000) => Ok(Self::Jdk22(false)),
-            (66, 0xFFFF) => Ok(Self::Jdk22(true)),
+            (66, PREVIEW_FEATURES) => Ok(Self::Jdk22(true)),
             (67, 0x0000) => Ok(Self::Jdk23(false)),
-            (67, 0xFFFF) => Ok(Self::Jdk23(true)),
+            (67, PREVIEW_FEATURES) => Ok(Self::Jdk23(true)),
             (68, 0x0000) => Ok(Self::Jdk24(false)),
-            (68, 0xFFFF) => Ok(Self::Jdk24(true)),
+            (68, PREVIEW_FEATURES) => Ok(Self::Jdk24(true)),
             (69, 0x0000) => Ok(Self::Jdk25(false)),
-            (69, 0xFFFF) => Ok(Self::Jdk25(true)),
+            (69, PREVIEW_FEATURES) => Ok(Self::Jdk25(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
                 Err(ParseError::malform("Unsupported class version"))
             }
