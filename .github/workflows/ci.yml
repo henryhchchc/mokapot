@@ -6,14 +6,14 @@ on:
       - main
     paths-ignore:
       - docs/**
-      - "*.md"
+      - "**/*.md"
       - "LICENSE"
     tags:
       - v**
   pull_request:
     paths-ignore:
       - docs/**
-      - "*.md"
+      - "**/*.md"
       - "LICENSE"
 
 concurrency:
