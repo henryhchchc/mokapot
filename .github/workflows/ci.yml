@@ -22,7 +22,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  JAVA_VERSION: 24
+  JAVA_VERSION: 25
 
 permissions:
   checks: write
