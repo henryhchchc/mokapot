@@ -4,7 +4,8 @@
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
-    rust_2021_compatibility
+    rust_2021_compatibility,
+    clippy::missing_const_for_fn
 )]
 // #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

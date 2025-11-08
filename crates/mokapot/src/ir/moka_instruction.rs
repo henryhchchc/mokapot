@@ -61,7 +61,7 @@ pub enum MokaInstruction {
 impl MokaInstruction {
     /// Returns the value defined by the instruction if it is a definition.
     #[must_use]
-    pub fn def(&self) -> Option<LocalValue> {
+    pub const fn def(&self) -> Option<LocalValue> {
         match self {
             Self::Definition { value, .. } => Some(*value),
             _ => None,

@@ -36,7 +36,7 @@ pub(crate) struct AttributeInfo {
 }
 
 impl AttributeInfo {
-    fn from_raw_parts(name_idx: u16, info: Vec<u8>) -> Self {
+    const fn from_raw_parts(name_idx: u16, info: Vec<u8>) -> Self {
         Self { name_idx, info }
     }
 }

@@ -52,7 +52,7 @@ impl<P> BooleanVariable<P> {
     }
 
     /// Creates a reference to the boolean variable.
-    fn as_ref(&self) -> BooleanVariable<&P> {
+    const fn as_ref(&self) -> BooleanVariable<&P> {
         match self {
             Self::Positive(id) => BooleanVariable::Positive(id),
             Self::Negative(id) => BooleanVariable::Negative(id),

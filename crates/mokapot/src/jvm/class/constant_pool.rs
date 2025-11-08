@@ -147,7 +147,7 @@ impl ConstantPool {
                   we ensured that the index is within the bounds of u16. \
                   Therefore, it is safe to cast the length to u16."
     )]
-    pub fn count(&self) -> u16 {
+    pub const fn count(&self) -> u16 {
         self.inner.len() as u16
     }
 }

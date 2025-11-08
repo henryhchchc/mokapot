@@ -16,7 +16,7 @@ pub struct Analyzer<'a, N> {
 impl<'a, N> Analyzer<'a, N> {
     /// Creates a new path condition analyzer.
     #[must_use]
-    pub fn new(cfg: &'a ControlFlowGraph<N, ControlTransfer>) -> Self {
+    pub const fn new(cfg: &'a ControlFlowGraph<N, ControlTransfer>) -> Self {
         Self { cfg }
     }
 }
