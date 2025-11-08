@@ -93,7 +93,7 @@ pub struct ConstantPool {
 }
 
 /// The maximum supported major version of a class file.
-pub const MAX_MAJOR_VERSION: u16 = 68;
+pub const MAX_MAJOR_VERSION: u16 = 69;
 
 /// The version of a class file.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
@@ -147,6 +147,8 @@ pub enum Version {
     Jdk23(bool),
     /// JDK 24
     Jdk24(bool),
+    /// JDK 25
+    Jdk25(bool),
 }
 impl Version {
     pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
@@ -188,6 +190,8 @@ impl Version {
             (67, 0xFFFF) => Ok(Self::Jdk23(true)),
             (68, 0x0000) => Ok(Self::Jdk24(false)),
             (68, 0xFFFF) => Ok(Self::Jdk24(true)),
+            (69, 0x0000) => Ok(Self::Jdk25(false)),
+            (69, 0xFFFF) => Ok(Self::Jdk25(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
                 Err(ParseError::malform("Unsupported class version"))
             }
@@ -213,6 +217,7 @@ impl Version {
                 | Self::Jdk22(true)
                 | Self::Jdk23(true)
                 | Self::Jdk24(true)
+                | Self::Jdk25(true)
         )
     }
 
@@ -244,6 +249,7 @@ impl Version {
             Self::Jdk22(_) => 66,
             Self::Jdk23(_) => 67,
             Self::Jdk24(_) => 68,
+            Self::Jdk25(_) => 69,
         }
     }
 
@@ -267,7 +273,8 @@ impl Version {
             | Jdk21(enable_preview)
             | Jdk22(enable_preview)
             | Jdk23(enable_preview)
-            | Jdk24(enable_preview) => {
+            | Jdk24(enable_preview)
+            | Jdk25(enable_preview) => {
                 if *enable_preview {
                     u16::MAX
                 } else {
