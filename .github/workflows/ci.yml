@@ -52,7 +52,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Setup cargo-hack
+      - name: Setup Checking Tools
         uses: taiki-e/install-action@v2
         with:
           tool: clippy-sarif,sarif-fmt
