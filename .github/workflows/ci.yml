@@ -44,11 +44,18 @@ jobs:
   style_clippy_check:
     name: Style / clippy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - name: Setup cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
         uses: actions/setup-java@v5
         with:
@@ -59,11 +66,15 @@ jobs:
       - name: Restore Rust Build Cache
         uses: Leafwing-Studios/cargo-cache@v2
       - name: Run clippy
-        uses: auguwu/clippy-action@1.4.0
+        run: |
+          cargo clippy
+          -D warnings
+          --all-features --all-targets --verbose
+          --message-format=json | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
+      - name: Upload analysis results to GitHub
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          check-args: --all-targets --all-features --verbose
-          args: -D warnings
-          token: ${{secrets.GITHUB_TOKEN}}
+          sarif_file: rust-clippy-results.sarif
 
   feature_test:
     name: Test / cargo-hack
@@ -74,7 +85,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Setup Build Tools
+      - name: Setup cargo-hack
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
