@@ -1,6 +1,3 @@
 [default]
 locale = "en-us"
-extend-ignore-identifiers-re = [
-    "BA(Load|Store)",
-    "ifle"
-]
+extend-ignore-identifiers-re = ["BA(Load|Store)", "ifle"]
