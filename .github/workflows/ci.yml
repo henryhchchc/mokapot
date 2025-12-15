@@ -122,7 +122,7 @@ jobs:
           cargo llvm-cov nextest --all-features --no-report -E 'kind(lib)'
           cargo llvm-cov report --codecov --output-path ./target/codecov-unit.json
       - name: Upload Coverage Data
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: codecov-unit.json
           path: ./target/codecov-unit.json
@@ -175,7 +175,7 @@ jobs:
           cargo llvm-cov nextest --all-features --no-report --run-ignored=all -E 'kind(test)'
           cargo llvm-cov report --codecov --output-path ./target/codecov-integration.json
       - name: Upload Coverage Data
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: codecov-integration.json
           path: ./target/codecov-integration.json
