@@ -156,7 +156,7 @@ jobs:
           echo "hash=${hash}" >> "$GITHUB_OUTPUT"
       - name: Cache JDK classes
         id: cache-jdk-classes
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
           path: jdk_classes/
