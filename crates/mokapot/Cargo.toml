@@ -21,7 +21,7 @@ petgraph = { version = "0.8.3", optional = true }
 thiserror = "2.0.17"
 trait-gen = "2.0.6"
 walkdir = "2.5.0"
-zip = { version = "6.0.0", default-features = false, features = [
+zip = { version = "7.0.0", default-features = false, features = [
   "deflate",
 ], optional = true }
 
