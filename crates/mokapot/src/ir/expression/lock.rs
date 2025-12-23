@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use super::super::Operand;
 use crate::ir::Identifier;
@@ -17,7 +17,7 @@ pub enum Operation {
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::Acquire(arg) | Self::Release(arg) => arg.iter().copied().collect(),
         }
@@ -36,7 +36,7 @@ mod tests {
 
         #[test]
         fn uses(lock in arb_argument()) {
-            let ids = lock.iter().copied().collect::<BTreeSet<_>>();
+            let ids = lock.iter().copied().collect::<HashSet<_>>();
             let operation = Operation::Acquire(lock.clone());
             assert_eq!(operation.uses(), ids);
 

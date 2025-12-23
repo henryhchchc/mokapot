@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use itertools::Itertools;
 
@@ -58,7 +58,7 @@ pub enum Operation {
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::New { length, .. } => length.iter().copied().collect(),
             Self::NewMultiDim { dimensions, .. } => dimensions.iter().flatten().copied().collect(),

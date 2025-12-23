@@ -1,7 +1,7 @@
 //! Petgraph implementation of the [`DefUseChain`].
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
-use petgraph::visit::{GraphBase, IntoNeighbors, VisitMap, Visitable};
+use petgraph::visit::{GraphBase, IntoNeighbors, Visitable};
 
 use crate::ir::{DefUseChain, Identifier};
 
@@ -11,7 +11,7 @@ impl GraphBase for DefUseChain<'_> {
 }
 
 impl IntoNeighbors for &DefUseChain<'_> {
-    type Neighbors = <BTreeSet<Identifier> as IntoIterator>::IntoIter;
+    type Neighbors = <HashSet<Identifier> as IntoIterator>::IntoIter;
 
     fn neighbors(self, node: Identifier) -> Self::Neighbors {
         if let Identifier::Local(loc) = node
@@ -20,26 +20,12 @@ impl IntoNeighbors for &DefUseChain<'_> {
         {
             return insn.uses().into_iter();
         }
-        BTreeSet::default().into_iter()
+        Self::Neighbors::default()
     }
 }
 
 /// A visit map for the def-use chain.
-pub type Visited = BTreeSet<Identifier>;
-
-impl VisitMap<Identifier> for Visited {
-    fn visit(&mut self, a: Identifier) -> bool {
-        self.insert(a)
-    }
-
-    fn is_visited(&self, a: &Identifier) -> bool {
-        self.contains(a)
-    }
-
-    fn unvisit(&mut self, a: Identifier) -> bool {
-        self.remove(&a)
-    }
-}
+pub type Visited = HashSet<Identifier>;
 
 impl Visitable for DefUseChain<'_> {
     type Map = Visited;

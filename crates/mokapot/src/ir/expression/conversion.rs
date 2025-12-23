@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use super::super::Operand;
 use crate::{ir::Identifier, types::field_type::FieldType};
@@ -61,7 +61,7 @@ pub enum Operation {
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::Int2Long(arg)
             | Self::Float2Long(arg)
@@ -99,7 +99,7 @@ mod tests {
             arg in arb_argument(),
             target_type in arb_field_type(),
         ) {
-            let arg_ids: BTreeSet<_> = arg.clone().into_iter().collect();
+            let arg_ids: HashSet<_> = arg.clone().into_iter().collect();
             let conversions = [
                 Operation::Int2Long(arg.clone()),
                 Operation::Int2Float(arg.clone()),

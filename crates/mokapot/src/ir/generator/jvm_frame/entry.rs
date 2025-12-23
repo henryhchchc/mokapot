@@ -1,6 +1,6 @@
 use crate::ir::Operand;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) enum Entry {
     Value(Operand),
