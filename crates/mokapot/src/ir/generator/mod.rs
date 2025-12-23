@@ -18,7 +18,7 @@ use super::{
     expression::Expression,
 };
 use crate::{
-    analysis::fixed_point::Analyzer,
+    analysis::fixed_point::DataflowProblem,
     ir::control_flow::path_condition::{
         BooleanVariable, NormalizedPredicate, PathCondition, Value,
     },
@@ -28,7 +28,6 @@ use crate::{
         method,
         references::ClassRef,
     },
-    types::method_descriptor::MethodDescriptor,
 };
 
 /// An error that occurs when generating Moka IR.
@@ -50,41 +49,25 @@ pub enum MokaIRBrewingError {
 
 struct MokaIRGenerator<'m> {
     ir_instructions: BTreeMap<ProgramCounter, MokaInstruction>,
-    is_static: bool,
-    descriptor: &'m MethodDescriptor,
     body: &'m MethodBody,
     control_flow_edges: BTreeMap<(ProgramCounter, ProgramCounter), ControlTransfer>,
+    initial_seed: Option<(ProgramCounter, JvmStackFrame)>,
 }
 
-impl Analyzer for MokaIRGenerator<'_> {
+impl DataflowProblem for MokaIRGenerator<'_> {
     type Location = ProgramCounter;
     type Fact = JvmStackFrame;
     type Err = MokaIRBrewingError;
-    type PropagatedFacts = Vec<(Self::Location, Self::Fact)>;
 
-    fn entry_fact(&self) -> Result<Self::PropagatedFacts, Self::Err> {
-        let first_pc = self
-            .body
-            .instructions
-            .entry_point()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?
-            .0
-            .to_owned();
-        JvmStackFrame::new(
-            self.is_static,
-            self.descriptor,
-            self.body.max_locals,
-            self.body.max_stack,
-        )
-        .map(|frame| vec![(first_pc, frame)])
-        .map_err(Into::into)
+    fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
+        self.initial_seed.clone().into_iter().collect::<Vec<_>>()
     }
 
-    fn analyze_location(
+    fn flow(
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::PropagatedFacts, Self::Err> {
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
         let location = location.to_owned();
         let mut frame = fact.same_frame();
         let jvm_instruction = self
@@ -96,7 +79,7 @@ impl Analyzer for MokaIRGenerator<'_> {
             self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);
 
-        let (affected_locations, edges): (_, HashSet<_>) = edges_and_frames
+        let (affected_locations, edges): (Vec<_>, HashSet<_>) = edges_and_frames
             .into_iter()
             .map(|(edge, frame)| ((edge.target, frame), edge))
             .unzip();
@@ -109,16 +92,6 @@ impl Analyzer for MokaIRGenerator<'_> {
         ));
         Ok(affected_locations)
     }
-
-    fn merge_facts(
-        &self,
-        current_fact: &Self::Fact,
-        incoming_fact: Self::Fact,
-    ) -> Result<Self::Fact, Self::Err> {
-        current_fact
-            .merge(incoming_fact)
-            .map_err(MokaIRBrewingError::MergeError)
-    }
 }
 
 impl<'m> MokaIRGenerator<'m> {
@@ -129,18 +102,32 @@ impl<'m> MokaIRGenerator<'m> {
             .ok_or(MokaIRBrewingError::MalformedControlFlow)
     }
 
-    fn for_method(method: &'m Method) -> Result<Self, <Self as Analyzer>::Err> {
+    fn for_method(method: &'m Method) -> Result<Self, MokaIRBrewingError> {
         let body = method
             .body
             .as_ref()
             .ok_or(MokaIRBrewingError::NoMethodBody)?;
         let is_static = method.access_flags.contains(method::AccessFlags::STATIC);
+
+        let first_pc = body
+            .instructions
+            .entry_point()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?
+            .0
+            .to_owned();
+
+        let initial_frame = JvmStackFrame::new(
+            is_static,
+            &method.descriptor,
+            body.max_locals,
+            body.max_stack,
+        )?;
+
         Ok(Self {
             ir_instructions: BTreeMap::default(),
-            is_static,
-            descriptor: &method.descriptor,
             body,
             control_flow_edges: BTreeMap::default(),
+            initial_seed: Some((first_pc, initial_frame)),
         })
     }
 
@@ -208,7 +195,10 @@ impl MokaIRGenerator<'_> {
         ),
         MokaIRBrewingError,
     > {
-        self.analyze()?;
+        use crate::analysis::fixed_point::solve;
+        use std::collections::BTreeMap;
+
+        let _facts: BTreeMap<_, _> = solve(&mut self)?;
         let cfg = ControlFlowGraph::from_edges(
             self.control_flow_edges
                 .into_iter()
@@ -222,8 +212,7 @@ impl MokaIRGenerator<'_> {
         location: ProgramCounter,
         mut frame: JvmStackFrame,
         ir_instruction: &MokaInstruction,
-    ) -> Result<Vec<(Edge<ControlTransfer>, JvmStackFrame)>, <MokaIRGenerator<'_> as Analyzer>::Err>
-    {
+    ) -> Result<Vec<(Edge<ControlTransfer>, JvmStackFrame)>, MokaIRBrewingError> {
         use ControlTransfer::{Conditional, SubroutineReturn, Unconditional};
 
         Ok(match ir_instruction {
