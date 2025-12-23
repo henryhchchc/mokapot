@@ -9,3 +9,8 @@ repository = "https://github.com/henryhchchc/mokapot"
 license = "MIT"
 keywords = ["analysis", "bytecode", "java", "jvm"]
 categories = ["development-tools", "parsing"]
+
+[profile.test]
+opt-level = 3
+debug = true
+lto = true
