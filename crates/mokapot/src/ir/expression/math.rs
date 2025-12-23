@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::ir::{Identifier, Operand};
 
@@ -54,7 +54,7 @@ pub enum Operation {
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::Add(a, b)
             | Self::Subtract(a, b)
@@ -88,6 +88,8 @@ pub enum NaNTreatment {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use proptest::prelude::*;
 
     use super::*;
@@ -116,7 +118,7 @@ mod tests {
                 Operation::LongComparison(arg1.clone(), arg2.clone()),
                 Operation::FloatingPointComparison(arg1.clone(), arg2.clone(), nan_treatment.clone()),
             ];
-            let bin_ops_ids = arg1.iter().chain(arg2.iter()).copied().collect::<BTreeSet<_>>();
+            let bin_ops_ids = arg1.iter().chain(arg2.iter()).copied().collect::<HashSet<_>>();
             for op in &bin_ops {
                 assert_eq!(op.uses(), bin_ops_ids);
             }
@@ -125,7 +127,7 @@ mod tests {
                 Operation::Negate(arg1.clone()),
                 Operation::Increment(arg1.clone(), num),
             ];
-            let unitary_ops_ids = arg1.iter().copied().collect::<BTreeSet<_>>();
+            let unitary_ops_ids = arg1.iter().copied().collect::<HashSet<_>>();
             for op in &unitary_ops {
                 assert_eq!(op.uses(), unitary_ops_ids);
             }

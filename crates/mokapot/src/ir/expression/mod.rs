@@ -1,5 +1,5 @@
 //! Module for the expressions in Moka IR.
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use itertools::Itertools;
 
@@ -105,7 +105,7 @@ pub enum Expression {
 impl Expression {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::Call { this, args, .. } => this.iter().chain(args).flatten().copied().collect(),
             Self::Closure { captures, .. } => captures.iter().flatten().copied().collect(),
@@ -115,7 +115,7 @@ impl Expression {
             Self::Conversion(conv_op) => conv_op.uses(),
             Self::Throw(arg) => arg.iter().copied().collect(),
             Self::Synchronization(monitor_op) => monitor_op.uses(),
-            _ => BTreeSet::default(),
+            _ => HashSet::default(),
         }
     }
 }

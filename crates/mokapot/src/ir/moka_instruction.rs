@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, btree_set},
+    collections::{BTreeMap, BTreeSet, HashSet, btree_set, hash_set},
     iter::{self, Once},
     ops::BitOr,
 };
@@ -70,9 +70,9 @@ impl MokaInstruction {
 
     /// Returns the set of [`Identifier`]s used by the instruction.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
-            Self::Nop => BTreeSet::new(),
+            Self::Nop => HashSet::new(),
             Self::Definition { expr, .. } => expr.uses(),
             Self::Jump {
                 condition: Some(condition),
@@ -83,13 +83,13 @@ impl MokaInstruction {
             | Self::Switch {
                 match_value: uses, ..
             } => uses.iter().copied().collect(),
-            _ => BTreeSet::default(),
+            _ => HashSet::default(),
         }
     }
 }
 
 /// Represents a reference to a value in the Moka IR.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Operand {
     /// A reference to a value defined in the current scope.
@@ -98,7 +98,23 @@ pub enum Operand {
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
     #[display("Phi({})", _0.iter().map(ToString::to_string).join(", "))]
-    Phi(BTreeSet<Identifier>),
+    Phi(HashSet<Identifier>),
+}
+
+impl PartialOrd for Operand {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use Operand::{Just, Phi};
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        match (self, other) {
+            (Just(lhs), Just(rhs)) => lhs.eq(rhs).then_some(Equal),
+            (Just(lhs), Phi(rhs_set)) => rhs_set.contains(lhs).then_some(Less),
+            (Phi(lhs_set), Just(rhs)) => lhs_set.contains(rhs).then_some(Greater),
+            (Phi(lhs_set), Phi(rhs_set)) if lhs_set == rhs_set => Some(Equal),
+            (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_superset(rhs_set) => Some(Greater),
+            (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_subset(rhs_set) => Some(Less),
+            (Phi(_), Phi(_)) => None,
+        }
+    }
 }
 
 impl From<Identifier> for Operand {
@@ -114,13 +130,13 @@ impl BitOr for Operand {
         use Operand::{Just, Phi};
         match (self, rhs) {
             (Just(lhs), Just(rhs)) if lhs == rhs => Just(lhs),
-            (Just(lhs), Just(rhs)) => Phi(BTreeSet::from([lhs, rhs])),
+            (Just(lhs), Just(rhs)) => Phi(HashSet::from([lhs, rhs])),
             (Just(id), Phi(mut ids)) | (Phi(mut ids), Just(id)) => {
                 ids.insert(id);
                 Phi(ids)
             }
-            (Phi(mut lhs), Phi(mut rhs)) => {
-                lhs.append(&mut rhs);
+            (Phi(mut lhs), Phi(rhs)) => {
+                lhs.extend(rhs);
                 Phi(lhs)
             }
         }
@@ -132,7 +148,7 @@ impl IntoIterator for Operand {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, btree_set::IntoIter<Self::Item>>;
+    type IntoIter = Either<Once<Self::Item>, hash_set::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
         use Operand::{Just, Phi};
@@ -148,7 +164,7 @@ impl<'a> IntoIterator for &'a Operand {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, btree_set::Iter<'a, Identifier>>;
+    type IntoIter = Either<Once<Self::Item>, hash_set::Iter<'a, Identifier>>;
 
     fn into_iter(self) -> Self::IntoIter {
         use Operand::{Just, Phi};
@@ -194,7 +210,7 @@ impl From<LocalValue> for u16 {
 }
 
 /// Represents an identifier of a value in the current scope.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Identifier {
     /// The `this` value in an instance method.

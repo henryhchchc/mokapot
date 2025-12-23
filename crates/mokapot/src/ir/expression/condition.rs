@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::ir::{Identifier, Operand};
 
@@ -52,7 +52,7 @@ pub enum Condition<OP = Operand> {
 impl Condition {
     /// Returns the set of [`Identifier`]s used by the condition.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::Equal(a, b)
             | Self::NotEqual(a, b)
@@ -79,7 +79,7 @@ mod tests {
     use super::*;
     use crate::ir::test::arb_argument;
 
-    fn check_uses(cond: &Condition, ids: &BTreeSet<Identifier>) {
+    fn check_uses(cond: &Condition, ids: &HashSet<Identifier>) {
         let cond_ids = cond.uses();
         for id in ids {
             assert!(cond_ids.contains(id));

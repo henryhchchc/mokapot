@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::{
     ir::{Identifier, Operand},
@@ -44,7 +44,7 @@ pub enum Access {
 impl Access {
     /// Returns the set of [`Identifier`]s used by the expression.
     #[must_use]
-    pub fn uses(&self) -> BTreeSet<Identifier> {
+    pub fn uses(&self) -> HashSet<Identifier> {
         match self {
             Self::WriteStatic { value: u, .. } | Self::ReadInstance { object_ref: u, .. } => {
                 u.iter().copied().collect()
@@ -52,7 +52,7 @@ impl Access {
             Self::WriteInstance {
                 object_ref, value, ..
             } => object_ref.iter().chain(value.iter()).copied().collect(),
-            Self::ReadStatic { .. } => BTreeSet::default(),
+            Self::ReadStatic { .. } => HashSet::default(),
         }
     }
 }
