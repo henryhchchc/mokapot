@@ -10,7 +10,5 @@ license = "MIT"
 keywords = ["analysis", "bytecode", "java", "jvm"]
 categories = ["development-tools", "parsing"]
 
-[profile.test]
-opt-level = 3
-debug = true
+[profile.release]
 lto = true
