@@ -10,5 +10,8 @@ license = "MIT"
 keywords = ["analysis", "bytecode", "java", "jvm"]
 categories = ["development-tools", "parsing"]
 
-[profile.release]
+[profile.integration-test]
+opt-level = 3
+debug = true
+debug-assertions = true
 lto = true
