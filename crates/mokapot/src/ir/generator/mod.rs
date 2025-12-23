@@ -2,7 +2,7 @@ mod execution;
 mod jvm_frame;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     iter::once,
     mem,
 };

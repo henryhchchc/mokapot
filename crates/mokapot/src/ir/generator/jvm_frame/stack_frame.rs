@@ -3,6 +3,7 @@ use std::{collections::BTreeSet, iter::once};
 use itertools::Itertools;
 
 use crate::{
+    analysis::fixed_point::JoinSemiLattice,
     ir::{Identifier, Operand},
     jvm::code::ProgramCounter,
     types::{
@@ -17,13 +18,21 @@ pub(crate) const DUAL_SLOT: SlotWidth = true;
 
 use super::{entry::Entry, error::ExecutionError};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct JvmStackFrame {
-    max_locals: u16,
     max_stack: u16,
-    local_variables: Vec<Entry>,
+    local_variables: Box<[Entry]>,
     operand_stack: Vec<Entry>,
     pub possible_ret_addresses: BTreeSet<ProgramCounter>,
+}
+
+impl PartialOrd for JvmStackFrame {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.max_stack != other.max_stack {
+            return None;
+        }
+        todo!()
+    }
 }
 
 impl JvmStackFrame {
@@ -35,7 +44,6 @@ impl JvmStackFrame {
     ) -> Result<Self, ExecutionError> {
         let local_variables = create_local_variable_entries(is_static, desc, max_locals)?;
         Ok(Self {
-            max_locals,
             max_stack,
             local_variables,
             operand_stack: Vec::with_capacity(max_stack.into()),
@@ -180,7 +188,6 @@ impl JvmStackFrame {
 
         operand_stack.push(stack_value);
         Self {
-            max_locals: self.max_locals,
             max_stack: self.max_stack,
             local_variables: self.local_variables.clone(),
             operand_stack,
@@ -189,42 +196,33 @@ impl JvmStackFrame {
     }
 
     pub(crate) fn merge(&self, other: Self) -> Result<Self, ExecutionError> {
-        if self.max_locals != other.max_locals {
+        if self.local_variables.len() != other.local_variables.len() {
             Err(ExecutionError::LocalLimitMismatch)?;
         }
-        debug_assert!(
-            self.local_variables.len() == other.local_variables.len(),
-            "The size of the local variables does not match"
-        );
         if self.operand_stack.len() != other.operand_stack.len() {
             Err(ExecutionError::StackSizeMismatch)?;
         }
-        let reachable_subroutines = self
-            .possible_ret_addresses
-            .clone()
-            .into_iter()
-            .chain(other.possible_ret_addresses)
-            .collect();
         let local_variables = self
             .local_variables
             .clone()
             .into_iter()
             .zip(other.local_variables)
-            .map(|(lhs, rhs)| Entry::merge(lhs, rhs))
+            .map(|(lhs, rhs)| lhs.join(rhs))
             .collect();
         let operand_stack = self
             .operand_stack
             .clone()
             .into_iter()
             .zip(other.operand_stack)
-            .map(|(lhs, rhs)| Entry::merge(lhs, rhs))
+            .map(|(lhs, rhs)| lhs.join(rhs))
             .collect();
+        let mut possible_ret_addresses = other.possible_ret_addresses;
+        possible_ret_addresses.extend(self.possible_ret_addresses.clone());
         Ok(Self {
-            max_locals: self.max_locals,
             max_stack: self.max_stack,
             local_variables,
             operand_stack,
-            possible_ret_addresses: reachable_subroutines,
+            possible_ret_addresses,
         })
     }
 }
@@ -233,7 +231,7 @@ fn create_local_variable_entries(
     is_static: bool,
     desc: &MethodDescriptor,
     max_locals: u16,
-) -> Result<Vec<Entry>, ExecutionError> {
+) -> Result<Box<[Entry]>, ExecutionError> {
     use PrimitiveType::{Double, Long};
     let locals_for_args = desc
         .parameters_types

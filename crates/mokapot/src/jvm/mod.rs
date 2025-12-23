@@ -340,7 +340,6 @@ impl Hash for ConstantValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         core::mem::discriminant(self).hash(state);
         match self {
-            Self::Null => {}
             Self::Integer(v) => v.hash(state),
             Self::Long(v) => v.hash(state),
             Self::Float(v) if !v.is_nan() => {
@@ -349,9 +348,7 @@ impl Hash for ConstantValue {
             Self::Double(v) if !v.is_nan() => {
                 v.to_bits().hash(state);
             }
-            // Does not mutate the hasher for NaN
-            Self::Float(_) => {}
-            Self::Double(_) => {}
+            Self::Null | Self::Float(_) | Self::Double(_) => {}
             Self::String(v) => v.hash(state),
             Self::Class(v) => v.hash(state),
             Self::Handle(v) => v.hash(state),

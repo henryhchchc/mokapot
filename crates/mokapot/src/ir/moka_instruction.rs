@@ -1,15 +1,17 @@
 use std::{
     collections::{BTreeMap, HashSet, hash_set},
     iter::{self, Once},
-    ops::BitOr,
 };
 
 use itertools::{Either, Itertools};
 use std::hash::Hash;
 
 use super::expression::{Condition, Expression};
-use crate::intrinsics::hash_unordered;
 use crate::jvm::code::ProgramCounter;
+use crate::{
+    analysis::fixed_point::JoinSemiLattice,
+    intrinsics::{hash_unordered, hashset_partial_order},
+};
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -111,10 +113,7 @@ impl PartialOrd for Operand {
             (Just(lhs), Just(rhs)) => lhs.eq(rhs).then_some(Equal),
             (Just(lhs), Phi(rhs_set)) => rhs_set.contains(lhs).then_some(Less),
             (Phi(lhs_set), Just(rhs)) => lhs_set.contains(rhs).then_some(Greater),
-            (Phi(lhs_set), Phi(rhs_set)) if lhs_set == rhs_set => Some(Equal),
-            (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_superset(rhs_set) => Some(Greater),
-            (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_subset(rhs_set) => Some(Less),
-            (Phi(_), Phi(_)) => None,
+            (Phi(lhs), Phi(rhs)) => hashset_partial_order(lhs, rhs),
         }
     }
 }
@@ -135,12 +134,10 @@ impl From<Identifier> for Operand {
     }
 }
 
-impl BitOr for Operand {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
+impl JoinSemiLattice for Operand {
+    fn join(self, other: Self) -> Self {
         use Operand::{Just, Phi};
-        match (self, rhs) {
+        match (self, other) {
             (Just(lhs), Just(rhs)) if lhs == rhs => Just(lhs),
             (Just(lhs), Just(rhs)) => Phi(HashSet::from([lhs, rhs])),
             (Just(id), Phi(mut ids)) | (Phi(mut ids), Just(id)) => {
@@ -272,29 +269,29 @@ pub(super) mod test {
 
         use super::{Identifier::*, Operand::*};
 
-        assert_eq!(Just(This) | Just(This), Just(This));
+        assert_eq!(Just(This).join(Just(This)), Just(This));
         assert_eq!(
-            Just(This) | Just(Arg(0)),
+            Just(This).join(Just(Arg(0))),
             Phi(HashSet::from([This, Arg(0)]))
         );
         assert_eq!(
-            Just(Arg(0)) | Just(This),
+            Just(Arg(0)).join(Just(This)),
             Phi(HashSet::from([This, Arg(0)]))
         );
         assert_eq!(
-            Just(Arg(0)) | Just(Arg(1)),
+            Just(Arg(0)).join(Just(Arg(1))),
             Phi(HashSet::from([Arg(0), Arg(1)]))
         );
         assert_eq!(
-            Just(Arg(0)) | Phi(HashSet::from([Arg(1), Arg(2)])),
+            Just(Arg(0)).join(Phi(HashSet::from([Arg(1), Arg(2)]))),
             Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(HashSet::from([Arg(1), Arg(2)])) | Just(Arg(0)),
+            Phi(HashSet::from([Arg(1), Arg(2)])).join(Just(Arg(0))),
             Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(HashSet::from([Arg(1), Arg(2)])) | Phi(HashSet::from([Arg(0), Arg(1), Arg(3)])),
+            Phi(HashSet::from([Arg(1), Arg(2)])).join(Phi(HashSet::from([Arg(0), Arg(1), Arg(3)]))),
             Phi(HashSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
         );
     }
