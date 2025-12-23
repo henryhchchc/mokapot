@@ -339,4 +339,16 @@ pub(super) mod test {
             HashSet::from([&Arg(0), &Arg(1)])
         );
     }
+
+    proptest! {
+       #[test]
+       fn operand_join_ordering(
+           lhs in arb_argument(),
+           rhs in arb_argument(),
+       ) {
+           let joined = lhs.clone().join(rhs.clone());
+           prop_assert!(joined >= lhs);
+           prop_assert!(joined >= rhs);
+       }
+    }
 }
