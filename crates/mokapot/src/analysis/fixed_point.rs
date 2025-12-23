@@ -30,7 +30,6 @@
 //! struct MyFact { /* ... */ }
 //!
 //! impl JoinSemiLattice for MyFact {
-//!     fn bottom() -> Self { /* ... */ }
 //!     fn join(&self, other: &Self) -> Self { /* ... */ }
 //! }
 //!
@@ -70,10 +69,9 @@ use std::{
 ///
 /// Implementations must satisfy the following laws:
 ///
-/// - **Idempotency**: `a.join(&a) == a`
-/// - **Commutativity**: `a.join(&b) == b.join(&a)`
-/// - **Associativity**: `a.join(&b).join(&c) == a.join(&b.join(&c))`
-/// - **Bottom identity**: `bottom().join(&a) == a`
+/// - **Idempotency**: `a.clone().join(a) == a`
+/// - **Commutativity**: `a.join(b) == b.join(a)`
+/// - **Associativity**: `a.join(b).join(c) == a.join(b.join(c))`
 ///
 /// # Lattice Ordering via `PartialOrd`
 ///
@@ -81,9 +79,8 @@ use std::{
 /// represents information content: `a <= b` means "a is less informative than or equal to b".
 ///
 /// The lattice ordering must be consistent with the join operation:
-/// - `a <= a.join(&b)` and `b <= a.join(&b)` (join is an upper bound)
-/// - If `a <= c` and `b <= c`, then `a.join(&b) <= c` (join is the *least* upper bound)
-/// - `bottom() <= a` for all `a`
+/// - `a <= a.join(b)` and `b <= a.join(b)` (join is an upper bound)
+/// - If `a <= c` and `b <= c`, then `a.join(b) <= c` (join is the *least* upper bound)
 ///
 /// **Note**: This ordering may differ from any "natural" ordering of the underlying type.
 /// For example, in a powerset lattice, `{a} <= {a, b}` even though set ordering might
@@ -95,18 +92,15 @@ use std::{
 /// (i.e., all ascending chains are finite), or the analysis should use widening.
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait JoinSemiLattice: Clone + PartialOrd {
-    /// Returns the bottom element (⊥) of the lattice.
-    ///
-    /// The bottom element represents the least informative fact, typically the
-    /// initial value before any analysis has been performed. It must satisfy:
-    /// `bottom().join(&x) == x` for all `x`.
-    fn bottom() -> Self;
-
     /// Computes the join (least upper bound) of two elements.
     ///
     /// The join operation combines information from two facts, typically when
     /// control flow paths merge. For may-analyses, this is usually set union;
     /// for must-analyses, set intersection.
+    ///
+    /// This method consumes both operands, similar to [`std::ops::Add`]. This
+    /// allows implementations to reuse allocations when possible. If you need
+    /// to keep the original values, clone them before calling `join`.
     ///
     /// # Arguments
     ///
@@ -116,15 +110,7 @@ pub trait JoinSemiLattice: Clone + PartialOrd {
     ///
     /// The least upper bound of `self` and `other`.
     #[must_use]
-    fn join(&self, other: &Self) -> Self;
-
-    /// Returns `true` if this element is the bottom element.
-    ///
-    /// Default implementation uses the lattice ordering: an element is bottom
-    /// iff it is less than or equal to `Self::bottom()`.
-    fn is_bottom(&self) -> bool {
-        self <= &Self::bottom()
-    }
+    fn join(self, other: Self) -> Self;
 }
 
 /// A dataflow analysis problem definition.
@@ -265,10 +251,9 @@ impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F> {
     where
         F: JoinSemiLattice,
     {
-        match self.get(&location) {
+        match self.remove(&location) {
             Some(existing) => {
-                let joined = existing.join(&fact);
-                self.insert(location, joined);
+                self.insert(location, existing.join(fact));
             }
             None => {
                 self.insert(location, fact);
@@ -298,10 +283,9 @@ impl<L: Hash + Eq + Clone, F, S: BuildHasher + Default> FactsMap<L, F> for HashM
     where
         F: JoinSemiLattice,
     {
-        match self.get(&location) {
+        match self.remove(&location) {
             Some(existing) => {
-                let joined = existing.join(&fact);
-                self.insert(location, joined);
+                self.insert(location, existing.join(fact));
             }
             None => {
                 self.insert(location, fact);
@@ -381,7 +365,7 @@ where
     while let Some((location, incoming_fact)) = worklist.pop() {
         // Compute the new fact by joining with the existing fact (if any)
         let new_fact = match facts.get(&location) {
-            Some(current) => current.join(&incoming_fact),
+            Some(current) => current.clone().join(incoming_fact),
             None => incoming_fact,
         };
 
@@ -579,20 +563,12 @@ where
 /// - `None <= Some(_)` for all values
 /// - `Some(a) <= Some(b)` iff `a <= b` in the inner lattice
 impl<T: JoinSemiLattice> JoinSemiLattice for Option<T> {
-    fn bottom() -> Self {
-        None
-    }
-
-    fn join(&self, other: &Self) -> Self {
+    fn join(self, other: Self) -> Self {
         match (self, other) {
             (None, None) => None,
-            (Some(a), None) => Some(a.clone()),
-            (None, Some(b)) => Some(b.clone()),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
             (Some(a), Some(b)) => Some(a.join(b)),
         }
-    }
-
-    fn is_bottom(&self) -> bool {
-        self.is_none()
     }
 }
