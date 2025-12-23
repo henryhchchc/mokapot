@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, convert::Infallible, fmt::Display};
+use std::{convert::Infallible, fmt::Display};
 
 use super::{BooleanVariable, PathCondition};
 use crate::{
-    analysis::fixed_point,
+    analysis::fixed_point::DataflowProblem,
     ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer},
     jvm::{ConstantValue, code::ProgramCounter},
 };
@@ -21,31 +21,26 @@ impl<'a, N> Analyzer<'a, N> {
     }
 }
 
-impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
+impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
     type Location = ProgramCounter;
 
     type Fact = PathCondition<&'cfg NormalizedPredicate<Value>>;
 
     type Err = Infallible;
 
-    type PropagatedFacts = BTreeMap<Self::Location, Self::Fact>;
-
-    fn entry_fact(&self) -> Result<Self::PropagatedFacts, Self::Err> {
-        Ok(BTreeMap::from([(
-            self.cfg.entry_point(),
-            PathCondition::one(),
-        )]))
+    fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
+        [(self.cfg.entry_point(), PathCondition::one())]
     }
 
-    fn analyze_location(
+    fn flow(
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::PropagatedFacts, Self::Err> {
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
         let Some(outgoing_edges) = self.cfg.outgoing_edges(*location) else {
-            return Ok(BTreeMap::new());
+            return Ok(Vec::new());
         };
-        let result = outgoing_edges
+        let result: Vec<_> = outgoing_edges
             .map(|edge| {
                 let new_fact = if let ControlTransfer::Conditional(cond) = edge.data {
                     cond.as_ref() & fact.clone()
@@ -55,15 +50,6 @@ impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
                 (edge.target, new_fact)
             })
             .collect();
-        Ok(result)
-    }
-
-    fn merge_facts(
-        &self,
-        current_fact: &Self::Fact,
-        incoming_fact: Self::Fact,
-    ) -> Result<Self::Fact, Self::Err> {
-        let result = current_fact.clone() | incoming_fact;
         Ok(result)
     }
 }

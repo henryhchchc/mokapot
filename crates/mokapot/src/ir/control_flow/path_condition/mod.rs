@@ -15,7 +15,10 @@ mod analyzer;
 
 pub use analyzer::*;
 
-use crate::intrinsics::hash_unordered;
+use crate::{
+    analysis::fixed_point::JoinSemiLattice,
+    intrinsics::{hash_unordered, hashset_partial_order},
+};
 
 /// Path condition in disjunctive normal form.
 ///
@@ -47,6 +50,24 @@ where
     }
 }
 
+impl<P> PartialOrd for PathCondition<P>
+where
+    P: Hash + Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        hashset_partial_order(&self.minterms, &other.minterms)
+    }
+}
+
+impl<P> JoinSemiLattice for PathCondition<P>
+where
+    P: Hash + Eq + Clone,
+{
+    fn join(self, other: Self) -> Self {
+        self | other
+    }
+}
+
 /// A conjunction of predicates (a minterm in DNF).
 ///
 /// Represents a conjunction (AND) of boolean variables.
@@ -71,6 +92,15 @@ where
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         hash_unordered(self.0.iter(), state);
+    }
+}
+
+impl<P> PartialOrd for MinTerm<P>
+where
+    P: Hash + Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        hashset_partial_order(&self.0, &other.0)
     }
 }
 
