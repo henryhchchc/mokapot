@@ -2,7 +2,7 @@ mod execution;
 mod jvm_frame;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     iter::once,
     mem,
 };
@@ -96,18 +96,17 @@ impl Analyzer for MokaIRGenerator<'_> {
             self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);
 
-        let (affected_locations, edges) = edges_and_frames
+        let (affected_locations, edges): (_, HashSet<_>) = edges_and_frames
             .into_iter()
             .map(|(edge, frame)| ((edge.target, frame), edge))
             .unzip();
-        self.control_flow_edges
-            .extend(BTreeSet::into_iter(edges).map(
-                |Edge {
-                     source,
-                     target,
-                     data,
-                 }| ((source, target), data),
-            ));
+        self.control_flow_edges.extend(edges.into_iter().map(
+            |Edge {
+                 source,
+                 target,
+                 data,
+             }| ((source, target), data),
+        ));
         Ok(affected_locations)
     }
 

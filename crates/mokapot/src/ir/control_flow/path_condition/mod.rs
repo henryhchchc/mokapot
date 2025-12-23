@@ -3,9 +3,9 @@
 //! This module implements path condition analysis using disjunctive normal form (DNF).
 //! A path condition represents a boolean formula that must be satisfied for a path to be taken.
 use std::{
-    cmp::Ord,
-    collections::{BTreeSet, btree_set},
+    collections::{HashSet, hash_set},
     fmt::Display,
+    hash::Hash,
     ops::{BitAnd, BitOr, Not},
 };
 
@@ -15,27 +15,69 @@ mod analyzer;
 
 pub use analyzer::*;
 
+use crate::intrinsics::hash_unordered;
+
 /// Path condition in disjunctive normal form.
 ///
 /// Represents a boolean formula as a disjunction of conjunctions (OR of ANDs).
 /// An empty set of minterms represents a contradiction (false).
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     /// The clauses in the disjunctive normal form.
-    minterms: BTreeSet<MinTerm<P>>,
+    minterms: HashSet<MinTerm<P>>,
+}
+
+impl<P> PartialEq for PathCondition<P>
+where
+    P: Hash + Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.minterms == other.minterms
+    }
+}
+
+impl<P> Eq for PathCondition<P> where P: Hash + Eq {}
+
+impl<P> Hash for PathCondition<P>
+where
+    P: Hash + Eq,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_unordered(self.minterms.iter(), state);
+    }
 }
 
 /// A conjunction of predicates (a minterm in DNF).
 ///
 /// Represents a conjunction (AND) of boolean variables.
 /// An empty set of variables represents a tautology (true).
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct MinTerm<P>(BTreeSet<BooleanVariable<P>>);
+#[derive(Debug, Clone)]
+pub struct MinTerm<P>(HashSet<BooleanVariable<P>>);
+
+impl<P> PartialEq for MinTerm<P>
+where
+    P: Hash + Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<P> Eq for MinTerm<P> where P: Hash + Eq {}
+
+impl<P> Hash for MinTerm<P>
+where
+    P: Hash,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_unordered(self.0.iter(), state);
+    }
+}
 
 /// A variable in a path condition.
 ///
 /// Represents either a positive or negative occurrence of a predicate.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum BooleanVariable<P> {
     /// A positive variable.
     Positive(P),
@@ -86,23 +128,23 @@ impl<V> Not for BooleanVariable<V> {
 impl<P> MinTerm<P> {
     /// Creates a tautology (i.e., ⊤).
     #[must_use]
-    pub const fn one() -> Self {
-        Self(BTreeSet::new())
+    pub fn one() -> Self {
+        Self(HashSet::new())
     }
 
     /// Creates a minterm containing a single variable.
     #[must_use]
     pub fn of(pred: BooleanVariable<P>) -> Self
     where
-        P: Ord,
+        P: Hash + Eq,
     {
-        Self(BTreeSet::from([pred]))
+        Self(HashSet::from([pred]))
     }
 
     /// Creates a reference to the minterm.
     fn as_ref(&self) -> MinTerm<&P>
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         MinTerm(self.0.iter().map(|it| it.as_ref()).collect())
     }
@@ -110,7 +152,7 @@ impl<P> MinTerm<P> {
     /// Checks if this minterm contains a variable.
     fn contains(&self, var: &BooleanVariable<P>) -> bool
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         self.0.contains(var)
     }
@@ -118,7 +160,7 @@ impl<P> MinTerm<P> {
     /// Inserts a variable into this minterm.
     fn insert(&mut self, var: BooleanVariable<P>) -> bool
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         self.0.insert(var)
     }
@@ -139,7 +181,7 @@ impl<P: Display> Display for MinTerm<P> {
     }
 }
 
-impl<V: Ord> FromIterator<BooleanVariable<V>> for MinTerm<V> {
+impl<V: Hash + Eq> FromIterator<BooleanVariable<V>> for MinTerm<V> {
     fn from_iter<T: IntoIterator<Item = BooleanVariable<V>>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
@@ -147,7 +189,7 @@ impl<V: Ord> FromIterator<BooleanVariable<V>> for MinTerm<V> {
 
 impl<V> IntoIterator for MinTerm<V> {
     type Item = BooleanVariable<V>;
-    type IntoIter = btree_set::IntoIter<BooleanVariable<V>>;
+    type IntoIter = hash_set::IntoIter<BooleanVariable<V>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -159,21 +201,21 @@ impl<P> PathCondition<P> {
     #[must_use]
     pub fn one() -> Self
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         Self {
-            minterms: BTreeSet::from([MinTerm::one()]),
+            minterms: HashSet::from([MinTerm::one()]),
         }
     }
 
     /// Creates a false value (contradiction).
     #[must_use]
-    pub const fn zero() -> Self
+    pub fn zero() -> Self
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         Self {
-            minterms: BTreeSet::new(),
+            minterms: HashSet::new(),
         }
     }
 
@@ -181,17 +223,17 @@ impl<P> PathCondition<P> {
     #[must_use]
     pub fn of(pred: BooleanVariable<P>) -> Self
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         Self {
-            minterms: BTreeSet::from([MinTerm::of(pred)]),
+            minterms: HashSet::from([MinTerm::of(pred)]),
         }
     }
 
     /// Returns a set of variable IDs used in the path condition.
-    pub fn predicates(&self) -> BTreeSet<&P>
+    pub fn predicates(&self) -> HashSet<&P>
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         self.minterms
             .iter()
@@ -203,7 +245,7 @@ impl<P> PathCondition<P> {
     /// Creates a reference to the path condition.
     fn as_ref(&self) -> PathCondition<&P>
     where
-        P: Ord,
+        P: Hash + Eq,
     {
         PathCondition {
             minterms: self.minterms.iter().map(|it| it.as_ref()).collect(),
@@ -219,7 +261,7 @@ impl<P> PathCondition<P> {
 
 impl<T> BitOr for PathCondition<T>
 where
-    T: Ord + Clone,
+    T: Hash + Eq + Clone,
 {
     type Output = Self;
 
@@ -232,7 +274,7 @@ where
 
 impl<P> BitAnd<BooleanVariable<P>> for PathCondition<P>
 where
-    P: Ord + Clone,
+    P: Hash + Eq + Clone,
 {
     type Output = Self;
 
@@ -259,7 +301,7 @@ where
 
 impl<P> BitAnd for PathCondition<P>
 where
-    P: Ord + Clone,
+    P: Hash + Eq + Clone,
 {
     type Output = Self;
 
@@ -297,7 +339,7 @@ where
 
 impl<P> Display for PathCondition<P>
 where
-    P: Display,
+    P: Display + Hash + Eq,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_contradiction() {
@@ -313,7 +355,10 @@ mod test {
     use std::collections::HashMap;
 
     use itertools::Itertools;
-    use proptest::{collection::btree_set, prelude::*};
+    use proptest::{
+        collection::{btree_set, hash_set},
+        prelude::*,
+    };
 
     use super::{BooleanVariable, PathCondition};
     use crate::ir::control_flow::path_condition::MinTerm;
@@ -357,8 +402,8 @@ mod test {
     }
 
     fn arb_test_cond() -> impl Strategy<Value = PathCondition<u32>> {
-        btree_set(
-            btree_set(any::<BooleanVariable<u32>>(), 1..26).prop_map(MinTerm),
+        hash_set(
+            hash_set(any::<BooleanVariable<u32>>(), 1..26).prop_map(MinTerm),
             1..26,
         )
         .prop_map(|minterms| PathCondition { minterms })

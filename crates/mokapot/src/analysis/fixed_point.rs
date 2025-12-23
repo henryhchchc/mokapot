@@ -490,15 +490,15 @@ pub trait Analyzer {
     fn analyze(&mut self) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>
     where
         Self::Location: Ord + Eq,
-        Self::Fact: Ord + Eq,
+        Self::Fact: Hash + Eq,
     {
-        use std::collections::BTreeSet;
+        use std::collections::HashSet;
 
         let mut facts: BTreeMap<Self::Location, Self::Fact> = BTreeMap::new();
         let mut dirty_nodes: BTreeMap<_, _> = self
             .entry_fact()?
             .into_iter()
-            .map(|(loc, fact)| (loc, BTreeSet::from([fact])))
+            .map(|(loc, fact)| (loc, HashSet::from([fact])))
             .collect();
 
         while let Some((location, incoming_facts)) = dirty_nodes.pop_first() {
@@ -527,11 +527,8 @@ pub trait Analyzer {
 #[allow(deprecated)]
 fn merge_incoming_facts_legacy<A: Analyzer + ?Sized>(
     analyzer: &A,
-    incoming_facts: std::collections::BTreeSet<A::Fact>,
-) -> Result<A::Fact, A::Err>
-where
-    A::Fact: Ord,
-{
+    incoming_facts: std::collections::HashSet<A::Fact>,
+) -> Result<A::Fact, A::Err> {
     let mut merged_fact = None;
     for incoming_fact in incoming_facts {
         if let Some(ref merged) = merged_fact {

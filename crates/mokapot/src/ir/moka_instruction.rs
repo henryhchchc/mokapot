@@ -1,12 +1,14 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet, btree_set, hash_set},
+    collections::{BTreeMap, HashSet, hash_set},
     iter::{self, Once},
     ops::BitOr,
 };
 
 use itertools::{Either, Itertools};
+use std::hash::Hash;
 
 use super::expression::{Condition, Expression};
+use crate::intrinsics::hash_unordered;
 use crate::jvm::code::ProgramCounter;
 
 /// Represents a single instruction in the Moka IR.
@@ -113,6 +115,16 @@ impl PartialOrd for Operand {
             (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_superset(rhs_set) => Some(Greater),
             (Phi(lhs_set), Phi(rhs_set)) if lhs_set.is_subset(rhs_set) => Some(Less),
             (Phi(_), Phi(_)) => None,
+        }
+    }
+}
+
+impl Hash for Operand {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Operand::Just(id) => id.hash(state),
+            Operand::Phi(ids) => hash_unordered(ids.iter(), state),
         }
     }
 }
@@ -250,84 +262,84 @@ pub(super) mod test {
     pub(crate) fn arb_argument() -> impl Strategy<Value = Operand> {
         prop_oneof![
             any::<Identifier>().prop_map(Operand::Just),
-            prop::collection::btree_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
+            prop::collection::hash_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
         ]
     }
 
     #[test]
     fn value_ref_merge() {
-        use std::collections::BTreeSet;
+        use std::collections::HashSet;
 
         use super::{Identifier::*, Operand::*};
 
         assert_eq!(Just(This) | Just(This), Just(This));
         assert_eq!(
             Just(This) | Just(Arg(0)),
-            Phi(BTreeSet::from([This, Arg(0)]))
+            Phi(HashSet::from([This, Arg(0)]))
         );
         assert_eq!(
             Just(Arg(0)) | Just(This),
-            Phi(BTreeSet::from([This, Arg(0)]))
+            Phi(HashSet::from([This, Arg(0)]))
         );
         assert_eq!(
             Just(Arg(0)) | Just(Arg(1)),
-            Phi(BTreeSet::from([Arg(0), Arg(1)]))
+            Phi(HashSet::from([Arg(0), Arg(1)]))
         );
         assert_eq!(
-            Just(Arg(0)) | Phi(BTreeSet::from([Arg(1), Arg(2)])),
-            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
+            Just(Arg(0)) | Phi(HashSet::from([Arg(1), Arg(2)])),
+            Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Just(Arg(0)),
-            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2)]))
+            Phi(HashSet::from([Arg(1), Arg(2)])) | Just(Arg(0)),
+            Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(1), Arg(2)])) | Phi(BTreeSet::from([Arg(0), Arg(1), Arg(3)])),
-            Phi(BTreeSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
+            Phi(HashSet::from([Arg(1), Arg(2)])) | Phi(HashSet::from([Arg(0), Arg(1), Arg(3)])),
+            Phi(HashSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
         );
     }
 
     #[test]
     fn value_ref_iter() {
-        use std::collections::BTreeSet;
+        use std::collections::HashSet;
 
         use super::{Identifier::*, Operand::*};
 
         assert_eq!(
-            Just(This).into_iter().collect::<BTreeSet<_>>(),
-            BTreeSet::from([This])
+            Just(This).into_iter().collect::<HashSet<_>>(),
+            HashSet::from([This])
         );
         assert_eq!(
-            Just(Arg(0)).into_iter().collect::<BTreeSet<_>>(),
-            BTreeSet::from([Arg(0)])
+            Just(Arg(0)).into_iter().collect::<HashSet<_>>(),
+            HashSet::from([Arg(0)])
         );
         assert_eq!(
-            Phi(BTreeSet::from([Arg(0), Arg(1)]))
+            Phi(HashSet::from([Arg(0), Arg(1)]))
                 .into_iter()
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([Arg(0), Arg(1)])
+                .collect::<HashSet<_>>(),
+            HashSet::from([Arg(0), Arg(1)])
         );
     }
 
     #[test]
     fn value_ref_iter_over_refs() {
-        use std::collections::BTreeSet;
+        use std::collections::HashSet;
 
         use super::{Identifier::*, Operand::*};
 
         assert_eq!(
-            (&Just(This)).into_iter().collect::<BTreeSet<_>>(),
-            BTreeSet::from([&This])
+            (&Just(This)).into_iter().collect::<HashSet<_>>(),
+            HashSet::from([&This])
         );
         assert_eq!(
-            (&Just(Arg(0))).into_iter().collect::<BTreeSet<_>>(),
-            BTreeSet::from([&Arg(0)])
+            (&Just(Arg(0))).into_iter().collect::<HashSet<_>>(),
+            HashSet::from([&Arg(0)])
         );
         assert_eq!(
-            (&Phi(BTreeSet::from([Arg(0), Arg(1)])))
+            (&Phi(HashSet::from([Arg(0), Arg(1)])))
                 .into_iter()
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([&Arg(0), &Arg(1)])
+                .collect::<HashSet<_>>(),
+            HashSet::from([&Arg(0), &Arg(1)])
         );
     }
 }
