@@ -73,8 +73,8 @@ mod tests {
             object_ref in arb_argument(),
             value in arb_argument()
         ) {
-            let value_ids = value.iter().copied().collect::<BTreeSet<_>>();
-            let object_ref_ids = object_ref.iter().copied().collect::<BTreeSet<_>>();
+            let value_ids = value.iter().copied().collect::<HashSet<_>>();
+            let object_ref_ids = object_ref.iter().copied().collect::<HashSet<_>>();
 
             let read_static = Access::ReadStatic { field: field.clone() };
             assert!(read_static.uses().is_empty());

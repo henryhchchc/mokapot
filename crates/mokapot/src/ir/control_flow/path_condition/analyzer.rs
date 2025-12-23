@@ -69,7 +69,7 @@ impl<'cfg, N> fixed_point::Analyzer for Analyzer<'cfg, N> {
 }
 
 /// A normalized condition.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum NormalizedPredicate<V> {
     /// The left-hand side is equal to the right-hand side.
     Equal(V, V),
@@ -153,7 +153,7 @@ impl From<ir::expression::Condition> for BooleanVariable<NormalizedPredicate<Val
 }
 
 /// A value.
-#[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
 pub enum Value {
     /// A variable.
     Variable(Operand),

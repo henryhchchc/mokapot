@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// The kind of a control transfer.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
@@ -25,7 +25,7 @@ pub enum ControlTransfer {
 }
 
 /// An edge in the control flow graph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Edge<D> {
     /// The source program counter.
     pub source: ProgramCounter,
@@ -150,7 +150,7 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashSet};
 
     use super::*;
 
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn iter_edges() {
         let cfg = build_cfg();
-        let edges = cfg.edges().collect::<BTreeSet<_>>();
+        let edges = cfg.edges().collect::<HashSet<_>>();
         assert_eq!(edges.len(), 4);
         for i in 0..=3 {
             assert!(edges.contains(&Edge {

@@ -1,5 +1,7 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
+use std::hash::Hash;
+
 use itertools::Itertools;
 
 use self::{
@@ -216,7 +218,7 @@ pub struct Module {
 }
 
 /// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, derive_more::Display)]
+#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.
@@ -330,6 +332,35 @@ impl Ord for ConstantValue {
                 .cmp(rhs0)
                 .then_with(|| lhs1.cmp(rhs1))
                 .then_with(|| lhs2.cmp(rhs2)),
+        }
+    }
+}
+
+impl Hash for ConstantValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Null => {}
+            Self::Integer(v) => v.hash(state),
+            Self::Long(v) => v.hash(state),
+            Self::Float(v) if !v.is_nan() => {
+                v.to_bits().hash(state);
+            }
+            Self::Double(v) if !v.is_nan() => {
+                v.to_bits().hash(state);
+            }
+            // Does not mutate the hasher for NaN
+            Self::Float(_) => {}
+            Self::Double(_) => {}
+            Self::String(v) => v.hash(state),
+            Self::Class(v) => v.hash(state),
+            Self::Handle(v) => v.hash(state),
+            Self::MethodType(v) => v.hash(state),
+            Self::Dynamic(v0, v1, v2) => {
+                v0.hash(state);
+                v1.hash(state);
+                v2.hash(state);
+            }
         }
     }
 }

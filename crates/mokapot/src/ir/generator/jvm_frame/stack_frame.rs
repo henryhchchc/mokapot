@@ -17,7 +17,7 @@ pub(crate) const DUAL_SLOT: SlotWidth = true;
 
 use super::{entry::Entry, error::ExecutionError};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Hash)]
 pub struct JvmStackFrame {
     max_locals: u16,
     max_stack: u16,
