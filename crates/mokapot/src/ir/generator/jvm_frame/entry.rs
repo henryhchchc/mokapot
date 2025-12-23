@@ -39,3 +39,21 @@ impl JoinSemiLattice for Entry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+       #[test]
+       fn entry_join_ordering(
+           lhs in any::<Entry>(),
+           rhs in any::<Entry>()
+       ) {
+           let joined = lhs.clone().join(rhs.clone());
+           prop_assert!(joined >= lhs);
+           prop_assert!(joined >= rhs);
+       }
+    }
+}
