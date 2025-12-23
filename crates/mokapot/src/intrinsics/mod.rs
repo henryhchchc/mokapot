@@ -1,6 +1,12 @@
 //! Low-level utilities and abstractions used internally in this crate.
 
-use std::{borrow::Borrow, collections::HashMap, hash::Hash, mem::transmute, sync::RwLock};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    hash::Hash,
+    mem::transmute,
+    sync::RwLock,
+};
 
 mod hash;
 mod macros;
@@ -22,6 +28,24 @@ where
     // field, so we can read the discriminant without offsetting the pointer.
     // See https://doc.rust-lang.org/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
     unsafe { *std::ptr::from_ref(value).cast::<D>() }
+}
+
+pub(crate) fn hashset_partial_order<T>(
+    lhs: &HashSet<T>,
+    rhs: &HashSet<T>,
+) -> Option<std::cmp::Ordering>
+where
+    T: Hash + Eq,
+{
+    if lhs == rhs {
+        Some(std::cmp::Ordering::Equal)
+    } else if lhs.is_subset(rhs) {
+        Some(std::cmp::Ordering::Less)
+    } else if lhs.is_superset(lhs) {
+        Some(std::cmp::Ordering::Greater)
+    } else {
+        None
+    }
 }
 
 #[derive(Debug)]
