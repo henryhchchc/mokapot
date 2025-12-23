@@ -8,6 +8,8 @@ pub(crate) enum Entry {
     Top,
     #[display("<uninitialized_local>")]
     UninitializedLocal,
+    #[display("<out_of_scope>")]
+    OutOfScope,
 }
 
 impl PartialOrd for Entry {
@@ -16,18 +18,18 @@ impl PartialOrd for Entry {
         match (self, other) {
             (Entry::Value(lhs), Entry::Value(rhs)) => lhs.partial_cmp(rhs),
             (Entry::Value(_), Entry::Top) | (Entry::Top, Entry::Value(_)) => None,
-            (Entry::Top, Entry::Top) | (Entry::UninitializedLocal, Entry::UninitializedLocal) => {
-                Some(Equal)
-            }
-            (Entry::UninitializedLocal, _) => Some(Less),
-            (_, Entry::UninitializedLocal) => Some(Greater),
+            (Entry::Top, Entry::Top)
+            | (Entry::UninitializedLocal, Entry::UninitializedLocal)
+            | (Entry::OutOfScope, Entry::OutOfScope) => Some(Equal),
+            (Entry::UninitializedLocal, _) | (_, Entry::OutOfScope) => Some(Less),
+            (_, Entry::UninitializedLocal) | (Entry::OutOfScope, _) => Some(Greater),
         }
     }
 }
 
 impl JoinSemiLattice for Entry {
     fn join(self, other: Self) -> Self {
-        use Entry::{Top, UninitializedLocal, Value};
+        use Entry::{OutOfScope, Top, UninitializedLocal, Value};
         match (self, other) {
             (Value(lhs), Value(rhs)) => Value(lhs.join(rhs)),
             (Top, Top) => Top,
@@ -35,7 +37,7 @@ impl JoinSemiLattice for Entry {
             // NOTE: When `lhs` and `rhs` are different variants, it indicates that the local
             //       variable slot is reused. In this case, we do not merge it since it will be
             //       overridden afterwards.
-            (lhs, _) => lhs,
+            (_, Top | OutOfScope) | (OutOfScope | Top, _) => OutOfScope,
         }
     }
 }
