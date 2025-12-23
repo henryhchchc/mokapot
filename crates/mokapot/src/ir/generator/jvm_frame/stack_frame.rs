@@ -114,13 +114,17 @@ impl JvmStackFrame {
         let value = match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
-            Entry::UninitializedLocal => unreachable!("It is never pushed to the stack"),
+            Entry::UninitializedLocal | Entry::OutOfScope => {
+                unreachable!("It is never pushed to the stack")
+            }
         }?;
         if SLOT == DUAL_SLOT {
             match self.pop_raw()? {
                 Entry::Top => Ok(()),
                 Entry::Value(_) => Err(ExecutionError::ValueMismatch),
-                Entry::UninitializedLocal => unreachable!("It is never pushed to the stack"),
+                Entry::UninitializedLocal | Entry::OutOfScope => {
+                    unreachable!("It is never pushed to the stack")
+                }
             }?;
         }
         Ok(value)
@@ -182,6 +186,7 @@ impl JvmStackFrame {
         let value = match lower_slot {
             Entry::Value(it) => Ok(it.clone()),
             Entry::Top => Err(ExecutionError::ValueMismatch),
+            Entry::OutOfScope => Err(ExecutionError::LocalOutOfScope),
             Entry::UninitializedLocal => Err(ExecutionError::LocalUninitialized),
         }?;
         if SLOT == DUAL_SLOT {

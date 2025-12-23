@@ -8,6 +8,8 @@ pub enum ExecutionError {
     LocalLimitExceed,
     #[error("The local variable is not initialized")]
     LocalUninitialized,
+    #[error("The local variable is out of scope.")]
+    LocalOutOfScope,
     #[error("The stack size mismatch")]
     StackSizeMismatch,
     #[error("The local limit mismatch")]
