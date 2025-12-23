@@ -172,7 +172,7 @@ jobs:
         run: |
           export JDK_CLASSES="${GITHUB_WORKSPACE}/jdk_classes"
           cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest --profile=integration-test --all-features --no-report --run-ignored=all -E 'kind(test)'
+          cargo llvm-cov nextest --cargo-profile=integration-test --all-features --no-report --run-ignored=all -E 'kind(test)'
           cargo llvm-cov report --codecov --output-path ./target/codecov-integration.json
       - name: Upload Coverage Data
         uses: actions/upload-artifact@v6
