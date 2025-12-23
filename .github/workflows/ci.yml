@@ -67,8 +67,8 @@ jobs:
         uses: Leafwing-Studios/cargo-cache@v2
       - name: Run clippy
         run: cargo clippy
-          -D warnings
           --all-features --all-targets --verbose
+          -- -D warnings
           --message-format=json | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@v4
