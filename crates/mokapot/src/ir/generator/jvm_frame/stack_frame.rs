@@ -28,10 +28,52 @@ pub struct JvmStackFrame {
 
 impl PartialOrd for JvmStackFrame {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::Equal;
         if self.max_stack != other.max_stack {
             return None;
         }
-        todo!()
+        if self.operand_stack.len() != other.operand_stack.len() {
+            return None;
+        }
+        let stack_order = self.operand_stack.partial_cmp(&other.operand_stack);
+        let locals_order = self.local_variables.partial_cmp(&other.local_variables);
+        match (stack_order, locals_order) {
+            (Some(Equal), ord) | (ord, Some(Equal)) => ord,
+            (ord @ Some(s_ord), Some(l_ord)) if s_ord == l_ord => ord,
+            _ => None,
+        }
+    }
+}
+
+impl JoinSemiLattice for JvmStackFrame {
+    /// Joins two stack frames by merging their local variables and operand stacks.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the local variables or operand stacks of the two stack frames have different lengths.
+    fn join(self, other: Self) -> Self {
+        let local_variables = self
+            .local_variables
+            .clone()
+            .into_iter()
+            .zip_eq(other.local_variables)
+            .map(|(lhs, rhs)| lhs.join(rhs))
+            .collect();
+        let operand_stack = self
+            .operand_stack
+            .clone()
+            .into_iter()
+            .zip_eq(other.operand_stack)
+            .map(|(lhs, rhs)| lhs.join(rhs))
+            .collect();
+        let mut possible_ret_addresses = other.possible_ret_addresses;
+        possible_ret_addresses.extend(self.possible_ret_addresses.clone());
+        Self {
+            max_stack: self.max_stack,
+            local_variables,
+            operand_stack,
+            possible_ret_addresses,
+        }
     }
 }
 
@@ -193,37 +235,6 @@ impl JvmStackFrame {
             operand_stack,
             possible_ret_addresses: self.possible_ret_addresses.clone(),
         }
-    }
-
-    pub(crate) fn merge(&self, other: Self) -> Result<Self, ExecutionError> {
-        if self.local_variables.len() != other.local_variables.len() {
-            Err(ExecutionError::LocalLimitMismatch)?;
-        }
-        if self.operand_stack.len() != other.operand_stack.len() {
-            Err(ExecutionError::StackSizeMismatch)?;
-        }
-        let local_variables = self
-            .local_variables
-            .clone()
-            .into_iter()
-            .zip(other.local_variables)
-            .map(|(lhs, rhs)| lhs.join(rhs))
-            .collect();
-        let operand_stack = self
-            .operand_stack
-            .clone()
-            .into_iter()
-            .zip(other.operand_stack)
-            .map(|(lhs, rhs)| lhs.join(rhs))
-            .collect();
-        let mut possible_ret_addresses = other.possible_ret_addresses;
-        possible_ret_addresses.extend(self.possible_ret_addresses.clone());
-        Ok(Self {
-            max_stack: self.max_stack,
-            local_variables,
-            operand_stack,
-            possible_ret_addresses,
-        })
     }
 }
 
