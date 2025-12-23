@@ -21,7 +21,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  CARGO_TERM_COLOR: always
   JAVA_VERSION: 25
 
 permissions:
@@ -63,8 +62,10 @@ jobs:
           distribution: corretto
       - uses: actions/checkout@v6
         name: Checkout source code
-      - name: Restore Rust Build Cache
+      - name: Cache Rust Build Stuff
         uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
       - name: Run clippy
         run: cargo clippy
           --all-features --all-targets --verbose
@@ -92,6 +93,8 @@ jobs:
         name: Checkout source code
       - name: Cache Rust Build Stuff
         uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
       - name: Test all feature combinations
         env:
           RUSTFLAGS: -D unused -D unfulfilled_lint_expectations
@@ -116,6 +119,8 @@ jobs:
         name: Checkout source code
       - name: Cache Rust Build Stuff
         uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
       - name: Test
         run: |
           cargo llvm-cov clean --workspace
@@ -165,6 +170,8 @@ jobs:
         run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
       - name: Cache Rust Build Stuff
         uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
       - name: Test
         env:
           INTEGRATION_TEST: TRUE
@@ -273,8 +280,6 @@ jobs:
         run: rustup update && rustup default
       - uses: actions/checkout@v6
         name: Checkout source code
-      - name: Cache Rust Build Stuff
-        uses: Leafwing-Studios/cargo-cache@v2
       - name: Authenticate crates.io
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
