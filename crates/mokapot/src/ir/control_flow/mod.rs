@@ -2,12 +2,12 @@
 
 pub mod path_condition;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use self::path_condition::{NormalizedPredicate, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
-    analysis::fixed_point::Analyzer,
+    analysis::fixed_point::solve,
     jvm::{code::ProgramCounter, references::ClassRef},
 };
 
@@ -141,9 +141,9 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
     #[must_use]
     pub fn path_conditions(
         &self,
-    ) -> BTreeMap<ProgramCounter, PathCondition<&NormalizedPredicate<Value>>> {
+    ) -> HashMap<ProgramCounter, PathCondition<&NormalizedPredicate<Value>>> {
         let mut analyzer = path_condition::Analyzer::new(self);
-        let Ok(path_conditions) = analyzer.analyze();
+        let Ok(path_conditions) = solve(&mut analyzer);
         path_conditions
     }
 }
