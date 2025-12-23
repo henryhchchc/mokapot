@@ -9,11 +9,11 @@ where
     I::Item: Hash,
     H: Hasher,
 {
-    let aggregated: u128 = once(0x9e37_79b9)
+    let aggregated: u128 = once(0x9e37_79b9_9e37_79b9_9e37_79b9)
         .chain(iter.map(|item| {
             let mut hasher = DefaultHasher::new();
             item.hash(&mut hasher);
-            hasher.finish() as u128
+            u128::from(hasher.finish())
         }))
         .sum();
     aggregated.hash(state);
