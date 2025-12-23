@@ -11,12 +11,14 @@
 //! allows for more context to be added to errors during parsing.
 
 use std::{
-    backtrace::Backtrace,
     error::Error,
     fmt::{self, Display},
     io,
     num::TryFromIntError,
 };
+
+#[cfg(debug_assertions)]
+use std::backtrace::Backtrace;
 
 use crate::jvm::{class::constant_pool, code::InvalidOffset};
 
