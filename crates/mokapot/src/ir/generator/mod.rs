@@ -19,8 +19,9 @@ use super::{
 };
 use crate::{
     analysis::fixed_point::DataflowProblem,
-    ir::control_flow::path_condition::{
-        BooleanVariable, NormalizedPredicate, PathCondition, Value,
+    ir::{
+        control_flow::path_condition::{BooleanVariable, PathCondition, Value},
+        expression::Condition,
     },
     jvm::{
         ConstantValue, Method,
@@ -279,15 +280,16 @@ impl MokaIRGenerator<'_> {
             } => {
                 let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
                     let val = ConstantValue::Integer(*it).into();
-                    let not_equal_to_match_value = BooleanVariable::Negative(
-                        NormalizedPredicate::Equal(match_value.clone().into(), val),
-                    );
+                    let not_equal_to_match_value = BooleanVariable::Negative(Condition::Equal(
+                        match_value.clone().into(),
+                        val,
+                    ));
                     acc & not_equal_to_match_value
                 });
                 let default_edge = Edge::new(location, *default, Conditional(default_cond));
                 let branch_edges = branches.iter().map(|(&val, &pc)| {
                     let val = Value::Constant(ConstantValue::Integer(val));
-                    let cond = BooleanVariable::Positive(NormalizedPredicate::Equal(
+                    let cond = BooleanVariable::Positive(Condition::Equal(
                         match_value.clone().into(),
                         val,
                     ));
