@@ -234,8 +234,9 @@ pub trait FactsMap<L, F>: Default {
         F: JoinSemiLattice;
 }
 
-impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F>
+impl<L, F> FactsMap<L, F> for BTreeMap<L, F>
 where
+    L: Ord,
     F: Clone,
 {
     fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
@@ -267,7 +268,7 @@ where
 
 impl<L, F, S> FactsMap<L, F> for HashMap<L, F, S>
 where
-    L: Hash + Eq + Clone,
+    L: Hash + Eq,
     F: Clone,
     S: BuildHasher + Default,
 {
