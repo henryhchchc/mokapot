@@ -150,7 +150,7 @@ pub trait DataflowProblem {
     ///
     /// This could be a basic block, an instruction, or any program point
     /// where dataflow facts are computed.
-    type Location: Clone;
+    type Location;
 
     /// The type of dataflow fact being computed.
     ///
