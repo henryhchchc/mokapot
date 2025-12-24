@@ -233,9 +233,6 @@ pub trait FactsMap<L, F>: Default {
     /// Returns `None` if the map is empty. The order of removal is
     /// implementation-defined.
     fn pop(&mut self) -> Option<(L, F)>;
-
-    /// Returns `true` if the map is empty.
-    fn is_empty(&self) -> bool;
 }
 
 impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F> {
@@ -263,10 +260,6 @@ impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F> {
 
     fn pop(&mut self) -> Option<(L, F)> {
         self.pop_first()
-    }
-
-    fn is_empty(&self) -> bool {
-        BTreeMap::is_empty(self)
     }
 }
 
@@ -298,10 +291,6 @@ impl<L: Hash + Eq + Clone, F, S: BuildHasher + Default> FactsMap<L, F> for HashM
         let key = self.keys().next().cloned()?;
         let value = self.remove(&key)?;
         Some((key, value))
-    }
-
-    fn is_empty(&self) -> bool {
-        HashMap::is_empty(self)
     }
 }
 
@@ -393,153 +382,6 @@ where
     }
 
     Ok(facts)
-}
-
-// ============================================================================
-// Backward Compatibility: Legacy Analyzer trait
-// ============================================================================
-
-/// A trait for implementing fixed-point analysis algorithms.
-///
-/// # Deprecation Notice
-///
-/// This trait is provided for backward compatibility. For new code, prefer using
-/// [`DataflowProblem`] or [`DataflowProblemMut`] with the [`solve`] or [`solve_mut`]
-/// functions.
-///
-/// # Migration Guide
-///
-/// To migrate from `Analyzer` to `DataflowProblemMut`:
-///
-/// | Old (`Analyzer`)     | New (`DataflowProblem`)                 |
-/// |----------------------|-----------------------------------------|
-/// | `entry_fact()`       | `seeds()`                               |
-/// | `analyze_location()` | `flow()`                                |
-/// | `merge_facts()`      | Implement `JoinSemiLattice` on `Fact`   |
-/// | `analyze()`          | `solve::<_, BTreeMap<_, _>>(&mut p)`    |
-#[instability::unstable(feature = "fixed-point-analyses")]
-#[deprecated(
-    since = "0.1.0",
-    note = "Use `DataflowProblem` or `DataflowProblemMut` with `solve` or `solve_mut` instead"
-)]
-pub trait Analyzer {
-    /// The type representing a location in the control flow graph.
-    type Location;
-
-    /// The type of fact that is propagated through the control flow graph.
-    type Fact;
-
-    /// The type of error that can occur during the analysis.
-    type Err;
-
-    /// The type representing a collection of propagated facts.
-    type PropagatedFacts: IntoIterator<Item = (Self::Location, Self::Fact)>;
-
-    /// Creates the initial facts at the entry point(s) of the analysis.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if creating the entry facts fails.
-    fn entry_fact(&self) -> Result<Self::PropagatedFacts, Self::Err>;
-
-    /// Applies the transfer function at a location.
-    ///
-    /// # Arguments
-    ///
-    /// * `location` - The current location being analyzed
-    /// * `fact` - The current fact at this location
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if the analysis fails at this location.
-    fn analyze_location(
-        &mut self,
-        location: &Self::Location,
-        fact: &Self::Fact,
-    ) -> Result<Self::PropagatedFacts, Self::Err>;
-
-    /// Merges facts where control flow paths converge (join operation).
-    ///
-    /// # Arguments
-    ///
-    /// * `current_fact` - The existing fact at a location
-    /// * `incoming_fact` - A new fact arriving at the same location
-    ///
-    /// # Returns
-    ///
-    /// The merged fact (least upper bound).
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if merging fails.
-    fn merge_facts(
-        &self,
-        current_fact: &Self::Fact,
-        incoming_fact: Self::Fact,
-    ) -> Result<Self::Fact, Self::Err>;
-
-    /// Runs the fixed-point analysis algorithm.
-    ///
-    /// # Returns
-    ///
-    /// A `BTreeMap` mapping each location to its final fact.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if the analysis fails.
-    fn analyze(&mut self) -> Result<BTreeMap<Self::Location, Self::Fact>, Self::Err>
-    where
-        Self::Location: Ord + Eq,
-        Self::Fact: Hash + Eq,
-    {
-        use std::collections::HashSet;
-
-        let mut facts: BTreeMap<Self::Location, Self::Fact> = BTreeMap::new();
-        let mut dirty_nodes: BTreeMap<_, _> = self
-            .entry_fact()?
-            .into_iter()
-            .map(|(loc, fact)| (loc, HashSet::from([fact])))
-            .collect();
-
-        while let Some((location, incoming_facts)) = dirty_nodes.pop_first() {
-            let incoming_fact = merge_incoming_facts_legacy(self, incoming_facts)?;
-            let maybe_updated_fact = match facts.get(&location) {
-                Some(current_fact) => {
-                    let merged_fact = self.merge_facts(current_fact, incoming_fact)?;
-                    Some(merged_fact).filter(|it| it != current_fact)
-                }
-                None => Some(incoming_fact),
-            };
-
-            if let Some(fact) = maybe_updated_fact {
-                for (loc, new_fact) in self.analyze_location(&location, &fact)? {
-                    dirty_nodes.entry(loc).or_default().insert(new_fact);
-                }
-                facts.insert(location, fact);
-            }
-        }
-
-        Ok(facts)
-    }
-}
-
-/// Helper function for the legacy `Analyzer` trait.
-#[allow(deprecated)]
-fn merge_incoming_facts_legacy<A: Analyzer + ?Sized>(
-    analyzer: &A,
-    incoming_facts: std::collections::HashSet<A::Fact>,
-) -> Result<A::Fact, A::Err> {
-    let mut merged_fact = None;
-    for incoming_fact in incoming_facts {
-        if let Some(ref merged) = merged_fact {
-            let new = analyzer.merge_facts(merged, incoming_fact)?;
-            merged_fact.replace(new);
-        } else {
-            merged_fact.replace(incoming_fact);
-        }
-    }
-    // SAFETY: The worklist algorithm ensures at least one fact exists
-    Ok(merged_fact.expect("at least one incoming fact"))
 }
 
 // ============================================================================
