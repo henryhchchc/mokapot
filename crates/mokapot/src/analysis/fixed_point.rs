@@ -411,3 +411,22 @@ impl<T: JoinSemiLattice> JoinSemiLattice for Option<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use proptest::prelude::*;
+
+    use crate::{analysis::fixed_point::JoinSemiLattice, ir::Operand};
+
+    proptest! {
+       #[test]
+       fn operand_join_ordering(
+           lhs in any::<Option<Operand>>(),
+           rhs in any::<Option<Operand>>(),
+       ) {
+           let joined = lhs.clone().join(rhs.clone());
+           prop_assert!(joined >= lhs);
+           prop_assert!(joined >= rhs);
+       }
+    }
+}
