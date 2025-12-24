@@ -1,9 +1,9 @@
-use std::{convert::Infallible, fmt::Display};
+use std::convert::Infallible;
 
 use super::{BooleanVariable, PathCondition};
 use crate::{
     analysis::fixed_point::DataflowProblem,
-    ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer},
+    ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer, expression::Condition},
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
@@ -24,7 +24,7 @@ impl<'a, N> Analyzer<'a, N> {
 impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
     type Location = ProgramCounter;
 
-    type Fact = PathCondition<&'cfg NormalizedPredicate<Value>>;
+    type Fact = PathCondition<&'cfg Condition<Value>>;
 
     type Err = Infallible;
 
@@ -54,87 +54,30 @@ impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
     }
 }
 
-/// A normalized condition.
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub enum NormalizedPredicate<V> {
-    /// The left-hand side is equal to the right-hand side.
-    Equal(V, V),
-    /// The left-hand side is less than the right-hand side.
-    LessThan(V, V),
-    /// The left-hand side is less than or equal to the right-hand side.
-    LessThanOrEqual(V, V),
-    /// The value is null.
-    IsNull(V),
-}
-
-impl<V> Display for NormalizedPredicate<V>
+impl<T, V> From<ir::expression::Condition<T>> for BooleanVariable<ir::expression::Condition<V>>
 where
-    V: Display,
+    V: From<T>,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Equal(lhs, rhs) => write!(f, "{lhs} == {rhs}"),
-            Self::LessThan(lhs, rhs) => write!(f, "{lhs} < {rhs}"),
-            Self::LessThanOrEqual(lhs, rhs) => write!(f, "{lhs} <= {rhs}"),
-            Self::IsNull(value) => write!(f, "{value} == null"),
-        }
-    }
-}
-
-impl From<ir::expression::Condition> for BooleanVariable<NormalizedPredicate<Value>> {
-    fn from(value: ir::expression::Condition) -> Self {
-        use BooleanVariable::{Negative, Positive};
+    fn from(value: ir::expression::Condition<T>) -> Self {
         #[allow(clippy::enum_glob_use)]
-        use ir::expression::Condition::*;
-
-        let zero: Value = ConstantValue::Integer(0).into();
-        match value {
-            IsNull(value) => Positive(NormalizedPredicate::IsNull(value.into())),
-            IsNotNull(value) => Negative(NormalizedPredicate::IsNull(value.into())),
-            // For binary operation involving zeros, we always put zero on the right.
-            IsZero(value) => Positive(NormalizedPredicate::Equal(value.into(), zero)),
-            IsNonZero(value) => Negative(NormalizedPredicate::Equal(value.into(), zero)),
-            IsPositive(value) => Negative(NormalizedPredicate::LessThanOrEqual(value.into(), zero)),
-            IsNegative(value) => Positive(NormalizedPredicate::LessThan(value.into(), zero)),
-            IsNonPositive(value) => {
-                Positive(NormalizedPredicate::LessThanOrEqual(value.into(), zero))
-            }
-            IsNonNegative(value) => Negative(NormalizedPredicate::LessThan(value.into(), zero)),
-            // For binary operations, we establish a normalized form
-            // by placing the smaller value on the left-hand side.
-            Equal(lhs, rhs) if lhs < rhs => {
-                Positive(NormalizedPredicate::Equal(lhs.into(), rhs.into()))
-            }
-            Equal(lhs, rhs) => Positive(NormalizedPredicate::Equal(rhs.into(), lhs.into())),
-            NotEqual(lhs, rhs) if lhs < rhs => {
-                Negative(NormalizedPredicate::Equal(lhs.into(), rhs.into()))
-            }
-            NotEqual(lhs, rhs) => Negative(NormalizedPredicate::Equal(rhs.into(), lhs.into())),
-            LessThan(lhs, rhs) if lhs < rhs => {
-                Positive(NormalizedPredicate::LessThan(lhs.into(), rhs.into()))
-            }
-            LessThan(lhs, rhs) => {
-                Negative(NormalizedPredicate::LessThanOrEqual(rhs.into(), lhs.into()))
-            }
-            LessThanOrEqual(lhs, rhs) if lhs < rhs => {
-                Positive(NormalizedPredicate::LessThanOrEqual(lhs.into(), rhs.into()))
-            }
-            LessThanOrEqual(lhs, rhs) => {
-                Negative(NormalizedPredicate::LessThan(rhs.into(), lhs.into()))
-            }
-            GreaterThan(lhs, rhs) if lhs < rhs => {
-                Negative(NormalizedPredicate::LessThanOrEqual(lhs.into(), rhs.into()))
-            }
-            GreaterThan(lhs, rhs) => {
-                Positive(NormalizedPredicate::LessThan(rhs.into(), lhs.into()))
-            }
-            GreaterThanOrEqual(lhs, rhs) if lhs < rhs => {
-                Negative(NormalizedPredicate::LessThan(lhs.into(), rhs.into()))
-            }
-            GreaterThanOrEqual(lhs, rhs) => {
-                Positive(NormalizedPredicate::LessThanOrEqual(rhs.into(), lhs.into()))
-            }
-        }
+        use Condition::*;
+        let inner = match value {
+            Equal(lhs, rhs) => Equal(lhs.into(), rhs.into()),
+            NotEqual(lhs, rhs) => NotEqual(lhs.into(), rhs.into()),
+            LessThan(lhs, rhs) => LessThan(lhs.into(), rhs.into()),
+            LessThanOrEqual(lhs, rhs) => LessThanOrEqual(lhs.into(), rhs.into()),
+            GreaterThan(lhs, rhs) => GreaterThan(lhs.into(), rhs.into()),
+            GreaterThanOrEqual(lhs, rhs) => GreaterThanOrEqual(lhs.into(), rhs.into()),
+            IsNull(value) => IsNull(value.into()),
+            IsNotNull(value) => IsNotNull(value.into()),
+            IsZero(value) => IsZero(value.into()),
+            IsNonZero(value) => IsNonZero(value.into()),
+            IsPositive(value) => IsPositive(value.into()),
+            IsNegative(value) => IsNegative(value.into()),
+            IsNonNegative(value) => IsNonNegative(value.into()),
+            IsNonPositive(value) => IsNonPositive(value.into()),
+        };
+        Self::Positive(inner)
     }
 }
 

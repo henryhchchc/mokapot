@@ -123,7 +123,7 @@ impl Hash for Operand {
         core::mem::discriminant(self).hash(state);
         match self {
             Operand::Just(id) => id.hash(state),
-            Operand::Phi(ids) => hash_unordered(ids.iter(), state),
+            Operand::Phi(ids) => hash_unordered(ids, state),
         }
     }
 }

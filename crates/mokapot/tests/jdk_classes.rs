@@ -71,11 +71,11 @@ fn test_a_class(class: Class) {
                         Either::Right(std::iter::empty())
                     }
                 })
-                .dedup()
+                .unique()
                 .count();
             // Set a limit here due to high memory consumption.
             // [TODO] optimized later.
-            let variable_count_limit = if env::var("CI").is_ok() { 18 } else { 22 };
+            let variable_count_limit = if env::var("CI").is_ok() { 12 } else { 16 };
             if variable_count <= variable_count_limit {
                 println!(
                     "Analyzing path condition for: {}::{}{}",

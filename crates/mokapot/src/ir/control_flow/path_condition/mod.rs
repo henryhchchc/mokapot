@@ -46,7 +46,7 @@ where
     P: Hash + Eq,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        hash_unordered(self.minterms.iter(), state);
+        hash_unordered(&self.minterms, state);
     }
 }
 
@@ -91,7 +91,7 @@ where
     P: Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        hash_unordered(self.0.iter(), state);
+        hash_unordered(&self.0, state);
     }
 }
 

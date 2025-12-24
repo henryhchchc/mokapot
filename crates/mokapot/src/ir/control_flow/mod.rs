@@ -4,10 +4,11 @@ pub mod path_condition;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use self::path_condition::{NormalizedPredicate, PathCondition, Value};
+use self::path_condition::{PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
     analysis::fixed_point::solve,
+    ir::expression::Condition,
     jvm::{code::ProgramCounter, references::ClassRef},
 };
 
@@ -17,7 +18,7 @@ pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
     /// A conditional control transfer.
-    Conditional(PathCondition<NormalizedPredicate<Value>>),
+    Conditional(PathCondition<Condition<Value>>),
     /// A control transfer to the exception handler.
     Exception(BTreeSet<ClassRef>),
     /// A control transfer caused by subroutine return.
@@ -139,9 +140,7 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// # Performance
     /// The memory consumption is exponential in the number of unique predicates in this control flow graph.
     #[must_use]
-    pub fn path_conditions(
-        &self,
-    ) -> HashMap<ProgramCounter, PathCondition<&NormalizedPredicate<Value>>> {
+    pub fn path_conditions(&self) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
         let mut analyzer = path_condition::Analyzer::new(self);
         let Ok(path_conditions) = solve(&mut analyzer);
         path_conditions
