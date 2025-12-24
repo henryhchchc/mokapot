@@ -30,12 +30,11 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::ir::test::arb_argument;
 
     proptest! {
 
         #[test]
-        fn uses(lock in arb_argument()) {
+        fn uses(lock in any::<Operand>()) {
             let ids = lock.iter().copied().collect::<HashSet<_>>();
             let operation = Operation::Acquire(lock.clone());
             assert_eq!(operation.uses(), ids);

@@ -90,13 +90,13 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{ir::test::arb_argument, tests::arb_field_type};
+    use crate::tests::arb_field_type;
 
     proptest! {
 
         #[test]
         fn uses(
-            arg in arb_argument(),
+            arg in any::<Operand>(),
             target_type in arb_field_type(),
         ) {
             let arg_ids: HashSet<_> = arg.clone().into_iter().collect();
