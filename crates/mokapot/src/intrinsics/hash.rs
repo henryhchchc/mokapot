@@ -72,15 +72,34 @@ mod tests {
         hash_unordered(iter, &mut hasher);
         hasher.finish()
     }
+    use proptest::prelude::*;
+    use rand::seq::SliceRandom as _;
 
-    #[test]
-    fn order_independent() {
-        let hash1 = compute_unordered_hash([1, 2, 3].iter());
-        let hash2 = compute_unordered_hash([3, 1, 2].iter());
-        let hash3 = compute_unordered_hash([2, 3, 1].iter());
+    proptest! {
+        #[test]
+        fn order_independent(
+            elements in prop::collection::vec(any::<i32>(), 0..100)
+        ) {
+            let hash1 = compute_unordered_hash(elements.iter());
 
-        assert_eq!(hash1, hash2);
-        assert_eq!(hash2, hash3);
+            let mut vec2 = elements.clone();
+            vec2.reverse();
+            let hash2 = compute_unordered_hash(vec2.iter());
+
+            let mut vec3 = elements.clone();
+            if vec3.len() > 1 {
+                vec3.rotate_left(1);
+            }
+            let hash3 = compute_unordered_hash(vec3.iter());
+
+            let mut vec4 = elements.clone();
+            vec4.shuffle(&mut rand::rng());
+            let hash4 = compute_unordered_hash(vec4.iter());
+
+            prop_assert_eq!(hash1, hash2);
+            prop_assert_eq!(hash2, hash3);
+            prop_assert_eq!(hash3, hash4);
+        }
     }
 
     #[test]
@@ -102,20 +121,32 @@ mod tests {
         assert_ne!(hash_empty, hash_one);
     }
 
-    #[test]
-    fn different_sizes_differ() {
-        let hash1 = compute_unordered_hash([1, 2].iter());
-        let hash2 = compute_unordered_hash([1, 2, 3].iter());
+    proptest! {
+        #[test]
+        fn different_sizes_differ(
+            elements in prop::collection::vec(any::<i32>(), 1..100)
+        ) {
+            let hash1 = compute_unordered_hash(elements.iter());
 
-        assert_ne!(hash1, hash2);
+            let mut extended = elements.clone();
+            extended.push(0);
+            let hash2 = compute_unordered_hash(extended.iter());
+
+            prop_assert_ne!(hash1, hash2);
+        }
     }
 
-    #[test]
-    fn same_elements_same_hash() {
-        let hash1 = compute_unordered_hash([42, 42, 42].iter());
-        let hash2 = compute_unordered_hash([42, 42, 42].iter());
+    proptest! {
+        #[test]
+        fn same_elements_same_hash(element in any::<i32>(), count in 1usize..10) {
+            let vec1: Vec<_> = std::iter::repeat_n(element, count).collect();
+            let vec2: Vec<_> = std::iter::repeat_n(element, count).collect();
 
-        assert_eq!(hash1, hash2);
+            let hash1 = compute_unordered_hash(vec1.iter());
+            let hash2 = compute_unordered_hash(vec2.iter());
+
+            prop_assert_eq!(hash1, hash2);
+        }
     }
 
     #[test]
