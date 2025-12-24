@@ -2,7 +2,7 @@ mod execution;
 mod jvm_frame;
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     iter::once,
     mem,
 };
@@ -197,9 +197,8 @@ impl MokaIRGenerator<'_> {
         MokaIRBrewingError,
     > {
         use crate::analysis::fixed_point::solve;
-        use std::collections::BTreeMap;
 
-        let _facts: BTreeMap<_, _> = solve(&mut self)?;
+        let _facts: HashMap<_, _> = solve(&mut self)?;
         let cfg = ControlFlowGraph::from_edges(
             self.control_flow_edges
                 .into_iter()

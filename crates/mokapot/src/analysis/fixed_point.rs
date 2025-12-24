@@ -55,6 +55,7 @@
 //! ```
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, HashMap},
     hash::{BuildHasher, Hash},
 };
@@ -363,12 +364,9 @@ where
         // new_fact is strictly greater than current (i.e., current < new_fact),
         // or if they are incomparable (which shouldn't happen in a well-formed
         // lattice, but we handle it by propagating).
-        let increased = facts.get(&location).is_none_or(|current| {
-            !matches!(
-                new_fact.partial_cmp(current),
-                Some(std::cmp::Ordering::Equal | std::cmp::Ordering::Less)
-            )
-        });
+        let increased = facts
+            .get(&location)
+            .is_none_or(|it| new_fact.partial_cmp(it).is_some_and(Ordering::is_gt));
 
         if increased {
             // Apply the flow function and propagate to successors
