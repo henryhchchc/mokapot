@@ -55,9 +55,9 @@
 //! ```
 
 use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     hash::{BuildHasher, Hash},
+    mem,
 };
 
 /// A join semi-lattice for dataflow analysis.
@@ -215,83 +215,86 @@ pub trait DataflowProblem {
 /// - [`HashMap<L, F>`] for `L: Hash + Eq`
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait FactsMap<L, F>: Default {
-    /// Returns a reference to the fact at the given location, if present.
-    fn get(&self, location: &L) -> Option<&F>;
-
-    /// Inserts a fact at the given location, returning the previous fact if any.
-    fn insert(&mut self, location: L, fact: F) -> Option<F>;
-
     /// Inserts a fact, joining with any existing fact at that location.
     ///
     /// If no fact exists at the location, the new fact is inserted directly.
-    /// If a fact already exists, the new fact is joined with it.
-    fn insert_or_join(&mut self, location: L, fact: F)
+    /// If a fact already exists, the new fact is joined with the existing fact.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some((location, fact))` with references to the stored location and fact
+    /// if the insertion resulted in a change (either a new entry or a strictly greater
+    /// joined fact). Returns `None` if the new fact did not add information (i.e., the
+    /// existing fact already subsumed it).
+    ///
+    /// The returned references are valid for the lifetime of the map and can be used
+    /// to propagate facts further in the analysis.
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice;
-
-    /// Removes and returns an arbitrary (location, fact) pair from the map.
-    ///
-    /// Returns `None` if the map is empty. The order of removal is
-    /// implementation-defined.
-    fn pop(&mut self) -> Option<(L, F)>;
 }
 
-impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F> {
-    fn get(&self, location: &L) -> Option<&F> {
-        BTreeMap::get(self, location)
-    }
-
-    fn insert(&mut self, location: L, fact: F) -> Option<F> {
-        BTreeMap::insert(self, location, fact)
-    }
-
-    fn insert_or_join(&mut self, location: L, fact: F)
+impl<L: Ord, F> FactsMap<L, F> for BTreeMap<L, F>
+where
+    F: Clone,
+{
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice,
     {
-        match self.remove(&location) {
-            Some(existing) => {
-                self.insert(location, existing.join(fact));
+        use std::collections::btree_map::Entry;
+        let updated_entry = match self.entry(location) {
+            Entry::Vacant(entry) => Some(entry.insert_entry(fact)),
+            Entry::Occupied(mut entry) => {
+                let existing_fact = entry.get();
+                let new_fact = existing_fact.clone().join(fact);
+                new_fact.gt(existing_fact).then(|| {
+                    entry.insert(new_fact);
+                    entry
+                })
             }
-            None => {
-                self.insert(location, fact);
-            }
-        }
-    }
-
-    fn pop(&mut self) -> Option<(L, F)> {
-        self.pop_first()
+        };
+        updated_entry.map(|entry| unsafe {
+            // SAFETY: The key and value are stored in the Map.
+            //         The map cannot be mutated while `key_ref` and `value_ref` are held.
+            (
+                mem::transmute::<&L, &L>(entry.key()),
+                mem::transmute::<&F, &F>(entry.get()),
+            )
+        })
     }
 }
 
-impl<L: Hash + Eq + Clone, F, S: BuildHasher + Default> FactsMap<L, F> for HashMap<L, F, S> {
-    fn get(&self, location: &L) -> Option<&F> {
-        HashMap::get(self, location)
-    }
-
-    fn insert(&mut self, location: L, fact: F) -> Option<F> {
-        HashMap::insert(self, location, fact)
-    }
-
-    fn insert_or_join(&mut self, location: L, fact: F)
+impl<L, F, S> FactsMap<L, F> for HashMap<L, F, S>
+where
+    L: Hash + Eq + Clone,
+    F: Clone,
+    S: BuildHasher + Default,
+{
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice,
     {
-        match self.remove(&location) {
-            Some(existing) => {
-                self.insert(location, existing.join(fact));
+        use std::collections::hash_map::Entry;
+        let updated_entry = match self.entry(location) {
+            Entry::Vacant(entry) => Some(entry.insert_entry(fact)),
+            Entry::Occupied(mut entry) => {
+                let existing_fact = entry.get();
+                let new_fact = existing_fact.clone().join(fact);
+                new_fact.gt(existing_fact).then(|| {
+                    entry.insert(new_fact);
+                    entry
+                })
             }
-            None => {
-                self.insert(location, fact);
-            }
-        }
-    }
-
-    fn pop(&mut self) -> Option<(L, F)> {
-        // HashMap doesn't have pop_first, so we get an arbitrary key and remove it
-        let key = self.keys().next().cloned()?;
-        let value = self.remove(&key)?;
-        Some((key, value))
+        };
+        updated_entry.map(|entry| unsafe {
+            // SAFETY: The key and value are stored in the Map.
+            //         The map cannot be mutated while `key_ref` and `value_ref` are held.
+            (
+                mem::transmute::<&L, &L>(entry.key()),
+                mem::transmute::<&F, &F>(entry.get()),
+            )
+        })
     }
 }
 
@@ -345,38 +348,14 @@ where
     M: FactsMap<P::Location, P::Fact>,
 {
     let mut facts = M::default();
-    let mut worklist = M::default();
+    let mut worklist = VecDeque::new();
 
-    // Initialize worklist with seeds
-    for (loc, fact) in problem.seeds() {
-        worklist.insert_or_join(loc, fact);
-    }
+    worklist.extend(problem.seeds());
 
     // Fixed-point iteration
-    while let Some((location, incoming_fact)) = worklist.pop() {
-        // Compute the new fact by joining with the existing fact (if any)
-        let new_fact = match facts.get(&location) {
-            Some(current) => current.clone().join(incoming_fact),
-            None => incoming_fact,
-        };
-
-        // Check if the fact increased in the lattice ordering.
-        // In a monotonic analysis, facts only increase, so we check if
-        // new_fact is strictly greater than current (i.e., current < new_fact),
-        // or if they are incomparable (which shouldn't happen in a well-formed
-        // lattice, but we handle it by propagating).
-        let increased = facts
-            .get(&location)
-            .is_none_or(|it| new_fact.partial_cmp(it).is_some_and(Ordering::is_gt));
-
-        if increased {
-            // Apply the flow function and propagate to successors
-            for (succ_loc, succ_fact) in problem.flow(&location, &new_fact)? {
-                worklist.insert_or_join(succ_loc, succ_fact);
-            }
-
-            // Update the fact at this location
-            facts.insert(location, new_fact);
+    while let Some((location, incoming_fact)) = worklist.pop_front() {
+        if let Some((location, new_fact)) = facts.insert_or_join(location, incoming_fact) {
+            worklist.extend(problem.flow(location, new_fact)?);
         }
     }
 
