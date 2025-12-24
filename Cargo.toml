@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.24.1"
+version = "0.24.2"
 edition = "2024"
 repository = "https://github.com/henryhchchc/mokapot"
 license = "MIT"
