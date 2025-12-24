@@ -35,28 +35,23 @@ where
     H: Hasher,
     B: BuildHasher,
 {
-    let mut sum: u64 = 0;
-    let mut product: u128 = 1;
-    let mut xor: u64 = 0;
-    let mut count: u64 = 0;
-
-    for ref item in iter {
-        let item_hash = build_hasher.hash_one(item);
-        // Wrapping add is order-independent and duplicate-sensitive
-        sum = sum.wrapping_add(item_hash);
-        // Use wrapping multiplication with an offset to avoid zero-product issues
-        product = product.wrapping_mul(u128::from(item_hash) | 1);
-        // XOR with rotation reduces pattern collisions
-        xor ^= item_hash.rotate_left((item_hash & 63) as u32);
-        count += 1;
-    }
-
-    // Combine all components into the final hash state
-    // The count ensures collections of different sizes are distinguishable
-    sum.hash(state);
-    product.hash(state);
-    xor.hash(state);
-    count.hash(state);
+    iter.into_iter()
+        .map(|ref it| build_hasher.hash_one(it))
+        .fold(
+            (0u64, 1u64, 0u64, 0u64),
+            |(sum, product, xor, count), item_hash| {
+                (
+                    // Wrapping add is order-independent and duplicate-sensitive
+                    sum.wrapping_add(item_hash),
+                    // Use wrapping multiplication with an offset to avoid zero-product issues
+                    product.wrapping_mul((item_hash << 1) | 1),
+                    // XOR with rotation reduces pattern collisions
+                    xor ^ item_hash.rotate_left((item_hash & 63) as u32),
+                    count + 1,
+                )
+            },
+        )
+        .hash(state);
 }
 
 #[cfg(test)]
