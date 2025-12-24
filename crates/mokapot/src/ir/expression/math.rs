@@ -93,13 +93,12 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::ir::test::arb_argument;
 
     proptest! {
         #[test]
         fn uses(
-            arg1 in arb_argument(),
-            arg2 in arb_argument(),
+            arg1 in any::<Operand>(),
+            arg2 in any::<Operand>(),
             num in any::<i32>(),
             nan_treatment in any::<NaNTreatment>()
         ) {

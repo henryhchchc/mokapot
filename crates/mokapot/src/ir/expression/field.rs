@@ -63,15 +63,15 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{ir::test::arb_argument, jvm::references::tests::arb_field_ref};
+    use crate::jvm::references::tests::arb_field_ref;
 
     proptest! {
 
         #[test]
         fn uses(
             field in arb_field_ref(),
-            object_ref in arb_argument(),
-            value in arb_argument()
+            object_ref in any::<Operand>(),
+            value in any::<Operand>()
         ) {
             let value_ids = value.iter().copied().collect::<HashSet<_>>();
             let object_ref_ids = object_ref.iter().copied().collect::<HashSet<_>>();

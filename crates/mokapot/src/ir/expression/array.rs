@@ -85,7 +85,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{ir::test::arb_argument, tests::arb_field_type};
+    use crate::tests::arb_field_type;
 
     fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Operand>) {
         let uses = op.uses();
@@ -98,9 +98,9 @@ mod tests {
 
         #[test]
         fn uses(
-            arg1 in arb_argument(),
-            arg2 in arb_argument(),
-            arg3 in arb_argument(),
+            arg1 in any::<Operand>(),
+            arg2 in any::<Operand>(),
+            arg3 in any::<Operand>(),
             ty in arb_field_type()
         ) {
             let new_ops = Operation::New {

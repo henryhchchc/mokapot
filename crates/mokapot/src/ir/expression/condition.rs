@@ -77,7 +77,6 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::ir::test::arb_argument;
 
     fn check_uses(cond: &Condition, ids: &HashSet<Identifier>) {
         let cond_ids = cond.uses();
@@ -91,8 +90,8 @@ mod tests {
 
         #[test]
         fn uses(
-            arg1 in arb_argument(),
-            arg2 in arb_argument(),
+            arg1 in any::<Operand>(),
+            arg2 in any::<Operand>(),
         ) {
             let arg1_ids = arg1.clone().into_iter().collect();
             let both_arg_ids = arg1.iter().chain(arg2.iter()).copied().collect();

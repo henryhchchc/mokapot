@@ -102,7 +102,14 @@ pub enum Operand {
     /// A reference to a value combined from multiple branches.
     /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
     #[display("Phi({})", _0.iter().map(ToString::to_string).join(", "))]
+    #[cfg_attr(test, proptest(strategy = "prop_test_phi_inner()"))]
     Phi(HashSet<Identifier>),
+}
+
+#[cfg(test)]
+fn prop_test_phi_inner() -> impl proptest::strategy::Strategy<Value = Operand> {
+    use proptest::prelude::*;
+    proptest::collection::hash_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
 }
 
 impl PartialOrd for Operand {
@@ -242,7 +249,7 @@ impl From<LocalValue> for Identifier {
 }
 
 #[cfg(test)]
-pub(super) mod test {
+pub(crate) mod test {
     use proptest::prelude::*;
 
     use super::*;
@@ -254,13 +261,6 @@ pub(super) mod test {
             let id: u16 = value.into();
             assert_eq!(id, value.0);
         }
-    }
-
-    pub(crate) fn arb_argument() -> impl Strategy<Value = Operand> {
-        prop_oneof![
-            any::<Identifier>().prop_map(Operand::Just),
-            prop::collection::hash_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
-        ]
     }
 
     #[test]
@@ -343,8 +343,8 @@ pub(super) mod test {
     proptest! {
        #[test]
        fn operand_join_ordering(
-           lhs in arb_argument(),
-           rhs in arb_argument(),
+           lhs in any::<Operand>(),
+           rhs in any::<Operand>(),
        ) {
            let joined = lhs.clone().join(rhs.clone());
            prop_assert!(joined >= lhs);
