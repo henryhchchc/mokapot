@@ -76,6 +76,7 @@ fn brew_ir() {
 proptest! {
 
     #[test]
+    #[cfg_attr(not(integration_test), ignore)]
     fn du_chain_defs(local_idx in any::<u16>()) {
         let method = get_test_method();
         let ir_method = method.brew().unwrap();
@@ -91,6 +92,7 @@ proptest! {
 }
 
 #[test]
+#[cfg_attr(not(integration_test), ignore)]
 fn du_chain_uses() {
     let method = get_test_method();
     let ir_method = method.brew().unwrap();
@@ -112,6 +114,7 @@ fn du_chain_uses() {
 
 #[test]
 #[cfg(feature = "petgraph")]
+#[cfg_attr(not(integration_test), ignore)]
 fn cfg_to_dot() {
     use itertools::Itertools;
     use mokapot::ir::control_flow::ControlTransfer;
@@ -143,6 +146,7 @@ fn cfg_to_dot() {
 
 #[test]
 #[cfg(feature = "petgraph")]
+#[cfg_attr(not(integration_test), ignore)]
 fn dominance() {
     use mokapot::jvm::code::ProgramCounter;
 
