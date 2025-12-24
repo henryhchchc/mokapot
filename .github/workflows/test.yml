@@ -1,0 +1,168 @@
+name: Tests
+
+on:
+  workflow_run:
+    workflows: ["Code Quality"]
+    types:
+      - completed
+    branches:
+      - main
+  pull_request:
+    paths-ignore:
+      - docs/**
+      - "**/*.md"
+      - "LICENSE"
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  JAVA_VERSION: 25
+
+permissions:
+  checks: write
+
+jobs:
+  feature_test:
+    name: Feature Combinations
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Setup cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Cache Rust Build Stuff
+        uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
+      - name: Test all feature combinations
+        env:
+          RUSTFLAGS: -D unused -D unfulfilled_lint_expectations
+        run: |
+          cargo hack check --feature-powerset --no-dev-deps
+
+  unit_test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - name: Setup Build Tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Cache Rust Build Stuff
+        uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
+      - name: Test
+        run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov nextest --all-features --no-report -E 'kind(lib)'
+          cargo llvm-cov report --codecov --output-path ./target/codecov-unit.json
+      - name: Upload Coverage Data
+        uses: actions/upload-artifact@v6
+        with:
+          name: codecov-unit.json
+          path: ./target/codecov-unit.json
+
+  integration_test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - name: Setup Build Tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: corretto
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Hash JDK modules
+        id: hash-jdk-modules
+        run: |
+          file_path="${{ env.JAVA_HOME }}/lib/modules"
+          hash=$(sha256sum "$file_path" | awk '{print $1}')
+          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
+      - name: Cache JDK classes
+        id: cache-jdk-classes
+        uses: actions/cache@v5
+        with:
+          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
+          path: jdk_classes/
+      - name: Extract JDK classes
+        if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
+        run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
+      - name: Cache Rust Build Stuff
+        uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
+      - name: Test
+        env:
+          INTEGRATION_TEST: TRUE
+        timeout-minutes: 10
+        run: |
+          export JDK_CLASSES="${GITHUB_WORKSPACE}/jdk_classes"
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov nextest --cargo-profile=integration-test --all-features --no-report --run-ignored=all -E 'kind(test)'
+          cargo llvm-cov report --profile=integration-test --codecov --output-path ./target/codecov-integration.json
+      - name: Upload Coverage Data
+        uses: actions/upload-artifact@v6
+        with:
+          name: codecov-integration.json
+          path: ./target/codecov-integration.json
+
+  codecov:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: [unit_test, integration_test]
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Download Coverage Data (Unit Test)
+        uses: actions/download-artifact@v7
+        with:
+          name: codecov-unit.json
+      - name: Download Coverage Data (Integration Test)
+        uses: actions/download-artifact@v7
+        with:
+          name: codecov-integration.json
+      - name: Upload to codecov (Unit Test)
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: codecov-unit.json
+          flags: unit_tests
+          fail_ci_if_error: true
+      - name: Upload to codecov (Integration Test)
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: codecov-integration.json
+          flags: integration_tests
+          fail_ci_if_error: true
