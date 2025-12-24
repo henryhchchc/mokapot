@@ -92,7 +92,7 @@ use std::{
 /// For the fixed-point algorithm to terminate, the lattice should have finite height
 /// (i.e., all ascending chains are finite), or the analysis should use widening.
 #[instability::unstable(feature = "fixed-point-analyses")]
-pub trait JoinSemiLattice: Clone + PartialOrd {
+pub trait JoinSemiLattice: PartialOrd {
     /// Computes the join (least upper bound) of two elements.
     ///
     /// The join operation combines information from two facts, typically when
@@ -341,6 +341,7 @@ impl<L: Hash + Eq + Clone, F, S: BuildHasher + Default> FactsMap<L, F> for HashM
 pub fn solve<P, M>(problem: &mut P) -> Result<M, P::Err>
 where
     P: DataflowProblem,
+    <P as DataflowProblem>::Fact: Clone,
     M: FactsMap<P::Location, P::Fact>,
 {
     let mut facts = M::default();
