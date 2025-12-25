@@ -5,7 +5,7 @@
 use std::{
     collections::{HashSet, hash_set},
     fmt::Display,
-    hash::Hash,
+    hash::{Hash, Hasher},
     ops::{BitAnd, BitOr, Not},
 };
 
@@ -17,7 +17,7 @@ pub use analyzer::*;
 
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    intrinsics::{hash_unordered, hashset_partial_order},
+    intrinsics::{HashUnordered, hashset_partial_order},
 };
 
 /// Path condition in disjunctive normal form.
@@ -45,8 +45,8 @@ impl<P> Hash for PathCondition<P>
 where
     P: Hash + Eq,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        hash_unordered(&self.minterms, state);
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (&self.minterms).hash_unordered(state);
     }
 }
 
@@ -90,8 +90,8 @@ impl<P> Hash for MinTerm<P>
 where
     P: Hash,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        hash_unordered(&self.0, state);
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (&self.0).hash_unordered(state);
     }
 }
 

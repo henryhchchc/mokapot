@@ -3,7 +3,11 @@ use std::convert::Infallible;
 use super::{BooleanVariable, PathCondition};
 use crate::{
     analysis::fixed_point::DataflowProblem,
-    ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer, expression::Condition},
+    ir::{
+        self, ControlFlowGraph, Operand,
+        control_flow::{ControlTransfer, Edge},
+        expression::Condition,
+    },
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
@@ -37,20 +41,16 @@ impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
-        let Some(outgoing_edges) = self.cfg.outgoing_edges(*location) else {
-            return Ok(Vec::new());
-        };
-        let result: Vec<_> = outgoing_edges
-            .map(|edge| {
-                let new_fact = if let ControlTransfer::Conditional(cond) = edge.data {
-                    cond.as_ref() & fact.clone()
-                } else {
-                    fact.clone()
-                };
-                (edge.target, new_fact)
+        Ok(self
+            .cfg
+            .outgoing_edges(*location)
+            .into_iter()
+            .flatten()
+            .map(|edge| match edge.data {
+                ControlTransfer::Conditional(cond) => (edge.target, cond.as_ref() & fact.clone()),
+                _ => (edge.target, fact.clone()),
             })
-            .collect();
-        Ok(result)
+            .collect::<Vec<_>>())
     }
 }
 

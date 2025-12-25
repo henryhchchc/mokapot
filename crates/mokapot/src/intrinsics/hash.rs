@@ -1,23 +1,33 @@
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher, Hash, Hasher};
 
-/// Hashes an iterator's items in an order-independent manner using
-/// symmetric polynomial-inspired combining.
+/// Trait for hashing collections in an order-independent manner.
 ///
-/// This produces a hash that is:
-/// - Order-independent: `{a, b, c}` hashes the same regardless of iteration order
-/// - Duplicate-sensitive: `{a, a, b}` differs from `{a, b}`
-/// - Collision-resistant: Uses sum, product, and count to avoid simple collisions
-///
-/// Uses the default hasher ([`DefaultHasher`]) for computing individual item hashes.
-/// For custom hasher support, use [`hash_unordered_with_hasher`].
-#[inline]
-pub(crate) fn hash_unordered<I, H>(iter: I, state: &mut H)
+/// This trait can be implemented by collection types to provide
+/// order-independent hashing capabilities, where the hash value
+/// is the same regardless of the iteration order of elements.
+pub(crate) trait HashUnordered {
+    /// Hashes the collection's items in an order-independent manner.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - The hasher state to write the computed hash to
+    fn hash_unordered<H>(self, state: &mut H)
+    where
+        H: Hasher;
+}
+
+impl<I> HashUnordered for I
 where
     I: IntoIterator,
     I::Item: Hash,
-    H: Hasher,
 {
-    hash_unordered_with_hasher(iter, state, &BuildHasherDefault::<DefaultHasher>::default());
+    #[inline]
+    fn hash_unordered<H>(self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        hash_unordered_with_hasher(self, state, &BuildHasherDefault::<DefaultHasher>::default());
+    }
 }
 
 /// Hashes an iterator's items in an order-independent manner using
@@ -28,7 +38,7 @@ where
 /// - Duplicate-sensitive: `{a, a, b}` differs from `{a, b}`
 /// - Collision-resistant: Uses sum, product, and count to avoid simple collisions
 #[inline]
-pub(crate) fn hash_unordered_with_hasher<I, H, B>(iter: I, state: &mut H, build_hasher: &B)
+fn hash_unordered_with_hasher<I, H, B>(iter: I, state: &mut H, build_hasher: &B)
 where
     I: IntoIterator,
     I::Item: Hash,
@@ -64,7 +74,7 @@ mod tests {
         I::Item: Hash,
     {
         let mut hasher = DefaultHasher::new();
-        hash_unordered(iter, &mut hasher);
+        iter.hash_unordered(&mut hasher);
         hasher.finish()
     }
     use proptest::prelude::*;

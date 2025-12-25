@@ -10,7 +10,7 @@ use super::expression::{Condition, Expression};
 use crate::jvm::code::ProgramCounter;
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    intrinsics::{hash_unordered, hashset_partial_order},
+    intrinsics::{HashUnordered, hashset_partial_order},
 };
 
 /// Represents a single instruction in the Moka IR.
@@ -130,7 +130,7 @@ impl Hash for Operand {
         core::mem::discriminant(self).hash(state);
         match self {
             Operand::Just(id) => id.hash(state),
-            Operand::Phi(ids) => hash_unordered(ids, state),
+            Operand::Phi(ids) => ids.hash_unordered(state),
         }
     }
 }
