@@ -55,7 +55,7 @@
 //! ```
 
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap},
     hash::{BuildHasher, Hash},
     mem,
 };
@@ -232,6 +232,18 @@ pub trait FactsMap<L, F>: Default {
     fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice;
+
+    /// Removes and returns an arbitrary key-value pair from the map.
+    ///
+    /// This method is used internally by the solver to extract entries from the map.
+    /// The specific entry returned is implementation-defined and may vary between
+    /// different map types.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some((location, fact))` if the map is non-empty, or `None` if the
+    /// map is empty.
+    fn pop_one(&mut self) -> Option<(L, F)>;
 }
 
 impl<L, F> FactsMap<L, F> for BTreeMap<L, F>
@@ -263,6 +275,10 @@ where
                 mem::transmute::<&F, &F>(entry.get()),
             )
         })
+    }
+
+    fn pop_one(&mut self) -> Option<(L, F)> {
+        self.pop_first()
     }
 }
 
@@ -296,6 +312,16 @@ where
                 mem::transmute::<&F, &F>(entry.get()),
             )
         })
+    }
+
+    fn pop_one(&mut self) -> Option<(L, F)> {
+        // Get an arbitrary key, clone it, then remove the entry
+        let key_to_pop = self.keys().next()?;
+        // SAFETY: In the implementation of `remove_entry`, `key` is used for searching _before_ (re)moving the entry.
+        //         `key` is never used after `remove_entry`.
+        //         Therefore, it is fine to extend disassociate the key from the map.
+        let key: &L = unsafe { mem::transmute(key_to_pop) };
+        self.remove_entry(key)
     }
 }
 
@@ -349,14 +375,21 @@ where
     M: FactsMap<P::Location, P::Fact>,
 {
     let mut facts = M::default();
-    let mut worklist = VecDeque::new();
+    let mut worklist = M::default();
 
-    worklist.extend(problem.seeds());
+    problem.seeds().into_iter().for_each(|(loc, fact)| {
+        worklist.insert_or_join(loc, fact);
+    });
 
     // Fixed-point iteration
-    while let Some((location, incoming_fact)) = worklist.pop_front() {
+    while let Some((location, incoming_fact)) = worklist.pop_one() {
         if let Some((location, new_fact)) = facts.insert_or_join(location, incoming_fact) {
-            worklist.extend(problem.flow(location, new_fact)?);
+            problem
+                .flow(location, new_fact)?
+                .into_iter()
+                .for_each(|(loc, fact)| {
+                    worklist.insert_or_join(loc, fact);
+                });
         }
     }
 
