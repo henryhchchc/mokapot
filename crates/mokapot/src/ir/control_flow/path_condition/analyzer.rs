@@ -3,11 +3,7 @@ use std::convert::Infallible;
 use super::{BooleanVariable, PathCondition};
 use crate::{
     analysis::fixed_point::DataflowProblem,
-    ir::{
-        self, ControlFlowGraph, Operand,
-        control_flow::{ControlTransfer, Edge},
-        expression::Condition,
-    },
+    ir::{self, ControlFlowGraph, Operand, control_flow::ControlTransfer, expression::Condition},
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
