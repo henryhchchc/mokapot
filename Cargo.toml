@@ -28,7 +28,7 @@ rayon = "1.11"
 thiserror = "2.0"
 trait-gen = "2.0"
 walkdir = "2.5"
-zip = { version = "7.1", default-features = false }
+zip = { version = "7.2", default-features = false }
 
 [profile.integration-test]
 inherits = "test"
