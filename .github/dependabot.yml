@@ -3,8 +3,13 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/" # Location of package manifests
     schedule:
-      interval: "weekly"
+      interval: daily
+    groups:
+      patch-updates:
+        update-types:
+          - patch
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: daily
