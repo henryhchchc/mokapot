@@ -11,7 +11,7 @@ keywords = ["analysis", "bytecode", "java", "jvm"]
 categories = ["development-tools", "parsing"]
 
 [workspace.dependencies]
-bitflags = "2.10"
+bitflags = "2.11"
 cesu8 = "1.1"
 clap = "4.5"
 derive_more = "2.0"
