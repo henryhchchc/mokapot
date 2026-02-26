@@ -216,11 +216,11 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
       - name: Download Coverage Data (Unit Test)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: codecov-unit.json
       - name: Download Coverage Data (Integration Test)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: codecov-integration.json
       - name: Upload to codecov (Unit Test)
