@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use inkwell::{basic_block::BasicBlock, context::ContextRef, values::FunctionValue};
+use inkwell::{basic_block::BasicBlock, values::FunctionValue};
 use num_traits::{AsPrimitive, NumCast, PrimInt};
 
-use crate::jvm::code::ProgramCounter;
+use crate::{ir::llvm_ir_backend::Context, jvm::code::ProgramCounter};
 
 /// Sign-extends an integer number into [`u64`] for consumption by the LLVM API.
 pub(super) fn upcast_to_u64<T: PrimInt>(value: T) -> u64 {
@@ -20,7 +20,7 @@ pub(super) fn upcast_to_u64<T: PrimInt>(value: T) -> u64 {
 /// basic block in `function_value`, preserving the order of IR instructions using the provided
 /// [`pc`][ProgramCounter].
 pub(super) fn get_or_insert_basic_block_ordered<'ctx>(
-    context: ContextRef<'ctx>,
+    ctx: &Context<'ctx, '_>,
     function_value: FunctionValue<'ctx>,
     pc: ProgramCounter,
 ) -> BasicBlock<'ctx> {
@@ -46,16 +46,12 @@ pub(super) fn get_or_insert_basic_block_ordered<'ctx>(
 
     if let Some(insert_bb) = insertion_point {
         // Found a BB to insert after - Insert after the insertion point
-        let ctx = insert_bb.get_context();
-
-        ctx.insert_basic_block_after(insert_bb, &pc_bb_name)
+        ctx.ctx.insert_basic_block_after(insert_bb, &pc_bb_name)
     } else if let Some(insert_bb) = function_value.get_first_basic_block() {
         // No BB to append after but function already contains BBs - Prepend to function start
-        let ctx = insert_bb.get_context();
-
-        ctx.prepend_basic_block(insert_bb, &pc_bb_name)
+        ctx.ctx.prepend_basic_block(insert_bb, &pc_bb_name)
     } else {
         // Function doesn't have any BBs - Create the first BB
-        context.append_basic_block(function_value, &pc_bb_name)
+        ctx.ctx.append_basic_block(function_value, &pc_bb_name)
     }
 }
