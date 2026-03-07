@@ -330,6 +330,7 @@ impl IRLowering for Operand {
 impl IRLowering for MathOperation {
     type Output<'ctx> = BasicValueEnum<'ctx>;
 
+    #[allow(clippy::too_many_lines)]
     fn lower<'ctx>(&self, ctx: &mut Context<'ctx, '_>, pc: ProgramCounter) -> Self::Output<'ctx> {
         match self {
             MathOperation::Add(lhs, rhs) => {
@@ -345,6 +346,122 @@ impl IRLowering for MathOperation {
                     }
                     (_, _) => {
                         panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Subtract(lhs, rhs) => {
+                let lhs = lhs.lower(ctx, pc);
+                let rhs = rhs.lower(ctx, pc);
+
+                match (lhs, rhs) {
+                    (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
+                        ctx.builder.build_int_sub(lhs, rhs, "").unwrap().into()
+                    }
+                    (BasicValueEnum::FloatValue(lhs), BasicValueEnum::FloatValue(rhs)) => {
+                        ctx.builder.build_float_sub(lhs, rhs, "").unwrap().into()
+                    }
+                    (_, _) => {
+                        panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Multiply(lhs, rhs) => {
+                let lhs = lhs.lower(ctx, pc);
+                let rhs = rhs.lower(ctx, pc);
+
+                match (lhs, rhs) {
+                    (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
+                        ctx.builder.build_int_mul(lhs, rhs, "").unwrap().into()
+                    }
+                    (BasicValueEnum::FloatValue(lhs), BasicValueEnum::FloatValue(rhs)) => {
+                        ctx.builder.build_float_mul(lhs, rhs, "").unwrap().into()
+                    }
+                    (_, _) => {
+                        panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Divide(lhs, rhs) => {
+                let lhs = lhs.lower(ctx, pc);
+                let rhs = rhs.lower(ctx, pc);
+
+                match (lhs, rhs) {
+                    (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
+                        // TODO: Throw exception if rhs is zero
+                        ctx.builder
+                            .build_int_signed_div(lhs, rhs, "")
+                            .unwrap()
+                            .into()
+                    }
+                    (BasicValueEnum::FloatValue(lhs), BasicValueEnum::FloatValue(rhs)) => {
+                        ctx.builder.build_float_div(lhs, rhs, "").unwrap().into()
+                    }
+                    (_, _) => {
+                        panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Remainder(lhs, rhs) => {
+                let lhs = lhs.lower(ctx, pc);
+                let rhs = rhs.lower(ctx, pc);
+
+                match (lhs, rhs) {
+                    (BasicValueEnum::IntValue(lhs), BasicValueEnum::IntValue(rhs)) => {
+                        // TODO: Throw exception if rhs is zero
+                        ctx.builder
+                            .build_int_signed_rem(lhs, rhs, "")
+                            .unwrap()
+                            .into()
+                    }
+                    (BasicValueEnum::FloatValue(lhs), BasicValueEnum::FloatValue(rhs)) => {
+                        ctx.builder.build_float_rem(lhs, rhs, "").unwrap().into()
+                    }
+                    (_, _) => {
+                        panic!("Expect ({lhs:?}, {rhs:?}) to both be IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Negate(value) => {
+                let value = value.lower(ctx, pc);
+
+                match value {
+                    BasicValueEnum::IntValue(value) => {
+                        ctx.builder.build_int_neg(value, "").unwrap().into()
+                    }
+                    BasicValueEnum::FloatValue(value) => {
+                        ctx.builder.build_float_neg(value, "").unwrap().into()
+                    }
+                    _ => {
+                        panic!("Expect {value:?} to be an IntValue or FloatValue")
+                    }
+                }
+            }
+
+            MathOperation::Increment(value, constant) => {
+                let value = value.lower(ctx, pc);
+
+                match value {
+                    BasicValueEnum::IntValue(value) => {
+                        let constant = value.get_type().const_int(upcast_to_u64(*constant), true);
+                        ctx.builder
+                            .build_int_add(value, constant, "")
+                            .unwrap()
+                            .into()
+                    }
+                    BasicValueEnum::FloatValue(value) => {
+                        let constant = value.get_type().const_float(f64::from(*constant));
+                        ctx.builder
+                            .build_float_add(value, constant, "")
+                            .unwrap()
+                            .into()
+                    }
+                    _ => {
+                        panic!("Expect {value:?} to be an IntValue or FloatValue")
                     }
                 }
             }
