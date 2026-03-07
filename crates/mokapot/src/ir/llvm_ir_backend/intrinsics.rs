@@ -1,9 +1,11 @@
-use inkwell::{builder::Builder, intrinsics::Intrinsic, module::Module};
+use inkwell::intrinsics::Intrinsic;
+
+use crate::ir::llvm_ir_backend::Context;
 
 /// Invokes [`llvm.donothing()`](https://llvm.org/docs/LangRef.html#llvm-donothing-intrinsic).
-pub(super) fn invoke_donothing<'ctx>(module: &Module<'ctx>, builder: &Builder<'ctx>) {
+pub(super) fn invoke_donothing(ctx: &Context<'_, '_>) {
     let intrinsic = Intrinsic::find("llvm.donothing").unwrap();
-    let intrinsic_fn = intrinsic.get_declaration(module, &[]).unwrap();
+    let intrinsic_fn = intrinsic.get_declaration(&ctx.module, &[]).unwrap();
 
-    builder.build_call(intrinsic_fn, &[], "").unwrap();
+    ctx.builder.build_call(intrinsic_fn, &[], "").unwrap();
 }
