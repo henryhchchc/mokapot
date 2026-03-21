@@ -68,9 +68,20 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
       - name: Cache Rust Build Stuff
-        uses: Leafwing-Studios/cargo-cache@v2
+        uses: actions/cache@v5
         with:
-          sweep-cache: true
+          path: |
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Run clippy
         run: |
           set -o pipefail
@@ -93,6 +104,11 @@ jobs:
             echo "Clippy found issues (exit code: $CLIPPY_EXIT_CODE)"
             exit $CLIPPY_EXIT_CODE
           fi
+      - name: Sweep target cache
+        if: always()
+        uses: BD103/cargo-sweep@v2
+        with:
+          manifest-path: Cargo.toml
 
   # ====================
   # Tests
@@ -113,14 +129,30 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
       - name: Cache Rust Build Stuff
-        uses: Leafwing-Studios/cargo-cache@v2
+        uses: actions/cache@v5
         with:
-          sweep-cache: true
+          path: |
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test all feature combinations
         env:
           RUSTFLAGS: -D unused -D unfulfilled_lint_expectations
         run: |
           cargo hack check --feature-powerset --no-dev-deps
+      - name: Sweep target cache
+        if: always()
+        uses: BD103/cargo-sweep@v2
+        with:
+          manifest-path: Cargo.toml
 
   unit_test:
     name: Tests / Unit Tests
@@ -139,9 +171,20 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
       - name: Cache Rust Build Stuff
-        uses: Leafwing-Studios/cargo-cache@v2
+        uses: actions/cache@v5
         with:
-          sweep-cache: true
+          path: |
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         run: |
           cargo llvm-cov clean --workspace
@@ -152,6 +195,11 @@ jobs:
         with:
           name: codecov-unit.json
           path: ./target/codecov-unit.json
+      - name: Sweep target cache
+        if: always()
+        uses: BD103/cargo-sweep@v2
+        with:
+          manifest-path: Cargo.toml
 
   integration_test:
     name: Tests / Integration Tests
@@ -190,9 +238,20 @@ jobs:
         if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
         run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
       - name: Cache Rust Build Stuff
-        uses: Leafwing-Studios/cargo-cache@v2
+        uses: actions/cache@v5
         with:
-          sweep-cache: true
+          path: |
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         env:
           INTEGRATION_TEST: TRUE
@@ -207,6 +266,11 @@ jobs:
         with:
           name: codecov-integration.json
           path: ./target/codecov-integration.json
+      - name: Sweep target cache
+        if: always()
+        uses: BD103/cargo-sweep@v2
+        with:
+          manifest-path: Cargo.toml
 
   codecov:
     name: Tests / Coverage Report
