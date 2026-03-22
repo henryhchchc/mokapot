@@ -1,0 +1,19 @@
+[package]
+name = "mokapot-py"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "mokapot"
+crate-type = ["cdylib"]
+
+[dependencies]
+mokapot = { path = "../mokapot" }
+pyo3 = { workspace = true, features = ["extension-module"] }
+
+[features]
+default = []
+gil-refs = []
