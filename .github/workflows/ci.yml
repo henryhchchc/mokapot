@@ -346,7 +346,7 @@ jobs:
       id-token: write
     steps:
       - name: Deploy docs to github pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
           artifact_name: mokapot-docs
 
