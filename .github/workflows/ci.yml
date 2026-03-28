@@ -288,7 +288,7 @@ jobs:
         with:
           name: codecov-integration.json
       - name: Upload to codecov (Unit Test)
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -296,7 +296,7 @@ jobs:
           flags: unit_tests
           fail_ci_if_error: true
       - name: Upload to codecov (Integration Test)
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
