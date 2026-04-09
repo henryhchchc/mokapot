@@ -7,7 +7,6 @@ license.workspace = true
 publish = false
 
 [lib]
-name = "mokapot"
 crate-type = ["cdylib"]
 
 [dependencies]
