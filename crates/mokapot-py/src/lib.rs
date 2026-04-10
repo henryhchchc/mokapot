@@ -13,14 +13,17 @@ use pyo3::{
     prelude::*,
     types::{PyModule, PyType},
 };
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 create_exception!(mokapot, MokapotError, PyException);
 create_exception!(mokapot, ParseError, MokapotError);
 
+#[gen_stub_pyclass]
 #[derive(Clone, Debug)]
 #[pyclass(name = "ClassRef", module = "mokapot", skip_from_py_object)]
 struct PyClassRef(jvm::references::ClassRef);
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl PyClassRef {
     #[new]
@@ -44,11 +47,14 @@ impl From<jvm::references::ClassRef> for PyClassRef {
     }
 }
 
+#[gen_stub_pyclass]
 #[derive(Clone, Debug)]
 #[pyclass(name = "ClassAccessFlags", module = "mokapot", skip_from_py_object)]
 struct PyClassAccessFlags(jvm::class::AccessFlags);
 
+#[gen_stub_pymethods]
 #[pymethods]
+#[allow(non_snake_case)]
 impl PyClassAccessFlags {
     #[new]
     fn new(bits: u16) -> PyResult<Self> {
@@ -78,6 +84,51 @@ impl PyClassAccessFlags {
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }
+
+    #[classattr]
+    fn PUBLIC() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::PUBLIC)
+    }
+
+    #[classattr]
+    fn FINAL() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::FINAL)
+    }
+
+    #[classattr]
+    fn SUPER() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::SUPER)
+    }
+
+    #[classattr]
+    fn INTERFACE() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::INTERFACE)
+    }
+
+    #[classattr]
+    fn ABSTRACT() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::ABSTRACT)
+    }
+
+    #[classattr]
+    fn SYNTHETIC() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::SYNTHETIC)
+    }
+
+    #[classattr]
+    fn ANNOTATION() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::ANNOTATION)
+    }
+
+    #[classattr]
+    fn ENUM() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::ENUM)
+    }
+
+    #[classattr]
+    fn MODULE() -> PyClassAccessFlags {
+        PyClassAccessFlags(jvm::class::AccessFlags::MODULE)
+    }
 }
 
 impl From<jvm::class::AccessFlags> for PyClassAccessFlags {
@@ -86,10 +137,12 @@ impl From<jvm::class::AccessFlags> for PyClassAccessFlags {
     }
 }
 
+#[gen_stub_pyclass]
 #[derive(Clone, Debug)]
 #[pyclass(name = "Version", module = "mokapot", skip_from_py_object)]
 struct PyVersion(jvm::class::Version);
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl PyVersion {
     #[getter]
@@ -118,10 +171,12 @@ impl From<jvm::class::Version> for PyVersion {
     }
 }
 
+#[gen_stub_pyclass]
 #[derive(Clone, Debug)]
 #[pyclass(name = "Class", module = "mokapot", skip_from_py_object)]
 struct PyClass(RustClass);
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl PyClass {
     #[classmethod]
@@ -193,11 +248,7 @@ fn mokapot_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyClassAccessFlags>()?;
     module.add_class::<PyVersion>()?;
 
-    let class_access_flags = module.py().get_type::<PyClassAccessFlags>();
-    for (name, flag) in jvm::class::AccessFlags::all().iter_names() {
-        let flag_obj = Py::new(module.py(), PyClassAccessFlags(flag))?;
-        class_access_flags.setattr(name, flag_obj)?;
-    }
-
     Ok(())
 }
+
+pyo3_stub_gen::define_stub_info_gatherer!(stub_info);

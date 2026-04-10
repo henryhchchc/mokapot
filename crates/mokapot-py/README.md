@@ -10,6 +10,8 @@ uv sync
 uv run maturin develop
 ```
 
+`mokapot.pyi` is generated automatically by the build backend before each build.
+
 ## Tests
 
 ```sh

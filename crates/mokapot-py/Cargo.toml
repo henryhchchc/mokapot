@@ -7,11 +7,17 @@ license.workspace = true
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "stub_gen"
+path = "src/bin/stub_gen.rs"
 
 [dependencies]
 mokapot = { path = "../mokapot" }
 pyo3 = { workspace = true, features = ["extension-module"] }
+pyo3-stub-gen = "0.22"
+pyo3-stub-gen-derive = "0.22"
 
 [features]
 default = []

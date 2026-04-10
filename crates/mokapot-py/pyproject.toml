@@ -16,7 +16,8 @@ dev = ["maturin", "pytest"]
 
 [build-system]
 requires = ["maturin>=1.12"]
-build-backend = "maturin"
+build-backend = "_build_backend"
+backend-path = ["."]
 
 [tool.maturin]
 bindings = "pyo3"
