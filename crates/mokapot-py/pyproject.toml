@@ -12,7 +12,7 @@ classifiers = [
 dependencies = []
 
 [dependency-groups]
-dev = ["maturin", "pytest"]
+dev = ["maturin", "pytest", "pytest-cov"]
 
 [build-system]
 requires = ["maturin>=1.12"]
