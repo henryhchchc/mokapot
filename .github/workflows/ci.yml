@@ -321,10 +321,7 @@ jobs:
           uv run maturin develop
           uv run pytest tests --cov --cov-report=xml:coverage-py-python.xml
           cd "$GITHUB_WORKSPACE"
-          cargo llvm-cov report \
-            --object target/debug/libmokapot_py.so \
-            --codecov \
-            --output-path ./target/codecov-py-rust.json
+          cargo llvm-cov report --codecov --output-path ./target/codecov-py-rust.json
       - name: Upload Rust Coverage Data
         uses: actions/upload-artifact@v7
         with:
