@@ -315,7 +315,7 @@ jobs:
         run: uv sync
       - name: Build and test with coverage
         run: |
-          eval $(cargo llvm-cov show-env --export-prefix)
+          eval $(cargo llvm-cov show-env --sh)
           cargo llvm-cov clean --workspace
           cd crates/mokapot-py
           uv run maturin develop
