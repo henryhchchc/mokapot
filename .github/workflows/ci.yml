@@ -328,7 +328,7 @@ jobs:
             echo "::info title=Fixed file permissions::$line"
           done
       - name: Upload docs as github pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           name: mokapot-docs
           path: target/doc
