@@ -22,6 +22,8 @@ concurrency:
 
 env:
   JAVA_VERSION: 26
+  # Keep this in sync with `llvm22-1-prefer-dynamic` in `crates/mokapot/Cargo.toml`.
+  LLVM_VERSION: 22
 
 permissions:
   checks: write
@@ -67,6 +69,13 @@ jobs:
           distribution: corretto
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Cache Rust Build Stuff
         uses: actions/cache@v5
         with:
@@ -128,6 +137,13 @@ jobs:
           tool: cargo-hack
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Cache Rust Build Stuff
         uses: actions/cache@v5
         with:
@@ -170,6 +186,13 @@ jobs:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Cache Rust Build Stuff
         uses: actions/cache@v5
         with:
@@ -222,6 +245,13 @@ jobs:
           distribution: corretto
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Hash JDK modules
         id: hash-jdk-modules
         run: |
@@ -318,6 +348,13 @@ jobs:
           toolchain: nightly
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Build docs
         env:
           RUSTDOCFLAGS: --cfg docsrs
@@ -373,6 +410,13 @@ jobs:
           toolchain: stable
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
       - name: Authenticate crates.io
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
