@@ -18,7 +18,7 @@ bitflags = { workspace = true }
 cesu8 = { workspace = true }
 derive_more = { workspace = true, features = ["full"] }
 document-features = { workspace = true }
-inkwell = { workspace = true, features = ["llvm21-1-prefer-dynamic"], optional = true }
+inkwell = { workspace = true, features = ["llvm18-1-prefer-dynamic"], optional = true }
 instability = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
