@@ -9,7 +9,7 @@ use inkwell::{
     builder::Builder,
     context::{Context as LLVMContext, ContextRef},
     module::Module,
-    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
+    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType},
     values::{BasicValueEnum, FunctionValue, IntValue, PointerValue},
 };
 
@@ -66,6 +66,7 @@ struct LoweringContext<'ctx, 'a> {
     instructions: &'a InstructionList<MokaInstruction>,
     slots: HashMap<Identifier, PointerValue<'ctx>>,
     slot_types: HashMap<Identifier, BasicTypeEnum<'ctx>>,
+    array_element_types: HashMap<Identifier, FieldType>,
 }
 
 impl<'ctx, 'a> LoweringContext<'ctx, 'a> {
@@ -92,6 +93,7 @@ impl<'ctx, 'a> LoweringContext<'ctx, 'a> {
             instructions,
             slots: HashMap::new(),
             slot_types: HashMap::new(),
+            array_element_types: HashMap::new(),
         }
     }
 
@@ -143,6 +145,28 @@ impl<'ctx, 'a> LoweringContext<'ctx, 'a> {
             .builder
             .build_load(slot_type, slot, &sanitize_symbol(&identifier.to_string()))
             .unwrap())
+    }
+
+    fn maybe_load_identifier(&mut self, identifier: Identifier) -> Option<BasicValueEnum<'ctx>> {
+        let slot = self
+            .slots
+            .get(&identifier)
+            .copied()
+            .or_else(|| default_slot_for_identifier(self, identifier))?;
+        let slot_type = *self.slot_types.get(&identifier)?;
+        Some(
+            self.builder
+                .build_load(slot_type, slot, &sanitize_symbol(&identifier.to_string()))
+                .unwrap(),
+        )
+    }
+
+    fn record_array_element_type(&mut self, identifier: Identifier, element_type: FieldType) {
+        self.array_element_types.insert(identifier, element_type);
+    }
+
+    fn maybe_array_element_type(&self, identifier: Identifier) -> Option<&FieldType> {
+        self.array_element_types.get(&identifier)
     }
 }
 
@@ -224,6 +248,7 @@ fn bind_method_parameters<'ctx>(ctx: &mut LoweringContext<'ctx, '_>, method: &Mo
     }
 
     for argument_index in 0..method.descriptor.parameters_types.len() {
+        let parameter_type = &method.descriptor.parameters_types[argument_index];
         let arg = ctx
             .function
             .get_nth_param(parameter_index + u32::try_from(argument_index).unwrap())
@@ -232,6 +257,9 @@ fn bind_method_parameters<'ctx>(ctx: &mut LoweringContext<'ctx, '_>, method: &Mo
         let identifier = Identifier::Arg(argument_index as u16);
         let slot = ctx.create_slot(identifier, arg.get_type());
         ctx.builder.build_store(slot, arg).unwrap();
+        if let FieldType::Array(inner) = parameter_type {
+            ctx.record_array_element_type(identifier, (**inner).clone());
+        }
     }
 }
 
@@ -322,6 +350,128 @@ fn sanitize_symbol(symbol: &str) -> String {
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect()
+}
+
+fn helper_name(parts: &[impl AsRef<str>]) -> String {
+    parts
+        .iter()
+        .map(|part| sanitize_symbol(part.as_ref()))
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn abi_type_name_from_field_type(field_type: &FieldType) -> String {
+    match field_type {
+        FieldType::Base(PrimitiveType::Boolean) => "i1".to_owned(),
+        FieldType::Base(PrimitiveType::Byte) => "i8".to_owned(),
+        FieldType::Base(PrimitiveType::Char) | FieldType::Base(PrimitiveType::Short) => {
+            "i16".to_owned()
+        }
+        FieldType::Base(PrimitiveType::Int) => "i32".to_owned(),
+        FieldType::Base(PrimitiveType::Long) => "i64".to_owned(),
+        FieldType::Base(PrimitiveType::Float) => "f32".to_owned(),
+        FieldType::Base(PrimitiveType::Double) => "f64".to_owned(),
+        FieldType::Object(_) | FieldType::Array(_) => "ref".to_owned(),
+    }
+}
+
+fn abi_type_name_from_basic_type(value_type: BasicTypeEnum<'_>) -> String {
+    match value_type {
+        BasicTypeEnum::IntType(ty) => format!("i{}", ty.get_bit_width()),
+        BasicTypeEnum::FloatType(ty) => {
+            if ty == ty.get_context().f32_type() {
+                "f32".to_owned()
+            } else if ty == ty.get_context().f64_type() {
+                "f64".to_owned()
+            } else {
+                sanitize_symbol(&ty.print_to_string().to_string())
+            }
+        }
+        BasicTypeEnum::PointerType(_) => "ref".to_owned(),
+        _ => sanitize_symbol(&value_type.print_to_string().to_string()),
+    }
+}
+
+fn array_struct_name(element_type: &FieldType) -> String {
+    helper_name(&[
+        "mokapot",
+        "array",
+        &abi_type_name_from_field_type(element_type),
+    ])
+}
+
+fn array_struct_type<'ctx>(ctx: ContextRef<'ctx>, element_type: &FieldType) -> StructType<'ctx> {
+    let name = array_struct_name(element_type);
+    let struct_type = ctx
+        .get_struct_type(&name)
+        .unwrap_or_else(|| ctx.opaque_struct_type(&name));
+    if struct_type.is_opaque() {
+        struct_type.set_body(&[ctx.i32_type().into(), reference_type(ctx)], false);
+    }
+    struct_type
+}
+
+fn array_length_ptr<'ctx>(
+    ctx: &LoweringContext<'ctx, '_>,
+    array_type: StructType<'ctx>,
+    array_ref: PointerValue<'ctx>,
+) -> Result<PointerValue<'ctx>, LoweringError> {
+    ctx.builder
+        .build_struct_gep(array_type, array_ref, 0, "array_length_ptr")
+        .map_err(|_| LoweringError::UnsupportedOperand("array length gep".to_owned()))
+}
+
+fn array_data_ptr_ptr<'ctx>(
+    ctx: &LoweringContext<'ctx, '_>,
+    array_type: StructType<'ctx>,
+    array_ref: PointerValue<'ctx>,
+) -> Result<PointerValue<'ctx>, LoweringError> {
+    ctx.builder
+        .build_struct_gep(array_type, array_ref, 1, "array_data_ptr_ptr")
+        .map_err(|_| LoweringError::UnsupportedOperand("array data gep".to_owned()))
+}
+
+fn array_data_ptr<'ctx>(
+    ctx: &mut LoweringContext<'ctx, '_>,
+    array_ref: PointerValue<'ctx>,
+    element_type: &FieldType,
+) -> Result<PointerValue<'ctx>, LoweringError> {
+    let array_type = array_struct_type(ctx.ctx, element_type);
+    let data_ptr_ptr = array_data_ptr_ptr(ctx, array_type, array_ref)?;
+    let data_ptr = ctx
+        .builder
+        .build_load(reference_type(ctx.ctx), data_ptr_ptr, "array_data_ptr")
+        .unwrap();
+    let BasicValueEnum::PointerValue(data_ptr) = data_ptr else {
+        return Err(LoweringError::UnsupportedOperand(
+            "array data pointer load".to_owned(),
+        ));
+    };
+    Ok(data_ptr)
+}
+
+fn array_element_ptr<'ctx>(
+    ctx: &mut LoweringContext<'ctx, '_>,
+    array_ref: PointerValue<'ctx>,
+    element_type: &FieldType,
+    index: IntValue<'ctx>,
+) -> Result<PointerValue<'ctx>, LoweringError> {
+    let data_ptr = array_data_ptr(ctx, array_ref, element_type)?;
+    let element_llvm_ptr_type = ctx.ctx.ptr_type(AddressSpace::default());
+    let typed_data_ptr = ctx
+        .builder
+        .build_pointer_cast(data_ptr, element_llvm_ptr_type, "typed_array_data_ptr")
+        .unwrap();
+    unsafe {
+        ctx.builder
+            .build_gep(
+                llvm_type_of(ctx.ctx, element_type),
+                typed_data_ptr,
+                &[index],
+                "array_element_ptr",
+            )
+            .map_err(|_| LoweringError::UnsupportedOperand("array element gep".to_owned()))
+    }
 }
 
 fn initialize_slot<'ctx>(
@@ -428,7 +578,7 @@ fn lower_closure_expression<'ctx>(
     name: &str,
     captures: &[Operand],
 ) -> Result<BasicValueEnum<'ctx>, LoweringError> {
-    let function_name = format!("mokapot_runtime_closure_{}", sanitize_symbol(name));
+    let function_name = helper_name(&["mokapot", "abi", "closure", "new", name]);
     let capture_values: Vec<BasicValueEnum<'ctx>> = captures
         .iter()
         .map(|capture| capture.lower(ctx, ProgramCounter::ZERO))
@@ -475,10 +625,141 @@ fn string_global_ptr<'ctx>(
     global.as_pointer_value().into()
 }
 
-fn choose_phi_identifier(ids: &std::collections::HashSet<Identifier>) -> Option<Identifier> {
+fn lower_string_constant<'ctx>(
+    ctx: &mut LoweringContext<'ctx, '_>,
+    bytes: &[u8],
+) -> Result<BasicValueEnum<'ctx>, LoweringError> {
+    let helper = runtime_function(
+        ctx,
+        &helper_name(&["mokapot", "abi", "const", "string"]),
+        reference_type(ctx.ctx).fn_type(
+            &[reference_type(ctx.ctx).into(), ctx.ctx.i32_type().into()],
+            false,
+        ),
+    );
+    let bytes_ptr = string_global_ptr(ctx, bytes);
+    let length = ctx.ctx.i32_type().const_int(bytes.len() as u64, false);
+    let call = ctx
+        .builder
+        .build_call(helper, &[bytes_ptr.into(), length.into()], "const_string")
+        .unwrap();
+    Ok(call.try_as_basic_value().unwrap_basic())
+}
+
+fn array_element_type_from_operand(
+    ctx: &LoweringContext<'_, '_>,
+    operand: &Operand,
+) -> Result<FieldType, LoweringError> {
+    let mut iter = operand
+        .iter()
+        .filter_map(|identifier| ctx.maybe_array_element_type(*identifier))
+        .cloned();
+    let Some(first) = iter.next() else {
+        return Err(LoweringError::UnsupportedOperand(format!(
+            "unknown array element type for {operand}"
+        )));
+    };
+    if iter.any(|element_type| element_type != first) {
+        return Err(LoweringError::UnsupportedOperand(format!(
+            "inconsistent array element types for {operand}"
+        )));
+    }
+    Ok(first)
+}
+
+fn record_array_result(
+    ctx: &mut LoweringContext<'_, '_>,
+    destination: Identifier,
+    expr: &Expression,
+) {
+    let element_type = match expr {
+        Expression::Array(ArrayOperation::New { element_type, .. }) => Some(element_type.clone()),
+        Expression::Field(FieldAccess::ReadStatic { field })
+        | Expression::Field(FieldAccess::ReadInstance { field, .. }) => match &field.field_type {
+            FieldType::Array(inner) => Some((**inner).clone()),
+            _ => None,
+        },
+        Expression::Call { method, .. } => match &method.descriptor.return_type {
+            ReturnType::Some(FieldType::Array(inner)) => Some((**inner).clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(element_type) = element_type {
+        ctx.record_array_element_type(destination, element_type);
+    }
+}
+
+fn lower_phi_operand<'ctx>(
+    ctx: &mut LoweringContext<'ctx, '_>,
+    ids: &std::collections::HashSet<Identifier>,
+    _pc: ProgramCounter,
+) -> Result<BasicValueEnum<'ctx>, LoweringError> {
     let mut ids: Vec<_> = ids.iter().copied().collect();
     ids.sort_by_key(|identifier| phi_sort_key(*identifier));
-    ids.into_iter().next()
+
+    let mut result_type = None;
+    let mut deferred = Vec::new();
+    let mut loaded = Vec::new();
+    for identifier in ids {
+        if let Some(value) = ctx.maybe_load_identifier(identifier) {
+            result_type.get_or_insert(value.get_type());
+            loaded.push((identifier, Some(value)));
+        } else {
+            deferred.push(identifier);
+            loaded.push((identifier, None));
+        }
+    }
+
+    let Some(result_type) = result_type else {
+        return Err(LoweringError::UnsupportedOperand("empty phi".to_owned()));
+    };
+
+    for identifier in deferred {
+        ctx.create_slot(identifier, result_type);
+    }
+
+    let values: Vec<_> = loaded
+        .into_iter()
+        .map(|(identifier, value)| {
+            value.unwrap_or_else(|| {
+                ctx.maybe_load_identifier(identifier)
+                    .expect("deferred phi input should have a typed slot")
+            })
+        })
+        .collect();
+
+    let first_value = values[0];
+    if values.len() == 1 {
+        return Ok(first_value);
+    }
+
+    if values.iter().any(|value| value.get_type() != result_type) {
+        return Err(LoweringError::UnsupportedOperand(
+            "phi with mixed types".to_owned(),
+        ));
+    }
+
+    let helper = runtime_function(
+        ctx,
+        &helper_name(&[
+            "mokapot",
+            "abi",
+            "phi",
+            &abi_type_name_from_basic_type(result_type),
+            &values.len().to_string(),
+        ]),
+        result_type.fn_type(
+            &values
+                .iter()
+                .map(|value| BasicMetadataTypeEnum::from(value.get_type()))
+                .collect::<Vec<_>>(),
+            false,
+        ),
+    );
+    let args: Vec<_> = values.into_iter().map(Into::into).collect();
+    let call = ctx.builder.build_call(helper, &args, "phi").unwrap();
+    Ok(call.try_as_basic_value().unwrap_basic())
 }
 
 fn phi_sort_key(identifier: Identifier) -> (u8, u16) {
@@ -652,6 +933,7 @@ impl IRLowering for MokaInstruction {
             } => {
                 let lowered = expr.lower(ctx, pc)?;
                 ctx.store_identifier((*destination).into(), lowered);
+                record_array_result(ctx, (*destination).into(), expr);
             }
             MokaInstruction::Jump { condition, target } => {
                 let target_bb = get_or_insert_basic_block_ordered(ctx, func_val, *target);
@@ -787,10 +1069,10 @@ impl IRLowering for ConstantValue {
             }
             ConstantValue::Double(v) => Ok(ctx.ctx.f64_type().const_float(*v).into()),
             ConstantValue::String(JavaString::Utf8(value)) => {
-                Ok(string_global_ptr(ctx, value.as_bytes()))
+                lower_string_constant(ctx, value.as_bytes())
             }
             ConstantValue::String(JavaString::InvalidUtf8(bytes)) => {
-                Ok(string_global_ptr(ctx, bytes))
+                lower_string_constant(ctx, bytes)
             }
             _ => Err(LoweringError::UnsupportedConstant(self.to_string())),
         }
@@ -843,9 +1125,7 @@ impl IRLowering for Operand {
     ) -> Result<Self::Output<'ctx>, LoweringError> {
         match self {
             Operand::Just(identifier) => identifier.lower(ctx, pc),
-            Operand::Phi(ids) => choose_phi_identifier(ids)
-                .ok_or(LoweringError::UnsupportedOperand(self.to_string()))?
-                .lower(ctx, pc),
+            Operand::Phi(ids) => lower_phi_operand(ctx, ids, pc),
         }
     }
 }
@@ -860,8 +1140,15 @@ impl IRLowering for FieldAccess {
     ) -> Result<Self::Output<'ctx>, LoweringError> {
         match self {
             FieldAccess::ReadStatic { field } => {
-                let function_name =
-                    format!("mokapot_runtime_get_static_{}", field_ref_symbol(field));
+                let function_name = helper_name(&[
+                    "mokapot",
+                    "abi",
+                    "field",
+                    "get",
+                    "static",
+                    &abi_type_name_from_field_type(&field.field_type),
+                    &field_ref_symbol(field),
+                ]);
                 let function = runtime_function(
                     ctx,
                     &function_name,
@@ -878,8 +1165,15 @@ impl IRLowering for FieldAccess {
             }
             FieldAccess::WriteStatic { field, value } => {
                 let value = value.lower(ctx, pc)?;
-                let function_name =
-                    format!("mokapot_runtime_put_static_{}", field_ref_symbol(field));
+                let function_name = helper_name(&[
+                    "mokapot",
+                    "abi",
+                    "field",
+                    "put",
+                    "static",
+                    &abi_type_name_from_field_type(&field.field_type),
+                    &field_ref_symbol(field),
+                ]);
                 let function = runtime_function(
                     ctx,
                     &function_name,
@@ -890,12 +1184,19 @@ impl IRLowering for FieldAccess {
                 ctx.builder
                     .build_call(function, &[value.into()], "")
                     .unwrap();
-                Ok(placeholder_void_value(ctx))
+                Ok(value)
             }
             FieldAccess::ReadInstance { object_ref, field } => {
                 let object_ref = object_ref.lower(ctx, pc)?;
-                let function_name =
-                    format!("mokapot_runtime_get_field_{}", field_ref_symbol(field));
+                let function_name = helper_name(&[
+                    "mokapot",
+                    "abi",
+                    "field",
+                    "get",
+                    "instance",
+                    &abi_type_name_from_field_type(&field.field_type),
+                    &field_ref_symbol(field),
+                ]);
                 let function = runtime_function(
                     ctx,
                     &function_name,
@@ -918,8 +1219,15 @@ impl IRLowering for FieldAccess {
             } => {
                 let object_ref = object_ref.lower(ctx, pc)?;
                 let value = value.lower(ctx, pc)?;
-                let function_name =
-                    format!("mokapot_runtime_put_field_{}", field_ref_symbol(field));
+                let function_name = helper_name(&[
+                    "mokapot",
+                    "abi",
+                    "field",
+                    "put",
+                    "instance",
+                    &abi_type_name_from_field_type(&field.field_type),
+                    &field_ref_symbol(field),
+                ]);
                 let function = runtime_function(
                     ctx,
                     &function_name,
@@ -931,7 +1239,7 @@ impl IRLowering for FieldAccess {
                 ctx.builder
                     .build_call(function, &[object_ref.into(), value.into()], "")
                     .unwrap();
-                Ok(placeholder_void_value(ctx))
+                Ok(value)
             }
         }
     }
@@ -953,89 +1261,74 @@ impl IRLowering for ArrayOperation {
                 let BasicValueEnum::IntValue(length) = length.lower(ctx, pc)? else {
                     return Err(LoweringError::UnsupportedOperand(self.to_string()));
                 };
-                let function_name = format!(
-                    "mokapot_runtime_new_array_{}",
-                    sanitize_symbol(&element_type.descriptor())
-                );
-                let function = runtime_function(
-                    ctx,
-                    &function_name,
-                    reference_type(ctx.ctx).fn_type(&[length.get_type().into()], false),
-                );
-                let call = ctx
+                let array_type = array_struct_type(ctx.ctx, element_type);
+                let array_ref = ctx.builder.build_malloc(array_type, "array_ref").unwrap();
+                let data_ptr = ctx
                     .builder
-                    .build_call(function, &[length.into()], "new_array")
+                    .build_array_malloc(llvm_type_of(ctx.ctx, element_type), length, "array_data")
                     .unwrap();
-                Ok(call.try_as_basic_value().unwrap_basic())
+                let length_ptr = array_length_ptr(ctx, array_type, array_ref)?;
+                ctx.builder.build_store(length_ptr, length).unwrap();
+                let data_ptr_ptr = array_data_ptr_ptr(ctx, array_type, array_ref)?;
+                ctx.builder.build_store(data_ptr_ptr, data_ptr).unwrap();
+                Ok(array_ref.into())
             }
             ArrayOperation::Read { array_ref, index } => {
-                let array_ref = array_ref.lower(ctx, pc)?;
+                let element_type = array_element_type_from_operand(ctx, array_ref)?;
+                let array_ref_value = array_ref.lower(ctx, pc)?;
+                let BasicValueEnum::PointerValue(array_ref) = array_ref_value else {
+                    return Err(LoweringError::UnsupportedOperand(self.to_string()));
+                };
                 let BasicValueEnum::IntValue(index) = index.lower(ctx, pc)? else {
                     return Err(LoweringError::UnsupportedOperand(self.to_string()));
                 };
-                let function = runtime_function(
-                    ctx,
-                    "mokapot_runtime_array_read_i32",
-                    ctx.ctx.i32_type().fn_type(
-                        &[reference_type(ctx.ctx).into(), index.get_type().into()],
-                        false,
-                    ),
-                );
-                let call = ctx
+                let element_ptr = array_element_ptr(ctx, array_ref, &element_type, index)?;
+                Ok(ctx
                     .builder
-                    .build_call(function, &[array_ref.into(), index.into()], "array_read")
-                    .unwrap();
-                Ok(call.try_as_basic_value().unwrap_basic())
+                    .build_load(
+                        llvm_type_of(ctx.ctx, &element_type),
+                        element_ptr,
+                        "array_read",
+                    )
+                    .unwrap())
             }
             ArrayOperation::Write {
                 array_ref,
                 index,
                 value,
             } => {
-                let array_ref = array_ref.lower(ctx, pc)?;
+                let element_type = array_element_type_from_operand(ctx, array_ref)?;
+                let array_ref_value = array_ref.lower(ctx, pc)?;
+                let BasicValueEnum::PointerValue(array_ref) = array_ref_value else {
+                    return Err(LoweringError::UnsupportedOperand(self.to_string()));
+                };
                 let BasicValueEnum::IntValue(index) = index.lower(ctx, pc)? else {
                     return Err(LoweringError::UnsupportedOperand(self.to_string()));
                 };
                 let value = value.lower(ctx, pc)?;
-                let function = runtime_function(
-                    ctx,
-                    "mokapot_runtime_array_write_i32",
-                    reference_type(ctx.ctx).fn_type(
-                        &[
-                            reference_type(ctx.ctx).into(),
-                            index.get_type().into(),
-                            value.get_type().into(),
-                        ],
-                        false,
-                    ),
-                );
-                let call = ctx
-                    .builder
-                    .build_call(
-                        function,
-                        &[array_ref.into(), index.into(), value.into()],
-                        "array_write",
-                    )
-                    .unwrap();
-                Ok(call
-                    .try_as_basic_value()
-                    .basic()
-                    .unwrap_or_else(|| array_ref))
+                if value.get_type() != llvm_type_of(ctx.ctx, &element_type) {
+                    return Err(LoweringError::UnsupportedOperand(format!(
+                        "array write type mismatch: expected {}, got {}",
+                        abi_type_name_from_field_type(&element_type),
+                        abi_type_name_from_basic_type(value.get_type())
+                    )));
+                }
+                let element_ptr = array_element_ptr(ctx, array_ref, &element_type, index)?;
+                ctx.builder.build_store(element_ptr, value).unwrap();
+                Ok(value)
             }
             ArrayOperation::Length { array_ref } => {
-                let array_ref = array_ref.lower(ctx, pc)?;
-                let function = runtime_function(
-                    ctx,
-                    "mokapot_runtime_array_length",
-                    ctx.ctx
-                        .i32_type()
-                        .fn_type(&[reference_type(ctx.ctx).into()], false),
-                );
-                let call = ctx
+                let element_type = array_element_type_from_operand(ctx, array_ref)?;
+                let array_ref_value = array_ref.lower(ctx, pc)?;
+                let BasicValueEnum::PointerValue(array_ref) = array_ref_value else {
+                    return Err(LoweringError::UnsupportedOperand(self.to_string()));
+                };
+                let array_type = array_struct_type(ctx.ctx, &element_type);
+                let length_ptr = array_length_ptr(ctx, array_type, array_ref)?;
+                Ok(ctx
                     .builder
-                    .build_call(function, &[array_ref.into()], "array_length")
-                    .unwrap();
-                Ok(call.try_as_basic_value().unwrap_basic())
+                    .build_load(ctx.ctx.i32_type(), length_ptr, "array_length")
+                    .unwrap())
             }
             ArrayOperation::NewMultiDim { .. } => {
                 Err(LoweringError::UnsupportedExpression(self.to_string()))
