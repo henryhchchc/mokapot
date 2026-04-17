@@ -36,13 +36,13 @@ jobs:
     name: Code Quality / rustfmt
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: rustfmt
       - name: Checkout source code
         uses: actions/checkout@v6
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          rust-toolchain: stable
+          rust-components: rustfmt
       - name: Check code formatting with rustfmt
         run: cargo fmt --all -- --check
 
@@ -53,44 +53,20 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: clippy
-      - name: Setup Checking Tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: clippy-sarif,sarif-fmt
-      - name: Setup JDK
-        uses: actions/setup-java@v5
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: corretto
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v5
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
+          rust-toolchain: stable
+          rust-components: clippy
+          cargo-tools: clippy-sarif,sarif-fmt
+          setup-java: "true"
+          java-version: ${{ env.JAVA_VERSION }}
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
+          cache-rust-build: "true"
+          cache-key-suffix: ${{ github.job }}
       - name: Run clippy
         run: |
           set +e
@@ -137,38 +113,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rustfmt, clippy]
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Setup cargo-hack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v5
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
+          rust-toolchain: stable
+          cargo-tools: cargo-hack
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
+          cache-rust-build: "true"
+          cache-key-suffix: ${{ github.job }}
       - name: Test all feature combinations
         env:
           RUSTFLAGS: -D unused -D unfulfilled_lint_expectations
@@ -185,39 +140,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rustfmt, clippy]
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: llvm-tools-preview
-      - name: Setup Build Tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v5
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
+          rust-toolchain: stable
+          rust-components: llvm-tools-preview
+          cargo-tools: cargo-llvm-cov,cargo-nextest
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
+          cache-rust-build: "true"
+          cache-key-suffix: ${{ github.job }}
       - name: Test
         run: |
           cargo llvm-cov clean --workspace
@@ -239,29 +173,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rustfmt, clippy]
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: llvm-tools-preview
-      - name: Setup Build Tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov,cargo-nextest
-      - name: Setup JDK
-        uses: actions/setup-java@v5
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: corretto
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          rust-toolchain: stable
+          rust-components: llvm-tools-preview
+          cargo-tools: cargo-llvm-cov,cargo-nextest
+          setup-java: "true"
+          java-version: ${{ env.JAVA_VERSION }}
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
+          cache-rust-build: "true"
+          cache-key-suffix: ${{ github.job }}
       - name: Hash JDK modules
         id: hash-jdk-modules
         run: |
@@ -277,21 +202,6 @@ jobs:
       - name: Extract JDK classes
         if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
         run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
-      - name: Cache Rust Build Stuff
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ github.job }}-
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         env:
           INTEGRATION_TEST: TRUE
@@ -352,19 +262,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit_test]
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          rust-toolchain: nightly
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
       - name: Build docs
         env:
           RUSTDOCFLAGS: --cfg docsrs
@@ -414,19 +319,14 @@ jobs:
       matrix:
         crate: ["mokapot"]
     steps:
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
       - name: Checkout source code
         uses: actions/checkout@v6
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh "${{ env.LLVM_VERSION }}"
-          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> "$GITHUB_PATH"
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ env.LLVM_VERSION }}" >> "$GITHUB_ENV"
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          rust-toolchain: stable
+          setup-llvm: "true"
+          llvm-version: ${{ env.LLVM_VERSION }}
       - name: Authenticate crates.io
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
