@@ -93,13 +93,23 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Run clippy
         run: |
-          set -o pipefail
+          set +e
           cargo clippy \
             --all-features --all-targets \
             --message-format=json \
             -- -D warnings 2>&1 | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
-          echo "CLIPPY_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
-        continue-on-error: true
+          clippy_exit_code=${PIPESTATUS[0]}
+          clippy_sarif_exit_code=${PIPESTATUS[1]}
+          tee_exit_code=${PIPESTATUS[2]}
+          sarif_fmt_exit_code=${PIPESTATUS[3]}
+          set -e
+
+          echo "CLIPPY_EXIT_CODE=${clippy_exit_code}" >> "$GITHUB_ENV"
+
+          if [ "$clippy_sarif_exit_code" -ne 0 ] || [ "$tee_exit_code" -ne 0 ] || [ "$sarif_fmt_exit_code" -ne 0 ]; then
+            echo "Failed to generate or format clippy SARIF output"
+            exit 1
+          fi
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@v4
         if: always()
