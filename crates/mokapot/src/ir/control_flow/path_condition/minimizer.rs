@@ -8,6 +8,7 @@ use super::{BooleanVariable, cube::Cube};
 
 /// A reduction strategy for boolean covers.
 pub(super) trait Minimizer<P> {
+    /// Returns an equivalent set of cubes with redundant terms removed.
     fn minimize(&self, cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
     where
         P: Hash + Eq + Clone;
@@ -28,6 +29,8 @@ impl<P> Minimizer<P> for ExactMinimizer {
         }
 
         let atoms = AtomTable::from_cubes(&cubes);
+        // Expand the current cover into explicit on-set minterms before running
+        // a two-level exact minimization pass.
         let mut on_set = cubes
             .iter()
             .flat_map(|cube| IndexedCube::from_cube(cube, &atoms).expand_minterms())
@@ -76,15 +79,12 @@ where
     P: Hash + Eq + Clone,
 {
     fn from_cubes(cubes: &HashSet<Cube<P>>) -> Self {
-        let mut atoms = Vec::new();
+        let mut atom_set = HashSet::new();
         for cube in cubes {
-            for predicate in cube.predicates() {
-                if !atoms.contains(predicate) {
-                    atoms.push(predicate.clone());
-                }
-            }
+            atom_set.extend(cube.predicates().cloned());
         }
 
+        let mut atoms = atom_set.into_iter().collect::<Vec<_>>();
         atoms.sort_by_cached_key(predicate_key::<P>);
         let indices = atoms
             .iter()

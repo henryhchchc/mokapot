@@ -150,7 +150,7 @@ impl<P> Cover<P> {
             return false;
         }
 
-        let Some(predicate) = relevant
+        let Some(split_predicate) = relevant
             .iter()
             .flat_map(|existing| existing.predicates())
             .find(|predicate| !cube.contains_predicate(predicate))
@@ -159,16 +159,18 @@ impl<P> Cover<P> {
             return false;
         };
 
-        let positive = cube
+        // A cover contains `cube` only if it contains both refinements of an
+        // unconstrained predicate.
+        let positive_branch = cube
             .clone()
-            .conjoin_literal(BooleanVariable::Positive(predicate.clone()));
-        let negative = cube
+            .conjoin_literal(BooleanVariable::Positive(split_predicate.clone()));
+        let negative_branch = cube
             .clone()
-            .conjoin_literal(BooleanVariable::Negative(predicate));
+            .conjoin_literal(BooleanVariable::Negative(split_predicate));
 
-        match (positive, negative) {
-            (Some(positive), Some(negative)) => {
-                self.covers_cube(&positive) && self.covers_cube(&negative)
+        match (positive_branch, negative_branch) {
+            (Some(positive_branch), Some(negative_branch)) => {
+                self.covers_cube(&positive_branch) && self.covers_cube(&negative_branch)
             }
             _ => false,
         }
@@ -214,10 +216,11 @@ impl<P> Cover<P> {
     }
 }
 
-/// Path condition in disjunctive normal form.
+/// A reduced path condition in disjunctive normal form.
 ///
-/// Represents a boolean formula as a disjunction of conjunctions (OR of ANDs).
-/// An empty set of minterms represents a contradiction (false).
+/// `PathCondition` stores a boolean formula as a disjunction of cubes. The
+/// internal cover is minimized after conjunctions and disjunctions so equivalent
+/// conditions stay compact and compare semantically.
 #[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     cover: Cover<P>,
@@ -262,7 +265,7 @@ where
 }
 
 impl<P> PathCondition<P> {
-    /// Creates a true value (tautology).
+    /// Creates the tautological condition `⊤`.
     #[must_use]
     pub fn one() -> Self
     where
@@ -273,7 +276,7 @@ impl<P> PathCondition<P> {
         }
     }
 
-    /// Creates a false value (contradiction).
+    /// Creates the contradictory condition `⊥`.
     #[must_use]
     pub fn zero() -> Self {
         Self {
@@ -281,7 +284,7 @@ impl<P> PathCondition<P> {
         }
     }
 
-    /// Creates a path condition from a single predicate.
+    /// Creates a path condition from a single literal.
     #[must_use]
     pub fn of(predicate: BooleanVariable<P>) -> Self
     where
@@ -292,7 +295,7 @@ impl<P> PathCondition<P> {
         }
     }
 
-    /// Returns a set of variable IDs used in the path condition.
+    /// Returns the predicates referenced by this condition.
     #[must_use]
     pub fn predicates(&self) -> HashSet<&P>
     where
@@ -301,7 +304,8 @@ impl<P> PathCondition<P> {
         self.cover.predicates().collect()
     }
 
-    /// Creates a reference to the path condition.
+    /// Borrows the predicates while preserving the boolean structure.
+    #[must_use]
     pub(super) fn as_ref(&self) -> PathCondition<&P>
     where
         P: Hash + Eq,
@@ -311,7 +315,7 @@ impl<P> PathCondition<P> {
         }
     }
 
-    /// Returns true if this path condition is a contradiction (false).
+    /// Returns whether this condition is `⊥`.
     #[must_use]
     pub fn is_contradiction(&self) -> bool {
         self.cover.is_contradiction()
@@ -383,7 +387,7 @@ where
             let cubes = self
                 .cover
                 .cubes()
-                .map(|cube| cube.to_string())
+                .map(ToString::to_string)
                 .sorted()
                 .collect::<Vec<_>>();
             write!(f, "{}", cubes.iter().format(" || "))

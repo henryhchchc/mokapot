@@ -12,7 +12,8 @@ pub enum BooleanVariable<P> {
 }
 
 impl<P> BooleanVariable<P> {
-    /// Returns a reference to the inner predicate of the variable.
+    /// Returns the underlying predicate, ignoring polarity.
+    #[must_use]
     pub const fn predicate(&self) -> &P {
         match self {
             Self::Negative(predicate) | Self::Positive(predicate) => predicate,

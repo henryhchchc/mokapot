@@ -1,7 +1,9 @@
-//! Path constraint analysis.
+//! Path condition analysis.
 //!
-//! This module implements path condition analysis using disjunctive normal form (DNF).
-//! A path condition represents a boolean formula that must be satisfied for a path to be taken.
+//! Path conditions are represented as reduced disjunctive normal form (DNF): a
+//! disjunction of cubes, where each cube is a conjunction of literals. This
+//! keeps transfer functions simple while still allowing exact two-level
+//! minimization after each refinement or join.
 
 mod analyzer;
 mod cover;

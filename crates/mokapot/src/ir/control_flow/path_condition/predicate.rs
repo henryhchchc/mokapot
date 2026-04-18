@@ -6,6 +6,7 @@ use crate::{
 use super::BooleanVariable;
 
 impl<T> BooleanVariable<Condition<T>> {
+    /// Rewrites equivalent conditions into a single literal vocabulary.
     fn canonicalize(self) -> Self {
         match self {
             Self::Positive(condition) => canonicalize_condition(condition),
@@ -14,6 +15,7 @@ impl<T> BooleanVariable<Condition<T>> {
     }
 }
 
+/// Rewrites branch conditions into canonical positive/negative literals.
 fn canonicalize_condition<T>(condition: Condition<T>) -> BooleanVariable<Condition<T>> {
     use BooleanVariable::{Negative, Positive};
     use Condition::{
@@ -67,12 +69,12 @@ where
     }
 }
 
-/// A value.
+/// An operand or constant referenced by a path predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
 pub enum Value {
-    /// A variable.
+    /// A value produced by the IR.
     Variable(Operand),
-    /// A constant value.
+    /// A JVM constant embedded in the condition.
     Constant(ConstantValue),
 }
 
