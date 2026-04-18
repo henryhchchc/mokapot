@@ -4,7 +4,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use super::{BooleanVariable, cube::Cube};
+use super::{BooleanVariable, PathConditionBudget, cube::Cube};
 
 /// A reduction strategy for boolean covers.
 pub(super) trait Minimizer<P> {
@@ -14,11 +14,21 @@ pub(super) trait Minimizer<P> {
         P: Hash + Eq + Clone;
 }
 
-/// An exact two-level boolean minimizer.
-#[derive(Debug, Clone, Copy, Default)]
-pub(super) struct ExactMinimizer;
+/// A bounded boolean minimizer for path-condition covers.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct BoundedMinimizer {
+    budget: PathConditionBudget,
+}
 
-impl<P> Minimizer<P> for ExactMinimizer {
+impl BoundedMinimizer {
+    /// Creates a new minimizer with the given resource budget.
+    #[must_use]
+    pub const fn new(budget: PathConditionBudget) -> Self {
+        Self { budget }
+    }
+}
+
+impl<P> Minimizer<P> for BoundedMinimizer {
     fn minimize(&self, cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
     where
         P: Hash + Eq + Clone,
@@ -29,24 +39,221 @@ impl<P> Minimizer<P> for ExactMinimizer {
         }
 
         let atoms = AtomTable::from_cubes(&cubes);
-        // Expand the current cover into explicit on-set minterms before running
-        // a two-level exact minimization pass.
-        let mut on_set = cubes
-            .iter()
-            .flat_map(|cube| IndexedCube::from_cube(cube, &atoms).expand_minterms())
-            .collect::<Vec<_>>();
-        on_set.sort_by_cached_key(IndexedCube::sort_key);
-        on_set.dedup();
-        let prime_implicants = prime_implicants(on_set.clone());
-        let selected = minimum_cover(&prime_implicants, &on_set);
+        let on_set_upper_bound = exact_on_set_upper_bound(&cubes, atoms.atoms.len());
 
-        absorb(
-            selected
-                .into_iter()
-                .map(|index| prime_implicants[index].to_cube(&atoms))
-                .collect(),
-        )
+        match on_set_upper_bound {
+            Some(upper_bound) if upper_bound <= self.budget.max_exact_on_set_size => {
+                exact_minimize(&cubes, &atoms)
+            }
+            _ => heuristic_minimize(&cubes, &atoms, self.budget),
+        }
     }
+}
+
+fn exact_minimize<P>(cubes: &HashSet<Cube<P>>, atoms: &AtomTable<P>) -> HashSet<Cube<P>>
+where
+    P: Hash + Eq + Clone,
+{
+    let mut on_set = cubes
+        .iter()
+        .flat_map(|cube| IndexedCube::from_cube(cube, atoms).expand_minterms())
+        .collect::<Vec<_>>();
+    on_set.sort_by_cached_key(IndexedCube::sort_key);
+    on_set.dedup();
+    let prime_implicants = prime_implicants(on_set.clone());
+    let selected = minimum_cover(&prime_implicants, &on_set);
+
+    absorb(
+        selected
+            .into_iter()
+            .map(|index| prime_implicants[index].to_cube(atoms))
+            .collect(),
+    )
+}
+
+fn heuristic_minimize<P>(
+    cubes: &HashSet<Cube<P>>,
+    atoms: &AtomTable<P>,
+    budget: PathConditionBudget,
+) -> HashSet<Cube<P>>
+where
+    P: Hash + Eq + Clone,
+{
+    let mut current = absorb_indexed(
+        cubes
+            .iter()
+            .map(|cube| IndexedCube::from_cube(cube, atoms))
+            .collect(),
+    );
+    if current.len() <= 1 {
+        return current
+            .into_iter()
+            .map(|cube| cube.to_cube(atoms))
+            .collect::<HashSet<_>>();
+    }
+
+    let mut current_cost = indexed_cover_cost(&current);
+    let mut stats = HeuristicStats::default();
+
+    for _round in 0..budget.max_heuristic_rounds {
+        let expanded = heuristic_expand(&current, budget, &mut stats);
+        let candidate = heuristic_irredundant(expanded, budget, &mut stats);
+        let candidate_cost = indexed_cover_cost(&candidate);
+
+        if candidate_cost < current_cost {
+            current = candidate;
+            current_cost = candidate_cost;
+        } else {
+            break;
+        }
+
+        if stats.cover_checks >= budget.max_cover_checks {
+            break;
+        }
+    }
+
+    absorb(
+        current
+            .into_iter()
+            .map(|cube| cube.to_cube(atoms))
+            .collect(),
+    )
+}
+
+fn heuristic_expand(
+    cover: &[IndexedCube],
+    budget: PathConditionBudget,
+    stats: &mut HeuristicStats,
+) -> Vec<IndexedCube> {
+    let reference = absorb_indexed(cover.to_vec());
+    let mut memo = HashMap::new();
+    let mut expanded = Vec::with_capacity(reference.len());
+
+    for (cube_index, cube) in reference.iter().enumerate() {
+        let mut candidate = cube.clone();
+        let specified_indices = candidate.specified_indices().collect::<Vec<_>>();
+
+        for index in specified_indices {
+            let generalized = candidate.generalize(index);
+            let Some(is_covered) =
+                indexed_cover_covers_cube(&reference, &generalized, &mut memo, budget, stats)
+            else {
+                expanded.push(candidate);
+                expanded.extend(reference.iter().skip(cube_index + 1).cloned());
+                return absorb_indexed(expanded);
+            };
+
+            if is_covered {
+                candidate = generalized;
+            }
+        }
+
+        expanded.push(candidate);
+        if stats.cover_checks >= budget.max_cover_checks {
+            expanded.extend(reference.iter().skip(cube_index + 1).cloned());
+            break;
+        }
+    }
+
+    absorb_indexed(expanded)
+}
+
+fn heuristic_irredundant(
+    cover: Vec<IndexedCube>,
+    budget: PathConditionBudget,
+    stats: &mut HeuristicStats,
+) -> Vec<IndexedCube> {
+    let cover = absorb_indexed(cover);
+    let mut irredundant = Vec::with_capacity(cover.len());
+
+    for (cube_index, cube) in cover.iter().enumerate() {
+        let rest = cover
+            .iter()
+            .enumerate()
+            .filter(|(other_index, _)| *other_index != cube_index)
+            .map(|(_, other)| other.clone())
+            .collect::<Vec<_>>();
+        let mut memo = HashMap::new();
+
+        let Some(is_covered) = indexed_cover_covers_cube(&rest, cube, &mut memo, budget, stats)
+        else {
+            irredundant.extend(cover.iter().skip(cube_index).cloned());
+            return absorb_indexed(irredundant);
+        };
+
+        if !is_covered {
+            irredundant.push(cube.clone());
+        }
+
+        if stats.cover_checks >= budget.max_cover_checks {
+            irredundant.extend(cover.iter().skip(cube_index + 1).cloned());
+            break;
+        }
+    }
+
+    absorb_indexed(irredundant)
+}
+
+fn indexed_cover_covers_cube(
+    cover: &[IndexedCube],
+    cube: &IndexedCube,
+    memo: &mut HashMap<IndexedCube, bool>,
+    budget: PathConditionBudget,
+    stats: &mut HeuristicStats,
+) -> Option<bool> {
+    if let Some(result) = memo.get(cube) {
+        return Some(*result);
+    }
+    if !stats.try_take_cover_check(budget) {
+        return None;
+    }
+
+    let result = if cover.iter().any(|existing| existing.subsumes(cube)) {
+        true
+    } else {
+        let split_index = cover
+            .iter()
+            .filter(|existing| !existing.conflicts_with(cube))
+            .flat_map(IndexedCube::specified_indices)
+            .find(|index| cube.literals[*index] == LiteralState::DontCare);
+        let Some(split_index) = split_index else {
+            return Some(false);
+        };
+
+        let positive = indexed_cover_covers_cube(
+            cover,
+            &cube.with_literal(split_index, LiteralState::Positive),
+            memo,
+            budget,
+            stats,
+        )?;
+        let negative = indexed_cover_covers_cube(
+            cover,
+            &cube.with_literal(split_index, LiteralState::Negative),
+            memo,
+            budget,
+            stats,
+        )?;
+        positive && negative
+    };
+
+    memo.insert(cube.clone(), result);
+    Some(result)
+}
+
+fn exact_on_set_upper_bound<P>(cubes: &HashSet<Cube<P>>, atom_count: usize) -> Option<usize>
+where
+    P: Hash + Eq,
+{
+    cubes.iter().try_fold(0usize, |upper_bound, cube| {
+        let dont_care_count = atom_count.saturating_sub(cube.predicates().count());
+        if dont_care_count >= usize::BITS as usize {
+            return None;
+        }
+
+        let cube_expansion = 1usize << dont_care_count;
+        upper_bound.checked_add(cube_expansion)
+    })
 }
 
 fn absorb<P>(cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
@@ -176,6 +383,16 @@ impl IndexedCube {
             .all(|(lhs, rhs)| *lhs == LiteralState::DontCare || lhs == rhs)
     }
 
+    fn conflicts_with(&self, other: &Self) -> bool {
+        self.literals.iter().zip(&other.literals).any(|(lhs, rhs)| {
+            matches!(
+                (lhs, rhs),
+                (LiteralState::Positive, LiteralState::Negative)
+                    | (LiteralState::Negative, LiteralState::Positive)
+            )
+        })
+    }
+
     fn literal_count(&self) -> usize {
         self.literals
             .iter()
@@ -185,6 +402,23 @@ impl IndexedCube {
 
     fn sort_key(&self) -> (usize, Vec<LiteralState>) {
         (self.literal_count(), self.literals.clone())
+    }
+
+    fn specified_indices(&self) -> impl Iterator<Item = usize> + '_ {
+        self.literals
+            .iter()
+            .enumerate()
+            .filter_map(|(index, literal)| (*literal != LiteralState::DontCare).then_some(index))
+    }
+
+    fn generalize(&self, index: usize) -> Self {
+        self.with_literal(index, LiteralState::DontCare)
+    }
+
+    fn with_literal(&self, index: usize, literal: LiteralState) -> Self {
+        let mut literals = self.literals.clone();
+        literals[index] = literal;
+        Self { literals }
     }
 
     fn expand_minterms(self) -> Vec<Self> {
@@ -214,6 +448,22 @@ impl IndexedCube {
                     .collect(),
             },
         )
+    }
+}
+
+#[derive(Debug, Default)]
+struct HeuristicStats {
+    cover_checks: usize,
+}
+
+impl HeuristicStats {
+    const fn try_take_cover_check(&mut self, budget: PathConditionBudget) -> bool {
+        if self.cover_checks >= budget.max_cover_checks {
+            false
+        } else {
+            self.cover_checks += 1;
+            true
+        }
     }
 }
 
@@ -369,6 +619,14 @@ fn cover_cost(
     )
 }
 
+fn indexed_cover_cost(cubes: &[IndexedCube]) -> (usize, usize, Vec<Vec<LiteralState>>) {
+    (
+        cubes.len(),
+        cubes.iter().map(IndexedCube::literal_count).sum(),
+        cubes.iter().map(|cube| cube.literals.clone()).collect(),
+    )
+}
+
 fn predicate_key<P>(predicate: &P) -> (u64, u64)
 where
     P: Hash,
@@ -409,7 +667,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exact_minimizer_reduces_complementary_terms() {
+    fn bounded_minimizer_reduces_complementary_terms_exactly() {
         let cubes = HashSet::from([
             Cube::of(BooleanVariable::Positive(1_u8))
                 .conjoin_literal(BooleanVariable::Positive(2_u8))
@@ -419,10 +677,42 @@ mod tests {
                 .unwrap(),
         ]);
 
-        let reduced = ExactMinimizer.minimize(cubes);
+        let reduced = BoundedMinimizer::new(PathConditionBudget::default()).minimize(cubes);
         assert_eq!(
             reduced,
             HashSet::from([Cube::of(BooleanVariable::Positive(1_u8))])
         );
+    }
+
+    #[test]
+    fn bounded_minimizer_reduces_complementary_terms_heuristically() {
+        let cubes = HashSet::from([
+            Cube::of(BooleanVariable::Positive(1_u8))
+                .conjoin_literal(BooleanVariable::Positive(2_u8))
+                .unwrap(),
+            Cube::of(BooleanVariable::Positive(1_u8))
+                .conjoin_literal(BooleanVariable::Negative(2_u8))
+                .unwrap(),
+        ]);
+
+        let reduced = BoundedMinimizer::new(PathConditionBudget {
+            max_exact_on_set_size: 0,
+            max_heuristic_rounds: 2,
+            max_cover_checks: 128,
+        })
+        .minimize(cubes);
+        assert_eq!(
+            reduced,
+            HashSet::from([Cube::of(BooleanVariable::Positive(1_u8))])
+        );
+    }
+
+    #[test]
+    fn exact_on_set_upper_bound_detects_large_expansions() {
+        let cubes = (0_u8..10)
+            .map(|predicate| Cube::of(BooleanVariable::Positive(predicate)))
+            .collect::<HashSet<_>>();
+
+        assert_eq!(exact_on_set_upper_bound(&cubes, 10), Some(10 * (1 << 9)));
     }
 }
