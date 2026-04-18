@@ -10,7 +10,8 @@ use itertools::Itertools;
 use super::{
     BooleanVariable, BranchGuard,
     cube::Cube,
-    minimizer::{ExactMinimizer, Minimizer},
+    current_budget,
+    minimizer::{BoundedMinimizer, Minimizer},
 };
 use crate::{analysis::fixed_point::JoinSemiLattice, intrinsics::HashUnordered};
 
@@ -78,7 +79,7 @@ impl<P> Cover<P> {
         P: Hash + Eq + Clone,
     {
         Self {
-            cubes: ExactMinimizer.minimize(self.cubes),
+            cubes: BoundedMinimizer::new(current_budget()).minimize(self.cubes),
         }
     }
 

@@ -4,6 +4,8 @@ pub mod path_condition;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+pub use self::path_condition::PathConditionBudget;
+
 use self::path_condition::{BranchGuard, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
@@ -141,9 +143,20 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// The memory consumption is exponential in the number of unique predicates in this control flow graph.
     #[must_use]
     pub fn path_conditions(&self) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-        let mut analyzer = path_condition::Analyzer::new(self);
-        let Ok(path_conditions) = solve(&mut analyzer);
-        path_conditions
+        self.path_conditions_with_budget(PathConditionBudget::default())
+    }
+
+    /// Analyzes the control flow graph with a custom minimization budget.
+    #[must_use]
+    pub fn path_conditions_with_budget(
+        &self,
+        budget: PathConditionBudget,
+    ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
+        path_condition::with_budget(budget, || {
+            let mut analyzer = path_condition::Analyzer::new(self);
+            let Ok(path_conditions) = solve(&mut analyzer);
+            path_conditions
+        })
     }
 }
 
@@ -232,5 +245,23 @@ mod tests {
         assert!(path_conditions.contains_key(&1.into()));
         assert!(path_conditions.contains_key(&3.into()));
         assert!(!path_conditions.contains_key(&2.into()));
+    }
+
+    #[test]
+    fn path_conditions_budgeted_entry_point_matches_default() {
+        let operand = Operand::from(Identifier::Arg(0));
+        let condition = Condition::IsZero(operand.into());
+        let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
+        let negative = BranchGuard::of(BooleanVariable::Negative(condition));
+        let cfg = ControlFlowGraph::from_edges([
+            (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
+            (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
+            (1.into(), 3.into(), ControlTransfer::Unconditional),
+        ]);
+
+        assert_eq!(
+            cfg.path_conditions(),
+            cfg.path_conditions_with_budget(PathConditionBudget::default())
+        );
     }
 }

@@ -2,11 +2,12 @@
 //!
 //! Path conditions are represented as reduced disjunctive normal form (DNF): a
 //! disjunction of cubes, where each cube is a conjunction of literals. This
-//! keeps transfer functions simple while still allowing exact two-level
+//! keeps transfer functions simple while still allowing bounded two-level
 //! minimization after each refinement or join.
 
 mod analyzer;
 mod branch_guard;
+mod budget;
 mod cover;
 mod cube;
 mod literal;
@@ -15,9 +16,18 @@ mod predicate;
 
 pub use analyzer::Analyzer;
 pub use branch_guard::BranchGuard;
+pub use budget::PathConditionBudget;
 pub use cover::PathCondition;
 pub use literal::BooleanVariable;
 pub use predicate::Value;
+
+pub(super) fn current_budget() -> PathConditionBudget {
+    budget::current_budget()
+}
+
+pub(super) fn with_budget<R>(budget: PathConditionBudget, f: impl FnOnce() -> R) -> R {
+    budget::with_budget(budget, f)
+}
 
 #[cfg(test)]
 mod tests {
