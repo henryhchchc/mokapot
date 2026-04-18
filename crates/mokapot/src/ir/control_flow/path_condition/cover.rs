@@ -12,12 +12,9 @@ use super::MinTerm;
 use super::{
     BooleanVariable,
     cube::Cube,
-    minimizer::{AbsorptionMinimizer, Minimizer},
+    minimizer::{ExactMinimizer, Minimizer},
 };
-use crate::{
-    analysis::fixed_point::JoinSemiLattice,
-    intrinsics::{HashUnordered, hashset_partial_order},
-};
+use crate::{analysis::fixed_point::JoinSemiLattice, intrinsics::HashUnordered};
 
 #[derive(Debug, Clone, Default)]
 struct Cover<P> {
@@ -46,10 +43,19 @@ where
 
 impl<P> PartialOrd for Cover<P>
 where
-    P: Hash + Eq,
+    P: Hash + Eq + Clone,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        hashset_partial_order(&self.cubes, &other.cubes)
+        if self.cubes == other.cubes {
+            return Some(std::cmp::Ordering::Equal);
+        }
+
+        match (self.implies(other), other.implies(self)) {
+            (true, true) => Some(std::cmp::Ordering::Equal),
+            (true, false) => Some(std::cmp::Ordering::Less),
+            (false, true) => Some(std::cmp::Ordering::Greater),
+            (false, false) => None,
+        }
     }
 }
 
@@ -69,6 +75,15 @@ impl<P> Cover<P> {
         }
     }
 
+    fn reduce(self) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        Self {
+            cubes: ExactMinimizer.minimize(self.cubes),
+        }
+    }
+
     fn of_literal(literal: BooleanVariable<P>) -> Self
     where
         P: Hash + Eq,
@@ -83,14 +98,11 @@ impl<P> Cover<P> {
     where
         P: Hash + Eq + Clone,
     {
-        let mut cover = Self::zero();
-        let minimizer = AbsorptionMinimizer;
-        for minterm in minterms {
-            if let Some(cube) = Cube::try_from_minterm(&minterm).map(|cube| cube.cloned()) {
-                minimizer.insert_cube(&mut cover.cubes, cube);
-            }
-        }
-        cover
+        let cubes = minterms
+            .into_iter()
+            .filter_map(|minterm| Cube::try_from_minterm(&minterm).map(Cube::cloned))
+            .collect();
+        Self { cubes }.reduce()
     }
 
     fn as_ref(&self) -> Cover<&P>
@@ -114,32 +126,75 @@ impl<P> Cover<P> {
         self.cubes.is_empty()
     }
 
-    fn disjoin(mut self, rhs: Self) -> Self
-    where
-        P: Hash + Eq,
-    {
-        let minimizer = AbsorptionMinimizer;
-        for cube in rhs.cubes {
-            minimizer.insert_cube(&mut self.cubes, cube);
-        }
-        self
-    }
-
-    fn conjoin_literal(self, literal: BooleanVariable<P>) -> Self
+    fn implies(&self, other: &Self) -> bool
     where
         P: Hash + Eq + Clone,
     {
-        let minimizer = AbsorptionMinimizer;
-        let mut cubes = HashSet::new();
-        for cube in self.cubes {
-            if let Some(cube) = cube.conjoin_literal(literal.clone()) {
-                minimizer.insert_cube(&mut cubes, cube);
-            }
-        }
-        Self { cubes }
+        self.cubes.iter().all(|cube| other.covers_cube(cube))
     }
 
-    fn conjoin(self, rhs: Self) -> Self
+    fn covers_cube(&self, cube: &Cube<P>) -> bool
+    where
+        P: Hash + Eq + Clone,
+    {
+        if self.cubes.iter().any(|existing| existing.subsumes(cube)) {
+            return true;
+        }
+
+        let relevant = self
+            .cubes
+            .iter()
+            .filter(|existing| !existing.conflicts_with(cube))
+            .collect::<Vec<_>>();
+        if relevant.is_empty() {
+            return false;
+        }
+
+        let Some(predicate) = relevant
+            .iter()
+            .flat_map(|existing| existing.predicates())
+            .find(|predicate| !cube.contains_predicate(predicate))
+            .cloned()
+        else {
+            return false;
+        };
+
+        let positive = cube
+            .clone()
+            .conjoin_literal(BooleanVariable::Positive(predicate.clone()));
+        let negative = cube
+            .clone()
+            .conjoin_literal(BooleanVariable::Negative(predicate));
+
+        match (positive, negative) {
+            (Some(positive), Some(negative)) => {
+                self.covers_cube(&positive) && self.covers_cube(&negative)
+            }
+            _ => false,
+        }
+    }
+
+    fn disjoin(mut self, rhs: Self) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        self.cubes.extend(rhs.cubes);
+        self.reduce()
+    }
+
+    fn conjoin_literal(self, literal: &BooleanVariable<P>) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        let cubes = self
+            .cubes
+            .into_iter()
+            .filter_map(|cube| cube.conjoin_literal(literal.clone()))
+            .collect();
+        Self { cubes }.reduce()
+    }
+
+    fn conjoin(self, rhs: &Self) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -147,16 +202,15 @@ impl<P> Cover<P> {
             return Self::zero();
         }
 
-        let minimizer = AbsorptionMinimizer;
         let mut cubes = HashSet::new();
         for lhs_cube in &self.cubes {
             for rhs_cube in &rhs.cubes {
                 if let Some(cube) = lhs_cube.conjoin(rhs_cube) {
-                    minimizer.insert_cube(&mut cubes, cube);
+                    cubes.insert(cube);
                 }
             }
         }
-        Self { cubes }
+        Self { cubes }.reduce()
     }
 }
 
@@ -191,7 +245,7 @@ where
 
 impl<P> PartialOrd for PathCondition<P>
 where
-    P: Hash + Eq,
+    P: Hash + Eq + Clone,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.cover.partial_cmp(&other.cover)
@@ -200,7 +254,7 @@ where
 
 impl<P> JoinSemiLattice for PathCondition<P>
 where
-    P: Hash + Eq,
+    P: Hash + Eq + Clone,
 {
     fn join(self, other: Self) -> Self {
         self | other
@@ -239,6 +293,7 @@ impl<P> PathCondition<P> {
     }
 
     /// Returns a set of variable IDs used in the path condition.
+    #[must_use]
     pub fn predicates(&self) -> HashSet<&P>
     where
         P: Hash + Eq,
@@ -280,7 +335,7 @@ impl<P> PathCondition<P> {
 
 impl<P> BitOr for PathCondition<P>
 where
-    P: Hash + Eq,
+    P: Hash + Eq + Clone,
 {
     type Output = Self;
 
@@ -299,7 +354,7 @@ where
 
     fn bitand(self, rhs: BooleanVariable<P>) -> Self::Output {
         Self {
-            cover: self.cover.conjoin_literal(rhs),
+            cover: self.cover.conjoin_literal(&rhs),
         }
     }
 }
@@ -312,7 +367,7 @@ where
 
     fn bitand(self, rhs: Self) -> Self::Output {
         Self {
-            cover: self.cover.conjoin(rhs.cover),
+            cover: self.cover.conjoin(&rhs.cover),
         }
     }
 }
@@ -325,7 +380,13 @@ where
         if self.is_contradiction() {
             write!(f, "⊥")
         } else {
-            write!(f, "{}", self.cover.cubes().format(" || "))
+            let cubes = self
+                .cover
+                .cubes()
+                .map(|cube| cube.to_string())
+                .sorted()
+                .collect::<Vec<_>>();
+            write!(f, "{}", cubes.iter().format(" || "))
         }
     }
 }

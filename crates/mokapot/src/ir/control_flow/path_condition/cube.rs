@@ -114,6 +114,14 @@ impl<P> Cube<P> {
         self.positive.iter().chain(self.negative.iter())
     }
 
+    pub(super) fn positive(&self) -> impl Iterator<Item = &P> {
+        self.positive.iter()
+    }
+
+    pub(super) fn negative(&self) -> impl Iterator<Item = &P> {
+        self.negative.iter()
+    }
+
     pub(super) fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
         self.positive
             .iter()
@@ -183,6 +191,26 @@ impl<P> Cube<P> {
         self.positive.is_subset(&other.positive) && self.negative.is_subset(&other.negative)
     }
 
+    pub(super) fn conflicts_with(&self, other: &Self) -> bool
+    where
+        P: Hash + Eq,
+    {
+        self.positive
+            .iter()
+            .any(|predicate| other.negative.contains(predicate))
+            || self
+                .negative
+                .iter()
+                .any(|predicate| other.positive.contains(predicate))
+    }
+
+    pub(super) fn contains_predicate(&self, predicate: &P) -> bool
+    where
+        P: Hash + Eq,
+    {
+        self.positive.contains(predicate) || self.negative.contains(predicate)
+    }
+
     pub(super) fn is_tautology(&self) -> bool {
         self.positive.is_empty() && self.negative.is_empty()
     }
@@ -209,7 +237,12 @@ where
         if self.is_tautology() {
             write!(f, "⊤")
         } else {
-            write!(f, "{}", self.literals().format(" && "))
+            let literals = self
+                .literals()
+                .map(|literal| literal.to_string())
+                .sorted()
+                .collect::<Vec<_>>();
+            write!(f, "{}", literals.iter().format(" && "))
         }
     }
 }

@@ -112,4 +112,87 @@ mod tests {
         let rhs = lhs & BooleanVariable::Negative(1_u32);
         assert_eq!(rhs, PathCondition::zero());
     }
+
+    fn conjunction(literals: impl IntoIterator<Item = BooleanVariable<u32>>) -> PathCondition<u32> {
+        literals
+            .into_iter()
+            .fold(PathCondition::one(), |condition, literal| {
+                condition & literal
+            })
+    }
+
+    #[test]
+    fn or_exactly_minimizes_complementary_terms() {
+        let a = BooleanVariable::Positive(1_u32);
+        let b = BooleanVariable::Positive(2_u32);
+        let lhs = PathCondition::of(a.clone()) & b.clone();
+        let rhs = PathCondition::of(a.clone()) & !b;
+        assert_eq!(lhs | rhs, PathCondition::of(a));
+    }
+
+    #[test]
+    fn partial_order_tracks_semantic_implication() {
+        let a = BooleanVariable::Positive(1_u32);
+        let b = BooleanVariable::Positive(2_u32);
+        let specific = PathCondition::of(a.clone()) & b.clone();
+        let general = PathCondition::of(a.clone()) & b.clone() | (PathCondition::of(a) & !b);
+        assert_eq!(
+            specific.partial_cmp(&general),
+            Some(std::cmp::Ordering::Less)
+        );
+    }
+
+    #[test]
+    fn equivalent_forms_with_multiple_minima_reduce_identically() {
+        let a = BooleanVariable::Positive(1_u32);
+        let b = BooleanVariable::Positive(2_u32);
+        let c = BooleanVariable::Positive(3_u32);
+
+        let minterms = [
+            conjunction([!a.clone(), !b.clone(), !c.clone()]),
+            conjunction([!a.clone(), b.clone(), !c.clone()]),
+            conjunction([!a.clone(), b.clone(), c.clone()]),
+            conjunction([a.clone(), !b.clone(), !c.clone()]),
+            conjunction([a.clone(), !b.clone(), c.clone()]),
+        ];
+
+        let lhs = minterms
+            .iter()
+            .cloned()
+            .fold(PathCondition::zero(), |condition, minterm| {
+                condition | minterm
+            });
+        let rhs = minterms
+            .iter()
+            .rev()
+            .cloned()
+            .fold(PathCondition::zero(), |condition, minterm| {
+                condition | minterm
+            });
+
+        assert_eq!(lhs, rhs);
+        assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
+    }
+
+    #[test]
+    fn display_sorts_literals_within_a_cube() {
+        let lhs = conjunction([
+            BooleanVariable::Positive(2_u32),
+            BooleanVariable::Negative(1_u32),
+        ]);
+        let rhs = conjunction([
+            BooleanVariable::Negative(1_u32),
+            BooleanVariable::Positive(2_u32),
+        ]);
+        assert_eq!(lhs.to_string(), rhs.to_string());
+    }
+
+    #[test]
+    fn display_sorts_cubes_within_a_condition() {
+        let lhs = conjunction([BooleanVariable::Positive(2_u32)])
+            | conjunction([BooleanVariable::Positive(1_u32)]);
+        let rhs = conjunction([BooleanVariable::Positive(1_u32)])
+            | conjunction([BooleanVariable::Positive(2_u32)]);
+        assert_eq!(lhs.to_string(), rhs.to_string());
+    }
 }
