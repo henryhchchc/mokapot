@@ -7,9 +7,7 @@ use std::{
 
 use itertools::Itertools;
 
-use super::BooleanVariable;
-#[cfg(test)]
-use super::MinTerm;
+use super::{BooleanVariable, BranchGuard};
 use crate::intrinsics::{HashUnordered, hashset_partial_order};
 
 /// A normalized conjunction of literals.
@@ -82,32 +80,17 @@ impl<P> Cube<P> {
         cube
     }
 
-    #[cfg(test)]
-    pub(super) fn try_from_minterm(minterm: &MinTerm<P>) -> Option<Cube<&P>>
+    pub(super) fn from_branch_guard(branch_guard: BranchGuard<P>) -> Option<Self>
     where
         P: Hash + Eq,
     {
         let mut cube = Cube::one();
-        for literal in minterm.literals() {
-            let literal = match literal {
-                BooleanVariable::Positive(predicate) => BooleanVariable::Positive(predicate),
-                BooleanVariable::Negative(predicate) => BooleanVariable::Negative(predicate),
-            };
+        for literal in branch_guard {
             if cube.insert(literal) == InsertResult::Contradiction {
                 return None;
             }
         }
         Some(cube)
-    }
-
-    pub(super) fn as_ref(&self) -> Cube<&P>
-    where
-        P: Hash + Eq,
-    {
-        Cube {
-            positive: self.positive.iter().collect(),
-            negative: self.negative.iter().collect(),
-        }
     }
 
     pub(super) fn predicates(&self) -> impl Iterator<Item = &P> {
@@ -213,19 +196,6 @@ impl<P> Cube<P> {
 
     pub(super) fn is_tautology(&self) -> bool {
         self.positive.is_empty() && self.negative.is_empty()
-    }
-}
-
-#[cfg(test)]
-impl<P> Cube<&P> {
-    pub(super) fn cloned(self) -> Cube<P>
-    where
-        P: Clone + Hash + Eq,
-    {
-        Cube {
-            positive: self.positive.into_iter().cloned().collect(),
-            negative: self.negative.into_iter().cloned().collect(),
-        }
     }
 }
 

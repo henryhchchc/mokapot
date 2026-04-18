@@ -11,12 +11,12 @@ use crate::intrinsics::{HashUnordered, hashset_partial_order};
 
 /// A conjunction of literals.
 ///
-/// `MinTerm` is a small public helper for callers that need to talk about a
-/// single cube directly. An empty minterm represents `⊤`.
+/// `BranchGuard` is the conjunction carried by a conditional CFG edge. An
+/// empty guard represents `⊤`.
 #[derive(Debug, Clone)]
-pub struct MinTerm<P>(pub(super) HashSet<BooleanVariable<P>>);
+pub struct BranchGuard<P>(pub(super) HashSet<BooleanVariable<P>>);
 
-impl<P> PartialEq for MinTerm<P>
+impl<P> PartialEq for BranchGuard<P>
 where
     P: Hash + Eq,
 {
@@ -25,9 +25,9 @@ where
     }
 }
 
-impl<P> Eq for MinTerm<P> where P: Hash + Eq {}
+impl<P> Eq for BranchGuard<P> where P: Hash + Eq {}
 
-impl<P> Hash for MinTerm<P>
+impl<P> Hash for BranchGuard<P>
 where
     P: Hash,
 {
@@ -36,7 +36,7 @@ where
     }
 }
 
-impl<P> PartialOrd for MinTerm<P>
+impl<P> PartialOrd for BranchGuard<P>
 where
     P: Hash + Eq,
 {
@@ -45,14 +45,14 @@ where
     }
 }
 
-impl<P> MinTerm<P> {
-    /// Creates the tautological minterm `⊤`.
+impl<P> BranchGuard<P> {
+    /// Creates the tautological guard `⊤`.
     #[must_use]
     pub fn one() -> Self {
         Self(HashSet::new())
     }
 
-    /// Creates a minterm containing a single literal.
+    /// Creates a guard containing a single literal.
     #[must_use]
     pub fn of(predicate: BooleanVariable<P>) -> Self
     where
@@ -61,20 +61,37 @@ impl<P> MinTerm<P> {
         Self(HashSet::from([predicate]))
     }
 
-    /// Returns an iterator over the literals in the minterm.
-    #[cfg(test)]
-    pub(super) fn literals(&self) -> impl Iterator<Item = &BooleanVariable<P>> {
-        self.0.iter()
-    }
-
-    /// Returns whether this minterm is `⊤`.
+    /// Returns whether this guard is `⊤`.
     #[must_use]
     pub fn is_tautology(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Returns the predicates referenced by this guard.
+    #[must_use]
+    pub fn predicates(&self) -> HashSet<&P>
+    where
+        P: Hash + Eq,
+    {
+        self.0.iter().map(BooleanVariable::predicate).collect()
+    }
+
+    /// Borrows the predicates while preserving the conjunction structure.
+    pub(super) fn as_ref(&self) -> BranchGuard<&P>
+    where
+        P: Hash + Eq,
+    {
+        self.0
+            .iter()
+            .map(|literal| match literal {
+                BooleanVariable::Positive(predicate) => BooleanVariable::Positive(predicate),
+                BooleanVariable::Negative(predicate) => BooleanVariable::Negative(predicate),
+            })
+            .collect()
+    }
 }
 
-impl<P: Display> Display for MinTerm<P> {
+impl<P: Display> Display for BranchGuard<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_tautology() {
             write!(f, "⊤")
@@ -90,7 +107,7 @@ impl<P: Display> Display for MinTerm<P> {
     }
 }
 
-impl<P> FromIterator<BooleanVariable<P>> for MinTerm<P>
+impl<P> FromIterator<BooleanVariable<P>> for BranchGuard<P>
 where
     P: Hash + Eq,
 {
@@ -99,7 +116,7 @@ where
     }
 }
 
-impl<P> IntoIterator for MinTerm<P> {
+impl<P> IntoIterator for BranchGuard<P> {
     type Item = BooleanVariable<P>;
     type IntoIter = hash_set::IntoIter<BooleanVariable<P>>;
 
@@ -114,11 +131,11 @@ mod tests {
 
     #[test]
     fn display_orders_literals_stably() {
-        let lhs = MinTerm::from_iter([
+        let lhs = BranchGuard::from_iter([
             BooleanVariable::Positive(2_u8),
             BooleanVariable::Negative(1_u8),
         ]);
-        let rhs = MinTerm::from_iter([
+        let rhs = BranchGuard::from_iter([
             BooleanVariable::Negative(1_u8),
             BooleanVariable::Positive(2_u8),
         ]);

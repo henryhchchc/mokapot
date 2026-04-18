@@ -4,7 +4,7 @@ pub mod path_condition;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use self::path_condition::{PathCondition, Value};
+use self::path_condition::{BranchGuard, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
     analysis::fixed_point::solve,
@@ -17,8 +17,8 @@ use crate::{
 pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
-    /// A conditional control transfer.
-    Conditional(PathCondition<Condition<Value>>),
+    /// A conditional control transfer guarded by a conjunction of literals.
+    Conditional(BranchGuard<Condition<Value>>),
     /// A control transfer to the exception handler.
     Exception(BTreeSet<ClassRef>),
     /// A control transfer caused by subroutine return.
@@ -219,8 +219,8 @@ mod tests {
     fn path_conditions_prune_impossible_paths() {
         let operand = Operand::from(Identifier::Arg(0));
         let condition = Condition::IsZero(operand.into());
-        let positive = PathCondition::of(BooleanVariable::Positive(condition.clone()));
-        let negative = PathCondition::of(BooleanVariable::Negative(condition));
+        let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
+        let negative = BranchGuard::of(BooleanVariable::Negative(condition));
         let cfg = ControlFlowGraph::from_edges([
             (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
             (1.into(), 2.into(), ControlTransfer::Conditional(negative)),

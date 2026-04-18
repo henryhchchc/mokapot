@@ -2,12 +2,11 @@ mod execution;
 mod jvm_frame;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     iter::once,
     mem,
 };
 
-use itertools::Itertools;
 use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
@@ -20,7 +19,7 @@ use super::{
 use crate::{
     analysis::fixed_point::DataflowProblem,
     ir::{
-        control_flow::path_condition::{BooleanVariable, PathCondition, Value},
+        control_flow::path_condition::{BooleanVariable, BranchGuard, Value},
         expression::Condition,
     },
     jvm::{
@@ -80,17 +79,12 @@ impl DataflowProblem for MokaIRGenerator<'_> {
             self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);
 
-        let (affected_locations, edges): (Vec<_>, HashSet<_>) = edges_and_frames
-            .into_iter()
-            .map(|(edge, frame)| ((edge.target, frame), edge))
-            .unzip();
-        self.control_flow_edges.extend(edges.into_iter().map(
-            |Edge {
-                 source,
-                 target,
-                 data,
-             }| ((source, target), data),
-        ));
+        let mut affected_locations = Vec::with_capacity(edges_and_frames.len());
+        for (edge, frame) in edges_and_frames {
+            self.control_flow_edges
+                .insert((edge.source, edge.target), edge.data);
+            affected_locations.push((edge.target, frame));
+        }
         Ok(affected_locations)
     }
 }
@@ -137,23 +131,27 @@ impl<'m> MokaIRGenerator<'m> {
         pc: ProgramCounter,
         frame: &JvmStackFrame,
     ) -> Vec<(Edge<ControlTransfer>, JvmStackFrame)> {
-        exception_table
+        let handlers = exception_table
             .iter()
-            .filter(|&it| it.covers(pc))
-            .into_group_map_by(|&it| it.handler_pc)
+            .filter(|entry| entry.covers(pc))
+            .fold(BTreeMap::new(), |mut handlers, entry| {
+                let caught_type = entry
+                    .catch_type
+                    .clone()
+                    .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"));
+                handlers
+                    .entry(entry.handler_pc)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(caught_type);
+                handlers
+            });
+
+        handlers
             .into_iter()
-            .map(|(handler_pc, entries)| {
+            .map(|(handler_pc, exceptions)| {
                 let caught_exception_ref = Operand::Just(Identifier::CaughtException(handler_pc));
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
-                let exceptions = entries
-                    .into_iter()
-                    .map(|it| {
-                        it.catch_type
-                            .clone()
-                            .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"))
-                    })
-                    .collect();
                 (
                     Edge::new(pc, handler_pc, ControlTransfer::Exception(exceptions)),
                     handler_frame,
@@ -258,14 +256,10 @@ impl MokaIRGenerator<'_> {
             } => {
                 let cond: BooleanVariable<_> = condition.clone().into();
                 let neg_cond = !cond.clone();
-                let target_edge = {
-                    let cond = PathCondition::of(cond);
-                    Edge::new(location, *target, Conditional(cond))
-                };
+                let target_edge = Edge::new(location, *target, Conditional(BranchGuard::of(cond)));
                 let next_pc_edge = {
-                    let neg_cond = PathCondition::of(neg_cond);
                     let next_pc = self.next_pc_of(location)?;
-                    Edge::new(location, next_pc, Conditional(neg_cond))
+                    Edge::new(location, next_pc, Conditional(BranchGuard::of(neg_cond)))
                 };
                 vec![
                     (target_edge, frame.same_frame()),
@@ -277,14 +271,13 @@ impl MokaIRGenerator<'_> {
                 branches,
                 match_value,
             } => {
-                let default_cond = branches.keys().fold(PathCondition::one(), |acc, it| {
-                    let val = ConstantValue::Integer(*it).into();
-                    let not_equal_to_match_value = BooleanVariable::Negative(Condition::Equal(
-                        match_value.clone().into(),
-                        val,
-                    ));
-                    acc & not_equal_to_match_value
-                });
+                let default_cond = branches
+                    .keys()
+                    .map(|it| {
+                        let val = ConstantValue::Integer(*it).into();
+                        BooleanVariable::Negative(Condition::Equal(match_value.clone().into(), val))
+                    })
+                    .collect::<BranchGuard<_>>();
                 let default_edge = Edge::new(location, *default, Conditional(default_cond));
                 let branch_edges = branches.iter().map(|(&val, &pc)| {
                     let val = Value::Constant(ConstantValue::Integer(val));
@@ -292,7 +285,7 @@ impl MokaIRGenerator<'_> {
                         match_value.clone().into(),
                         val,
                     ));
-                    let edge = Edge::new(location, pc, Conditional(PathCondition::of(cond)));
+                    let edge = Edge::new(location, pc, Conditional(BranchGuard::of(cond)));
                     (edge, frame.same_frame())
                 });
                 branch_edges
