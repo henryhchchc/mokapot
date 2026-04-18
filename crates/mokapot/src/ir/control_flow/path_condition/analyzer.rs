@@ -7,14 +7,14 @@ use crate::{
     jvm::code::ProgramCounter,
 };
 
-/// An analyzer for path conditions.
+/// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
 pub struct Analyzer<'a, N> {
     cfg: &'a ControlFlowGraph<N, ControlTransfer>,
 }
 
 impl<'a, N> Analyzer<'a, N> {
-    /// Creates a new path condition analyzer.
+    /// Creates a path-condition analysis over `cfg`.
     #[must_use]
     pub const fn new(cfg: &'a ControlFlowGraph<N, ControlTransfer>) -> Self {
         Self { cfg }

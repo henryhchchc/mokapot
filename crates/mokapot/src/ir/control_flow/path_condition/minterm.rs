@@ -9,10 +9,10 @@ use itertools::Itertools;
 use super::literal::BooleanVariable;
 use crate::intrinsics::{HashUnordered, hashset_partial_order};
 
-/// A conjunction of predicates (a minterm in DNF).
+/// A conjunction of literals.
 ///
-/// Represents a conjunction (AND) of boolean variables.
-/// An empty set of variables represents a tautology (true).
+/// `MinTerm` is a small public helper for callers that need to talk about a
+/// single cube directly. An empty minterm represents `⊤`.
 #[derive(Debug, Clone)]
 pub struct MinTerm<P>(pub(super) HashSet<BooleanVariable<P>>);
 
@@ -46,13 +46,13 @@ where
 }
 
 impl<P> MinTerm<P> {
-    /// Creates a tautology (i.e., ⊤).
+    /// Creates the tautological minterm `⊤`.
     #[must_use]
     pub fn one() -> Self {
         Self(HashSet::new())
     }
 
-    /// Creates a minterm containing a single variable.
+    /// Creates a minterm containing a single literal.
     #[must_use]
     pub fn of(predicate: BooleanVariable<P>) -> Self
     where
@@ -67,7 +67,7 @@ impl<P> MinTerm<P> {
         self.0.iter()
     }
 
-    /// Returns true if this minterm is empty (represents a tautology).
+    /// Returns whether this minterm is `⊤`.
     #[must_use]
     pub fn is_tautology(&self) -> bool {
         self.0.is_empty()
@@ -79,7 +79,13 @@ impl<P: Display> Display for MinTerm<P> {
         if self.is_tautology() {
             write!(f, "⊤")
         } else {
-            write!(f, "{}", self.0.iter().format(" && "))
+            let literals = self
+                .0
+                .iter()
+                .map(ToString::to_string)
+                .sorted()
+                .collect::<Vec<_>>();
+            write!(f, "{}", literals.iter().format(" && "))
         }
     }
 }
@@ -99,5 +105,24 @@ impl<P> IntoIterator for MinTerm<P> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_orders_literals_stably() {
+        let lhs = MinTerm::from_iter([
+            BooleanVariable::Positive(2_u8),
+            BooleanVariable::Negative(1_u8),
+        ]);
+        let rhs = MinTerm::from_iter([
+            BooleanVariable::Negative(1_u8),
+            BooleanVariable::Positive(2_u8),
+        ]);
+
+        assert_eq!(lhs.to_string(), rhs.to_string());
     }
 }
