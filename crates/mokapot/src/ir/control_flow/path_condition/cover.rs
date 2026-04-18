@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Display,
     hash::{Hash, Hasher},
     ops::{BitAnd, BitOr},
@@ -7,10 +7,8 @@ use std::{
 
 use itertools::Itertools;
 
-#[cfg(test)]
-use super::MinTerm;
 use super::{
-    BooleanVariable,
+    BooleanVariable, BranchGuard,
     cube::Cube,
     minimizer::{ExactMinimizer, Minimizer},
 };
@@ -94,24 +92,15 @@ impl<P> Cover<P> {
     }
 
     #[cfg(test)]
-    fn from_minterms(minterms: impl IntoIterator<Item = MinTerm<P>>) -> Self
+    fn from_branch_guards(branch_guards: impl IntoIterator<Item = BranchGuard<P>>) -> Self
     where
         P: Hash + Eq + Clone,
     {
-        let cubes = minterms
+        let cubes = branch_guards
             .into_iter()
-            .filter_map(|minterm| Cube::try_from_minterm(&minterm).map(Cube::cloned))
+            .filter_map(Cube::from_branch_guard)
             .collect();
         Self { cubes }.reduce()
-    }
-
-    fn as_ref(&self) -> Cover<&P>
-    where
-        P: Hash + Eq,
-    {
-        Cover {
-            cubes: self.cubes.iter().map(Cube::as_ref).collect(),
-        }
     }
 
     fn predicates(&self) -> impl Iterator<Item = &P> {
@@ -130,10 +119,26 @@ impl<P> Cover<P> {
     where
         P: Hash + Eq + Clone,
     {
-        self.cubes.iter().all(|cube| other.covers_cube(cube))
+        let mut memo = HashMap::new();
+        self.cubes
+            .iter()
+            .all(|cube| other.covers_cube(cube, &mut memo))
     }
 
-    fn covers_cube(&self, cube: &Cube<P>) -> bool
+    fn covers_cube(&self, cube: &Cube<P>, memo: &mut HashMap<Cube<P>, bool>) -> bool
+    where
+        P: Hash + Eq + Clone,
+    {
+        if let Some(result) = memo.get(cube) {
+            return *result;
+        }
+
+        let result = self.covers_cube_uncached(cube, memo);
+        memo.insert(cube.clone(), result);
+        result
+    }
+
+    fn covers_cube_uncached(&self, cube: &Cube<P>, memo: &mut HashMap<Cube<P>, bool>) -> bool
     where
         P: Hash + Eq + Clone,
     {
@@ -141,21 +146,14 @@ impl<P> Cover<P> {
             return true;
         }
 
-        let relevant = self
+        let split_predicate = self
             .cubes
             .iter()
             .filter(|existing| !existing.conflicts_with(cube))
-            .collect::<Vec<_>>();
-        if relevant.is_empty() {
-            return false;
-        }
-
-        let Some(split_predicate) = relevant
-            .iter()
-            .flat_map(|existing| existing.predicates())
+            .flat_map(Cube::predicates)
             .find(|predicate| !cube.contains_predicate(predicate))
-            .cloned()
-        else {
+            .cloned();
+        let Some(split_predicate) = split_predicate else {
             return false;
         };
 
@@ -170,7 +168,7 @@ impl<P> Cover<P> {
 
         match (positive_branch, negative_branch) {
             (Some(positive_branch), Some(negative_branch)) => {
-                self.covers_cube(&positive_branch) && self.covers_cube(&negative_branch)
+                self.covers_cube(&positive_branch, memo) && self.covers_cube(&negative_branch, memo)
             }
             _ => false,
         }
@@ -192,6 +190,29 @@ impl<P> Cover<P> {
             .cubes
             .into_iter()
             .filter_map(|cube| cube.conjoin_literal(literal.clone()))
+            .collect();
+        Self { cubes }.reduce()
+    }
+
+    fn conjoin_branch_guard(self, branch_guard: BranchGuard<P>) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        if self.is_contradiction() {
+            return Self::zero();
+        }
+
+        let Some(rhs_cube) = Cube::from_branch_guard(branch_guard) else {
+            return Self::zero();
+        };
+        if rhs_cube.is_tautology() {
+            return self;
+        }
+
+        let cubes = self
+            .cubes
+            .into_iter()
+            .filter_map(|lhs_cube| lhs_cube.conjoin(&rhs_cube))
             .collect();
         Self { cubes }.reduce()
     }
@@ -304,17 +325,6 @@ impl<P> PathCondition<P> {
         self.cover.predicates().collect()
     }
 
-    /// Borrows the predicates while preserving the boolean structure.
-    #[must_use]
-    pub(super) fn as_ref(&self) -> PathCondition<&P>
-    where
-        P: Hash + Eq,
-    {
-        PathCondition {
-            cover: self.cover.as_ref(),
-        }
-    }
-
     /// Returns whether this condition is `⊥`.
     #[must_use]
     pub fn is_contradiction(&self) -> bool {
@@ -322,12 +332,14 @@ impl<P> PathCondition<P> {
     }
 
     #[cfg(test)]
-    pub(super) fn from_minterms(minterms: impl IntoIterator<Item = MinTerm<P>>) -> Self
+    pub(super) fn from_branch_guards(
+        branch_guards: impl IntoIterator<Item = BranchGuard<P>>,
+    ) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self {
-            cover: Cover::from_minterms(minterms),
+            cover: Cover::from_branch_guards(branch_guards),
         }
     }
 
@@ -359,6 +371,19 @@ where
     fn bitand(self, rhs: BooleanVariable<P>) -> Self::Output {
         Self {
             cover: self.cover.conjoin_literal(&rhs),
+        }
+    }
+}
+
+impl<P> BitAnd<BranchGuard<P>> for PathCondition<P>
+where
+    P: Hash + Eq + Clone,
+{
+    type Output = Self;
+
+    fn bitand(self, rhs: BranchGuard<P>) -> Self::Output {
+        Self {
+            cover: self.cover.conjoin_branch_guard(rhs),
         }
     }
 }

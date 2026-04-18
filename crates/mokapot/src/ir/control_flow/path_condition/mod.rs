@@ -6,17 +6,17 @@
 //! minimization after each refinement or join.
 
 mod analyzer;
+mod branch_guard;
 mod cover;
 mod cube;
 mod literal;
 mod minimizer;
-mod minterm;
 mod predicate;
 
 pub use analyzer::Analyzer;
+pub use branch_guard::BranchGuard;
 pub use cover::PathCondition;
 pub use literal::BooleanVariable;
-pub use minterm::MinTerm;
 pub use predicate::Value;
 
 #[cfg(test)]
@@ -25,7 +25,7 @@ mod tests {
 
     use proptest::{collection::hash_set, prelude::*};
 
-    use super::{BooleanVariable, MinTerm, PathCondition};
+    use super::{BooleanVariable, BranchGuard, PathCondition};
 
     impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
         type Parameters = (u32, bool);
@@ -63,10 +63,10 @@ mod tests {
 
     fn arb_test_cond() -> impl Strategy<Value = PathCondition<u32>> {
         hash_set(
-            hash_set(any::<BooleanVariable<u32>>(), 1..26).prop_map(MinTerm),
+            hash_set(any::<BooleanVariable<u32>>(), 1..26).prop_map(BranchGuard),
             1..26,
         )
-        .prop_map(PathCondition::from_minterms)
+        .prop_map(PathCondition::from_branch_guards)
     }
 
     proptest! {
@@ -150,7 +150,7 @@ mod tests {
         let b = BooleanVariable::Positive(2_u32);
         let c = BooleanVariable::Positive(3_u32);
 
-        let minterms = [
+        let branch_guards = [
             conjunction([!a.clone(), !b.clone(), !c.clone()]),
             conjunction([!a.clone(), b.clone(), !c.clone()]),
             conjunction([!a.clone(), b.clone(), c.clone()]),
@@ -158,18 +158,18 @@ mod tests {
             conjunction([a.clone(), !b.clone(), c.clone()]),
         ];
 
-        let lhs = minterms
+        let lhs = branch_guards
             .iter()
             .cloned()
-            .fold(PathCondition::zero(), |condition, minterm| {
-                condition | minterm
+            .fold(PathCondition::zero(), |condition, branch_guard| {
+                condition | branch_guard
             });
-        let rhs = minterms
+        let rhs = branch_guards
             .iter()
             .rev()
             .cloned()
-            .fold(PathCondition::zero(), |condition, minterm| {
-                condition | minterm
+            .fold(PathCondition::zero(), |condition, branch_guard| {
+                condition | branch_guard
             });
 
         assert_eq!(lhs, rhs);
