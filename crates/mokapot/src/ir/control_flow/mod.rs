@@ -152,6 +152,7 @@ mod tests {
     use std::collections::{BTreeSet, HashSet};
 
     use super::*;
+    use crate::ir::{Identifier, Operand, control_flow::path_condition::BooleanVariable};
 
     #[test]
     fn entry_point() {
@@ -212,5 +213,24 @@ mod tests {
         let exits = cfg.exits().collect::<BTreeSet<_>>();
         assert_eq!(exits.len(), 1);
         assert!(exits.contains(&4.into()));
+    }
+
+    #[test]
+    fn path_conditions_prune_impossible_paths() {
+        let operand = Operand::from(Identifier::Arg(0));
+        let condition = Condition::IsZero(operand.into());
+        let positive = PathCondition::of(BooleanVariable::Positive(condition.clone()));
+        let negative = PathCondition::of(BooleanVariable::Negative(condition));
+        let cfg = ControlFlowGraph::from_edges([
+            (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
+            (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
+            (1.into(), 3.into(), ControlTransfer::Unconditional),
+        ]);
+
+        let path_conditions = cfg.path_conditions();
+        assert!(path_conditions.contains_key(&0.into()));
+        assert!(path_conditions.contains_key(&1.into()));
+        assert!(path_conditions.contains_key(&3.into()));
+        assert!(!path_conditions.contains_key(&2.into()));
     }
 }
