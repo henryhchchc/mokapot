@@ -9,7 +9,6 @@ pub use self::path_condition::PathConditionBudget;
 use self::path_condition::{BranchGuard, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
-    analysis::fixed_point::solve,
     ir::expression::Condition,
     jvm::{code::ProgramCounter, references::ClassRef},
 };
@@ -152,11 +151,7 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
         &self,
         budget: PathConditionBudget,
     ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-        path_condition::with_budget(budget, || {
-            let mut analyzer = path_condition::Analyzer::new(self);
-            let Ok(path_conditions) = solve(&mut analyzer);
-            path_conditions
-        })
+        path_condition::analyze(self, budget)
     }
 }
 
@@ -228,40 +223,39 @@ mod tests {
         assert!(exits.contains(&4.into()));
     }
 
-    #[test]
-    fn path_conditions_prune_impossible_paths() {
-        let operand = Operand::from(Identifier::Arg(0));
-        let condition = Condition::IsZero(operand.into());
-        let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
-        let negative = BranchGuard::of(BooleanVariable::Negative(condition));
-        let cfg = ControlFlowGraph::from_edges([
-            (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
-            (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
-            (1.into(), 3.into(), ControlTransfer::Unconditional),
-        ]);
+    mod path_condition_analysis {
+        use super::*;
 
-        let path_conditions = cfg.path_conditions();
-        assert!(path_conditions.contains_key(&0.into()));
-        assert!(path_conditions.contains_key(&1.into()));
-        assert!(path_conditions.contains_key(&3.into()));
-        assert!(!path_conditions.contains_key(&2.into()));
-    }
+        fn branch_cfg() -> ControlFlowGraph<(), ControlTransfer> {
+            let operand = Operand::from(Identifier::Arg(0));
+            let condition = Condition::IsZero(operand.into());
+            let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
+            let negative = BranchGuard::of(BooleanVariable::Negative(condition));
+            ControlFlowGraph::from_edges([
+                (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
+                (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
+                (1.into(), 3.into(), ControlTransfer::Unconditional),
+            ])
+        }
 
-    #[test]
-    fn path_conditions_budgeted_entry_point_matches_default() {
-        let operand = Operand::from(Identifier::Arg(0));
-        let condition = Condition::IsZero(operand.into());
-        let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
-        let negative = BranchGuard::of(BooleanVariable::Negative(condition));
-        let cfg = ControlFlowGraph::from_edges([
-            (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
-            (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
-            (1.into(), 3.into(), ControlTransfer::Unconditional),
-        ]);
+        #[test]
+        fn analysis_prunes_impossible_paths() {
+            let cfg = branch_cfg();
+            let path_conditions = cfg.path_conditions();
+            assert!(path_conditions.contains_key(&0.into()));
+            assert!(path_conditions.contains_key(&1.into()));
+            assert!(path_conditions.contains_key(&3.into()));
+            assert!(!path_conditions.contains_key(&2.into()));
+        }
 
-        assert_eq!(
-            cfg.path_conditions(),
-            cfg.path_conditions_with_budget(PathConditionBudget::default())
-        );
+        #[test]
+        fn explicit_default_budget_matches_default_analysis_entrypoint() {
+            let cfg = branch_cfg();
+
+            assert_eq!(
+                cfg.path_conditions(),
+                cfg.path_conditions_with_budget(PathConditionBudget::default())
+            );
+        }
     }
 }

@@ -1,9 +1,16 @@
 //! Path condition analysis.
 //!
-//! Path conditions are represented as reduced disjunctive normal form (DNF): a
-//! disjunction of cubes, where each cube is a conjunction of literals. This
-//! keeps transfer functions simple while still allowing bounded two-level
-//! minimization after each refinement or join.
+//! Path conditions are represented as raw disjunctive normal form (DNF): a
+//! disjunction of cubes, where each cube is a conjunction of literals.
+//! Composition updates that container structurally, with conjunction only
+//! pruning direct cube-level contradictions. They intentionally do not carry
+//! semantic lattice behavior; explicit minimization lives on
+//! [`PathCondition::reduce`], and the solver-facing [`PathConditionFact`]
+//! wrapper owns budgeted semantic ordering. Whole-condition negation is also
+//! intentionally left out here: pushing `!` through a raw DNF is only worth
+//! doing once a caller actually needs that transformation.
+
+use std::collections::HashMap;
 
 mod analyzer;
 mod branch_guard;
@@ -14,19 +21,28 @@ mod literal;
 mod minimizer;
 mod predicate;
 
-pub use analyzer::Analyzer;
+use self::analyzer::Analyzer;
+use crate::{
+    analysis::fixed_point::solve,
+    ir::{ControlFlowGraph, control_flow::ControlTransfer, expression::Condition},
+    jvm::code::ProgramCounter,
+};
 pub use branch_guard::BranchGuard;
 pub use budget::PathConditionBudget;
 pub use cover::PathCondition;
 pub use literal::BooleanVariable;
 pub use predicate::Value;
 
-pub(super) fn current_budget() -> PathConditionBudget {
-    budget::current_budget()
-}
-
-pub(super) fn with_budget<R>(budget: PathConditionBudget, f: impl FnOnce() -> R) -> R {
-    budget::with_budget(budget, f)
+pub(super) fn analyze<N>(
+    cfg: &ControlFlowGraph<N, ControlTransfer>,
+    budget: PathConditionBudget,
+) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
+    let mut analyzer = Analyzer::new(cfg, budget);
+    let Ok(path_conditions): Result<HashMap<_, _>, _> = solve(&mut analyzer);
+    path_conditions
+        .into_iter()
+        .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -35,7 +51,7 @@ mod tests {
 
     use proptest::{collection::hash_set, prelude::*};
 
-    use super::{BooleanVariable, BranchGuard, PathCondition};
+    use super::{BooleanVariable, BranchGuard, PathCondition, PathConditionBudget};
 
     impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
         type Parameters = (u32, bool);
@@ -79,52 +95,6 @@ mod tests {
         .prop_map(PathCondition::from_branch_guards)
     }
 
-    proptest! {
-        #[test]
-        fn and(
-            lhs in arb_test_cond(),
-            rhs in arb_test_cond()
-        ) {
-            let mut pred_values = generate_pred_values(&lhs);
-            pred_values.extend(generate_pred_values(&rhs));
-            let lhs_eval = evaluate(&lhs, &pred_values);
-            let rhs_eval = evaluate(&rhs, &pred_values);
-            let conjunction = lhs.clone() & rhs.clone();
-            let conjunction_eval = evaluate(&conjunction, &pred_values);
-            assert_eq!(lhs_eval && rhs_eval, conjunction_eval);
-        }
-
-        #[test]
-        fn or(
-            lhs in arb_test_cond(),
-            rhs in arb_test_cond()
-        ) {
-            let mut pred_values = generate_pred_values(&lhs);
-            pred_values.extend(generate_pred_values(&rhs));
-            let lhs_eval = evaluate(&lhs, &pred_values);
-            let rhs_eval = evaluate(&rhs, &pred_values);
-            let disjunction = lhs.clone() | rhs.clone();
-            let disjunction_eval = evaluate(&disjunction, &pred_values);
-            assert_eq!(lhs_eval || rhs_eval, disjunction_eval);
-        }
-    }
-
-    #[test]
-    fn or_absorbs_more_specific_terms() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathCondition::of(a.clone());
-        let rhs = PathCondition::of(a.clone()) & b;
-        assert_eq!(lhs.clone() | rhs, lhs);
-    }
-
-    #[test]
-    fn and_eliminates_direct_contradictions() {
-        let lhs = PathCondition::one() & BooleanVariable::Positive(1_u32);
-        let rhs = lhs & BooleanVariable::Negative(1_u32);
-        assert_eq!(rhs, PathCondition::zero());
-    }
-
     fn conjunction(literals: impl IntoIterator<Item = BooleanVariable<u32>>) -> PathCondition<u32> {
         literals
             .into_iter()
@@ -133,78 +103,141 @@ mod tests {
             })
     }
 
-    #[test]
-    fn or_exactly_minimizes_complementary_terms() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathCondition::of(a.clone()) & b.clone();
-        let rhs = PathCondition::of(a.clone()) & !b;
-        assert_eq!(lhs | rhs, PathCondition::of(a));
+    mod raw_structure {
+        use super::*;
+
+        proptest! {
+            #[test]
+            fn conjunction_matches_boolean_semantics(
+                lhs in arb_test_cond(),
+                rhs in arb_test_cond()
+            ) {
+                let mut pred_values = generate_pred_values(&lhs);
+                pred_values.extend(generate_pred_values(&rhs));
+                let lhs_eval = evaluate(&lhs, &pred_values);
+                let rhs_eval = evaluate(&rhs, &pred_values);
+                let conjunction = lhs.clone() & rhs.clone();
+                let conjunction_eval = evaluate(&conjunction, &pred_values);
+                assert_eq!(lhs_eval && rhs_eval, conjunction_eval);
+            }
+
+            #[test]
+            fn disjunction_matches_boolean_semantics(
+                lhs in arb_test_cond(),
+                rhs in arb_test_cond()
+            ) {
+                let mut pred_values = generate_pred_values(&lhs);
+                pred_values.extend(generate_pred_values(&rhs));
+                let lhs_eval = evaluate(&lhs, &pred_values);
+                let rhs_eval = evaluate(&rhs, &pred_values);
+                let disjunction = lhs.clone() | rhs.clone();
+                let disjunction_eval = evaluate(&disjunction, &pred_values);
+                assert_eq!(lhs_eval || rhs_eval, disjunction_eval);
+            }
+        }
+
+        #[test]
+        fn conjunction_eliminates_direct_contradictions() {
+            let lhs = PathCondition::one() & BooleanVariable::Positive(1_u32);
+            let rhs = lhs & BooleanVariable::Negative(1_u32);
+            assert_eq!(rhs, PathCondition::zero());
+        }
+
+        #[test]
+        fn disjunction_preserves_more_specific_terms_structurally() {
+            let a = BooleanVariable::Positive(1_u32);
+            let b = BooleanVariable::Positive(2_u32);
+            let lhs = PathCondition::of(a.clone());
+            let rhs = PathCondition::of(a.clone()) & b;
+            assert_ne!(lhs.clone() | rhs, lhs);
+        }
+
+        #[test]
+        fn disjunction_preserves_complementary_terms_structurally() {
+            let a = BooleanVariable::Positive(1_u32);
+            let b = BooleanVariable::Positive(2_u32);
+            let lhs = PathCondition::of(a.clone()) & b.clone();
+            let rhs = PathCondition::of(a.clone()) & !b;
+            assert_ne!(lhs | rhs, PathCondition::of(a));
+        }
+
+        #[test]
+        fn structurally_distinct_equivalent_forms_are_not_equal_without_reduction() {
+            let a = BooleanVariable::Positive(1_u32);
+            let b = BooleanVariable::Positive(2_u32);
+            let specific = PathCondition::of(a.clone()) & b.clone();
+            let general = PathCondition::of(a.clone()) & b.clone() | (PathCondition::of(a) & !b);
+            assert_ne!(specific, general);
+        }
+
+        #[test]
+        fn disjunction_order_is_irrelevant_even_for_complex_covers() {
+            let a = BooleanVariable::Positive(1_u32);
+            let b = BooleanVariable::Positive(2_u32);
+            let c = BooleanVariable::Positive(3_u32);
+
+            let branch_guards = [
+                conjunction([!a.clone(), !b.clone(), !c.clone()]),
+                conjunction([!a.clone(), b.clone(), !c.clone()]),
+                conjunction([!a.clone(), b.clone(), c.clone()]),
+                conjunction([a.clone(), !b.clone(), !c.clone()]),
+                conjunction([a.clone(), !b.clone(), c.clone()]),
+            ];
+
+            let lhs = branch_guards
+                .iter()
+                .cloned()
+                .fold(PathCondition::zero(), |condition, branch_guard| {
+                    condition | branch_guard
+                });
+            let rhs = branch_guards
+                .iter()
+                .rev()
+                .cloned()
+                .fold(PathCondition::zero(), |condition, branch_guard| {
+                    condition | branch_guard
+                });
+
+            assert_eq!(lhs, rhs);
+        }
+
+        #[test]
+        fn display_sorts_literals_within_a_cube() {
+            let lhs = conjunction([
+                BooleanVariable::Positive(2_u32),
+                BooleanVariable::Negative(1_u32),
+            ]);
+            let rhs = conjunction([
+                BooleanVariable::Negative(1_u32),
+                BooleanVariable::Positive(2_u32),
+            ]);
+            assert_eq!(lhs.to_string(), rhs.to_string());
+        }
+
+        #[test]
+        fn display_sorts_cubes_within_a_condition() {
+            let lhs = conjunction([BooleanVariable::Positive(2_u32)])
+                | conjunction([BooleanVariable::Positive(1_u32)]);
+            let rhs = conjunction([BooleanVariable::Positive(1_u32)])
+                | conjunction([BooleanVariable::Positive(2_u32)]);
+            assert_eq!(lhs.to_string(), rhs.to_string());
+        }
     }
 
-    #[test]
-    fn partial_order_tracks_semantic_implication() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let specific = PathCondition::of(a.clone()) & b.clone();
-        let general = PathCondition::of(a.clone()) & b.clone() | (PathCondition::of(a) & !b);
-        assert_eq!(
-            specific.partial_cmp(&general),
-            Some(std::cmp::Ordering::Less)
-        );
-    }
+    mod explicit_reduction {
+        use super::*;
 
-    #[test]
-    fn equivalent_forms_with_multiple_minima_reduce_identically() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let c = BooleanVariable::Positive(3_u32);
+        #[test]
+        fn reduce_eliminates_complementary_terms_explicitly() {
+            let a = BooleanVariable::Positive(1_u32);
+            let b = BooleanVariable::Positive(2_u32);
+            let structural =
+                (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
 
-        let branch_guards = [
-            conjunction([!a.clone(), !b.clone(), !c.clone()]),
-            conjunction([!a.clone(), b.clone(), !c.clone()]),
-            conjunction([!a.clone(), b.clone(), c.clone()]),
-            conjunction([a.clone(), !b.clone(), !c.clone()]),
-            conjunction([a.clone(), !b.clone(), c.clone()]),
-        ];
+            let reduced = structural.clone().reduce(PathConditionBudget::default());
 
-        let lhs = branch_guards
-            .iter()
-            .cloned()
-            .fold(PathCondition::zero(), |condition, branch_guard| {
-                condition | branch_guard
-            });
-        let rhs = branch_guards
-            .iter()
-            .rev()
-            .cloned()
-            .fold(PathCondition::zero(), |condition, branch_guard| {
-                condition | branch_guard
-            });
-
-        assert_eq!(lhs, rhs);
-        assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
-    }
-
-    #[test]
-    fn display_sorts_literals_within_a_cube() {
-        let lhs = conjunction([
-            BooleanVariable::Positive(2_u32),
-            BooleanVariable::Negative(1_u32),
-        ]);
-        let rhs = conjunction([
-            BooleanVariable::Negative(1_u32),
-            BooleanVariable::Positive(2_u32),
-        ]);
-        assert_eq!(lhs.to_string(), rhs.to_string());
-    }
-
-    #[test]
-    fn display_sorts_cubes_within_a_condition() {
-        let lhs = conjunction([BooleanVariable::Positive(2_u32)])
-            | conjunction([BooleanVariable::Positive(1_u32)]);
-        let rhs = conjunction([BooleanVariable::Positive(1_u32)])
-            | conjunction([BooleanVariable::Positive(2_u32)]);
-        assert_eq!(lhs.to_string(), rhs.to_string());
+            assert_ne!(structural, PathCondition::of(a.clone()));
+            assert_eq!(reduced, PathCondition::of(a));
+        }
     }
 }
