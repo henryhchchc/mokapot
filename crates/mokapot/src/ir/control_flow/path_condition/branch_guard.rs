@@ -67,13 +67,21 @@ impl<P> BranchGuard<P> {
         self.0.is_empty()
     }
 
-    /// Returns the predicates referenced by this guard.
+    /// Returns the number of unique predicates referenced by this guard. For estimating the complexity of the path condition.
     #[must_use]
-    pub fn predicates(&self) -> HashSet<&P>
+    pub fn predicate_count(&self) -> usize
     where
         P: Hash + Eq,
     {
-        self.0.iter().map(BooleanVariable::predicate).collect()
+        self.0
+            .iter()
+            .map(|it| match it {
+                BooleanVariable::Negative(predicate) | BooleanVariable::Positive(predicate) => {
+                    predicate
+                }
+            })
+            .unique()
+            .count()
     }
 
     /// Borrows the predicates while preserving the conjunction structure.

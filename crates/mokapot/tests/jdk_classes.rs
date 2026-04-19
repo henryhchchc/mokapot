@@ -1,6 +1,5 @@
 use std::{env, fs, path::PathBuf};
 
-use itertools::{Either, Itertools};
 use mokapot::{
     ir::{MokaIRMethodExt, control_flow::ControlTransfer},
     jvm::Class,
@@ -61,19 +60,18 @@ fn test_a_class(class: Class) {
             let ir_method = it.brew().unwrap_or_else(|e| {
                 panic!("Failed to brew {}: {}", it.name, e);
             });
-            let variable_count = ir_method
+            let variable_count: usize = ir_method
                 .control_flow_graph
                 .edges()
-                .flat_map(|edge| {
+                .map(|edge| {
                     if let ControlTransfer::Conditional(it) = edge.data {
-                        Either::Left(it.predicates().into_iter())
+                        it.predicate_count()
                     } else {
-                        Either::Right(std::iter::empty())
+                        0
                     }
                 })
-                .unique()
-                .count();
-            // Set a limit here due to high memory consumption.
+                .sum();
+            // Set a limit here due to high resource consumption.
             // [TODO] optimized later.
             let variable_count_limit = if env::var("CI").is_ok() { 8 } else { 16 };
             if variable_count <= variable_count_limit {

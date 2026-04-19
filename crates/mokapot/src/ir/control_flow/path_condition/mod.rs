@@ -1,18 +1,7 @@
 //! Path condition analysis.
-//!
-//! Path conditions are represented as raw disjunctive normal form (DNF): a
-//! disjunction of cubes, where each cube is a conjunction of literals.
-//! Composition updates that container structurally, with conjunction only
-//! pruning direct cube-level contradictions. They intentionally do not carry
-//! semantic lattice behavior; explicit minimization lives on
-//! [`PathCondition::reduce`], and the solver-facing [`PathConditionFact`]
-//! wrapper owns budgeted semantic ordering. Whole-condition negation is also
-//! intentionally left out here: pushing `!` through a raw DNF is only worth
-//! doing once a caller actually needs that transformation.
 
 use std::collections::HashMap;
 
-mod analyzer;
 mod branch_guard;
 mod budget;
 mod cover;
@@ -20,10 +9,11 @@ mod cube;
 mod literal;
 mod minimizer;
 mod predicate;
+mod problem;
 
-use self::analyzer::Analyzer;
+use self::problem::PathConditionProblem;
 use crate::{
-    analysis::fixed_point::solve,
+    analysis::fixed_point,
     ir::{ControlFlowGraph, control_flow::ControlTransfer, expression::Condition},
     jvm::code::ProgramCounter,
 };
@@ -37,8 +27,8 @@ pub(super) fn analyze<N>(
     cfg: &ControlFlowGraph<N, ControlTransfer>,
     budget: PathConditionBudget,
 ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-    let mut analyzer = Analyzer::new(cfg, budget);
-    let Ok(path_conditions): Result<HashMap<_, _>, _> = solve(&mut analyzer);
+    let mut problem = PathConditionProblem::new(cfg, budget);
+    let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
     path_conditions
         .into_iter()
         .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
