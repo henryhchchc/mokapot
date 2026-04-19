@@ -1,21 +1,17 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
     hash::{Hash, Hasher},
-    ops::{BitAnd, BitOr},
 };
-
-use itertools::Itertools;
 
 use super::{
     BooleanVariable, BranchGuard, PathConditionBudget,
     cube::Cube,
     minimizer::{BoundedMinimizer, Minimizer},
 };
-use crate::{analysis::fixed_point::JoinSemiLattice, intrinsics::HashUnordered};
+use crate::intrinsics::HashUnordered;
 
 #[derive(Debug, Clone, Default)]
-struct Cover<P> {
+pub(super) struct Cover<P> {
     cubes: HashSet<Cube<P>>,
 }
 
@@ -58,7 +54,7 @@ where
 }
 
 impl<P> Cover<P> {
-    fn one() -> Self
+    pub(super) fn one() -> Self
     where
         P: Hash + Eq,
     {
@@ -67,13 +63,13 @@ impl<P> Cover<P> {
         }
     }
 
-    fn zero() -> Self {
+    pub(super) fn zero() -> Self {
         Self {
             cubes: HashSet::new(),
         }
     }
 
-    fn of_literal(literal: BooleanVariable<P>) -> Self
+    pub(super) fn of_literal(literal: BooleanVariable<P>) -> Self
     where
         P: Hash + Eq,
     {
@@ -83,7 +79,9 @@ impl<P> Cover<P> {
     }
 
     #[cfg(test)]
-    fn from_branch_guards(branch_guards: impl IntoIterator<Item = BranchGuard<P>>) -> Self
+    pub(super) fn from_branch_guards(
+        branch_guards: impl IntoIterator<Item = BranchGuard<P>>,
+    ) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -94,15 +92,15 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    fn predicates(&self) -> impl Iterator<Item = &P> {
+    pub(super) fn predicates(&self) -> impl Iterator<Item = &P> {
         self.cubes.iter().flat_map(Cube::predicates)
     }
 
-    fn cubes(&self) -> impl Iterator<Item = &Cube<P>> {
+    pub(super) fn cubes(&self) -> impl Iterator<Item = &Cube<P>> {
         self.cubes.iter()
     }
 
-    fn is_contradiction(&self) -> bool {
+    pub(super) fn is_contradiction(&self) -> bool {
         self.cubes.is_empty()
     }
 
@@ -165,7 +163,7 @@ impl<P> Cover<P> {
         }
     }
 
-    fn disjoin(mut self, rhs: Self) -> Self
+    pub(super) fn disjoin(mut self, rhs: Self) -> Self
     where
         P: Hash + Eq,
     {
@@ -175,7 +173,7 @@ impl<P> Cover<P> {
         self
     }
 
-    fn conjoin_literal(self, literal: &BooleanVariable<P>) -> Self
+    pub(super) fn conjoin_literal(self, literal: &BooleanVariable<P>) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -187,7 +185,7 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    fn conjoin_branch_guard(self, branch_guard: BranchGuard<P>) -> Self
+    pub(super) fn conjoin_branch_guard(self, branch_guard: BranchGuard<P>) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -210,7 +208,7 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    fn conjoin(self, rhs: &Self) -> Self
+    pub(super) fn conjoin(self, rhs: &Self) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -229,7 +227,7 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    fn reduce(self, budget: PathConditionBudget) -> Self
+    pub(super) fn reduce(self, budget: PathConditionBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -237,274 +235,5 @@ impl<P> Cover<P> {
         Self {
             cubes: minimizer.minimize(self.cubes),
         }
-    }
-}
-
-/// A path condition stored in disjunctive normal form.
-#[derive(Debug, Clone)]
-pub struct PathCondition<P> {
-    cover: Cover<P>,
-}
-
-impl<P> PartialEq for PathCondition<P>
-where
-    P: Hash + Eq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.cover == other.cover
-    }
-}
-
-impl<P> Eq for PathCondition<P> where P: Hash + Eq {}
-
-impl<P> Hash for PathCondition<P>
-where
-    P: Hash + Eq,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.cover.hash(state);
-    }
-}
-
-impl<P> PathCondition<P> {
-    const fn with_cover(cover: Cover<P>) -> Self {
-        Self { cover }
-    }
-
-    /// Creates the tautological condition `⊤`.
-    #[must_use]
-    pub fn one() -> Self
-    where
-        P: Hash + Eq,
-    {
-        Self::with_cover(Cover::one())
-    }
-
-    /// Creates the contradictory condition `⊥`.
-    #[must_use]
-    pub fn zero() -> Self {
-        Self::with_cover(Cover::zero())
-    }
-
-    /// Creates a path condition from a single literal.
-    #[must_use]
-    pub fn of(predicate: BooleanVariable<P>) -> Self
-    where
-        P: Hash + Eq,
-    {
-        Self::with_cover(Cover::of_literal(predicate))
-    }
-
-    /// Returns the predicates referenced by this condition.
-    #[must_use]
-    pub fn predicates(&self) -> HashSet<&P>
-    where
-        P: Hash + Eq,
-    {
-        self.cover.predicates().collect()
-    }
-
-    /// Returns whether this condition is `⊥`.
-    #[must_use]
-    pub fn is_contradiction(&self) -> bool {
-        self.cover.is_contradiction()
-    }
-
-    /// Reduces this condition with the given minimization budget.
-    ///
-    /// This is an explicit structural optimization step. Raw boolean
-    /// composition on [`PathCondition`] does not perform semantic
-    /// minimization implicitly.
-    #[must_use]
-    pub fn reduce(self, budget: PathConditionBudget) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self::with_cover(self.cover.reduce(budget))
-    }
-
-    #[cfg(test)]
-    pub(super) fn from_branch_guards(
-        branch_guards: impl IntoIterator<Item = BranchGuard<P>>,
-    ) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self::with_cover(Cover::from_branch_guards(branch_guards))
-    }
-
-    #[cfg(test)]
-    pub(super) fn cubes(&self) -> impl Iterator<Item = &Cube<P>> {
-        self.cover.cubes()
-    }
-}
-
-/// Internal lattice wrapper used by the generic fixed-point solver.
-#[derive(Debug, Clone)]
-#[doc(hidden)]
-pub(super) struct PathConditionFact<P> {
-    inner: PathCondition<P>,
-    budget: PathConditionBudget,
-}
-
-impl<P> PathConditionFact<P> {
-    pub(crate) fn one(budget: PathConditionBudget) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self::new(PathCondition::one(), budget)
-    }
-
-    pub(crate) fn new(inner: PathCondition<P>, budget: PathConditionBudget) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self {
-            inner: inner.reduce(budget),
-            budget,
-        }
-    }
-
-    pub(crate) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self::new(self.inner.clone() & branch_guard, self.budget)
-    }
-
-    pub(crate) fn is_contradiction(&self) -> bool {
-        self.inner.is_contradiction()
-    }
-
-    pub(crate) fn into_inner(self) -> PathCondition<P> {
-        self.inner
-    }
-}
-
-impl<P> PartialEq for PathConditionFact<P>
-where
-    P: Hash + Eq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-}
-
-impl<P> Eq for PathConditionFact<P> where P: Hash + Eq {}
-
-impl<P> PartialOrd for PathConditionFact<P>
-where
-    P: Hash + Eq + Clone,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        debug_assert_eq!(self.budget, other.budget);
-        self.inner.cover.partial_cmp(&other.inner.cover)
-    }
-}
-
-impl<P> JoinSemiLattice for PathConditionFact<P>
-where
-    P: Hash + Eq + Clone,
-{
-    fn join(self, other: Self) -> Self {
-        debug_assert_eq!(self.budget, other.budget);
-        Self::new(self.inner | other.inner, self.budget)
-    }
-}
-
-impl<P> BitOr for PathCondition<P>
-where
-    P: Hash + Eq,
-{
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self::with_cover(self.cover.disjoin(rhs.cover))
-    }
-}
-
-impl<P> BitAnd<BooleanVariable<P>> for PathCondition<P>
-where
-    P: Hash + Eq + Clone,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: BooleanVariable<P>) -> Self::Output {
-        Self::with_cover(self.cover.conjoin_literal(&rhs))
-    }
-}
-
-impl<P> BitAnd<BranchGuard<P>> for PathCondition<P>
-where
-    P: Hash + Eq + Clone,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: BranchGuard<P>) -> Self::Output {
-        Self::with_cover(self.cover.conjoin_branch_guard(rhs))
-    }
-}
-
-impl<P> BitAnd for PathCondition<P>
-where
-    P: Hash + Eq + Clone,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        Self::with_cover(self.cover.conjoin(&rhs.cover))
-    }
-}
-
-impl<P> Display for PathCondition<P>
-where
-    P: Display + Hash + Eq,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_contradiction() {
-            write!(f, "⊥")
-        } else {
-            let cubes = self
-                .cover
-                .cubes()
-                .map(ToString::to_string)
-                .sorted()
-                .collect::<Vec<_>>();
-            write!(f, "{}", cubes.iter().format(" || "))
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{BooleanVariable, PathCondition, PathConditionBudget, PathConditionFact};
-    use crate::analysis::fixed_point::JoinSemiLattice;
-
-    #[test]
-    fn fact_construction_reduces_raw_path_conditions() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let structural =
-            (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
-
-        let fact = PathConditionFact::new(structural, PathConditionBudget::default());
-
-        assert_eq!(fact.into_inner(), PathCondition::of(a));
-    }
-
-    #[test]
-    fn fact_join_reduces_after_structural_union() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathConditionFact::new(
-            PathCondition::of(a.clone()) & b.clone(),
-            PathConditionBudget::default(),
-        );
-        let rhs = PathConditionFact::new(
-            PathCondition::of(a.clone()) & !b,
-            PathConditionBudget::default(),
-        );
-
-        assert_eq!(lhs.join(rhs).into_inner(), PathCondition::of(a));
     }
 }
