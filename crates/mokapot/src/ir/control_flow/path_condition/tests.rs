@@ -185,7 +185,9 @@ mod explicit_reduction {
         let structural =
             (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
 
-        let reduced = structural.clone().reduce(PathConditionBudget::default());
+        let reduced = structural
+            .clone()
+            .reduce_with_budget(PathConditionBudget::default());
 
         assert_ne!(structural, PathCondition::of(a.clone()));
         assert_eq!(reduced, PathCondition::of(a));

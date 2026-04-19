@@ -1,7 +1,7 @@
-use std::{collections::HashMap, convert::Infallible, hash::Hash};
+use std::{convert::Infallible, hash::Hash};
 
 use crate::{
-    analysis::fixed_point::{self, DataflowProblem, JoinSemiLattice},
+    analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
     ir::{
         ControlFlowGraph,
         control_flow::{ControlTransfer, PathCondition, PathConditionBudget, Value},
@@ -12,21 +12,9 @@ use crate::{
 
 use super::BranchGuard;
 
-pub(super) fn analyze<N>(
-    cfg: &ControlFlowGraph<N, ControlTransfer>,
-    budget: PathConditionBudget,
-) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-    let mut problem = PathConditionProblem::new(cfg, budget);
-    let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
-    path_conditions
-        .into_iter()
-        .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
-        .collect()
-}
-
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
-struct PathConditionProblem<'a, N> {
+pub(super) struct PathConditionProblem<'a, N> {
     cfg: &'a ControlFlowGraph<N, ControlTransfer>,
     budget: PathConditionBudget,
 }
@@ -34,7 +22,7 @@ struct PathConditionProblem<'a, N> {
 impl<'a, N> PathConditionProblem<'a, N> {
     /// Creates a path-condition analysis over `cfg`.
     #[must_use]
-    const fn new(
+    pub(super) const fn new(
         cfg: &'a ControlFlowGraph<N, ControlTransfer>,
         budget: PathConditionBudget,
     ) -> Self {
@@ -96,7 +84,7 @@ impl<P> PathConditionFact<P> {
         P: Hash + Eq + Clone,
     {
         Self {
-            inner: inner.reduce(budget),
+            inner: inner.reduce_with_budget(budget),
             budget,
         }
     }
