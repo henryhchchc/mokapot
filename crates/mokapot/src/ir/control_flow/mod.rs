@@ -4,12 +4,10 @@ pub mod path_condition;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-pub use self::path_condition::PathConditionBudget;
-
 use self::path_condition::{BranchGuard, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
-    ir::expression::Condition,
+    ir::{control_flow::path_condition::PathConditionBudget, expression::Condition},
     jvm::{code::ProgramCounter, references::ClassRef},
 };
 
@@ -138,8 +136,6 @@ impl<E> ControlFlowGraph<(), E> {
 
 impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
-    /// # Performance
-    /// The memory consumption is exponential in the number of unique predicates in this control flow graph.
     #[must_use]
     pub fn path_conditions(&self) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
         self.path_conditions_with_budget(PathConditionBudget::default())
