@@ -11,23 +11,13 @@ pub enum BooleanVariable<P> {
     Negative(P),
 }
 
-impl<P> BooleanVariable<P> {
-    /// Returns the underlying predicate, ignoring polarity.
-    #[must_use]
-    pub const fn predicate(&self) -> &P {
-        match self {
-            Self::Negative(predicate) | Self::Positive(predicate) => predicate,
-        }
-    }
-}
-
 impl<P> Display for BooleanVariable<P>
 where
     P: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Positive(predicate) => write!(f, "({predicate})"),
+            Self::Positive(predicate) => write!(f, "{predicate}"),
             Self::Negative(predicate) => write!(f, "~({predicate})"),
         }
     }

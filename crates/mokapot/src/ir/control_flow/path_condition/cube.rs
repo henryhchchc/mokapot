@@ -84,13 +84,11 @@ impl<P> Cube<P> {
     where
         P: Hash + Eq,
     {
-        let mut cube = Cube::one();
-        for literal in branch_guard {
-            if cube.insert(literal) == InsertResult::Contradiction {
-                return None;
-            }
-        }
-        Some(cube)
+        branch_guard
+            .into_iter()
+            .try_fold(Cube::one(), |mut cube, literal| {
+                (cube.insert(literal) != InsertResult::Contradiction).then_some(cube)
+            })
     }
 
     pub(super) fn predicates(&self) -> impl Iterator<Item = &P> {
@@ -116,25 +114,16 @@ impl<P> Cube<P> {
     where
         P: Hash + Eq,
     {
-        match literal {
-            BooleanVariable::Positive(predicate) => {
-                if self.negative.contains(&predicate) {
-                    InsertResult::Contradiction
-                } else if self.positive.insert(predicate) {
-                    InsertResult::Inserted
-                } else {
-                    InsertResult::Present
-                }
-            }
-            BooleanVariable::Negative(predicate) => {
-                if self.positive.contains(&predicate) {
-                    InsertResult::Contradiction
-                } else if self.negative.insert(predicate) {
-                    InsertResult::Inserted
-                } else {
-                    InsertResult::Present
-                }
-            }
+        let (present, opposite, predicate) = match literal {
+            BooleanVariable::Positive(predicate) => (&mut self.positive, &self.negative, predicate),
+            BooleanVariable::Negative(predicate) => (&mut self.negative, &self.positive, predicate),
+        };
+        if opposite.contains(&predicate) {
+            InsertResult::Contradiction
+        } else if present.insert(predicate) {
+            InsertResult::Inserted
+        } else {
+            InsertResult::Present
         }
     }
 
@@ -149,22 +138,14 @@ impl<P> Cube<P> {
     where
         P: Hash + Eq + Clone,
     {
-        if self
-            .positive
-            .iter()
-            .any(|predicate| other.negative.contains(predicate))
-            || self
-                .negative
-                .iter()
-                .any(|predicate| other.positive.contains(predicate))
-        {
-            return None;
+        if self.conflicts_with(other) {
+            None
+        } else {
+            let mut cube = self.clone();
+            cube.positive.extend(other.positive.iter().cloned());
+            cube.negative.extend(other.negative.iter().cloned());
+            Some(cube)
         }
-
-        let mut cube = self.clone();
-        cube.positive.extend(other.positive.iter().cloned());
-        cube.negative.extend(other.negative.iter().cloned());
-        Some(cube)
     }
 
     pub(super) fn subsumes(&self, other: &Self) -> bool
@@ -207,12 +188,11 @@ where
         if self.is_tautology() {
             write!(f, "⊤")
         } else {
-            let literals = self
-                .literals()
+            self.literals()
                 .map(|literal| literal.to_string())
                 .sorted()
-                .collect::<Vec<_>>();
-            write!(f, "{}", literals.iter().format(" && "))
+                .format(" && ")
+                .fmt(f)
         }
     }
 }

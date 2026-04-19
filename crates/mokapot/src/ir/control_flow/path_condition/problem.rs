@@ -9,12 +9,12 @@ use crate::{
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
-pub(super) struct Analyzer<'a, N> {
+pub(super) struct PathConditionProblem<'a, N> {
     cfg: &'a ControlFlowGraph<N, ControlTransfer>,
     budget: PathConditionBudget,
 }
 
-impl<'a, N> Analyzer<'a, N> {
+impl<'a, N> PathConditionProblem<'a, N> {
     /// Creates a path-condition analysis over `cfg`.
     #[must_use]
     pub(super) const fn new(
@@ -25,7 +25,7 @@ impl<'a, N> Analyzer<'a, N> {
     }
 }
 
-impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
+impl<'cfg, N> DataflowProblem for PathConditionProblem<'cfg, N> {
     type Location = ProgramCounter;
 
     type Fact = PathConditionFact<&'cfg Condition<Value>>;
@@ -47,11 +47,10 @@ impl<'cfg, N> DataflowProblem for Analyzer<'cfg, N> {
             .into_iter()
             .flatten()
             .filter_map(|edge| {
-                let propagated = match edge.data {
-                    ControlTransfer::Conditional(condition) => {
-                        fact.conjoin_branch_guard(condition.as_ref())
-                    }
-                    _ => fact.clone(),
+                let propagated = if let ControlTransfer::Conditional(condition) = edge.data {
+                    fact.conjoin_branch_guard(condition.as_ref())
+                } else {
+                    fact.clone()
                 };
                 (!propagated.is_contradiction()).then_some((edge.target, propagated))
             })

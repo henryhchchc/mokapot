@@ -241,16 +241,6 @@ impl<P> Cover<P> {
 }
 
 /// A path condition stored in disjunctive normal form.
-///
-/// `PathCondition` stores a boolean formula as a raw disjunction of cubes.
-/// Boolean composition updates that cover structurally; only direct cube-level
-/// contradictions are pruned during conjunction. Structural equality and
-/// hashing operate on the stored cover directly. Explicit reduction is
-/// available through [`PathCondition::reduce`], while budgeted lattice
-/// semantics stay at the [`PathConditionFact`] wrapper boundary used by the
-/// fixed-point solver. Negating an entire condition is intentionally not part
-/// of this API yet; callers should add that only when they need more than
-/// literal-level `!`.
 #[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     cover: Cover<P>,
