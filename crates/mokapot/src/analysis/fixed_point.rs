@@ -269,7 +269,8 @@ where
         };
         updated_entry.map(|entry| unsafe {
             // SAFETY: The key and value are stored in the Map.
-            //         The map cannot be mutated while `key_ref` and `value_ref` are held.
+            // The map cannot be mutated while the returned references are held.
+            // Therefore, the key and the value do not move during the lifetime of the references.
             (
                 mem::transmute::<&L, &L>(entry.key()),
                 mem::transmute::<&F, &F>(entry.get()),
@@ -306,7 +307,8 @@ where
         };
         updated_entry.map(|entry| unsafe {
             // SAFETY: The key and value are stored in the Map.
-            //         The map cannot be mutated while `key_ref` and `value_ref` are held.
+            // The map cannot be mutated while the returned references are held.
+            // Therefore, the key and the value do not move during the lifetime of the references.
             (
                 mem::transmute::<&L, &L>(entry.key()),
                 mem::transmute::<&F, &F>(entry.get()),
@@ -315,12 +317,11 @@ where
     }
 
     fn pop_one(&mut self) -> Option<(L, F)> {
-        // Get an arbitrary key, clone it, then remove the entry
-        let key_to_pop = self.keys().next()?;
+        let key = self.keys().next()?;
         // SAFETY: In the implementation of `remove_entry`, `key` is used for searching _before_ (re)moving the entry.
-        //         `key` is never used after `remove_entry`.
-        //         Therefore, it is fine to extend disassociate the key from the map.
-        let key: &L = unsafe { mem::transmute(key_to_pop) };
+        // `key` is never used after `remove_entry`.
+        // Therefore, it is fine to disassociate the lifetime of `key` from the map _for this call_.
+        let key: &L = unsafe { mem::transmute(key) };
         self.remove_entry(key)
     }
 }
