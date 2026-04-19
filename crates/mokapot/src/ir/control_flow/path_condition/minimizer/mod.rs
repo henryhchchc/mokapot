@@ -58,19 +58,16 @@ pub(super) fn absorb<P>(cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
 where
     P: Hash + Eq,
 {
-    let mut reduced = HashSet::new();
-    for cube in cubes {
-        if reduced
+    cubes.into_iter().fold(HashSet::new(), |mut reduced, cube| {
+        if !reduced
             .iter()
             .any(|existing: &Cube<P>| existing.subsumes(&cube))
         {
-            continue;
+            reduced.retain(|existing| !cube.subsumes(existing));
+            reduced.insert(cube);
         }
-
-        reduced.retain(|existing| !cube.subsumes(existing));
-        reduced.insert(cube);
-    }
-    reduced
+        reduced
+    })
 }
 
 fn exact_on_set_upper_bound<P>(cubes: &HashSet<Cube<P>>, atom_count: usize) -> Option<usize>

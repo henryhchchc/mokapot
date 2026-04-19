@@ -4,7 +4,10 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::ir::control_flow::path_condition::{BooleanVariable, cube::Cube};
+use crate::ir::control_flow::path_condition::{
+    BooleanVariable,
+    cube::{Cube, InsertResult},
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct AtomTable<P> {
@@ -57,12 +60,10 @@ impl IndexedCube {
     {
         let mut literals = vec![LiteralState::DontCare; atoms.atoms.len()];
         for predicate in cube.positive() {
-            literals[*atoms.indices.get(predicate).expect("missing positive atom")] =
-                LiteralState::Positive;
+            literals[atoms.indices[predicate]] = LiteralState::Positive;
         }
         for predicate in cube.negative() {
-            literals[*atoms.indices.get(predicate).expect("missing negative atom")] =
-                LiteralState::Negative;
+            literals[atoms.indices[predicate]] = LiteralState::Negative;
         }
         Self { literals }
     }
@@ -75,21 +76,15 @@ impl IndexedCube {
         for (index, literal) in self.literals.iter().enumerate() {
             let predicate = atoms.atoms[index].clone();
             match literal {
-                LiteralState::DontCare => {}
                 LiteralState::Positive => {
                     let inserted = cube.insert(BooleanVariable::Positive(predicate));
-                    debug_assert_ne!(
-                        inserted,
-                        crate::ir::control_flow::path_condition::cube::InsertResult::Contradiction
-                    );
+                    debug_assert_ne!(inserted, InsertResult::Contradiction);
                 }
                 LiteralState::Negative => {
                     let inserted = cube.insert(BooleanVariable::Negative(predicate));
-                    debug_assert_ne!(
-                        inserted,
-                        crate::ir::control_flow::path_condition::cube::InsertResult::Contradiction
-                    );
+                    debug_assert_ne!(inserted, InsertResult::Contradiction);
                 }
+                LiteralState::DontCare => {}
             }
         }
         cube
