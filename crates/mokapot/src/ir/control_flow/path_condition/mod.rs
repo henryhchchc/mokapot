@@ -1,6 +1,6 @@
 //! Path condition analysis.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
 mod branch_guard;
 mod budget;
@@ -9,12 +9,14 @@ mod cube;
 mod literal;
 mod minimizer;
 mod predicate;
-mod problem;
 
-use self::problem::PathConditionProblem;
 use crate::{
-    analysis::fixed_point,
-    ir::{ControlFlowGraph, control_flow::ControlTransfer, expression::Condition},
+    analysis::fixed_point::{self, DataflowProblem},
+    ir::{
+        ControlFlowGraph,
+        control_flow::{ControlTransfer, path_condition::cover::PathConditionFact},
+        expression::Condition,
+    },
     jvm::code::ProgramCounter,
 };
 pub use branch_guard::BranchGuard;
@@ -33,6 +35,57 @@ pub(super) fn analyze<N>(
         .into_iter()
         .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
         .collect()
+}
+
+/// A forward dataflow analysis that propagates path conditions through a CFG.
+#[derive(Debug)]
+struct PathConditionProblem<'a, N> {
+    cfg: &'a ControlFlowGraph<N, ControlTransfer>,
+    budget: PathConditionBudget,
+}
+
+impl<'a, N> PathConditionProblem<'a, N> {
+    /// Creates a path-condition analysis over `cfg`.
+    #[must_use]
+    pub(super) const fn new(
+        cfg: &'a ControlFlowGraph<N, ControlTransfer>,
+        budget: PathConditionBudget,
+    ) -> Self {
+        Self { cfg, budget }
+    }
+}
+
+impl<'cfg, N> DataflowProblem for PathConditionProblem<'cfg, N> {
+    type Location = ProgramCounter;
+
+    type Fact = PathConditionFact<&'cfg Condition<Value>>;
+
+    type Err = Infallible;
+
+    fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
+        [(self.cfg.entry_point(), PathConditionFact::one(self.budget))]
+    }
+
+    fn flow(
+        &mut self,
+        location: &Self::Location,
+        fact: &Self::Fact,
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
+        Ok(self
+            .cfg
+            .outgoing_edges(*location)
+            .into_iter()
+            .flatten()
+            .filter_map(|edge| {
+                let propagated = if let ControlTransfer::Conditional(condition) = edge.data {
+                    fact.conjoin_branch_guard(condition.as_ref())
+                } else {
+                    fact.clone()
+                };
+                (!propagated.is_contradiction()).then_some((edge.target, propagated))
+            })
+            .collect::<Vec<_>>())
+    }
 }
 
 #[cfg(test)]
