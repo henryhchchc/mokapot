@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 /// Budget knobs for path-condition minimization.
 ///
 /// The exact reducer is only used while the estimated on-set stays below
@@ -23,31 +21,4 @@ impl Default for PathConditionBudget {
             max_cover_checks: 8_192,
         }
     }
-}
-
-thread_local! {
-    static BUDGET_STACK: RefCell<Vec<PathConditionBudget>> = const { RefCell::new(Vec::new()) };
-}
-
-struct BudgetScope;
-
-impl Drop for BudgetScope {
-    fn drop(&mut self) {
-        BUDGET_STACK.with(|stack| {
-            let popped = stack.borrow_mut().pop();
-            debug_assert!(popped.is_some(), "path-condition budget stack underflow");
-        });
-    }
-}
-
-pub(super) fn current_budget() -> PathConditionBudget {
-    BUDGET_STACK
-        .with(|stack| stack.borrow().last().copied())
-        .unwrap_or_default()
-}
-
-pub(super) fn with_budget<R>(budget: PathConditionBudget, f: impl FnOnce() -> R) -> R {
-    BUDGET_STACK.with(|stack| stack.borrow_mut().push(budget));
-    let _scope = BudgetScope;
-    f()
 }
