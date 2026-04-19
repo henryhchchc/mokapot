@@ -1,5 +1,8 @@
 use std::collections::{BTreeSet, HashSet};
 use std::hash::Hash;
+use std::iter::once;
+
+use itertools::Itertools;
 
 use super::{
     absorb,
@@ -61,8 +64,6 @@ fn prime_implicants(on_set: Vec<IndexedCube>) -> Vec<IndexedCube> {
 }
 
 fn minimum_cover(prime_implicants: &[IndexedCube], on_set: &[IndexedCube]) -> BTreeSet<usize> {
-    let mut selected = BTreeSet::new();
-    let mut uncovered = (0..on_set.len()).collect::<BTreeSet<_>>();
     let coverage = on_set
         .iter()
         .map(|cube| {
@@ -74,12 +75,14 @@ fn minimum_cover(prime_implicants: &[IndexedCube], on_set: &[IndexedCube]) -> BT
         })
         .collect::<Vec<_>>();
 
-    for covers in &coverage {
-        if covers.len() == 1 {
-            selected.extend(covers.iter().copied());
-        }
-    }
+    let mut selected: BTreeSet<usize> = coverage
+        .iter()
+        .filter(|it| it.len() == 1)
+        .flatten()
+        .copied()
+        .collect();
 
+    let mut uncovered: BTreeSet<_> = (0..on_set.len()).collect();
     if !selected.is_empty() {
         uncovered.retain(|&cube_index| {
             !selected
@@ -92,25 +95,21 @@ fn minimum_cover(prime_implicants: &[IndexedCube], on_set: &[IndexedCube]) -> BT
         return selected;
     }
 
-    let mut products = vec![BTreeSet::new()];
-    for cube_index in uncovered {
-        let options = coverage[cube_index]
-            .iter()
-            .filter(|index| !selected.contains(index))
-            .copied()
-            .collect::<Vec<_>>();
-
-        let mut next_products = Vec::new();
-        for product in &products {
-            for option in &options {
-                let mut candidate = product.clone();
-                candidate.insert(*option);
-                next_products.push(candidate);
-            }
-        }
-
-        products = reduce_products(next_products, prime_implicants);
-    }
+    let products = uncovered
+        .into_iter()
+        .fold(vec![BTreeSet::new()], |products, cube_index| {
+            let options: Vec<_> = coverage[cube_index]
+                .iter()
+                .filter(|index| !selected.contains(index))
+                .copied()
+                .collect();
+            let next_products = products
+                .iter()
+                .cartesian_product(&options)
+                .map(|(product, option)| product.iter().copied().chain(once(*option)).collect())
+                .collect();
+            reduce_products(next_products, prime_implicants)
+        });
 
     let best = products
         .into_iter()
@@ -121,22 +120,19 @@ fn minimum_cover(prime_implicants: &[IndexedCube], on_set: &[IndexedCube]) -> BT
 }
 
 fn reduce_products(
-    mut products: Vec<BTreeSet<usize>>,
+    products: Vec<BTreeSet<usize>>,
     prime_implicants: &[IndexedCube],
 ) -> Vec<BTreeSet<usize>> {
-    products.sort_by_key(|product| cover_cost(product, prime_implicants));
-    let mut reduced: Vec<BTreeSet<usize>> = Vec::new();
-
-    'candidate: for product in products {
-        for existing in &reduced {
-            if existing.is_subset(&product) {
-                continue 'candidate;
+    products
+        .into_iter()
+        .sorted_by_key(|product| cover_cost(product, prime_implicants))
+        .fold(Vec::new(), |mut reduced, product| {
+            if reduced.iter().any(|existing| existing.is_subset(&product)) {
+                reduced
+            } else {
+                reduced.retain(|existing: &BTreeSet<usize>| !product.is_subset(existing));
+                reduced.push(product);
+                reduced
             }
-        }
-
-        reduced.retain(|existing: &BTreeSet<usize>| !product.is_subset(existing));
-        reduced.push(product);
-    }
-
-    reduced
+        })
 }
