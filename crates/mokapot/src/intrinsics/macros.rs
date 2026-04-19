@@ -50,7 +50,7 @@ macro_rules! extract_attributes {
 }
 
 macro_rules! see_jvm_spec {
-    (__latest_jdk) => { 25 };
+    (__latest_jdk) => { 26 };
     ($sec:literal $(, $sub_sec:literal )*) => {
         concat!(
             "See the [JVM Specification §", $sec, $( ".", $sub_sec, )* "]",
