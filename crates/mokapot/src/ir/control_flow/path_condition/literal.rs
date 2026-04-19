@@ -17,7 +17,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Positive(predicate) => write!(f, "{predicate}"),
+            Self::Positive(predicate) => predicate.fmt(f),
             Self::Negative(predicate) => write!(f, "~({predicate})"),
         }
     }
