@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::{
+    analysis::fixed_point,
     ir::{ControlFlowGraph, control_flow::ControlTransfer, expression::Condition},
     jvm::code::ProgramCounter,
 };
@@ -37,7 +38,12 @@ pub(super) fn analyze<N>(
     cfg: &ControlFlowGraph<N, ControlTransfer>,
     budget: PathConditionBudget,
 ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-    analyzer::analyze(cfg, budget)
+    let mut problem = analyzer::PathConditionProblem::new(cfg, budget);
+    let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
+    path_conditions
+        .into_iter()
+        .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
+        .collect()
 }
 
 /// A path condition stored in disjunctive normal form.
@@ -110,13 +116,22 @@ impl<P> PathCondition<P> {
         self.cover.is_contradiction()
     }
 
+    /// Reduces this condition with a default minimization budget.
+    #[must_use]
+    pub fn reduce(self) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        self.reduce_with_budget(PathConditionBudget::default())
+    }
+
     /// Reduces this condition with the given minimization budget.
     ///
     /// This is an explicit structural optimization step. Raw boolean
     /// composition on [`PathCondition`] does not perform semantic
     /// minimization implicitly.
     #[must_use]
-    pub fn reduce(self, budget: PathConditionBudget) -> Self
+    pub fn reduce_with_budget(self, budget: PathConditionBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -189,13 +204,12 @@ where
         if self.is_contradiction() {
             write!(f, "⊥")
         } else {
-            let cubes = self
-                .cover
+            self.cover
                 .cubes()
                 .map(ToString::to_string)
                 .sorted()
-                .collect::<Vec<_>>();
-            write!(f, "{}", cubes.iter().format(" || "))
+                .format(" || ")
+                .fmt(f)
         }
     }
 }

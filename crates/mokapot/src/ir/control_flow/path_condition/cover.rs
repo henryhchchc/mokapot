@@ -3,6 +3,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use itertools::Itertools;
+
 use super::{
     BooleanVariable, BranchGuard, PathConditionBudget,
     cube::Cube,
@@ -118,8 +120,8 @@ impl<P> Cover<P> {
     where
         P: Hash + Eq + Clone,
     {
-        if let Some(result) = memo.get(cube) {
-            return *result;
+        if let Some(&result) = memo.get(cube) {
+            return result;
         }
 
         let result = self.covers_cube_uncached(cube, memo);
@@ -216,14 +218,12 @@ impl<P> Cover<P> {
             return Self::zero();
         }
 
-        let mut cubes = HashSet::new();
-        for lhs_cube in &self.cubes {
-            for rhs_cube in &rhs.cubes {
-                if let Some(cube) = lhs_cube.conjoin(rhs_cube) {
-                    cubes.insert(cube);
-                }
-            }
-        }
+        let cubes = self
+            .cubes
+            .iter()
+            .cartesian_product(&rhs.cubes)
+            .filter_map(|(lhs_cube, rhs_cube)| lhs_cube.conjoin(rhs_cube))
+            .collect();
         Self { cubes }
     }
 
