@@ -1,0 +1,96 @@
+name: Setup Build Environment
+description: Set up the shared Rust build environment for CI jobs.
+
+inputs:
+  rust-toolchain:
+    description: Rust toolchain to install.
+    required: false
+    default: stable
+  rust-components:
+    description: Comma-separated Rust components to install.
+    required: false
+    default: ""
+  cargo-tools:
+    description: Comma-separated cargo tools to install via taiki-e/install-action.
+    required: false
+    default: ""
+  setup-java:
+    description: Whether to install the JDK.
+    required: false
+    default: "false"
+  java-version:
+    description: Java version to install when setup-java is enabled.
+    required: false
+    default: ""
+  setup-llvm:
+    description: Whether to install LLVM from apt.llvm.org.
+    required: false
+    default: "false"
+  llvm-version:
+    description: LLVM major version to install when setup-llvm is enabled.
+    required: false
+    default: ""
+  cache-rust-build:
+    description: Whether to restore and save the shared Rust build cache.
+    required: false
+    default: "false"
+  cache-key-suffix:
+    description: Job-specific suffix for the Rust build cache key.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust
+      if: ${{ inputs.rust-components == '' }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+
+    - name: Setup Rust
+      if: ${{ inputs.rust-components != '' }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+        components: ${{ inputs.rust-components }}
+
+    - name: Setup Cargo Tools
+      if: ${{ inputs.cargo-tools != '' }}
+      uses: taiki-e/install-action@v2
+      with:
+        tool: ${{ inputs.cargo-tools }}
+
+    - name: Setup JDK
+      if: ${{ inputs.setup-java == 'true' }}
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: corretto
+
+    - name: Install LLVM
+      if: ${{ inputs.setup-llvm == 'true' }}
+      shell: bash
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh "${{ inputs.llvm-version }}"
+        echo "/usr/lib/llvm-${{ inputs.llvm-version }}/bin" >> "$GITHUB_PATH"
+        echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${{ inputs.llvm-version }}" >> "$GITHUB_ENV"
+
+    - name: Cache Rust Build Stuff
+      if: ${{ inputs.cache-rust-build == 'true' }}
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cargo/.crates.toml
+          ~/.cargo/.crates2.json
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ inputs.cache-key-suffix }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-cargo-target-${{ inputs.cache-key-suffix }}-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-target-
