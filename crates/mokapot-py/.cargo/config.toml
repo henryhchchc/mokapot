@@ -1,0 +1,5 @@
+# Allow Python symbols to be resolved at runtime instead of link time.
+# This is required to build the `stub_gen` binary without a Python interpreter
+# available at link time. The binary does not call any Python C API at runtime.
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

@@ -32,6 +32,22 @@ cargo build --all-features
 cargo test --all-features
 ```
 
+## Python bindings (experimental)
+
+An initial Python extension is available in `crates/mokapot-py`.
+
+```sh
+cd crates/mokapot-py
+maturin develop
+```
+
+```python
+from mokapot import Class
+
+cls = mokapot.Class.from_file("MyClass.class")
+print(cls.binary_name)
+```
+
 ## Contributing
 
 See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to contribute.
