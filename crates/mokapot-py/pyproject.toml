@@ -1,0 +1,25 @@
+[project]
+name = "mokapot"
+version = "0.25.0"
+description = "Python bindings for mokapot"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Rust",
+]
+dependencies = []
+
+[dependency-groups]
+dev = ["maturin", "pytest", "pytest-cov"]
+
+[build-system]
+requires = ["maturin>=1.12"]
+build-backend = "_build_backend"
+backend-path = ["."]
+
+[tool.maturin]
+bindings = "pyo3"
+include = ["mokapot.pyi"]
+module-name = "mokapot"
