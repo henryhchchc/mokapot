@@ -720,7 +720,7 @@ impl Instruction {
                     .map(|target| offset_wide(target, pc))
                     .collect();
                 TableSwitch {
-                    default: (u16::from(default) - u16::from(pc)).into(),
+                    default: offset_wide(default, pc),
                     low,
                     high,
                     jump_offsets,
@@ -866,4 +866,33 @@ fn offset_wide(target: ProgramCounter, pc: ProgramCounter) -> i32 {
     let target: i32 = target.into();
     let pc: i32 = pc.into();
     target - pc
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::jvm::{
+        class::ConstantPool,
+        code::{Instruction, ProgramCounter, RawInstruction},
+    };
+
+    #[test]
+    fn tableswitch_default_can_target_backward() {
+        let raw = Instruction::TableSwitch {
+            default: ProgramCounter::from(5),
+            range: 0..=0,
+            jump_targets: vec![ProgramCounter::from(10)],
+        }
+        .into_raw_instruction(ProgramCounter::from(10), &mut ConstantPool::new())
+        .unwrap();
+
+        assert_eq!(
+            raw,
+            RawInstruction::TableSwitch {
+                default: -5,
+                low: 0,
+                high: 0,
+                jump_offsets: vec![0],
+            }
+        );
+    }
 }

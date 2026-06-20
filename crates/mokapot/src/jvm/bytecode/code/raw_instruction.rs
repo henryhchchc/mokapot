@@ -400,7 +400,7 @@ impl RawInstruction {
                 let dynamic_index = reader.decode_value()?;
                 let zero: u16 = reader.decode_value()?;
                 if zero != 0 {
-                    ParseError::malform("Zero paddings are not zero");
+                    Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
                 InvokeDynamic { dynamic_index }
             }
@@ -477,10 +477,15 @@ impl RawInstruction {
             0x75 => LNeg,
             0xab => {
                 while !reader.position().is_multiple_of(4) {
-                    let _padding_byte: u8 = reader.decode_value()?;
+                    let padding_byte: u8 = reader.decode_value()?;
+                    if padding_byte != 0 {
+                        Err(ParseError::malform("Switch padding is not zero"))?;
+                    }
                 }
                 let default = reader.decode_value()?;
-                let npairs = reader.decode_value()?;
+                let npairs: i32 = reader.decode_value()?;
+                let npairs = usize::try_from(npairs)
+                    .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
                 let match_offsets = (0..npairs)
                     .map(|_| {
                         let match_value = reader.decode_value()?;
@@ -495,11 +500,17 @@ impl RawInstruction {
             }
             0xaa => {
                 while !reader.position().is_multiple_of(4) {
-                    let _padding_byte: u8 = reader.decode_value()?;
+                    let padding_byte: u8 = reader.decode_value()?;
+                    if padding_byte != 0 {
+                        Err(ParseError::malform("Switch padding is not zero"))?;
+                    }
                 }
                 let default = reader.decode_value()?;
                 let low = reader.decode_value()?;
                 let high = reader.decode_value()?;
+                if low > high {
+                    Err(ParseError::malform("Invalid tableswitch range"))?;
+                }
                 let jump_offsets = (low..=high)
                     .map(|_| reader.decode_value())
                     .collect::<io::Result<_>>()?;
@@ -707,5 +718,60 @@ impl RawInstruction {
                 1 + padding + 8 + (8 * entries) // opcode + padding + default,npairs + (match,offset) pairs
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jvm::bytecode::ParseErrorKind;
+
+    fn assert_malformed(bytes: Vec<u8>) {
+        let err = InstructionList::<RawInstruction>::from_bytes(bytes).unwrap_err();
+        assert_eq!(err.kind(), ParseErrorKind::Malformed);
+    }
+
+    #[test]
+    fn invokedynamic_rejects_nonzero_reserved_bytes() {
+        assert_malformed(vec![0xba, 0x00, 0x01, 0x00, 0x01]);
+    }
+
+    #[test]
+    fn lookupswitch_rejects_nonzero_padding() {
+        assert_malformed(vec![
+            0xab, // lookupswitch at pc 0, followed by 3 bytes of padding
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, // default
+            0x00, 0x00, 0x00, 0x00, // npairs
+        ]);
+    }
+
+    #[test]
+    fn lookupswitch_rejects_negative_pair_count() {
+        assert_malformed(vec![
+            0xab, // lookupswitch at pc 0, followed by 3 bytes of padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // default
+            0xff, 0xff, 0xff, 0xff, // npairs = -1
+        ]);
+    }
+
+    #[test]
+    fn tableswitch_rejects_nonzero_padding() {
+        assert_malformed(vec![
+            0xaa, // tableswitch at pc 0, followed by 3 bytes of padding
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, // default
+            0x00, 0x00, 0x00, 0x00, // low
+            0x00, 0x00, 0x00, 0x00, // high
+            0x00, 0x00, 0x00, 0x00, // only jump offset
+        ]);
+    }
+
+    #[test]
+    fn tableswitch_rejects_inverted_range() {
+        assert_malformed(vec![
+            0xaa, // tableswitch at pc 0, followed by 3 bytes of padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // default
+            0x00, 0x00, 0x00, 0x01, // low
+            0x00, 0x00, 0x00, 0x00, // high
+        ]);
     }
 }
