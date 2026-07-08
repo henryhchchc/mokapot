@@ -5,12 +5,12 @@ use super::{
     absorb,
     indexed::{AtomTable, IndexedCube, LiteralState, absorb_indexed, indexed_cover_cost},
 };
-use crate::ir::control_flow::path_condition::{PathConditionBudget, cube::Cube};
+use crate::ir::control_flow::path_condition::{SolvingBudget, cube::Cube};
 
 pub(super) fn heuristic_minimize<P>(
     cubes: &HashSet<Cube<P>>,
     atoms: &AtomTable<P>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
 ) -> HashSet<Cube<P>>
 where
     P: Hash + Eq + Clone,
@@ -31,7 +31,7 @@ where
     let mut current_cost = indexed_cover_cost(&current);
     let mut stats = HeuristicStats::default();
 
-    for _round in 0..budget.max_heuristic_rounds {
+    for _round in 0..budget.heuristic_rounds {
         let expanded = heuristic_expand(&current, budget, &mut stats);
         let candidate = heuristic_irredundant(expanded, budget, &mut stats);
         let candidate_cost = indexed_cover_cost(&candidate);
@@ -43,7 +43,7 @@ where
             break;
         }
 
-        if stats.cover_checks >= budget.max_cover_checks {
+        if stats.cover_checks >= budget.cover_checks {
             break;
         }
     }
@@ -58,7 +58,7 @@ where
 
 fn heuristic_expand(
     cover: &[IndexedCube],
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
     stats: &mut HeuristicStats,
 ) -> Vec<IndexedCube> {
     let reference = absorb_indexed(cover.to_vec());
@@ -85,7 +85,7 @@ fn heuristic_expand(
         }
 
         expanded.push(candidate);
-        if stats.cover_checks >= budget.max_cover_checks {
+        if stats.cover_checks >= budget.cover_checks {
             expanded.extend(reference.iter().skip(cube_index + 1).cloned());
             break;
         }
@@ -96,7 +96,7 @@ fn heuristic_expand(
 
 fn heuristic_irredundant(
     cover: Vec<IndexedCube>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
     stats: &mut HeuristicStats,
 ) -> Vec<IndexedCube> {
     let cover = absorb_indexed(cover);
@@ -121,7 +121,7 @@ fn heuristic_irredundant(
             irredundant.push(cube.clone());
         }
 
-        if stats.cover_checks >= budget.max_cover_checks {
+        if stats.cover_checks >= budget.cover_checks {
             irredundant.extend(cover.iter().skip(cube_index + 1).cloned());
             break;
         }
@@ -134,7 +134,7 @@ fn indexed_cover_covers_cube(
     cover: &[IndexedCube],
     cube: &IndexedCube,
     memo: &mut HashMap<IndexedCube, bool>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
     stats: &mut HeuristicStats,
 ) -> Option<bool> {
     if let Some(result) = memo.get(cube) {
@@ -183,8 +183,8 @@ struct HeuristicStats {
 }
 
 impl HeuristicStats {
-    const fn try_take_cover_check(&mut self, budget: PathConditionBudget) -> bool {
-        if self.cover_checks >= budget.max_cover_checks {
+    const fn try_take_cover_check(&mut self, budget: SolvingBudget) -> bool {
+        if self.cover_checks >= budget.cover_checks {
             false
         } else {
             self.cover_checks += 1;

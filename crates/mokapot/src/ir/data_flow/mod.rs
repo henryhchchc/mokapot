@@ -29,13 +29,13 @@ impl<'a> DefUseChain<'a> {
 
     /// Get the location where an identifier is defined.
     #[must_use]
-    pub fn defined_at(&self, value: &LocalValue) -> Option<ProgramCounter> {
-        self.defs.get(value).copied()
+    pub fn defined_at(&self, value: LocalValue) -> Option<ProgramCounter> {
+        self.defs.get(&value).copied()
     }
 
     /// Get the locations where an identifier is used.
     #[must_use]
-    pub fn used_at(&self, id: &Identifier) -> BTreeSet<ProgramCounter> {
-        self.uses.get(id).cloned().unwrap_or_default()
+    pub fn used_at(&self, id: Identifier) -> BTreeSet<ProgramCounter> {
+        self.uses.get(&id).cloned().unwrap_or_default()
     }
 }

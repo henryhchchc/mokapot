@@ -83,9 +83,9 @@ proptest! {
         let du_chain = DefUseChain::new(&ir_method);
         let pc = ProgramCounter::from(local_idx);
         if let Some(MokaInstruction::Definition { .. }) = ir_method.instructions.get(&pc) {
-            assert_eq!(du_chain.defined_at(&LocalValue::new(local_idx)), Some(pc));
+            assert_eq!(du_chain.defined_at(LocalValue::new(local_idx)), Some(pc));
         } else {
-            assert!(du_chain.defined_at(&LocalValue::new(local_idx)).is_none());
+            assert!(du_chain.defined_at(LocalValue::new(local_idx)).is_none());
         }
     }
 
@@ -108,7 +108,7 @@ fn du_chain_uses() {
     for (local_idx, pc) in test_data {
         let def = Identifier::Local(LocalValue::new(local_idx));
         let use_site = ProgramCounter::from(pc);
-        assert!(du_chain.used_at(&def).contains(&use_site));
+        assert!(du_chain.used_at(def).contains(&use_site));
     }
 }
 

@@ -8,7 +8,7 @@ use exact::exact_minimize;
 use heuristic::heuristic_minimize;
 use indexed::AtomTable;
 
-use super::{PathConditionBudget, cube::Cube};
+use super::{SolvingBudget, cube::Cube};
 
 /// A reduction strategy for boolean covers.
 pub(super) trait Minimizer<P> {
@@ -21,13 +21,13 @@ pub(super) trait Minimizer<P> {
 /// A bounded boolean minimizer for path-condition covers.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct BoundedMinimizer {
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
 }
 
 impl BoundedMinimizer {
     /// Creates a new minimizer with the given resource budget.
     #[must_use]
-    pub const fn new(budget: PathConditionBudget) -> Self {
+    pub const fn new(budget: SolvingBudget) -> Self {
         Self { budget }
     }
 }
@@ -46,7 +46,7 @@ impl<P> Minimizer<P> for BoundedMinimizer {
         let on_set_upper_bound = exact_on_set_upper_bound(&cubes, atoms.len());
 
         match on_set_upper_bound {
-            Some(upper_bound) if upper_bound <= self.budget.max_exact_on_set_size => {
+            Some(upper_bound) if upper_bound <= self.budget.on_set_size => {
                 exact_minimize(&cubes, &atoms)
             }
             _ => heuristic_minimize(&cubes, &atoms, self.budget),
@@ -101,7 +101,7 @@ mod tests {
                 .unwrap(),
         ]);
 
-        let reduced = BoundedMinimizer::new(PathConditionBudget::default()).minimize(cubes);
+        let reduced = BoundedMinimizer::new(SolvingBudget::default()).minimize(cubes);
         assert_eq!(
             reduced,
             HashSet::from([Cube::of(BooleanVariable::Positive(1_u8))])
@@ -119,10 +119,10 @@ mod tests {
                 .unwrap(),
         ]);
 
-        let reduced = BoundedMinimizer::new(PathConditionBudget {
-            max_exact_on_set_size: 0,
-            max_heuristic_rounds: 2,
-            max_cover_checks: 128,
+        let reduced = BoundedMinimizer::new(SolvingBudget {
+            on_set_size: 0,
+            heuristic_rounds: 2,
+            cover_checks: 128,
         })
         .minimize(cubes);
         assert_eq!(

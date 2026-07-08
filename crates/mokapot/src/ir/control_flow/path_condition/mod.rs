@@ -30,13 +30,13 @@ mod tests;
 use cover::Cover;
 
 pub use branch_guard::BranchGuard;
-pub use budget::PathConditionBudget;
+pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
 pub use predicate::Value;
 
 pub(super) fn analyze<N>(
     cfg: &ControlFlowGraph<N, ControlTransfer>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
 ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
     let mut problem = analyzer::PathConditionProblem::new(cfg, budget);
     let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
@@ -122,7 +122,7 @@ impl<P> PathCondition<P> {
     where
         P: Hash + Eq + Clone,
     {
-        self.reduce_with_budget(PathConditionBudget::default())
+        self.reduce_with_budget(SolvingBudget::default())
     }
 
     /// Reduces this condition with the given minimization budget.
@@ -131,7 +131,7 @@ impl<P> PathCondition<P> {
     /// composition on [`PathCondition`] does not perform semantic
     /// minimization implicitly.
     #[must_use]
-    pub fn reduce_with_budget(self, budget: PathConditionBudget) -> Self
+    pub fn reduce_with_budget(self, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {

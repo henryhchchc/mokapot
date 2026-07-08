@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use self::path_condition::{BranchGuard, PathCondition, Value};
 use super::ControlFlowGraph;
 use crate::{
-    ir::{control_flow::path_condition::PathConditionBudget, expression::Condition},
+    ir::{control_flow::path_condition::SolvingBudget, expression::Condition},
     jvm::{code::ProgramCounter, references::ClassRef},
 };
 
@@ -49,6 +49,7 @@ impl<D> Edge<D> {
 impl<N, E> ControlFlowGraph<N, E> {
     /// Returns the entry point of the control flow graph.
     #[must_use]
+    #[expect(clippy::unused_self)]
     pub const fn entry_point(&self) -> ProgramCounter {
         ProgramCounter::ZERO
     }
@@ -138,14 +139,14 @@ impl<N> ControlFlowGraph<N, ControlTransfer> {
     /// Analyzes the control flow graph to determine the path conditions at each program counter.
     #[must_use]
     pub fn path_conditions(&self) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
-        self.path_conditions_with_budget(PathConditionBudget::default())
+        self.path_conditions_with_budget(SolvingBudget::default())
     }
 
     /// Analyzes the control flow graph with a custom minimization budget.
     #[must_use]
     pub fn path_conditions_with_budget(
         &self,
-        budget: PathConditionBudget,
+        budget: SolvingBudget,
     ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
         path_condition::analyze(self, budget)
     }
@@ -250,7 +251,7 @@ mod tests {
 
             assert_eq!(
                 cfg.path_conditions(),
-                cfg.path_conditions_with_budget(PathConditionBudget::default())
+                cfg.path_conditions_with_budget(SolvingBudget::default())
             );
         }
     }

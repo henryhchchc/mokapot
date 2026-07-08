@@ -4,7 +4,7 @@ use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
     ir::{
         ControlFlowGraph,
-        control_flow::{ControlTransfer, PathCondition, PathConditionBudget, Value},
+        control_flow::{ControlTransfer, PathCondition, SolvingBudget, Value},
         expression::Condition,
     },
     jvm::code::ProgramCounter,
@@ -16,7 +16,7 @@ use super::BranchGuard;
 #[derive(Debug)]
 pub(super) struct PathConditionProblem<'a, N> {
     cfg: &'a ControlFlowGraph<N, ControlTransfer>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
 }
 
 impl<'a, N> PathConditionProblem<'a, N> {
@@ -24,7 +24,7 @@ impl<'a, N> PathConditionProblem<'a, N> {
     #[must_use]
     pub(super) const fn new(
         cfg: &'a ControlFlowGraph<N, ControlTransfer>,
-        budget: PathConditionBudget,
+        budget: SolvingBudget,
     ) -> Self {
         Self { cfg, budget }
     }
@@ -68,18 +68,18 @@ impl<'cfg, N> DataflowProblem for PathConditionProblem<'cfg, N> {
 #[doc(hidden)]
 pub(super) struct PathConditionFact<P> {
     inner: PathCondition<P>,
-    budget: PathConditionBudget,
+    budget: SolvingBudget,
 }
 
 impl<P> PathConditionFact<P> {
-    pub(crate) fn one(budget: PathConditionBudget) -> Self
+    pub(crate) fn one(budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self::new(PathCondition::one(), budget)
     }
 
-    pub(crate) fn new(inner: PathCondition<P>, budget: PathConditionBudget) -> Self
+    pub(crate) fn new(inner: PathCondition<P>, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -138,7 +138,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{PathConditionBudget, PathConditionFact};
+    use super::{PathConditionFact, SolvingBudget};
     use crate::{
         analysis::fixed_point::JoinSemiLattice,
         ir::control_flow::path_condition::{BooleanVariable, PathCondition},
@@ -151,7 +151,7 @@ mod tests {
         let structural =
             (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
 
-        let fact = PathConditionFact::new(structural, PathConditionBudget::default());
+        let fact = PathConditionFact::new(structural, SolvingBudget::default());
 
         assert_eq!(fact.into_inner(), PathCondition::of(a));
     }
@@ -162,12 +162,10 @@ mod tests {
         let b = BooleanVariable::Positive(2_u32);
         let lhs = PathConditionFact::new(
             PathCondition::of(a.clone()) & b.clone(),
-            PathConditionBudget::default(),
+            SolvingBudget::default(),
         );
-        let rhs = PathConditionFact::new(
-            PathCondition::of(a.clone()) & !b,
-            PathConditionBudget::default(),
-        );
+        let rhs =
+            PathConditionFact::new(PathCondition::of(a.clone()) & !b, SolvingBudget::default());
 
         assert_eq!(lhs.join(rhs).into_inner(), PathCondition::of(a));
     }

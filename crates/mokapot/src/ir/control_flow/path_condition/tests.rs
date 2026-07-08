@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use proptest::{collection::hash_set, prelude::*};
 
-use super::{BooleanVariable, BranchGuard, PathCondition, PathConditionBudget};
+use super::{BooleanVariable, BranchGuard, PathCondition, SolvingBudget};
 
 impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
     type Parameters = (u32, bool);
@@ -187,7 +187,7 @@ mod explicit_reduction {
 
         let reduced = structural
             .clone()
-            .reduce_with_budget(PathConditionBudget::default());
+            .reduce_with_budget(SolvingBudget::default());
 
         assert_ne!(structural, PathCondition::of(a.clone()));
         assert_eq!(reduced, PathCondition::of(a));

@@ -211,11 +211,11 @@ impl LocalValue {
     pub const fn new(id: u16) -> Self {
         Self(id)
     }
+}
 
-    /// Create an [`Operand`] by referencing this [`LocalValue`].
-    #[must_use]
-    pub const fn as_operand(&self) -> Operand {
-        Operand::Just(Identifier::Local(*self))
+impl From<LocalValue> for Operand {
+    fn from(val: LocalValue) -> Self {
+        Operand::Just(Identifier::Local(val))
     }
 }
 

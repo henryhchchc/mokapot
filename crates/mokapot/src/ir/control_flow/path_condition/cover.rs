@@ -6,7 +6,7 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    BooleanVariable, BranchGuard, PathConditionBudget,
+    BooleanVariable, BranchGuard, SolvingBudget,
     cube::Cube,
     minimizer::{BoundedMinimizer, Minimizer},
 };
@@ -227,7 +227,7 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    pub(super) fn reduce(self, budget: PathConditionBudget) -> Self
+    pub(super) fn reduce(self, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
