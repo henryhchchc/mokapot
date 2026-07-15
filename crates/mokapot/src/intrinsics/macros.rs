@@ -29,6 +29,15 @@ macro_rules! extract_attributes {
                 )*
                 $(
                     Attribute::$attr_true => {
+                        if $var_true {
+                            let message = concat!(
+                                "There should be at most one ",
+                                stringify!($attr_true),
+                                " in a ",
+                                $env
+                            );
+                            Err(ParseError::malform(message))?;
+                        }
                         $var_true = true;
                     },
                 )*
@@ -38,8 +47,8 @@ macro_rules! extract_attributes {
                     }
                     unexpected => {
                         Err(ParseError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
-                            unexpected.name(),
-                            $env
+                            $env,
+                            unexpected.name()
                         )))?;
                     }
                 }
