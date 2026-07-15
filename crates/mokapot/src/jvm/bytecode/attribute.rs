@@ -360,3 +360,62 @@ where
     }
     Ok(buf)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ParseError;
+    use crate::{intrinsics::extract_attributes, jvm::bytecode::ParseErrorKind};
+
+    fn extract_markers(attributes: Vec<super::Attribute>) -> Result<(bool, bool), ParseError> {
+        extract_attributes! {
+            for attributes in "test_attributes" {
+                if let is_synthetic: Synthetic,
+                if let is_deprecated: Deprecated,
+                else let _other_attributes
+            }
+        }
+
+        Ok((is_synthetic, is_deprecated))
+    }
+
+    #[test]
+    fn rejects_duplicate_marker_attributes() {
+        let error = extract_markers(vec![
+            super::Attribute::Synthetic,
+            super::Attribute::Synthetic,
+        ])
+        .expect_err("duplicate marker attributes must be rejected");
+
+        assert_eq!(error.kind(), ParseErrorKind::Malformed);
+        assert!(
+            error
+                .to_string()
+                .contains("There should be at most one Synthetic in a test_attributes")
+        );
+
+        let error = extract_markers(vec![
+            super::Attribute::Deprecated,
+            super::Attribute::Deprecated,
+        ])
+        .expect_err("duplicate marker attributes must be rejected");
+
+        assert_eq!(error.kind(), ParseErrorKind::Malformed);
+        assert!(
+            error
+                .to_string()
+                .contains("There should be at most one Deprecated in a test_attributes")
+        );
+    }
+
+    #[test]
+    fn reports_the_expected_attribute_table_before_the_actual_attribute() {
+        let error = extract_markers(vec![super::Attribute::Signature(String::new())])
+            .expect_err("an unexpected attribute must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Unexpected attribute. Expected: test_attributes, but got: Signature")
+        );
+    }
+}
