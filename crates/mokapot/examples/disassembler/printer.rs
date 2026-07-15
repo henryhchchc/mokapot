@@ -297,8 +297,8 @@ impl<'a> ClassPrinter<'a> {
         println!("         from    to  target type");
         for entry in &body.exception_table {
             // Get the start and end program counters of the protected region
-            let start_pc = *entry.covered_pc.start();
-            let end_pc = *entry.covered_pc.end();
+            let start_pc = entry.covered_pc.start;
+            let end_pc = entry.covered_pc.end;
 
             // Get the exception type, or "any" for finally blocks (which catch all exceptions)
             let catch_type = match &entry.catch_type {

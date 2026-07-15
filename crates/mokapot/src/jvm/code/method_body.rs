@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
-    ops::{Bound, Range, RangeInclusive},
+    ops::{Bound, Range},
 };
 
 use super::{Instruction, ProgramCounter, RawInstruction};
@@ -254,8 +254,10 @@ mod test {
 /// An entry in the exception table.
 #[derive(Debug, Clone)]
 pub struct ExceptionTableEntry {
-    /// The locations where the exception handler is active.
-    pub covered_pc: RangeInclusive<ProgramCounter>,
+    /// The half-open range of locations where the exception handler is active.
+    ///
+    /// This corresponds to the JVM class file's `start_pc <= pc < end_pc` invariant.
+    pub covered_pc: Range<ProgramCounter>,
     /// The location of the exception handler.
     pub handler_pc: ProgramCounter,
     /// The type of the exception to be handled.

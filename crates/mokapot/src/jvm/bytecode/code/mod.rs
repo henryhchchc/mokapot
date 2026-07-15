@@ -88,7 +88,7 @@ impl ClassElement for ExceptionTableEntry {
         } = raw;
         let start_pc = ProgramCounter::from(start_pc);
         let end_pc = ProgramCounter::from(end_pc);
-        let covered_pc = start_pc..=end_pc;
+        let covered_pc = start_pc..end_pc;
         let handler_pc = ProgramCounter::from(handler_pc);
         let catch_type = if catch_type_idx == 0 {
             None
@@ -108,8 +108,8 @@ impl ClassElement for ExceptionTableEntry {
             handler_pc,
             catch_type,
         } = self;
-        let start_pc = (*covered_pc.start()).into();
-        let end_pc = (*covered_pc.end()).into();
+        let start_pc = covered_pc.start.into();
+        let end_pc = covered_pc.end.into();
         let handler_pc = handler_pc.into();
         let catch_type_idx = catch_type
             .map(|it| cp.put_class_ref(it))
@@ -372,5 +372,45 @@ impl ClassElement for MethodBody {
             exception_table,
             attributes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ClassElement, ExceptionTableEntry, ParsingContext, raw_attributes};
+    use crate::jvm::{
+        class::{ConstantPool, Version},
+        code::ProgramCounter,
+    };
+
+    #[test]
+    fn exception_table_entry_preserves_exclusive_end_pc() {
+        let context = ParsingContext {
+            constant_pool: ConstantPool::new(),
+            class_version: Version::Jdk8,
+            current_class_binary_name: "Test".to_owned(),
+        };
+        let entry = ExceptionTableEntry::from_raw(
+            raw_attributes::ExceptionTableEntry {
+                start_pc: 1,
+                end_pc: 4,
+                handler_pc: 5,
+                catch_type_idx: 0,
+            },
+            &context,
+        )
+        .unwrap();
+
+        assert_eq!(
+            entry.covered_pc,
+            ProgramCounter::from(1)..ProgramCounter::from(4)
+        );
+        assert!(entry.covers(1.into()));
+        assert!(entry.covers(3.into()));
+        assert!(!entry.covers(4.into()));
+
+        let raw = entry.into_raw(&mut ConstantPool::new()).unwrap();
+        assert_eq!(raw.start_pc, 1);
+        assert_eq!(raw.end_pc, 4);
     }
 }
