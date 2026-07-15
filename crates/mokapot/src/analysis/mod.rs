@@ -82,7 +82,10 @@ where
 #[derive(Debug, Clone)]
 #[instability::unstable(feature = "project-analyses")]
 pub struct ClassHierarchy {
-    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
+    #[cfg_attr(
+        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
+        expect(dead_code)
+    )]
     inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
     super_classes: HashMap<ClassRef, ClassRef>,
 }
@@ -91,8 +94,14 @@ pub struct ClassHierarchy {
 #[derive(Debug, Clone)]
 #[instability::unstable(feature = "project-analyses")]
 pub struct InterfaceImplHierarchy {
-    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
+    #[cfg_attr(
+        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
+        expect(dead_code)
+    )]
     implementations: HashMap<ClassRef, HashSet<ClassRef>>,
-    #[cfg_attr(not(feature = "petgraph"), expect(dead_code))]
+    #[cfg_attr(
+        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
+        expect(dead_code)
+    )]
     implementers: HashMap<ClassRef, HashSet<ClassRef>>,
 }
