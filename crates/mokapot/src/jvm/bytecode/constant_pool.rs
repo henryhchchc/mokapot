@@ -86,6 +86,19 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
+    pub(super) fn put_interface_method_ref(
+        &mut self,
+        value: MethodRef,
+    ) -> Result<u16, GenerationError> {
+        let class_index = self.put_class_ref(value.owner)?;
+        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
+        self.put_entry_dedup(Entry::InterfaceMethodRef {
+            class_index,
+            name_and_type_index,
+        })
+        .map_err(Into::into)
+    }
+
     pub(super) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, ParseError> {
         let entry = self
             .get_entry(value_index)
@@ -277,7 +290,39 @@ impl ConstantPool {
     }
 
     pub(super) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        let entry = self.get_entry(index).context("Invalid  pool index")?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
+        if let &Entry::MethodRef {
+            class_index,
+            name_and_type_index,
+        } = entry
+        {
+            self.get_method_ref_parts(class_index, name_and_type_index)
+        } else {
+            mismatch("MethodRef", entry)
+        }
+    }
+
+    pub(super) fn get_interface_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
+        if let &Entry::InterfaceMethodRef {
+            class_index,
+            name_and_type_index,
+        } = entry
+        {
+            self.get_method_ref_parts(class_index, name_and_type_index)
+        } else {
+            mismatch("InterfaceMethodRef", entry)
+        }
+    }
+
+    pub(super) fn get_method_or_interface_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
         if let &Entry::MethodRef {
             class_index,
             name_and_type_index,
@@ -287,16 +332,24 @@ impl ConstantPool {
             name_and_type_index,
         } = entry
         {
-            let owner = self.get_class_ref(class_index)?;
-            let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-            Ok(MethodRef {
-                owner,
-                name,
-                descriptor,
-            })
+            self.get_method_ref_parts(class_index, name_and_type_index)
         } else {
             mismatch("MethodRef | InterfaceMethodRef", entry)
         }
+    }
+
+    fn get_method_ref_parts(
+        &self,
+        class_index: u16,
+        name_and_type_index: u16,
+    ) -> Result<MethodRef, ParseError> {
+        let owner = self.get_class_ref(class_index)?;
+        let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
+        Ok(MethodRef {
+            owner,
+            name,
+            descriptor,
+        })
     }
 
     pub(super) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, ParseError> {
@@ -319,10 +372,10 @@ impl ConstantPool {
             3 => self.get_field_ref(idx).map(RefPutField),
             4 => self.get_field_ref(idx).map(RefPutStatic),
             5 => self.get_method_ref(idx).map(RefInvokeVirtual),
-            6 => self.get_method_ref(idx).map(RefInvokeStatic),
-            7 => self.get_method_ref(idx).map(RefInvokeSpecial),
+            6 => self.get_method_or_interface_ref(idx).map(RefInvokeStatic),
+            7 => self.get_method_or_interface_ref(idx).map(RefInvokeSpecial),
             8 => self.get_method_ref(idx).map(RefNewInvokeSpecial),
-            9 => self.get_method_ref(idx).map(RefInvokeInterface),
+            9 => self.get_interface_method_ref(idx).map(RefInvokeInterface),
             _ => Err(ParseError::malform(
                 "Invalid reference kind in method handle",
             ))?,
@@ -342,8 +395,8 @@ impl ConstantPool {
             MethodHandle::RefInvokeVirtual(m)
             | MethodHandle::RefInvokeStatic(m)
             | MethodHandle::RefInvokeSpecial(m)
-            | MethodHandle::RefNewInvokeSpecial(m)
-            | MethodHandle::RefInvokeInterface(m) => self.put_method_ref(m)?,
+            | MethodHandle::RefNewInvokeSpecial(m) => self.put_method_ref(m)?,
+            MethodHandle::RefInvokeInterface(m) => self.put_interface_method_ref(m)?,
         };
         self.put_entry_dedup(Entry::MethodHandle {
             reference_kind,
@@ -588,6 +641,52 @@ pub(crate) mod tests {
             assert_eq!(pool, parsed_back);
             // assert_eq!(written, content);
         }
+    }
+
+    #[test]
+    fn interface_method_handles_use_interface_method_refs() {
+        let method = MethodRef {
+            owner: ClassRef::new("example/Interface"),
+            name: "method".to_owned(),
+            descriptor: "()V".parse().unwrap(),
+        };
+        let handle = MethodHandle::RefInvokeInterface(method);
+        let mut pool = ConstantPool::new();
+
+        let handle_index = pool.put_method_handle(handle.clone()).unwrap();
+
+        let Entry::MethodHandle {
+            reference_kind,
+            reference_index,
+        } = pool.get_entry(handle_index).unwrap()
+        else {
+            panic!("expected method handle entry");
+        };
+        assert_eq!(*reference_kind, 9);
+        assert!(matches!(
+            pool.get_entry(*reference_index),
+            Some(Entry::InterfaceMethodRef { .. })
+        ));
+        assert_eq!(pool.get_method_handle(handle_index).unwrap(), handle);
+    }
+
+    #[test]
+    fn interface_method_handles_reject_method_refs() {
+        let method = MethodRef {
+            owner: ClassRef::new("example/Interface"),
+            name: "method".to_owned(),
+            descriptor: "()V".parse().unwrap(),
+        };
+        let mut pool = ConstantPool::new();
+        let method_index = pool.put_method_ref(method).unwrap();
+        let handle_index = pool
+            .put_entry(Entry::MethodHandle {
+                reference_kind: 9,
+                reference_index: method_index,
+            })
+            .unwrap();
+
+        assert!(pool.get_method_handle(handle_index).is_err());
     }
 
     prop_compose! {

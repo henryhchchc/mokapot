@@ -359,18 +359,18 @@ impl Instruction {
                 Self::InvokeVirtual(method_ref)
             }
             InvokeSpecial { method_index } => {
-                let method_ref = constant_pool.get_method_ref(method_index)?;
+                let method_ref = constant_pool.get_method_or_interface_ref(method_index)?;
                 Self::InvokeSpecial(method_ref)
             }
             InvokeStatic { method_index } => {
-                let method_ref = constant_pool.get_method_ref(method_index)?;
+                let method_ref = constant_pool.get_method_or_interface_ref(method_index)?;
                 Self::InvokeStatic(method_ref)
             }
             InvokeInterface {
                 method_index,
                 count,
             } => {
-                let method_ref = constant_pool.get_method_ref(method_index)?;
+                let method_ref = constant_pool.get_interface_method_ref(method_index)?;
                 Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
@@ -771,7 +771,7 @@ impl Instruction {
                 method_index: cp.put_method_ref(method_ref)?,
             },
             Self::InvokeInterface(method_ref, count) => InvokeInterface {
-                method_index: cp.put_method_ref(method_ref)?,
+                method_index: cp.put_interface_method_ref(method_ref)?,
                 count,
             },
             Self::InvokeDynamic {
@@ -871,9 +871,19 @@ fn offset_wide(target: ProgramCounter, pc: ProgramCounter) -> i32 {
 #[cfg(test)]
 mod tests {
     use crate::jvm::{
-        class::ConstantPool,
+        JavaString,
+        class::{ConstantPool, constant_pool::Entry},
         code::{Instruction, ProgramCounter, RawInstruction},
+        references::{ClassRef, MethodRef},
     };
+
+    fn interface_method() -> MethodRef {
+        MethodRef {
+            owner: ClassRef::new("example/Interface"),
+            name: "method".to_owned(),
+            descriptor: "()V".parse().unwrap(),
+        }
+    }
 
     #[test]
     fn tableswitch_default_can_target_backward() {
@@ -893,6 +903,67 @@ mod tests {
                 high: 0,
                 jump_offsets: vec![0],
             }
+        );
+    }
+
+    #[test]
+    fn invokeinterface_uses_interface_method_refs() {
+        let mut pool = ConstantPool::new();
+        let raw = Instruction::InvokeInterface(interface_method(), 1)
+            .into_raw_instruction(ProgramCounter::default(), &mut pool)
+            .unwrap();
+
+        let RawInstruction::InvokeInterface { method_index, .. } = raw else {
+            panic!("expected invokeinterface instruction");
+        };
+        assert!(matches!(
+            pool.get_entry(method_index),
+            Some(Entry::InterfaceMethodRef { .. })
+        ));
+    }
+
+    #[test]
+    fn invokeinterface_rejects_method_refs() {
+        let mut pool = ConstantPool::new();
+        let class_name_index = pool
+            .put_entry(Entry::Utf8(JavaString::Utf8(
+                "example/Interface".to_owned(),
+            )))
+            .unwrap();
+        let class_index = pool
+            .put_entry(Entry::Class {
+                name_index: class_name_index,
+            })
+            .unwrap();
+        let name_index = pool
+            .put_entry(Entry::Utf8(JavaString::Utf8("method".to_owned())))
+            .unwrap();
+        let descriptor_index = pool
+            .put_entry(Entry::Utf8(JavaString::Utf8("()V".to_owned())))
+            .unwrap();
+        let name_and_type_index = pool
+            .put_entry(Entry::NameAndType {
+                name_index,
+                descriptor_index,
+            })
+            .unwrap();
+        let method_index = pool
+            .put_entry(Entry::MethodRef {
+                class_index,
+                name_and_type_index,
+            })
+            .unwrap();
+
+        assert!(
+            Instruction::from_raw_instruction(
+                RawInstruction::InvokeInterface {
+                    method_index,
+                    count: 1,
+                },
+                ProgramCounter::default(),
+                &pool,
+            )
+            .is_err()
         );
     }
 }
