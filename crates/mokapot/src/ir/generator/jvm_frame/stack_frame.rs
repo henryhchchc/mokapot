@@ -66,8 +66,11 @@ impl JoinSemiLattice for JvmStackFrame {
             .zip_eq(other.operand_stack)
             .map(|(lhs, rhs)| lhs.join(rhs))
             .collect();
-        let mut possible_ret_addresses = other.possible_ret_addresses;
-        possible_ret_addresses.extend(self.possible_ret_addresses.clone());
+        let possible_ret_addresses = self
+            .possible_ret_addresses
+            .into_iter()
+            .chain(other.possible_ret_addresses)
+            .collect();
         Self {
             max_stack: self.max_stack,
             local_variables,
