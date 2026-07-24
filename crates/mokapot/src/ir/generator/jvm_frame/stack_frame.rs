@@ -264,7 +264,7 @@ fn create_local_variable_entries(
     let this_arg = if is_static {
         None
     } else {
-        Some(Entry::Value(Operand::Just(Identifier::This)))
+        Some(Entry::Value(Operand::just(Identifier::This)))
     };
     let args = desc
         .parameters_types
@@ -272,7 +272,7 @@ fn create_local_variable_entries(
         .enumerate()
         .flat_map(|(arg_idx, local_type)| {
             let arg_idx = u16::try_from(arg_idx).expect("The number of args should be within u16");
-            let arg_ref = Operand::Just(Identifier::Arg(arg_idx));
+            let arg_ref = Operand::just(Identifier::Arg(arg_idx));
             let maybe_top = if let FieldType::Base(Long | Double) = local_type {
                 Some(Entry::Top)
             } else {

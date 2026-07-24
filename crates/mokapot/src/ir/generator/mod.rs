@@ -149,7 +149,7 @@ impl<'m> MokaIRGenerator<'m> {
         handlers
             .into_iter()
             .map(|(handler_pc, exceptions)| {
-                let caught_exception_ref = Operand::Just(Identifier::CaughtException(handler_pc));
+                let caught_exception_ref = Operand::just(Identifier::CaughtException(handler_pc));
                 let handler_frame =
                     frame.same_locals_1_stack_item_frame(Entry::Value(caught_exception_ref));
                 (

@@ -1,13 +1,16 @@
+use crate::ir::{
+    Identifier, LocalValue, Operand,
+    generator::{
+        ExecutionError,
+        jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+    },
+};
 #[cfg(test)]
 use proptest::prelude::*;
-use crate::ir::{
-    generator::{jvm_frame::{JvmStackFrame, SINGLE_SLOT, DUAL_SLOT}, ExecutionError},
-    Identifier, LocalValue, Operand,
-};
 
 #[test]
 fn args_locals_checking() {
-    let desc = "[ID)I".parse().unwrap();
+    let desc = "([ID)I".parse().unwrap();
     let too_small_locals = JvmStackFrame::new(false, &desc, 2, 2);
     assert!(too_small_locals.is_err());
     let correct = JvmStackFrame::new(false, &desc, 4, 2);
@@ -59,7 +62,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -80,7 +83,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {

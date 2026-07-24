@@ -1,17 +1,14 @@
 use std::{
-    collections::{BTreeMap, HashSet, hash_set},
-    iter::{self, Once},
+    collections::{BTreeMap, BTreeSet, HashSet, btree_set},
+    fmt,
 };
 
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use std::hash::Hash;
 
 use super::expression::{Condition, Expression};
+use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::jvm::code::ProgramCounter;
-use crate::{
-    analysis::fixed_point::JoinSemiLattice,
-    intrinsics::{HashUnordered, hashset_partial_order},
-};
 
 /// Represents a single instruction in the Moka IR.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -93,69 +90,61 @@ impl MokaInstruction {
 }
 
 /// Represents a reference to a value in the Moka IR.
-#[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
+/// It can contain more than one possible values for a value combined from multiple branches.
+/// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum Operand {
-    /// A reference to a value defined in the current scope.
-    #[display("{_0}")]
-    Just(Identifier),
-    /// A reference to a value combined from multiple branches.
-    /// See the Phi function in [Static single-assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) for more information.
-    #[display("Phi({})", _0.iter().map(ToString::to_string).join(", "))]
-    #[cfg_attr(test, proptest(strategy = "prop_test_phi_inner()"))]
-    Phi(HashSet<Identifier>),
-}
+pub struct Operand(
+    #[cfg_attr(test, proptest(strategy = "prop_test_phi_inner()"))] BTreeSet<Identifier>,
+);
 
-#[cfg(test)]
-fn prop_test_phi_inner() -> impl proptest::strategy::Strategy<Value = Operand> {
-    use proptest::prelude::*;
-    proptest::collection::hash_set(any::<Identifier>(), 1..10).prop_map(Operand::Phi)
-}
+/// An error returned when constructing an [`Operand`] from an empty iterator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("an operand must contain at least one identifier")]
+pub struct EmptyOperandError;
 
-impl PartialOrd for Operand {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use Operand::{Just, Phi};
-        use std::cmp::Ordering::{Equal, Greater, Less};
-        match (self, other) {
-            (Just(lhs), Just(rhs)) => lhs.eq(rhs).then_some(Equal),
-            (Just(lhs), Phi(rhs_set)) => rhs_set.contains(lhs).then_some(Less),
-            (Phi(lhs_set), Just(rhs)) => lhs_set.contains(rhs).then_some(Greater),
-            (Phi(lhs), Phi(rhs)) => hashset_partial_order(lhs, rhs),
+impl fmt::Display for Operand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0.len() > 1 {
+            write!(f, "Phi({})", self.0.iter().format(", "))
+        } else {
+            self.0.first().expect("Operand is always non-empty").fmt(f)
         }
     }
 }
 
-impl Hash for Operand {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        core::mem::discriminant(self).hash(state);
-        match self {
-            Operand::Just(id) => id.hash(state),
-            Operand::Phi(ids) => ids.hash_unordered(state),
+#[cfg(test)]
+fn prop_test_phi_inner() -> impl proptest::strategy::Strategy<Value = BTreeSet<Identifier>> {
+    use proptest::prelude::*;
+    proptest::collection::hash_set(any::<Identifier>(), 1..10).prop_map(BTreeSet::from_iter)
+}
+
+impl PartialOrd for Operand {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+
+        if self == other {
+            Some(Equal)
+        } else if self.0.is_subset(&other.0) {
+            Some(Less)
+        } else if other.0.is_subset(&self.0) {
+            Some(Greater)
+        } else {
+            None
         }
     }
 }
 
 impl From<Identifier> for Operand {
     fn from(value: Identifier) -> Self {
-        Self::Just(value)
+        Self::just(value)
     }
 }
 
 impl JoinSemiLattice for Operand {
-    fn join(self, other: Self) -> Self {
-        use Operand::{Just, Phi};
-        match (self, other) {
-            (Just(lhs), Just(rhs)) if lhs == rhs => Just(lhs),
-            (Just(lhs), Just(rhs)) => Phi(HashSet::from([lhs, rhs])),
-            (Just(id), Phi(mut ids)) | (Phi(mut ids), Just(id)) => {
-                ids.insert(id);
-                Phi(ids)
-            }
-            (Phi(mut lhs), Phi(rhs)) => {
-                lhs.extend(rhs);
-                Phi(lhs)
-            }
-        }
+    fn join(mut self, other: Self) -> Self {
+        self.0.extend(other.0);
+        self
     }
 }
 
@@ -164,14 +153,10 @@ impl IntoIterator for Operand {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, hash_set::IntoIter<Self::Item>>;
+    type IntoIter = btree_set::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Operand::{Just, Phi};
-        match self {
-            Just(id) => Either::Left(iter::once(id)),
-            Phi(ids) => Either::Right(ids.into_iter()),
-        }
+        self.0.into_iter()
     }
 }
 
@@ -180,19 +165,36 @@ impl<'a> IntoIterator for &'a Operand {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = Either<Once<Self::Item>, hash_set::Iter<'a, Identifier>>;
+    type IntoIter = btree_set::Iter<'a, Identifier>;
 
     fn into_iter(self) -> Self::IntoIter {
-        use Operand::{Just, Phi};
-        match self {
-            Just(id) => Either::Left(iter::once(id)),
-            Phi(ids) => Either::Right(ids.iter()),
-        }
+        self.0.iter()
     }
 }
 
 impl Operand {
-    /// Creates an iterator over the possible [`Identifier`].
+    /// Creates an operand that can only refer to `identifier`.
+    #[must_use]
+    pub fn just(identifier: Identifier) -> Self {
+        Self(BTreeSet::from([identifier]))
+    }
+
+    /// Creates an operand from all identifiers yielded by `identifiers`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EmptyOperandError`] when `identifiers` yields no identifiers.
+    pub fn try_from_iter(
+        identifiers: impl IntoIterator<Item = Identifier>,
+    ) -> Result<Self, EmptyOperandError> {
+        let values = BTreeSet::from_iter(identifiers);
+        if values.is_empty() {
+            return Err(EmptyOperandError);
+        }
+        Ok(Self(values))
+    }
+
+    /// Returns an iterator over the possible [`Identifier`]s.
     pub fn iter(&self) -> impl Iterator<Item = &Identifier> {
         self.into_iter()
     }
@@ -215,7 +217,7 @@ impl LocalValue {
 
 impl From<LocalValue> for Operand {
     fn from(val: LocalValue) -> Self {
-        Operand::Just(Identifier::Local(val))
+        Self::just(Identifier::Local(val))
     }
 }
 
@@ -226,7 +228,7 @@ impl From<LocalValue> for u16 {
 }
 
 /// Represents an identifier of a value in the current scope.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Identifier {
     /// The `this` value in an instance method.
@@ -254,6 +256,10 @@ pub(crate) mod test {
 
     use super::*;
 
+    fn operand(identifiers: impl IntoIterator<Item = Identifier>) -> Operand {
+        Operand::try_from_iter(identifiers).expect("test operands must not be empty")
+    }
+
     proptest! {
         #[test]
         fn local_value_inner_conversion(id in 0..u16::MAX) {
@@ -264,54 +270,71 @@ pub(crate) mod test {
     }
 
     #[test]
-    fn value_ref_merge() {
+    fn operand_construction() {
         use std::collections::HashSet;
 
-        use super::{Identifier::*, Operand::*};
+        use super::Identifier::*;
 
-        assert_eq!(Just(This).join(Just(This)), Just(This));
+        assert_eq!(Operand::try_from_iter([]), Err(EmptyOperandError));
         assert_eq!(
-            Just(This).join(Just(Arg(0))),
-            Phi(HashSet::from([This, Arg(0)]))
+            operand([This, This, Arg(0)])
+                .into_iter()
+                .collect::<HashSet<_>>(),
+            HashSet::from([This, Arg(0)])
+        );
+        assert_eq!(operand([This, Arg(0)]).to_string(), "Phi(%this, %arg0)");
+    }
+
+    #[test]
+    fn operand_merge() {
+        use super::Identifier::*;
+
+        assert_eq!(
+            Operand::just(This).join(Operand::just(This)),
+            Operand::just(This)
         );
         assert_eq!(
-            Just(Arg(0)).join(Just(This)),
-            Phi(HashSet::from([This, Arg(0)]))
+            Operand::just(This).join(Operand::just(Arg(0))),
+            operand([This, Arg(0)])
         );
         assert_eq!(
-            Just(Arg(0)).join(Just(Arg(1))),
-            Phi(HashSet::from([Arg(0), Arg(1)]))
+            Operand::just(Arg(0)).join(Operand::just(This)),
+            operand([This, Arg(0)])
         );
         assert_eq!(
-            Just(Arg(0)).join(Phi(HashSet::from([Arg(1), Arg(2)]))),
-            Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
+            Operand::just(Arg(0)).join(Operand::just(Arg(1))),
+            operand([Arg(0), Arg(1)])
         );
         assert_eq!(
-            Phi(HashSet::from([Arg(1), Arg(2)])).join(Just(Arg(0))),
-            Phi(HashSet::from([Arg(0), Arg(1), Arg(2)]))
+            Operand::just(Arg(0)).join(operand([Arg(1), Arg(2)])),
+            operand([Arg(0), Arg(1), Arg(2)])
         );
         assert_eq!(
-            Phi(HashSet::from([Arg(1), Arg(2)])).join(Phi(HashSet::from([Arg(0), Arg(1), Arg(3)]))),
-            Phi(HashSet::from([Arg(0), Arg(1), Arg(2), Arg(3)]))
+            operand([Arg(1), Arg(2)]).join(Operand::just(Arg(0))),
+            operand([Arg(0), Arg(1), Arg(2)])
+        );
+        assert_eq!(
+            operand([Arg(1), Arg(2)]).join(operand([Arg(0), Arg(1), Arg(3)])),
+            operand([Arg(0), Arg(1), Arg(2), Arg(3)])
         );
     }
 
     #[test]
-    fn value_ref_iter() {
+    fn operand_iter() {
         use std::collections::HashSet;
 
-        use super::{Identifier::*, Operand::*};
+        use super::Identifier::*;
 
         assert_eq!(
-            Just(This).into_iter().collect::<HashSet<_>>(),
+            Operand::just(This).into_iter().collect::<HashSet<_>>(),
             HashSet::from([This])
         );
         assert_eq!(
-            Just(Arg(0)).into_iter().collect::<HashSet<_>>(),
+            Operand::just(Arg(0)).into_iter().collect::<HashSet<_>>(),
             HashSet::from([Arg(0)])
         );
         assert_eq!(
-            Phi(HashSet::from([Arg(0), Arg(1)]))
+            operand([Arg(0), Arg(1)])
                 .into_iter()
                 .collect::<HashSet<_>>(),
             HashSet::from([Arg(0), Arg(1)])
@@ -319,21 +342,21 @@ pub(crate) mod test {
     }
 
     #[test]
-    fn value_ref_iter_over_refs() {
+    fn operand_iter_over_refs() {
         use std::collections::HashSet;
 
-        use super::{Identifier::*, Operand::*};
+        use super::Identifier::*;
 
         assert_eq!(
-            (&Just(This)).into_iter().collect::<HashSet<_>>(),
+            (&Operand::just(This)).into_iter().collect::<HashSet<_>>(),
             HashSet::from([&This])
         );
         assert_eq!(
-            (&Just(Arg(0))).into_iter().collect::<HashSet<_>>(),
+            (&Operand::just(Arg(0))).into_iter().collect::<HashSet<_>>(),
             HashSet::from([&Arg(0)])
         );
         assert_eq!(
-            (&Phi(HashSet::from([Arg(0), Arg(1)])))
+            (&operand([Arg(0), Arg(1)]))
                 .into_iter()
                 .collect::<HashSet<_>>(),
             HashSet::from([&Arg(0), &Arg(1)])

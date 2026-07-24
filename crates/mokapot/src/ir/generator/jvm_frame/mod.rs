@@ -3,6 +3,9 @@ mod error;
 mod operations;
 mod stack_frame;
 
+#[cfg(test)]
+mod tests;
+
 pub(super) use entry::Entry;
 pub use error::ExecutionError;
 pub(super) use operations::StackOperations;

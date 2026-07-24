@@ -103,7 +103,7 @@ impl MokaIRGenerator<'_> {
                 let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
                 let array_op = ArrayOperation::Read { array_ref, index };
 
-                frame.push_value::<SINGLE_SLOT>(Operand::Just(def.into()))?;
+                frame.push_value::<SINGLE_SLOT>(Operand::just(def.into()))?;
                 IR::Definition {
                     value: def,
                     expr: Expression::Array(array_op),

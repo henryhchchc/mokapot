@@ -69,7 +69,7 @@ fn brew_ir() {
     // #00F7 ireturn => return %arg1
     assert!(matches!(
         ir_insns.get(&ProgramCounter::from(0x00F7)).unwrap(),
-        MokaInstruction::Return(Some(Operand::Just(Identifier::Arg(1))))
+        MokaInstruction::Return(Some(operand)) if operand == &Operand::just(Identifier::Arg(1))
     ));
 }
 

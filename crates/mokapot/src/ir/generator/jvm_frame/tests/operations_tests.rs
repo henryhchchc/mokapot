@@ -1,9 +1,12 @@
+use crate::ir::{
+    Identifier, LocalValue, Operand,
+    generator::{
+        ExecutionError,
+        jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
+    },
+};
 #[cfg(test)]
 use proptest::prelude::*;
-use crate::ir::{
-    generator::{jvm_frame::{JvmStackFrame, SINGLE_SLOT}, ExecutionError},
-    Identifier, LocalValue, Operand,
-};
 
 proptest! {
     #[test]
@@ -15,7 +18,7 @@ proptest! {
             pop_count,
         ).unwrap();
         for i in 0..pop_count {
-            let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -36,7 +39,7 @@ proptest! {
             pop_count * 2,
         ).unwrap();
         for i in 0..(pop_count * 2) {
-            let value = Operand::Just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
