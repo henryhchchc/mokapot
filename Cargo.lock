@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "mokapot"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "bitflags",
  "cesu8",
