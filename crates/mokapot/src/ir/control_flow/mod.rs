@@ -49,7 +49,6 @@ impl<D> Edge<D> {
 impl<N, E> ControlFlowGraph<N, E> {
     /// Returns the entry point of the control flow graph.
     #[must_use]
-    #[expect(clippy::unused_self)]
     pub const fn entry_point(&self) -> ProgramCounter {
         ProgramCounter::ZERO
     }
