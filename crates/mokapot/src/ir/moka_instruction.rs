@@ -184,9 +184,10 @@ impl Operand {
     /// # Errors
     ///
     /// Returns [`EmptyOperandError`] when `identifiers` yields no identifiers.
-    pub fn try_from_iter(
-        identifiers: impl IntoIterator<Item = Identifier>,
-    ) -> Result<Self, EmptyOperandError> {
+    pub fn try_from_iter<I>(identifiers: I) -> Result<Self, EmptyOperandError>
+    where
+        I: IntoIterator<Item = Identifier>,
+    {
         let values = BTreeSet::from_iter(identifiers);
         if values.is_empty() {
             return Err(EmptyOperandError);
