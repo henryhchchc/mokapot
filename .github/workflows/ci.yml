@@ -92,7 +92,7 @@ jobs:
           echo "CLIPPY_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
         continue-on-error: true
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()
         with:
           sarif_file: rust-clippy-results.sarif
