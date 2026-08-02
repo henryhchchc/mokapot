@@ -576,7 +576,7 @@ impl ConstantPool {
         let name = match field_type {
             FieldType::Object(class_ref) => class_ref.0.to_string(),
             arr_type @ FieldType::Array(_) => arr_type.descriptor(),
-            FieldType::Base(_) => unreachable!(),
+            FieldType::Base(_) => Err(GenerationError::other("type_ref cannot be a base type."))?,
         };
         let name_index = self.put_string(name)?;
         self.put_entry_dedup(Entry::Class { name_index })
