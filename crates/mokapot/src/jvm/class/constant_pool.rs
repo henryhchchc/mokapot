@@ -271,16 +271,13 @@ impl ConstantPool {
                 .map(ConstantValue::MethodType),
             Entry::Class { name_index } => {
                 let s = self.get_str(name_index)?;
-                let ref_type = if s.starts_with('[') {
-                    ReferenceType::Array(Box::new(s.parse().map_err(|e| {
-                        ParseError::malform(format!("Invalid descriptor in constant value: {e}"))
-                    })?))
-                } else {
-                    ReferenceType::Class(s.parse().map_err(|e| {
-                        ParseError::malform(format!("Invalid binary name in constant value: {e}"))
-                    })?)
-                };
-                Ok(ConstantValue::Class(ref_type))
+                Ok(ConstantValue::Class(s.parse::<ReferenceType>().map_err(
+                    |_| {
+                        ParseError::malform(format!(
+                            "Invalid type reference in constant value: {s}"
+                        ))
+                    },
+                )?))
             }
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
