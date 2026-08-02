@@ -19,7 +19,7 @@ pub enum Error {
     NotFound,
     /// Error occurred while parsing the class bytes.
     #[error("Error parsing class bytes: {0}")]
-    Malformed(#[from] super::bytecode::errors::ParseError),
+    Malformed(#[from] super::errors::ParseError),
     /// Error occurred while reading the class bytes or locating the class file.
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),

@@ -8,7 +8,7 @@ use trait_gen::trait_gen;
 use super::FromBytecode;
 use crate::jvm::code::ProgramCounter;
 
-pub(super) trait BytecodeReader: Read {
+pub(crate) trait BytecodeReader: Read {
     fn decode_value<T: FromBytecode>(&mut self) -> Result<T>;
 }
 
@@ -42,7 +42,7 @@ impl FromBytecode for T {
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(super) fn read_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
+pub(crate) fn read_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read + ?Sized,
 {

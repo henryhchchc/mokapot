@@ -13,6 +13,7 @@ pub mod bytecode;
 pub mod class;
 pub mod class_loader;
 pub mod code;
+pub mod errors;
 pub mod field;
 pub mod method;
 pub mod module;

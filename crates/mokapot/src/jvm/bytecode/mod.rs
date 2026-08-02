@@ -3,14 +3,13 @@ mod annotation;
 mod attribute;
 pub(super) mod class_file;
 pub(super) mod code;
-pub(super) mod constant_pool;
 pub(super) mod errors;
 mod field_info;
 mod jvm_element_parser;
 mod method_info;
 mod module;
 mod raw_attributes;
-mod reader_utils;
+pub(crate) mod reader_utils;
 
 use std::{
     io::{self, Read, Write},
@@ -45,7 +44,7 @@ pub struct ParsingContext {
 /// Enables parsing a raw JVM element from a binary stream.
 ///
 /// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a binary input stream.
-trait FromBytecode {
+pub(crate) trait FromBytecode {
     /// Parses an instance of this type from the given reader.
     ///
     /// # Errors
@@ -60,7 +59,7 @@ trait FromBytecode {
 ///
 /// This trait is implemented by raw JVM elements (after putting all the constants in the constant pool) that can be serialized to a class file format.
 /// It provides a standardized way to write JVM elements back to binary form.
-trait ToBytecode {
+pub(crate) trait ToBytecode {
     /// Writes this element to the given writer in JVM class file format.
     ///
     /// # Errors
@@ -83,7 +82,7 @@ trait ToBytecode {
 /// Returns a `ToWriterError` if:
 /// - The length value cannot fit in the target type
 /// - Writing to the output stream fails
-fn write_length<Len>(
+pub(crate) fn write_length<Len>(
     writer: &mut (impl Write + ?Sized),
     length: usize,
 ) -> Result<(), GenerationError>
