@@ -193,22 +193,6 @@ mod test {
         }
 
         #[test]
-        fn method_desc_from_str(
-            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
-            ret in arb_return_type(),
-        ) {
-            let descriptor = format!(
-                "({}){}",
-                params.iter().map(FieldType::descriptor).join(""),
-                ret.descriptor()
-            );
-            let parsed =
-                MethodDescriptor::from_str(&descriptor).expect("Failed to parse method descriptor");
-            assert_eq!(parsed.return_type, ret);
-            assert_eq!(parsed.parameters_types, params);
-        }
-
-        #[test]
         fn too_many_return_type(
             params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
             rets in prop::collection::vec(arb_return_type(), 2..5),

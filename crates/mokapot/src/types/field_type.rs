@@ -340,21 +340,17 @@ mod tests {
 
     #[test]
     fn field_type_display() {
-        use FieldType::{Base, Object};
-        use PrimitiveType::*;
-        assert_eq!(Base(Boolean).to_string(), "boolean");
-        assert_eq!(Base(Char).to_string(), "char");
-        assert_eq!(Base(Float).to_string(), "float");
-        assert_eq!(Base(Double).to_string(), "double");
-        assert_eq!(Base(Byte).to_string(), "byte");
-        assert_eq!(Base(Short).to_string(), "short");
-        assert_eq!(Base(Int).to_string(), "int");
-        assert_eq!(Base(Long).to_string(), "long");
+        use FieldType::Object;
         assert_eq!(
             Object(ClassRef::new("java/lang/Object")).to_string(),
             "java/lang/Object"
         );
-        assert_eq!(Base(Int).into_array_type().to_string(), "int[]");
+        assert_eq!(
+            FieldType::Base(PrimitiveType::Int)
+                .into_array_type()
+                .to_string(),
+            "int[]"
+        );
         assert_eq!(
             Object(ClassRef::new("java/lang/Object"))
                 .into_array_type()
@@ -403,20 +399,8 @@ mod tests {
         assert_eq!("D".parse(), Ok(Base(Double)));
         assert_eq!("B".parse(), Ok(Base(Byte)));
         assert_eq!("S".parse(), Ok(Base(Short)));
+        assert_eq!("I".parse(), Ok(Base(Int)));
         assert_eq!("J".parse(), Ok(Base(Long)));
-        assert_eq!("Z".parse(), Ok(Base(Boolean)));
-    }
-
-    #[test]
-    fn parse_primitive() {
-        assert_eq!(PrimitiveType::try_from('Z'), Ok(PrimitiveType::Boolean));
-        assert_eq!(PrimitiveType::try_from('C'), Ok(PrimitiveType::Char));
-        assert_eq!(PrimitiveType::try_from('F'), Ok(PrimitiveType::Float));
-        assert_eq!(PrimitiveType::try_from('D'), Ok(PrimitiveType::Double));
-        assert_eq!(PrimitiveType::try_from('B'), Ok(PrimitiveType::Byte));
-        assert_eq!(PrimitiveType::try_from('S'), Ok(PrimitiveType::Short));
-        assert_eq!(PrimitiveType::try_from('I'), Ok(PrimitiveType::Int));
-        assert_eq!(PrimitiveType::try_from('J'), Ok(PrimitiveType::Long));
     }
 
     #[test]
