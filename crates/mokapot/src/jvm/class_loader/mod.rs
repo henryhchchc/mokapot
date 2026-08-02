@@ -85,7 +85,10 @@ pub mod class_paths;
 
 /// A class loader that caches loaded classes.
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
+#[allow(
+    clippy::module_name_repetitions,
+    reason = "The type disambiguates the loading strategy from `ClassLoader`."
+)]
 pub struct CachingClassLoader<P> {
     class_loader: ClassLoader<P>,
     cache: Cache<String, Class>,

@@ -15,7 +15,10 @@ use std::{
     num::TryFromIntError,
 };
 
-pub(super) use crate::jvm::errors::GenerationError;
+#[cfg(not(feature = "unstable-bytecode-generation"))]
+pub(crate) use crate::jvm::errors::GenerationError;
+#[cfg(feature = "unstable-bytecode-generation")]
+pub use crate::jvm::errors::{GenerationError, GenerationErrorKind};
 pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use num_traits::ToBytes;
 
