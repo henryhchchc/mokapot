@@ -10,14 +10,13 @@ use crate::{
             jvm_element_parser::ClassElement,
         },
         class::{ConstantPool, constant_pool},
-        code::{
-            Instruction, InstructionList, ProgramCounter, RawInstruction, RawWideInstruction,
-            WideInstruction,
-        },
+        code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         references::ClassRef,
     },
     types::{Descriptor, field_type::PrimitiveType},
 };
+
+use super::raw_instruction::{RawInstruction, RawWideInstruction};
 
 impl ClassElement for InstructionList<Instruction> {
     type Raw = InstructionList<RawInstruction>;

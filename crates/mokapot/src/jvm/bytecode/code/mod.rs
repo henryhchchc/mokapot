@@ -1,5 +1,5 @@
-pub(super) mod instruction_impl;
-pub(super) mod raw_instruction;
+pub(crate) mod instruction_impl;
+pub(crate) mod raw_instruction;
 pub(super) mod stack_map;
 
 use std::{
@@ -24,12 +24,14 @@ use crate::{
         class::ConstantPool,
         code::{
             ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
-            LocalVariableTable, MethodBody, ProgramCounter, RawInstruction,
+            LocalVariableTable, MethodBody, ProgramCounter,
         },
         method::{ParameterAccessFlags, ParameterInfo},
     },
     types::{Descriptor, field_type::FieldType},
 };
+
+use crate::jvm::bytecode::code::raw_instruction::RawInstruction;
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescAttr {

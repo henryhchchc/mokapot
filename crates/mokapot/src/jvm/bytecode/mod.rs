@@ -2,7 +2,7 @@
 mod annotation;
 mod attribute;
 pub(super) mod class_file;
-mod code;
+pub(super) mod code;
 pub(super) mod constant_pool;
 pub(super) mod errors;
 mod field_info;
