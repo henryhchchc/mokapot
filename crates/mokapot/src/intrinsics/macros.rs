@@ -24,7 +24,7 @@ macro_rules! extract_attributes {
                             " in a ",
                             $env
                         );
-                        Err(ParseError::malform(message))?;
+                        Err($crate::jvm::errors::ParseError::malform(message))?;
                     },
                 )*
                 $(
@@ -36,7 +36,7 @@ macro_rules! extract_attributes {
                                 " in a ",
                                 $env
                             );
-                            Err(ParseError::malform(message))?;
+                            Err($crate::jvm::errors::ParseError::malform(message))?;
                         }
                         $var_true = true;
                     },
@@ -46,7 +46,7 @@ macro_rules! extract_attributes {
                         $unrecognized.push((name, bytes));
                     }
                     unexpected => {
-                        Err(ParseError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
+                        Err($crate::jvm::errors::ParseError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
                             $env,
                             unexpected.name()
                         )))?;
