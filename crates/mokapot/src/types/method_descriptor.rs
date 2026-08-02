@@ -230,31 +230,6 @@ impl FromStr for ReturnType {
     }
 }
 
-impl ReturnType {
-    /// Returns the JVM descriptor string representation of this return type.
-    ///
-    /// # Returns
-    ///
-    /// * "V" for void return type
-    /// * The field type descriptor for specific return types
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use mokapot::types::method_descriptor::ReturnType;
-    /// use mokapot::types::field_type::PrimitiveType;
-    ///
-    /// assert_eq!(ReturnType::Void.descriptor(), "V");
-    /// assert_eq!(ReturnType::Some(PrimitiveType::Int.into()).descriptor(), "I");
-    /// ```
-    #[must_use]
-    pub fn descriptor(&self) -> String {
-        match self {
-            ReturnType::Some(it) => it.descriptor(),
-            ReturnType::Void => "V".to_owned(),
-        }
-    }
-}
 #[cfg(test)]
 mod test {
     use proptest::prelude::*;
