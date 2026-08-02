@@ -5,7 +5,10 @@ use super::{
 };
 use crate::{
     intrinsics::see_jvm_spec,
-    types::{field_type::PrimitiveType, method_descriptor::ReturnType},
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::ReturnType,
+    },
 };
 
 /// A value of an annotation field.
@@ -18,8 +21,8 @@ pub enum ElementValue {
     String(JavaString),
     /// An enum constant.
     EnumConstant {
-        /// The name of the enum type.
-        enum_type_name: String,
+        /// The type of the enum.
+        enum_type: FieldType,
         /// The name of the enum constant.
         const_name: String,
     },

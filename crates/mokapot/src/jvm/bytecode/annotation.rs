@@ -362,10 +362,13 @@ impl ClassElement for ElementValue {
                 type_name_index,
                 const_name_index,
             } => {
-                let enum_type = cp.get_str(type_name_index)?.to_owned();
+                let enum_type = cp
+                    .get_str(type_name_index)?
+                    .parse()
+                    .context("Invalid enum type descriptor")?;
                 let const_name = cp.get_str(const_name_index)?.to_owned();
                 Ok(Self::EnumConstant {
-                    enum_type_name: enum_type,
+                    enum_type,
                     const_name,
                 })
             }
@@ -412,10 +415,10 @@ impl ClassElement for ElementValue {
                 Self::Raw::Const(b's', value_idx)
             }
             ElementValue::EnumConstant {
-                enum_type_name,
+                enum_type,
                 const_name,
             } => {
-                let type_name_index = cp.put_string(enum_type_name)?;
+                let type_name_index = cp.put_string(enum_type.descriptor())?;
                 let const_name_index = cp.put_string(const_name)?;
                 Self::Raw::Enum {
                     type_name_index,
