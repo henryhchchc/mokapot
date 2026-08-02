@@ -93,14 +93,14 @@ impl FromStr for ReferenceType {
     ///
     /// A `CONSTANT_Class_info` stores either a binary name (for
     /// classes/interfaces) or an array descriptor (for array types).
-    /// This parser mirrors that:
     ///
-    #[doc = see_jvm_spec!(4, 4, 1)]
     /// - Strings starting with `[` are parsed as array type descriptors.
     ///   The outer `Array` wrapper in the resulting `FieldType` is stripped
     ///   since `ReferenceType::Array` stores only the component type.
     /// - All other strings are parsed as binary names (internal form) via
     ///   [`ClassRef::from_str`].
+    ///
+    #[doc = see_jvm_spec!(4, 4, 1)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('[') {
             let ft = FieldType::from_str(s)?;
