@@ -503,11 +503,11 @@ impl MokaIRGenerator<'_> {
                     expr: Expression::New(class.clone()),
                 }
             }
-            ANewArray(class_ref) => {
+            ANewArray(field_type) => {
                 let count = frame.pop_value::<SINGLE_SLOT>()?;
                 frame.push_value::<SINGLE_SLOT>(def.into())?;
                 let array_op = ArrayOperation::New {
-                    element_type: FieldType::Object(class_ref.clone()),
+                    element_type: field_type.clone(),
                     length: count,
                 };
                 IR::Definition {

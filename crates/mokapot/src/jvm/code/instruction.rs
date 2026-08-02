@@ -241,7 +241,7 @@ pub enum Instruction {
     } = 0xba,
     New(ClassRef) = 0xbb,
     NewArray(PrimitiveType) = 0xbc,
-    ANewArray(ClassRef) = 0xbd,
+    ANewArray(FieldType) = 0xbd,
     ArrayLength = 0xbe,
     AThrow = 0xbf,
     CheckCast(FieldType) = 0xc0,
@@ -591,7 +591,8 @@ impl fmt::Display for Instruction {
             }
 
             // Type-related instructions
-            New(class_ref) | ANewArray(class_ref) => write!(f, "{} {}", self.name(), class_ref),
+            New(class_ref) => write!(f, "{} {}", self.name(), class_ref),
+            ANewArray(field_type) => write!(f, "{} {}", self.name(), field_type),
             NewArray(primitive_type) => write!(f, "{} {}", self.name(), primitive_type),
             CheckCast(field_type) | InstanceOf(field_type) => {
                 write!(f, "{} {}", self.name(), field_type)

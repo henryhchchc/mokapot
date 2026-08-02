@@ -410,7 +410,7 @@ impl Instruction {
                 Self::NewArray(element_type)
             }
             ANewArray { index } => {
-                let element_type = constant_pool.get_class_ref(index)?;
+                let element_type = constant_pool.get_type_ref(index)?;
                 Self::ANewArray(element_type)
             }
             ArrayLength => Self::ArrayLength,
@@ -788,8 +788,8 @@ impl Instruction {
             Self::NewArray(atype) => NewArray {
                 atype: atype.new_array_type_tag(),
             },
-            Self::ANewArray(class_ref) => ANewArray {
-                index: cp.put_class_ref(&class_ref)?,
+            Self::ANewArray(field_type) => ANewArray {
+                index: cp.put_type_ref(field_type)?,
             },
             Self::ArrayLength => ArrayLength,
             Self::AThrow => AThrow,
