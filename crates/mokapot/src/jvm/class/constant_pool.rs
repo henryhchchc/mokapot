@@ -269,14 +269,19 @@ impl ConstantPool {
                 .get_str(descriptor_index)
                 .and_then(|it| it.parse().context("Invalid method descriptor"))
                 .map(ConstantValue::MethodType),
-            Entry::Class { name_index } => self.get_str(name_index).and_then(|s| {
-                s.parse()
-                    .map(ClassRef)
-                    .map(ConstantValue::Class)
-                    .map_err(|e| {
+            Entry::Class { name_index } => {
+                let s = self.get_str(name_index)?;
+                let field_type = if s.starts_with('[') {
+                    s.parse().map_err(|e| {
+                        ParseError::malform(format!("Invalid descriptor in constant value: {e}"))
+                    })?
+                } else {
+                    FieldType::Object(s.parse().map_err(|e| {
                         ParseError::malform(format!("Invalid binary name in constant value: {e}"))
-                    })
-            }),
+                    })?)
+                };
+                Ok(ConstantValue::Class(field_type))
+            }
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
                 .map(ConstantValue::Handle),
@@ -315,7 +320,7 @@ impl ConstantPool {
                 let string_index = self.put_entry_dedup(utf8_entry)?;
                 Entry::String { string_index }
             }
-            ConstantValue::Class(value) => return self.put_class_ref(&value),
+            ConstantValue::Class(value) => return self.put_type_ref(value),
             ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
             ConstantValue::MethodType(method_descriptor) => {
                 let descriptor_index = self.put_string(method_descriptor.descriptor())?;

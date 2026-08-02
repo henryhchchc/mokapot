@@ -7,7 +7,7 @@ use crate::{
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
-use super::{JavaString, class::MethodHandle, references::ClassRef};
+use super::{JavaString, class::MethodHandle};
 
 /// Denotes a compile-time constant value.
 #[doc = see_jvm_spec!(4, 4)]
@@ -33,7 +33,7 @@ pub enum ConstantValue {
     String(JavaString),
     /// A class literal.
     #[display("{_0}.class")]
-    Class(ClassRef),
+    Class(FieldType),
     /// A method handle.
     #[display("{_0:?}")]
     Handle(MethodHandle),
