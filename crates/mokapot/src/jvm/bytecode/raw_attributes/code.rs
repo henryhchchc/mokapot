@@ -274,7 +274,7 @@ pub enum VerificationTypeInfo {
 
 impl VerificationTypeInfo {
     const fn tag(&self) -> u8 {
-        // Safety: Self is repr(u8), so it is fine to call enum_discriminant.
+        // SAFETY: Self is repr(u8), so it is fine to call enum_discriminant.
         unsafe { enum_discriminant(self) }
     }
 }

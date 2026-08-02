@@ -342,7 +342,7 @@ impl FromBytecode for TargetInfo {
 
 impl ToBytecode for TargetInfo {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        // Safety: Self is marked as repr(u8) so it is fine to use enum_discriminant
+        // SAFETY: Self is marked as repr(u8) so it is fine to use enum_discriminant
         let target_type: u8 = unsafe { enum_discriminant(self) };
         writer.write_all(&target_type.to_be_bytes())?;
         match self {
