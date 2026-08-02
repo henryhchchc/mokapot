@@ -4,11 +4,11 @@ use std::{
     iter,
 };
 
-use super::super::{ParseError, reader::BytecodeReader};
+use super::super::{ParseError, reader_utils::BytecodeReader};
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        bytecode::{GenerationError, reader::PositionTracker, write_length},
+        bytecode::{errors::GenerationError, reader_utils::PositionTracker, write_length},
         code::{InstructionList, ProgramCounter},
     },
 };
@@ -16,7 +16,10 @@ use crate::{
 /// A raw JVM instruction without the information form the constant pool.
 #[doc = see_jvm_spec!(6, 5)]
 #[repr(u8)]
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "This maps one-to-one to those in the JVM spec."
+)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawInstruction {
     Nop = 0x00,
@@ -342,7 +345,14 @@ pub enum RawInstruction {
 }
 
 /// A wide instruction.
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "This maps one-to-one to those in the JVM spec."
+)]
+#[allow(
+    clippy::module_name_repetitions,
+    reason = "For consistent type names with the JVM spec."
+)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(u8)]
 pub enum RawWideInstruction {

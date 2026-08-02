@@ -18,7 +18,10 @@ use crate::{
 /// A JVM instruction.
 #[doc = see_jvm_spec!(6, 5)]
 #[derive(Debug, PartialEq, Clone)]
-#[allow(missing_docs)]
+#[allow(
+    missing_docs,
+    reason = "This maps one-to-one to those in the JVM spec."
+)]
 #[repr(u8)]
 pub enum Instruction {
     // Constants
@@ -261,7 +264,14 @@ pub enum Instruction {
 }
 
 /// A wide instruction.
-#[allow(missing_docs, clippy::module_name_repetitions)]
+#[allow(
+    missing_docs,
+    reason = "This maps one-to-one to those in the JVM spec."
+)]
+#[allow(
+    clippy::module_name_repetitions,
+    reason = "For consistent type names with the JVM spec."
+)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum WideInstruction {
     ILoad(u16),
