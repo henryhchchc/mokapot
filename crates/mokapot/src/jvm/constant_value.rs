@@ -4,7 +4,9 @@ use std::hash::Hash;
 
 use crate::{
     intrinsics::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
+    types::{
+        field_type::FieldType, method_descriptor::MethodDescriptor, reference_type::ReferenceType,
+    },
 };
 
 use super::{JavaString, class::MethodHandle};
@@ -33,7 +35,7 @@ pub enum ConstantValue {
     String(JavaString),
     /// A class literal.
     #[display("{_0}.class")]
-    Class(FieldType),
+    Class(ReferenceType),
     /// A method handle.
     #[display("{_0:?}")]
     Handle(MethodHandle),

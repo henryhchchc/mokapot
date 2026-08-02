@@ -1,14 +1,14 @@
 //! JVM fields and constant values.
 
 use super::{Field, references::FieldRef};
-use crate::types::field_type::FieldType;
+use crate::types::reference_type::ReferenceType;
 
 impl Field {
     /// Creates a [`FieldRef`] referring to the field.
     #[must_use]
     pub fn as_ref(&self) -> FieldRef {
         FieldRef {
-            owner: FieldType::Object(self.owner.clone()),
+            owner: ReferenceType::Class(self.owner.clone()),
             name: self.name.clone(),
             field_type: self.field_type.clone(),
         }

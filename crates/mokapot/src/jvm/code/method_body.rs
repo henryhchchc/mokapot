@@ -8,7 +8,7 @@ use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{TypeAnnotation, bytecode::ParseError, class::ConstantPool, references::ClassRef},
-    types::field_type::FieldType,
+    types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// The body of a method.
@@ -367,7 +367,7 @@ pub enum VerificationType {
     /// Indicates that the local variable has the verification type `uninitializedThis`.
     UninitializedThisVariable,
     /// Indicates that the local variable has the verification type `object` with the given type
-    ObjectVariable(FieldType),
+    ObjectVariable(ReferenceType),
     /// Indicates that the local variable has the verification type `uninitialized` with the given offset.
     UninitializedVariable {
         /// The location of the [`Instruction::New`] that created the object.

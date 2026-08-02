@@ -2,6 +2,7 @@
 pub mod binary_name;
 pub mod field_type;
 pub mod method_descriptor;
+pub mod reference_type;
 
 /// Trait for types that have a descriptor.
 pub trait Descriptor {

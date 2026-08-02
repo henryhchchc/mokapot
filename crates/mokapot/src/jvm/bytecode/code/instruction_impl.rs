@@ -9,7 +9,7 @@ use crate::{
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         errors::ParsingErrorContext,
     },
-    types::{Descriptor, field_type::PrimitiveType},
+    types::field_type::PrimitiveType,
 };
 
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
@@ -416,12 +416,12 @@ impl Instruction {
             ArrayLength => Self::ArrayLength,
             AThrow => Self::AThrow,
             CheckCast { target_type_index } => {
-                let class_ref = constant_pool.get_type_ref(target_type_index)?;
-                Self::CheckCast(class_ref)
+                let type_ref = constant_pool.get_type_ref(target_type_index)?;
+                Self::CheckCast(type_ref)
             }
             InstanceOf { target_type_index } => {
-                let class_ref = constant_pool.get_type_ref(target_type_index)?;
-                Self::InstanceOf(class_ref)
+                let type_ref = constant_pool.get_type_ref(target_type_index)?;
+                Self::InstanceOf(type_ref)
             }
             MonitorEnter => Self::MonitorEnter,
             MonitorExit => Self::MonitorExit,
@@ -444,8 +444,8 @@ impl Instruction {
                 RawWideInstruction::Ret { index } => WideInstruction::Ret(index),
             }),
             MultiANewArray { index, dimensions } => {
-                let class_ref = constant_pool.get_type_ref(index)?;
-                Self::MultiANewArray(class_ref, dimensions)
+                let type_ref = constant_pool.get_type_ref(index)?;
+                Self::MultiANewArray(type_ref, dimensions)
             }
             IfNull { offset } => Self::IfNull((pc + offset).context("Invalid jump offset")?),
             IfNonNull { offset } => Self::IfNonNull((pc + offset).context("Invalid jump offset")?),
@@ -788,8 +788,8 @@ impl Instruction {
             Self::NewArray(atype) => NewArray {
                 atype: atype.new_array_type_tag(),
             },
-            Self::ANewArray(field_type) => ANewArray {
-                index: cp.put_type_ref(field_type)?,
+            Self::ANewArray(type_ref) => ANewArray {
+                index: cp.put_type_ref(type_ref)?,
             },
             Self::ArrayLength => ArrayLength,
             Self::AThrow => AThrow,
@@ -820,11 +820,10 @@ impl Instruction {
                 },
                 WideInstruction::Ret(index) => RawWideInstruction::Ret { index },
             }),
-            Self::MultiANewArray(element_type, dimensions) => {
-                let name_index = cp.put_string(element_type.descriptor())?;
-                let index = cp.put_entry_dedup(constant_pool::Entry::Class { name_index })?;
-                MultiANewArray { index, dimensions }
-            }
+            Self::MultiANewArray(element_type, dimensions) => MultiANewArray {
+                index: cp.put_type_ref(element_type)?,
+                dimensions,
+            },
             Self::IfNull(target) => IfNull {
                 offset: try_offset(target, pc)?,
             },
@@ -871,12 +870,12 @@ mod tests {
             code::{Instruction, ProgramCounter, RawInstruction},
             references::MethodRef,
         },
-        types::field_type::FieldType,
+        types::reference_type::ReferenceType,
     };
 
     fn interface_method() -> MethodRef {
         MethodRef {
-            owner: FieldType::Object("example/Interface".parse().unwrap()),
+            owner: ReferenceType::Class("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         }

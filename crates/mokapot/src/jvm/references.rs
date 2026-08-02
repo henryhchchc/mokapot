@@ -9,6 +9,7 @@ use crate::{
         binary_name::{BinaryName, InvalidBinaryName},
         field_type::FieldType,
         method_descriptor::{MethodDescriptor, ReturnType},
+        reference_type::ReferenceType,
     },
 };
 
@@ -40,7 +41,7 @@ impl FromStr for ClassRef {
 #[display("{owner}.{name}")]
 pub struct FieldRef {
     /// A reference to the class or array type that contains the field.
-    pub owner: FieldType,
+    pub owner: ReferenceType,
     /// The name of the field.
     pub name: String,
     /// The type of the field.
@@ -53,7 +54,7 @@ pub struct FieldRef {
 #[display("{owner}::{name}")]
 pub struct MethodRef {
     /// The reference to the class or array type containing the method.
-    pub owner: FieldType,
+    pub owner: ReferenceType,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
@@ -114,7 +115,7 @@ pub(crate) mod tests {
     pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
         (arb_class_ref(), any::<String>(), arb_field_type()).prop_map(
             |(owner, name, field_type)| FieldRef {
-                owner: FieldType::Object(owner),
+                owner: ReferenceType::Class(owner),
                 name,
                 field_type,
             },
@@ -126,7 +127,7 @@ pub(crate) mod tests {
         #[test]
         fn test_is_constructor(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: FieldType::Object(ClassRef(class_name)),
+                owner: ReferenceType::Class(ClassRef(class_name)),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
@@ -137,7 +138,7 @@ pub(crate) mod tests {
         #[test]
         fn test_is_static_initializer_bolck(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: FieldType::Object(ClassRef(class_name)),
+                owner: ReferenceType::Class(ClassRef(class_name)),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };

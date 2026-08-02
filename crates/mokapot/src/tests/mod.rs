@@ -5,6 +5,7 @@ use crate::{
     types::{
         binary_name::BinaryName,
         field_type::{FieldType, PrimitiveType},
+        reference_type::ReferenceType,
     },
 };
 
@@ -103,4 +104,15 @@ prop_compose! {
 
 pub(crate) fn arb_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![arb_non_array_field_type(), arb_array_field_type()]
+}
+
+pub(crate) fn arb_reference_type() -> impl Strategy<Value = ReferenceType> {
+    prop_oneof![
+        arb_binary_name()
+            .prop_map(ClassRef)
+            .prop_map(ReferenceType::Class),
+        arb_field_type()
+            .prop_map(Box::new)
+            .prop_map(ReferenceType::Array),
+    ]
 }

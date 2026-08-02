@@ -3,7 +3,7 @@
 use bitflags::bitflags;
 
 use super::{Method, references::MethodRef};
-use crate::types::field_type::FieldType;
+use crate::types::reference_type::ReferenceType;
 
 /// A generic type signature for a method.
 pub type Signature = String;
@@ -30,7 +30,7 @@ impl Method {
     #[must_use]
     pub fn as_ref(&self) -> MethodRef {
         MethodRef {
-            owner: FieldType::Object(self.owner.clone()),
+            owner: ReferenceType::Class(self.owner.clone()),
             name: self.name.clone(),
             descriptor: self.descriptor.clone(),
         }

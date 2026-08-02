@@ -10,8 +10,8 @@ use crate::{
         references::{ClassRef, FieldRef, MethodRef},
     },
     types::{
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::MethodDescriptor,
+        field_type::PrimitiveType, method_descriptor::MethodDescriptor,
+        reference_type::ReferenceType,
     },
 };
 
@@ -241,17 +241,17 @@ pub enum Instruction {
     } = 0xba,
     New(ClassRef) = 0xbb,
     NewArray(PrimitiveType) = 0xbc,
-    ANewArray(FieldType) = 0xbd,
+    ANewArray(ReferenceType) = 0xbd,
     ArrayLength = 0xbe,
     AThrow = 0xbf,
-    CheckCast(FieldType) = 0xc0,
-    InstanceOf(FieldType) = 0xc1,
+    CheckCast(ReferenceType) = 0xc0,
+    InstanceOf(ReferenceType) = 0xc1,
     MonitorEnter = 0xc2,
     MonitorExit = 0xc3,
 
     // Extended
     Wide(WideInstruction) = 0xc4,
-    MultiANewArray(FieldType, u8) = 0xc5,
+    MultiANewArray(ReferenceType, u8) = 0xc5,
     IfNull(ProgramCounter) = 0xc6,
     IfNonNull(ProgramCounter) = 0xc7,
     GotoW(ProgramCounter) = 0xc8,

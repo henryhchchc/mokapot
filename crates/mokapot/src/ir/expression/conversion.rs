@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::super::Operand;
-use crate::{ir::Identifier, types::field_type::FieldType};
+use crate::{ir::Identifier, types::reference_type::ReferenceType};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -52,11 +52,11 @@ pub enum Operation {
     #[display("{_0} as short")]
     Int2Short(Operand),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
-    #[display("{_0} as {}", _1)]
-    CheckCast(Operand, FieldType),
+    #[display("{_0} as {_1}")]
+    CheckCast(Operand, ReferenceType),
     /// Checks whether an object is an instance of a given type.
-    #[display("{_0} is {}", _1)]
-    InstanceOf(Operand, FieldType),
+    #[display("{_0} is {_1}")]
+    InstanceOf(Operand, ReferenceType),
 }
 impl Operation {
     /// Returns the set of [`Identifier`]s used by the expression.
@@ -90,14 +90,14 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::arb_field_type;
+    use crate::tests::arb_reference_type;
 
     proptest! {
 
         #[test]
         fn uses(
             arg in any::<Operand>(),
-            target_type in arb_field_type(),
+            target_type in arb_reference_type(),
         ) {
             let arg_ids: HashSet<_> = arg.clone().into_iter().collect();
             let conversions = [

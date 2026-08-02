@@ -19,7 +19,7 @@ use crate::{
         errors::{GenerationError, ParseError, ParsingErrorContext},
         references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
     },
-    types::{Descriptor, field_type::FieldType},
+    types::{Descriptor, reference_type::ReferenceType},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -271,16 +271,16 @@ impl ConstantPool {
                 .map(ConstantValue::MethodType),
             Entry::Class { name_index } => {
                 let s = self.get_str(name_index)?;
-                let field_type = if s.starts_with('[') {
-                    s.parse().map_err(|e| {
+                let ref_type = if s.starts_with('[') {
+                    ReferenceType::Array(Box::new(s.parse().map_err(|e| {
                         ParseError::malform(format!("Invalid descriptor in constant value: {e}"))
-                    })?
+                    })?))
                 } else {
-                    FieldType::Object(s.parse().map_err(|e| {
+                    ReferenceType::Class(s.parse().map_err(|e| {
                         ParseError::malform(format!("Invalid binary name in constant value: {e}"))
                     })?)
                 };
-                Ok(ConstantValue::Class(field_type))
+                Ok(ConstantValue::Class(ref_type))
             }
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
@@ -559,7 +559,7 @@ impl ConstantPool {
         .map_err(Into::into)
     }
 
-    pub(crate) fn get_type_ref(&self, index: u16) -> Result<FieldType, ParseError> {
+    pub(crate) fn get_type_ref(&self, index: u16) -> Result<ReferenceType, ParseError> {
         let entry = self
             .get_entry(index)
             .context("Invalid constant pool index")?;
@@ -567,21 +567,17 @@ impl ConstantPool {
             return mismatch("Class", entry);
         };
         let name = self.get_str(name_index)?;
-        let field_type = if name.starts_with('[') {
-            FieldType::from_str(name)
-                .with_context(|_| format!("Invalid descriptor for type reference: {name}"))?
-        } else {
-            FieldType::Object(ClassRef(name.parse().context("Invalid binary name")?))
-        };
-        Ok(field_type)
+        name.parse::<ReferenceType>()
+            .map_err(|_| ParseError::malform(format!("Invalid type reference: {name}")))
     }
 
-    pub(crate) fn put_type_ref(&mut self, field_type: FieldType) -> Result<u16, GenerationError> {
-        debug_assert!(!matches!(field_type, FieldType::Base(_)));
-        let name = match field_type {
-            FieldType::Object(class_ref) => class_ref.0.to_string(),
-            arr_type @ FieldType::Array(_) => arr_type.descriptor(),
-            FieldType::Base(_) => Err(GenerationError::other("type_ref cannot be a base type."))?,
+    pub(crate) fn put_type_ref(
+        &mut self,
+        reference_type: ReferenceType,
+    ) -> Result<u16, GenerationError> {
+        let name = match reference_type {
+            ReferenceType::Class(class_ref) => class_ref.0.to_string(),
+            ReferenceType::Array(arr_type) => arr_type.descriptor(),
         };
         let name_index = self.put_string(name)?;
         self.put_entry_dedup(Entry::Class { name_index })
@@ -994,7 +990,7 @@ mod tests {
     #[test]
     fn interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
-            owner: FieldType::Object("example/Interface".parse().unwrap()),
+            owner: ReferenceType::Class("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
@@ -1021,7 +1017,7 @@ mod tests {
     #[test]
     fn interface_method_handles_reject_method_refs() {
         let method = MethodRef {
-            owner: FieldType::Object("example/Interface".parse().unwrap()),
+            owner: ReferenceType::Class("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
