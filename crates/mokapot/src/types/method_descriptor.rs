@@ -9,11 +9,8 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 
-use super::{
-    Descriptor,
-    field_type::{FieldType, PrimitiveType},
-};
-use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
+use super::{Descriptor, field_type::FieldType};
+use crate::intrinsics::see_jvm_spec;
 
 /// The descriptor of a method, representing its parameters and return type in JVM format.
 ///
@@ -117,22 +114,13 @@ impl Descriptor for ReturnType {
 const PARAM_START: char = '(';
 /// Character that ends a method descriptor's parameter list
 const PARAM_END: char = ')';
-/// Character that indicates an array type
-const ARRAY_MARKER: char = '[';
-/// Character that starts an object type descriptor
-const OBJECT_MARKER: char = 'L';
-/// Character that ends an object type descriptor
-const OBJECT_END: char = ';';
 
 impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
-    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let remaining = descriptor
-            .strip_prefix(PARAM_START)
-            .ok_or(InvalidDescriptor)?;
-        let (parameters_types, remaining) = parse_params(remaining)?;
-        let return_type = ReturnType::from_str(remaining)?;
+    fn from_str(mut descriptor: &str) -> Result<Self, Self::Err> {
+        let parameters_types = parse_params(&mut descriptor)?;
+        let return_type = ReturnType::from_str(descriptor)?;
         Ok(Self {
             parameters_types,
             return_type,
@@ -144,74 +132,20 @@ impl FromStr for MethodDescriptor {
 ///
 /// This function processes the characters between '(' and ')', extracting each parameter
 /// type descriptor and converting it into a `FieldType`.
-fn parse_params(
-    mut remaining: &str,
-) -> Result<(Vec<FieldType>, &str), <MethodDescriptor as FromStr>::Err> {
-    let mut parameters_types = Vec::new();
-    loop {
-        if let Some(remaining) = remaining.strip_prefix(PARAM_END) {
-            return Ok((parameters_types, remaining));
-        }
-        let (dimension, after_dim) = parse_array_dimension(remaining)?;
-        let (base_type, after_param) = parse_next_param(after_dim)?;
-        let param_type = (0..dimension).fold(base_type, |type_acc, _| type_acc.into_array_type());
-        parameters_types.push(param_type);
-        remaining = after_param;
-    }
-}
+fn parse_params(payload: &mut &str) -> Result<Vec<FieldType>, InvalidDescriptor> {
+    let mut rest = payload.strip_prefix(PARAM_START).ok_or(InvalidDescriptor)?;
 
-/// Parses a single parameter type from a method descriptor.
-///
-/// # Returns
-///
-/// Returns a tuple containing:
-/// - The parsed field type
-/// - The remaining unparsed portion of the input string
-///
-/// # Errors
-///
-/// Returns `InvalidDescriptor` if:
-/// - The input string is empty
-/// - The type descriptor is invalid or malformed
-/// - An object type descriptor is not properly terminated with ';'
-fn parse_next_param(input: &str) -> Result<(FieldType, &str), <MethodDescriptor as FromStr>::Err> {
-    let (first_char, remaining) = input
-        .chars()
-        .next()
-        .map(|c| (c, &input[c.len_utf8()..]))
-        .ok_or(InvalidDescriptor)?;
-
-    match first_char {
-        primitive @ ('Z' | 'C' | 'F' | 'D' | 'B' | 'S' | 'I' | 'J') => {
-            let param_type = PrimitiveType::try_from(primitive).map(Into::into)?;
-            Ok((param_type, remaining))
+    let parameters_types = std::iter::from_fn(|| {
+        if let Some(after_params) = rest.strip_prefix(PARAM_END) {
+            rest = after_params;
+            return None;
         }
-        OBJECT_MARKER => {
-            let (class_name, rest) = remaining.split_once(OBJECT_END).ok_or(InvalidDescriptor)?;
-            Ok((FieldType::Object(ClassRef::new(class_name)), rest))
-        }
-        _ => Err(InvalidDescriptor),
-    }
-}
+        Some(FieldType::parse_prefix(&mut rest))
+    })
+    .collect::<Result<_, _>>()
+    .inspect(|_| *payload = rest)?;
 
-/// Parses array dimensions from a type descriptor.
-///
-/// Counts consecutive '[' characters to determine the array dimensions.
-///
-/// # Returns
-///
-/// Returns a tuple containing:
-/// - The number of array dimensions (number of '[' characters)
-/// - The remaining unparsed portion of the input string
-///
-/// # Errors
-///
-/// Returns `InvalidDescriptor` if the number of array dimensions exceeds 255
-fn parse_array_dimension(input: &str) -> Result<(u8, &str), InvalidDescriptor> {
-    let count = input.chars().take_while(|&c| c == ARRAY_MARKER).count();
-    let remaining = &input[count..];
-    let dimension = u8::try_from(count).map_err(|_| InvalidDescriptor)?;
-    Ok((dimension, remaining))
+    Ok(parameters_types)
 }
 
 /// An error indicating that a method descriptor string is invalid according to the JVM specification.

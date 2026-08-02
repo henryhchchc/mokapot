@@ -116,6 +116,11 @@ impl PrimitiveType {
             PrimitiveType::Long => 11,
         }
     }
+
+    fn parse_prefix(payload: &mut &str) -> Result<Self, InvalidDescriptor> {
+        let first_char = payload.chars().next().ok_or(InvalidDescriptor)?;
+        Self::try_from(first_char).inspect(|_| *payload = &payload[first_char.len_utf8()..])
+    }
 }
 
 impl TryFrom<char> for PrimitiveType {
@@ -139,11 +144,12 @@ impl TryFrom<char> for PrimitiveType {
 impl FromStr for PrimitiveType {
     type Err = InvalidDescriptor;
 
-    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let mut chars = descriptor.chars();
-        match (chars.next(), chars.next()) {
-            (Some(c), None) => Self::try_from(c),
-            _ => Err(InvalidDescriptor),
+    fn from_str(mut descriptor: &str) -> Result<Self, Self::Err> {
+        let pt = Self::parse_prefix(&mut descriptor)?;
+        if descriptor.is_empty() {
+            Ok(pt)
+        } else {
+            Err(InvalidDescriptor)
         }
     }
 }
@@ -218,20 +224,10 @@ impl Descriptor for FieldType {
 impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
-    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        if descriptor.chars().count() == 1 {
-            PrimitiveType::from_str(descriptor).map(Into::into)
-        } else if descriptor.starts_with('[') {
-            let element_type_desc = &descriptor['['.len_utf8()..];
-            Self::from_str(element_type_desc).map(FieldType::into_array_type)
-        } else if descriptor.starts_with('L') && descriptor.ends_with(';') {
-            let binary_name = &descriptor['L'.len_utf8()..(descriptor.len() - ';'.len_utf8())];
-            if binary_name.is_empty() || binary_name.contains(';') {
-                Err(InvalidDescriptor)
-            } else {
-                let class_ref = ClassRef::new(binary_name);
-                Ok(Self::Object(class_ref))
-            }
+    fn from_str(mut descriptor: &str) -> Result<Self, Self::Err> {
+        let ty = Self::parse_prefix(&mut descriptor)?;
+        if descriptor.is_empty() {
+            Ok(ty)
         } else {
             Err(InvalidDescriptor)
         }
@@ -245,6 +241,31 @@ impl From<PrimitiveType> for FieldType {
 }
 
 impl FieldType {
+    /// Parses a field type from the beginning of `descriptor`, returning the parsed type
+    /// and the remaining unparsed suffix.
+    pub(crate) fn parse_prefix(payload: &mut &str) -> Result<Self, InvalidDescriptor> {
+        if let Ok(pt) = PrimitiveType::parse_prefix(payload) {
+            Ok(Self::Base(pt))
+        } else if let Some(mut element_type_prefix) = payload.strip_prefix('[') {
+            let result =
+                Self::parse_prefix(&mut element_type_prefix).map(FieldType::into_array_type);
+            *payload = element_type_prefix;
+            result
+        } else if let Some(ref_type_prefix) = payload.strip_prefix('L') {
+            let (binary_name, remaining) =
+                ref_type_prefix.split_once(';').ok_or(InvalidDescriptor)?;
+            if binary_name.is_empty() {
+                Err(InvalidDescriptor)
+            } else {
+                let class_ref = ClassRef::new(binary_name);
+                *payload = remaining;
+                Ok(Self::Object(class_ref))
+            }
+        } else {
+            Err(InvalidDescriptor)
+        }
+    }
+
     /// Creates an array type with the given type as its elements.
     #[must_use]
     pub fn into_array_type(self) -> Self {
