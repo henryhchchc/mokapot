@@ -138,7 +138,7 @@ impl ClassElement for VerificationType {
             Self::Raw::Null => Ok(Self::NullVariable),
             Self::Raw::UninitializedThis => Ok(Self::UninitializedThisVariable),
             Self::Raw::Object { class_info_index } => Ok(Self::ObjectVariable(
-                ctx.constant_pool.get_class_ref(class_info_index)?,
+                ctx.constant_pool.get_type_ref(class_info_index)?,
             )),
             Self::Raw::Uninitialized { offset } => Ok(Self::UninitializedVariable {
                 offset: ProgramCounter::from(offset),
@@ -156,7 +156,7 @@ impl ClassElement for VerificationType {
             Self::NullVariable => Ok(Self::Raw::Null),
             Self::UninitializedThisVariable => Ok(Self::Raw::UninitializedThis),
             Self::ObjectVariable(class) => Ok(Self::Raw::Object {
-                class_info_index: cp.put_class_ref(&class)?,
+                class_info_index: cp.put_type_ref(class)?,
             }),
             Self::UninitializedVariable { offset } => Ok(Self::Raw::Uninitialized {
                 offset: offset.into(),

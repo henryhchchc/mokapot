@@ -367,7 +367,7 @@ pub enum VerificationType {
     /// Indicates that the local variable has the verification type `uninitializedThis`.
     UninitializedThisVariable,
     /// Indicates that the local variable has the verification type `object` with the given type
-    ObjectVariable(ClassRef),
+    ObjectVariable(FieldType),
     /// Indicates that the local variable has the verification type `uninitialized` with the given offset.
     UninitializedVariable {
         /// The location of the [`Instruction::New`] that created the object.
