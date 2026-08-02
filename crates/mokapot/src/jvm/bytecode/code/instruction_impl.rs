@@ -864,16 +864,19 @@ fn offset_wide(target: ProgramCounter, pc: ProgramCounter) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::jvm::{
-        JavaString,
-        class::{ConstantPool, constant_pool::Entry},
-        code::{Instruction, ProgramCounter, RawInstruction},
-        references::MethodRef,
+    use crate::{
+        jvm::{
+            JavaString,
+            class::{ConstantPool, constant_pool::Entry},
+            code::{Instruction, ProgramCounter, RawInstruction},
+            references::MethodRef,
+        },
+        types::field_type::FieldType,
     };
 
     fn interface_method() -> MethodRef {
         MethodRef {
-            owner: "example/Interface".parse().unwrap(),
+            owner: FieldType::Object("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         }

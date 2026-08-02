@@ -214,7 +214,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(&value.owner)?;
+        let class_index = self.put_type_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.field_type)?;
         self.put_entry_dedup(Entry::FieldRef {
             class_index,
@@ -224,7 +224,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(&value.owner)?;
+        let class_index = self.put_type_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
         self.put_entry_dedup(Entry::MethodRef {
             class_index,
@@ -237,7 +237,7 @@ impl ConstantPool {
         &mut self,
         value: MethodRef,
     ) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(&value.owner)?;
+        let class_index = self.put_type_ref(value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
         self.put_entry_dedup(Entry::InterfaceMethodRef {
             class_index,
@@ -382,7 +382,7 @@ impl ConstantPool {
             name_and_type_index,
         } = entry
         {
-            let owner = self.get_class_ref(class_index)?;
+            let owner = self.get_type_ref(class_index)?;
             let (name, field_type) = self.get_name_and_type(name_and_type_index)?;
             Ok(FieldRef {
                 owner,
@@ -492,7 +492,7 @@ impl ConstantPool {
         class_index: u16,
         name_and_type_index: u16,
     ) -> Result<MethodRef, ParseError> {
-        let owner = self.get_class_ref(class_index)?;
+        let owner = self.get_type_ref(class_index)?;
         let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
         Ok(MethodRef {
             owner,
@@ -989,7 +989,7 @@ mod tests {
     #[test]
     fn interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
-            owner: "example/Interface".parse().unwrap(),
+            owner: FieldType::Object("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
@@ -1016,7 +1016,7 @@ mod tests {
     #[test]
     fn interface_method_handles_reject_method_refs() {
         let method = MethodRef {
-            owner: "example/Interface".parse().unwrap(),
+            owner: FieldType::Object("example/Interface".parse().unwrap()),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };

@@ -39,8 +39,8 @@ impl FromStr for ClassRef {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display("{owner}.{name}")]
 pub struct FieldRef {
-    /// A reference to the class that contains the field.
-    pub owner: ClassRef,
+    /// A reference to the class or array type that contains the field.
+    pub owner: FieldType,
     /// The name of the field.
     pub name: String,
     /// The type of the field.
@@ -52,8 +52,8 @@ pub struct FieldRef {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display("{owner}::{name}")]
 pub struct MethodRef {
-    /// The reference to the class containing the method.
-    pub owner: ClassRef,
+    /// The reference to the class or array type containing the method.
+    pub owner: FieldType,
     /// The name of the method.
     pub name: String,
     /// The descriptor of the method.
@@ -114,7 +114,7 @@ pub(crate) mod tests {
     pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
         (arb_class_ref(), any::<String>(), arb_field_type()).prop_map(
             |(owner, name, field_type)| FieldRef {
-                owner,
+                owner: FieldType::Object(owner),
                 name,
                 field_type,
             },
@@ -126,7 +126,7 @@ pub(crate) mod tests {
         #[test]
         fn test_is_constructor(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: ClassRef(class_name),
+                owner: FieldType::Object(ClassRef(class_name)),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
@@ -137,7 +137,7 @@ pub(crate) mod tests {
         #[test]
         fn test_is_static_initializer_bolck(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: ClassRef(class_name),
+                owner: FieldType::Object(ClassRef(class_name)),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
