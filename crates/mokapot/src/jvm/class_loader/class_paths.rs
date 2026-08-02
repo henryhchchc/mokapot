@@ -9,6 +9,7 @@ use super::{ClassPath, Error};
 use crate::{
     analysis::ClassRefs,
     jvm::{Class, references::ClassRef},
+    types::binary_name::BinaryName,
 };
 
 /// A class path that does nothing.
@@ -24,7 +25,7 @@ impl NopClassPath {
 }
 
 impl ClassPath for NopClassPath {
-    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, _binary_name: &BinaryName) -> Result<Class, Error> {
         Err(Error::NotFound)
     }
 }
@@ -42,8 +43,11 @@ pub struct DirectoryClassPath {
 }
 
 impl ClassPath for DirectoryClassPath {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
-        let class_file_path = self.directory.join(binary_name).with_extension("class");
+    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
+        let class_file_path = self
+            .directory
+            .join(binary_name.as_str())
+            .with_extension("class");
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
             let mut buf_read = BufReader::new(class_file);
@@ -70,7 +74,7 @@ impl ClassRefs for DirectoryClassPath {
             .into_iter()
             .filter_map(Result::ok)
             .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
-            .map(|it| {
+            .filter_map(|it| {
                 let binary_name = it
                     .path()
                     .strip_prefix(&self.directory)
@@ -79,7 +83,7 @@ impl ClassRefs for DirectoryClassPath {
                     .to_str()
                     .expect("The path name is not valid UTF-8")
                     .to_owned();
-                ClassRef { binary_name }
+                binary_name.parse().ok().map(ClassRef)
             })
             .collect()
     }
@@ -104,7 +108,7 @@ impl JarClassPath {
 
 #[cfg(feature = "jar")]
 impl ClassPath for JarClassPath {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
         let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
         let mut jar_archive = ZipArchive::new(jar_reader).map_err(|e| match e {
@@ -135,10 +139,7 @@ impl ClassRefs for JarClassPath {
         jar_archive
             .file_names()
             .filter_map(|it| it.strip_suffix(".class"))
-            .map(|binary_name| {
-                let binary_name = binary_name.to_owned();
-                ClassRef { binary_name }
-            })
+            .filter_map(|binary_name| binary_name.parse().ok().map(ClassRef))
             .collect()
     }
 }

@@ -135,7 +135,7 @@ fn cfg_to_dot() {
             ControlTransfer::Conditional(cond) => format!("when {cond}"),
             ControlTransfer::Exception(e) => format!(
                 "catch {}",
-                e.into_iter().map(|it| it.binary_name).join(" | ")
+                e.into_iter().map(|it| it.0.to_string()).join(" | ")
             ),
             ControlTransfer::SubroutineReturn => "<ret>".to_owned(),
         },

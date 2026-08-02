@@ -169,7 +169,7 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
             .ok_or(ParseError::malform("Invalid class access flags"))?;
-        let ClassRef { binary_name } = constant_pool.get_class_ref(this_class)?;
+        let ClassRef(binary_name) = constant_pool.get_class_ref(this_class)?;
         let super_class = match super_class {
             0 if binary_name == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
@@ -262,15 +262,17 @@ impl Class {
 
     pub(crate) fn into_raw(self) -> Result<ClassFile, GenerationError> {
         let mut constant_pool = ConstantPool::new();
-        let this_class = constant_pool.put_class_ref(self.make_ref())?;
+        let class_ref = self.make_ref();
+        let this_class = constant_pool.put_class_ref(&class_ref)?;
         let super_class = self
             .super_class
+            .as_ref()
             .map(|it| constant_pool.put_class_ref(it))
             .transpose()?
             .unwrap_or(0);
         let interfaces = self
             .interfaces
-            .into_iter()
+            .iter()
             .map(|it| constant_pool.put_class_ref(it))
             .try_collect()?;
         let fields = self
@@ -395,9 +397,10 @@ impl ClassElement for InnerClassInfo {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let info_index = cp.put_class_ref(self.inner_class)?;
+        let info_index = cp.put_class_ref(&self.inner_class)?;
         let outer_class_info_index = self
             .outer_class
+            .as_ref()
             .map(|it| cp.put_class_ref(it))
             .transpose()?
             .unwrap_or(0);
@@ -500,7 +503,7 @@ impl ClassElement for EnclosingMethod {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let class_index = cp.put_class_ref(self.class)?;
+        let class_index = cp.put_class_ref(&self.class)?;
         let method_index = self
             .method_name_and_desc
             .map(|(name, desc)| cp.put_name_and_type(name, &desc))

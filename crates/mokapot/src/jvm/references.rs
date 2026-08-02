@@ -1,29 +1,41 @@
 //! References to JVM elements.
 
+use std::str::FromStr;
+
 use super::Method;
-use crate::types::{
-    field_type::FieldType,
-    method_descriptor::{MethodDescriptor, ReturnType},
+use crate::{
+    intrinsics::see_jvm_spec,
+    types::{
+        binary_name::{BinaryName, InvalidBinaryName},
+        field_type::FieldType,
+        method_descriptor::{MethodDescriptor, ReturnType},
+    },
 };
 
 /// A reference to a [`Class`](crate::jvm::Class).
+#[doc = see_jvm_spec!(4, 4, 1)]
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, derive_more::Display)]
-#[display("{binary_name}")]
-pub struct ClassRef {
-    /// The binary name of the class.
-    pub binary_name: String,
-}
+#[display("{_0}")]
+pub struct ClassRef(pub BinaryName);
 
 impl ClassRef {
     /// Creates a new [`ClassRef`] from a binary name.
-    pub fn new<S: Into<String>>(binary_name: S) -> Self {
-        ClassRef {
-            binary_name: binary_name.into(),
-        }
+    #[must_use]
+    pub const fn new(binary_name: BinaryName) -> Self {
+        ClassRef(binary_name)
+    }
+}
+
+impl FromStr for ClassRef {
+    type Err = InvalidBinaryName;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        BinaryName::from_str(s).map(ClassRef)
     }
 }
 
 /// A reference to a [`Field`](crate::jvm::Field).
+#[doc = see_jvm_spec!(4, 4, 2)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display("{owner}.{name}")]
 pub struct FieldRef {
@@ -36,6 +48,7 @@ pub struct FieldRef {
 }
 
 /// A reference to a [`Method`].
+#[doc = see_jvm_spec!(4, 4, 2)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display("{owner}::{name}")]
 pub struct MethodRef {
@@ -65,6 +78,7 @@ impl MethodRef {
 }
 
 /// A reference to a [`Module`](crate::jvm::Module).
+#[doc = see_jvm_spec!(4, 4, 11)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 #[display("{name}")]
 pub struct ModuleRef {
@@ -73,11 +87,17 @@ pub struct ModuleRef {
 }
 
 /// A reference to a package.
+#[doc = see_jvm_spec!(4, 4, 12)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
-#[display("{binary_name}")]
-pub struct PackageRef {
-    /// The binary name of the package.
-    pub binary_name: String,
+#[display("{_0}")]
+pub struct PackageRef(pub BinaryName);
+
+impl FromStr for PackageRef {
+    type Err = InvalidBinaryName;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        BinaryName::from_str(s).map(PackageRef)
+    }
 }
 
 #[cfg(test)]
@@ -85,10 +105,10 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::{arb_field_type, arb_identifier};
+    use crate::tests::{arb_binary_name, arb_field_type};
 
     pub(crate) fn arb_class_ref() -> impl Strategy<Value = ClassRef> {
-        arb_identifier().prop_map(ClassRef::new)
+        arb_binary_name().prop_map(ClassRef)
     }
 
     pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
@@ -104,9 +124,9 @@ pub(crate) mod tests {
     proptest! {
 
         #[test]
-        fn test_is_constructor(class_name in arb_identifier()) {
+        fn test_is_constructor(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: ClassRef::new(class_name),
+                owner: ClassRef(class_name),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
@@ -115,9 +135,9 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn test_is_static_initializer_bolck(class_name in arb_identifier()) {
+        fn test_is_static_initializer_bolck(class_name in arb_binary_name()) {
             let method = MethodRef {
-                owner: ClassRef::new(class_name),
+                owner: ClassRef(class_name),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };

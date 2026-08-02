@@ -45,11 +45,11 @@ fn test_parse_my_class() {
     );
     assert_eq!("org/mokapot/test/MyClass", my_class.binary_name);
     assert_eq!(
-        Some(ClassRef::new("java/lang/Object")),
+        Some("java/lang/Object".parse().unwrap()),
         my_class.super_class
     );
     assert_eq!(
-        Some(&ClassRef::new("java/io/Closeable")),
+        Some(&"java/io/Closeable".parse::<ClassRef>().unwrap()),
         my_class.interfaces.first()
     );
     assert_eq!(2, my_class.fields.len());
@@ -69,7 +69,7 @@ fn test_parse_my_class() {
         .expect("Cannot find main method");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::Object(ClassRef::new("java/lang/String")).into_array_type(),
+        FieldType::Object("java/lang/String".parse().unwrap()).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }
@@ -156,8 +156,8 @@ fn parse_record() {
     ));
     assert!(matches!(
         rec_iter.next(),
-        Some(RecordComponent { name, component_type: FieldType::Object(ClassRef { binary_name }), .. })
-        if name == "description" && binary_name == "java/lang/String"
+        Some(RecordComponent { name, component_type: FieldType::Object(ClassRef(binary_name)), .. })
+        if name == "description" && *binary_name == *"java/lang/String"
     ));
     assert!(rec_iter.next().is_none());
 }

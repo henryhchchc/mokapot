@@ -3,12 +3,15 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use mokapot::jvm::{
-    Class, ClassLoader,
-    class_loader::{
-        CachingClassLoader, ClassPath, Error,
-        class_paths::{DirectoryClassPath, JarClassPath},
+use mokapot::{
+    jvm::{
+        Class, ClassLoader,
+        class_loader::{
+            CachingClassLoader, ClassPath, Error,
+            class_paths::{DirectoryClassPath, JarClassPath},
+        },
     },
+    types::binary_name::BinaryName,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -35,7 +38,9 @@ fn create_test_dir_class_path() -> DirectoryClassPath {
 fn load_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
-    let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
+    let class = class_loader
+        .load_class(&"org/mokapot/test/MyClass".parse().unwrap())
+        .unwrap();
     assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
 }
 
@@ -44,7 +49,7 @@ fn load_class() {
 fn load_absent_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
-    let class = class_loader.load_class("org/pkg/MyAbsentClass");
+    let class = class_loader.load_class(&"org/pkg/MyAbsentClass".parse().unwrap());
     assert!(matches!(class, Err(Error::NotFound)));
 }
 
@@ -59,7 +64,7 @@ impl<'a> MockClassPath<'a> {
 }
 
 impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, _binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, _binary_name: &BinaryName) -> Result<Class, Error> {
         self.counter.fetch_add(1, atomic::Ordering::Relaxed);
         let mut reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
         Class::from_reader(&mut reader).map_err(Into::into)
@@ -73,7 +78,9 @@ fn caching_class_loader_load_once() {
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
     (0..100).into_par_iter().for_each(|_| {
-        let class = class_loader.load_class("org/mokapot/test/MyClass").unwrap();
+        let class = class_loader
+            .load_class(&"org/mokapot/test/MyClass".parse().unwrap())
+            .unwrap();
         assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
     });
     assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
@@ -91,7 +98,7 @@ fn jar_class_path() {
 
     assert!(
         class_loader
-            .load_class("jdk/internal/jimage/ImageReader")
+            .load_class(&"jdk/internal/jimage/ImageReader".parse().unwrap())
             .is_ok()
     );
 }
@@ -107,7 +114,7 @@ fn jar_class_path_not_found() {
     let class_loader = ClassLoader::new([jar_cp]);
 
     assert!(matches!(
-        class_loader.load_class("jdk/internal/jimage/ImageReader3"),
+        class_loader.load_class(&"jdk/internal/jimage/ImageReader3".parse().unwrap()),
         Err(Error::NotFound)
     ));
 }
@@ -120,7 +127,7 @@ fn jar_class_path_not_jar() {
     let class_loader = ClassLoader::new([jar_cp]);
 
     assert!(matches!(
-        class_loader.load_class("jdk/internal/jimage/ImageReader"),
+        class_loader.load_class(&"jdk/internal/jimage/ImageReader".parse().unwrap()),
         Err(Error::Other(_)),
     ));
 }

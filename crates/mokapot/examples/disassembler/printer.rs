@@ -104,7 +104,7 @@ impl<'a> ClassPrinter<'a> {
 
         // Print parent class if present (all classes except Object have a parent)
         if let Some(super_class) = &self.class.super_class {
-            println!("  extends {}", super_class.binary_name);
+            println!("  extends {}", super_class);
         }
 
         // Print implemented interfaces if any
@@ -113,7 +113,7 @@ impl<'a> ClassPrinter<'a> {
             // Use peekable iterator to handle comma placement correctly
             let mut interfaces = self.class.interfaces.iter().peekable();
             while let Some(interface) = interfaces.next() {
-                print!("{}", interface.binary_name);
+                print!("{}", interface);
                 if interfaces.peek().is_some() {
                     print!(", ");
                 }
@@ -302,10 +302,9 @@ impl<'a> ClassPrinter<'a> {
 
             // Get the exception type, or "any" for finally blocks (which catch all exceptions)
             let catch_type = match &entry.catch_type {
-                Some(class_ref) => &class_ref.binary_name,
-                None => "any", // "any" means a finally block or catch-all handler
+                Some(class_ref) => class_ref.to_string(),
+                None => "any".to_string(), // "any" means a finally block or catch-all handler
             };
-
             println!(
                 "        {} {} {} {}",
                 start_pc, end_pc, entry.handler_pc, catch_type
@@ -326,7 +325,7 @@ impl<'a> ClassPrinter<'a> {
         if !method.exceptions.is_empty() {
             println!("    Exceptions:");
             for exception in &method.exceptions {
-                println!("      {}", exception.binary_name);
+                println!("      {}", exception);
             }
         }
     }

@@ -76,9 +76,7 @@ impl ClassElement for Method {
             .get_str(descriptor_index)?
             .parse()
             .context("Invalid method descriptor")?;
-        let owner = ClassRef {
-            binary_name: ctx.current_class_binary_name.clone(),
-        };
+        let owner = ClassRef(ctx.current_class_binary_name.clone());
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()

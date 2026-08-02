@@ -94,14 +94,14 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{jvm::references::ClassRef, tests::arb_identifier};
+    use crate::tests::arb_identifier;
 
     fn empty_method(name: String) -> Method {
         Method {
             name,
             access_flags: AccessFlags::PUBLIC,
             descriptor: "()V".parse().unwrap(),
-            owner: ClassRef::new("org/mokapot/Test"),
+            owner: "org/mokapot/Test".parse().unwrap(),
             body: None,
             exceptions: vec![],
             runtime_visible_annotations: vec![],

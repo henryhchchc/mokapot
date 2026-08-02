@@ -75,9 +75,7 @@ impl ClassElement for Field {
             .get_str(descriptor_index)?
             .parse()
             .context("Invalid field descriptor")?;
-        let owner = ClassRef {
-            binary_name: ctx.current_class_binary_name.clone(),
-        };
+        let owner = ClassRef(ctx.current_class_binary_name.clone());
         let attributes: Vec<Attribute> = attributes
             .into_iter()
             .map(|it| Attribute::from_raw(it, ctx))

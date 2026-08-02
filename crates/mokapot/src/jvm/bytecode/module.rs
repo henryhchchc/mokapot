@@ -70,7 +70,7 @@ impl ClassElement for Export {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let exports_index = cp.put_package_ref(self.package)?;
+        let exports_index = cp.put_package_ref(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
             .to
@@ -105,7 +105,7 @@ impl ClassElement for Open {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let opens_index = cp.put_package_ref(self.package)?;
+        let opens_index = cp.put_package_ref(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
             .to
@@ -137,10 +137,10 @@ impl ClassElement for Provide {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let provides_index = cp.put_class_ref(self.service)?;
+        let provides_index = cp.put_class_ref(&self.service)?;
         let with = self
             .with
-            .into_iter()
+            .iter()
             .map(|it| cp.put_class_ref(it))
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
@@ -244,7 +244,7 @@ impl ClassElement for Module {
             .try_collect()?;
         let uses = self
             .uses
-            .into_iter()
+            .iter()
             .map(|it| cp.put_class_ref(it))
             .try_collect()?;
         Ok(Self::Raw {

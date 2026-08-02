@@ -70,7 +70,7 @@ where
             cp.class_refs()
                 .into_iter()
                 .map(move |cr| {
-                    cp.find_class(&cr.binary_name)
+                    cp.find_class(&cr.0)
                         .expect("Class ref yielded by the class path must be found.")
                 })
                 .map(|it| (it.make_ref(), it))

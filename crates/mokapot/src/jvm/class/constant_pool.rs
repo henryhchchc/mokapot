@@ -200,21 +200,21 @@ impl ConstantPool {
             .context("Invalid constant pool index")?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(ClassRef::new(name))
+            Ok(ClassRef(name.parse().context("Invalid binary name")?))
         } else {
             mismatch("Class", entry)
         }
     }
 
-    pub(crate) fn put_class_ref(&mut self, value: ClassRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.binary_name)?;
+    pub(crate) fn put_class_ref(&mut self, value: &ClassRef) -> Result<u16, GenerationError> {
+        let name_index = self.put_string(value.0.to_string())?;
         let entry = Entry::Class { name_index };
         let idx = self.put_entry_dedup(entry)?;
         Ok(idx)
     }
 
     pub(crate) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(value.owner)?;
+        let class_index = self.put_class_ref(&value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.field_type)?;
         self.put_entry_dedup(Entry::FieldRef {
             class_index,
@@ -224,7 +224,7 @@ impl ConstantPool {
     }
 
     pub(crate) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(value.owner)?;
+        let class_index = self.put_class_ref(&value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
         self.put_entry_dedup(Entry::MethodRef {
             class_index,
@@ -237,7 +237,7 @@ impl ConstantPool {
         &mut self,
         value: MethodRef,
     ) -> Result<u16, GenerationError> {
-        let class_index = self.put_class_ref(value.owner)?;
+        let class_index = self.put_class_ref(&value.owner)?;
         let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
         self.put_entry_dedup(Entry::InterfaceMethodRef {
             class_index,
@@ -269,10 +269,14 @@ impl ConstantPool {
                 .get_str(descriptor_index)
                 .and_then(|it| it.parse().context("Invalid method descriptor"))
                 .map(ConstantValue::MethodType),
-            Entry::Class { name_index } => self
-                .get_str(name_index)
-                .map(ClassRef::new)
-                .map(ConstantValue::Class),
+            Entry::Class { name_index } => self.get_str(name_index).and_then(|s| {
+                s.parse()
+                    .map(ClassRef)
+                    .map(ConstantValue::Class)
+                    .map_err(|e| {
+                        ParseError::malform(format!("Invalid binary name in constant value: {e}"))
+                    })
+            }),
             Entry::MethodHandle { .. } => self
                 .get_method_handle(value_index)
                 .map(ConstantValue::Handle),
@@ -311,7 +315,7 @@ impl ConstantPool {
                 let string_index = self.put_entry_dedup(utf8_entry)?;
                 Entry::String { string_index }
             }
-            ConstantValue::Class(value) => return self.put_class_ref(value),
+            ConstantValue::Class(value) => return self.put_class_ref(&value),
             ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
             ConstantValue::MethodType(method_descriptor) => {
                 let descriptor_index = self.put_string(method_descriptor.descriptor())?;
@@ -357,16 +361,14 @@ impl ConstantPool {
             .context("Invalid constant pool index")?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(PackageRef {
-                binary_name: name.to_owned(),
-            })
+            Ok(PackageRef(name.parse().context("Invalid binary name")?))
         } else {
             mismatch("Package", entry)
         }
     }
 
-    pub(crate) fn put_package_ref(&mut self, value: PackageRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.binary_name)?;
+    pub(crate) fn put_package_ref(&mut self, value: &PackageRef) -> Result<u16, GenerationError> {
+        let name_index = self.put_string(value.0.to_string())?;
         let entry = Entry::Package { name_index };
         self.put_entry_dedup(entry).map_err(Into::into)
     }
@@ -553,26 +555,32 @@ impl ConstantPool {
     }
 
     pub(crate) fn get_type_ref(&self, index: u16) -> Result<FieldType, ParseError> {
-        let ClassRef { binary_name: name } = self.get_class_ref(index)?;
+        let entry = self
+            .get_entry(index)
+            .context("Invalid constant pool index")?;
+        let &Entry::Class { name_index } = entry else {
+            return mismatch("Class", entry);
+        };
+        let name = self.get_str(name_index)?;
         let field_type = if name.starts_with('[') {
-            FieldType::from_str(name.as_str())
+            FieldType::from_str(name)
                 .with_context(|_| format!("Invalid descriptor for type reference: {name}"))?
         } else {
-            FieldType::Object(ClassRef::new(name))
+            FieldType::Object(ClassRef(name.parse().context("Invalid binary name")?))
         };
         Ok(field_type)
     }
 
     pub(crate) fn put_type_ref(&mut self, field_type: FieldType) -> Result<u16, GenerationError> {
         debug_assert!(!matches!(field_type, FieldType::Base(_)));
-        let idx = match field_type {
-            FieldType::Object(class_ref) => self.put_class_ref(class_ref)?,
-            arr_type @ FieldType::Array(_) => {
-                self.put_class_ref(ClassRef::new(arr_type.descriptor()))?
-            }
+        let name = match field_type {
+            FieldType::Object(class_ref) => class_ref.0.to_string(),
+            arr_type @ FieldType::Array(_) => arr_type.descriptor(),
             FieldType::Base(_) => unreachable!(),
         };
-        Ok(idx)
+        let name_index = self.put_string(name)?;
+        self.put_entry_dedup(Entry::Class { name_index })
+            .map_err(Into::into)
     }
 }
 
@@ -981,7 +989,7 @@ mod tests {
     #[test]
     fn interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
-            owner: ClassRef::new("example/Interface"),
+            owner: "example/Interface".parse().unwrap(),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
@@ -1008,7 +1016,7 @@ mod tests {
     #[test]
     fn interface_method_handles_reject_method_refs() {
         let method = MethodRef {
-            owner: ClassRef::new("example/Interface"),
+            owner: "example/Interface".parse().unwrap(),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use self::references::{ClassRef, PackageRef};
 use crate::{
     intrinsics::see_jvm_spec,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
+    types::{binary_name::BinaryName, field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 pub mod annotation;
@@ -33,7 +33,7 @@ pub struct Class {
     /// The access modifiers of the class.
     pub access_flags: class::AccessFlags,
     /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
-    pub binary_name: String,
+    pub binary_name: BinaryName,
     /// A reference to the superclass of the class.
     /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
     pub super_class: Option<ClassRef>,

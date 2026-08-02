@@ -8,7 +8,6 @@ use crate::{
         class::{ConstantPool, constant_pool},
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         errors::ParsingErrorContext,
-        references::ClassRef,
     },
     types::{Descriptor, field_type::PrimitiveType},
 };
@@ -784,13 +783,13 @@ impl Instruction {
                 InvokeDynamic { dynamic_index }
             }
             Self::New(class_ref) => New {
-                index: cp.put_class_ref(class_ref)?,
+                index: cp.put_class_ref(&class_ref)?,
             },
             Self::NewArray(atype) => NewArray {
                 atype: atype.new_array_type_tag(),
             },
             Self::ANewArray(class_ref) => ANewArray {
-                index: cp.put_class_ref(class_ref)?,
+                index: cp.put_class_ref(&class_ref)?,
             },
             Self::ArrayLength => ArrayLength,
             Self::AThrow => AThrow,
@@ -822,9 +821,8 @@ impl Instruction {
                 WideInstruction::Ret(index) => RawWideInstruction::Ret { index },
             }),
             Self::MultiANewArray(element_type, dimensions) => {
-                let index = cp.put_class_ref(ClassRef {
-                    binary_name: element_type.descriptor(),
-                })?;
+                let name_index = cp.put_string(element_type.descriptor())?;
+                let index = cp.put_entry_dedup(constant_pool::Entry::Class { name_index })?;
                 MultiANewArray { index, dimensions }
             }
             Self::IfNull(target) => IfNull {
@@ -870,12 +868,12 @@ mod tests {
         JavaString,
         class::{ConstantPool, constant_pool::Entry},
         code::{Instruction, ProgramCounter, RawInstruction},
-        references::{ClassRef, MethodRef},
+        references::MethodRef,
     };
 
     fn interface_method() -> MethodRef {
         MethodRef {
-            owner: ClassRef::new("example/Interface"),
+            owner: "example/Interface".parse().unwrap(),
             name: "method".to_owned(),
             descriptor: "()V".parse().unwrap(),
         }

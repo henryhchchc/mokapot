@@ -23,6 +23,7 @@ pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};
+use crate::types::binary_name::BinaryName;
 
 /// Maintains context for parsing a JVM class file.
 ///
@@ -37,7 +38,7 @@ pub struct ParsingContext {
     /// The version of the class file being parsed, indicating JVM compatibility requirements.
     pub class_version: Version,
     /// The binary name of the class being parsed (e.g., "java/lang/String").
-    pub current_class_binary_name: String,
+    pub current_class_binary_name: BinaryName,
 }
 
 /// Enables parsing a raw JVM element from a binary stream.

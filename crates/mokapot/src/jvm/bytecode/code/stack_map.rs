@@ -156,7 +156,7 @@ impl ClassElement for VerificationType {
             Self::NullVariable => Ok(Self::Raw::Null),
             Self::UninitializedThisVariable => Ok(Self::Raw::UninitializedThis),
             Self::ObjectVariable(class) => Ok(Self::Raw::Object {
-                class_info_index: cp.put_class_ref(class)?,
+                class_info_index: cp.put_class_ref(&class)?,
             }),
             Self::UninitializedVariable { offset } => Ok(Self::Raw::Uninitialized {
                 offset: offset.into(),

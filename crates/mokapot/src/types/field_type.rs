@@ -169,11 +169,10 @@ impl FromStr for PrimitiveType {
 /// use std::str::FromStr;
 /// use mokapot::types::Descriptor;
 /// use mokapot::types::field_type::{FieldType, PrimitiveType};
-/// use mokapot::jvm::references::ClassRef;
 ///
 /// // Create and work with different field types
 /// let int_type = FieldType::Base(PrimitiveType::Int);
-/// let string_type = FieldType::Object(ClassRef::new("java/lang/String"));
+/// let string_type = FieldType::from_str("Ljava/lang/String;").unwrap();
 /// let int_array = int_type.into_array_type(); // Creates int[]
 /// let string_2d_array = FieldType::array_of(string_type, 2); // Creates String[][]
 ///
@@ -183,8 +182,8 @@ impl FromStr for PrimitiveType {
 /// assert_eq!(FieldType::from_str("[[Ljava/lang/String;").unwrap(), string_2d_array); // String[][]
 ///
 /// // Convert to descriptors or qualified names
-/// let string_type = FieldType::Object(ClassRef::new("java/lang/String"));
 /// assert_eq!(int_array.descriptor(), "[I");
+/// let string_type = FieldType::from_str("Ljava/lang/String;").unwrap();
 /// assert_eq!(string_type.qualified_name(), "java.lang.String");
 /// ```
 ///
@@ -205,7 +204,7 @@ impl FieldType {
     pub fn qualified_name(&self) -> String {
         match self {
             Self::Base(pt) => pt.to_string(),
-            Self::Object(ClassRef { binary_name }) => binary_name.replace('/', "."),
+            Self::Object(ClassRef(binary_name)) => binary_name.to_qualified_name(),
             Self::Array(inner) => format!("{}[]", inner.qualified_name()),
         }
     }
@@ -223,7 +222,7 @@ impl FieldType {
             if binary_name.is_empty() {
                 Err(InvalidDescriptor)
             } else {
-                let class_ref = ClassRef::new(binary_name);
+                let class_ref = ClassRef(binary_name.parse().map_err(|_| InvalidDescriptor)?);
                 *input = after_semi;
                 Ok(Self::Object(class_ref))
             }
@@ -249,7 +248,7 @@ impl Descriptor for FieldType {
     fn descriptor(&self) -> String {
         match self {
             FieldType::Base(it) => it.descriptor().to_string(),
-            FieldType::Object(ClassRef { binary_name }) => {
+            FieldType::Object(ClassRef(binary_name)) => {
                 format!("L{binary_name};")
             }
             FieldType::Array(inner) => format!("[{}", inner.descriptor()),
@@ -281,7 +280,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::{arb_identifier, arb_non_array_field_type};
+    use crate::tests::{arb_binary_name, arb_non_array_field_type};
 
     #[test]
     fn primitive_type_descriptor() {
@@ -342,7 +341,7 @@ mod tests {
     fn field_type_display() {
         use FieldType::Object;
         assert_eq!(
-            Object(ClassRef::new("java/lang/Object")).to_string(),
+            Object("java/lang/Object".parse().unwrap()).to_string(),
             "java/lang/Object"
         );
         assert_eq!(
@@ -352,7 +351,7 @@ mod tests {
             "int[]"
         );
         assert_eq!(
-            Object(ClassRef::new("java/lang/Object"))
+            Object("java/lang/Object".parse::<ClassRef>().unwrap())
                 .into_array_type()
                 .to_string(),
             "java/lang/Object[]"
@@ -361,9 +360,9 @@ mod tests {
 
     proptest! {
         #[test]
-        fn field_type_from_str_class(class_name in arb_identifier()) {
+        fn field_type_from_str_class(class_name in arb_binary_name()) {
             let s = format!("L{class_name};");
-            let expected = FieldType::Object(ClassRef::new(class_name));
+            let expected = FieldType::Object(ClassRef(class_name));
             assert_eq!(s.parse(), Ok(expected));
         }
 

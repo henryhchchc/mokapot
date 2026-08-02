@@ -100,6 +100,7 @@ impl ClassElement for ExceptionTableEntry {
         let end_pc = covered_pc.end.into();
         let handler_pc = handler_pc.into();
         let catch_type_idx = catch_type
+            .as_ref()
             .map(|it| cp.put_class_ref(it))
             .transpose()?
             .unwrap_or(0);
@@ -292,7 +293,7 @@ mod tests {
         let context = ParsingContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::Jdk8,
-            current_class_binary_name: "Test".to_owned(),
+            current_class_binary_name: "Test".parse().unwrap(),
         };
         let entry = ExceptionTableEntry::from_raw(
             raw_attributes::ExceptionTableEntry {

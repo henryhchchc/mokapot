@@ -15,7 +15,7 @@ fn load_classes() {
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
     assert!(
         ctx.application_classes
-            .contains_key(&ClassRef::new("org/mokapot/test/TestAnalysis"))
+            .contains_key(&"org/mokapot/test/TestAnalysis".parse().unwrap())
     );
 }
 
@@ -26,10 +26,10 @@ fn interfaces_impl() {
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
     let implements = ctx
         .interface_implementations
-        .implemented_interfaces(&ClassRef::new("org/mokapot/test/MyClass"));
+        .implemented_interfaces(&"org/mokapot/test/MyClass".parse().unwrap());
     assert!(
         implements
             .iter()
-            .any(|it| it == &ClassRef::new("java/io/Closeable"))
+            .any(|it| it == &"java/io/Closeable".parse::<ClassRef>().unwrap())
     );
 }

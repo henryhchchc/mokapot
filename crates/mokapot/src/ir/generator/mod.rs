@@ -26,7 +26,6 @@ use crate::{
         ConstantValue, Method,
         code::{ExceptionTableEntry, InstructionList, MethodBody, ProgramCounter},
         method,
-        references::ClassRef,
     },
 };
 
@@ -138,7 +137,7 @@ impl<'m> MokaIRGenerator<'m> {
                 let caught_type = entry
                     .catch_type
                     .clone()
-                    .unwrap_or_else(|| ClassRef::new("java/lang/Throwable"));
+                    .unwrap_or_else(|| "java/lang/Throwable".parse().unwrap());
                 handlers
                     .entry(entry.handler_pc)
                     .or_insert_with(BTreeSet::new)

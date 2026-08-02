@@ -2,7 +2,10 @@ use proptest::prelude::*;
 
 use crate::{
     jvm::{Class, class, references::ClassRef},
-    types::field_type::{FieldType, PrimitiveType},
+    types::{
+        binary_name::BinaryName,
+        field_type::{FieldType, PrimitiveType},
+    },
 };
 
 #[rustfmt::skip]
@@ -42,7 +45,7 @@ impl Default for Class {
         Self {
             version: class::Version::Jdk22(false),
             access_flags: class::AccessFlags::empty(),
-            binary_name: String::default(),
+            binary_name: BinaryName::new("$default$").unwrap(),
             super_class: None,
             interfaces: Vec::default(),
             fields: Vec::default(),
@@ -76,11 +79,15 @@ pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
     prop::collection::vec(arb_ident, 1..10).prop_map(|v| v.join("/"))
 }
 
+pub(crate) fn arb_binary_name() -> impl Strategy<Value = BinaryName> {
+    arb_identifier().prop_map(|s| BinaryName::new(s).unwrap())
+}
+
 pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
     prop_oneof![
         any::<PrimitiveType>().prop_map(FieldType::Base),
-        arb_identifier()
-            .prop_map(ClassRef::new)
+        arb_binary_name()
+            .prop_map(ClassRef)
             .prop_map(FieldType::Object),
     ]
 }

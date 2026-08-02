@@ -270,7 +270,7 @@ impl Attribute {
             Attribute::Exceptions(exception_types) => {
                 let mut bytes = Vec::new();
                 write_length::<u16>(&mut bytes, exception_types.len())?;
-                for exception_type in exception_types {
+                for exception_type in &exception_types {
                     bytes.extend(cp.put_class_ref(exception_type)?.to_be_bytes());
                 }
                 bytes
@@ -309,18 +309,18 @@ impl Attribute {
             Attribute::ModulePackages(mod_pkg) => {
                 let mut buf = Vec::new();
                 write_length::<u16>(&mut buf, mod_pkg.len())?;
-                for pkg in mod_pkg {
+                for pkg in &mod_pkg {
                     buf.extend(cp.put_package_ref(pkg)?.to_be_bytes());
                 }
                 buf
             }
             Attribute::NestHost(class_ref) | Attribute::ModuleMainClass(class_ref) => {
-                cp.put_class_ref(class_ref)?.to_be_bytes().to_vec()
+                cp.put_class_ref(&class_ref)?.to_be_bytes().to_vec()
             }
             Attribute::NestMembers(classes) | Attribute::PermittedSubclasses(classes) => {
                 let mut buf = Vec::new();
                 write_length::<u16>(&mut buf, classes.len())?;
-                for class in classes {
+                for class in &classes {
                     buf.extend(cp.put_class_ref(class)?.to_be_bytes());
                 }
                 buf

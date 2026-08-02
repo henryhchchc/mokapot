@@ -1,9 +1,9 @@
 //! Discovering and loading classes.
 
-use std::{borrow::Borrow, ops::Deref};
+use std::ops::Deref;
 
 use super::Class;
-use crate::intrinsics::Cache;
+use crate::{intrinsics::Cache, types::binary_name::BinaryName};
 
 /// A class loader that can load classes from a list of class paths.
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub trait ClassPath {
     ///
     /// # Errors
     /// See [`Error`].
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error>;
+    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error>;
 }
 
 impl<T> ClassPath for T
@@ -42,7 +42,7 @@ where
     T: Deref,
     <T as Deref>::Target: ClassPath,
 {
-    fn find_class(&self, binary_name: &str) -> Result<Class, Error> {
+    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
         self.deref().find_class(binary_name)
     }
 }
@@ -52,7 +52,7 @@ impl<P> ClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: &str) -> Result<Class, Error>
+    pub fn load_class(&self, binary_name: &BinaryName) -> Result<Class, Error>
     where
         P: ClassPath,
     {
@@ -91,7 +91,7 @@ pub mod class_paths;
 )]
 pub struct CachingClassLoader<P> {
     class_loader: ClassLoader<P>,
-    cache: Cache<String, Class>,
+    cache: Cache<BinaryName, Class>,
 }
 
 impl<P> CachingClassLoader<P> {
@@ -100,13 +100,12 @@ impl<P> CachingClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class<N>(&self, binary_name: &N) -> Result<&Class, Error>
+    pub fn load_class(&self, binary_name: &BinaryName) -> Result<&Class, Error>
     where
         P: ClassPath,
-        N: ?Sized + Borrow<str>,
     {
         self.cache
-            .get_or_try_put(binary_name.borrow(), |it| self.class_loader.load_class(it))
+            .get_or_try_put(binary_name, |it| self.class_loader.load_class(it))
     }
 }
 

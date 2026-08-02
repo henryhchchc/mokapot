@@ -47,9 +47,7 @@ impl Class {
     /// Creates a [`ClassRef`] referring to the class.
     #[must_use]
     pub fn make_ref(&self) -> ClassRef {
-        ClassRef {
-            binary_name: self.binary_name.clone(),
-        }
+        ClassRef(self.binary_name.clone())
     }
 
     /// Checks if the class is an interface.
