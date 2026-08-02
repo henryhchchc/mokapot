@@ -54,8 +54,8 @@ impl Class {
     /// use std::io::BufReader;
     ///
     /// let file = File::open("path/to/class/file").unwrap();
-    /// let reader = BufReader::new(file);
-    /// let class = Class::from_reader(reader).unwrap();
+    /// let mut reader = BufReader::new(file);
+    /// let class = Class::from_reader(&mut reader).unwrap();
     /// ```
     pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParseError>
     where
