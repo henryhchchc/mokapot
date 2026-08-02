@@ -21,11 +21,7 @@ pub mod references;
 pub mod constant_value;
 pub use constant_value::ConstantValue;
 
-/// A class loader that can load classes from a list of class paths.
-#[derive(Debug)]
-pub struct ClassLoader<P> {
-    class_path: Vec<P>,
-}
+pub use class_loader::ClassLoader;
 
 /// A JVM class
 #[doc = see_jvm_spec!(4, 1)]

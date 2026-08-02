@@ -2,8 +2,14 @@
 
 use std::{borrow::Borrow, ops::Deref};
 
-use super::{Class, ClassLoader};
+use super::Class;
 use crate::intrinsics::Cache;
+
+/// A class loader that can load classes from a list of class paths.
+#[derive(Debug)]
+pub struct ClassLoader<P> {
+    class_path: Vec<P>,
+}
 
 /// An error that can occur while loading a class.
 #[derive(thiserror::Error, Debug)]
