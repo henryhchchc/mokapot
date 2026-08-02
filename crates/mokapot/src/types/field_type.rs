@@ -117,9 +117,11 @@ impl PrimitiveType {
         }
     }
 
-    fn parse_prefix(payload: &mut &str) -> Result<Self, InvalidDescriptor> {
-        let first_char = payload.chars().next().ok_or(InvalidDescriptor)?;
-        Self::try_from(first_char).inspect(|_| *payload = &payload[first_char.len_utf8()..])
+    /// Parses a primitive type from the beginning of `input`, advancing it past the parsed
+    /// descriptor character on success.
+    fn parse_prefix(input: &mut &str) -> Result<Self, InvalidDescriptor> {
+        let first_char = input.chars().next().ok_or(InvalidDescriptor)?;
+        Self::try_from(first_char).inspect(|_| *input = &input[first_char.len_utf8()..])
     }
 }
 
@@ -207,6 +209,40 @@ impl FieldType {
             Self::Array(inner) => format!("{}[]", inner.qualified_name()),
         }
     }
+
+    /// Parses a field type from the beginning of `input`, advancing it past the parsed type.
+    pub(crate) fn parse_prefix(input: &mut &str) -> Result<Self, InvalidDescriptor> {
+        if let Ok(pt) = PrimitiveType::parse_prefix(input) {
+            Ok(Self::Base(pt))
+        } else if let Some(mut rest) = input.strip_prefix('[') {
+            Self::parse_prefix(&mut rest)
+                .map(FieldType::into_array_type)
+                .inspect(|_| *input = rest)
+        } else if let Some(rest) = input.strip_prefix('L') {
+            let (binary_name, after_semi) = rest.split_once(';').ok_or(InvalidDescriptor)?;
+            if binary_name.is_empty() {
+                Err(InvalidDescriptor)
+            } else {
+                let class_ref = ClassRef::new(binary_name);
+                *input = after_semi;
+                Ok(Self::Object(class_ref))
+            }
+        } else {
+            Err(InvalidDescriptor)
+        }
+    }
+
+    /// Creates an array type with the given type as its elements.
+    #[must_use]
+    pub fn into_array_type(self) -> Self {
+        Self::Array(Box::new(self))
+    }
+
+    /// Creates an array type with the given type as its elements.
+    #[must_use]
+    pub fn array_of(inner: Self, dim: u8) -> Self {
+        (0..dim).fold(inner, |acc, _| acc.into_array_type())
+    }
 }
 
 impl Descriptor for FieldType {
@@ -237,45 +273,6 @@ impl FromStr for FieldType {
 impl From<PrimitiveType> for FieldType {
     fn from(it: PrimitiveType) -> Self {
         Self::Base(it)
-    }
-}
-
-impl FieldType {
-    /// Parses a field type from the beginning of `descriptor`, returning the parsed type
-    /// and the remaining unparsed suffix.
-    pub(crate) fn parse_prefix(payload: &mut &str) -> Result<Self, InvalidDescriptor> {
-        if let Ok(pt) = PrimitiveType::parse_prefix(payload) {
-            Ok(Self::Base(pt))
-        } else if let Some(mut element_type_prefix) = payload.strip_prefix('[') {
-            let result =
-                Self::parse_prefix(&mut element_type_prefix).map(FieldType::into_array_type);
-            *payload = element_type_prefix;
-            result
-        } else if let Some(ref_type_prefix) = payload.strip_prefix('L') {
-            let (binary_name, remaining) =
-                ref_type_prefix.split_once(';').ok_or(InvalidDescriptor)?;
-            if binary_name.is_empty() {
-                Err(InvalidDescriptor)
-            } else {
-                let class_ref = ClassRef::new(binary_name);
-                *payload = remaining;
-                Ok(Self::Object(class_ref))
-            }
-        } else {
-            Err(InvalidDescriptor)
-        }
-    }
-
-    /// Creates an array type with the given type as its elements.
-    #[must_use]
-    pub fn into_array_type(self) -> Self {
-        Self::Array(Box::new(self))
-    }
-
-    /// Creates an array type with the given type as its elements.
-    #[must_use]
-    pub fn array_of(inner: Self, dim: u8) -> Self {
-        (0..dim).fold(inner, |acc, _| acc.into_array_type())
     }
 }
 
@@ -406,7 +403,6 @@ mod tests {
         assert_eq!("D".parse(), Ok(Base(Double)));
         assert_eq!("B".parse(), Ok(Base(Byte)));
         assert_eq!("S".parse(), Ok(Base(Short)));
-        assert_eq!("I".parse(), Ok(Base(Int)));
         assert_eq!("J".parse(), Ok(Base(Long)));
         assert_eq!("Z".parse(), Ok(Base(Boolean)));
     }

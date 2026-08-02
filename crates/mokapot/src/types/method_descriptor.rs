@@ -110,11 +110,6 @@ impl Descriptor for ReturnType {
     }
 }
 
-/// Character that starts a method descriptor's parameter list
-const PARAM_START: char = '(';
-/// Character that ends a method descriptor's parameter list
-const PARAM_END: char = ')';
-
 impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
@@ -130,20 +125,21 @@ impl FromStr for MethodDescriptor {
 
 /// Parses the parameter types portion of a method descriptor.
 ///
-/// This function processes the characters between '(' and ')', extracting each parameter
-/// type descriptor and converting it into a `FieldType`.
-fn parse_params(payload: &mut &str) -> Result<Vec<FieldType>, InvalidDescriptor> {
-    let mut rest = payload.strip_prefix(PARAM_START).ok_or(InvalidDescriptor)?;
+/// Consumes the leading `(` from `input`, then extracts each parameter type
+/// descriptor until `)` is reached. On success, `input` is advanced past the
+/// closing `)`.
+fn parse_params(input: &mut &str) -> Result<Vec<FieldType>, InvalidDescriptor> {
+    let mut rest = input.strip_prefix('(').ok_or(InvalidDescriptor)?;
 
     let parameters_types = std::iter::from_fn(|| {
-        if let Some(after_params) = rest.strip_prefix(PARAM_END) {
-            rest = after_params;
+        if let Some(after_paren) = rest.strip_prefix(')') {
+            rest = after_paren;
             return None;
         }
         Some(FieldType::parse_prefix(&mut rest))
     })
     .collect::<Result<_, _>>()
-    .inspect(|_| *payload = rest)?;
+    .inspect(|_| *input = rest)?;
 
     Ok(parameters_types)
 }
