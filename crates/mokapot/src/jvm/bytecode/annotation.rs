@@ -1,11 +1,11 @@
+//! [`ClassElement`] implementations for annotation types.
+
 use itertools::Itertools;
 
 use super::{
-    ParseError, ParsingContext,
-    errors::{GenerationError, ParsingErrorContext},
-    jvm_element_parser::ClassElement,
-    raw_attributes,
+    GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
 };
+use crate::jvm::errors::ParsingErrorContext;
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,

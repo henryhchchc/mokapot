@@ -1,11 +1,11 @@
 pub(crate) mod instruction_impl;
+pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
 pub(super) mod stack_map;
 
 use std::{
     io::{self, Read, Write},
     result::Result,
-    str::FromStr,
 };
 
 use itertools::Itertools;
@@ -13,39 +13,25 @@ use itertools::Itertools;
 use super::{
     FromBytecode, ParseError, ParsingContext, ToBytecode,
     attribute::Attribute,
-    errors::{GenerationError, ParsingErrorContext},
-    jvm_element_parser::ClassElement,
+    class_element::ClassElement,
     raw_attributes::{self, Code},
-    reader_utils::BytecodeReader,
+    reader::BytecodeReader,
 };
 use crate::{
     intrinsics::extract_attributes,
     jvm::{
         class::ConstantPool,
         code::{
-            ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
-            LocalVariableTable, MethodBody, ProgramCounter,
+            ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableTable,
+            MethodBody, ProgramCounter,
         },
         method::{ParameterAccessFlags, ParameterInfo},
     },
-    types::{Descriptor, field_type::FieldType},
 };
 
-use crate::jvm::bytecode::code::raw_instruction::RawInstruction;
+pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
 
-#[derive(Debug)]
-pub(crate) struct LocalVariableDescAttr {
-    pub id: LocalVariableId,
-    pub name: String,
-    pub field_type: FieldType,
-}
-
-#[derive(Debug)]
-pub(crate) struct LocalVariableTypeAttr {
-    pub id: LocalVariableId,
-    pub name: String,
-    pub signature: String,
-}
+use crate::jvm::{bytecode::code::raw_instruction::RawInstruction, errors::GenerationError};
 
 impl ClassElement for LineNumberTableEntry {
     type Raw = Self;
@@ -122,90 +108,6 @@ impl ClassElement for ExceptionTableEntry {
             end_pc,
             handler_pc,
             catch_type_idx,
-        })
-    }
-}
-
-impl ClassElement for LocalVariableDescAttr {
-    type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
-        let Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
-        } = raw;
-
-        let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx)?;
-        let field_type =
-            FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
-        let id = LocalVariableId {
-            effective_range,
-            index,
-        };
-        Ok(LocalVariableDescAttr {
-            id,
-            name,
-            field_type,
-        })
-    }
-
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.effective_range.start;
-        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
-        let name_index = cp.put_string(self.name)?;
-        let desc_or_signature_idx = cp.put_string(self.field_type.descriptor())?;
-        let index = self.id.index;
-        Ok(Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
-        })
-    }
-}
-
-impl ClassElement for LocalVariableTypeAttr {
-    type Raw = raw_attributes::LocalVariableInfo;
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
-        let Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
-        } = raw;
-
-        let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
-        let id = LocalVariableId {
-            effective_range,
-            index,
-        };
-        Ok(LocalVariableTypeAttr {
-            id,
-            name,
-            signature,
-        })
-    }
-
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.effective_range.start;
-        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
-        let name_index = cp.put_string(self.name)?;
-        let desc_or_signature_idx = cp.put_string(self.signature)?;
-        let index = self.id.index;
-        Ok(Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
         })
     }
 }

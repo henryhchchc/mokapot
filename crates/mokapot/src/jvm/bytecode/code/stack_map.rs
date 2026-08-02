@@ -2,8 +2,7 @@ use itertools::Itertools;
 
 use crate::jvm::{
     bytecode::{
-        ParseError, ParsingContext, errors::GenerationError, jvm_element_parser::ClassElement,
-        raw_attributes,
+        GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
     },
     class::ConstantPool,
     code::{ProgramCounter, StackMapFrame, VerificationType},

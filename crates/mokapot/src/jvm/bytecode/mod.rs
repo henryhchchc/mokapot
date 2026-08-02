@@ -1,26 +1,22 @@
 //! JVM class file format parsing and writing functionality.
 mod annotation;
 mod attribute;
+pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;
-pub(super) mod errors;
 mod field_info;
-mod jvm_element_parser;
 mod method_info;
 mod module;
 mod raw_attributes;
-pub(crate) mod reader_utils;
+pub(crate) mod reader;
 
 use std::{
     io::{self, Read, Write},
     num::TryFromIntError,
 };
 
-#[cfg(not(feature = "unstable-bytecode-generation"))]
-pub(crate) use errors::GenerationError;
-#[cfg(feature = "unstable-bytecode-generation")]
-pub use errors::{GenerationError, GenerationErrorKind};
-pub use errors::{ParseError, ParseErrorKind};
+pub(super) use crate::jvm::errors::GenerationError;
+pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use num_traits::ToBytes;
 
 use crate::jvm::class::{ConstantPool, Version};

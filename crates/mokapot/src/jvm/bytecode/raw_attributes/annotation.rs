@@ -4,7 +4,7 @@ use std::io::{self, Read, Write};
 use std::result::Result;
 
 use super::super::{
-    FromBytecode, ToBytecode, errors::GenerationError, reader_utils::BytecodeReader, write_length,
+    FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
 };
 use crate::{intrinsics::enum_discriminant, jvm::code::ProgramCounter};
 

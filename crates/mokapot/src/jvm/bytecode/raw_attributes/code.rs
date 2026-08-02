@@ -4,10 +4,9 @@ use std::io::{self, Read, Write};
 use std::result::Result;
 
 use super::super::{
-    FromBytecode, ToBytecode,
+    FromBytecode, GenerationError, ToBytecode,
     attribute::AttributeInfo,
-    errors::GenerationError,
-    reader_utils::{BytecodeReader, read_vec},
+    reader::{BytecodeReader, read_vec},
     write_length,
 };
 use crate::{

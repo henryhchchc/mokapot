@@ -4,7 +4,7 @@ use std::io::{self, Read, Write};
 use std::result::Result;
 
 use super::super::{
-    FromBytecode, ToBytecode, errors::GenerationError, reader_utils::BytecodeReader, write_length,
+    FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
 };
 
 pub struct ModuleInfo {

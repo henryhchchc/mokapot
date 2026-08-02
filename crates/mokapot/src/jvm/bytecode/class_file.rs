@@ -3,11 +3,10 @@ use std::io::{self, Read, Write};
 use itertools::Itertools;
 
 use super::{
-    FromBytecode, ParseError, ParsingContext, ToBytecode,
+    FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
     attribute::{Attribute, AttributeInfo},
-    errors::GenerationError,
+    class_element::ClassElement,
     field_info::FieldInfo,
-    jvm_element_parser::ClassElement,
     method_info::MethodInfo,
     raw_attributes, write_length,
 };
@@ -15,11 +14,12 @@ use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
         Class,
-        bytecode::{errors::ParsingErrorContext, reader_utils::BytecodeReader},
+        bytecode::reader::BytecodeReader,
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
         },
+        errors::ParsingErrorContext,
         references::ClassRef,
     },
     types::Descriptor,

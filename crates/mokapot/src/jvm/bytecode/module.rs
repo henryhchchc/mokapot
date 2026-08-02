@@ -1,9 +1,11 @@
+//! [`ClassElement`] implementations for module types.
+
 use itertools::Itertools;
 
 use super::{
-    GenerationError, ParseError, ParsingContext, errors::ParsingErrorContext,
-    jvm_element_parser::ClassElement, raw_attributes,
+    GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
 };
+use crate::jvm::errors::ParsingErrorContext;
 use crate::jvm::{
     Module,
     class::{ConstantPool, constant_pool::Entry},

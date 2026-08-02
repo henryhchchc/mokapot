@@ -4,13 +4,10 @@ use itertools::Itertools;
 
 use crate::{
     jvm::{
-        bytecode::{
-            ParseError, ParsingContext,
-            errors::{GenerationError, ParsingErrorContext},
-            jvm_element_parser::ClassElement,
-        },
+        bytecode::{GenerationError, ParseError, ParsingContext, class_element::ClassElement},
         class::{ConstantPool, constant_pool},
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
+        errors::ParsingErrorContext,
         references::ClassRef,
     },
     types::{Descriptor, field_type::PrimitiveType},

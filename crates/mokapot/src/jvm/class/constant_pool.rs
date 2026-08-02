@@ -12,7 +12,7 @@ use crate::{
         ConstantValue, JavaString,
         bytecode::{
             ToBytecode,
-            reader_utils::{BytecodeReader, read_vec},
+            reader::{BytecodeReader, read_vec},
             write_length,
         },
         class::{ConstantPool, MethodHandle},

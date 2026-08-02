@@ -8,11 +8,10 @@ use itertools::Itertools;
 use num_traits::ToBytes;
 
 use super::{
-    FromBytecode, ParseError, ParsingContext, ToBytecode,
+    FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
+    class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    errors::GenerationError,
-    jvm_element_parser::ClassElement,
-    reader_utils::{BytecodeReader, read_vec},
+    reader::{BytecodeReader, read_vec},
     write_length,
 };
 use crate::{

@@ -4,11 +4,11 @@ use std::{
     iter,
 };
 
-use super::super::{ParseError, reader_utils::BytecodeReader};
+use super::super::{ParseError, reader::BytecodeReader};
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        bytecode::{errors::GenerationError, reader_utils::PositionTracker, write_length},
+        bytecode::{GenerationError, reader::PositionTracker, write_length},
         code::{InstructionList, ProgramCounter},
     },
 };

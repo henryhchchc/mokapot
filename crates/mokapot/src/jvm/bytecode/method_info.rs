@@ -3,17 +3,17 @@ use std::io::{self, Read};
 use itertools::Itertools;
 
 use super::{
-    FromBytecode, ParseError, ToBytecode,
+    FromBytecode, GenerationError, ParseError, ToBytecode,
     attribute::{Attribute, AttributeInfo},
-    errors::GenerationError,
-    jvm_element_parser::ClassElement,
-    reader_utils::BytecodeReader,
+    class_element::ClassElement,
+    reader::BytecodeReader,
 };
 use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
         Method,
-        bytecode::{ParsingContext, errors::ParsingErrorContext},
+        bytecode::ParsingContext,
+        errors::ParsingErrorContext,
         method::{self},
         references::ClassRef,
     },
