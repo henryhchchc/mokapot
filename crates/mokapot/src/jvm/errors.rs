@@ -7,6 +7,9 @@
 //! - [`ParseError`] - Errors that occur during parsing of class files
 //! - [`GenerationError`] - Errors that occur during bytecode generation
 //!
+//! Both are type aliases for [`BytecodeError`] parameterized by their
+//! respective [`ParseErrorKind`] or [`GenerationErrorKind`].
+//!
 //! Additionally, this module provides the [`ParsingErrorContext`] trait, which
 //! allows for more context to be added to errors during parsing.
 
@@ -22,27 +25,43 @@ use std::backtrace::Backtrace;
 
 use crate::jvm::{class::constant_pool, code::InvalidOffset};
 
-/// An error that occurs during parsing of a class file.
+/// A generic JVM bytecode error parameterized by its error kind.
+///
+/// Both [`ParseError`] and [`GenerationError`] are type aliases for this
+/// struct with different kind enums.
 #[derive(Debug)]
-pub struct ParseError {
+pub struct BytecodeError<K> {
     cause: Box<dyn Error + Send + Sync>,
-    kind: ParseErrorKind,
+    kind: K,
     #[cfg(debug_assertions)]
     backtrace: Backtrace,
 }
 
-impl Error for ParseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.cause.as_ref())
+impl<K> BytecodeError<K> {
+    /// Creates a new `BytecodeError` with the given cause and kind.
+    #[must_use]
+    pub fn new(cause: Box<dyn Error + Send + Sync>, kind: K) -> Self {
+        Self {
+            cause,
+            kind,
+            #[cfg(debug_assertions)]
+            backtrace: Backtrace::capture(),
+        }
+    }
+
+    /// Returns the kind of error.
+    #[must_use]
+    pub const fn kind(&self) -> K
+    where
+        K: Copy,
+    {
+        self.kind
     }
 }
 
-impl fmt::Display for ParseError {
+impl<K: Display> Display for BytecodeError<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            ParseErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
-            ParseErrorKind::Malformed => write!(f, "Malformed class file: {}", self.cause)?,
-        }
+        write!(f, "{kind}: {cause}", kind = self.kind, cause = self.cause)?;
         #[cfg(debug_assertions)]
         {
             write!(f, "\nBacktrace: \n{}", self.backtrace)?;
@@ -51,43 +70,32 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl ParseError {
-    /// Creates a new `ParseError` with the given message, indicating a malformed class file.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - A message describing the error.
-    pub(crate) fn malform(message: impl fmt::Display) -> Self {
-        Self {
-            cause: format!("{message}").into(),
-            kind: ParseErrorKind::Malformed,
-            #[cfg(debug_assertions)]
-            backtrace: Backtrace::capture(),
-        }
-    }
-
-    /// Creates a new `ParseError` with the kind `IO` and the given `std::io::Error` as its cause.
-    ///
-    /// # Arguments
-    ///
-    /// * `error` - The IO error that caused this parse error.
-    pub(crate) fn io(error: io::Error) -> Self {
-        Self {
-            cause: error.into(),
-            kind: ParseErrorKind::IO,
-            #[cfg(debug_assertions)]
-            backtrace: Backtrace::capture(),
-        }
-    }
-
-    /// Returns the kind of error.
-    #[must_use]
-    pub const fn kind(&self) -> ParseErrorKind {
-        self.kind
+impl<K: fmt::Debug + Display + Send + Sync + 'static> Error for BytecodeError<K> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.cause.as_ref())
     }
 }
 
-impl From<std::io::Error> for ParseError {
+// ---------------------------------------------------------------------------
+// ParseError
+// ---------------------------------------------------------------------------
+
+/// An error that occurs during parsing of a class file.
+pub type ParseError = BytecodeError<ParseErrorKind>;
+
+impl BytecodeError<ParseErrorKind> {
+    /// Creates a new `ParseError` with the given message, indicating a malformed class file.
+    pub(crate) fn malform(message: impl fmt::Display) -> Self {
+        Self::new(format!("{message}").into(), ParseErrorKind::Malformed)
+    }
+
+    /// Creates a new `ParseError` with the kind `IO` and the given `std::io::Error` as its cause.
+    pub(crate) fn io(error: io::Error) -> Self {
+        Self::new(error.into(), ParseErrorKind::IO)
+    }
+}
+
+impl From<std::io::Error> for BytecodeError<ParseErrorKind> {
     fn from(error: std::io::Error) -> Self {
         Self::io(error)
     }
@@ -105,6 +113,19 @@ pub enum ParseErrorKind {
     /// The class file is malformed and does not conform to the JVM specification.
     Malformed,
 }
+
+impl Display for ParseErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IO => write!(f, "IO Error"),
+            Self::Malformed => write!(f, "Malformed class file"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ParsingErrorContext
+// ---------------------------------------------------------------------------
 
 /// A trait for providing context to errors during parsing.
 ///
@@ -190,35 +211,52 @@ impl<T> ParsingErrorContext for Option<T> {
     }
 }
 
-/// An error that occurs during parsing of a class file.
-#[derive(Debug)]
-#[instability::unstable(feature = "bytecode-generation")]
-pub struct GenerationError {
-    cause: Box<dyn Error + Send + Sync>,
-    kind: GenerationErrorKind,
-    #[cfg(debug_assertions)]
-    backtrace: Backtrace,
-}
+// ---------------------------------------------------------------------------
+// GenerationError
+// ---------------------------------------------------------------------------
 
-impl Error for GenerationError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.cause.as_ref())
+/// An error that occurs during bytecode generation.
+#[instability::unstable(feature = "bytecode-generation")]
+pub type GenerationError = BytecodeError<GenerationErrorKind>;
+
+impl BytecodeError<GenerationErrorKind> {
+    /// Creates a new `GenerationError` with the given message and kind `Other`.
+    #[must_use]
+    pub fn other<Message>(message: Message) -> Self
+    where
+        Message: Display,
+    {
+        Self::new(format!("{message}").into(), GenerationErrorKind::Other)
+    }
+
+    /// Creates a new `GenerationError` with the kind `IO` and the given `std::io::Error` as its cause.
+    #[must_use]
+    pub fn io(error: io::Error) -> Self {
+        Self::new(error.into(), GenerationErrorKind::IO)
     }
 }
 
-impl fmt::Display for GenerationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            GenerationErrorKind::IO => write!(f, "IO Error: {}", self.cause)?,
-            GenerationErrorKind::OutOfRange => write!(f, "Out of range error: {}", self.cause)?,
-            GenerationErrorKind::ConstantPool => write!(f, "Constant pool error: {}", self.cause)?,
-            GenerationErrorKind::Other => write!(f, "Other error: {}", self.cause)?,
-        }
-        #[cfg(debug_assertions)]
-        {
-            write!(f, "\nBacktrace: \n{}", self.backtrace)?;
-        }
-        Ok(())
+impl From<io::Error> for BytecodeError<GenerationErrorKind> {
+    fn from(error: io::Error) -> Self {
+        Self::io(error)
+    }
+}
+
+impl From<InvalidOffset> for BytecodeError<GenerationErrorKind> {
+    fn from(cause: InvalidOffset) -> Self {
+        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
+    }
+}
+
+impl From<constant_pool::Overflow> for BytecodeError<GenerationErrorKind> {
+    fn from(cause: constant_pool::Overflow) -> Self {
+        Self::new(cause.into(), GenerationErrorKind::ConstantPool)
+    }
+}
+
+impl From<TryFromIntError> for BytecodeError<GenerationErrorKind> {
+    fn from(cause: TryFromIntError) -> Self {
+        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
     }
 }
 
@@ -246,74 +284,13 @@ pub enum GenerationErrorKind {
     Other,
 }
 
-impl GenerationError {
-    /// Creates a new `GenerationError` with the given cause and kind.
-    ///
-    /// # Arguments
-    ///
-    /// * `cause` - The underlying cause of the error.
-    /// * `kind` - The kind of error that occurred.
-    #[must_use]
-    pub fn new(cause: Box<dyn Error + Send + Sync>, kind: GenerationErrorKind) -> Self {
-        Self {
-            cause,
-            kind,
-            #[cfg(debug_assertions)]
-            backtrace: Backtrace::capture(),
+impl Display for GenerationErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IO => write!(f, "IO Error"),
+            Self::OutOfRange => write!(f, "Out of range error"),
+            Self::ConstantPool => write!(f, "Constant pool error"),
+            Self::Other => write!(f, "Other error"),
         }
-    }
-
-    /// Creates a new `GenerationError` with the given message and kind `Other`.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - A message describing the error.
-    #[must_use]
-    pub fn other<Message>(message: Message) -> Self
-    where
-        Message: Display,
-    {
-        Self::new(format!("{message}").into(), GenerationErrorKind::Other)
-    }
-
-    /// Creates a new `GenerationError` with the kind `IO` and the given `std::io::Error` as its cause.
-    ///
-    /// # Arguments
-    ///
-    /// * `error` - The IO error that caused this generation error.
-    #[must_use]
-    pub fn io(error: io::Error) -> Self {
-        Self::new(error.into(), GenerationErrorKind::IO)
-    }
-
-    /// Returns the kind of error.
-    #[must_use]
-    #[instability::unstable(feature = "bytecode-generation")]
-    pub const fn kind(&self) -> GenerationErrorKind {
-        self.kind
-    }
-}
-
-impl From<io::Error> for GenerationError {
-    fn from(error: io::Error) -> Self {
-        Self::io(error)
-    }
-}
-
-impl From<InvalidOffset> for GenerationError {
-    fn from(cause: InvalidOffset) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
-    }
-}
-
-impl From<constant_pool::Overflow> for GenerationError {
-    fn from(cause: constant_pool::Overflow) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::ConstantPool)
-    }
-}
-
-impl From<TryFromIntError> for GenerationError {
-    fn from(cause: TryFromIntError) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
     }
 }
