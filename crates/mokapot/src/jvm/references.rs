@@ -65,14 +65,16 @@ impl MethodRef {
 }
 
 /// A reference to a [`Module`](crate::jvm::Module).
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
+#[display("{name}")]
 pub struct ModuleRef {
     /// The name of the module.
     pub name: String,
 }
 
 /// A reference to a package.
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
+#[display("{binary_name}")]
 pub struct PackageRef {
     /// The binary name of the package.
     pub binary_name: String,
