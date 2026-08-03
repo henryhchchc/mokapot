@@ -48,16 +48,11 @@ impl BinaryName {
     /// # Errors
     ///
     /// Returns [`InvalidBinaryName`] if the string does not satisfy the binary name invariants.
+    #[doc = see_jvm_spec!(4, 2, 1)]
     pub fn new(name: impl Into<Box<str>>) -> Result<Self, InvalidBinaryName> {
         let name: Box<str> = name.into();
         validate(&name)?;
         Ok(Self(name))
-    }
-
-    /// Returns the binary name as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 
     /// Returns the qualified name (`.`-separated form).

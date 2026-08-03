@@ -46,7 +46,7 @@ impl ClassPath for DirectoryClassPath {
     fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
         let class_file_path = self
             .directory
-            .join(binary_name.as_str())
+            .join(binary_name.as_ref())
             .with_extension("class");
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
