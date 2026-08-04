@@ -61,7 +61,7 @@ jobs:
         with:
           tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
-        uses: actions/setup-java@v5.6.0
+        uses: actions/setup-java@v5.7.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: corretto
@@ -216,7 +216,7 @@ jobs:
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
-        uses: actions/setup-java@v5.6.0
+        uses: actions/setup-java@v5.7.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: corretto
