@@ -57,7 +57,7 @@ jobs:
           toolchain: stable
           components: clippy
       - name: Setup Checking Tools
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
@@ -92,7 +92,7 @@ jobs:
           echo "CLIPPY_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
         continue-on-error: true
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.4
         if: always()
         with:
           sarif_file: rust-clippy-results.sarif
@@ -123,7 +123,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-hack
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-hack
       - name: Checkout source code
@@ -165,7 +165,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
@@ -212,7 +212,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
