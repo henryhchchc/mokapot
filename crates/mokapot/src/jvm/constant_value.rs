@@ -146,9 +146,7 @@ impl Hash for ConstantValue {
             Self::Handle(v) => v.hash(state),
             Self::MethodType(v) => v.hash(state),
             Self::Dynamic(v0, v1, v2) => {
-                v0.hash(state);
-                v1.hash(state);
-                v2.hash(state);
+                (v0, v1, v2).hash(state);
             }
         }
     }
