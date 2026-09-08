@@ -55,6 +55,12 @@ impl BinaryName {
         Ok(Self(name))
     }
 
+    /// Returns this binary name as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
     /// Returns the qualified name (`.`-separated form).
     ///
     /// # Examples

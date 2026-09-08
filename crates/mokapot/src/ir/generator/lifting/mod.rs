@@ -1,6 +1,16 @@
+//! Lifts stack-based JVM instructions into Moka IR instructions.
+
+mod control_flow;
+mod locals;
+mod operations;
+
+use control_flow::{cmp_jump, conditional_jump};
+use locals::{load_local, store_local};
+use operations::{binary_op_math, conversion_op};
+
 use super::{
     MokaIRBrewingError, MokaIRGenerator,
-    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT, SlotWidth},
+    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 use crate::{
     ir::{
@@ -23,7 +33,7 @@ use crate::{
 
 #[allow(clippy::too_many_lines)]
 impl MokaIRGenerator<'_> {
-    pub(super) fn run_instruction(
+    pub(super) fn lift_instruction(
         &mut self,
         jvm_instruction: &Instruction,
         pc: ProgramCounter,
@@ -602,83 +612,4 @@ impl MokaIRGenerator<'_> {
         };
         Ok(ir_instruction)
     }
-}
-
-#[inline]
-fn load_local<const SLOT: SlotWidth>(
-    frame: &mut JvmStackFrame,
-    idx: u16,
-) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.get_local::<SLOT>(idx)?;
-    frame.push_value::<SLOT>(value)?;
-    Ok(IR::Nop)
-}
-
-#[inline]
-fn store_local<const SLOT: SlotWidth>(
-    frame: &mut JvmStackFrame,
-    idx: u16,
-) -> Result<IR, MokaIRBrewingError> {
-    let value = frame.pop_value::<SLOT>()?;
-    frame.set_local::<SLOT>(idx, value)?;
-    Ok(IR::Nop)
-}
-
-#[inline]
-fn conditional_jump(
-    frame: &mut JvmStackFrame,
-    target: ProgramCounter,
-    condition: impl FnOnce(Operand) -> Condition,
-) -> Result<IR, MokaIRBrewingError> {
-    let operand = frame.pop_value::<SINGLE_SLOT>()?;
-    Ok(IR::Jump {
-        condition: Some(condition(operand)),
-        target,
-    })
-}
-
-#[inline]
-fn cmp_jump(
-    frame: &mut JvmStackFrame,
-    target: ProgramCounter,
-    condition: impl FnOnce(Operand, Operand) -> Condition,
-) -> Result<IR, MokaIRBrewingError> {
-    let rhs = frame.pop_value::<SINGLE_SLOT>()?;
-    let lhs = frame.pop_value::<SINGLE_SLOT>()?;
-    Ok(IR::Jump {
-        condition: Some(condition(lhs, rhs)),
-        target,
-    })
-}
-
-#[inline]
-fn conversion_op<const OPERAND_SLOT: SlotWidth, const RESULT_SLOT: SlotWidth>(
-    frame: &mut JvmStackFrame,
-    def: LocalValue,
-    conversion: impl FnOnce(Operand) -> Conversion,
-) -> Result<IR, MokaIRBrewingError> {
-    let operand = frame.pop_value::<OPERAND_SLOT>()?;
-    frame.push_value::<RESULT_SLOT>(def.into())?;
-    Ok(IR::Definition {
-        value: def,
-        expr: Expression::Conversion(conversion(operand)),
-    })
-}
-
-#[inline]
-fn binary_op_math<const SLOT: SlotWidth>(
-    frame: &mut JvmStackFrame,
-    def_id: LocalValue,
-    math: impl FnOnce(Operand, Operand) -> MathOperation,
-) -> Result<IR, MokaIRBrewingError> {
-    let rhs = frame.pop_value::<SLOT>()?;
-    let lhs = frame.pop_value::<SLOT>()?;
-    let value = def_id.into();
-    frame.push_value::<SLOT>(value)?;
-
-    let expr = Expression::Math(math(lhs, rhs));
-    Ok(IR::Definition {
-        value: def_id,
-        expr,
-    })
 }

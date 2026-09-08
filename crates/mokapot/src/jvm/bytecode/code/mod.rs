@@ -1,4 +1,4 @@
-pub(crate) mod instruction_impl;
+pub(crate) mod instruction_conversion;
 pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
 pub(super) mod stack_map;

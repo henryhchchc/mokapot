@@ -1,5 +1,5 @@
-mod execution;
 mod jvm_frame;
+mod lifting;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -73,7 +73,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
             .body
             .instruction_at(location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-        let ir_instruction = self.run_instruction(jvm_instruction, location, &mut frame)?;
+        let ir_instruction = self.lift_instruction(jvm_instruction, location, &mut frame)?;
         let edges_and_frames =
             self.analyze_frame_and_conditions(location, frame, &ir_instruction)?;
         self.ir_instructions.insert(location, ir_instruction);
