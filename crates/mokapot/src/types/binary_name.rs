@@ -173,13 +173,40 @@ fn validate(name: &str) -> Result<(), InvalidBinaryName> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
-    #[test]
-    fn valid_binary_names() {
-        assert!("java/lang/String".parse::<BinaryName>().is_ok());
-        assert!("java/util/Map$Entry".parse::<BinaryName>().is_ok());
-        assert!("MyClass".parse::<BinaryName>().is_ok());
-        assert!("org/mokapot/test/MyClass".parse::<BinaryName>().is_ok());
+    fn binary_name_segments() -> impl Strategy<Value = Vec<String>> {
+        prop::collection::vec(
+            proptest::string::string_regex("[A-Za-z_$][A-Za-z0-9_$]{0,15}").unwrap(),
+            1..5,
+        )
+    }
+
+    proptest! {
+        #[test]
+        fn valid_names_preserve_all_segments(segments in binary_name_segments()) {
+            let input = segments.join("/");
+            let name = input.parse::<BinaryName>().unwrap();
+            let expected_package = (segments.len() > 1)
+                .then(|| segments[..segments.len() - 1].join("/"));
+
+            prop_assert_eq!(&*name, input.as_str());
+            prop_assert_eq!(name.simple_name(), segments.last().unwrap());
+            prop_assert_eq!(name.package().map(|package| package.to_string()), expected_package);
+            prop_assert_eq!(name.to_qualified_name(), segments.join("."));
+        }
+
+        #[test]
+        fn names_with_empty_segments_are_rejected(
+            segments in binary_name_segments(),
+            insertion_point in any::<usize>(),
+        ) {
+            let mut segments = segments;
+            let insertion_point = insertion_point % (segments.len() + 1);
+            segments.insert(insertion_point, String::new());
+
+            prop_assert!(segments.join("/").parse::<BinaryName>().is_err());
+        }
     }
 
     #[test]
@@ -196,39 +223,5 @@ mod tests {
     #[test]
     fn rejects_class_descriptor() {
         assert!("Ljava/lang/String;".parse::<BinaryName>().is_err());
-    }
-
-    #[test]
-    fn rejects_empty_segments() {
-        assert!("/Foo".parse::<BinaryName>().is_err());
-        assert!("Foo/".parse::<BinaryName>().is_err());
-        assert!("Foo//Bar".parse::<BinaryName>().is_err());
-    }
-
-    #[test]
-    fn qualified_name() {
-        let name = "java/lang/String".parse::<BinaryName>().unwrap();
-        assert_eq!(name.to_qualified_name(), "java.lang.String");
-    }
-
-    #[test]
-    fn simple_name() {
-        let name = "java/lang/String".parse::<BinaryName>().unwrap();
-        assert_eq!(name.simple_name(), "String");
-
-        let name = "MyClass".parse::<BinaryName>().unwrap();
-        assert_eq!(name.simple_name(), "MyClass");
-    }
-
-    #[test]
-    fn package() {
-        let name = "java/lang/String".parse::<BinaryName>().unwrap();
-        assert_eq!(
-            name.package().map(|p| p.to_string()),
-            Some("java/lang".to_string())
-        );
-
-        let name = "MyClass".parse::<BinaryName>().unwrap();
-        assert_eq!(name.package(), None);
     }
 }

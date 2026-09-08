@@ -112,37 +112,59 @@ pub struct InvalidOffset;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
-    #[test]
-    fn test_entry_point() {
-        assert!(ProgramCounter::ZERO.is_entry_point());
-        assert!(!ProgramCounter::from(1).is_entry_point());
-    }
+    proptest! {
+        #[test]
+        fn entry_point_matches_zero(value in any::<u16>()) {
+            prop_assert_eq!(ProgramCounter::from(value).is_entry_point(), value == 0);
+        }
 
-    #[test]
-    fn test_offset() {
-        let pc = ProgramCounter::from(10);
-        assert_eq!(pc + 5, Ok(ProgramCounter::from(15)));
-        assert_eq!(pc + -5, Ok(ProgramCounter::from(5)));
-        assert_eq!(pc + i32::MAX, Err(InvalidOffset));
-    }
+        #[test]
+        fn i32_offset_matches_checked_arithmetic(value in any::<u16>(), offset in any::<i32>()) {
+            let expected = i64::from(value) + i64::from(offset);
+            let actual = ProgramCounter::from(value) + offset;
 
-    #[test]
-    fn test_offset_i16() {
-        let pc = ProgramCounter::from(u16::MAX - 10);
-        assert_eq!(pc + 5i16, Ok(ProgramCounter::from(u16::MAX - 5)));
-        assert_eq!(pc + -5i16, Ok(ProgramCounter::from(u16::MAX - 15)));
-        assert_eq!(pc + i16::MAX, Err(InvalidOffset));
+            if let Ok(expected) = u16::try_from(expected) {
+                prop_assert_eq!(actual, Ok(ProgramCounter::from(expected)));
+            } else {
+                prop_assert_eq!(actual, Err(InvalidOffset));
+            }
+        }
+
+        #[test]
+        fn i16_offset_matches_checked_arithmetic(value in any::<u16>(), offset in any::<i16>()) {
+            let expected = i32::from(value) + i32::from(offset);
+            let actual = ProgramCounter::from(value) + offset;
+
+            if let Ok(expected) = u16::try_from(expected) {
+                prop_assert_eq!(actual, Ok(ProgramCounter::from(expected)));
+            } else {
+                prop_assert_eq!(actual, Err(InvalidOffset));
+            }
+        }
+
+        #[test]
+        fn u16_offset_matches_checked_arithmetic(value in any::<u16>(), offset in any::<u16>()) {
+            let expected = u32::from(value) + u32::from(offset);
+            let actual = ProgramCounter::from(value) + offset;
+
+            if let Ok(expected) = u16::try_from(expected) {
+                prop_assert_eq!(actual, Ok(ProgramCounter::from(expected)));
+            } else {
+                prop_assert_eq!(actual, Err(InvalidOffset));
+            }
+        }
+
+        #[test]
+        fn display_is_zero_padded_uppercase_hex(value in any::<u16>()) {
+            let pc = ProgramCounter::from(value);
+            prop_assert_eq!(format!("{pc}"), format!("#{value:04X}"));
+        }
     }
 
     #[test]
     fn test_default() {
         assert_eq!(ProgramCounter::default(), ProgramCounter::from(0));
-    }
-
-    #[test]
-    fn test_display() {
-        let pc = ProgramCounter::from(10);
-        assert_eq!(format!("{pc}"), "#000A");
     }
 }

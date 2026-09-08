@@ -105,6 +105,7 @@ mod test {
     use std::io::ErrorKind::UnexpectedEof;
 
     use super::BytecodeReader;
+    use proptest::prelude::*;
 
     #[test]
     fn read_bytes_success() {
@@ -121,109 +122,71 @@ mod test {
         assert_eq!(err.kind(), UnexpectedEof);
     }
 
-    #[test]
-    fn read_u32_success() {
-        let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: u32 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x0102_0304);
-        assert!(reader.is_empty());
+    macro_rules! integer_decode_properties {
+        ($success:ident, $truncated:ident, $type:ty) => {
+            proptest! {
+                #[test]
+                fn $success(value in any::<$type>(), suffix in prop::collection::vec(any::<u8>(), 0..8)) {
+                    let mut bytes = value.to_be_bytes().to_vec();
+                    bytes.extend(&suffix);
+                    let mut reader = bytes.as_slice();
+
+                    let decoded: $type = reader.decode_value().unwrap();
+
+                    prop_assert_eq!(decoded, value);
+                    prop_assert_eq!(reader, suffix.as_slice());
+                }
+
+                #[test]
+                fn $truncated(
+                    value in any::<$type>(),
+                    available in 0usize..size_of::<$type>(),
+                ) {
+                    let bytes = value.to_be_bytes();
+                    let mut reader = &bytes[..available];
+
+                    let error = reader.decode_value::<$type>().unwrap_err();
+
+                    prop_assert_eq!(error.kind(), UnexpectedEof);
+                }
+            }
+        };
     }
 
-    #[test]
-    fn read_u32_failed() {
-        let mut reader = [0x01, 0x02, 0x03].as_slice();
-        let err = reader.decode_value::<u32>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-    }
+    integer_decode_properties!(read_u32_success, read_u32_failed, u32);
+    integer_decode_properties!(read_i32_success, read_i32_failed, i32);
+    integer_decode_properties!(read_u16_success, read_u16_failed, u16);
+    integer_decode_properties!(read_i16_success, read_i16_failed, i16);
+    integer_decode_properties!(read_u8_success, read_u8_failed, u8);
+    integer_decode_properties!(read_i8_success, read_i8_failed, i8);
 
-    #[test]
-    fn read_i32_success() {
-        let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: i32 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x0102_0304);
-        assert!(reader.is_empty());
-    }
+    proptest! {
+        #[test]
+        fn read_bytes_vec_success(
+            expected in prop::collection::vec(any::<u8>(), 0..64),
+            suffix in prop::collection::vec(any::<u8>(), 0..16),
+        ) {
+            let mut bytes = expected.clone();
+            bytes.extend(&suffix);
+            let mut reader = bytes.as_slice();
 
-    #[test]
-    fn read_i32_failed() {
-        let mut reader = [0x01, 0x02, 0x03].as_slice();
-        let err = reader.decode_value::<i32>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-    }
+            let decoded = super::read_vec(&mut reader, expected.len()).unwrap();
 
-    #[test]
-    fn read_u16_success() {
-        let mut reader = [0x01, 0x02].as_slice();
-        let buf: u16 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x0102);
-        assert!(reader.is_empty());
-    }
+            prop_assert_eq!(decoded, expected);
+            prop_assert_eq!(reader, suffix.as_slice());
+        }
 
-    #[test]
-    fn read_u16_failed() {
-        let mut reader = [0x01].as_slice();
-        let err = reader.decode_value::<u16>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-    }
+        #[test]
+        fn read_bytes_vec_failed(
+            available in prop::collection::vec(any::<u8>(), 0..64),
+            missing in 1usize..16,
+        ) {
+            let requested = available.len() + missing;
+            let mut reader = available.as_slice();
 
-    #[test]
-    fn read_i16_success() {
-        let mut reader = [0x01, 0x02].as_slice();
-        let buf: i16 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x0102);
-        assert!(reader.is_empty());
-    }
+            let error = super::read_vec(&mut reader, requested).unwrap_err();
 
-    #[test]
-    fn read_i16_failed() {
-        let mut reader = [0x01].as_slice();
-        let err = reader.decode_value::<i16>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-    }
-
-    #[test]
-    fn read_u8_success() {
-        let mut reader = [0x01].as_slice();
-        let buf: u8 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x01);
-        assert!(reader.is_empty());
-    }
-
-    #[test]
-    fn read_u8_failed() {
-        let mut reader = [].as_slice();
-        let err = reader.decode_value::<u8>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-        assert!(reader.is_empty());
-    }
-
-    #[test]
-    fn read_i8_success() {
-        let mut reader = [0x01].as_slice();
-        let buf: i8 = reader.decode_value().unwrap();
-        assert_eq!(buf, 0x01);
-        assert!(reader.is_empty());
-    }
-
-    #[test]
-    fn read_i8_failed() {
-        let mut reader = [].as_slice();
-        let err = reader.decode_value::<u32>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
-    }
-
-    #[test]
-    fn read_bytes_vec_success() {
-        let mut reader = [0x01, 0x02, 0x03, 0x04].as_slice();
-        let buf: Vec<u8> = super::read_vec(&mut reader, 3).unwrap();
-        assert_eq!(buf, [0x01, 0x02, 0x03]);
-        assert_eq!(reader, [0x04]);
-    }
-
-    #[test]
-    fn read_bytes_vec_failed() {
-        let mut reader = [0x01, 0x02].as_slice();
-        let err = super::read_vec(&mut reader, 3).unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
+            prop_assert_eq!(error.kind(), UnexpectedEof);
+        }
     }
 }
