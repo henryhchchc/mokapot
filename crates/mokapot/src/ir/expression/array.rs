@@ -2,21 +2,18 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 
-use crate::{
-    ir::{Identifier, Operand},
-    types::field_type::FieldType,
-};
+use crate::{ir::ValueId, types::field_type::FieldType};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation {
+pub enum Operation<OP: std::fmt::Display = ValueId> {
     /// Create a new array.
     #[display("new {element_type}[{length}]")]
     New {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The length of the array.
-        length: Operand,
+        length: OP,
     },
     /// Create a new multidimensional array.
     #[display(
@@ -27,55 +24,48 @@ pub enum Operation {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The lengths of each of the dimensions of the array.
-        dimensions: Vec<Operand>,
+        dimensions: Vec<OP>,
     },
     /// Gets an element from an array.
     #[display("{array_ref}[{index}]")]
     Read {
         /// The array to read from.
-        array_ref: Operand,
+        array_ref: OP,
         /// The index of the element to read.
-        index: Operand,
+        index: OP,
     },
     /// Sets an element in an array.
     #[display("{array_ref}[{index}] = {value}")]
     Write {
         /// The array to write to.
-        array_ref: Operand,
+        array_ref: OP,
         /// The index of the element to write.
-        index: Operand,
+        index: OP,
         /// The value to be written.
-        value: Operand,
+        value: OP,
     },
     /// Gets the length of an array.
     #[display("array_len({array_ref})")]
     Length {
         /// The array to get the length of.
-        array_ref: Operand,
+        array_ref: OP,
     },
 }
 
-impl Operation {
-    /// Returns the set of [`Identifier`]s used by the expression.
+impl Operation<ValueId> {
+    /// Returns the values used by the expression.
     #[must_use]
-    pub fn uses(&self) -> HashSet<Identifier> {
+    pub fn uses(&self) -> HashSet<ValueId> {
         match self {
-            Self::New { length, .. } => length.iter().copied().collect(),
-            Self::NewMultiDim { dimensions, .. } => dimensions.iter().flatten().copied().collect(),
-            Self::Read { array_ref, index } => {
-                array_ref.iter().chain(index.iter()).copied().collect()
-            }
+            Self::New { length, .. } => HashSet::from([*length]),
+            Self::NewMultiDim { dimensions, .. } => dimensions.iter().copied().collect(),
+            Self::Read { array_ref, index } => HashSet::from([*array_ref, *index]),
             Self::Write {
                 array_ref,
                 index,
                 value,
-            } => array_ref
-                .iter()
-                .chain(index.iter())
-                .chain(value.iter())
-                .copied()
-                .collect(),
-            Self::Length { array_ref } => array_ref.iter().copied().collect(),
+            } => HashSet::from([*array_ref, *index, *value]),
+            Self::Length { array_ref } => HashSet::from([*array_ref]),
         }
     }
 }
@@ -87,9 +77,9 @@ mod tests {
     use super::*;
     use crate::tests::arb_field_type;
 
-    fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a Operand>) {
+    fn check_uses<'a>(op: &Operation, args: impl IntoIterator<Item = &'a ValueId>) {
         let uses = op.uses();
-        args.into_iter().flatten().for_each(|a| {
+        args.into_iter().for_each(|a| {
             assert!(uses.contains(a));
         });
     }
@@ -98,38 +88,38 @@ mod tests {
 
         #[test]
         fn uses(
-            arg1 in any::<Operand>(),
-            arg2 in any::<Operand>(),
-            arg3 in any::<Operand>(),
+            arg1 in any::<ValueId>(),
+            arg2 in any::<ValueId>(),
+            arg3 in any::<ValueId>(),
             ty in arb_field_type()
         ) {
             let new_ops = Operation::New {
                 element_type: ty.clone(),
-                length: arg1.clone(),
+                length: arg1,
             };
             check_uses(&new_ops, [&arg1]);
 
             let new_multi_ops = Operation::NewMultiDim {
                 element_type: ty.clone(),
-                dimensions: [&arg1, &arg2, &arg3].into_iter().cloned().collect()
+                dimensions: vec![arg1, arg2, arg3]
             };
             check_uses(&new_multi_ops, [&arg1, &arg2, &arg3]);
 
             let read_ops = Operation::Read {
-                array_ref: arg1.clone(),
-                index: arg2.clone()
+                array_ref: arg1,
+                index: arg2
             };
             check_uses(&read_ops, [&arg1, &arg2]);
 
             let write_ops = Operation::Write {
-                array_ref: arg1.clone(),
-                index: arg2.clone(),
-                value: arg3.clone()
+                array_ref: arg1,
+                index: arg2,
+                value: arg3
             };
             check_uses(&write_ops, [&arg1,&arg2,&arg3]);
 
             let len_ops = Operation::Length {
-                array_ref: arg1.clone()
+                array_ref: arg1
             };
             check_uses(&len_ops, [&arg1]);
         }
