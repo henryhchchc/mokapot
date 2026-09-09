@@ -1,5 +1,5 @@
 use crate::{
-    ir::{self, Operand, expression::Condition},
+    ir::{self, Identifier, Operand, expression::Condition},
     jvm::ConstantValue,
 };
 
@@ -76,6 +76,36 @@ pub enum Value {
     Variable(Operand),
     /// A JVM constant embedded in the condition.
     Constant(ConstantValue),
+}
+
+impl Condition<Value> {
+    pub(crate) fn uses(&self) -> std::collections::HashSet<Identifier> {
+        use Condition::{
+            Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
+            IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
+        };
+
+        let values = match self {
+            Equal(lhs, rhs)
+            | NotEqual(lhs, rhs)
+            | LessThan(lhs, rhs)
+            | LessThanOrEqual(lhs, rhs)
+            | GreaterThan(lhs, rhs)
+            | GreaterThanOrEqual(lhs, rhs) => vec![lhs, rhs],
+            IsNull(value) | IsNotNull(value) | IsZero(value) | IsNonZero(value)
+            | IsPositive(value) | IsNegative(value) | IsNonNegative(value)
+            | IsNonPositive(value) => vec![value],
+        };
+        values
+            .into_iter()
+            .filter_map(|value| match value {
+                Value::Variable(operand) => Some(operand.iter()),
+                Value::Constant(_) => None,
+            })
+            .flatten()
+            .copied()
+            .collect()
+    }
 }
 
 impl From<ir::Operand> for Value {

@@ -1,12 +1,10 @@
 use mokapot::{
     ir::{
-        DefUseChain, Identifier, LocalValue, MokaIRMethodExt, MokaInstruction, Operand,
-        expression::Expression,
+        DefUseChain, Identifier, InstructionId, InstructionKind, MokaIRMethod, MokaIRMethodExt,
+        TerminatorKind, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
-use petgraph::dot::Dot;
-use proptest::{arbitrary::any, proptest};
 
 fn get_test_class() -> Class {
     let mut bytes = if cfg!(integration_test) {
@@ -22,12 +20,25 @@ fn get_test_class() -> Class {
 }
 
 fn get_test_method() -> Method {
-    let class = get_test_class();
-    class
+    get_test_class()
         .methods
         .into_iter()
-        .find(|it| it.name == "test")
+        .find(|method| method.name == "test")
         .unwrap()
+}
+
+fn instruction(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::MokaInstruction> {
+    method
+        .blocks()
+        .flat_map(|block| block.instructions())
+        .find(|instruction| instruction.id() == id)
+}
+
+fn terminator(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Terminator> {
+    method
+        .blocks()
+        .map(mokapot::ir::BasicBlock::terminator)
+        .find(|terminator| terminator.id() == id)
 }
 
 #[test]
@@ -38,65 +49,61 @@ fn load_test_method() {
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
-fn brew_ir() {
-    let class = get_test_class();
-    let method = get_test_method();
-    let ir = method.brew().unwrap();
-    if cfg!(debug_assertions) {
-        for (pc, insn) in method.body.unwrap().instructions {
-            let ir_insn = ir.instructions.get(&pc).unwrap();
-            println!("{}: {:16} => {}", pc, insn.name(), ir_insn)
-        }
+fn brew_ir_blocks_and_provenance() {
+    let ir = get_test_method().brew().unwrap();
+
+    let first = ir
+        .source_map()
+        .instructions_at(ProgramCounter::from(0x0000))
+        .find_map(|id| instruction(&ir, id))
+        .unwrap();
+    assert!(matches!(
+        first.kind(),
+        InstructionKind::Definition {
+            expr: Expression::Const(ConstantValue::String(JavaString::Utf8(value))),
+            ..
+        } if value == "233"
+    ));
+
+    let nop = ir
+        .source_map()
+        .instructions_at(ProgramCounter::from(0x007B))
+        .find_map(|id| instruction(&ir, id))
+        .unwrap();
+    assert_eq!(nop.kind(), &InstructionKind::Nop);
+
+    let returned = ir
+        .source_map()
+        .instructions_at(ProgramCounter::from(0x00F7))
+        .find_map(|id| terminator(&ir, id))
+        .unwrap();
+    assert!(matches!(
+        returned.kind(),
+        TerminatorKind::Return(Some(value)) if value == &Identifier::Arg(1).into()
+    ));
+
+    for block in ir.blocks() {
+        assert!(ir.block(block.id()).is_some());
     }
-    let ir_insns = ir.instructions;
-    eprintln!("BSM: {:#?}", class.bootstrap_methods);
-
-    eprintln!("methods: {:?}", class.methods);
-    // eprintln!("IR instructions: {:?}", ir_insns);
-    // #0000: ldc => %0 = String("233")
-    assert!(matches!(
-        ir_insns.get(&ProgramCounter::from(0x0000)).unwrap(),
-        MokaInstruction::Definition {
-            value,
-            expr: Expression::Const(ConstantValue::String(JavaString::Utf8(str)))
-        } if value == &LocalValue::new(0) && str == "233"
-    ));
-    // #0078: aload => nop
-    assert!(matches!(
-        ir_insns.get(&ProgramCounter::from(0x007B)).unwrap(),
-        MokaInstruction::Nop
-    ));
-    // #00F7 ireturn => return %arg1
-    assert!(matches!(
-        ir_insns.get(&ProgramCounter::from(0x00F7)).unwrap(),
-        MokaInstruction::Return(Some(operand)) if operand == &Operand::just(Identifier::Arg(1))
-    ));
-}
-
-proptest! {
-
-    #[test]
-    #[cfg_attr(not(integration_test), ignore)]
-    fn du_chain_defs(local_idx in any::<u16>()) {
-        let method = get_test_method();
-        let ir_method = method.brew().unwrap();
-        let du_chain = DefUseChain::new(&ir_method);
-        let pc = ProgramCounter::from(local_idx);
-        if let Some(MokaInstruction::Definition { .. }) = ir_method.instructions.get(&pc) {
-            assert_eq!(du_chain.defined_at(LocalValue::new(local_idx)), Some(pc));
-        } else {
-            assert!(du_chain.defined_at(LocalValue::new(local_idx)).is_none());
-        }
-    }
-
 }
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
-fn du_chain_uses() {
-    let method = get_test_method();
-    let ir_method = method.brew().unwrap();
-    let du_chain = DefUseChain::new(&ir_method);
+fn du_chain_definitions_use_instruction_identities() {
+    let ir = get_test_method().brew().unwrap();
+    let chain = DefUseChain::new(&ir);
+    for instruction in ir.blocks().flat_map(|block| block.instructions()) {
+        if let Some(value) = instruction.def() {
+            assert_eq!(chain.defined_at(value), Some(instruction.id()));
+        }
+    }
+}
+
+#[test]
+#[cfg_attr(not(integration_test), ignore)]
+fn du_chain_uses_include_source_related_nodes() {
+    let ir = get_test_method().brew().unwrap();
+    let chain = DefUseChain::new(&ir);
     let test_data = [
         (3, 0x09),
         (24, 0x1F),
@@ -105,10 +112,18 @@ fn du_chain_uses() {
         (108, 0x6D),
         (124, 0x7D),
     ];
-    for (local_idx, pc) in test_data {
-        let def = Identifier::Local(LocalValue::new(local_idx));
-        let use_site = ProgramCounter::from(pc);
-        assert!(du_chain.used_at(def).contains(&use_site));
+    for (definition_pc, use_pc) in test_data {
+        let value = ir
+            .source_map()
+            .instructions_at(ProgramCounter::from(definition_pc))
+            .find_map(|id| instruction(&ir, id).and_then(mokapot::ir::MokaInstruction::def))
+            .unwrap();
+        let uses = chain.used_at(Identifier::Local(value));
+        assert!(
+            ir.source_map()
+                .instructions_at(ProgramCounter::from(use_pc))
+                .any(|id| uses.contains(&id))
+        );
     }
 }
 
@@ -116,42 +131,21 @@ fn du_chain_uses() {
 #[cfg(feature = "petgraph")]
 #[cfg_attr(not(integration_test), ignore)]
 fn cfg_to_dot() {
-    use itertools::Itertools;
-    use mokapot::ir::control_flow::ControlTransfer;
+    use petgraph::dot::Dot;
 
-    let method = get_test_method();
-    let ir = method.brew().unwrap();
-    let condition = ir.control_flow_graph.path_conditions();
-    let cfg_with_insn = ir.control_flow_graph.clone().map(
-        |pc, _| {
-            format!(
-                "{pc}: {}\n({})",
-                ir.instructions.get(&pc).expect("No instruction"),
-                condition.get(&pc).expect("No path condition")
-            )
-        },
-        |_, d| match d {
-            ControlTransfer::Unconditional => "".to_owned(),
-            ControlTransfer::Conditional(cond) => format!("when {cond}"),
-            ControlTransfer::Exception(e) => format!(
-                "catch {}",
-                e.into_iter().map(|it| it.0.to_string()).join(" | ")
-            ),
-            ControlTransfer::SubroutineReturn => "<ret>".to_owned(),
-        },
-    );
-    let dot = Dot::with_config(&cfg_with_insn, &[]);
-    println!("{dot}");
+    let ir = get_test_method().brew().unwrap();
+    let cfg = ir.control_flow_graph();
+    let dot = format!("{:?}", Dot::new(&cfg));
+    assert!(dot.contains("digraph"));
+    assert!(!cfg.path_conditions().is_empty());
 }
 
 #[test]
 #[cfg(feature = "petgraph")]
 #[cfg_attr(not(integration_test), ignore)]
 fn dominance() {
-    use mokapot::jvm::code::ProgramCounter;
-
-    let method = get_test_method();
-    let ir = method.brew().unwrap();
-    let _dominance =
-        petgraph::algo::dominators::simple_fast(&ir.control_flow_graph, ProgramCounter::ZERO);
+    let ir = get_test_method().brew().unwrap();
+    let cfg = ir.control_flow_graph();
+    let dominance = petgraph::algo::dominators::simple_fast(&cfg, ir.entry_block());
+    assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);
 }

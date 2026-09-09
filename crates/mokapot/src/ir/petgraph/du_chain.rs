@@ -15,10 +15,10 @@ impl IntoNeighbors for &DefUseChain<'_> {
 
     fn neighbors(self, node: Identifier) -> Self::Neighbors {
         if let Identifier::Local(loc) = node
-            && let Some(pc) = self.defined_at(loc)
-            && let Some(insn) = self.method.instructions.get(&pc)
+            && let Some(instruction) = self.defined_at(loc)
+            && let Some(uses) = self.method.uses_at(instruction)
         {
-            return insn.uses().into_iter();
+            return uses.into_iter();
         }
         Self::Neighbors::default()
     }

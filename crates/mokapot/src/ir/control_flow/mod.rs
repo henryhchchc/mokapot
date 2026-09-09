@@ -1,257 +1,207 @@
-//! Control flow analysis
+//! Control-flow analysis.
 
 pub mod path_condition;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 
-use self::path_condition::{BranchGuard, PathCondition, Value};
-use super::ControlFlowGraph;
-use crate::{
-    ir::{control_flow::path_condition::SolvingBudget, expression::Condition},
-    jvm::{code::ProgramCounter, references::ClassRef},
-};
+use self::path_condition::{BranchGuard, PathCondition, SolvingBudget, Value};
+use super::{BasicBlock, BlockId, EdgeId};
+use crate::{ir::expression::Condition, jvm::references::ClassRef};
 
-/// The kind of a control transfer.
+/// The state transfer associated with one control-flow arm.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlTransfer {
     /// An unconditional control transfer.
     Unconditional,
-    /// A conditional control transfer guarded by a conjunction of literals.
+    /// A conditional transfer guarded by a conjunction of literals.
     Conditional(BranchGuard<Condition<Value>>),
-    /// A control transfer to the exception handler.
+    /// A transfer to an exception handler.
     Exception(BTreeSet<ClassRef>),
-    /// A control transfer caused by subroutine return.
+    /// A transfer caused by legacy subroutine return.
     SubroutineReturn,
 }
 
-/// An edge in the control flow graph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Edge<D> {
-    /// The source program counter.
-    pub source: ProgramCounter,
-    /// The target program counter.
-    pub target: ProgramCounter,
-    /// The data associated with the edge.
-    pub data: D,
+/// A borrowed edge from a block terminator.
+#[derive(Debug, Clone, Copy)]
+pub struct Edge<'method> {
+    id: EdgeId,
+    source: BlockId,
+    target: BlockId,
+    data: &'method ControlTransfer,
 }
 
-impl<D> Edge<D> {
-    /// Creates a new edge with the given source, target, and data.
-    pub const fn new(source: ProgramCounter, target: ProgramCounter, data: D) -> Self {
-        Self {
-            source,
-            target,
-            data,
-        }
+impl<'method> Edge<'method> {
+    /// Returns this arm's identity.
+    #[must_use]
+    pub const fn id(self) -> EdgeId {
+        self.id
+    }
+
+    /// Returns the source block.
+    #[must_use]
+    pub const fn source(self) -> BlockId {
+        self.source
+    }
+
+    /// Returns the target block.
+    #[must_use]
+    pub const fn target(self) -> BlockId {
+        self.target
+    }
+
+    /// Returns the state transfer associated with this arm.
+    #[must_use]
+    pub const fn transfer(self) -> &'method ControlTransfer {
+        self.data
     }
 }
 
-impl<N, E> ControlFlowGraph<N, E> {
-    /// Returns the entry point of the control flow graph.
+/// A borrowed control-flow graph derived solely from block terminators.
+#[derive(Debug, Clone, Copy)]
+pub struct ControlFlowGraph<'method> {
+    pub(crate) blocks: &'method [BasicBlock],
+    entry: BlockId,
+}
+
+impl<'method> ControlFlowGraph<'method> {
+    pub(crate) const fn new(blocks: &'method [BasicBlock], entry: BlockId) -> Self {
+        Self { blocks, entry }
+    }
+
+    /// Returns the entry block.
     #[must_use]
-    pub const fn entry_point(&self) -> ProgramCounter {
-        ProgramCounter::ZERO
+    pub const fn entry_block(self) -> BlockId {
+        self.entry
     }
 
-    /// Transforms the node and edge data to construct a new control flow graph.
+    /// Returns the blocks in deterministic source order.
     #[must_use]
-    pub fn map<N1, E1, NMap, EMap>(self, nf: NMap, ef: EMap) -> ControlFlowGraph<N1, E1>
-    where
-        NMap: Fn(ProgramCounter, N) -> N1,
-        EMap: Fn((ProgramCounter, ProgramCounter), E) -> E1,
-    {
-        let inner = self
-            .inner
-            .into_iter()
-            .map(|(src, (node_data, edges))| {
-                let data = nf(src, node_data);
-                let edges = edges
-                    .into_iter()
-                    .map(|(dst, edge_data)| (dst, ef((src, dst), edge_data)))
-                    .collect();
-                (src, (data, edges))
-            })
-            .collect();
-
-        ControlFlowGraph { inner }
+    pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'method BasicBlock)> {
+        self.blocks.iter().map(|block| (block.id(), block))
     }
 
-    /// Returns an iterator over the nodes
-    pub fn nodes(&self) -> impl Iterator<Item = (ProgramCounter, &N)> {
-        self.inner.iter().map(|(n, (d, _))| (*n, d))
-    }
-
-    /// Returns an iterator over the edges
-    pub fn edges(&self) -> impl Iterator<Item = Edge<&E>> {
-        self.inner
-            .iter()
-            .flat_map(|(&source, (_, outgoing_edges))| {
-                outgoing_edges.iter().map(move |(&target, data)| Edge {
-                    source,
-                    target,
-                    data,
+    /// Returns every successor arm, retaining parallel edges.
+    pub fn edges(self) -> impl Iterator<Item = Edge<'method>> {
+        self.blocks.iter().flat_map(|block| {
+            block
+                .terminator()
+                .successors()
+                .iter()
+                .map(move |successor| Edge {
+                    id: successor.id(),
+                    source: block.id(),
+                    target: successor.target(),
+                    data: successor.transfer(),
                 })
-            })
-    }
-
-    /// Returns an iterator over the exits of the control flow graph.
-    pub fn exits(&self) -> impl Iterator<Item = ProgramCounter> + '_ {
-        self.inner
-            .iter()
-            .filter(|(_, (_, outgoing_edges))| outgoing_edges.is_empty())
-            .map(|(n, _)| *n)
-    }
-
-    /// Returns an iterator over the edges starting at the given node.
-    #[must_use]
-    pub fn outgoing_edges(&self, from: ProgramCounter) -> Option<impl Iterator<Item = Edge<&E>>> {
-        self.inner.get(&from).map(|(_, outgoing_edges)| {
-            outgoing_edges.iter().map(move |(&target, data)| Edge {
-                source: from,
-                target,
-                data,
-            })
         })
     }
-}
 
-impl<E> ControlFlowGraph<(), E> {
-    /// Constructs a new control flow graph from a set of edges.
-    ///
-    /// # Panics
-    /// Panics if there are duplicate edges.
-    pub fn from_edges(
-        edges: impl IntoIterator<Item = (ProgramCounter, ProgramCounter, E)>,
-    ) -> Self {
-        let mut inner: BTreeMap<_, (_, BTreeMap<_, _>)> = BTreeMap::new();
-        inner.entry(ProgramCounter::ZERO).or_default();
-        edges.into_iter().for_each(|(src, dst, data)| {
-            let ((), edge_map) = inner.entry(src).or_default();
-            assert!(edge_map.insert(dst, data).is_none(), "Duplicate edge");
-            inner.entry(dst).or_default();
-        });
-        Self { inner }
+    /// Returns blocks with no outgoing successor arms.
+    pub fn exits(self) -> impl Iterator<Item = BlockId> + 'method {
+        self.blocks
+            .iter()
+            .filter(|block| block.terminator().successors().is_empty())
+            .map(BasicBlock::id)
     }
-}
 
-impl<N> ControlFlowGraph<N, ControlTransfer> {
-    /// Analyzes the control flow graph to determine the path conditions at each program counter.
+    /// Returns all outgoing arms from `source`.
+    pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'method>> {
+        self.blocks
+            .get(usize::try_from(source.index()).unwrap_or(usize::MAX))
+            .into_iter()
+            .flat_map(move |block| {
+                block
+                    .terminator()
+                    .successors()
+                    .iter()
+                    .map(move |successor| Edge {
+                        id: successor.id(),
+                        source,
+                        target: successor.target(),
+                        data: successor.transfer(),
+                    })
+            })
+    }
+
+    /// Computes path conditions at reachable blocks.
     #[must_use]
-    pub fn path_conditions(&self) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
+    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'method Condition<Value>>> {
         self.path_conditions_with_budget(SolvingBudget::default())
     }
 
-    /// Analyzes the control flow graph with a custom minimization budget.
+    /// Computes path conditions with a custom minimization budget.
     #[must_use]
     pub fn path_conditions_with_budget(
-        &self,
+        self,
         budget: SolvingBudget,
-    ) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
+    ) -> HashMap<BlockId, PathCondition<&'method Condition<Value>>> {
         path_condition::analyze(self, budget)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashSet};
-
     use super::*;
-    use crate::ir::{Identifier, Operand, control_flow::path_condition::BooleanVariable};
+    use crate::ir::{
+        BasicBlock, EdgeId, Identifier, InstructionId, Operand, Successor, Terminator,
+        TerminatorKind, control_flow::path_condition::BooleanVariable,
+    };
 
-    #[test]
-    fn entry_point() {
-        let cfg = ControlFlowGraph::<(), ()>::from_edges(vec![]);
-        assert_eq!(cfg.entry_point(), ProgramCounter::ZERO);
+    fn block(id: u32, successors: Vec<Successor>) -> BasicBlock {
+        BasicBlock::new(
+            BlockId::new(id),
+            vec![],
+            Terminator::new(
+                InstructionId::new(id),
+                if successors.len() == 2 {
+                    TerminatorKind::Branch
+                } else if successors.is_empty() {
+                    TerminatorKind::Return(None)
+                } else {
+                    TerminatorKind::Goto
+                },
+                successors,
+            ),
+        )
     }
 
-    fn build_cfg() -> ControlFlowGraph<(), ()> {
-        let edges = [
-            (0.into(), 1.into(), ()),
-            (1.into(), 2.into(), ()),
-            (2.into(), 3.into(), ()),
-            (3.into(), 4.into(), ()),
+    #[test]
+    fn path_conditions_prune_contradictory_arms_at_block_locations() {
+        let condition = Condition::IsZero(Operand::just(Identifier::Arg(0)));
+        let positive: BooleanVariable<Condition<Value>> = condition.into();
+        let negative = !positive.clone();
+        let blocks = vec![
+            block(
+                0,
+                vec![Successor::new(
+                    EdgeId::new(0),
+                    BlockId::new(1),
+                    ControlTransfer::Conditional(BranchGuard::of(positive.clone())),
+                )],
+            ),
+            block(
+                1,
+                vec![
+                    Successor::new(
+                        EdgeId::new(1),
+                        BlockId::new(2),
+                        ControlTransfer::Conditional(BranchGuard::of(negative)),
+                    ),
+                    Successor::new(
+                        EdgeId::new(2),
+                        BlockId::new(3),
+                        ControlTransfer::Unconditional,
+                    ),
+                ],
+            ),
+            block(2, vec![]),
+            block(3, vec![]),
         ];
-        ControlFlowGraph::from_edges(edges)
-    }
+        let conditions = ControlFlowGraph::new(&blocks, BlockId::new(0)).path_conditions();
 
-    #[test]
-    #[should_panic(expected = "Duplicate edge")]
-    fn from_edges_duplicate() {
-        let edges = [
-            (0.into(), 1.into(), ()),
-            (1.into(), 2.into(), ()),
-            (2.into(), 3.into(), ()),
-            (3.into(), 4.into(), ()),
-            (0.into(), 1.into(), ()),
-        ];
-        ControlFlowGraph::from_edges(edges);
-    }
-
-    #[test]
-    fn iter_nodes() {
-        let cfg = build_cfg();
-        let nodes = cfg.nodes().collect::<BTreeSet<_>>();
-        assert_eq!(nodes.len(), 5);
-        for i in 0..=4 {
-            assert!(nodes.contains(&(i.into(), &())));
-        }
-    }
-
-    #[test]
-    fn iter_edges() {
-        let cfg = build_cfg();
-        let edges = cfg.edges().collect::<HashSet<_>>();
-        assert_eq!(edges.len(), 4);
-        for i in 0..=3 {
-            assert!(edges.contains(&Edge {
-                source: i.into(),
-                target: (i + 1).into(),
-                data: &()
-            }));
-        }
-    }
-
-    #[test]
-    fn iter_exits() {
-        let cfg = build_cfg();
-        let exits = cfg.exits().collect::<BTreeSet<_>>();
-        assert_eq!(exits.len(), 1);
-        assert!(exits.contains(&4.into()));
-    }
-
-    mod path_condition_analysis {
-        use super::*;
-
-        fn branch_cfg() -> ControlFlowGraph<(), ControlTransfer> {
-            let operand = Operand::from(Identifier::Arg(0));
-            let condition = Condition::IsZero(operand.into());
-            let positive = BranchGuard::of(BooleanVariable::Positive(condition.clone()));
-            let negative = BranchGuard::of(BooleanVariable::Negative(condition));
-            ControlFlowGraph::from_edges([
-                (0.into(), 1.into(), ControlTransfer::Conditional(positive)),
-                (1.into(), 2.into(), ControlTransfer::Conditional(negative)),
-                (1.into(), 3.into(), ControlTransfer::Unconditional),
-            ])
-        }
-
-        #[test]
-        fn analysis_prunes_impossible_paths() {
-            let cfg = branch_cfg();
-            let path_conditions = cfg.path_conditions();
-            assert!(path_conditions.contains_key(&0.into()));
-            assert!(path_conditions.contains_key(&1.into()));
-            assert!(path_conditions.contains_key(&3.into()));
-            assert!(!path_conditions.contains_key(&2.into()));
-        }
-
-        #[test]
-        fn explicit_default_budget_matches_default_analysis_entrypoint() {
-            let cfg = branch_cfg();
-
-            assert_eq!(
-                cfg.path_conditions(),
-                cfg.path_conditions_with_budget(SolvingBudget::default())
-            );
-        }
+        assert!(conditions.contains_key(&BlockId::new(0)));
+        assert!(conditions.contains_key(&BlockId::new(1)));
+        assert!(!conditions.contains_key(&BlockId::new(2)));
+        assert!(conditions.contains_key(&BlockId::new(3)));
     }
 }

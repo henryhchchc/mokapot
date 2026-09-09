@@ -1,18 +1,81 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet, btree_set},
+    collections::{BTreeSet, HashSet, btree_set},
     fmt,
+    hash::Hash,
 };
 
-use itertools::Itertools;
-use std::hash::Hash;
-
-use super::expression::{Condition, Expression};
+use super::{control_flow::ControlTransfer, expression::Expression};
 use crate::analysis::fixed_point::JoinSemiLattice;
-use crate::jvm::code::ProgramCounter;
+use itertools::Itertools;
 
-/// Represents a single instruction in the Moka IR.
+/// The identity of a basic block within one Moka IR method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
+#[repr(transparent)]
+#[display("b{_0}")]
+pub struct BlockId(u32);
+
+impl BlockId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    pub(crate) const fn index(self) -> u32 {
+        self.0
+    }
+}
+
+/// The identity of an instruction or terminator within one Moka IR method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
+#[repr(transparent)]
+#[display("i{_0}")]
+pub struct InstructionId(u32);
+
+impl InstructionId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index)
+    }
+}
+
+/// The identity of a control-flow edge within one Moka IR method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
+#[repr(transparent)]
+#[display("e{_0}")]
+pub struct EdgeId(u32);
+
+impl EdgeId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index)
+    }
+}
+
+/// The identity of a value within one Moka IR method.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[repr(transparent)]
+#[display("%{_0}")]
+pub struct ValueId(u32);
+
+impl ValueId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index)
+    }
+}
+
+impl From<ValueId> for Operand {
+    fn from(value: ValueId) -> Self {
+        Self::just(Identifier::Local(value))
+    }
+}
+
+impl From<ValueId> for Identifier {
+    fn from(value: ValueId) -> Self {
+        Self::Local(value)
+    }
+}
+
+/// The ordinary operation performed by a Moka IR instruction.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum MokaInstruction {
+pub enum InstructionKind {
     /// A no-op instruction.
     #[display("nop")]
     Nop,
@@ -20,52 +83,19 @@ pub enum MokaInstruction {
     #[display("{value} = {expr}")]
     Definition {
         /// The value defined by the expression.
-        value: LocalValue,
+        value: ValueId,
         /// The expression that defines the value.
         expr: Expression,
     },
-    /// Jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) holds.
-    /// Unconditionally jumps to [`target`](MokaInstruction::Jump::target) if [`condition`](MokaInstruction::Jump::condition) is [`None`].
-    #[display("{}goto {target}", condition.as_ref().map(|cond| format!("if {cond} ")).unwrap_or_default())]
-    Jump {
-        /// The condition that must hold for the jump to occur.
-        /// It denotes an Unconditional jump if it is [`None`].
-        condition: Option<Condition>,
-        /// The target of the jump.
-        target: ProgramCounter,
-    },
-    /// Jump to the [`target`](MokaInstruction::Switch::default) corresponding to [`match_value`](MokaInstruction::Switch::match_value).
-    /// If [`match_value`](MokaInstruction::Switch::match_value) does not match any [`target`](MokaInstruction::Switch::branches), jump to [`default`](MokaInstruction::Switch::default).
-    #[display(
-        "switch {} {{ {}, else => {} }}",
-        match_value,
-        branches.iter().map(|(key, target)| format!("{key} => {target}")).join(", "),
-        default
-    )]
-    Switch {
-        /// The value to match against the branches.
-        match_value: Operand,
-        /// The branches of the switch.
-        branches: BTreeMap<i32, ProgramCounter>,
-        /// The target of the switch if no branches match.
-        default: ProgramCounter,
-    },
-    /// Returns from the current method with a value if it is [`Some`].
-    /// Otherwise, returns from the current method with `void`.
-    #[display("return{}", _0.as_ref().map(|it| format!(" {it}")).unwrap_or_default())]
-    Return(Option<Operand>),
-    /// Returns from a subroutine.
-    #[display("subroutine_ret {_0}")]
-    SubroutineRet(Operand),
 }
 
-impl MokaInstruction {
+impl InstructionKind {
     /// Returns the value defined by the instruction if it is a definition.
     #[must_use]
-    pub const fn def(&self) -> Option<LocalValue> {
+    pub const fn def(&self) -> Option<ValueId> {
         match self {
             Self::Definition { value, .. } => Some(*value),
-            _ => None,
+            Self::Nop => None,
         }
     }
 
@@ -75,17 +105,230 @@ impl MokaInstruction {
         match self {
             Self::Nop => HashSet::new(),
             Self::Definition { expr, .. } => expr.uses(),
-            Self::Jump {
-                condition: Some(condition),
-                ..
-            } => condition.uses(),
-            Self::Return(Some(uses))
-            | Self::SubroutineRet(uses)
-            | Self::Switch {
-                match_value: uses, ..
-            } => uses.iter().copied().collect(),
-            _ => HashSet::default(),
         }
+    }
+}
+
+/// An identified ordinary instruction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MokaInstruction {
+    id: InstructionId,
+    kind: InstructionKind,
+}
+
+impl MokaInstruction {
+    pub(crate) const fn new(id: InstructionId, kind: InstructionKind) -> Self {
+        Self { id, kind }
+    }
+
+    /// Returns this instruction's method-local identity.
+    #[must_use]
+    pub const fn id(&self) -> InstructionId {
+        self.id
+    }
+
+    /// Returns the operation performed by this instruction.
+    #[must_use]
+    pub const fn kind(&self) -> &InstructionKind {
+        &self.kind
+    }
+
+    /// Returns the value defined by this instruction, if any.
+    #[must_use]
+    pub const fn def(&self) -> Option<ValueId> {
+        self.kind.def()
+    }
+
+    /// Returns the identifiers used by this instruction.
+    #[must_use]
+    pub fn uses(&self) -> HashSet<Identifier> {
+        self.kind.uses()
+    }
+}
+
+impl fmt::Display for MokaInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+/// One ordered outgoing arm of a terminator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Successor {
+    id: EdgeId,
+    target: BlockId,
+    transfer: ControlTransfer,
+}
+
+impl Successor {
+    pub(crate) const fn new(id: EdgeId, target: BlockId, transfer: ControlTransfer) -> Self {
+        Self {
+            id,
+            target,
+            transfer,
+        }
+    }
+
+    /// Returns this arm's identity.
+    #[must_use]
+    pub const fn id(&self) -> EdgeId {
+        self.id
+    }
+
+    /// Returns the target block.
+    #[must_use]
+    pub const fn target(&self) -> BlockId {
+        self.target
+    }
+
+    /// Returns the state transfer associated with this arm.
+    #[must_use]
+    pub const fn transfer(&self) -> &ControlTransfer {
+        &self.transfer
+    }
+}
+
+/// The control-flow operation ending a basic block.
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+pub enum TerminatorKind {
+    /// Transfers control to one successor.
+    #[display("goto")]
+    Goto,
+    /// Selects one of two guarded successors.
+    #[display("branch")]
+    Branch,
+    /// Selects a successor by matching a value.
+    #[display("switch {match_value}")]
+    Switch {
+        /// The value matched by the switch arms.
+        match_value: Operand,
+    },
+    /// Returns from the method.
+    #[display("return{}", _0.as_ref().map(|value| format!(" {value}")).unwrap_or_default())]
+    Return(Option<Operand>),
+    /// Throws an exception.
+    #[display("throw {_0}")]
+    Throw(Operand),
+    /// Continues normally or enters an exception handler after a fallible operation.
+    #[display("fallible")]
+    Fallible,
+    /// Returns from a legacy JVM subroutine.
+    #[display("subroutine_ret {_0}")]
+    SubroutineReturn(Operand),
+}
+
+/// An identified terminator and its ordered successor arms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Terminator {
+    id: InstructionId,
+    kind: TerminatorKind,
+    successors: Vec<Successor>,
+}
+
+impl Terminator {
+    pub(crate) const fn new(
+        id: InstructionId,
+        kind: TerminatorKind,
+        successors: Vec<Successor>,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            successors,
+        }
+    }
+
+    /// Returns this terminator's method-local identity.
+    #[must_use]
+    pub const fn id(&self) -> InstructionId {
+        self.id
+    }
+
+    /// Returns the control-flow operation.
+    #[must_use]
+    pub const fn kind(&self) -> &TerminatorKind {
+        &self.kind
+    }
+
+    /// Returns the ordered outgoing arms.
+    #[must_use]
+    pub fn successors(&self) -> &[Successor] {
+        &self.successors
+    }
+
+    /// Returns the identifiers used by this terminator.
+    #[must_use]
+    pub fn uses(&self) -> HashSet<Identifier> {
+        let mut uses = match &self.kind {
+            TerminatorKind::Switch { match_value }
+            | TerminatorKind::Throw(match_value)
+            | TerminatorKind::SubroutineReturn(match_value) => {
+                match_value.iter().copied().collect()
+            }
+            TerminatorKind::Return(Some(value)) => value.iter().copied().collect(),
+            TerminatorKind::Goto
+            | TerminatorKind::Branch
+            | TerminatorKind::Return(None)
+            | TerminatorKind::Fallible => HashSet::new(),
+        };
+        for successor in &self.successors {
+            if let ControlTransfer::Conditional(guard) = successor.transfer() {
+                uses.extend(
+                    guard.predicates().flat_map(|condition| {
+                        super::expression::Condition::<
+                        super::control_flow::path_condition::Value,
+                    >::uses(condition)
+                    }),
+                );
+            }
+        }
+        uses
+    }
+}
+
+impl fmt::Display for Terminator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+/// A maximal basic block ending in exactly one terminator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasicBlock {
+    id: BlockId,
+    instructions: Vec<MokaInstruction>,
+    terminator: Terminator,
+}
+
+impl BasicBlock {
+    pub(crate) const fn new(
+        id: BlockId,
+        instructions: Vec<MokaInstruction>,
+        terminator: Terminator,
+    ) -> Self {
+        Self {
+            id,
+            instructions,
+            terminator,
+        }
+    }
+
+    /// Returns this block's method-local identity.
+    #[must_use]
+    pub const fn id(&self) -> BlockId {
+        self.id
+    }
+
+    /// Returns the ordinary instructions in execution order.
+    #[must_use]
+    pub fn instructions(&self) -> &[MokaInstruction] {
+        &self.instructions
+    }
+
+    /// Returns the block terminator.
+    #[must_use]
+    pub const fn terminator(&self) -> &Terminator {
+        &self.terminator
     }
 }
 
@@ -201,33 +444,6 @@ impl Operand {
     }
 }
 
-/// A unique identifier of a value defined in the current scope.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[repr(transparent)]
-#[display("%{_0}")]
-pub struct LocalValue(u16);
-
-impl LocalValue {
-    /// Creates a new [`LocalValue`] with the given ID.
-    #[must_use]
-    pub const fn new(id: u16) -> Self {
-        Self(id)
-    }
-}
-
-impl From<LocalValue> for Operand {
-    fn from(val: LocalValue) -> Self {
-        Self::just(Identifier::Local(val))
-    }
-}
-
-impl From<LocalValue> for u16 {
-    fn from(value: LocalValue) -> Self {
-        value.0
-    }
-}
-
 /// Represents an identifier of a value in the current scope.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -239,16 +455,10 @@ pub enum Identifier {
     #[display("%arg{_0}")]
     Arg(u16),
     /// A locally defined value.
-    Local(LocalValue),
+    Local(ValueId),
     /// The exception caught by a `catch` block.
-    #[display("%caught_exception@{_0}")]
-    CaughtException(ProgramCounter),
-}
-
-impl From<LocalValue> for Identifier {
-    fn from(value: LocalValue) -> Self {
-        Self::Local(value)
-    }
+    #[display("%caught_exception{_0}")]
+    CaughtException(ValueId),
 }
 
 #[cfg(test)]
@@ -263,10 +473,9 @@ pub(crate) mod test {
 
     proptest! {
         #[test]
-        fn local_value_inner_conversion(id in 0..u16::MAX) {
-            let value = LocalValue::new(id);
-            let id: u16 = value.into();
-            assert_eq!(id, value.0);
+        fn value_identity_display(id in any::<u32>()) {
+            let value = ValueId::new(id);
+            prop_assert_eq!(value.to_string(), format!("%{id}"));
         }
     }
 

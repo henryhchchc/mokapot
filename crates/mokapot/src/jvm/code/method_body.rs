@@ -188,10 +188,7 @@ mod test {
     use Instruction::*;
 
     use super::MethodBody;
-    use crate::{
-        ir::MokaInstruction,
-        jvm::code::{Instruction, InstructionList},
-    };
+    use crate::jvm::code::{Instruction, InstructionList};
 
     #[test]
     fn instruction_at() {
@@ -216,36 +213,15 @@ mod test {
 
     #[test]
     fn last_instruction() {
-        let instruction_list = InstructionList::from([
-            (0.into(), MokaInstruction::Nop),
-            (
-                1.into(),
-                MokaInstruction::Jump {
-                    condition: None,
-                    target: 1.into(),
-                },
-            ),
-            (2.into(), MokaInstruction::Return(None)),
-        ]);
-        assert_eq!(
-            Some((&2.into(), &MokaInstruction::Return(None))),
-            instruction_list.last_instruction()
-        );
+        let instruction_list =
+            InstructionList::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
+        assert_eq!(Some((&2.into(), &30)), instruction_list.last_instruction());
     }
 
     #[test]
     fn previous_pc() {
-        let instruction_list = InstructionList::from([
-            (0.into(), MokaInstruction::Nop),
-            (
-                1.into(),
-                MokaInstruction::Jump {
-                    condition: None,
-                    target: 1.into(),
-                },
-            ),
-            (2.into(), MokaInstruction::Return(None)),
-        ]);
+        let instruction_list =
+            InstructionList::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
         assert_eq!(Some(0.into()), instruction_list.prev_pc_of(&1.into()));
         assert_eq!(None, instruction_list.prev_pc_of(&0.into()));
     }

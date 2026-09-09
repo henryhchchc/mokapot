@@ -7,7 +7,6 @@ use super::{Identifier, Operand};
 use crate::{
     jvm::{
         ConstantValue,
-        code::ProgramCounter,
         references::{ClassRef, MethodRef},
     },
     types::method_descriptor::MethodDescriptor,
@@ -84,22 +83,14 @@ pub enum Expression {
     Array(ArrayOperation),
     /// A type conversion.
     Conversion(Conversion),
-    /// Throws an exception.
-    #[display("throw {_0}")]
-    Throw(Operand),
     /// An operation on a monitor.
     Synchronization(LockOperation),
     /// Creates a new object.
     #[display("new {_0}")]
     New(ClassRef),
-    /// A return address.
-    #[display("subroutine {target}, ret {return_address}")]
-    Subroutine {
-        /// The address to return to.
-        return_address: ProgramCounter,
-        /// The address where the subroutine starts.
-        target: ProgramCounter,
-    },
+    /// A legacy subroutine return address.
+    #[display("subroutine_return_address")]
+    SubroutineReturnAddress,
 }
 
 impl Expression {
@@ -113,7 +104,6 @@ impl Expression {
             Self::Field(field_op) => field_op.uses(),
             Self::Array(array_op) => array_op.uses(),
             Self::Conversion(conv_op) => conv_op.uses(),
-            Self::Throw(arg) => arg.iter().copied().collect(),
             Self::Synchronization(monitor_op) => monitor_op.uses(),
             _ => HashSet::default(),
         }
