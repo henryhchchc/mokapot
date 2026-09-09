@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    MokaIRBrewingError, Operand, PairedFrameValue, ScalarBlock,
+    MokaIRBrewingError, Operand, PairedFrameValue, ScalarBlock, ScalarValue,
     jvm_frame::{Entry, JvmStackFrame},
     ssa,
 };
@@ -10,7 +10,7 @@ use crate::ir::{BlockId, ValueId};
 pub(super) fn collect_phi_candidates(
     blocks: &[ScalarBlock],
     phi_blocks: &BTreeMap<ValueId, BlockId>,
-    preheader: Option<(BlockId, &JvmStackFrame<ValueId>)>,
+    preheader: Option<(BlockId, &JvmStackFrame<ScalarValue>)>,
 ) -> Result<ssa::PhiCandidates, MokaIRBrewingError> {
     let mut candidates = ssa::PhiCandidates::new();
     for target in blocks {
@@ -90,26 +90,36 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &JvmStackFrame<ValueId>,
-    source: &JvmStackFrame<ValueId>,
+    target: &JvmStackFrame<ScalarValue>,
+    source: &JvmStackFrame<ScalarValue>,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBrewingError> {
     if target.local_variables().len() != source.local_variables().len()
         || target.operand_stack().len() != source.operand_stack().len()
     {
         return Err(MokaIRBrewingError::MalformedControlFlow);
     }
-    Ok(target
+    target
         .local_variables()
         .iter()
         .zip(source.local_variables())
         .chain(target.operand_stack().iter().zip(source.operand_stack()))
         .map(|(target, source)| match (target, source) {
-            (Entry::Value(result), Entry::Value(value)) => (Some(*result), Some(*value)),
-            (Entry::Value(result), _) => (Some(*result), None),
-            (_, Entry::Value(value)) => (None, Some(*value)),
-            _ => (None, None),
+            (Entry::Value(ScalarValue::Value(result)), Entry::Value(ScalarValue::Value(value))) => {
+                Ok((Some(*result), Some(*value)))
+            }
+            (
+                Entry::Value(ScalarValue::ReturnAddress(lhs)),
+                Entry::Value(ScalarValue::ReturnAddress(rhs)),
+            ) if lhs == rhs => Ok((None, None)),
+            (Entry::Value(ScalarValue::Value(result)), _) => Ok((Some(*result), None)),
+            (_, Entry::Value(ScalarValue::Value(value))) => Ok((None, Some(*value))),
+            (Entry::Value(ScalarValue::ReturnAddress(_)), _)
+            | (_, Entry::Value(ScalarValue::ReturnAddress(_))) => {
+                Err(MokaIRBrewingError::MalformedControlFlow)
+            }
+            _ => Ok((None, None)),
         })
-        .collect())
+        .collect::<Result<_, _>>()
 }
 
 pub(super) fn unavailable_value_slots(
