@@ -2,10 +2,7 @@
 
 pub mod path_condition;
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    hash::Hash,
-};
+use std::{collections::HashMap, hash::Hash};
 
 use self::path_condition::{BranchGuard, LiftedValue, PathCondition, SolvingBudget};
 use super::{BasicBlock, BlockId, EdgeId, ValueId};
@@ -15,19 +12,23 @@ use crate::{
 };
 
 mod transfer {
-    use super::{BTreeSet, BranchGuard, ClassRef, Hash, LiftedCondition, LiftedValue};
+    use super::{BranchGuard, ClassRef, Hash, LiftedCondition, LiftedValue};
 
     /// A state transfer parameterized by the lifting operand representation.
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub enum ControlTransfer<OP: Eq + Hash> {
         /// An unconditional control transfer.
         Unconditional,
+        /// The normal outcome of a fallible operation.
+        Normal,
         /// A conditional transfer guarded by a conjunction of literals.
         Conditional(BranchGuard<LiftedCondition<LiftedValue<OP>>>),
-        /// A transfer to an exception handler.
-        Exception(BTreeSet<ClassRef>),
-        /// A transfer caused by legacy subroutine return.
-        SubroutineReturn,
+        /// An exceptional outcome selected by this catch type.
+        ///
+        /// `None` denotes a catch-all exception-table entry.
+        Exception(Option<ClassRef>),
+        /// An exceptional outcome that leaves the method.
+        Unwind,
     }
 }
 

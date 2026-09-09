@@ -68,7 +68,7 @@ pub enum ValueDefinition {
     This,
     /// A method parameter at the given parameter index.
     Parameter(u16),
-    /// The exception introduced at a handler block.
+    /// The exception introduced at a synthetic handler-entry block.
     CaughtException(BlockId),
     /// A value produced by an ordinary instruction or phi.
     Instruction(InstructionId),
@@ -268,12 +268,12 @@ pub enum TerminatorKind {
     /// Throws an exception.
     #[display("throw {_0}")]
     Throw(ValueId),
-    /// Continues normally or enters an exception handler after a fallible operation.
+    /// Selects the normal or an exceptional outcome of a fallible operation.
     #[display("fallible")]
     Fallible,
-    /// Returns from a legacy JVM subroutine.
-    #[display("subroutine_ret {_0}")]
-    SubroutineReturn(ValueId),
+    /// Propagates an exception out of the method.
+    #[display("unwind")]
+    Unwind,
 }
 
 /// An identified terminator and its ordered successor arms.
@@ -317,12 +317,12 @@ impl Terminator {
         let mut uses = match &self.kind {
             TerminatorKind::Switch { match_value: value }
             | TerminatorKind::Throw(value)
-            | TerminatorKind::SubroutineReturn(value)
             | TerminatorKind::Return(Some(value)) => HashSet::from([*value]),
             TerminatorKind::Goto
             | TerminatorKind::Branch
             | TerminatorKind::Return(None)
-            | TerminatorKind::Fallible => HashSet::new(),
+            | TerminatorKind::Fallible
+            | TerminatorKind::Unwind => HashSet::new(),
         };
         for successor in &self.successors {
             if let ControlTransfer::Conditional(guard) = successor.transfer() {

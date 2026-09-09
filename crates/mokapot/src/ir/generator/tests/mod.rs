@@ -44,4 +44,6 @@ pub(super) fn method(
 mod blocks;
 mod control_flow;
 mod effects;
+mod exceptions;
+mod legacy;
 mod phis;
