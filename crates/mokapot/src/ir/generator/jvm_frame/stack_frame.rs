@@ -1,10 +1,9 @@
-use std::{collections::BTreeSet, iter::once};
+use std::iter::once;
 
 use itertools::Itertools;
 
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    jvm::code::ProgramCounter,
     types::{
         field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
@@ -24,7 +23,6 @@ pub struct JvmStackFrame<V = Operand> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
-    pub possible_ret_addresses: BTreeSet<ProgramCounter>,
 }
 
 impl<V: Clone + PartialOrd> PartialOrd for JvmStackFrame<V> {
@@ -67,16 +65,10 @@ impl<V: Clone + JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
             .zip_eq(other.operand_stack)
             .map(|(lhs, rhs)| lhs.join(rhs))
             .collect();
-        let possible_ret_addresses = self
-            .possible_ret_addresses
-            .into_iter()
-            .chain(other.possible_ret_addresses)
-            .collect();
         Self {
             max_stack: self.max_stack,
             local_variables,
             operand_stack,
-            possible_ret_addresses,
         }
     }
 }
@@ -120,7 +112,6 @@ impl<V: Clone> JvmStackFrame<V> {
             max_stack,
             local_variables,
             operand_stack: Vec::with_capacity(max_stack.into()),
-            possible_ret_addresses: BTreeSet::new(),
         })
     }
 
@@ -266,7 +257,30 @@ impl<V: Clone> JvmStackFrame<V> {
             max_stack: self.max_stack,
             local_variables: self.local_variables.clone(),
             operand_stack,
-            possible_ret_addresses: self.possible_ret_addresses.clone(),
+        }
+    }
+
+    pub(crate) fn same_locals_empty_stack_frame(&self) -> Self {
+        Self {
+            max_stack: self.max_stack,
+            local_variables: self.local_variables.clone(),
+            operand_stack: Vec::with_capacity(self.max_stack.into()),
+        }
+    }
+
+    pub(crate) fn without_values(&self) -> Self {
+        Self {
+            max_stack: self.max_stack,
+            local_variables: self
+                .local_variables
+                .iter()
+                .map(|entry| match entry {
+                    Entry::Value(_) | Entry::UninitializedLocal => Entry::UninitializedLocal,
+                    Entry::Top => Entry::Top,
+                    Entry::OutOfScope => Entry::OutOfScope,
+                })
+                .collect(),
+            operand_stack: Vec::with_capacity(self.max_stack.into()),
         }
     }
 
@@ -298,7 +312,6 @@ impl<V: Clone> JvmStackFrame<V> {
                 .iter()
                 .map(|entry| map_entry(entry, &mut map))
                 .collect::<Result<_, _>>()?,
-            possible_ret_addresses: self.possible_ret_addresses.clone(),
         })
     }
 

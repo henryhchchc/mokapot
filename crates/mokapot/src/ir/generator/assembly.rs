@@ -1,8 +1,8 @@
 use super::{
-    BTreeMap, BTreeSet, BlockId, GeneratedMethod, HashMap, Identifier, JvmStackFrame,
-    LiftedControlTransfer, LiftedInstruction, MokaIRBrewingError, MokaIRGenerator, Operand,
-    PlannedBlock, ProgramCounter, ScalarArm, ScalarBlock, ScalarEntryFrames, ValueId,
-    collect_phi_candidates, method, next_temp_value, ssa, unavailable_value_slots,
+    BTreeMap, BTreeSet, BlockId, FrameOperand, GeneratedMethod, HashMap, Identifier, JvmStackFrame,
+    LiftedControlTransfer, LiftedInstruction, Location, MokaIRBrewingError, MokaIRGenerator,
+    Operand, PlannedBlock, ScalarArm, ScalarBlock, ScalarEntryFrames, ScalarValue, ValueId,
+    collect_phi_candidates, fallibility, method, next_temp_value, ssa, unavailable_value_slots,
 };
 
 impl MokaIRGenerator<'_> {
@@ -12,33 +12,29 @@ impl MokaIRGenerator<'_> {
     )]
     pub(super) fn assemble_blocks(
         mut self,
-        facts: &HashMap<ProgramCounter, JvmStackFrame>,
+        facts: &HashMap<Location, JvmStackFrame>,
     ) -> Result<GeneratedMethod, MokaIRBrewingError> {
-        let entry_pc = self
+        let entry_location = self
             .initial_seed
             .as_ref()
-            .map(|(pc, _)| *pc)
+            .map(|(location, _)| *location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
         let reachable = self.lifted.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(MokaIRBrewingError::MalformedControlFlow);
         }
 
-        let mut leaders = BTreeSet::from([entry_pc]);
+        let mut leaders = BTreeSet::from([entry_location]);
         leaders.extend(
-            self.body
-                .exception_table
+            reachable
                 .iter()
-                .map(|entry| entry.handler_pc)
-                .filter(|handler| self.lifted.contains_key(handler)),
+                .copied()
+                .filter(|location| !matches!(location, Location::Bytecode { .. })),
         );
-        let mut predecessors: BTreeMap<ProgramCounter, BTreeSet<ProgramCounter>> = BTreeMap::new();
+        let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
         for (&source, arms) in &self.outgoing {
-            for (target, transfer) in arms {
+            for (target, _) in arms {
                 predecessors.entry(*target).or_default().insert(source);
-                if matches!(transfer, LiftedControlTransfer::Exception(_)) {
-                    leaders.insert(*target);
-                }
             }
         }
         leaders.extend(
@@ -48,22 +44,22 @@ impl MokaIRGenerator<'_> {
                 .map(|(target, _)| *target),
         );
 
-        for (pc, instruction) in &self.lifted {
-            let arms = self.outgoing.get(pc).map_or(
-                &[] as &[(ProgramCounter, LiftedControlTransfer<Operand>)],
+        for (location, instruction) in &self.lifted {
+            let arms = self.outgoing.get(location).map_or(
+                &[] as &[(Location, LiftedControlTransfer<Operand>)],
                 Vec::as_slice,
             );
             if instruction.is_explicit_transfer()
-                || arms
-                    .iter()
-                    .any(|(_, transfer)| matches!(transfer, LiftedControlTransfer::Exception(_)))
+                || arms.iter().any(|(_, transfer)| {
+                    matches!(
+                        transfer,
+                        LiftedControlTransfer::Normal
+                            | LiftedControlTransfer::Exception(_)
+                            | LiftedControlTransfer::Unwind
+                    )
+                })
             {
                 leaders.extend(arms.iter().map(|(target, _)| *target));
-            }
-            if let LiftedInstruction::Subroutine { return_address, .. } = instruction
-                && self.lifted.contains_key(return_address)
-            {
-                leaders.insert(*return_address);
             }
         }
 
@@ -76,7 +72,7 @@ impl MokaIRGenerator<'_> {
                 .get(current)
                 .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
             let arms = self.outgoing.get(current).map_or(
-                &[] as &[(ProgramCounter, LiftedControlTransfer<Operand>)],
+                &[] as &[(Location, LiftedControlTransfer<Operand>)],
                 Vec::as_slice,
             );
             let plain_fallthrough = !instruction.is_explicit_transfer()
@@ -87,25 +83,25 @@ impl MokaIRGenerator<'_> {
                 leaders.insert(*next);
             }
         }
-        leaders.retain(|pc| self.lifted.contains_key(pc));
+        leaders.retain(|location| self.lifted.contains_key(location));
 
         let needs_entry_preheader = predecessors
-            .get(&entry_pc)
+            .get(&entry_location)
             .is_some_and(|sources| !sources.is_empty());
         let block_offset = u32::from(needs_entry_preheader);
         let block_ids = leaders
             .iter()
             .enumerate()
-            .map(|(index, pc)| {
+            .map(|(index, location)| {
                 u32::try_from(index)
                     .ok()
                     .and_then(|index| index.checked_add(block_offset))
-                    .map(|index| (*pc, BlockId::new(index)))
+                    .map(|index| (*location, BlockId::new(index)))
                     .ok_or(MokaIRBrewingError::MalformedControlFlow)
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
         let bytecode_entry = *block_ids
-            .get(&entry_pc)
+            .get(&entry_location)
             .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
         let entry = if needs_entry_preheader {
             BlockId::new(0)
@@ -113,18 +109,17 @@ impl MokaIRGenerator<'_> {
             bytecode_entry
         };
 
-        let mut pc_to_block = BTreeMap::new();
-        let mut grouped: BTreeMap<BlockId, Vec<ProgramCounter>> = BTreeMap::new();
+        let mut location_to_block = BTreeMap::new();
+        let mut grouped: BTreeMap<BlockId, Vec<Location>> = BTreeMap::new();
         let mut current_block = None;
-        for pc in reachable {
-            if let Some(id) = block_ids.get(&pc) {
+        for location in reachable {
+            if let Some(id) = block_ids.get(&location) {
                 current_block = Some(*id);
             }
             let id = current_block.ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            pc_to_block.insert(pc, id);
-            grouped.entry(id).or_default().push(pc);
+            location_to_block.insert(location, id);
+            grouped.entry(id).or_default().push(location);
         }
-
         let plans = grouped
             .into_iter()
             .map(|(id, pcs)| PlannedBlock { id, pcs })
@@ -155,12 +150,18 @@ impl MokaIRGenerator<'_> {
             .iter()
             .map(|_| next_temp_value(&mut next_temp))
             .collect::<Result<Vec<_>, _>>()?;
+        let scalar_this = this_temp.map(ScalarValue::Value);
+        let scalar_parameters = parameter_temps
+            .iter()
+            .copied()
+            .map(ScalarValue::Value)
+            .collect::<Vec<_>>();
         let initial_scalar_frame = JvmStackFrame::with_inputs(
             &self.method.descriptor,
             self.body.max_locals,
             self.body.max_stack,
-            this_temp,
-            &parameter_temps,
+            scalar_this,
+            &scalar_parameters,
         )?;
 
         let (entry_frames, phi_blocks) = self.scalar_entry_frames(
@@ -173,7 +174,8 @@ impl MokaIRGenerator<'_> {
             &parameter_temps,
             &mut next_temp,
         )?;
-        let scalar_blocks = self.translate_scalar_blocks(&plans, entry_frames, &pc_to_block)?;
+        let scalar_blocks =
+            self.translate_scalar_blocks(&plans, entry_frames, &location_to_block)?;
         let candidates = collect_phi_candidates(
             &scalar_blocks,
             &phi_blocks,
@@ -200,10 +202,10 @@ impl MokaIRGenerator<'_> {
     fn scalar_entry_frames(
         &self,
         plans: &[PlannedBlock],
-        facts: &HashMap<ProgramCounter, JvmStackFrame>,
+        facts: &HashMap<Location, JvmStackFrame>,
         bytecode_entry: BlockId,
         needs_entry_preheader: bool,
-        initial_frame: &JvmStackFrame<ValueId>,
+        initial_frame: &JvmStackFrame<ScalarValue>,
         this_temp: Option<ValueId>,
         parameter_temps: &[ValueId],
         next_temp: &mut u32,
@@ -222,6 +224,15 @@ impl MokaIRGenerator<'_> {
             let discovered = facts
                 .get(&leader)
                 .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            if matches!(leader, Location::Unwind) {
+                let frame = discovered.without_values().try_map_values(
+                    |_| -> Result<ScalarValue, MokaIRBrewingError> {
+                        Err(MokaIRBrewingError::MalformedControlFlow)
+                    },
+                )?;
+                frames.insert(plan.id, frame);
+                continue;
+            }
             let mut incoming = self.incoming_frames_at(leader)?;
             if plan.id == bytecode_entry && needs_entry_preheader {
                 let (_, initial) = self
@@ -233,23 +244,33 @@ impl MokaIRGenerator<'_> {
             let (unavailable_locals, unavailable_stack) =
                 unavailable_value_slots(discovered, &incoming)?;
             let mut frame = discovered.try_map_values(|operand| {
-                if let Some(identifier) = operand.0.iter().copied().next()
-                    && operand.0.len() == 1
-                {
-                    return match identifier {
-                        Identifier::This => {
-                            this_temp.ok_or(MokaIRBrewingError::MalformedControlFlow)
+                if operand.0.len() == 1 {
+                    let identifier = *operand
+                        .0
+                        .first()
+                        .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                    return Ok(match identifier {
+                        Identifier::This => ScalarValue::Value(
+                            this_temp.ok_or(MokaIRBrewingError::MalformedControlFlow)?,
+                        ),
+                        Identifier::Arg(index) => ScalarValue::Value(
+                            parameter_temps
+                                .get(usize::from(index))
+                                .copied()
+                                .ok_or(MokaIRBrewingError::MalformedControlFlow)?,
+                        ),
+                        Identifier::Local(value) | Identifier::CaughtException(value) => {
+                            ScalarValue::Value(value)
                         }
-                        Identifier::Arg(index) => parameter_temps
-                            .get(usize::from(index))
-                            .copied()
-                            .ok_or(MokaIRBrewingError::MalformedControlFlow),
-                        Identifier::Local(value) | Identifier::CaughtException(value) => Ok(value),
-                    };
+                        Identifier::ReturnAddress(address) => ScalarValue::ReturnAddress(address),
+                    });
+                }
+                if operand.contains_return_address() {
+                    return Err(MokaIRBrewingError::MalformedControlFlow);
                 }
                 let value = next_temp_value(next_temp)?;
                 phi_blocks.insert(value, plan.id);
-                Ok(value)
+                Ok(ScalarValue::Value(value))
             })?;
             frame.invalidate_values_at(unavailable_locals, unavailable_stack);
             frames.insert(plan.id, frame);
@@ -259,7 +280,7 @@ impl MokaIRGenerator<'_> {
 
     fn incoming_frames_at(
         &self,
-        target: ProgramCounter,
+        target: Location,
     ) -> Result<Vec<&JvmStackFrame>, MokaIRBrewingError> {
         let mut incoming = Vec::new();
         for (source, arms) in &self.outgoing {
@@ -283,8 +304,8 @@ impl MokaIRGenerator<'_> {
     fn translate_scalar_blocks(
         &mut self,
         plans: &[PlannedBlock],
-        mut entry_frames: BTreeMap<BlockId, JvmStackFrame<ValueId>>,
-        pc_to_block: &BTreeMap<ProgramCounter, BlockId>,
+        mut entry_frames: BTreeMap<BlockId, JvmStackFrame<ScalarValue>>,
+        location_to_block: &BTreeMap<Location, BlockId>,
     ) -> Result<Vec<ScalarBlock>, MokaIRBrewingError> {
         let mut blocks = Vec::with_capacity(plans.len());
         for plan in plans {
@@ -294,21 +315,39 @@ impl MokaIRGenerator<'_> {
             let mut frame = entry_frame.clone();
             let mut instructions = Vec::with_capacity(plan.pcs.len());
             let mut arms = Vec::new();
-            for (index, &pc) in plan.pcs.iter().enumerate() {
-                let jvm_instruction = self
-                    .body
-                    .instruction_at(pc)
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                let instruction = self.lift_instruction(jvm_instruction, pc, &mut frame)?;
+            for (index, &location) in plan.pcs.iter().enumerate() {
+                let pre_frame = frame.clone();
+                let (instruction, fallible) = match location {
+                    Location::Bytecode { pc, .. } => {
+                        let jvm_instruction = self
+                            .body
+                            .instruction_at(pc)
+                            .ok_or(MokaIRBrewingError::MalformedControlFlow)?
+                            .clone();
+                        let instruction =
+                            self.lift_instruction(&jvm_instruction, location, &mut frame)?;
+                        (
+                            instruction,
+                            fallibility::is_synchronously_fallible(&jvm_instruction),
+                        )
+                    }
+                    Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
+                    Location::Unwind => (LiftedInstruction::Unwind, false),
+                };
                 let is_last = index + 1 == plan.pcs.len();
                 if is_last {
                     arms = self
-                        .analyze_frame_and_conditions(pc, frame.clone(), &instruction, &|value| {
-                            value
-                        })?
+                        .analyze_frame_and_conditions(
+                            location,
+                            &pre_frame,
+                            frame.clone(),
+                            &instruction,
+                            fallible,
+                            &|value| ScalarValue::Value(value),
+                        )?
                         .into_iter()
                         .map(|(target, transfer, frame)| {
-                            pc_to_block
+                            location_to_block
                                 .get(&target)
                                 .copied()
                                 .map(|target| ScalarArm {
@@ -322,7 +361,7 @@ impl MokaIRGenerator<'_> {
                 } else if instruction.is_explicit_transfer() {
                     return Err(MokaIRBrewingError::MalformedControlFlow);
                 }
-                instructions.push((pc, instruction));
+                instructions.push((location, instruction));
             }
             blocks.push(ScalarBlock {
                 plan: plan.clone(),
