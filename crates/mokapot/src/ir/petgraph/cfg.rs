@@ -156,7 +156,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::ir::{InstructionId, Successor, Terminator, TerminatorKind};
+    use crate::ir::{InstructionId, Successor, Terminator, TerminatorKind, ValueId};
 
     #[test]
     fn dense_nodes_and_parallel_edges_are_preserved() {
@@ -164,10 +164,11 @@ mod tests {
         let source = BasicBlock::new(
             BlockId::new(0),
             vec![],
+            vec![],
             Terminator::new(
                 InstructionId::new(0),
                 TerminatorKind::Switch {
-                    match_value: crate::ir::Identifier::Arg(0).into(),
+                    match_value: ValueId::new(0),
                 },
                 (0..3)
                     .map(|id| {
@@ -178,6 +179,7 @@ mod tests {
         );
         let exit = BasicBlock::new(
             target,
+            vec![],
             vec![],
             Terminator::new(InstructionId::new(1), TerminatorKind::Return(None), vec![]),
         );

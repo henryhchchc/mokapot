@@ -1,13 +1,11 @@
-use super::{
-    Condition, IR, JvmStackFrame, MokaIRBrewingError, Operand, ProgramCounter, SINGLE_SLOT,
-};
+use super::{Condition, IR, JvmStackFrame, MokaIRBrewingError, ProgramCounter, SINGLE_SLOT};
 
 #[inline]
-pub(super) fn conditional_jump(
-    frame: &mut JvmStackFrame,
+pub(super) fn conditional_jump<OP: Clone + std::fmt::Display>(
+    frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
-    condition: impl FnOnce(Operand) -> Condition,
-) -> Result<IR, MokaIRBrewingError> {
+    condition: impl FnOnce(OP) -> Condition<OP>,
+) -> Result<IR<OP>, MokaIRBrewingError> {
     let operand = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(IR::Jump {
         condition: Some(condition(operand)),
@@ -16,11 +14,11 @@ pub(super) fn conditional_jump(
 }
 
 #[inline]
-pub(super) fn cmp_jump(
-    frame: &mut JvmStackFrame,
+pub(super) fn cmp_jump<OP: Clone + std::fmt::Display>(
+    frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
-    condition: impl FnOnce(Operand, Operand) -> Condition,
-) -> Result<IR, MokaIRBrewingError> {
+    condition: impl FnOnce(OP, OP) -> Condition<OP>,
+) -> Result<IR<OP>, MokaIRBrewingError> {
     let rhs = frame.pop_value::<SINGLE_SLOT>()?;
     let lhs = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(IR::Jump {

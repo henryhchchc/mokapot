@@ -5,8 +5,8 @@ use crate::{
     ir::control_flow::ControlFlowGraph,
     ir::{
         BlockId,
-        control_flow::{ControlTransfer, PathCondition, SolvingBudget, Value},
-        expression::Condition,
+        control_flow::{ControlTransfer, PathCondition, SolvingBudget},
+        expression::Predicate,
     },
 };
 
@@ -30,7 +30,7 @@ impl<'method> PathConditionProblem<'method> {
 impl<'method> DataflowProblem for PathConditionProblem<'method> {
     type Location = BlockId;
 
-    type Fact = PathConditionFact<&'method Condition<Value>>;
+    type Fact = PathConditionFact<&'method Predicate>;
 
     type Err = Infallible;
 
