@@ -3,6 +3,7 @@
     reason = "generator tests share the fixture helpers from their parent module"
 )]
 use super::*;
+use std::iter::once;
 
 #[test]
 fn straight_line_instructions_coalesce_into_one_block() {

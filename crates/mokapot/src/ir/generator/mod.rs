@@ -1,6 +1,8 @@
 mod analysis;
 mod assembly;
+mod fallibility;
 mod jvm_frame;
+mod legacy;
 mod lifting;
 mod materialize;
 mod merge;
@@ -10,21 +12,20 @@ mod ssa;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, btree_set},
     fmt,
-    iter::once,
-    mem,
 };
 
 use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
 use self::jvm_frame::JvmStackFrame;
+use self::legacy::{Location, Normalizer as LegacyNormalizer, ReturnAddress};
 use self::merge::{collect_phi_candidates, unavailable_value_slots};
 use self::remap::{remap_expression, remap_transfer};
 use super::{
     BasicBlock, BlockId, EdgeId, InstructionId, InstructionKind, MokaIRMethod, MokaInstruction,
     Phi, PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
     control_flow::{ControlTransfer, LiftedControlTransfer},
-    expression::{Expression, LiftedCondition, LiftedExpression},
+    expression::{LiftedCondition, LiftedExpression},
 };
 
 /// A value identity used only while interpreting the JVM stack machine.
@@ -38,6 +39,16 @@ enum Identifier {
     Local(ValueId),
     #[display("%caught_exception{_0}")]
     CaughtException(ValueId),
+    #[display("%return_address")]
+    ReturnAddress(ReturnAddress),
+}
+
+trait FrameOperand:
+    Clone + Eq + std::hash::Hash + fmt::Display + From<ValueId> + From<ReturnAddress>
+{
+    fn return_address(&self) -> Option<ReturnAddress>;
+
+    fn contains_return_address(&self) -> bool;
 }
 
 /// A private reaching-definition set. Completed `MokaIR` never exposes this type.
@@ -75,6 +86,63 @@ impl From<ValueId> for Operand {
 impl From<Identifier> for Operand {
     fn from(value: Identifier) -> Self {
         Self::just(value)
+    }
+}
+
+impl From<ReturnAddress> for Operand {
+    fn from(value: ReturnAddress) -> Self {
+        Self::just(Identifier::ReturnAddress(value))
+    }
+}
+
+impl FrameOperand for Operand {
+    fn return_address(&self) -> Option<ReturnAddress> {
+        (self.0.len() == 1)
+            .then(|| self.0.first())
+            .flatten()
+            .and_then(|identifier| match identifier {
+                Identifier::ReturnAddress(address) => Some(*address),
+                _ => None,
+            })
+    }
+
+    fn contains_return_address(&self) -> bool {
+        self.0
+            .iter()
+            .any(|identifier| matches!(identifier, Identifier::ReturnAddress(_)))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
+enum ScalarValue {
+    #[display("{_0}")]
+    Value(ValueId),
+    #[display("%return_address")]
+    ReturnAddress(ReturnAddress),
+}
+
+impl From<ValueId> for ScalarValue {
+    fn from(value: ValueId) -> Self {
+        Self::Value(value)
+    }
+}
+
+impl From<ReturnAddress> for ScalarValue {
+    fn from(value: ReturnAddress) -> Self {
+        Self::ReturnAddress(value)
+    }
+}
+
+impl FrameOperand for ScalarValue {
+    fn return_address(&self) -> Option<ReturnAddress> {
+        match self {
+            Self::ReturnAddress(address) => Some(*address),
+            Self::Value(_) => None,
+        }
+    }
+
+    fn contains_return_address(&self) -> bool {
+        matches!(self, Self::ReturnAddress(_))
     }
 }
 
@@ -133,27 +201,27 @@ struct GeneratedMethod {
 #[derive(Debug, Clone)]
 struct PlannedBlock {
     id: BlockId,
-    pcs: Vec<ProgramCounter>,
+    pcs: Vec<Location>,
 }
 
 #[derive(Debug, Clone)]
 struct ScalarArm {
     target: BlockId,
-    transfer: ControlTransfer,
-    frame: JvmStackFrame<ValueId>,
+    transfer: LiftedControlTransfer<ScalarValue>,
+    frame: JvmStackFrame<ScalarValue>,
 }
 
 #[derive(Debug, Clone)]
 struct ScalarBlock {
     plan: PlannedBlock,
-    entry_frame: JvmStackFrame<ValueId>,
-    instructions: Vec<(ProgramCounter, LiftedInstruction<ValueId>)>,
+    entry_frame: JvmStackFrame<ScalarValue>,
+    instructions: Vec<(Location, LiftedInstruction<ScalarValue>)>,
     arms: Vec<ScalarArm>,
 }
 
-type OutgoingState<OP> = (ProgramCounter, LiftedControlTransfer<OP>, JvmStackFrame<OP>);
+type OutgoingState<OP> = (Location, LiftedControlTransfer<OP>, JvmStackFrame<OP>);
 type ScalarEntryFrames = (
-    BTreeMap<BlockId, JvmStackFrame<ValueId>>,
+    BTreeMap<BlockId, JvmStackFrame<ScalarValue>>,
     BTreeMap<ValueId, BlockId>,
 );
 type PairedFrameValue = (Option<ValueId>, Option<ValueId>);
@@ -177,6 +245,8 @@ use crate::{
 
 #[derive(Debug, Clone)]
 enum LiftedInstruction<OP: fmt::Display = Operand> {
+    HandlerEntry,
+    Unwind,
     Nop,
     Definition {
         value: ValueId,
@@ -195,9 +265,7 @@ enum LiftedInstruction<OP: fmt::Display = Operand> {
     Return(Option<OP>),
     Throw(OP),
     Subroutine {
-        value: ValueId,
-        target: ProgramCounter,
-        return_address: ProgramCounter,
+        target: Location,
     },
     SubroutineReturn(OP),
 }
@@ -206,7 +274,9 @@ impl<OP: fmt::Display> LiftedInstruction<OP> {
     const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,
-            Self::Jump { .. }
+            Self::HandlerEntry
+                | Self::Unwind
+                | Self::Jump { .. }
                 | Self::Switch { .. }
                 | Self::Return(_)
                 | Self::Throw(_)
@@ -231,17 +301,26 @@ pub enum MokaIRBrewingError {
     /// An error that occurs when the method contains malformed control flow.
     #[error("The method contains malformed control flow")]
     MalformedControlFlow,
+    /// Legacy subroutine expansion exceeded its deterministic safety budget.
+    #[error("legacy subroutine expansion exceeded the {limit}-location budget")]
+    LegacySubroutineExpansionLimit {
+        /// The maximum number of expanded locations.
+        limit: usize,
+    },
 }
 
 struct MokaIRGenerator<'method> {
-    lifted: BTreeMap<ProgramCounter, LiftedInstruction>,
-    outgoing: BTreeMap<ProgramCounter, Vec<(ProgramCounter, LiftedControlTransfer<Operand>)>>,
-    outgoing_frames: BTreeMap<ProgramCounter, Vec<JvmStackFrame>>,
-    value_ids: BTreeMap<ProgramCounter, ValueId>,
-    caught_exception_ids: BTreeMap<ProgramCounter, ValueId>,
+    lifted: BTreeMap<Location, LiftedInstruction>,
+    outgoing: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<Operand>)>>,
+    outgoing_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
+    value_ids: BTreeMap<Location, ValueId>,
+    caught_exception_ids: BTreeMap<Location, ValueId>,
     method: &'method Method,
     body: &'method MethodBody,
-    initial_seed: Option<(ProgramCounter, JvmStackFrame)>,
+    legacy: LegacyNormalizer,
+    discovering: bool,
+    next_lifted_value: u32,
+    initial_seed: Option<(Location, JvmStackFrame)>,
 }
 
 /// An extension trait for [`Method`] that generates Moka IR.

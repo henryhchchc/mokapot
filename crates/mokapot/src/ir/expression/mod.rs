@@ -109,9 +109,6 @@ mod model {
         /// Creates a new object.
         #[display("new {_0}")]
         New(ClassRef),
-        /// A legacy subroutine return address.
-        #[display("subroutine_return_address")]
-        SubroutineReturnAddress,
     }
 }
 

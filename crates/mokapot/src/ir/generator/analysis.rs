@@ -1,12 +1,12 @@
 use super::{
-    BTreeMap, BTreeSet, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, Entry,
+    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, Entry, FrameOperand,
     GeneratedMethod, HashMap, Identifier, JvmStackFrame, LiftedCondition, LiftedControlTransfer,
-    LiftedInstruction, LiftedValue, Method, MokaIRBrewingError, MokaIRGenerator, Operand,
-    OutgoingState, ProgramCounter, ValueId, fmt, mem, method, once,
+    LiftedInstruction, LiftedValue, Location, Method, MokaIRBrewingError, MokaIRGenerator, Operand,
+    OutgoingState, ProgramCounter, ValueId, fallibility, method,
 };
 
 impl DataflowProblem for MokaIRGenerator<'_> {
-    type Location = ProgramCounter;
+    type Location = Location;
     type Fact = JvmStackFrame;
     type Err = MokaIRBrewingError;
 
@@ -20,32 +20,57 @@ impl DataflowProblem for MokaIRGenerator<'_> {
         fact: &Self::Fact,
     ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
         let location = *location;
-        let mut frame = fact.same_frame();
-        let jvm_instruction = self
-            .body
-            .instruction_at(location)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-        let ir_instruction = self.lift_instruction(jvm_instruction, location, &mut frame)?;
-        let edges_and_frames =
-            self.analyze_frame_and_conditions(location, frame, &ir_instruction, &|id| {
-                Operand::just(Identifier::CaughtException(id))
-            })?;
-        self.lifted.insert(location, ir_instruction);
+        let (instruction, outgoing) = match location {
+            Location::Handler {
+                handler_pc,
+                context,
+            } => {
+                let target = self.legacy.bytecode(handler_pc, context)?;
+                (
+                    LiftedInstruction::HandlerEntry,
+                    vec![(
+                        target,
+                        LiftedControlTransfer::Unconditional,
+                        fact.same_frame(),
+                    )],
+                )
+            }
+            Location::Unwind => (LiftedInstruction::Unwind, Vec::new()),
+            Location::Bytecode { pc, .. } => {
+                let pre_frame = fact.same_frame();
+                let mut normal_frame = fact.same_frame();
+                let jvm_instruction = self
+                    .body
+                    .instruction_at(pc)
+                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?
+                    .clone();
+                let instruction =
+                    self.lift_instruction(&jvm_instruction, location, &mut normal_frame)?;
+                let outgoing = self.analyze_frame_and_conditions(
+                    location,
+                    &pre_frame,
+                    normal_frame,
+                    &instruction,
+                    fallibility::is_synchronously_fallible(&jvm_instruction),
+                    &|id| Operand::just(Identifier::CaughtException(id)),
+                )?;
+                (instruction, outgoing)
+            }
+        };
+
+        self.lifted.insert(location, instruction);
         self.outgoing.insert(
             location,
-            edges_and_frames
+            outgoing
                 .iter()
                 .map(|(target, transfer, _)| (*target, transfer.clone()))
                 .collect(),
         );
         self.outgoing_frames.insert(
             location,
-            edges_and_frames
-                .iter()
-                .map(|(_, _, frame)| frame.clone())
-                .collect(),
+            outgoing.iter().map(|(_, _, frame)| frame.clone()).collect(),
         );
-        Ok(edges_and_frames
+        Ok(outgoing
             .into_iter()
             .map(|(target, _, frame)| (target, frame))
             .collect::<Vec<_>>())
@@ -69,49 +94,54 @@ impl<'method> MokaIRGenerator<'method> {
             body.max_locals,
             body.max_stack,
         )?;
-
-        let value_ids = body
-            .instructions
-            .iter()
-            .enumerate()
-            .map(|(index, (pc, _))| {
-                u32::try_from(index)
-                    .map(|index| (*pc, ValueId::new(index)))
-                    .map_err(|_| MokaIRBrewingError::MalformedControlFlow)
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let first_caught_id =
-            u32::try_from(value_ids.len()).map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
-        let mut caught_exception_ids = BTreeMap::new();
-        for handler_pc in body.exception_table.iter().map(|entry| entry.handler_pc) {
-            if !caught_exception_ids.contains_key(&handler_pc) {
-                let offset = u32::try_from(caught_exception_ids.len())
-                    .map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
-                let id = first_caught_id
-                    .checked_add(offset)
-                    .map(ValueId::new)
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                caught_exception_ids.insert(handler_pc, id);
-            }
-        }
+        let entry = Location::entry(first_pc);
 
         Ok(Self {
-            lifted: BTreeMap::new(),
-            outgoing: BTreeMap::new(),
-            outgoing_frames: BTreeMap::new(),
-            value_ids,
-            caught_exception_ids,
+            lifted: BTreeMap::default(),
+            outgoing: BTreeMap::default(),
+            outgoing_frames: BTreeMap::default(),
+            value_ids: BTreeMap::default(),
+            caught_exception_ids: BTreeMap::default(),
             method,
             body,
-            initial_seed: Some((first_pc, initial_frame)),
+            legacy: super::LegacyNormalizer::new(first_pc),
+            discovering: true,
+            next_lifted_value: 0,
+            initial_seed: Some((entry, initial_frame)),
         })
     }
 
-    pub(super) fn value_at(&self, pc: ProgramCounter) -> Result<ValueId, MokaIRBrewingError> {
-        self.value_ids
-            .get(&pc)
-            .copied()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)
+    pub(super) fn value_at(&mut self, location: Location) -> Result<ValueId, MokaIRBrewingError> {
+        if let Some(value) = self.value_ids.get(&location) {
+            return Ok(*value);
+        }
+        if !self.discovering || !matches!(location, Location::Bytecode { .. }) {
+            return Err(MokaIRBrewingError::MalformedControlFlow);
+        }
+        let value = self.next_temporary_value()?;
+        self.value_ids.insert(location, value);
+        Ok(value)
+    }
+
+    fn caught_exception_at(&mut self, location: Location) -> Result<ValueId, MokaIRBrewingError> {
+        if let Some(value) = self.caught_exception_ids.get(&location) {
+            return Ok(*value);
+        }
+        if !self.discovering || !matches!(location, Location::Handler { .. }) {
+            return Err(MokaIRBrewingError::MalformedControlFlow);
+        }
+        let value = self.next_temporary_value()?;
+        self.caught_exception_ids.insert(location, value);
+        Ok(value)
+    }
+
+    fn next_temporary_value(&mut self) -> Result<ValueId, MokaIRBrewingError> {
+        let value = ValueId::new(self.next_lifted_value);
+        self.next_lifted_value = self
+            .next_lifted_value
+            .checked_add(1)
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        Ok(value)
     }
 
     pub(super) fn next_pc_of(
@@ -124,72 +154,130 @@ impl<'method> MokaIRGenerator<'method> {
             .ok_or(MokaIRBrewingError::MalformedControlFlow)
     }
 
-    fn exception_edges<OP: Clone + Eq + std::hash::Hash>(
-        &self,
-        pc: ProgramCounter,
-        frame: &JvmStackFrame<OP>,
+    fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBrewingError> {
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        let context = location
+            .context()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        self.legacy.bytecode(self.next_pc_of(pc)?, context)
+    }
+
+    fn target_location(
+        &mut self,
+        location: Location,
+        target: ProgramCounter,
+    ) -> Result<Location, MokaIRBrewingError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        self.legacy.bytecode(target, context)
+    }
+
+    fn exception_edges<OP: FrameOperand>(
+        &mut self,
+        location: Location,
+        pre_frame: &JvmStackFrame<OP>,
         caught_value: &impl Fn(ValueId) -> OP,
     ) -> Result<Vec<OutgoingState<OP>>, MokaIRBrewingError> {
-        self.body
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        let context = location
+            .context()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        let entries = self
+            .body
             .exception_table
             .iter()
             .filter(|entry| entry.covers(pc))
-            .map(|entry| {
-                let caught_type = entry
-                    .catch_type
-                    .clone()
-                    .unwrap_or_else(|| "java/lang/Throwable".parse().expect("valid class name"));
-                let caught_id = self
-                    .caught_exception_ids
-                    .get(&entry.handler_pc)
-                    .copied()
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                let caught = caught_value(caught_id);
-                let handler_frame = frame.same_locals_1_stack_item_frame(Entry::Value(caught));
-                Ok((
-                    entry.handler_pc,
-                    LiftedControlTransfer::Exception(BTreeSet::from([caught_type])),
-                    handler_frame,
-                ))
-            })
-            .collect()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut outgoing = Vec::with_capacity(entries.len() + 1);
+        let mut exhaustive = false;
+        for entry in entries {
+            let handler = self.legacy.handler(entry.handler_pc, context)?;
+            let caught = caught_value(self.caught_exception_at(handler)?);
+            outgoing.push((
+                handler,
+                LiftedControlTransfer::Exception(entry.catch_type.clone()),
+                pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
+            ));
+            exhaustive = entry
+                .catch_type
+                .as_ref()
+                .is_none_or(|caught_type| caught_type.0.as_ref() == "java/lang/Throwable");
+            if exhaustive {
+                break;
+            }
+        }
+        if !exhaustive {
+            let unwind = self.legacy.register(Location::Unwind)?;
+            outgoing.push((
+                unwind,
+                LiftedControlTransfer::Unwind,
+                pre_frame.same_locals_empty_stack_frame(),
+            ));
+        }
+        Ok(outgoing)
     }
 
-    pub(super) fn analyze_frame_and_conditions<OP>(
-        &self,
-        location: ProgramCounter,
-        mut frame: JvmStackFrame<OP>,
+    #[expect(
+        clippy::too_many_lines,
+        reason = "all control-flow forms are classified together"
+    )]
+    pub(super) fn analyze_frame_and_conditions<OP: FrameOperand>(
+        &mut self,
+        location: Location,
+        pre_frame: &JvmStackFrame<OP>,
+        normal_frame: JvmStackFrame<OP>,
         instruction: &LiftedInstruction<OP>,
+        fallible: bool,
         caught_value: &impl Fn(ValueId) -> OP,
-    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBrewingError>
-    where
-        OP: Clone + Eq + std::hash::Hash + fmt::Display,
-    {
-        use LiftedControlTransfer::{Conditional, SubroutineReturn, Unconditional};
+    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBrewingError> {
+        use LiftedControlTransfer::{Conditional, Normal, Unconditional};
 
         Ok(match instruction {
-            LiftedInstruction::Nop => vec![(self.next_pc_of(location)?, Unconditional, frame)],
-            LiftedInstruction::Return(_) => Vec::new(),
-            LiftedInstruction::Throw(_) => self.exception_edges(location, &frame, caught_value)?,
-            LiftedInstruction::Subroutine {
-                target,
-                return_address,
-                ..
-            } => {
-                frame.possible_ret_addresses.insert(*return_address);
-                vec![(*target, Unconditional, frame)]
+            LiftedInstruction::HandlerEntry => {
+                let Location::Handler {
+                    handler_pc,
+                    context,
+                } = location
+                else {
+                    return Err(MokaIRBrewingError::MalformedControlFlow);
+                };
+                vec![(
+                    self.legacy.bytecode(handler_pc, context)?,
+                    Unconditional,
+                    normal_frame,
+                )]
             }
-            LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) => once((
-                self.next_pc_of(location)?,
-                Unconditional,
-                frame.same_frame(),
-            ))
-            .chain(self.exception_edges(location, &frame, caught_value)?)
-            .collect(),
+            LiftedInstruction::Unwind | LiftedInstruction::Return(_) => Vec::new(),
+            LiftedInstruction::Throw(_) => {
+                self.exception_edges(location, pre_frame, caught_value)?
+            }
+            LiftedInstruction::Subroutine { target, .. } => {
+                vec![(*target, Unconditional, normal_frame)]
+            }
+            LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) if fallible => {
+                let mut outgoing = vec![(self.next_location(location)?, Normal, normal_frame)];
+                outgoing.extend(self.exception_edges(location, pre_frame, caught_value)?);
+                outgoing
+            }
+            LiftedInstruction::Nop
+            | LiftedInstruction::Definition { .. }
+            | LiftedInstruction::Effect(_) => {
+                vec![(self.next_location(location)?, Unconditional, normal_frame)]
+            }
             LiftedInstruction::Jump {
                 condition: None,
                 target,
-            } => vec![(*target, Unconditional, frame.same_frame())],
+            } => vec![(
+                self.target_location(location, *target)?,
+                Unconditional,
+                normal_frame,
+            )],
             LiftedInstruction::Jump {
                 condition: Some(condition),
                 target,
@@ -197,14 +285,14 @@ impl<'method> MokaIRGenerator<'method> {
                 let condition: BooleanVariable<_> = condition.clone().into();
                 vec![
                     (
-                        *target,
+                        self.target_location(location, *target)?,
                         Conditional(BranchGuard::of(condition.clone())),
-                        frame.same_frame(),
+                        normal_frame.same_frame(),
                     ),
                     (
-                        self.next_pc_of(location)?,
+                        self.next_location(location)?,
                         Conditional(BranchGuard::of(!condition)),
-                        frame.same_frame(),
+                        normal_frame,
                     ),
                 ]
             }
@@ -213,20 +301,20 @@ impl<'method> MokaIRGenerator<'method> {
                 branches,
                 match_value,
             } => {
-                let branch_edges = branches.iter().map(|(&case, &target)| {
-                    let value: LiftedValue<OP> =
-                        LiftedValue::Constant(ConstantValue::Integer(case));
+                let mut outgoing = Vec::with_capacity(branches.len() + 1);
+                for (&case, &target) in branches {
+                    let value = LiftedValue::Constant(ConstantValue::Integer(case));
                     let condition = BooleanVariable::Positive(LiftedCondition::Equal(
                         match_value.clone().into(),
                         value,
                     ));
-                    (
-                        target,
+                    outgoing.push((
+                        self.target_location(location, target)?,
                         Conditional(BranchGuard::of(condition)),
-                        frame.same_frame(),
-                    )
-                });
-                let default_guard: BranchGuard<LiftedCondition<LiftedValue<OP>>> = branches
+                        normal_frame.same_frame(),
+                    ));
+                }
+                let default_guard = branches
                     .keys()
                     .map(|case| {
                         BooleanVariable::Negative(LiftedCondition::Equal(
@@ -235,18 +323,23 @@ impl<'method> MokaIRGenerator<'method> {
                         ))
                     })
                     .collect();
-                branch_edges
-                    .chain(once((
-                        *default,
-                        Conditional(default_guard),
-                        frame.same_frame(),
-                    )))
-                    .collect()
+                outgoing.push((
+                    self.target_location(location, *default)?,
+                    Conditional(default_guard),
+                    normal_frame,
+                ));
+                outgoing
             }
-            LiftedInstruction::SubroutineReturn(_) => mem::take(&mut frame.possible_ret_addresses)
-                .into_iter()
-                .map(|target| (target, SubroutineReturn, frame.same_frame()))
-                .collect(),
+            LiftedInstruction::SubroutineReturn(value) => {
+                let address = value
+                    .return_address()
+                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                vec![(
+                    self.legacy.return_from(location, address)?,
+                    Unconditional,
+                    normal_frame,
+                )]
+            }
         })
     }
 
@@ -257,22 +350,21 @@ impl<'method> MokaIRGenerator<'method> {
         let reachable = self.lifted.keys().copied().collect::<Vec<_>>();
         self.value_ids = reachable
             .iter()
+            .filter(|location| matches!(location, Location::Bytecode { .. }))
             .enumerate()
-            .map(|(index, pc)| {
+            .map(|(index, &location)| {
                 u32::try_from(index)
-                    .map(|index| (*pc, ValueId::new(index)))
+                    .map(|index| (location, ValueId::new(index)))
                     .map_err(|_| MokaIRBrewingError::MalformedControlFlow)
             })
             .collect::<Result<_, _>>()?;
         let first_caught_id = u32::try_from(self.value_ids.len())
             .map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
-        self.caught_exception_ids = self
-            .caught_exception_ids
-            .keys()
-            .filter(|handler| self.lifted.contains_key(handler))
-            .copied()
+        self.caught_exception_ids = reachable
+            .iter()
+            .filter(|location| matches!(location, Location::Handler { .. }))
             .enumerate()
-            .map(|(offset, handler)| {
+            .map(|(offset, &handler)| {
                 let offset =
                     u32::try_from(offset).map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
                 first_caught_id
@@ -281,6 +373,13 @@ impl<'method> MokaIRGenerator<'method> {
                     .ok_or(MokaIRBrewingError::MalformedControlFlow)
             })
             .collect::<Result<_, _>>()?;
+        self.next_lifted_value = first_caught_id
+            .checked_add(
+                u32::try_from(self.caught_exception_ids.len())
+                    .map_err(|_| MokaIRBrewingError::MalformedControlFlow)?,
+            )
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        self.discovering = false;
         self.lifted.clear();
         self.outgoing.clear();
         self.outgoing_frames.clear();

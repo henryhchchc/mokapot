@@ -10,9 +10,9 @@ use crate::ir::{
     },
 };
 
-pub(super) fn remap_expression(
-    expression: LiftedExpression<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+pub(super) fn remap_expression<OP: std::fmt::Display>(
+    expression: LiftedExpression<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<Expression, MokaIRBrewingError> {
     Ok(match expression {
         LiftedExpression::Const(value) => Expression::Const(value),
@@ -39,16 +39,15 @@ pub(super) fn remap_expression(
             Expression::Conversion(remap_conversion(operation, remap)?)
         }
         LiftedExpression::Synchronization(operation) => {
-            Expression::Synchronization(remap_lock(&operation, remap)?)
+            Expression::Synchronization(remap_lock(operation, remap)?)
         }
         LiftedExpression::New(class) => Expression::New(class),
-        LiftedExpression::SubroutineReturnAddress => Expression::SubroutineReturnAddress,
     })
 }
 
-fn remap_math(
-    operation: LiftedMathOperation<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_math<OP: std::fmt::Display>(
+    operation: LiftedMathOperation<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<MathOperation, MokaIRBrewingError> {
     Ok(match operation {
         LiftedMathOperation::Add(a, b) => MathOperation::Add(remap(a)?, remap(b)?),
@@ -77,9 +76,9 @@ fn remap_math(
     })
 }
 
-fn remap_array(
-    operation: LiftedArrayOperation<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_array<OP: std::fmt::Display>(
+    operation: LiftedArrayOperation<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<ArrayOperation, MokaIRBrewingError> {
     Ok(match operation {
         LiftedArrayOperation::New {
@@ -118,9 +117,9 @@ fn remap_array(
     })
 }
 
-fn remap_field(
-    access: LiftedFieldAccess<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_field<OP: std::fmt::Display>(
+    access: LiftedFieldAccess<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<FieldAccess, MokaIRBrewingError> {
     Ok(match access {
         LiftedFieldAccess::ReadStatic { field } => FieldAccess::ReadStatic { field },
@@ -144,9 +143,9 @@ fn remap_field(
     })
 }
 
-fn remap_conversion(
-    operation: LiftedConversion<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_conversion<OP: std::fmt::Display>(
+    operation: LiftedConversion<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<Conversion, MokaIRBrewingError> {
     Ok(match operation {
         LiftedConversion::Int2Long(value) => Conversion::Int2Long(remap(value)?),
@@ -171,24 +170,25 @@ fn remap_conversion(
     })
 }
 
-fn remap_lock(
-    operation: &LiftedLockOperation<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_lock<OP: std::fmt::Display>(
+    operation: LiftedLockOperation<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<LockOperation, MokaIRBrewingError> {
     Ok(match operation {
-        LiftedLockOperation::Acquire(value) => LockOperation::Acquire(remap(*value)?),
-        LiftedLockOperation::Release(value) => LockOperation::Release(remap(*value)?),
+        LiftedLockOperation::Acquire(value) => LockOperation::Acquire(remap(value)?),
+        LiftedLockOperation::Release(value) => LockOperation::Release(remap(value)?),
     })
 }
 
-pub(super) fn remap_transfer(
-    transfer: LiftedControlTransfer<ValueId>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+pub(super) fn remap_transfer<OP: Eq + std::hash::Hash + std::fmt::Display>(
+    transfer: LiftedControlTransfer<OP>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<ControlTransfer, MokaIRBrewingError> {
     Ok(match transfer {
         LiftedControlTransfer::Unconditional => ControlTransfer::Unconditional,
+        LiftedControlTransfer::Normal => ControlTransfer::Normal,
         LiftedControlTransfer::Exception(types) => ControlTransfer::Exception(types),
-        LiftedControlTransfer::SubroutineReturn => ControlTransfer::SubroutineReturn,
+        LiftedControlTransfer::Unwind => ControlTransfer::Unwind,
         LiftedControlTransfer::Conditional(guard) => ControlTransfer::Conditional(
             guard
                 .into_iter()
@@ -198,9 +198,9 @@ pub(super) fn remap_transfer(
     })
 }
 
-fn remap_literal(
-    literal: BooleanVariable<LiftedCondition<LiftedValue<ValueId>>>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_literal<OP: std::fmt::Display>(
+    literal: BooleanVariable<LiftedCondition<LiftedValue<OP>>>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<BooleanVariable<Predicate>, MokaIRBrewingError> {
     Ok(match literal {
         BooleanVariable::Positive(condition) => {
@@ -212,9 +212,9 @@ fn remap_literal(
     })
 }
 
-fn remap_guard_condition(
-    condition: LiftedCondition<LiftedValue<ValueId>>,
-    remap: &impl Fn(ValueId) -> Result<ValueId, MokaIRBrewingError>,
+fn remap_guard_condition<OP: std::fmt::Display>(
+    condition: LiftedCondition<LiftedValue<OP>>,
+    remap: &impl Fn(OP) -> Result<ValueId, MokaIRBrewingError>,
 ) -> Result<Predicate, MokaIRBrewingError> {
     let value = |value| match value {
         LiftedValue::Variable(value) => remap(value).map(Value::Variable),

@@ -139,7 +139,7 @@ impl MokaIRMethod {
         &self.parameter_values
     }
 
-    /// Returns the caught-exception value available at a handler block.
+    /// Returns the caught-exception value introduced by a synthetic handler-entry block.
     #[must_use]
     pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
         self.caught_exceptions.get(&block).copied()

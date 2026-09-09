@@ -1,7 +1,7 @@
 use super::{
-    BTreeMap, BasicBlock, BlockId, ControlTransfer, EdgeId, Expression, GeneratedMethod,
-    InstructionId, InstructionKind, LiftedInstruction, MokaIRBrewingError, MokaIRGenerator,
-    MokaInstruction, Phi, PhiInput, ScalarBlock, SourceMap, Successor, Terminator, TerminatorKind,
+    BTreeMap, BasicBlock, BlockId, ControlTransfer, EdgeId, GeneratedMethod, InstructionId,
+    InstructionKind, LiftedInstruction, MokaIRBrewingError, MokaIRGenerator, MokaInstruction, Phi,
+    PhiInput, ScalarBlock, ScalarValue, SourceMap, Successor, Terminator, TerminatorKind,
     ValueDefinition, ValueId, remap_expression, remap_transfer, ssa,
 };
 
@@ -94,21 +94,17 @@ impl MokaIRGenerator<'_> {
                 )?;
             }
 
-            for (pc, instruction) in &block.instructions {
+            for (location, instruction) in &block.instructions {
                 let retained = matches!(
                     instruction,
-                    LiftedInstruction::Definition { .. }
-                        | LiftedInstruction::Effect(_)
-                        | LiftedInstruction::Subroutine { .. }
+                    LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_)
                 );
                 if !retained {
                     continue;
                 }
                 let id = allocate_instruction_id(&mut next_instruction)?;
-                instruction_ids.insert(*pc, id);
-                if let LiftedInstruction::Definition { value, .. }
-                | LiftedInstruction::Subroutine { value, .. } = instruction
-                {
+                instruction_ids.insert(*location, id);
+                if let LiftedInstruction::Definition { value, .. } = instruction {
                     allocate_final_value(
                         *value,
                         ValueDefinition::Instruction(id),
@@ -125,6 +121,10 @@ impl MokaIRGenerator<'_> {
         }
 
         let remap = |value| resolve_final_value(value, &simplified.substitutions, &temp_values);
+        let remap_operand = |value| match value {
+            ScalarValue::Value(value) => remap(value),
+            ScalarValue::ReturnAddress(_) => Err(MokaIRBrewingError::MalformedControlFlow),
+        };
         let mut source_map = SourceMap::default();
         let mut blocks =
             Vec::with_capacity(scalar_blocks.len() + usize::from(needs_entry_preheader));
@@ -168,24 +168,21 @@ impl MokaIRGenerator<'_> {
             }
 
             let mut instructions = Vec::new();
-            for (pc, lifted) in &block.instructions {
+            for (location, lifted) in &block.instructions {
                 let kind = match lifted.clone() {
                     LiftedInstruction::Definition { value, expr } => {
                         Some(InstructionKind::Definition {
                             value: remap(value)?,
-                            expr: remap_expression(expr, &remap)?,
+                            expr: remap_expression(expr, &remap_operand)?,
                         })
                     }
                     LiftedInstruction::Effect(expr) => Some(InstructionKind::Effect {
-                        expr: remap_expression(expr, &remap)?,
+                        expr: remap_expression(expr, &remap_operand)?,
                     }),
-                    LiftedInstruction::Subroutine { value, .. } => {
-                        Some(InstructionKind::Definition {
-                            value: remap(value)?,
-                            expr: Expression::SubroutineReturnAddress,
-                        })
-                    }
-                    LiftedInstruction::Nop
+                    LiftedInstruction::HandlerEntry
+                    | LiftedInstruction::Unwind
+                    | LiftedInstruction::Nop
+                    | LiftedInstruction::Subroutine { .. }
                     | LiftedInstruction::Jump { .. }
                     | LiftedInstruction::Switch { .. }
                     | LiftedInstruction::Return(_)
@@ -194,9 +191,12 @@ impl MokaIRGenerator<'_> {
                 };
                 if let Some(kind) = kind {
                     let id = *instruction_ids
-                        .get(pc)
+                        .get(location)
                         .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                    source_map.insert(*pc, id);
+                    let pc = location
+                        .source_pc()
+                        .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                    source_map.insert(pc, id);
                     instructions.push(MokaInstruction::new(id, kind));
                 }
             }
@@ -208,38 +208,39 @@ impl MokaIRGenerator<'_> {
                     Ok(Successor::new(
                         allocate_edge_id(&mut next_edge)?,
                         arm.target,
-                        remap_transfer(arm.transfer, &remap)?,
+                        remap_transfer(arm.transfer, &remap_operand)?,
                     ))
                 })
                 .collect::<Result<Vec<_>, MokaIRBrewingError>>()?;
-            let (last_pc, last) = block
+            let (last_location, last) = block
                 .instructions
                 .last()
                 .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            let source_backed = last.is_explicit_transfer();
+            let source_backed = last.is_explicit_transfer() && last_location.source_pc().is_some();
             let kind = match last {
+                LiftedInstruction::Unwind => TerminatorKind::Unwind,
                 LiftedInstruction::Jump {
                     condition: Some(_), ..
                 } => TerminatorKind::Branch,
-                LiftedInstruction::Jump {
+                LiftedInstruction::HandlerEntry
+                | LiftedInstruction::Jump {
                     condition: None, ..
                 }
                 | LiftedInstruction::Subroutine { .. }
+                | LiftedInstruction::SubroutineReturn(_)
                 | LiftedInstruction::Nop => TerminatorKind::Goto,
                 LiftedInstruction::Switch { match_value, .. } => TerminatorKind::Switch {
-                    match_value: remap(*match_value)?,
+                    match_value: remap_operand(*match_value)?,
                 },
                 LiftedInstruction::Return(value) => {
-                    TerminatorKind::Return(value.map(remap).transpose()?)
+                    TerminatorKind::Return(value.map(remap_operand).transpose()?)
                 }
-                LiftedInstruction::Throw(value) => TerminatorKind::Throw(remap(*value)?),
-                LiftedInstruction::SubroutineReturn(value) => {
-                    TerminatorKind::SubroutineReturn(remap(*value)?)
-                }
+                LiftedInstruction::Throw(value) => TerminatorKind::Throw(remap_operand(*value)?),
                 LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) => {
-                    if successors.iter().any(|successor| {
-                        matches!(successor.transfer(), ControlTransfer::Exception(_))
-                    }) {
+                    if successors
+                        .iter()
+                        .any(|successor| matches!(successor.transfer(), ControlTransfer::Normal))
+                    {
                         TerminatorKind::Fallible
                     } else {
                         TerminatorKind::Goto
@@ -250,7 +251,12 @@ impl MokaIRGenerator<'_> {
                 .get(&block.plan.id)
                 .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
             if source_backed {
-                source_map.insert(*last_pc, terminator_id);
+                source_map.insert(
+                    last_location
+                        .source_pc()
+                        .ok_or(MokaIRBrewingError::MalformedControlFlow)?,
+                    terminator_id,
+                );
             }
             let terminator = Terminator::new(terminator_id, kind, successors);
             blocks.push(BasicBlock::new(

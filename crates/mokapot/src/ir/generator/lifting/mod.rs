@@ -9,7 +9,7 @@ use locals::{load_local, store_local};
 use operations::{binary_op_math, conversion_op};
 
 use super::{
-    LiftedInstruction as IR, MokaIRBrewingError, MokaIRGenerator,
+    LiftedInstruction as IR, Location, MokaIRBrewingError, MokaIRGenerator,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 use crate::{
@@ -38,16 +38,19 @@ impl MokaIRGenerator<'_> {
     pub(super) fn lift_instruction<OP>(
         &mut self,
         jvm_instruction: &Instruction,
-        pc: ProgramCounter,
+        location: Location,
         frame: &mut JvmStackFrame<OP>,
     ) -> Result<IR<OP>, MokaIRBrewingError>
     where
-        OP: Clone + From<ValueId> + std::fmt::Display,
+        OP: super::FrameOperand,
     {
         #[allow(clippy::enum_glob_use)]
         use Instruction::*;
 
-        let def = self.value_at(pc)?;
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        let def = self.value_at(location)?;
         let ir_instruction = match jvm_instruction {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
@@ -353,12 +356,9 @@ impl MokaIRGenerator<'_> {
             },
             Jsr(target) | JsrW(target) => {
                 let next_pc = self.next_pc_of(pc)?;
-                frame.push_value::<SINGLE_SLOT>(def.into())?;
-                IR::Subroutine {
-                    value: def,
-                    return_address: next_pc,
-                    target: *target,
-                }
+                let (target, return_address) = self.legacy.enter(location, *target, next_pc)?;
+                frame.push_value::<SINGLE_SLOT>(return_address.into())?;
+                IR::Subroutine { target }
             }
             Ret(idx) => {
                 let idx = (*idx).into();
