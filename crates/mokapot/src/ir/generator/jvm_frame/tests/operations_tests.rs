@@ -1,7 +1,7 @@
 use crate::ir::{
-    Identifier, Operand, ValueId,
+    ValueId,
     generator::{
-        ExecutionError,
+        ExecutionError, Identifier, Operand,
         jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
     },
 };

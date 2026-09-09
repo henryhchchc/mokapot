@@ -4,13 +4,14 @@ use itertools::Itertools;
 
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    ir::{Identifier, Operand},
     jvm::code::ProgramCounter,
     types::{
         field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
     },
 };
+
+use super::super::{Identifier, Operand};
 
 pub(crate) type SlotWidth = bool;
 pub(crate) const SINGLE_SLOT: SlotWidth = false;
@@ -19,14 +20,14 @@ pub(crate) const DUAL_SLOT: SlotWidth = true;
 use super::{entry::Entry, error::ExecutionError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct JvmStackFrame {
+pub struct JvmStackFrame<V = Operand> {
     max_stack: u16,
-    local_variables: Box<[Entry]>,
-    operand_stack: Vec<Entry>,
+    local_variables: Box<[Entry<V>]>,
+    operand_stack: Vec<Entry<V>>,
     pub possible_ret_addresses: BTreeSet<ProgramCounter>,
 }
 
-impl PartialOrd for JvmStackFrame {
+impl<V: Clone + PartialOrd> PartialOrd for JvmStackFrame<V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use std::cmp::Ordering::Equal;
         if self.max_stack != other.max_stack {
@@ -45,7 +46,7 @@ impl PartialOrd for JvmStackFrame {
     }
 }
 
-impl JoinSemiLattice for JvmStackFrame {
+impl<V: Clone + JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
     /// Joins two stack frames by merging their local variables and operand stacks.
     ///
     /// # Panics
@@ -80,14 +81,41 @@ impl JoinSemiLattice for JvmStackFrame {
     }
 }
 
-impl JvmStackFrame {
+impl JvmStackFrame<Operand> {
     pub(crate) fn new(
         is_static: bool,
         desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, ExecutionError> {
-        let local_variables = create_local_variable_entries(is_static, desc, max_locals)?;
+        let this_value = (!is_static).then(|| Operand::just(Identifier::This));
+        let parameters = desc
+            .parameters_types
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                Operand::just(Identifier::Arg(
+                    u16::try_from(index).expect("descriptor parameter count fits u16"),
+                ))
+            })
+            .collect::<Vec<_>>();
+        Self::with_inputs(desc, max_locals, max_stack, this_value, &parameters)
+    }
+}
+
+impl<V: Clone> JvmStackFrame<V> {
+    pub(crate) fn with_inputs(
+        desc: &MethodDescriptor,
+        max_locals: u16,
+        max_stack: u16,
+        this_value: Option<V>,
+        parameters: &[V],
+    ) -> Result<Self, ExecutionError> {
+        if parameters.len() != desc.parameters_types.len() {
+            return Err(ExecutionError::ValueMismatch);
+        }
+        let local_variables =
+            create_local_variable_entries(desc, max_locals, this_value, parameters)?;
         Ok(Self {
             max_stack,
             local_variables,
@@ -96,13 +124,13 @@ impl JvmStackFrame {
         })
     }
 
-    pub(crate) fn pop_raw(&mut self) -> Result<Entry, ExecutionError> {
+    pub(crate) fn pop_raw(&mut self) -> Result<Entry<V>, ExecutionError> {
         self.operand_stack
             .pop()
             .ok_or(ExecutionError::StackUnderflow)
     }
 
-    pub(crate) fn push_raw(&mut self, value: Entry) -> Result<(), ExecutionError> {
+    pub(crate) fn push_raw(&mut self, value: Entry<V>) -> Result<(), ExecutionError> {
         let stack_size =
             u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16");
         if stack_size >= self.max_stack {
@@ -113,7 +141,7 @@ impl JvmStackFrame {
         }
     }
 
-    pub(crate) fn pop_value<const SLOT: SlotWidth>(&mut self) -> Result<Operand, ExecutionError> {
+    pub(crate) fn pop_value<const SLOT: SlotWidth>(&mut self) -> Result<V, ExecutionError> {
         let value = match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
@@ -135,7 +163,7 @@ impl JvmStackFrame {
 
     pub(crate) fn push_value<const SLOT: SlotWidth>(
         &mut self,
-        value: Operand,
+        value: V,
     ) -> Result<(), ExecutionError> {
         if SLOT == DUAL_SLOT {
             self.push_raw(Entry::Top)?;
@@ -146,7 +174,7 @@ impl JvmStackFrame {
     pub(crate) fn pop_args(
         &mut self,
         descriptor: &MethodDescriptor,
-    ) -> Result<Vec<Operand>, ExecutionError> {
+    ) -> Result<Vec<V>, ExecutionError> {
         let mut args: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -160,7 +188,7 @@ impl JvmStackFrame {
     pub(crate) fn typed_push(
         &mut self,
         value_type: &FieldType,
-        value: Operand,
+        value: V,
     ) -> Result<(), ExecutionError> {
         if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
             self.push_value::<DUAL_SLOT>(value)
@@ -169,7 +197,7 @@ impl JvmStackFrame {
         }
     }
 
-    pub(crate) fn typed_pop(&mut self, value_type: &FieldType) -> Result<Operand, ExecutionError> {
+    pub(crate) fn typed_pop(&mut self, value_type: &FieldType) -> Result<V, ExecutionError> {
         if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
             self.pop_value::<DUAL_SLOT>()
         } else {
@@ -177,10 +205,7 @@ impl JvmStackFrame {
         }
     }
 
-    pub(crate) fn get_local<const SLOT: SlotWidth>(
-        &self,
-        idx: u16,
-    ) -> Result<Operand, ExecutionError> {
+    pub(crate) fn get_local<const SLOT: SlotWidth>(&self, idx: u16) -> Result<V, ExecutionError> {
         let idx = usize::from(idx);
         let lower_slot = self
             .local_variables
@@ -209,7 +234,7 @@ impl JvmStackFrame {
     pub(crate) fn set_local<const SLOT: SlotWidth>(
         &mut self,
         idx: u16,
-        value: Operand,
+        value: V,
     ) -> Result<(), ExecutionError> {
         let idx = usize::from(idx);
         let lower_slot = self
@@ -233,7 +258,7 @@ impl JvmStackFrame {
         self.clone()
     }
 
-    pub(crate) fn same_locals_1_stack_item_frame(&self, stack_value: Entry) -> Self {
+    pub(crate) fn same_locals_1_stack_item_frame(&self, stack_value: Entry<V>) -> Self {
         let mut operand_stack = Vec::with_capacity(self.max_stack.into());
 
         operand_stack.push(stack_value);
@@ -244,13 +269,71 @@ impl JvmStackFrame {
             possible_ret_addresses: self.possible_ret_addresses.clone(),
         }
     }
+
+    pub(crate) fn try_map_values<U: Clone, E>(
+        &self,
+        mut map: impl FnMut(&V) -> Result<U, E>,
+    ) -> Result<JvmStackFrame<U>, E> {
+        fn map_entry<V, U, E>(
+            entry: &Entry<V>,
+            map: &mut dyn FnMut(&V) -> Result<U, E>,
+        ) -> Result<Entry<U>, E> {
+            Ok(match entry {
+                Entry::Value(value) => Entry::Value(map(value)?),
+                Entry::Top => Entry::Top,
+                Entry::UninitializedLocal => Entry::UninitializedLocal,
+                Entry::OutOfScope => Entry::OutOfScope,
+            })
+        }
+
+        Ok(JvmStackFrame {
+            max_stack: self.max_stack,
+            local_variables: self
+                .local_variables
+                .iter()
+                .map(|entry| map_entry(entry, &mut map))
+                .collect::<Result<_, _>>()?,
+            operand_stack: self
+                .operand_stack
+                .iter()
+                .map(|entry| map_entry(entry, &mut map))
+                .collect::<Result<_, _>>()?,
+            possible_ret_addresses: self.possible_ret_addresses.clone(),
+        })
+    }
+
+    pub(crate) fn local_variables(&self) -> &[Entry<V>] {
+        &self.local_variables
+    }
+
+    pub(crate) fn operand_stack(&self) -> &[Entry<V>] {
+        &self.operand_stack
+    }
+
+    pub(crate) fn invalidate_values_at(
+        &mut self,
+        local_indices: impl IntoIterator<Item = usize>,
+        stack_indices: impl IntoIterator<Item = usize>,
+    ) {
+        for index in local_indices {
+            if let Some(entry) = self.local_variables.get_mut(index) {
+                *entry = Entry::UninitializedLocal;
+            }
+        }
+        for index in stack_indices {
+            if let Some(entry) = self.operand_stack.get_mut(index) {
+                *entry = Entry::UninitializedLocal;
+            }
+        }
+    }
 }
 
-fn create_local_variable_entries(
-    is_static: bool,
+fn create_local_variable_entries<V: Clone>(
     desc: &MethodDescriptor,
     max_locals: u16,
-) -> Result<Box<[Entry]>, ExecutionError> {
+    this_value: Option<V>,
+    parameters: &[V],
+) -> Result<Box<[Entry<V>]>, ExecutionError> {
     use PrimitiveType::{Double, Long};
     let locals_for_args = desc
         .parameters_types
@@ -260,28 +343,22 @@ fn create_local_variable_entries(
             _ => 1,
         })
         .sum::<usize>()
-        + usize::from(!is_static);
+        + usize::from(this_value.is_some());
     if usize::from(max_locals) < locals_for_args {
         return Err(ExecutionError::LocalLimitExceed);
     }
-    let this_arg = if is_static {
-        None
-    } else {
-        Some(Entry::Value(Operand::just(Identifier::This)))
-    };
+    let this_arg = this_value.map(Entry::Value);
     let args = desc
         .parameters_types
         .iter()
-        .enumerate()
-        .flat_map(|(arg_idx, local_type)| {
-            let arg_idx = u16::try_from(arg_idx).expect("The number of args should be within u16");
-            let arg_ref = Operand::just(Identifier::Arg(arg_idx));
+        .zip(parameters.iter().cloned())
+        .flat_map(|(local_type, value)| {
             let maybe_top = if let FieldType::Base(Long | Double) = local_type {
                 Some(Entry::Top)
             } else {
                 None
             };
-            once(Entry::Value(arg_ref)).chain(maybe_top)
+            once(Entry::Value(value)).chain(maybe_top)
         });
     let local_variables = this_arg
         .into_iter()
