@@ -34,9 +34,17 @@ pub struct MokaIRMethod {
     entry_block: BlockId,
     blocks: Vec<BasicBlock>,
     source_map: SourceMap,
+    this_value: Option<ValueId>,
+    parameter_values: Vec<ValueId>,
+    caught_exceptions: BTreeMap<BlockId, ValueId>,
+    value_definitions: Vec<ValueDefinition>,
 }
 
 impl MokaIRMethod {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the private constructor assembles independently owned method metadata and IR"
+    )]
     pub(crate) const fn new(
         access_flags: method::AccessFlags,
         name: String,
@@ -45,6 +53,10 @@ impl MokaIRMethod {
         entry_block: BlockId,
         blocks: Vec<BasicBlock>,
         source_map: SourceMap,
+        this_value: Option<ValueId>,
+        parameter_values: Vec<ValueId>,
+        caught_exceptions: BTreeMap<BlockId, ValueId>,
+        value_definitions: Vec<ValueDefinition>,
     ) -> Self {
         Self {
             access_flags,
@@ -54,6 +66,10 @@ impl MokaIRMethod {
             entry_block,
             blocks,
             source_map,
+            this_value,
+            parameter_values,
+            caught_exceptions,
+            value_definitions,
         }
     }
 
@@ -111,6 +127,47 @@ impl MokaIRMethod {
         &self.source_map
     }
 
+    /// Returns the SSA value representing `this`, if this is an instance method.
+    #[must_use]
+    pub const fn this_value(&self) -> Option<ValueId> {
+        self.this_value
+    }
+
+    /// Returns the SSA values representing method parameters in descriptor order.
+    #[must_use]
+    pub fn parameter_values(&self) -> &[ValueId] {
+        &self.parameter_values
+    }
+
+    /// Returns the caught-exception value available at a handler block.
+    #[must_use]
+    pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
+        self.caught_exceptions.get(&block).copied()
+    }
+
+    /// Returns the unique definition of a method-local SSA value.
+    #[must_use]
+    pub fn value_definition(&self, value: ValueId) -> Option<ValueDefinition> {
+        self.value_definitions
+            .get(usize::try_from(value.index()).ok()?)
+            .copied()
+    }
+
+    pub(crate) fn value_definitions(
+        &self,
+    ) -> impl Iterator<Item = (ValueId, ValueDefinition)> + '_ {
+        self.value_definitions
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(id, definition)| {
+                (
+                    ValueId::new(u32::try_from(id).expect("value identity must fit u32")),
+                    definition,
+                )
+            })
+    }
+
     /// Returns a borrowed control-flow view derived from block terminators.
     #[must_use]
     pub fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
@@ -118,25 +175,26 @@ impl MokaIRMethod {
     }
 
     #[cfg(feature = "petgraph")]
-    fn instruction(&self, id: InstructionId) -> Option<&MokaInstruction> {
+    pub(crate) fn uses_at(&self, id: InstructionId) -> Option<std::collections::HashSet<ValueId>> {
         self.blocks
             .iter()
-            .flat_map(BasicBlock::instructions)
-            .find(|instruction| instruction.id() == id)
-    }
-
-    #[cfg(feature = "petgraph")]
-    pub(crate) fn uses_at(
-        &self,
-        id: InstructionId,
-    ) -> Option<std::collections::HashSet<Identifier>> {
-        self.instruction(id).map(MokaInstruction::uses).or_else(|| {
-            self.blocks
-                .iter()
-                .map(BasicBlock::terminator)
-                .find(|terminator| terminator.id() == id)
-                .map(Terminator::uses)
-        })
+            .flat_map(BasicBlock::phis)
+            .find(|phi| phi.id() == id)
+            .map(Phi::uses)
+            .or_else(|| {
+                self.blocks
+                    .iter()
+                    .flat_map(BasicBlock::instructions)
+                    .find(|instruction| instruction.id() == id)
+                    .map(MokaInstruction::uses)
+            })
+            .or_else(|| {
+                self.blocks
+                    .iter()
+                    .map(BasicBlock::terminator)
+                    .find(|terminator| terminator.id() == id)
+                    .map(Terminator::uses)
+            })
     }
 }
 
@@ -184,8 +242,8 @@ pub struct DefUseChain<'a> {
         expect(dead_code)
     )]
     method: &'a MokaIRMethod,
-    defs: HashMap<ValueId, InstructionId>,
-    uses: HashMap<Identifier, BTreeSet<InstructionId>>,
+    defs: HashMap<ValueId, ValueDefinition>,
+    uses: HashMap<ValueId, BTreeSet<InstructionId>>,
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ pub(crate) trait StackOperations {
     fn swap(&mut self) -> Result<(), ExecutionError>;
 }
 
-impl StackOperations for JvmStackFrame {
+impl<V: Clone> StackOperations for JvmStackFrame<V> {
     fn pop(&mut self) -> Result<(), ExecutionError> {
         let _top_element = self.pop_raw()?;
         Ok(())

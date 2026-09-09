@@ -1,10 +1,11 @@
 use mokapot::{
     ir::{
-        DefUseChain, Identifier, InstructionId, InstructionKind, MokaIRMethod, MokaIRMethodExt,
-        TerminatorKind, expression::Expression,
+        DefUseChain, InstructionId, InstructionKind, MokaIRMethod, MokaIRMethodExt, TerminatorKind,
+        ValueDefinition, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
+use std::collections::{BTreeSet, HashSet};
 
 fn get_test_class() -> Class {
     let mut bytes = if cfg!(integration_test) {
@@ -65,12 +66,12 @@ fn brew_ir_blocks_and_provenance() {
         } if value == "233"
     ));
 
-    let nop = ir
-        .source_map()
-        .instructions_at(ProgramCounter::from(0x007B))
-        .find_map(|id| instruction(&ir, id))
-        .unwrap();
-    assert_eq!(nop.kind(), &InstructionKind::Nop);
+    assert_eq!(
+        ir.source_map()
+            .instructions_at(ProgramCounter::from(0x007B))
+            .count(),
+        0
+    );
 
     let returned = ir
         .source_map()
@@ -79,7 +80,7 @@ fn brew_ir_blocks_and_provenance() {
         .unwrap();
     assert!(matches!(
         returned.kind(),
-        TerminatorKind::Return(Some(value)) if value == &Identifier::Arg(1).into()
+        TerminatorKind::Return(Some(value)) if value == &ir.parameter_values()[1]
     ));
 
     for block in ir.blocks() {
@@ -94,9 +95,70 @@ fn du_chain_definitions_use_instruction_identities() {
     let chain = DefUseChain::new(&ir);
     for instruction in ir.blocks().flat_map(|block| block.instructions()) {
         if let Some(value) = instruction.def() {
-            assert_eq!(chain.defined_at(value), Some(instruction.id()));
+            assert_eq!(
+                chain.defined_at(value),
+                Some(ValueDefinition::Instruction(instruction.id()))
+            );
         }
     }
+}
+
+#[test]
+#[cfg_attr(not(integration_test), ignore)]
+fn ssa_identities_and_phi_predecessors_are_well_formed() {
+    let ir = get_test_method().brew().unwrap();
+    let mut instruction_ids = HashSet::new();
+    let mut definitions = HashSet::new();
+    let mut uses = HashSet::new();
+
+    if let Some(value) = ir.this_value() {
+        definitions.insert(value);
+    }
+    definitions.extend(ir.parameter_values());
+    for block in ir.blocks() {
+        if let Some(value) = ir.caught_exception(block.id()) {
+            definitions.insert(value);
+        }
+        let predecessors = ir
+            .blocks()
+            .filter(|candidate| {
+                candidate
+                    .terminator()
+                    .successors()
+                    .iter()
+                    .any(|successor| successor.target() == block.id())
+            })
+            .map(mokapot::ir::BasicBlock::id)
+            .collect::<BTreeSet<_>>();
+        for phi in block.phis() {
+            assert!(instruction_ids.insert(phi.id()));
+            assert!(definitions.insert(phi.value()));
+            assert_eq!(
+                phi.inputs()
+                    .iter()
+                    .map(mokapot::ir::PhiInput::predecessor)
+                    .collect::<BTreeSet<_>>(),
+                predecessors
+            );
+            uses.extend(phi.inputs().iter().map(mokapot::ir::PhiInput::value));
+        }
+        for instruction in block.instructions() {
+            assert!(instruction_ids.insert(instruction.id()));
+            if let Some(value) = instruction.def() {
+                assert!(definitions.insert(value));
+            }
+            uses.extend(instruction.uses());
+        }
+        assert!(instruction_ids.insert(block.terminator().id()));
+        uses.extend(block.terminator().uses());
+    }
+
+    assert!(uses.iter().all(|value| definitions.contains(value)));
+    assert!(
+        definitions
+            .iter()
+            .all(|value| ir.value_definition(*value).is_some())
+    );
 }
 
 #[test]
@@ -118,7 +180,7 @@ fn du_chain_uses_include_source_related_nodes() {
             .instructions_at(ProgramCounter::from(definition_pc))
             .find_map(|id| instruction(&ir, id).and_then(mokapot::ir::MokaInstruction::def))
             .unwrap();
-        let uses = chain.used_at(Identifier::Local(value));
+        let uses = chain.used_at(value);
         assert!(
             ir.source_map()
                 .instructions_at(ProgramCounter::from(use_pc))

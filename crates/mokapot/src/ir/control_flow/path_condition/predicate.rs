@@ -1,5 +1,8 @@
 use crate::{
-    ir::{self, Identifier, Operand, expression::Condition},
+    ir::{
+        self, ValueId,
+        expression::{LiftedCondition as Condition, Predicate},
+    },
     jvm::ConstantValue,
 };
 
@@ -41,11 +44,12 @@ fn canonicalize_condition<T>(condition: Condition<T>) -> BooleanVariable<Conditi
     }
 }
 
-impl<T, V> From<ir::expression::Condition<T>> for BooleanVariable<ir::expression::Condition<V>>
+impl<T, V> From<ir::expression::LiftedCondition<T>>
+    for BooleanVariable<ir::expression::LiftedCondition<V>>
 where
     V: From<T>,
 {
-    fn from(value: ir::expression::Condition<T>) -> Self {
+    fn from(value: ir::expression::LiftedCondition<T>) -> Self {
         #[allow(clippy::enum_glob_use)]
         use Condition::*;
 
@@ -69,17 +73,25 @@ where
     }
 }
 
-/// An operand or constant referenced by a path predicate.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
-pub enum Value {
-    /// A value produced by the IR.
-    Variable(Operand),
-    /// A JVM constant embedded in the condition.
-    Constant(ConstantValue),
+mod model {
+    use super::ConstantValue;
+
+    /// An operand or constant parameterized by the lifting operand representation.
+    #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
+    pub enum Value<OP> {
+        /// A value produced by the IR.
+        Variable(OP),
+        /// A JVM constant embedded in the condition.
+        Constant(ConstantValue),
+    }
 }
 
-impl Condition<Value> {
-    pub(crate) fn uses(&self) -> std::collections::HashSet<Identifier> {
+/// A scalar SSA value or JVM constant referenced by a path predicate.
+pub type Value = model::Value<ValueId>;
+pub(crate) use model::Value as LiftedValue;
+
+impl Predicate {
+    pub(crate) fn uses(&self) -> std::collections::HashSet<ValueId> {
         use Condition::{
             Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
             IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
@@ -99,17 +111,16 @@ impl Condition<Value> {
         values
             .into_iter()
             .filter_map(|value| match value {
-                Value::Variable(operand) => Some(operand.iter()),
-                Value::Constant(_) => None,
+                LiftedValue::Variable(value) => Some(value),
+                LiftedValue::Constant(_) => None,
             })
-            .flatten()
             .copied()
             .collect()
     }
 }
 
-impl From<ir::Operand> for Value {
-    fn from(value: ir::Operand) -> Self {
+impl<OP> From<OP> for model::Value<OP> {
+    fn from(value: OP) -> Self {
         Self::Variable(value)
     }
 }

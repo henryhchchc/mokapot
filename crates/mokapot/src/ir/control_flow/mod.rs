@@ -2,24 +2,38 @@
 
 pub mod path_condition;
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    hash::Hash,
+};
 
-use self::path_condition::{BranchGuard, PathCondition, SolvingBudget, Value};
-use super::{BasicBlock, BlockId, EdgeId};
-use crate::{ir::expression::Condition, jvm::references::ClassRef};
+use self::path_condition::{BranchGuard, LiftedValue, PathCondition, SolvingBudget};
+use super::{BasicBlock, BlockId, EdgeId, ValueId};
+use crate::{
+    ir::expression::{LiftedCondition, Predicate},
+    jvm::references::ClassRef,
+};
+
+mod transfer {
+    use super::{BTreeSet, BranchGuard, ClassRef, Hash, LiftedCondition, LiftedValue};
+
+    /// A state transfer parameterized by the lifting operand representation.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum ControlTransfer<OP: Eq + Hash> {
+        /// An unconditional control transfer.
+        Unconditional,
+        /// A conditional transfer guarded by a conjunction of literals.
+        Conditional(BranchGuard<LiftedCondition<LiftedValue<OP>>>),
+        /// A transfer to an exception handler.
+        Exception(BTreeSet<ClassRef>),
+        /// A transfer caused by legacy subroutine return.
+        SubroutineReturn,
+    }
+}
 
 /// The state transfer associated with one control-flow arm.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ControlTransfer {
-    /// An unconditional control transfer.
-    Unconditional,
-    /// A conditional transfer guarded by a conjunction of literals.
-    Conditional(BranchGuard<Condition<Value>>),
-    /// A transfer to an exception handler.
-    Exception(BTreeSet<ClassRef>),
-    /// A transfer caused by legacy subroutine return.
-    SubroutineReturn,
-}
+pub type ControlTransfer = transfer::ControlTransfer<ValueId>;
+pub(crate) use transfer::ControlTransfer as LiftedControlTransfer;
 
 /// A borrowed edge from a block terminator.
 #[derive(Debug, Clone, Copy)]
@@ -125,7 +139,7 @@ impl<'method> ControlFlowGraph<'method> {
 
     /// Computes path conditions at reachable blocks.
     #[must_use]
-    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'method Condition<Value>>> {
+    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'method Predicate>> {
         self.path_conditions_with_budget(SolvingBudget::default())
     }
 
@@ -134,7 +148,7 @@ impl<'method> ControlFlowGraph<'method> {
     pub fn path_conditions_with_budget(
         self,
         budget: SolvingBudget,
-    ) -> HashMap<BlockId, PathCondition<&'method Condition<Value>>> {
+    ) -> HashMap<BlockId, PathCondition<&'method Predicate>> {
         path_condition::analyze(self, budget)
     }
 }
@@ -143,13 +157,14 @@ impl<'method> ControlFlowGraph<'method> {
 mod tests {
     use super::*;
     use crate::ir::{
-        BasicBlock, EdgeId, Identifier, InstructionId, Operand, Successor, Terminator,
-        TerminatorKind, control_flow::path_condition::BooleanVariable,
+        BasicBlock, EdgeId, InstructionId, Successor, Terminator, TerminatorKind,
+        control_flow::path_condition::BooleanVariable, expression::Condition,
     };
 
     fn block(id: u32, successors: Vec<Successor>) -> BasicBlock {
         BasicBlock::new(
             BlockId::new(id),
+            vec![],
             vec![],
             Terminator::new(
                 InstructionId::new(id),
@@ -167,8 +182,8 @@ mod tests {
 
     #[test]
     fn path_conditions_prune_contradictory_arms_at_block_locations() {
-        let condition = Condition::IsZero(Operand::just(Identifier::Arg(0)));
-        let positive: BooleanVariable<Condition<Value>> = condition.into();
+        let condition = Condition::IsZero(crate::ir::ValueId::new(0));
+        let positive: BooleanVariable<Predicate> = condition.into();
         let negative = !positive.clone();
         let blocks = vec![
             block(

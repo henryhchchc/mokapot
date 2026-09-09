@@ -427,15 +427,41 @@ impl<T: JoinSemiLattice> JoinSemiLattice for Option<T> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+
     use proptest::prelude::*;
 
-    use crate::{analysis::fixed_point::JoinSemiLattice, ir::Operand};
+    use crate::analysis::fixed_point::JoinSemiLattice;
+
+    #[derive(Debug, Clone, PartialEq, Eq, proptest_derive::Arbitrary)]
+    struct TestSet(BTreeSet<u8>);
+
+    impl PartialOrd for TestSet {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            if self == other {
+                Some(std::cmp::Ordering::Equal)
+            } else if self.0.is_subset(&other.0) {
+                Some(std::cmp::Ordering::Less)
+            } else if self.0.is_superset(&other.0) {
+                Some(std::cmp::Ordering::Greater)
+            } else {
+                None
+            }
+        }
+    }
+
+    impl JoinSemiLattice for TestSet {
+        fn join(mut self, other: Self) -> Self {
+            self.0.extend(other.0);
+            self
+        }
+    }
 
     proptest! {
        #[test]
-       fn operand_join_ordering(
-           lhs in any::<Option<Operand>>(),
-           rhs in any::<Option<Operand>>(),
+       fn option_join_ordering(
+           lhs in any::<Option<TestSet>>(),
+           rhs in any::<Option<TestSet>>(),
        ) {
            let joined = lhs.clone().join(rhs.clone());
            prop_assert!(joined >= lhs);
