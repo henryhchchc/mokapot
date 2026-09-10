@@ -4,37 +4,60 @@ pub mod path_condition;
 
 use std::{collections::HashMap, hash::Hash};
 
-use self::path_condition::{BranchGuard, LiftedValue, PathCondition, SolvingBudget};
-use super::{BasicBlock, BlockId, EdgeId, ValueId};
+use self::path_condition::{BranchGuard, PathCondition, SolvingBudget, Value};
+use super::{BasicBlock, BlockId, EdgeId, TryMapValues, ValueId};
 use crate::{
-    ir::expression::{LiftedCondition, Predicate},
+    ir::expression::{Condition, Predicate},
     jvm::references::ClassRef,
 };
 
 mod transfer {
-    use super::{BranchGuard, ClassRef, Hash, LiftedCondition, LiftedValue};
+    use super::{BranchGuard, ClassRef, Condition, Hash, Value, ValueId};
 
-    /// A state transfer parameterized by the lifting operand representation.
+    /// The semantics of one control-flow successor arm.
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub enum ControlTransfer<OP: Eq + Hash> {
+    pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
         /// An unconditional control transfer.
         Unconditional,
         /// The normal outcome of a fallible operation.
         Normal,
         /// A conditional transfer guarded by a conjunction of literals.
-        Conditional(BranchGuard<LiftedCondition<LiftedValue<OP>>>),
+        Conditional(BranchGuard<Condition<Value<OP>>>),
         /// An exceptional outcome selected by this catch type.
         ///
-        /// `None` denotes a catch-all exception-table entry.
+        /// `None` denotes a catch-all exception-table entry. Arm order retains
+        /// JVM exception-handler precedence.
         Exception(Option<ClassRef>),
         /// An exceptional outcome that leaves the method.
         Unwind,
     }
 }
 
-/// The state transfer associated with one control-flow arm.
-pub type ControlTransfer = transfer::ControlTransfer<ValueId>;
-pub(crate) use transfer::ControlTransfer as LiftedControlTransfer;
+pub use transfer::ControlTransfer;
+
+impl<OP, OUT> TryMapValues<OUT> for ControlTransfer<OP>
+where
+    OP: Eq + Hash,
+    OUT: Eq + Hash,
+{
+    type Value = OP;
+    type Mapped = ControlTransfer<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<ControlTransfer<OUT>, E> {
+        Ok(match self {
+            Self::Unconditional => ControlTransfer::Unconditional,
+            Self::Normal => ControlTransfer::Normal,
+            Self::Exception(exception) => ControlTransfer::Exception(exception),
+            Self::Unwind => ControlTransfer::Unwind,
+            Self::Conditional(guard) => ControlTransfer::Conditional(
+                guard.try_map_values(|value| value.try_map_values(&mut remap))?,
+            ),
+        })
+    }
+}
 
 /// A borrowed edge from a block terminator.
 #[derive(Debug, Clone, Copy)]
@@ -156,3 +179,64 @@ impl<'method> ControlFlowGraph<'method> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod mapping_tests {
+    use super::{
+        ControlTransfer, TryMapValues,
+        path_condition::{BooleanVariable, BranchGuard, Value},
+    };
+    use crate::{ir::expression::Condition, jvm::ConstantValue};
+
+    #[test]
+    fn maps_guard_variables_without_changing_constants_or_polarity() {
+        let transfer = ControlTransfer::Conditional(BranchGuard::from_iter([
+            BooleanVariable::Positive(Condition::Equal(
+                Value::Variable(1_u8),
+                Value::Constant(ConstantValue::Integer(3)),
+            )),
+            BooleanVariable::Negative(Condition::IsNull(Value::Variable(2))),
+        ]));
+
+        let mapped = transfer
+            .try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10))
+            .unwrap();
+        assert_eq!(
+            mapped,
+            ControlTransfer::Conditional(BranchGuard::from_iter([
+                BooleanVariable::Positive(Condition::Equal(
+                    Value::Variable(11_u16),
+                    Value::Constant(ConstantValue::Integer(3))
+                )),
+                BooleanVariable::Negative(Condition::IsNull(Value::Variable(12))),
+            ]))
+        );
+    }
+
+    #[test]
+    fn mapping_errors_propagate_from_guards() {
+        let transfer = ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+            Condition::IsNull(Value::Variable(1_u8)),
+        )));
+        assert_eq!(
+            transfer.try_map_values(|_| Err::<u16, _>("unmapped")),
+            Err("unmapped")
+        );
+    }
+
+    #[test]
+    fn mapping_preserves_guard_set_semantics() {
+        let transfer = ControlTransfer::Conditional(BranchGuard::from_iter([
+            BooleanVariable::Positive(Condition::IsNull(Value::Variable(1_u8))),
+            BooleanVariable::Positive(Condition::IsNull(Value::Variable(2))),
+        ]));
+
+        let mapped = transfer.try_map_values(|_| Ok::<_, ()>(0_u16)).unwrap();
+        assert_eq!(
+            mapped,
+            ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+                Condition::IsNull(Value::Variable(0_u16)),
+            )))
+        );
+    }
+}

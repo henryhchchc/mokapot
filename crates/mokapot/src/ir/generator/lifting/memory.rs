@@ -1,19 +1,32 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{
+    ArrayOperation, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
+    MokaIRBuildError, SINGLE_SLOT, SsaValueId, load_local, required_definition, store_local,
+};
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    matches!(
+        instruction,
+        JVM::IALoad
+            | JVM::FALoad
+            | JVM::AALoad
+            | JVM::BALoad
+            | JVM::CALoad
+            | JVM::SALoad
+            | JVM::LALoad
+            | JVM::DALoad
+    )
+}
 
 pub(super) fn lift<OP: FrameOperand>(
-    jvm_instruction: &Instruction,
-    def: ProvisionalValueId,
+    jvm_instruction: &JVM,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         ILoad(idx) | FLoad(idx) | ALoad(idx) => {
@@ -29,22 +42,24 @@ pub(super) fn lift<OP: FrameOperand>(
         LLoad2 | DLoad2 => load_local::<DUAL_SLOT, _>(frame, 2)?,
         LLoad3 | DLoad3 => load_local::<DUAL_SLOT, _>(frame, 3)?,
         IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
+            let def = required_definition(definition)?;
             let index = frame.pop_value::<SINGLE_SLOT>()?;
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
 
             frame.push_value::<SINGLE_SLOT>(def.into())?;
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
         }
         LALoad | DALoad => {
+            let def = required_definition(definition)?;
             let index = frame.pop_value::<SINGLE_SLOT>()?;
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
             frame.push_value::<DUAL_SLOT>(def.into())?;
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
@@ -71,7 +86,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 value,
             };
 
-            IR::Effect(Expression::Array(array_op))
+            Instruction::Effect(Expression::Array(array_op))
         }
         LAStore | DAStore => {
             let value = frame.pop_value::<DUAL_SLOT>()?;
@@ -82,7 +97,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 index,
                 value,
             };
-            IR::Effect(Expression::Array(array_op))
+            Instruction::Effect(Expression::Array(array_op))
         }
         _ => return Ok(None),
     };

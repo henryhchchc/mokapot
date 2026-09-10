@@ -1,7 +1,7 @@
 use super::*;
 
-fn value(index: u32) -> ProvisionalValueId {
-    ProvisionalValueId::new(index)
+fn value(index: u32) -> SsaValueId {
+    SsaValueId::new(index)
 }
 
 fn block(index: u32) -> BlockId {
@@ -20,6 +20,12 @@ fn canonicalizes_trivial_phi_chains() {
     assert_eq!(
         simplified.substitutions,
         BTreeMap::from([(value(1), value(100)), (value(2), value(100))])
+    );
+    assert!(
+        simplified
+            .substitutions
+            .values()
+            .all(|value| !simplified.substitutions.contains_key(value))
     );
 }
 

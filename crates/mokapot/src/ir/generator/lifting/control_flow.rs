@@ -1,48 +1,47 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{
+    Condition, DUAL_SLOT, FrameOperand, Instruction, JVM, JvmSemantics, JvmStackFrame, Location,
+    MokaIRBuildError, ProgramCounter, SINGLE_SLOT, WideInstruction,
+};
 
 #[inline]
-pub(super) fn conditional_jump<OP: Clone + std::fmt::Display>(
+pub(super) fn conditional_jump<OP: Clone>(
     frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
     condition: impl FnOnce(OP) -> Condition<OP>,
-) -> Result<IR<OP>, MokaIRBuildError> {
+) -> Result<Instruction<OP>, MokaIRBuildError> {
     let operand = frame.pop_value::<SINGLE_SLOT>()?;
-    Ok(IR::Jump {
+    Ok(Instruction::Jump {
         condition: Some(condition(operand)),
         target,
     })
 }
 
 #[inline]
-pub(super) fn cmp_jump<OP: Clone + std::fmt::Display>(
+pub(super) fn cmp_jump<OP: Clone>(
     frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
     condition: impl FnOnce(OP, OP) -> Condition<OP>,
-) -> Result<IR<OP>, MokaIRBuildError> {
+) -> Result<Instruction<OP>, MokaIRBuildError> {
     let rhs = frame.pop_value::<SINGLE_SLOT>()?;
     let lhs = frame.pop_value::<SINGLE_SLOT>()?;
-    Ok(IR::Jump {
+    Ok(Instruction::Jump {
         condition: Some(condition(lhs, rhs)),
         target,
     })
 }
 
 pub(super) fn lift<OP: FrameOperand>(
-    generator: &mut MokaIRGenerator<'_>,
-    jvm_instruction: &Instruction,
+    semantics: &mut impl JvmSemantics,
+    jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         IfEq(target) => conditional_jump(frame, *target, Condition::IsZero)?,
@@ -59,24 +58,25 @@ pub(super) fn lift<OP: FrameOperand>(
         IfICmpLt(target) => cmp_jump(frame, *target, Condition::LessThan)?,
         IfICmpGt(target) => cmp_jump(frame, *target, Condition::GreaterThan)?,
         IfICmpLe(target) => cmp_jump(frame, *target, Condition::LessThanOrEqual)?,
-        Goto(target) | GotoW(target) => IR::Jump {
+        Goto(target) | GotoW(target) => Instruction::Jump {
             condition: None,
             target: *target,
         },
         Jsr(target) | JsrW(target) => {
-            let next_pc = generator.next_pc_of(pc)?;
-            let (target, return_address) = generator.legacy.enter(location, *target, next_pc)?;
+            let next_pc = semantics.next_pc_of(pc)?;
+            let (target, return_address) =
+                semantics.enter_subroutine(location, *target, next_pc)?;
             frame.push_value::<SINGLE_SLOT>(return_address.into())?;
-            IR::Subroutine { target }
+            Instruction::Subroutine { target }
         }
         Ret(idx) => {
             let idx = (*idx).into();
             let return_address = frame.get_local::<SINGLE_SLOT>(idx)?;
-            IR::SubroutineReturn(return_address)
+            Instruction::SubroutineReturn(return_address)
         }
         Wide(WideInstruction::Ret(idx)) => {
             let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
-            IR::SubroutineReturn(return_address)
+            Instruction::SubroutineReturn(return_address)
         }
         TableSwitch {
             range,
@@ -85,7 +85,7 @@ pub(super) fn lift<OP: FrameOperand>(
         } => {
             let condition = frame.pop_value::<SINGLE_SLOT>()?;
             let branches = range.clone().zip(jump_targets.clone()).collect();
-            IR::Switch {
+            Instruction::Switch {
                 match_value: condition,
                 default: *default,
                 branches,
@@ -96,7 +96,7 @@ pub(super) fn lift<OP: FrameOperand>(
             match_targets,
         } => {
             let condition = frame.pop_value::<SINGLE_SLOT>()?;
-            IR::Switch {
+            Instruction::Switch {
                 match_value: condition,
                 default: *default,
                 branches: match_targets.clone(),
@@ -104,13 +104,13 @@ pub(super) fn lift<OP: FrameOperand>(
         }
         IReturn | FReturn | AReturn => {
             let value = frame.pop_value::<SINGLE_SLOT>()?;
-            IR::Return(Some(value))
+            Instruction::Return(Some(value))
         }
         LReturn | DReturn => {
             let value = frame.pop_value::<DUAL_SLOT>()?;
-            IR::Return(Some(value))
+            Instruction::Return(Some(value))
         }
-        Return => IR::Return(None),
+        Return => Instruction::Return(None),
         _ => return Ok(None),
     };
     Ok(Some(instruction))

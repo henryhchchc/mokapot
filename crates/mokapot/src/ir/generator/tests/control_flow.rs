@@ -1,7 +1,3 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "generator tests share the fixture helpers from their parent module"
-)]
 use super::*;
 
 #[test]
@@ -140,7 +136,7 @@ fn normally_reachable_handler_still_starts_a_block() {
         ir.block(handler).unwrap().terminator().successors()[0].target(),
         normal
     );
-    assert_eq!(ir.block(handler).unwrap().instructions().len(), 0);
+    assert_eq!(ir.block(handler).unwrap().operations().len(), 0);
     assert!(ir.caught_exception(handler).is_some());
 }
 

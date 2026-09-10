@@ -1,21 +1,17 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "generator tests share the fixture helpers from their parent module"
-)]
 use super::*;
 use crate::{
     ir::{DefUseChain, UseSite},
     jvm::references::ClassRef,
 };
 
-fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &IrInstruction {
+fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Operation {
     method
         .source_map()
         .instructions_at(pc)
         .find_map(|id| {
             method
                 .blocks()
-                .flat_map(BasicBlock::instructions)
+                .flat_map(BasicBlock::operations)
                 .find(|instruction| instruction.id() == id)
         })
         .expect("the source PC must map to an ordinary instruction")
@@ -39,7 +35,7 @@ fn block_containing_instruction(method: &MokaIRMethod, instruction: InstructionI
         .blocks()
         .find(|block| {
             block
-                .instructions()
+                .operations()
                 .iter()
                 .any(|candidate| candidate.id() == instruction)
         })
@@ -91,7 +87,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         Some(ValueDefinition::CaughtException(handler_entry.id()))
     );
     assert!(handler_entry.phis().is_empty());
-    assert!(handler_entry.instructions().is_empty());
+    assert!(handler_entry.operations().is_empty());
     assert_eq!(handler_entry.terminator().successors().len(), 1);
     assert!(matches!(
         handler_entry.terminator().successors()[0].transfer(),
@@ -374,7 +370,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     let unwind = ir.block(unwind_targets[0]).unwrap();
     assert_eq!(unwind.terminator().kind(), &TerminatorKind::Unwind);
     assert!(unwind.phis().is_empty());
-    assert!(unwind.instructions().is_empty());
+    assert!(unwind.operations().is_empty());
     assert!(unwind.terminator().successors().is_empty());
     assert_eq!(
         ir.source_map().origins_of(unwind.terminator().id()).count(),
@@ -387,7 +383,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
         for phi in block.phis() {
             assert!(instruction_ids.insert(phi.id()));
         }
-        for instruction in block.instructions() {
+        for instruction in block.operations() {
             assert!(instruction_ids.insert(instruction.id()));
         }
         assert!(instruction_ids.insert(block.terminator().id()));

@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use crate::ir::ValueId;
+use crate::ir::{TryMapValues, ValueId};
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP: std::fmt::Display = ValueId> {
+pub enum Operation<OP = ValueId> {
     /// Acquires the lock.
     #[display("acquire {_0}")]
     Acquire(OP),
@@ -20,6 +20,21 @@ impl Operation<ValueId> {
         match self {
             Self::Acquire(arg) | Self::Release(arg) => HashSet::from([*arg]),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
+    type Value = OP;
+    type Mapped = Operation<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Operation<OUT>, E> {
+        Ok(match self {
+            Self::Acquire(value) => Operation::Acquire(remap(value)?),
+            Self::Release(value) => Operation::Release(remap(value)?),
+        })
     }
 }
 
