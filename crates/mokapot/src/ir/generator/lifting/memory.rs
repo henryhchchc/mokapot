@@ -1,18 +1,18 @@
 use super::{
-    ArrayOperation, DUAL_SLOT, Expression, FrameOperand, IR, Instruction, JvmStackFrame,
+    ArrayOperation, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
     MokaIRBuildError, SINGLE_SLOT, SsaValueId, load_local, store_local,
 };
 
 pub(super) fn lift<OP: FrameOperand>(
-    jvm_instruction: &Instruction,
+    jvm_instruction: &JVM,
     def: SsaValueId,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         ILoad(idx) | FLoad(idx) | ALoad(idx) => {
@@ -33,7 +33,7 @@ pub(super) fn lift<OP: FrameOperand>(
             let array_op = ArrayOperation::Read { array_ref, index };
 
             frame.push_value::<SINGLE_SLOT>(def.into())?;
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
@@ -43,7 +43,7 @@ pub(super) fn lift<OP: FrameOperand>(
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
             frame.push_value::<DUAL_SLOT>(def.into())?;
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
@@ -70,7 +70,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 value,
             };
 
-            IR::Effect(Expression::Array(array_op))
+            Instruction::Effect(Expression::Array(array_op))
         }
         LAStore | DAStore => {
             let value = frame.pop_value::<DUAL_SLOT>()?;
@@ -81,7 +81,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 index,
                 value,
             };
-            IR::Effect(Expression::Array(array_op))
+            Instruction::Effect(Expression::Array(array_op))
         }
         _ => return Ok(None),
     };

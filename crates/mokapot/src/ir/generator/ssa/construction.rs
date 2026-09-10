@@ -1,6 +1,6 @@
 use super::super::block_formation::{BlockEntry, JvmBlock};
 use super::{
-    BTreeMap, BlockId, JvmReplayPlan, JvmStackFrame, LiftedInstruction, Location, Method,
+    BTreeMap, BlockId, Instruction, JvmReplayPlan, JvmStackFrame, Location, Method,
     MokaIRBuildError, OperandState, ReturnAddress, SsaArm, SsaBlock, SsaEntryFrames, SsaFrameValue,
     SsaValueId, next_ssa_value, unavailable_value_slots,
 };
@@ -112,8 +112,8 @@ pub(super) fn construct_blocks(
                         fallibility.is_synchronously_fallible(&jvm_instruction),
                     )
                 }
-                Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
-                Location::Unwind => (LiftedInstruction::Unwind, false),
+                Location::Handler { .. } => (Instruction::HandlerEntry, false),
+                Location::Unwind => (Instruction::Unwind, false),
             };
             let is_last = index + 1 == block.locations.len();
             if is_last {

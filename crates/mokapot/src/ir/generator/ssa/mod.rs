@@ -8,13 +8,13 @@ pub(in crate::ir::generator) mod value;
 
 use super::block_formation::{BlockEntry, JvmBlockGraph};
 use super::{
-    BTreeMap, BlockId, FrameOperand, JvmReplayPlan, JvmStackFrame, LiftedControlTransfer,
-    LiftedInstruction, Location, Method, MokaIRBuildError, OperandState, ReturnAddress,
-    SsaFrameValue, SsaValueId, jvm_frame, method,
+    BTreeMap, BlockId, ControlTransfer, FrameOperand, Instruction, JvmReplayPlan, JvmStackFrame,
+    Location, Method, MokaIRBuildError, OperandState, ReturnAddress, SsaFrameValue, SsaValueId,
+    jvm_frame, method,
 };
 
 use merge::{collect_phi_candidates, unavailable_value_slots};
-use model::{PairedFrameValue, SsaArm, SsaBlock, SsaEntryFrames, SsaPhi, next_ssa_value};
+use model::{SsaArm, SsaBlock, SsaEntryFrames, SsaPhi, next_ssa_value};
 use simplify::simplify_phis;
 
 /// The internal SSA representation consumed by `MokaIR` emission.

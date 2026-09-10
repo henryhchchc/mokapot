@@ -1,14 +1,14 @@
-use super::{FrameOperand, IR, Instruction, JvmStackFrame, MokaIRBuildError, StackOperations};
+use super::{FrameOperand, Instruction, JVM, JvmStackFrame, MokaIRBuildError, StackOperations};
 
 pub(super) fn lift<OP: FrameOperand>(
-    jvm_instruction: &Instruction,
+    jvm_instruction: &JVM,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         Pop | Pop2 | Dup | DupX1 | DupX2 | Dup2 | Dup2X1 | Dup2X2 | Swap => {
@@ -24,7 +24,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 Swap => frame.swap()?,
                 _ => unreachable!("By outer match arm"),
             }
-            IR::Erased
+            Instruction::Erased
         }
         _ => return Ok(None),
     };

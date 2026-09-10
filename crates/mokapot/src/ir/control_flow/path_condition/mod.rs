@@ -31,7 +31,6 @@ use cover::Cover;
 pub use branch_guard::BranchGuard;
 pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
-pub(crate) use predicate::LiftedValue;
 pub use predicate::Value;
 
 pub(super) fn analyze(

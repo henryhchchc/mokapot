@@ -4,7 +4,7 @@ use crate::{
     jvm::references::ClassRef,
 };
 
-fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &IrOperation {
+fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Operation {
     method
         .source_map()
         .instructions_at(pc)

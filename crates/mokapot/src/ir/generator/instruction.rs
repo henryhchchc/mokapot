@@ -1,21 +1,21 @@
 use std::collections::BTreeMap;
 
 use super::{Location, OperandState, SsaValueId};
-use crate::ir::expression::{LiftedCondition, LiftedExpression};
+use crate::ir::expression::{Condition, Expression};
 use crate::jvm::code::ProgramCounter;
 
 #[derive(Debug, Clone)]
-pub(super) enum LiftedInstruction<OP = OperandState> {
+pub(super) enum Instruction<OP = OperandState> {
     HandlerEntry,
     Unwind,
     Erased,
     Definition {
         value: SsaValueId,
-        expr: LiftedExpression<OP>,
+        expr: Expression<OP>,
     },
-    Effect(LiftedExpression<OP>),
+    Effect(Expression<OP>),
     Jump {
-        condition: Option<LiftedCondition<OP>>,
+        condition: Option<Condition<OP>>,
         target: ProgramCounter,
     },
     Switch {
@@ -31,7 +31,7 @@ pub(super) enum LiftedInstruction<OP = OperandState> {
     SubroutineReturn(OP),
 }
 
-impl<OP> LiftedInstruction<OP> {
+impl<OP> Instruction<OP> {
     pub(super) const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,

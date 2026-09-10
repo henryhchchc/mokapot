@@ -5,8 +5,8 @@ mod jvm_block;
 pub(in crate::ir::generator) use jvm_block::JvmBlock;
 
 use super::{
-    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, JvmReplayPlan, JvmStackFrame,
-    LiftedControlTransfer, Location, MokaIRBuildError,
+    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, ControlTransfer, JvmReplayPlan, JvmStackFrame,
+    Location, MokaIRBuildError,
 };
 
 /// How control enters the formed block graph.
@@ -95,9 +95,9 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
             || facts.outgoing.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
-                    LiftedControlTransfer::Normal
-                        | LiftedControlTransfer::Exception(_)
-                        | LiftedControlTransfer::Unwind
+                    ControlTransfer::Normal
+                        | ControlTransfer::Exception(_)
+                        | ControlTransfer::Unwind
                 )
             })
         {
@@ -116,10 +116,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         let plain_fallthrough = !facts.is_explicit_transfer
             && facts.outgoing.len() == 1
             && facts.outgoing[0].target == *next
-            && matches!(
-                facts.outgoing[0].transfer,
-                LiftedControlTransfer::Unconditional
-            );
+            && matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional);
         if !plain_fallthrough {
             leaders.insert(*next);
         }

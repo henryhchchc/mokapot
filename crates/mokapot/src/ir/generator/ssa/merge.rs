@@ -1,18 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    MokaIRBuildError, OperandState, PairedFrameValue, SsaBlock, SsaFrameValue, SsaValueId,
+    MokaIRBuildError, OperandState, SsaBlock, SsaFrameValue, SsaValueId,
     jvm_frame::{Entry, JvmStackFrame},
-    simplify as ssa,
 };
 use crate::ir::BlockId;
+
+type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 pub(super) fn collect_phi_candidates(
     blocks: &[SsaBlock],
     phi_blocks: &BTreeMap<SsaValueId, BlockId>,
     preheader: Option<(BlockId, &JvmStackFrame<SsaFrameValue>)>,
-) -> Result<ssa::PhiCandidates, MokaIRBuildError> {
-    let mut candidates = ssa::PhiCandidates::new();
+) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
+    let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     for target in blocks {
         let mut incoming = blocks
             .iter()

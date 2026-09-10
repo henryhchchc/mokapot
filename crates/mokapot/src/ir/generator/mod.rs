@@ -17,9 +17,9 @@ mod block_formation;
 mod emission;
 mod error;
 mod identity;
+mod instruction;
 mod jvm_frame;
 mod jvm_frame_analysis;
-mod lifted_instruction;
 mod lifting;
 mod normalized_jvm;
 mod ssa;
@@ -31,21 +31,18 @@ use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
 use self::identity::SsaValueId;
+use self::instruction::Instruction;
 use self::jvm_frame_analysis::operand_state::OperandState;
 use self::jvm_frame_analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer, JvmReplayPlan};
-use self::lifted_instruction::LiftedInstruction;
 use self::lifting::frame_operand::FrameOperand;
 use self::ssa::value::SsaFrameValue;
 
 use self::jvm_frame::JvmStackFrame;
-use self::normalized_jvm::{
-    Location, NormalizedJvm, Normalizer as LegacyNormalizer, ReturnAddress,
-};
+use self::normalized_jvm::{Location, NormalizedJvm, Normalizer, ReturnAddress};
 use super::{
-    BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation as IrOperation,
-    OperationKind, Phi, PhiInput, SourceMap, Successor, Terminator, TerminatorKind,
-    ValueDefinition, ValueId,
-    control_flow::{ControlTransfer, LiftedControlTransfer},
+    BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation, OperationKind, Phi,
+    PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+    control_flow::ControlTransfer,
 };
 use crate::{
     analysis::fixed_point::DataflowProblem,
