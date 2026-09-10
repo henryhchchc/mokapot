@@ -1,9 +1,6 @@
-use crate::ir::{
-    ValueId,
-    generator::{
-        ExecutionError, Identifier, Operand,
-        jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
-    },
+use crate::ir::generator::{
+    DiscoveryValue, ExecutionError, ProvisionalValueId,
+    jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
 };
 #[cfg(test)]
 use proptest::prelude::*;
@@ -18,7 +15,7 @@ proptest! {
             pop_count,
         ).unwrap();
         for i in 0..pop_count {
-            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
+            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -39,7 +36,7 @@ proptest! {
             pop_count * 2,
         ).unwrap();
         for i in 0..(pop_count * 2) {
-            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
+            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -52,14 +49,14 @@ proptest! {
     }
 
     #[test]
-    fn jvm_dup(value in any::<Operand>()) {
+    fn jvm_dup(value in any::<DiscoveryValue>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             2,
         ).unwrap();
-        stack_frame.push_value::<SINGLE_SLOT>(value.clone()).expect("Fail to push");
+        stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         stack_frame.dup().expect("Fail to dup");
         let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
         assert_eq!(popped, value);
@@ -68,15 +65,15 @@ proptest! {
     }
 
     #[test]
-    fn jvm_dup_x1([v1, v2] in any::<[Operand;2]>()) {
+    fn jvm_dup_x1([v1, v2] in any::<[DiscoveryValue;2]>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             3,
         ).unwrap();
-        stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
-        stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
+        stack_frame.push_value::<SINGLE_SLOT>(v2).expect("Fail to push");
+        stack_frame.push_value::<SINGLE_SLOT>(v1).expect("Fail to push");
         stack_frame.dup_x1().expect("Fail to dup_x1");
         let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
         assert_eq!(popped, v1);
@@ -87,15 +84,15 @@ proptest! {
     }
 
     #[test]
-    fn jvm_swap([v1, v2] in any::<[Operand;2]>()) {
+    fn jvm_swap([v1, v2] in any::<[DiscoveryValue;2]>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             2,
         ).unwrap();
-        stack_frame.push_value::<SINGLE_SLOT>(v2.clone()).expect("Fail to push");
-        stack_frame.push_value::<SINGLE_SLOT>(v1.clone()).expect("Fail to push");
+        stack_frame.push_value::<SINGLE_SLOT>(v2).expect("Fail to push");
+        stack_frame.push_value::<SINGLE_SLOT>(v1).expect("Fail to push");
         stack_frame.swap().expect("Fail to swap");
         let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
         assert_eq!(popped, v2);

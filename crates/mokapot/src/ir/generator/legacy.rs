@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::jvm::code::ProgramCounter;
 
-use super::MokaIRBrewingError;
+use super::MokaIRBuildError;
 
 pub(super) const LOCATION_BUDGET: usize = 1_048_576;
 
@@ -59,6 +59,13 @@ impl Location {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct ReturnAddress(ContextId);
 
+#[cfg(test)]
+impl ReturnAddress {
+    pub(super) const fn for_test(context: u32) -> Self {
+        Self(ContextId(context))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct CallFrame {
     parent: ContextId,
@@ -85,10 +92,10 @@ impl Normalizer {
         }
     }
 
-    pub(super) fn register(&mut self, location: Location) -> Result<Location, MokaIRBrewingError> {
+    pub(super) fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
         self.locations.insert(location);
         if self.locations.len() > LOCATION_BUDGET {
-            return Err(MokaIRBrewingError::LegacySubroutineExpansionLimit {
+            return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
                 limit: LOCATION_BUDGET,
             });
         }
@@ -99,7 +106,7 @@ impl Normalizer {
         &mut self,
         pc: ProgramCounter,
         context: ContextId,
-    ) -> Result<Location, MokaIRBrewingError> {
+    ) -> Result<Location, MokaIRBuildError> {
         self.register(Location::Bytecode { pc, context })
     }
 
@@ -107,7 +114,7 @@ impl Normalizer {
         &mut self,
         handler_pc: ProgramCounter,
         context: ContextId,
-    ) -> Result<Location, MokaIRBrewingError> {
+    ) -> Result<Location, MokaIRBuildError> {
         self.register(Location::Handler {
             handler_pc,
             context,
@@ -119,13 +126,13 @@ impl Normalizer {
         location: Location,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBrewingError> {
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
         let Location::Bytecode {
             pc: call_site,
             context: parent,
         } = location
         else {
-            return Err(MokaIRBrewingError::MalformedControlFlow);
+            return Err(MokaIRBuildError::MalformedControlFlow);
         };
         let mut cursor = Some(parent);
         while let Some(context) = cursor {
@@ -133,7 +140,7 @@ impl Normalizer {
                 break;
             };
             if frame.target == target {
-                return Err(MokaIRBrewingError::MalformedControlFlow);
+                return Err(MokaIRBuildError::MalformedControlFlow);
             }
             cursor = Some(frame.parent);
         }
@@ -147,7 +154,7 @@ impl Normalizer {
             context
         } else {
             let index = u32::try_from(self.contexts.len()).map_err(|_| {
-                MokaIRBrewingError::LegacySubroutineExpansionLimit {
+                MokaIRBuildError::LegacySubroutineExpansionLimit {
                     limit: LOCATION_BUDGET,
                 }
             })?;
@@ -163,23 +170,23 @@ impl Normalizer {
         &mut self,
         location: Location,
         address: ReturnAddress,
-    ) -> Result<Location, MokaIRBrewingError> {
+    ) -> Result<Location, MokaIRBuildError> {
         let Location::Bytecode {
             context: current,
             pc: return_pc,
         } = location
         else {
-            return Err(MokaIRBrewingError::MalformedControlFlow);
+            return Err(MokaIRBuildError::MalformedControlFlow);
         };
         let mut cursor = current;
         loop {
             let frame = self
                 .frame(cursor)?
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if cursor == address.0 {
                 match self.returns.insert(cursor, return_pc) {
                     Some(previous) if previous != return_pc => {
-                        return Err(MokaIRBrewingError::MalformedControlFlow);
+                        return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                     Some(_) | None => {}
                 }
@@ -189,10 +196,10 @@ impl Normalizer {
         }
     }
 
-    fn frame(&self, context: ContextId) -> Result<Option<CallFrame>, MokaIRBrewingError> {
+    fn frame(&self, context: ContextId) -> Result<Option<CallFrame>, MokaIRBuildError> {
         self.contexts
-            .get(usize::try_from(context.0).map_err(|_| MokaIRBrewingError::MalformedControlFlow)?)
+            .get(usize::try_from(context.0).map_err(|_| MokaIRBuildError::MalformedControlFlow)?)
             .copied()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 }

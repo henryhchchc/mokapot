@@ -1,9 +1,6 @@
-use crate::ir::{
-    ValueId,
-    generator::{
-        ExecutionError, Identifier, Operand,
-        jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
-    },
+use crate::ir::generator::{
+    DiscoveryValue, ExecutionError, ProvisionalValueId,
+    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 #[cfg(test)]
 use proptest::prelude::*;
@@ -19,7 +16,7 @@ fn args_locals_checking() {
 
 proptest! {
     #[test]
-    fn push_pop(args in prop::collection::vec(any::<Operand>(), 0..10)) {
+    fn push_pop(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -27,7 +24,7 @@ proptest! {
             args.len().try_into().unwrap(),
         ).unwrap();
         for arg in &args {
-            stack_frame.push_value::<SINGLE_SLOT>(arg.clone()).expect("Fail to push");
+            stack_frame.push_value::<SINGLE_SLOT>(*arg).expect("Fail to push");
         }
         for arg in args.iter().rev() {
             let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
@@ -36,7 +33,7 @@ proptest! {
     }
 
     #[test]
-    fn push_pop_dual_slot(args in prop::collection::vec(any::<Operand>(), 0..10)) {
+    fn push_pop_dual_slot(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -44,7 +41,7 @@ proptest! {
             (args.len() * 2).try_into().unwrap(),
         ).unwrap();
         for arg in &args {
-            stack_frame.push_value::<DUAL_SLOT>(arg.clone()).expect("Fail to push");
+            stack_frame.push_value::<DUAL_SLOT>(*arg).expect("Fail to push");
         }
         for arg in args.iter().rev() {
             let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
@@ -62,7 +59,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
+            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -83,7 +80,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
+            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
@@ -98,14 +95,14 @@ proptest! {
     }
 
     #[test]
-    fn slot_mismatch(values in any::<Operand>()) {
+    fn slot_mismatch(values in any::<DiscoveryValue>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             2,
         ).unwrap();
-        stack_frame.push_value::<DUAL_SLOT>(values.clone()).unwrap();
+        stack_frame.push_value::<DUAL_SLOT>(values).unwrap();
         stack_frame.pop_value::<SINGLE_SLOT>().unwrap();
         assert!(matches!(
             stack_frame.pop_value::<SINGLE_SLOT>(),
@@ -114,7 +111,7 @@ proptest! {
     }
 
     #[test]
-    fn mixed_width_values(values in prop::collection::vec(any::<Operand>(), 0..10)) {
+    fn mixed_width_values(values in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -123,9 +120,9 @@ proptest! {
         ).unwrap();
         for (i, value) in values.iter().enumerate() {
             if i % 2 == 0 {
-                stack_frame.push_value::<DUAL_SLOT>(value.clone()).expect("Fail to push");
+                stack_frame.push_value::<DUAL_SLOT>(*value).expect("Fail to push");
             } else {
-                stack_frame.push_value::<SINGLE_SLOT>(value.clone()).expect("Fail to push");
+                stack_frame.push_value::<SINGLE_SLOT>(*value).expect("Fail to push");
             }
         }
         for (i, value) in values.iter().enumerate().rev() {

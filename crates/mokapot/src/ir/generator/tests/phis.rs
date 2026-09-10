@@ -18,7 +18,7 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         "(I)I",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let join = ir
         .blocks()
         .find(|block| matches!(block.terminator().kind(), TerminatorKind::Return(Some(_))))
@@ -34,7 +34,7 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         TerminatorKind::Return(Some(value)) if *value == phi.value()
     ));
     assert_eq!(
-        ir.value_definition(phi.value()),
+        ir.definition_of(phi.value()),
         Some(ValueDefinition::Instruction(phi.id()))
     );
     assert_eq!(ir.source_map().origins_of(phi.id()).count(), 0);
@@ -58,8 +58,8 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
     );
 
     assert!(matches!(
-        method.brew(),
-        Err(MokaIRBrewingError::ExecutionError(_))
+        build(&method),
+        Err(MokaIRBuildError::ExecutionError(_))
     ));
 }
 
@@ -80,7 +80,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         "(I)I",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let preheader = ir.block(ir.entry_block()).unwrap();
     let header_id = preheader.terminator().successors()[0].target();
     let header = ir.block(header_id).unwrap();
@@ -107,8 +107,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         .find(|input| input.predecessor() != ir.entry_block())
         .unwrap()
         .value();
-    let Some(ValueDefinition::Instruction(backedge_definition)) =
-        ir.value_definition(backedge_value)
+    let Some(ValueDefinition::Instruction(backedge_definition)) = ir.definition_of(backedge_value)
     else {
         panic!("the loop-carried input must be computed in the loop")
     };
@@ -123,7 +122,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
 #[test]
 fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
     let method = method([(0.into(), Instruction::Goto(0.into()))], "()V", vec![]);
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 2);
@@ -164,7 +163,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
         "(II)I",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let header = ir
         .blocks()
         .find(|block| matches!(block.terminator().kind(), TerminatorKind::Branch))
@@ -207,7 +206,7 @@ fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
         "(I)I",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let phis = ir.blocks().flat_map(BasicBlock::phis).collect::<Vec<_>>();
 
     assert_eq!(phis.len(), 3);
