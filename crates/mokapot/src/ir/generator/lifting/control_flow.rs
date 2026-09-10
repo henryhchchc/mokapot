@@ -32,7 +32,7 @@ pub(super) fn cmp_jump<OP: Clone + std::fmt::Display>(
 }
 
 pub(super) fn lift<OP: FrameOperand>(
-    generator: &mut JvmFrameAnalysis<'_>,
+    semantics: &mut impl JvmSemantics,
     jvm_instruction: &Instruction,
     location: Location,
     pc: ProgramCounter,
@@ -64,8 +64,9 @@ pub(super) fn lift<OP: FrameOperand>(
             target: *target,
         },
         Jsr(target) | JsrW(target) => {
-            let next_pc = generator.next_pc_of(pc)?;
-            let (target, return_address) = generator.legacy.enter(location, *target, next_pc)?;
+            let next_pc = semantics.next_pc_of(pc)?;
+            let (target, return_address) =
+                semantics.enter_subroutine(location, *target, next_pc)?;
             frame.push_value::<SINGLE_SLOT>(return_address.into())?;
             IR::Subroutine { target }
         }

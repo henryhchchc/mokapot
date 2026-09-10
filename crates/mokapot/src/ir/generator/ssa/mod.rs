@@ -8,9 +8,9 @@ pub(in crate::ir::generator) mod value;
 
 use super::block_formation::BlockLayout;
 use super::{
-    BTreeMap, BlockId, FrameOperand, JvmFrameAnalysis, JvmStackFrame, LiftedControlTransfer,
-    LiftedInstruction, Location, MokaIRBuildError, OperandState, ReturnAddress, SsaFrameValue,
-    SsaValueId, jvm_frame, method,
+    BTreeMap, BlockId, FrameOperand, JvmFrameFacts, JvmStackFrame, LiftedControlTransfer,
+    LiftedInstruction, Location, Method, MokaIRBuildError, OperandState, ReturnAddress,
+    SsaFrameValue, SsaValueId, jvm_frame, method,
 };
 
 pub(in crate::ir::generator) use merge::{collect_phi_candidates, unavailable_value_slots};
@@ -21,7 +21,8 @@ pub(in crate::ir::generator) use simplify::{SimplifiedPhis, simplify_phis};
 
 /// The internal SSA representation consumed by `MokaIR` emission.
 pub(super) struct SsaMethod<'method> {
-    pub(super) analysis: JvmFrameAnalysis<'method>,
+    pub(super) method: &'method Method,
+    pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
     pub(super) entry: BlockId,
     pub(super) bytecode_entry: BlockId,
     pub(super) needs_entry_preheader: bool,
@@ -33,25 +34,27 @@ pub(super) struct SsaMethod<'method> {
 }
 
 /// Constructs exact SSA frames, blocks, and phis from a planned block layout.
-pub(super) fn construct(layout: BlockLayout<'_>) -> Result<SsaMethod<'_>, MokaIRBuildError> {
+pub(super) fn construct(
+    frame_facts: JvmFrameFacts<'_>,
+    layout: BlockLayout,
+) -> Result<SsaMethod<'_>, MokaIRBuildError> {
     let BlockLayout {
-        mut analysis,
         entry,
         bytecode_entry,
         needs_entry_preheader,
         plans,
         location_to_block,
     } = layout;
-    let mut next_value = analysis
-        .value_ids
+    let mut next_value = frame_facts
+        .definition_ids
         .values()
-        .chain(analysis.caught_exception_ids.values())
+        .chain(frame_facts.caught_exception_ids.values())
         .map(|value| value.index())
         .max()
         .unwrap_or(0)
         .checked_add(1)
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let this_value = if analysis
+    let this_value = if frame_facts
         .method
         .access_flags
         .contains(method::AccessFlags::STATIC)
@@ -60,7 +63,7 @@ pub(super) fn construct(layout: BlockLayout<'_>) -> Result<SsaMethod<'_>, MokaIR
     } else {
         Some(next_ssa_value(&mut next_value)?)
     };
-    let parameter_values = analysis
+    let parameter_values = frame_facts
         .method
         .descriptor
         .parameters_types
@@ -74,24 +77,27 @@ pub(super) fn construct(layout: BlockLayout<'_>) -> Result<SsaMethod<'_>, MokaIR
         .map(SsaFrameValue::Value)
         .collect::<Vec<_>>();
     let initial_frame = JvmStackFrame::with_inputs(
-        &analysis.method.descriptor,
-        analysis.body.max_locals,
-        analysis.body.max_stack,
+        &frame_facts.method.descriptor,
+        frame_facts.body.max_locals,
+        frame_facts.body.max_stack,
         frame_this,
         &frame_parameters,
     )?;
 
-    let (entry_frames, phi_blocks) = analysis.ssa_entry_frames(
-        &plans,
-        &analysis.facts,
-        bytecode_entry,
-        needs_entry_preheader,
-        &initial_frame,
-        this_value,
-        &parameter_values,
-        &mut next_value,
-    )?;
-    let blocks = analysis.construct_ssa_blocks(&plans, entry_frames, &location_to_block)?;
+    let (blocks, phi_blocks) = {
+        let builder = construction::SsaBuilder::new(&frame_facts);
+        let (entry_frames, phi_blocks) = builder.entry_frames(
+            &plans,
+            bytecode_entry,
+            needs_entry_preheader,
+            &initial_frame,
+            this_value,
+            &parameter_values,
+            &mut next_value,
+        )?;
+        let blocks = builder.construct_blocks(&plans, entry_frames, &location_to_block)?;
+        (blocks, phi_blocks)
+    };
     let candidates = collect_phi_candidates(
         &blocks,
         &phi_blocks,
@@ -101,7 +107,8 @@ pub(super) fn construct(layout: BlockLayout<'_>) -> Result<SsaMethod<'_>, MokaIR
         simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
 
     Ok(SsaMethod {
-        analysis,
+        method: frame_facts.method,
+        caught_exception_ids: frame_facts.caught_exception_ids,
         entry,
         bytecode_entry,
         needs_entry_preheader,

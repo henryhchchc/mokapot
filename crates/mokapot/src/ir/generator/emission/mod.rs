@@ -1,60 +1,44 @@
 //! Emits completed public `MokaIR` from internal SSA construction state.
 
-mod body;
 mod remap;
 
 use self::remap::{remap_expression, remap_transfer};
-use super::ssa::{SsaBlock, SsaMethod};
+use super::ssa::SsaMethod;
 use super::{
-    BTreeMap, BasicBlock, BlockId, ControlTransfer, EdgeId, InstructionId, IrOperation,
-    JvmFrameAnalysis, LiftedInstruction, MokaIRBuildError, OperationKind, Phi, PhiInput, SourceMap,
-    SsaFrameValue, SsaValueId, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
-    ssa,
+    BTreeMap, BasicBlock, ControlTransfer, EdgeId, InstructionId, IrOperation, LiftedInstruction,
+    MokaIRBuildError, MokaIRMethod, OperationKind, Phi, PhiInput, SourceMap, SsaFrameValue,
+    SsaValueId, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
 };
-pub(in crate::ir::generator) use body::GeneratedBody;
 
 /// Emits final identities, blocks, and provenance from internal SSA.
-pub(super) fn emit(ssa: SsaMethod<'_>) -> Result<GeneratedBody, MokaIRBuildError> {
-    let SsaMethod {
-        analysis,
-        entry,
-        bytecode_entry,
-        needs_entry_preheader,
-        blocks,
-        phi_blocks,
-        simplified_phis,
-        this_value,
-        parameter_values,
-    } = ssa;
-    analysis.materialize_ssa(
-        entry,
-        bytecode_entry,
-        needs_entry_preheader,
-        blocks,
-        &phi_blocks,
-        &simplified_phis,
-        this_value,
-        &parameter_values,
-    )
+pub(super) fn emit(ssa: SsaMethod<'_>) -> Result<MokaIRMethod, MokaIRBuildError> {
+    Emitter { ssa }.emit()
 }
 
-impl JvmFrameAnalysis<'_> {
+struct Emitter<'method> {
+    ssa: SsaMethod<'method>,
+}
+
+impl Emitter<'_> {
     #[expect(
-        clippy::too_many_arguments,
         clippy::too_many_lines,
         reason = "final SSA allocation and block materialization form one ordered pass"
     )]
-    fn materialize_ssa(
-        &self,
-        entry: BlockId,
-        bytecode_entry: BlockId,
-        needs_entry_preheader: bool,
-        blocks: Vec<SsaBlock>,
-        phi_blocks: &BTreeMap<SsaValueId, BlockId>,
-        simplified: &ssa::SimplifiedPhis,
-        this_temp: Option<SsaValueId>,
-        parameter_temps: &[SsaValueId],
-    ) -> Result<GeneratedBody, MokaIRBuildError> {
+    fn emit(self) -> Result<MokaIRMethod, MokaIRBuildError> {
+        let SsaMethod {
+            method,
+            caught_exception_ids,
+            entry,
+            bytecode_entry,
+            needs_entry_preheader,
+            blocks,
+            phi_blocks,
+            simplified_phis,
+            this_value: this_temp,
+            parameter_values,
+        } = self.ssa;
+        let simplified = &simplified_phis;
+        let parameter_temps = &parameter_values;
         let mut next_instruction = 0_u32;
         let mut next_value = 0_u32;
         let mut temp_values = BTreeMap::new();
@@ -101,7 +85,7 @@ impl JvmFrameAnalysis<'_> {
                 .locations
                 .first()
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            if let Some(&temp) = self.caught_exception_ids.get(&leader) {
+            if let Some(&temp) = caught_exception_ids.get(&leader) {
                 let value = allocate_final_value(
                     temp,
                     ValueDefinition::CaughtException(block.plan.id),
@@ -112,7 +96,7 @@ impl JvmFrameAnalysis<'_> {
                 caught_exceptions.insert(block.plan.id, value);
             }
 
-            for (&temp, &phi_block) in phi_blocks {
+            for (&temp, &phi_block) in &phi_blocks {
                 if phi_block != block.plan.id || !simplified.candidates.contains_key(&temp) {
                     continue;
                 }
@@ -180,7 +164,7 @@ impl JvmFrameAnalysis<'_> {
 
         for block in blocks {
             let mut phis = Vec::new();
-            for (&temp, &phi_block) in phi_blocks {
+            for (&temp, &phi_block) in &phi_blocks {
                 if phi_block != block.plan.id {
                     continue;
                 }
@@ -300,15 +284,19 @@ impl JvmFrameAnalysis<'_> {
             ));
         }
 
-        Ok(GeneratedBody {
+        Ok(MokaIRMethod::new(
+            method.access_flags,
+            method.name.clone(),
+            method.descriptor.clone(),
+            method.owner.clone(),
             entry,
-            blocks: emitted_blocks,
+            emitted_blocks,
             source_map,
             this_value,
             parameter_values,
             caught_exceptions,
             value_definitions,
-        })
+        ))
     }
 }
 

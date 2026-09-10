@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 
 use super::*;
-use crate::jvm::code::{ExceptionTableEntry, Instruction, InstructionList};
+use crate::jvm::code::{
+    ExceptionTableEntry, Instruction, InstructionList, MethodBody, ProgramCounter,
+};
 
 pub(super) fn method(
     instructions: impl IntoIterator<Item = (ProgramCounter, Instruction)>,
