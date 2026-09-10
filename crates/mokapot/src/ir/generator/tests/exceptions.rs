@@ -203,6 +203,104 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
 }
 
 #[test]
+fn synchronized_return_has_only_exceptional_successors() {
+    let illegal_monitor_state: ClassRef = "java/lang/IllegalMonitorStateException".parse().unwrap();
+    let mut method = method(
+        [
+            (0.into(), Instruction::IConst1),
+            (1.into(), Instruction::IReturn),
+            (10.into(), Instruction::AStore0),
+            (11.into(), Instruction::IConst0),
+            (12.into(), Instruction::IReturn),
+        ],
+        "()I",
+        vec![ExceptionTableEntry {
+            covered_pc: 1.into()..2.into(),
+            handler_pc: 10.into(),
+            catch_type: Some(illegal_monitor_state.clone()),
+        }],
+    );
+    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    let ir = build(&method).unwrap();
+    let return_terminator = terminator_at(&ir, 1.into());
+    let returned = match return_terminator.kind() {
+        TerminatorKind::Return(Some(value)) => *value,
+        kind => panic!("expected value return, got {kind:?}"),
+    };
+    let successors = return_terminator.successors();
+
+    assert_eq!(successors.len(), 2);
+    assert!(matches!(
+        successors[0].transfer(),
+        ControlTransfer::Exception(Some(caught)) if caught == &illegal_monitor_state
+    ));
+    assert!(matches!(successors[1].transfer(), ControlTransfer::Unwind));
+    assert!(
+        successors
+            .iter()
+            .all(|successor| !matches!(successor.transfer(), ControlTransfer::Normal))
+    );
+    assert!(ir.caught_exception(successors[0].target()).is_some());
+    assert_eq!(
+        DefUseChain::new(&ir)
+            .uses_of(returned)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([UseSite::Instruction(return_terminator.id())])
+    );
+}
+
+#[test]
+fn unhandled_synchronized_return_reaches_unwind() {
+    let mut method = method([(0.into(), Instruction::Return)], "()V", vec![]);
+    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    let ir = build(&method).unwrap();
+    let return_terminator = terminator_at(&ir, 0.into());
+
+    assert_eq!(return_terminator.kind(), &TerminatorKind::Return(None));
+    assert_eq!(return_terminator.successors().len(), 1);
+    assert!(matches!(
+        return_terminator.successors()[0].transfer(),
+        ControlTransfer::Unwind
+    ));
+    assert_eq!(
+        ir.block(return_terminator.successors()[0].target())
+            .unwrap()
+            .terminator()
+            .kind(),
+        &TerminatorKind::Unwind
+    );
+}
+
+#[test]
+fn explicit_monitor_operations_make_returns_fallible() {
+    let method = method(
+        [
+            (0.into(), Instruction::ALoad0),
+            (1.into(), Instruction::MonitorEnter),
+            (2.into(), Instruction::Return),
+        ],
+        "(Ljava/lang/Object;)V",
+        vec![],
+    );
+    let ir = build(&method).unwrap();
+    let return_terminator = terminator_at(&ir, 2.into());
+
+    assert_eq!(return_terminator.successors().len(), 1);
+    assert!(matches!(
+        return_terminator.successors()[0].transfer(),
+        ControlTransfer::Unwind
+    ));
+}
+
+#[test]
+fn monitor_free_nonsynchronized_return_remains_terminal() {
+    let method = method([(0.into(), Instruction::Return)], "()V", vec![]);
+    let ir = build(&method).unwrap();
+
+    assert!(terminator_at(&ir, 0.into()).successors().is_empty());
+}
+
+#[test]
 fn exceptional_state_excludes_the_fallible_result() {
     let method = method(
         [

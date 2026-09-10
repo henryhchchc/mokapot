@@ -52,7 +52,8 @@ pub enum TerminatorKind {
         /// The value matched by the switch arms.
         match_value: ValueId,
     },
-    /// Returns from the method.
+    /// Completes the method normally, with exceptional successors when method
+    /// exit itself can fail.
     #[display("return{}", _0.as_ref().map(|value| format!(" {value}")).unwrap_or_default())]
     Return(Option<ValueId>),
     /// Throws an exception.
