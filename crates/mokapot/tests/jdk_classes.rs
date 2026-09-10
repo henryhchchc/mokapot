@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
 
 use mokapot::{
-    ir::{MokaIRMethodExt, control_flow::ControlTransfer},
+    ir::{MokaIRMethod, control_flow::ControlTransfer},
     jvm::Class,
     types::Descriptor,
 };
@@ -57,8 +57,8 @@ fn test_a_class(class: Class) {
                 .for_each(|(_pc, insn)| {
                     let _ = insn.name();
                 });
-            let ir_method = it.brew().unwrap_or_else(|e| {
-                panic!("Failed to brew {}: {}", it.name, e);
+            let ir_method = MokaIRMethod::from_method(it).unwrap_or_else(|e| {
+                panic!("Failed to build {}: {}", it.name, e);
             });
             let variable_count: usize = ir_method
                 .control_flow_graph()

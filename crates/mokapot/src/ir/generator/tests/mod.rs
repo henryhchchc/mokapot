@@ -41,6 +41,10 @@ pub(super) fn method(
     }
 }
 
+fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
+    MokaIRMethod::from_method(method)
+}
+
 mod blocks;
 mod control_flow;
 mod effects;

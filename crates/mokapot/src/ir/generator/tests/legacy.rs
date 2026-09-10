@@ -25,7 +25,7 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
 
 #[test]
 fn normalizes_a_basic_jsr_ret_pair_to_gotos() {
-    let ir = method(
+    let ir = build(&method(
         [
             (0.into(), Instruction::Jsr(10.into())),
             (3.into(), Instruction::Return),
@@ -34,8 +34,7 @@ fn normalizes_a_basic_jsr_ret_pair_to_gotos() {
         ],
         "()V",
         vec![],
-    )
-    .brew()
+    ))
     .unwrap();
 
     let call = block_with_origin(&ir, 0.into()).terminator();
@@ -50,7 +49,7 @@ fn normalizes_a_basic_jsr_ret_pair_to_gotos() {
 
 #[test]
 fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
-    let ir = method(
+    let ir = build(&method(
         [
             (0.into(), Instruction::Jsr(20.into())),
             (3.into(), Instruction::Jsr(20.into())),
@@ -62,8 +61,7 @@ fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
         ],
         "()V",
         vec![],
-    )
-    .brew()
+    ))
     .unwrap();
 
     assert_eq!(ir.source_map().instructions_at(21.into()).count(), 2);
@@ -91,7 +89,7 @@ fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
 
 #[test]
 fn supports_nested_subroutines_and_returns_to_an_ancestor() {
-    let ir = method(
+    let ir = build(&method(
         [
             (0.into(), Instruction::Jsr(20.into())),
             (3.into(), Instruction::Return),
@@ -103,8 +101,7 @@ fn supports_nested_subroutines_and_returns_to_an_ancestor() {
         ],
         "()V",
         vec![],
-    )
-    .brew()
+    ))
     .unwrap();
 
     assert_eq!(
@@ -128,7 +125,7 @@ fn normalizes_jsr_w_and_wide_ret() {
     );
     let mut ir = ir;
     ir.body.as_mut().unwrap().max_locals = 301;
-    let ir = ir.brew().unwrap();
+    let ir = build(&ir).unwrap();
 
     assert_eq!(
         block_with_origin(&ir, 0.into()).terminator().kind(),
@@ -142,7 +139,7 @@ fn normalizes_jsr_w_and_wide_ret() {
 
 #[test]
 fn gives_each_context_its_own_handler_entry_and_caught_value() {
-    let ir = method(
+    let ir = build(&method(
         [
             (0.into(), Instruction::Jsr(20.into())),
             (3.into(), Instruction::Jsr(20.into())),
@@ -164,8 +161,7 @@ fn gives_each_context_its_own_handler_entry_and_caught_value() {
             handler_pc: 30.into(),
             catch_type: Some("java/lang/Throwable".parse().unwrap()),
         }],
-    )
-    .brew()
+    ))
     .unwrap();
 
     let handler_values = ir
@@ -178,7 +174,7 @@ fn gives_each_context_its_own_handler_entry_and_caught_value() {
     assert_eq!(handler_values.len(), 2);
     assert_ne!(handler_values[0].1, handler_values[1].1);
     assert!(handler_values.iter().all(|&(block, value)| {
-        ir.value_definition(value) == Some(ValueDefinition::CaughtException(block))
+        ir.definition_of(value) == Some(ValueDefinition::CaughtException(block))
             && ir
                 .source_map()
                 .origins_of(ir.block(block).unwrap().terminator().id())
@@ -202,14 +198,14 @@ fn rejects_recursive_and_root_level_legacy_returns() {
         vec![],
     );
     assert!(matches!(
-        recursive.brew(),
-        Err(MokaIRBrewingError::MalformedControlFlow)
+        build(&recursive),
+        Err(MokaIRBuildError::MalformedControlFlow)
     ));
 
     let root_ret = method([(0.into(), Instruction::Ret(0))], "()V", vec![]);
     assert!(matches!(
-        root_ret.brew(),
-        Err(MokaIRBrewingError::ExecutionError(_) | MokaIRBrewingError::MalformedControlFlow)
+        build(&root_ret),
+        Err(MokaIRBuildError::ExecutionError(_) | MokaIRBuildError::MalformedControlFlow)
     ));
 
     let multiple_returns = method(
@@ -226,7 +222,7 @@ fn rejects_recursive_and_root_level_legacy_returns() {
         vec![],
     );
     assert!(matches!(
-        multiple_returns.brew(),
-        Err(MokaIRBrewingError::MalformedControlFlow)
+        build(&multiple_returns),
+        Err(MokaIRBuildError::MalformedControlFlow)
     ));
 }
