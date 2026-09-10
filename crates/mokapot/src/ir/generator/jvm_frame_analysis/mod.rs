@@ -15,31 +15,43 @@ use crate::ir::generator::lifting::{
 
 /// Mutable state used only while solving JVM frame facts.
 pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
-    method: &'method Method,
     body: &'method MethodBody,
     fallibility: FallibilityContext,
     normalizer: LegacyNormalizer,
     definition_ids: BTreeMap<Location, SsaValueId>,
     caught_exception_ids: BTreeMap<Location, SsaValueId>,
     next_definition_id: u32,
-    instructions: BTreeMap<Location, LiftedInstruction>,
-    successors: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
-    successor_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
+    lifted_locations: BTreeMap<Location, (bool, Vec<JvmOutgoing>)>,
     entry: Option<(Location, JvmStackFrame)>,
 }
 
-/// Reachable JVM locations, their incoming frames, and normalized control flow.
-pub(in crate::ir::generator) struct JvmFrameFacts<'method> {
-    pub method: &'method Method,
-    pub body: &'method MethodBody,
-    pub entry: (Location, JvmStackFrame),
-    pub frames: BTreeMap<Location, JvmStackFrame>,
-    pub instructions: BTreeMap<Location, LiftedInstruction>,
-    pub successors: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
-    pub successor_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
-    pub definition_ids: BTreeMap<Location, SsaValueId>,
-    pub caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    pub normalized: NormalizedJvm,
+/// One outgoing edge and the abstract frame reaching its target.
+pub(in crate::ir::generator) struct JvmOutgoing {
+    pub target: Location,
+    pub transfer: LiftedControlTransfer<OperandState>,
+    pub frame: JvmStackFrame,
+}
+
+/// Completed abstract-execution facts for one reachable JVM location.
+pub(in crate::ir::generator) struct AnalyzedLocation {
+    pub incoming: JvmStackFrame,
+    pub is_explicit_transfer: bool,
+    pub outgoing: Vec<JvmOutgoing>,
+}
+
+/// Immutable lookups required to replay bytecode with exact SSA operands.
+pub(in crate::ir::generator) struct JvmReplayPlan {
+    definition_ids: BTreeMap<Location, SsaValueId>,
+    caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    normalized: NormalizedJvm,
+}
+
+/// Reachable JVM locations and abstract control-flow facts.
+pub(in crate::ir::generator) struct AnalyzedJvmCfg {
+    pub entry_location: Location,
+    pub initial_frame: JvmStackFrame,
+    pub locations: BTreeMap<Location, AnalyzedLocation>,
+    pub replay: JvmReplayPlan,
 }
 
 impl DataflowProblem for JvmFrameAnalyzer<'_> {
@@ -97,17 +109,20 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
             }
         };
 
-        self.instructions.insert(location, instruction);
-        self.successors.insert(
+        let is_explicit_transfer = instruction.is_explicit_transfer();
+        self.lifted_locations.insert(
             location,
-            outgoing
-                .iter()
-                .map(|(target, transfer, _)| (*target, transfer.clone()))
-                .collect(),
-        );
-        self.successor_frames.insert(
-            location,
-            outgoing.iter().map(|(_, _, frame)| frame.clone()).collect(),
+            (
+                is_explicit_transfer,
+                outgoing
+                    .iter()
+                    .map(|(target, transfer, frame)| JvmOutgoing {
+                        target: *target,
+                        transfer: transfer.clone(),
+                        frame: frame.clone(),
+                    })
+                    .collect(),
+            ),
         );
         Ok(outgoing
             .into_iter()
@@ -132,35 +147,52 @@ impl<'method> JvmFrameAnalyzer<'method> {
         )?;
 
         Ok(Self {
-            method,
             body,
             fallibility: FallibilityContext::for_method(method),
             normalizer: LegacyNormalizer::new(first_pc),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             next_definition_id: 0,
-            instructions: BTreeMap::new(),
-            successors: BTreeMap::new(),
-            successor_frames: BTreeMap::new(),
+            lifted_locations: BTreeMap::new(),
             entry: Some((Location::entry(first_pc), initial_frame)),
         })
     }
 
-    pub(super) fn run(mut self) -> Result<JvmFrameFacts<'method>, MokaIRBuildError> {
+    pub(super) fn run(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
         use crate::analysis::fixed_point::solve;
 
-        let frames = solve(&mut self)?;
-        Ok(JvmFrameFacts {
-            method: self.method,
-            body: self.body,
-            entry: self.entry.ok_or(MokaIRBuildError::MalformedControlFlow)?,
-            frames,
-            instructions: self.instructions,
-            successors: self.successors,
-            successor_frames: self.successor_frames,
-            definition_ids: self.definition_ids,
-            caught_exception_ids: self.caught_exception_ids,
-            normalized: self.normalizer.finish(),
+        let frames: BTreeMap<Location, JvmStackFrame> = solve(&mut self)?;
+        let locations: BTreeMap<Location, AnalyzedLocation> = frames
+            .into_iter()
+            .map(|(location, incoming)| {
+                let (is_explicit_transfer, outgoing) = self
+                    .lifted_locations
+                    .remove(&location)
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+                Ok((
+                    location,
+                    AnalyzedLocation {
+                        incoming,
+                        is_explicit_transfer,
+                        outgoing,
+                    },
+                ))
+            })
+            .collect::<Result<_, MokaIRBuildError>>()?;
+        if !self.lifted_locations.is_empty() {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
+        let (entry_location, initial_frame) =
+            self.entry.ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        Ok(AnalyzedJvmCfg {
+            entry_location,
+            initial_frame,
+            locations,
+            replay: JvmReplayPlan {
+                definition_ids: self.definition_ids,
+                caught_exception_ids: self.caught_exception_ids,
+                normalized: self.normalizer.finish(),
+            },
         })
     }
 
@@ -171,6 +203,104 @@ impl<'method> JvmFrameAnalyzer<'method> {
             .checked_add(1)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(id)
+    }
+}
+
+impl JvmReplayPlan {
+    pub(in crate::ir::generator) fn max_value_index(&self) -> Option<u32> {
+        self.definition_ids
+            .values()
+            .chain(self.caught_exception_ids.values())
+            .map(|value| value.index())
+            .max()
+    }
+
+    pub(in crate::ir::generator) fn definition_at(
+        &self,
+        location: Location,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
+        self.definition_ids
+            .get(&location)
+            .copied()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+
+    pub(in crate::ir::generator) fn caught_exception_at(
+        &self,
+        location: Location,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
+        self.caught_exception_ids
+            .get(&location)
+            .copied()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+
+    pub(in crate::ir::generator) fn caught_exception(
+        &self,
+        location: Location,
+    ) -> Option<SsaValueId> {
+        self.caught_exception_ids.get(&location).copied()
+    }
+
+    pub(in crate::ir::generator) fn next_location(
+        &self,
+        body: &MethodBody,
+        location: Location,
+    ) -> Result<Location, MokaIRBuildError> {
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let next = body
+            .instructions
+            .next_pc_of(&pc)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalized.bytecode(next, context)
+    }
+
+    pub(in crate::ir::generator) fn target_location(
+        &self,
+        location: Location,
+        target: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalized.bytecode(target, context)
+    }
+
+    pub(in crate::ir::generator) fn handler_location(
+        &self,
+        location: Location,
+        handler: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalized.handler(handler, context)
+    }
+
+    pub(in crate::ir::generator) fn unwind_location(&self) -> Result<Location, MokaIRBuildError> {
+        self.normalized.unwind()
+    }
+
+    pub(in crate::ir::generator) fn enter_subroutine(
+        &self,
+        location: Location,
+        target: ProgramCounter,
+        continuation: ProgramCounter,
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+        self.normalized.enter(location, target, continuation)
+    }
+
+    pub(in crate::ir::generator) fn return_from(
+        &self,
+        location: Location,
+        address: ReturnAddress,
+    ) -> Result<Location, MokaIRBuildError> {
+        self.normalized.return_from(location, address)
     }
 }
 

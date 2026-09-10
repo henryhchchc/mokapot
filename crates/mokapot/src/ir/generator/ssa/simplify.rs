@@ -4,20 +4,20 @@ use super::SsaValueId;
 use crate::ir::BlockId;
 
 /// Phi candidates keyed by their provisional result value.
-pub(in crate::ir::generator) type PhiCandidates = BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>;
+pub(super) type PhiCandidates = BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>;
 
 /// The result of simplifying a set of provisional phi nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) struct SimplifiedPhis {
+pub(super) struct SimplifiedPhis {
     /// Canonical replacements for eliminated phi results.
-    pub(crate) substitutions: BTreeMap<SsaValueId, SsaValueId>,
+    pub(super) substitutions: BTreeMap<SsaValueId, SsaValueId>,
     /// Phi candidates that represent genuine choices after rewriting.
-    pub(crate) candidates: PhiCandidates,
+    pub(super) candidates: PhiCandidates,
 }
 
 /// An inconsistency found while simplifying provisional phi nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum PhiSimplificationError {
+pub(super) enum PhiSimplificationError {
     /// A reachable phi cycle has no value entering it from outside the cycle.
     #[error("reachable phi cycle containing {representative} has no external value")]
     ClosedCycle {
@@ -31,7 +31,7 @@ pub(crate) enum PhiSimplificationError {
 /// Inputs retain their caller-provided predecessor order. Eliminated results are
 /// returned as fully canonical substitutions, and every retained input is
 /// rewritten through those substitutions.
-pub(in crate::ir::generator) fn simplify_phis(
+pub(super) fn simplify_phis(
     mut candidates: PhiCandidates,
 ) -> Result<SimplifiedPhis, PhiSimplificationError> {
     let mut substitutions = BTreeMap::new();
