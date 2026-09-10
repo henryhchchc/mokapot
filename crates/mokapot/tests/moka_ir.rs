@@ -1,7 +1,7 @@
 use mokapot::{
     ir::{
         DefUseChain, InstructionId, InstructionKind, MokaIRMethod, MokaIRMethodExt, TerminatorKind,
-        ValueDefinition, expression::Expression,
+        UseSite, ValueDefinition, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
@@ -184,9 +184,36 @@ fn du_chain_uses_include_source_related_nodes() {
         assert!(
             ir.source_map()
                 .instructions_at(ProgramCounter::from(use_pc))
-                .any(|id| uses.contains(&id))
+                .any(|id| uses.contains(&UseSite::Instruction(id)))
         );
     }
+}
+
+#[test]
+#[cfg_attr(not(integration_test), ignore)]
+fn coverage_transfer_uses_only_sparse_source_provenance() {
+    let ir = get_test_method().brew().unwrap();
+    let covered_pcs = [ProgramCounter::from(0x0000), ProgramCounter::from(0x0003)];
+    let covered_nodes = covered_pcs
+        .into_iter()
+        .flat_map(|pc| ir.source_map().instructions_at(pc))
+        .collect::<BTreeSet<_>>();
+
+    assert!(!covered_nodes.is_empty());
+    assert!(covered_pcs.into_iter().all(|pc| {
+        ir.source_map()
+            .instructions_at(pc)
+            .all(|instruction| covered_nodes.contains(&instruction))
+    }));
+    assert_eq!(
+        ir.source_map()
+            .instructions_at(ProgramCounter::from(0x007B))
+            .count(),
+        0
+    );
+    assert!(ir.blocks().flat_map(|block| block.phis()).all(|phi| {
+        ir.source_map().origins_of(phi.id()).next().is_none() && !covered_nodes.contains(&phi.id())
+    }));
 }
 
 #[test]
@@ -210,4 +237,9 @@ fn dominance() {
     let cfg = ir.control_flow_graph();
     let dominance = petgraph::algo::dominators::simple_fast(&cfg, ir.entry_block());
     assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);
+    assert!(
+        ir.blocks()
+            .filter(|block| block.id() != ir.entry_block())
+            .all(|block| { dominance.immediate_dominator(block.id()).is_some() })
+    );
 }
