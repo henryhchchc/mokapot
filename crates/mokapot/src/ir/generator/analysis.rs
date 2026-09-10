@@ -1,14 +1,14 @@
 use super::{
-    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, Entry, FrameOperand,
-    GeneratedMethod, HashMap, Identifier, JvmStackFrame, LiftedCondition, LiftedControlTransfer,
-    LiftedInstruction, LiftedValue, Location, Method, MokaIRBrewingError, MokaIRGenerator, Operand,
-    OutgoingState, ProgramCounter, ValueId, fallibility, method,
+    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, DiscoveryValue, Entry,
+    FrameOperand, GeneratedMethod, JvmStackFrame, LiftedCondition, LiftedControlTransfer,
+    LiftedInstruction, LiftedValue, Location, Method, MokaIRBuildError, MokaIRGenerator,
+    OutgoingState, ProgramCounter, ProvisionalValueId, fallibility, method,
 };
 
 impl DataflowProblem for MokaIRGenerator<'_> {
     type Location = Location;
     type Fact = JvmStackFrame;
-    type Err = MokaIRBrewingError;
+    type Err = MokaIRBuildError;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         self.initial_seed.clone().into_iter().collect::<Vec<_>>()
@@ -42,7 +42,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)?
                     .clone();
                 let instruction =
                     self.lift_instruction(&jvm_instruction, location, &mut normal_frame)?;
@@ -52,7 +52,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
                     normal_frame,
                     &instruction,
                     fallibility::is_synchronously_fallible(&jvm_instruction),
-                    &|id| Operand::just(Identifier::CaughtException(id)),
+                    &|id| DiscoveryValue::CaughtException(id),
                 )?;
                 (instruction, outgoing)
             }
@@ -78,16 +78,13 @@ impl DataflowProblem for MokaIRGenerator<'_> {
 }
 
 impl<'method> MokaIRGenerator<'method> {
-    pub(super) fn for_method(method: &'method Method) -> Result<Self, MokaIRBrewingError> {
-        let body = method
-            .body
-            .as_ref()
-            .ok_or(MokaIRBrewingError::NoMethodBody)?;
+    pub(super) fn for_method(method: &'method Method) -> Result<Self, MokaIRBuildError> {
+        let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
         let first_pc = body
             .instructions
             .entry_point()
             .map(|(pc, _)| *pc)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let initial_frame = JvmStackFrame::new(
             method.access_flags.contains(method::AccessFlags::STATIC),
             &method.descriptor,
@@ -111,56 +108,62 @@ impl<'method> MokaIRGenerator<'method> {
         })
     }
 
-    pub(super) fn value_at(&mut self, location: Location) -> Result<ValueId, MokaIRBrewingError> {
+    pub(super) fn value_at(
+        &mut self,
+        location: Location,
+    ) -> Result<ProvisionalValueId, MokaIRBuildError> {
         if let Some(value) = self.value_ids.get(&location) {
             return Ok(*value);
         }
         if !self.discovering || !matches!(location, Location::Bytecode { .. }) {
-            return Err(MokaIRBrewingError::MalformedControlFlow);
+            return Err(MokaIRBuildError::MalformedControlFlow);
         }
         let value = self.next_temporary_value()?;
         self.value_ids.insert(location, value);
         Ok(value)
     }
 
-    fn caught_exception_at(&mut self, location: Location) -> Result<ValueId, MokaIRBrewingError> {
+    fn caught_exception_at(
+        &mut self,
+        location: Location,
+    ) -> Result<ProvisionalValueId, MokaIRBuildError> {
         if let Some(value) = self.caught_exception_ids.get(&location) {
             return Ok(*value);
         }
         if !self.discovering || !matches!(location, Location::Handler { .. }) {
-            return Err(MokaIRBrewingError::MalformedControlFlow);
+            return Err(MokaIRBuildError::MalformedControlFlow);
         }
         let value = self.next_temporary_value()?;
         self.caught_exception_ids.insert(location, value);
         Ok(value)
     }
 
-    fn next_temporary_value(&mut self) -> Result<ValueId, MokaIRBrewingError> {
-        let value = ValueId::new(self.next_lifted_value);
+    fn next_temporary_value(&mut self) -> Result<ProvisionalValueId, MokaIRBuildError> {
+        let value = ProvisionalValueId::new(self.next_lifted_value);
         self.next_lifted_value = self
             .next_lifted_value
             .checked_add(1)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(value)
     }
 
     pub(super) fn next_pc_of(
         &self,
         pc: ProgramCounter,
-    ) -> Result<ProgramCounter, MokaIRBrewingError> {
+    ) -> Result<ProgramCounter, MokaIRBuildError> {
         self.body
             .instructions
             .next_pc_of(&pc)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
-    fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBrewingError> {
+    fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
         let pc = location
             .source_pc()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let context = location
             .context()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         self.legacy.bytecode(self.next_pc_of(pc)?, context)
     }
 
@@ -168,10 +171,10 @@ impl<'method> MokaIRGenerator<'method> {
         &mut self,
         location: Location,
         target: ProgramCounter,
-    ) -> Result<Location, MokaIRBrewingError> {
+    ) -> Result<Location, MokaIRBuildError> {
         let context = location
             .context()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         self.legacy.bytecode(target, context)
     }
 
@@ -179,14 +182,14 @@ impl<'method> MokaIRGenerator<'method> {
         &mut self,
         location: Location,
         pre_frame: &JvmStackFrame<OP>,
-        caught_value: &impl Fn(ValueId) -> OP,
-    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBrewingError> {
+        caught_value: &impl Fn(ProvisionalValueId) -> OP,
+    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
         let pc = location
             .source_pc()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let context = location
             .context()
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let entries = self
             .body
             .exception_table
@@ -234,8 +237,8 @@ impl<'method> MokaIRGenerator<'method> {
         normal_frame: JvmStackFrame<OP>,
         instruction: &LiftedInstruction<OP>,
         fallible: bool,
-        caught_value: &impl Fn(ValueId) -> OP,
-    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBrewingError> {
+        caught_value: &impl Fn(ProvisionalValueId) -> OP,
+    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
         use LiftedControlTransfer::{Conditional, Normal, Unconditional};
 
         Ok(match instruction {
@@ -245,7 +248,7 @@ impl<'method> MokaIRGenerator<'method> {
                     context,
                 } = location
                 else {
-                    return Err(MokaIRBrewingError::MalformedControlFlow);
+                    return Err(MokaIRBuildError::MalformedControlFlow);
                 };
                 vec![(
                     self.legacy.bytecode(handler_pc, context)?,
@@ -265,7 +268,7 @@ impl<'method> MokaIRGenerator<'method> {
                 outgoing.extend(self.exception_edges(location, pre_frame, caught_value)?);
                 outgoing
             }
-            LiftedInstruction::Nop
+            LiftedInstruction::Erased
             | LiftedInstruction::Definition { .. }
             | LiftedInstruction::Effect(_) => {
                 vec![(self.next_location(location)?, Unconditional, normal_frame)]
@@ -333,7 +336,7 @@ impl<'method> MokaIRGenerator<'method> {
             LiftedInstruction::SubroutineReturn(value) => {
                 let address = value
                     .return_address()
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
                 vec![(
                     self.legacy.return_from(location, address)?,
                     Unconditional,
@@ -343,47 +346,11 @@ impl<'method> MokaIRGenerator<'method> {
         })
     }
 
-    pub(super) fn generate(mut self) -> Result<GeneratedMethod, MokaIRBrewingError> {
+    pub(super) fn generate(mut self) -> Result<GeneratedMethod, MokaIRBuildError> {
         use crate::analysis::fixed_point::solve;
 
-        let _: HashMap<_, _> = solve(&mut self)?;
-        let reachable = self.lifted.keys().copied().collect::<Vec<_>>();
-        self.value_ids = reachable
-            .iter()
-            .filter(|location| matches!(location, Location::Bytecode { .. }))
-            .enumerate()
-            .map(|(index, &location)| {
-                u32::try_from(index)
-                    .map(|index| (location, ValueId::new(index)))
-                    .map_err(|_| MokaIRBrewingError::MalformedControlFlow)
-            })
-            .collect::<Result<_, _>>()?;
-        let first_caught_id = u32::try_from(self.value_ids.len())
-            .map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
-        self.caught_exception_ids = reachable
-            .iter()
-            .filter(|location| matches!(location, Location::Handler { .. }))
-            .enumerate()
-            .map(|(offset, &handler)| {
-                let offset =
-                    u32::try_from(offset).map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
-                first_caught_id
-                    .checked_add(offset)
-                    .map(|id| (handler, ValueId::new(id)))
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)
-            })
-            .collect::<Result<_, _>>()?;
-        self.next_lifted_value = first_caught_id
-            .checked_add(
-                u32::try_from(self.caught_exception_ids.len())
-                    .map_err(|_| MokaIRBrewingError::MalformedControlFlow)?,
-            )
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+        let facts: BTreeMap<_, _> = solve(&mut self)?;
         self.discovering = false;
-        self.lifted.clear();
-        self.outgoing.clear();
-        self.outgoing_frames.clear();
-        let facts: HashMap<_, _> = solve(&mut self)?;
         self.assemble_blocks(&facts)
     }
 }

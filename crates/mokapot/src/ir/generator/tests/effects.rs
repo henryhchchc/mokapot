@@ -17,7 +17,7 @@ fn array_write_is_an_effect_without_a_definition() {
         "([III)V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let effect = ir
         .source_map()
         .instructions_at(3.into())
@@ -49,7 +49,7 @@ fn monitor_operations_are_effects_without_definitions() {
         "(Ljava/lang/Object;)V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let instructions = ir
         .blocks()
         .flat_map(BasicBlock::instructions)

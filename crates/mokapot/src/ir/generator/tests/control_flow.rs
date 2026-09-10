@@ -21,7 +21,7 @@ fn switch_retains_parallel_successor_arms() {
         "(I)V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let switch = ir.block(ir.entry_block()).unwrap().terminator();
 
     assert!(matches!(switch.kind(), TerminatorKind::Switch { .. }));
@@ -75,7 +75,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         "()V",
         exception_table,
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let fallible = ir.block(ir.entry_block()).unwrap().terminator();
 
     assert_eq!(fallible.kind(), &TerminatorKind::Fallible);
@@ -116,7 +116,7 @@ fn normally_reachable_handler_still_starts_a_block() {
             catch_type: Some("java/lang/Throwable".parse().unwrap()),
         }],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let entry = ir.block(ir.entry_block()).unwrap();
     let normal = entry
         .terminator()
@@ -154,7 +154,7 @@ fn throw_is_a_source_backed_terminator() {
         "(Ljava/lang/Throwable;)V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let block = ir.block(ir.entry_block()).unwrap();
 
     assert!(matches!(

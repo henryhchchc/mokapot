@@ -1,17 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    MokaIRBrewingError, Operand, PairedFrameValue, ScalarBlock, ScalarValue,
+    DiscoveryValue, MokaIRBuildError, PairedFrameValue, ProvisionalValueId, ScalarBlock,
+    ScalarValue,
     jvm_frame::{Entry, JvmStackFrame},
     ssa,
 };
-use crate::ir::{BlockId, ValueId};
+use crate::ir::BlockId;
 
 pub(super) fn collect_phi_candidates(
     blocks: &[ScalarBlock],
-    phi_blocks: &BTreeMap<ValueId, BlockId>,
+    phi_blocks: &BTreeMap<ProvisionalValueId, BlockId>,
     preheader: Option<(BlockId, &JvmStackFrame<ScalarValue>)>,
-) -> Result<ssa::PhiCandidates, MokaIRBrewingError> {
+) -> Result<ssa::PhiCandidates, MokaIRBuildError> {
     let mut candidates = ssa::PhiCandidates::new();
     for target in blocks {
         let mut incoming = blocks
@@ -35,7 +36,8 @@ pub(super) fn collect_phi_candidates(
             .map(|(predecessor, _)| *predecessor)
             .collect::<BTreeSet<_>>()
             .len();
-        let mut inputs = BTreeMap::<ValueId, BTreeMap<BlockId, ValueId>>::new();
+        let mut inputs =
+            BTreeMap::<ProvisionalValueId, BTreeMap<BlockId, ProvisionalValueId>>::new();
         for (predecessor, frame) in incoming {
             for (result, value) in paired_frame_values(&target.entry_frame, frame)? {
                 let (Some(result), Some(value)) = (result, value) else {
@@ -51,7 +53,7 @@ pub(super) fn collect_phi_candidates(
                     std::collections::btree_map::Entry::Occupied(entry)
                         if *entry.get() == value => {}
                     std::collections::btree_map::Entry::Occupied(_) => {
-                        return Err(MokaIRBrewingError::MalformedControlFlow);
+                        return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                 }
             }
@@ -92,11 +94,11 @@ pub(super) fn collect_phi_candidates(
 fn paired_frame_values(
     target: &JvmStackFrame<ScalarValue>,
     source: &JvmStackFrame<ScalarValue>,
-) -> Result<Vec<PairedFrameValue>, MokaIRBrewingError> {
+) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
     if target.local_variables().len() != source.local_variables().len()
         || target.operand_stack().len() != source.operand_stack().len()
     {
-        return Err(MokaIRBrewingError::MalformedControlFlow);
+        return Err(MokaIRBuildError::MalformedControlFlow);
     }
     target
         .local_variables()
@@ -115,7 +117,7 @@ fn paired_frame_values(
             (_, Entry::Value(ScalarValue::Value(value))) => Ok((None, Some(*value))),
             (Entry::Value(ScalarValue::ReturnAddress(_)), _)
             | (_, Entry::Value(ScalarValue::ReturnAddress(_))) => {
-                Err(MokaIRBrewingError::MalformedControlFlow)
+                Err(MokaIRBuildError::MalformedControlFlow)
             }
             _ => Ok((None, None)),
         })
@@ -125,14 +127,14 @@ fn paired_frame_values(
 pub(super) fn unavailable_value_slots(
     merged: &JvmStackFrame,
     incoming: &[&JvmStackFrame],
-) -> Result<(Vec<usize>, Vec<usize>), MokaIRBrewingError> {
+) -> Result<(Vec<usize>, Vec<usize>), MokaIRBuildError> {
     if incoming.iter().any(|frame| {
         frame.local_variables().len() != merged.local_variables().len()
             || frame.operand_stack().len() != merged.operand_stack().len()
     }) {
-        return Err(MokaIRBrewingError::MalformedControlFlow);
+        return Err(MokaIRBuildError::MalformedControlFlow);
     }
-    let unavailable = |merged: &[Entry<Operand>], stack: bool| {
+    let unavailable = |merged: &[Entry<DiscoveryValue>], stack: bool| {
         merged
             .iter()
             .enumerate()

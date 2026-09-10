@@ -1,7 +1,7 @@
 use mokapot::{
     ir::{
-        DefUseChain, InstructionId, InstructionKind, MokaIRMethod, MokaIRMethodExt, TerminatorKind,
-        UseSite, ValueDefinition, expression::Expression,
+        DefUseChain, InstructionId, InstructionKind, MokaIRMethod, TerminatorKind, UseSite,
+        ValueDefinition, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
@@ -28,7 +28,7 @@ fn get_test_method() -> Method {
         .unwrap()
 }
 
-fn instruction(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::MokaInstruction> {
+fn instruction(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Instruction> {
     method
         .blocks()
         .flat_map(|block| block.instructions())
@@ -50,8 +50,8 @@ fn load_test_method() {
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
-fn brew_ir_blocks_and_provenance() {
-    let ir = get_test_method().brew().unwrap();
+fn builds_ir_blocks_and_provenance() {
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
 
     let first = ir
         .source_map()
@@ -91,12 +91,12 @@ fn brew_ir_blocks_and_provenance() {
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
 fn du_chain_definitions_use_instruction_identities() {
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let chain = DefUseChain::new(&ir);
     for instruction in ir.blocks().flat_map(|block| block.instructions()) {
         if let Some(value) = instruction.def() {
             assert_eq!(
-                chain.defined_at(value),
+                chain.definition_of(value),
                 Some(ValueDefinition::Instruction(instruction.id()))
             );
         }
@@ -106,7 +106,7 @@ fn du_chain_definitions_use_instruction_identities() {
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
 fn ssa_identities_and_phi_predecessors_are_well_formed() {
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let mut instruction_ids = HashSet::new();
     let mut definitions = HashSet::new();
     let mut uses = HashSet::new();
@@ -157,14 +157,14 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
     assert!(
         definitions
             .iter()
-            .all(|value| ir.value_definition(*value).is_some())
+            .all(|value| ir.definition_of(*value).is_some())
     );
 }
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
 fn du_chain_uses_include_source_related_nodes() {
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let chain = DefUseChain::new(&ir);
     let test_data = [
         (3, 0x09),
@@ -178,9 +178,9 @@ fn du_chain_uses_include_source_related_nodes() {
         let value = ir
             .source_map()
             .instructions_at(ProgramCounter::from(definition_pc))
-            .find_map(|id| instruction(&ir, id).and_then(mokapot::ir::MokaInstruction::def))
+            .find_map(|id| instruction(&ir, id).and_then(mokapot::ir::Instruction::def))
             .unwrap();
-        let uses = chain.used_at(value);
+        let uses = chain.uses_of(value).collect::<BTreeSet<_>>();
         assert!(
             ir.source_map()
                 .instructions_at(ProgramCounter::from(use_pc))
@@ -192,7 +192,7 @@ fn du_chain_uses_include_source_related_nodes() {
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
 fn coverage_transfer_uses_only_sparse_source_provenance() {
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let covered_pcs = [ProgramCounter::from(0x0000), ProgramCounter::from(0x0003)];
     let covered_nodes = covered_pcs
         .into_iter()
@@ -222,7 +222,7 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
 fn cfg_to_dot() {
     use petgraph::dot::Dot;
 
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let cfg = ir.control_flow_graph();
     let dot = format!("{:?}", Dot::new(&cfg));
     assert!(dot.contains("digraph"));
@@ -233,7 +233,7 @@ fn cfg_to_dot() {
 #[cfg(feature = "petgraph")]
 #[cfg_attr(not(integration_test), ignore)]
 fn dominance() {
-    let ir = get_test_method().brew().unwrap();
+    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let cfg = ir.control_flow_graph();
     let dominance = petgraph::algo::dominators::simple_fast(&cfg, ir.entry_block());
     assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);

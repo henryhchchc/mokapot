@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::super::{Identifier, Operand};
+use super::super::DiscoveryValue;
 
 pub(crate) type SlotWidth = bool;
 pub(crate) const SINGLE_SLOT: SlotWidth = false;
@@ -19,7 +19,7 @@ pub(crate) const DUAL_SLOT: SlotWidth = true;
 use super::{entry::Entry, error::ExecutionError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct JvmStackFrame<V = Operand> {
+pub struct JvmStackFrame<V = DiscoveryValue> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
@@ -73,22 +73,22 @@ impl<V: Clone + JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
     }
 }
 
-impl JvmStackFrame<Operand> {
+impl JvmStackFrame<DiscoveryValue> {
     pub(crate) fn new(
         is_static: bool,
         desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, ExecutionError> {
-        let this_value = (!is_static).then(|| Operand::just(Identifier::This));
+        let this_value = (!is_static).then_some(DiscoveryValue::This);
         let parameters = desc
             .parameters_types
             .iter()
             .enumerate()
             .map(|(index, _)| {
-                Operand::just(Identifier::Arg(
+                DiscoveryValue::Arg(
                     u16::try_from(index).expect("descriptor parameter count fits u16"),
-                ))
+                )
             })
             .collect::<Vec<_>>();
         Self::with_inputs(desc, max_locals, max_stack, this_value, &parameters)

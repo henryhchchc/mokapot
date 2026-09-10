@@ -1,15 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::{BlockId, ValueId};
+use super::ProvisionalValueId;
+use crate::ir::BlockId;
 
 /// Phi candidates keyed by their provisional result value.
-pub(crate) type PhiCandidates = BTreeMap<ValueId, Vec<(BlockId, ValueId)>>;
+pub(crate) type PhiCandidates = BTreeMap<ProvisionalValueId, Vec<(BlockId, ProvisionalValueId)>>;
 
 /// The result of simplifying a set of provisional phi nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SimplifiedPhis {
     /// Canonical replacements for eliminated phi results.
-    pub(crate) substitutions: BTreeMap<ValueId, ValueId>,
+    pub(crate) substitutions: BTreeMap<ProvisionalValueId, ProvisionalValueId>,
     /// Phi candidates that represent genuine choices after rewriting.
     pub(crate) candidates: PhiCandidates,
 }
@@ -21,7 +22,7 @@ pub(crate) enum PhiSimplificationError {
     #[error("reachable phi cycle containing {representative} has no external value")]
     ClosedCycle {
         /// The lowest-numbered result in the remaining canonical cycle.
-        representative: ValueId,
+        representative: ProvisionalValueId,
     },
 }
 
@@ -109,7 +110,10 @@ pub(crate) fn simplify_phis(
     })
 }
 
-fn canonical(mut value: ValueId, substitutions: &BTreeMap<ValueId, ValueId>) -> ValueId {
+fn canonical(
+    mut value: ProvisionalValueId,
+    substitutions: &BTreeMap<ProvisionalValueId, ProvisionalValueId>,
+) -> ProvisionalValueId {
     while let Some(&replacement) = substitutions.get(&value) {
         debug_assert_ne!(value, replacement, "a substitution must make progress");
         value = replacement;
@@ -117,7 +121,10 @@ fn canonical(mut value: ValueId, substitutions: &BTreeMap<ValueId, ValueId>) -> 
     value
 }
 
-fn rewrite_candidates(candidates: &mut PhiCandidates, substitutions: &BTreeMap<ValueId, ValueId>) {
+fn rewrite_candidates(
+    candidates: &mut PhiCandidates,
+    substitutions: &BTreeMap<ProvisionalValueId, ProvisionalValueId>,
+) {
     for inputs in candidates.values_mut() {
         for (_, value) in inputs {
             *value = canonical(*value, substitutions);
@@ -125,7 +132,7 @@ fn rewrite_candidates(candidates: &mut PhiCandidates, substitutions: &BTreeMap<V
     }
 }
 
-fn strongly_connected_components(candidates: &PhiCandidates) -> Vec<BTreeSet<ValueId>> {
+fn strongly_connected_components(candidates: &PhiCandidates) -> Vec<BTreeSet<ProvisionalValueId>> {
     let nodes = candidates.keys().copied().collect::<BTreeSet<_>>();
     let adjacency = candidates
         .iter()
@@ -209,108 +216,4 @@ fn strongly_connected_components(candidates: &PhiCandidates) -> Vec<BTreeSet<Val
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn value(index: u32) -> ValueId {
-        ValueId::new(index)
-    }
-
-    fn block(index: u32) -> BlockId {
-        BlockId::new(index)
-    }
-
-    #[test]
-    fn canonicalizes_trivial_phi_chains() {
-        let simplified = simplify_phis(BTreeMap::from([
-            (value(1), vec![(block(0), value(100))]),
-            (value(2), vec![(block(1), value(1))]),
-        ]))
-        .unwrap();
-
-        assert!(simplified.candidates.is_empty());
-        assert_eq!(
-            simplified.substitutions,
-            BTreeMap::from([(value(1), value(100)), (value(2), value(100))])
-        );
-    }
-
-    #[test]
-    fn ignores_self_inputs_when_simplifying() {
-        let simplified = simplify_phis(BTreeMap::from([(
-            value(1),
-            vec![(block(0), value(100)), (block(1), value(1))],
-        )]))
-        .unwrap();
-
-        assert!(simplified.candidates.is_empty());
-        assert_eq!(simplified.substitutions[&value(1)], value(100));
-    }
-
-    #[test]
-    fn collapses_mutually_recursive_trivial_phis() {
-        let simplified = simplify_phis(BTreeMap::from([
-            (value(1), vec![(block(0), value(100)), (block(1), value(2))]),
-            (value(2), vec![(block(0), value(100)), (block(1), value(1))]),
-        ]))
-        .unwrap();
-
-        assert!(simplified.candidates.is_empty());
-        assert_eq!(simplified.substitutions[&value(1)], value(100));
-        assert_eq!(simplified.substitutions[&value(2)], value(100));
-    }
-
-    #[test]
-    fn rejects_a_closed_reachable_cycle() {
-        let error = simplify_phis(BTreeMap::from([
-            (value(1), vec![(block(0), value(2))]),
-            (value(2), vec![(block(1), value(1))]),
-        ]))
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            PhiSimplificationError::ClosedCycle {
-                representative: value(2)
-            }
-        );
-    }
-
-    #[test]
-    fn retains_a_cycle_with_distinct_external_values() {
-        let candidates = BTreeMap::from([
-            (value(1), vec![(block(0), value(100)), (block(1), value(2))]),
-            (value(2), vec![(block(0), value(101)), (block(1), value(1))]),
-        ]);
-        let simplified = simplify_phis(candidates.clone()).unwrap();
-
-        assert!(simplified.substitutions.is_empty());
-        assert_eq!(simplified.candidates, candidates);
-    }
-
-    #[test]
-    fn rewrites_inputs_of_retained_candidates_to_canonical_values() {
-        let simplified = simplify_phis(BTreeMap::from([
-            (value(1), vec![(block(0), value(100))]),
-            (
-                value(2),
-                vec![
-                    (block(0), value(1)),
-                    (block(1), value(101)),
-                    (block(2), value(2)),
-                ],
-            ),
-        ]))
-        .unwrap();
-
-        assert_eq!(simplified.substitutions[&value(1)], value(100));
-        assert_eq!(
-            simplified.candidates[&value(2)],
-            [
-                (block(0), value(100)),
-                (block(1), value(101)),
-                (block(2), value(2))
-            ]
-        );
-    }
-}
+mod tests;

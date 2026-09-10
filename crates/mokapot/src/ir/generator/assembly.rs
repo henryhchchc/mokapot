@@ -1,8 +1,7 @@
 use super::{
-    BTreeMap, BTreeSet, BlockId, FrameOperand, GeneratedMethod, HashMap, Identifier, JvmStackFrame,
-    LiftedControlTransfer, LiftedInstruction, Location, MokaIRBrewingError, MokaIRGenerator,
-    Operand, PlannedBlock, ScalarArm, ScalarBlock, ScalarEntryFrames, ScalarValue, ValueId,
-    collect_phi_candidates, fallibility, method, next_temp_value, ssa, unavailable_value_slots,
+    BTreeMap, BTreeSet, BlockId, DiscoveryValue, GeneratedMethod, JvmStackFrame,
+    LiftedControlTransfer, Location, MokaIRBuildError, MokaIRGenerator, PlannedBlock, ScalarValue,
+    collect_phi_candidates, method, next_temp_value, ssa,
 };
 
 impl MokaIRGenerator<'_> {
@@ -12,16 +11,16 @@ impl MokaIRGenerator<'_> {
     )]
     pub(super) fn assemble_blocks(
         mut self,
-        facts: &HashMap<Location, JvmStackFrame>,
-    ) -> Result<GeneratedMethod, MokaIRBrewingError> {
+        facts: &BTreeMap<Location, JvmStackFrame>,
+    ) -> Result<GeneratedMethod, MokaIRBuildError> {
         let entry_location = self
             .initial_seed
             .as_ref()
             .map(|(location, _)| *location)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let reachable = self.lifted.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
-            return Err(MokaIRBrewingError::MalformedControlFlow);
+            return Err(MokaIRBuildError::MalformedControlFlow);
         }
 
         let mut leaders = BTreeSet::from([entry_location]);
@@ -46,7 +45,7 @@ impl MokaIRGenerator<'_> {
 
         for (location, instruction) in &self.lifted {
             let arms = self.outgoing.get(location).map_or(
-                &[] as &[(Location, LiftedControlTransfer<Operand>)],
+                &[] as &[(Location, LiftedControlTransfer<DiscoveryValue>)],
                 Vec::as_slice,
             );
             if instruction.is_explicit_transfer()
@@ -70,9 +69,9 @@ impl MokaIRGenerator<'_> {
             let instruction = self
                 .lifted
                 .get(current)
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             let arms = self.outgoing.get(current).map_or(
-                &[] as &[(Location, LiftedControlTransfer<Operand>)],
+                &[] as &[(Location, LiftedControlTransfer<DiscoveryValue>)],
                 Vec::as_slice,
             );
             let plain_fallthrough = !instruction.is_explicit_transfer()
@@ -97,12 +96,12 @@ impl MokaIRGenerator<'_> {
                     .ok()
                     .and_then(|index| index.checked_add(block_offset))
                     .map(|index| (*location, BlockId::new(index)))
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
         let bytecode_entry = *block_ids
             .get(&entry_location)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let entry = if needs_entry_preheader {
             BlockId::new(0)
         } else {
@@ -116,7 +115,7 @@ impl MokaIRGenerator<'_> {
             if let Some(id) = block_ids.get(&location) {
                 current_block = Some(*id);
             }
-            let id = current_block.ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            let id = current_block.ok_or(MokaIRBuildError::MalformedControlFlow)?;
             location_to_block.insert(location, id);
             grouped.entry(id).or_default().push(location);
         }
@@ -133,7 +132,7 @@ impl MokaIRGenerator<'_> {
             .max()
             .unwrap_or(0)
             .checked_add(1)
-            .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let this_temp = if self
             .method
             .access_flags
@@ -182,7 +181,7 @@ impl MokaIRGenerator<'_> {
             needs_entry_preheader.then_some((bytecode_entry, &initial_scalar_frame)),
         )?;
         let simplified =
-            ssa::simplify_phis(candidates).map_err(|_| MokaIRBrewingError::MalformedControlFlow)?;
+            ssa::simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
         self.materialize_scalar_method(
             entry,
             bytecode_entry,
@@ -193,183 +192,5 @@ impl MokaIRGenerator<'_> {
             this_temp,
             &parameter_temps,
         )
-    }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "entry-state construction joins method inputs, discovery facts, and deterministic allocation"
-    )]
-    fn scalar_entry_frames(
-        &self,
-        plans: &[PlannedBlock],
-        facts: &HashMap<Location, JvmStackFrame>,
-        bytecode_entry: BlockId,
-        needs_entry_preheader: bool,
-        initial_frame: &JvmStackFrame<ScalarValue>,
-        this_temp: Option<ValueId>,
-        parameter_temps: &[ValueId],
-        next_temp: &mut u32,
-    ) -> Result<ScalarEntryFrames, MokaIRBrewingError> {
-        let mut frames = BTreeMap::new();
-        let mut phi_blocks = BTreeMap::new();
-        for plan in plans {
-            if plan.id == bytecode_entry && !needs_entry_preheader {
-                frames.insert(plan.id, initial_frame.clone());
-                continue;
-            }
-            let leader = *plan
-                .pcs
-                .first()
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            let discovered = facts
-                .get(&leader)
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            if matches!(leader, Location::Unwind) {
-                let frame = discovered.without_values().try_map_values(
-                    |_| -> Result<ScalarValue, MokaIRBrewingError> {
-                        Err(MokaIRBrewingError::MalformedControlFlow)
-                    },
-                )?;
-                frames.insert(plan.id, frame);
-                continue;
-            }
-            let mut incoming = self.incoming_frames_at(leader)?;
-            if plan.id == bytecode_entry && needs_entry_preheader {
-                let (_, initial) = self
-                    .initial_seed
-                    .as_ref()
-                    .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                incoming.push(initial);
-            }
-            let (unavailable_locals, unavailable_stack) =
-                unavailable_value_slots(discovered, &incoming)?;
-            let mut frame = discovered.try_map_values(|operand| {
-                if operand.0.len() == 1 {
-                    let identifier = *operand
-                        .0
-                        .first()
-                        .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-                    return Ok(match identifier {
-                        Identifier::This => ScalarValue::Value(
-                            this_temp.ok_or(MokaIRBrewingError::MalformedControlFlow)?,
-                        ),
-                        Identifier::Arg(index) => ScalarValue::Value(
-                            parameter_temps
-                                .get(usize::from(index))
-                                .copied()
-                                .ok_or(MokaIRBrewingError::MalformedControlFlow)?,
-                        ),
-                        Identifier::Local(value) | Identifier::CaughtException(value) => {
-                            ScalarValue::Value(value)
-                        }
-                        Identifier::ReturnAddress(address) => ScalarValue::ReturnAddress(address),
-                    });
-                }
-                if operand.contains_return_address() {
-                    return Err(MokaIRBrewingError::MalformedControlFlow);
-                }
-                let value = next_temp_value(next_temp)?;
-                phi_blocks.insert(value, plan.id);
-                Ok(ScalarValue::Value(value))
-            })?;
-            frame.invalidate_values_at(unavailable_locals, unavailable_stack);
-            frames.insert(plan.id, frame);
-        }
-        Ok((frames, phi_blocks))
-    }
-
-    fn incoming_frames_at(
-        &self,
-        target: Location,
-    ) -> Result<Vec<&JvmStackFrame>, MokaIRBrewingError> {
-        let mut incoming = Vec::new();
-        for (source, arms) in &self.outgoing {
-            let frames = self
-                .outgoing_frames
-                .get(source)
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            if arms.len() != frames.len() {
-                return Err(MokaIRBrewingError::MalformedControlFlow);
-            }
-            incoming.extend(
-                arms.iter()
-                    .zip(frames)
-                    .filter(|((arm_target, _), _)| *arm_target == target)
-                    .map(|(_, frame)| frame),
-            );
-        }
-        Ok(incoming)
-    }
-
-    fn translate_scalar_blocks(
-        &mut self,
-        plans: &[PlannedBlock],
-        mut entry_frames: BTreeMap<BlockId, JvmStackFrame<ScalarValue>>,
-        location_to_block: &BTreeMap<Location, BlockId>,
-    ) -> Result<Vec<ScalarBlock>, MokaIRBrewingError> {
-        let mut blocks = Vec::with_capacity(plans.len());
-        for plan in plans {
-            let entry_frame = entry_frames
-                .remove(&plan.id)
-                .ok_or(MokaIRBrewingError::MalformedControlFlow)?;
-            let mut frame = entry_frame.clone();
-            let mut instructions = Vec::with_capacity(plan.pcs.len());
-            let mut arms = Vec::new();
-            for (index, &location) in plan.pcs.iter().enumerate() {
-                let pre_frame = frame.clone();
-                let (instruction, fallible) = match location {
-                    Location::Bytecode { pc, .. } => {
-                        let jvm_instruction = self
-                            .body
-                            .instruction_at(pc)
-                            .ok_or(MokaIRBrewingError::MalformedControlFlow)?
-                            .clone();
-                        let instruction =
-                            self.lift_instruction(&jvm_instruction, location, &mut frame)?;
-                        (
-                            instruction,
-                            fallibility::is_synchronously_fallible(&jvm_instruction),
-                        )
-                    }
-                    Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
-                    Location::Unwind => (LiftedInstruction::Unwind, false),
-                };
-                let is_last = index + 1 == plan.pcs.len();
-                if is_last {
-                    arms = self
-                        .analyze_frame_and_conditions(
-                            location,
-                            &pre_frame,
-                            frame.clone(),
-                            &instruction,
-                            fallible,
-                            &|value| ScalarValue::Value(value),
-                        )?
-                        .into_iter()
-                        .map(|(target, transfer, frame)| {
-                            location_to_block
-                                .get(&target)
-                                .copied()
-                                .map(|target| ScalarArm {
-                                    target,
-                                    transfer,
-                                    frame,
-                                })
-                                .ok_or(MokaIRBrewingError::MalformedControlFlow)
-                        })
-                        .collect::<Result<_, _>>()?;
-                } else if instruction.is_explicit_transfer() {
-                    return Err(MokaIRBrewingError::MalformedControlFlow);
-                }
-                instructions.push((location, instruction));
-            }
-            blocks.push(ScalarBlock {
-                plan: plan.clone(),
-                entry_frame,
-                instructions,
-                arms,
-            });
-        }
-        Ok(blocks)
     }
 }
