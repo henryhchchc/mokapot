@@ -1,8 +1,7 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{
+    Condition, DUAL_SLOT, FrameOperand, IR, Instruction, JvmSemantics, JvmStackFrame, Location,
+    MokaIRBuildError, ProgramCounter, SINGLE_SLOT, WideInstruction,
+};
 
 #[inline]
 pub(super) fn conditional_jump<OP: Clone>(
