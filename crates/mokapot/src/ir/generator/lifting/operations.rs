@@ -7,7 +7,7 @@ use super::{
 pub(super) fn conversion_op<
     const OPERAND_SLOT: SlotWidth,
     const RESULT_SLOT: SlotWidth,
-    OP: Clone + From<SsaValueId> + std::fmt::Display,
+    OP: Clone + From<SsaValueId>,
 >(
     frame: &mut JvmStackFrame<OP>,
     def: SsaValueId,
@@ -22,10 +22,7 @@ pub(super) fn conversion_op<
 }
 
 #[inline]
-pub(super) fn binary_op_math<
-    const SLOT: SlotWidth,
-    OP: Clone + From<SsaValueId> + std::fmt::Display,
->(
+pub(super) fn binary_op_math<const SLOT: SlotWidth, OP: Clone + From<SsaValueId>>(
     frame: &mut JvmStackFrame<OP>,
     def_id: SsaValueId,
     math: impl FnOnce(OP, OP) -> MathOperation<OP>,

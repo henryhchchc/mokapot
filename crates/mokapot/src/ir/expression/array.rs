@@ -6,7 +6,7 @@ use crate::{ir::ValueId, types::field_type::FieldType};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP: std::fmt::Display = ValueId> {
+pub enum Operation<OP = ValueId> {
     /// Create a new array.
     #[display("new {element_type}[{length}]")]
     New {

@@ -4,7 +4,7 @@ use crate::{ir::ValueId, jvm::references::FieldRef};
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Access<OP: std::fmt::Display = ValueId> {
+pub enum Access<OP = ValueId> {
     /// Reads a static field.
     #[display("read {field}")]
     ReadStatic {
