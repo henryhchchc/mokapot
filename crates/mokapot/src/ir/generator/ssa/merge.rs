@@ -1,17 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    DiscoveryValue, MokaIRBuildError, PairedFrameValue, ProvisionalValueId, ScalarBlock,
-    ScalarValue,
+    MokaIRBuildError, OperandState, PairedFrameValue, SsaBlock, SsaFrameValue, SsaValueId,
     jvm_frame::{Entry, JvmStackFrame},
-    ssa,
+    simplify as ssa,
 };
 use crate::ir::BlockId;
 
-pub(super) fn collect_phi_candidates(
-    blocks: &[ScalarBlock],
-    phi_blocks: &BTreeMap<ProvisionalValueId, BlockId>,
-    preheader: Option<(BlockId, &JvmStackFrame<ScalarValue>)>,
+pub(in crate::ir::generator) fn collect_phi_candidates(
+    blocks: &[SsaBlock],
+    phi_blocks: &BTreeMap<SsaValueId, BlockId>,
+    preheader: Option<(BlockId, &JvmStackFrame<SsaFrameValue>)>,
 ) -> Result<ssa::PhiCandidates, MokaIRBuildError> {
     let mut candidates = ssa::PhiCandidates::new();
     for target in blocks {
@@ -36,8 +35,7 @@ pub(super) fn collect_phi_candidates(
             .map(|(predecessor, _)| *predecessor)
             .collect::<BTreeSet<_>>()
             .len();
-        let mut inputs =
-            BTreeMap::<ProvisionalValueId, BTreeMap<BlockId, ProvisionalValueId>>::new();
+        let mut inputs = BTreeMap::<SsaValueId, BTreeMap<BlockId, SsaValueId>>::new();
         for (predecessor, frame) in incoming {
             for (result, value) in paired_frame_values(&target.entry_frame, frame)? {
                 let (Some(result), Some(value)) = (result, value) else {
@@ -92,8 +90,8 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &JvmStackFrame<ScalarValue>,
-    source: &JvmStackFrame<ScalarValue>,
+    target: &JvmStackFrame<SsaFrameValue>,
+    source: &JvmStackFrame<SsaFrameValue>,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
     if target.local_variables().len() != source.local_variables().len()
         || target.operand_stack().len() != source.operand_stack().len()
@@ -106,17 +104,18 @@ fn paired_frame_values(
         .zip(source.local_variables())
         .chain(target.operand_stack().iter().zip(source.operand_stack()))
         .map(|(target, source)| match (target, source) {
-            (Entry::Value(ScalarValue::Value(result)), Entry::Value(ScalarValue::Value(value))) => {
-                Ok((Some(*result), Some(*value)))
-            }
             (
-                Entry::Value(ScalarValue::ReturnAddress(lhs)),
-                Entry::Value(ScalarValue::ReturnAddress(rhs)),
+                Entry::Value(SsaFrameValue::Value(result)),
+                Entry::Value(SsaFrameValue::Value(value)),
+            ) => Ok((Some(*result), Some(*value))),
+            (
+                Entry::Value(SsaFrameValue::ReturnAddress(lhs)),
+                Entry::Value(SsaFrameValue::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Entry::Value(ScalarValue::Value(result)), _) => Ok((Some(*result), None)),
-            (_, Entry::Value(ScalarValue::Value(value))) => Ok((None, Some(*value))),
-            (Entry::Value(ScalarValue::ReturnAddress(_)), _)
-            | (_, Entry::Value(ScalarValue::ReturnAddress(_))) => {
+            (Entry::Value(SsaFrameValue::Value(result)), _) => Ok((Some(*result), None)),
+            (_, Entry::Value(SsaFrameValue::Value(value))) => Ok((None, Some(*value))),
+            (Entry::Value(SsaFrameValue::ReturnAddress(_)), _)
+            | (_, Entry::Value(SsaFrameValue::ReturnAddress(_))) => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
             _ => Ok((None, None)),
@@ -124,7 +123,7 @@ fn paired_frame_values(
         .collect::<Result<_, _>>()
 }
 
-pub(super) fn unavailable_value_slots(
+pub(in crate::ir::generator) fn unavailable_value_slots(
     merged: &JvmStackFrame,
     incoming: &[&JvmStackFrame],
 ) -> Result<(Vec<usize>, Vec<usize>), MokaIRBuildError> {
@@ -134,7 +133,7 @@ pub(super) fn unavailable_value_slots(
     }) {
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
-    let unavailable = |merged: &[Entry<DiscoveryValue>], stack: bool| {
+    let unavailable = |merged: &[Entry<OperandState>], stack: bool| {
         merged
             .iter()
             .enumerate()

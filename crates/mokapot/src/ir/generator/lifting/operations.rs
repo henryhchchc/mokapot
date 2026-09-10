@@ -1,16 +1,16 @@
 use super::{
     super::jvm_frame::SlotWidth, Conversion, Expression, IR, JvmStackFrame, MathOperation,
-    MokaIRBuildError, ProvisionalValueId,
+    MokaIRBuildError, SsaValueId,
 };
 
 #[inline]
 pub(super) fn conversion_op<
     const OPERAND_SLOT: SlotWidth,
     const RESULT_SLOT: SlotWidth,
-    OP: Clone + From<ProvisionalValueId> + std::fmt::Display,
+    OP: Clone + From<SsaValueId> + std::fmt::Display,
 >(
     frame: &mut JvmStackFrame<OP>,
-    def: ProvisionalValueId,
+    def: SsaValueId,
     conversion: impl FnOnce(OP) -> Conversion<OP>,
 ) -> Result<IR<OP>, MokaIRBuildError> {
     let operand = frame.pop_value::<OPERAND_SLOT>()?;
@@ -24,10 +24,10 @@ pub(super) fn conversion_op<
 #[inline]
 pub(super) fn binary_op_math<
     const SLOT: SlotWidth,
-    OP: Clone + From<ProvisionalValueId> + std::fmt::Display,
+    OP: Clone + From<SsaValueId> + std::fmt::Display,
 >(
     frame: &mut JvmStackFrame<OP>,
-    def_id: ProvisionalValueId,
+    def_id: SsaValueId,
     math: impl FnOnce(OP, OP) -> MathOperation<OP>,
 ) -> Result<IR<OP>, MokaIRBuildError> {
     let rhs = frame.pop_value::<SLOT>()?;

@@ -6,12 +6,12 @@ use crate::jvm::code::ProgramCounter;
 
 use super::MokaIRBuildError;
 
-pub(super) const LOCATION_BUDGET: usize = 1_048_576;
+pub(crate) const LOCATION_BUDGET: usize = 1_048_576;
 
 /// An interned legacy-subroutine context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct ContextId(u32);
+pub(crate) struct ContextId(u32);
 
 impl ContextId {
     const ROOT: Self = Self(0);
@@ -19,7 +19,7 @@ impl ContextId {
 
 /// A private expanded control-flow location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(super) enum Location {
+pub(crate) enum Location {
     Bytecode {
         context: ContextId,
         pc: ProgramCounter,
@@ -32,21 +32,21 @@ pub(super) enum Location {
 }
 
 impl Location {
-    pub(super) const fn entry(pc: ProgramCounter) -> Self {
+    pub(crate) const fn entry(pc: ProgramCounter) -> Self {
         Self::Bytecode {
             context: ContextId::ROOT,
             pc,
         }
     }
 
-    pub(super) const fn source_pc(self) -> Option<ProgramCounter> {
+    pub(crate) const fn source_pc(self) -> Option<ProgramCounter> {
         match self {
             Self::Bytecode { pc, .. } => Some(pc),
             Self::Handler { .. } | Self::Unwind => None,
         }
     }
 
-    pub(super) const fn context(self) -> Option<ContextId> {
+    pub(crate) const fn context(self) -> Option<ContextId> {
         match self {
             Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),
             Self::Unwind => None,
@@ -57,11 +57,11 @@ impl Location {
 /// The exact call activation represented by a JVM `returnAddress` value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct ReturnAddress(ContextId);
+pub(crate) struct ReturnAddress(ContextId);
 
 #[cfg(test)]
 impl ReturnAddress {
-    pub(super) const fn for_test(context: u32) -> Self {
+    pub(crate) const fn for_test(context: u32) -> Self {
         Self(ContextId(context))
     }
 }
@@ -75,7 +75,7 @@ struct CallFrame {
 }
 
 #[derive(Debug)]
-pub(super) struct Normalizer {
+pub(crate) struct Normalizer {
     contexts: Vec<Option<CallFrame>>,
     interned: BTreeMap<CallFrame, ContextId>,
     locations: BTreeSet<Location>,
@@ -83,7 +83,7 @@ pub(super) struct Normalizer {
 }
 
 impl Normalizer {
-    pub(super) fn new(entry: ProgramCounter) -> Self {
+    pub(crate) fn new(entry: ProgramCounter) -> Self {
         Self {
             contexts: vec![None],
             interned: BTreeMap::new(),
@@ -92,7 +92,7 @@ impl Normalizer {
         }
     }
 
-    pub(super) fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+    pub(crate) fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
         self.locations.insert(location);
         if self.locations.len() > LOCATION_BUDGET {
             return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
@@ -102,7 +102,7 @@ impl Normalizer {
         Ok(location)
     }
 
-    pub(super) fn bytecode(
+    pub(crate) fn bytecode(
         &mut self,
         pc: ProgramCounter,
         context: ContextId,
@@ -110,7 +110,7 @@ impl Normalizer {
         self.register(Location::Bytecode { pc, context })
     }
 
-    pub(super) fn handler(
+    pub(crate) fn handler(
         &mut self,
         handler_pc: ProgramCounter,
         context: ContextId,
@@ -121,7 +121,7 @@ impl Normalizer {
         })
     }
 
-    pub(super) fn enter(
+    pub(crate) fn enter(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -166,7 +166,7 @@ impl Normalizer {
         Ok((self.bytecode(target, context)?, ReturnAddress(context)))
     }
 
-    pub(super) fn return_from(
+    pub(crate) fn return_from(
         &mut self,
         location: Location,
         address: ReturnAddress,

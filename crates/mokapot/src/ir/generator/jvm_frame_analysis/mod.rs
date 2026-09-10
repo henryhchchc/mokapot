@@ -1,11 +1,39 @@
-use super::{
-    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, DiscoveryValue, Entry,
-    FrameOperand, GeneratedMethod, JvmStackFrame, LiftedCondition, LiftedControlTransfer,
-    LiftedInstruction, LiftedValue, Location, Method, MokaIRBuildError, MokaIRGenerator,
-    OutgoingState, ProgramCounter, ProvisionalValueId, fallibility, method,
-};
+//! Abstractly executes JVM frames to determine reachable states.
 
-impl DataflowProblem for MokaIRGenerator<'_> {
+pub(super) mod fallibility;
+pub(super) mod legacy;
+pub(in crate::ir::generator) mod operand_state;
+
+use super::{
+    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, Entry, FrameOperand,
+    JvmStackFrame, LiftedCondition, LiftedControlTransfer, LiftedInstruction, LiftedValue, Method,
+    MethodBody, MokaIRBuildError, OperandState, ProgramCounter, SsaValueId, method,
+};
+use fallibility::FallibilityContext;
+use legacy::{Location, Normalizer as LegacyNormalizer};
+
+pub(in crate::ir::generator) type OutgoingState<OP> =
+    (Location, LiftedControlTransfer<OP>, JvmStackFrame<OP>);
+
+/// The fixed-point JVM frame analysis and the state needed by later phases.
+pub(in crate::ir::generator) struct JvmFrameAnalysis<'method> {
+    pub(in crate::ir::generator) facts: BTreeMap<Location, JvmStackFrame>,
+    pub(in crate::ir::generator) lifted: BTreeMap<Location, LiftedInstruction>,
+    pub(in crate::ir::generator) outgoing:
+        BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
+    pub(in crate::ir::generator) outgoing_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
+    pub(in crate::ir::generator) value_ids: BTreeMap<Location, SsaValueId>,
+    pub(in crate::ir::generator) caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    pub(in crate::ir::generator) method: &'method Method,
+    pub(in crate::ir::generator) body: &'method MethodBody,
+    pub(in crate::ir::generator) fallibility: FallibilityContext,
+    pub(in crate::ir::generator) legacy: LegacyNormalizer,
+    analyzing: bool,
+    next_lifted_value: u32,
+    pub(in crate::ir::generator) initial_seed: Option<(Location, JvmStackFrame)>,
+}
+
+impl DataflowProblem for JvmFrameAnalysis<'_> {
     type Location = Location;
     type Fact = JvmStackFrame;
     type Err = MokaIRBuildError;
@@ -52,7 +80,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
                     normal_frame,
                     &instruction,
                     self.fallibility.is_synchronously_fallible(&jvm_instruction),
-                    &|id| DiscoveryValue::CaughtException(id),
+                    &|id| OperandState::CaughtException(id),
                 )?;
                 (instruction, outgoing)
             }
@@ -77,7 +105,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
     }
 }
 
-impl<'method> MokaIRGenerator<'method> {
+impl<'method> JvmFrameAnalysis<'method> {
     pub(super) fn for_method(method: &'method Method) -> Result<Self, MokaIRBuildError> {
         let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
         let first_pc = body
@@ -94,6 +122,7 @@ impl<'method> MokaIRGenerator<'method> {
         let entry = Location::entry(first_pc);
 
         Ok(Self {
+            facts: BTreeMap::default(),
             lifted: BTreeMap::default(),
             outgoing: BTreeMap::default(),
             outgoing_frames: BTreeMap::default(),
@@ -102,21 +131,18 @@ impl<'method> MokaIRGenerator<'method> {
             method,
             body,
             fallibility: fallibility::FallibilityContext::for_method(method),
-            legacy: super::LegacyNormalizer::new(first_pc),
-            discovering: true,
+            legacy: LegacyNormalizer::new(first_pc),
+            analyzing: true,
             next_lifted_value: 0,
             initial_seed: Some((entry, initial_frame)),
         })
     }
 
-    pub(super) fn value_at(
-        &mut self,
-        location: Location,
-    ) -> Result<ProvisionalValueId, MokaIRBuildError> {
+    pub(super) fn value_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
         if let Some(value) = self.value_ids.get(&location) {
             return Ok(*value);
         }
-        if !self.discovering || !matches!(location, Location::Bytecode { .. }) {
+        if !self.analyzing || !matches!(location, Location::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
         let value = self.next_temporary_value()?;
@@ -124,14 +150,11 @@ impl<'method> MokaIRGenerator<'method> {
         Ok(value)
     }
 
-    fn caught_exception_at(
-        &mut self,
-        location: Location,
-    ) -> Result<ProvisionalValueId, MokaIRBuildError> {
+    fn caught_exception_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
         if let Some(value) = self.caught_exception_ids.get(&location) {
             return Ok(*value);
         }
-        if !self.discovering || !matches!(location, Location::Handler { .. }) {
+        if !self.analyzing || !matches!(location, Location::Handler { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
         let value = self.next_temporary_value()?;
@@ -139,8 +162,8 @@ impl<'method> MokaIRGenerator<'method> {
         Ok(value)
     }
 
-    fn next_temporary_value(&mut self) -> Result<ProvisionalValueId, MokaIRBuildError> {
-        let value = ProvisionalValueId::new(self.next_lifted_value);
+    fn next_temporary_value(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+        let value = SsaValueId::new(self.next_lifted_value);
         self.next_lifted_value = self
             .next_lifted_value
             .checked_add(1)
@@ -183,7 +206,7 @@ impl<'method> MokaIRGenerator<'method> {
         &mut self,
         location: Location,
         pre_frame: &JvmStackFrame<OP>,
-        caught_value: &impl Fn(ProvisionalValueId) -> OP,
+        caught_value: &impl Fn(SsaValueId) -> OP,
     ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
         let pc = location
             .source_pc()
@@ -238,7 +261,7 @@ impl<'method> MokaIRGenerator<'method> {
         normal_frame: JvmStackFrame<OP>,
         instruction: &LiftedInstruction<OP>,
         fallible: bool,
-        caught_value: &impl Fn(ProvisionalValueId) -> OP,
+        caught_value: &impl Fn(SsaValueId) -> OP,
     ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
         use LiftedControlTransfer::{Conditional, Normal, Unconditional};
 
@@ -350,11 +373,11 @@ impl<'method> MokaIRGenerator<'method> {
         })
     }
 
-    pub(super) fn generate(mut self) -> Result<GeneratedMethod, MokaIRBuildError> {
+    pub(super) fn run(mut self) -> Result<Self, MokaIRBuildError> {
         use crate::analysis::fixed_point::solve;
 
-        let facts: BTreeMap<_, _> = solve(&mut self)?;
-        self.discovering = false;
-        self.assemble_blocks(&facts)
+        self.facts = solve(&mut self)?;
+        self.analyzing = false;
+        Ok(self)
     }
 }

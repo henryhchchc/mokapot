@@ -32,7 +32,7 @@ pub(super) fn cmp_jump<OP: Clone + std::fmt::Display>(
 }
 
 pub(super) fn lift<OP: FrameOperand>(
-    generator: &mut MokaIRGenerator<'_>,
+    generator: &mut JvmFrameAnalysis<'_>,
     jvm_instruction: &Instruction,
     location: Location,
     pc: ProgramCounter,

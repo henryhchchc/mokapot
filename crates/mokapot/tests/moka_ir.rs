@@ -1,6 +1,6 @@
 use mokapot::{
     ir::{
-        DefUseChain, InstructionId, InstructionKind, MokaIRMethod, TerminatorKind, UseSite,
+        DefUseChain, InstructionId, MokaIRMethod, OperationKind, TerminatorKind, UseSite,
         ValueDefinition, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
@@ -28,10 +28,10 @@ fn get_test_method() -> Method {
         .unwrap()
 }
 
-fn instruction(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Instruction> {
+fn operation(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Operation> {
     method
         .blocks()
-        .flat_map(|block| block.instructions())
+        .flat_map(|block| block.operations())
         .find(|instruction| instruction.id() == id)
 }
 
@@ -56,11 +56,11 @@ fn builds_ir_blocks_and_provenance() {
     let first = ir
         .source_map()
         .instructions_at(ProgramCounter::from(0x0000))
-        .find_map(|id| instruction(&ir, id))
+        .find_map(|id| operation(&ir, id))
         .unwrap();
     assert!(matches!(
         first.kind(),
-        InstructionKind::Definition {
+        OperationKind::Definition {
             expr: Expression::Const(ConstantValue::String(JavaString::Utf8(value))),
             ..
         } if value == "233"
@@ -93,7 +93,7 @@ fn builds_ir_blocks_and_provenance() {
 fn du_chain_definitions_use_instruction_identities() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let chain = DefUseChain::new(&ir);
-    for instruction in ir.blocks().flat_map(|block| block.instructions()) {
+    for instruction in ir.blocks().flat_map(|block| block.operations()) {
         if let Some(value) = instruction.def() {
             assert_eq!(
                 chain.definition_of(value),
@@ -142,7 +142,7 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             );
             uses.extend(phi.inputs().iter().map(mokapot::ir::PhiInput::value));
         }
-        for instruction in block.instructions() {
+        for instruction in block.operations() {
             assert!(instruction_ids.insert(instruction.id()));
             if let Some(value) = instruction.def() {
                 assert!(definitions.insert(value));
@@ -178,7 +178,7 @@ fn du_chain_uses_include_source_related_nodes() {
         let value = ir
             .source_map()
             .instructions_at(ProgramCounter::from(definition_pc))
-            .find_map(|id| instruction(&ir, id).and_then(mokapot::ir::Instruction::def))
+            .find_map(|id| operation(&ir, id).and_then(mokapot::ir::Operation::def))
             .unwrap();
         let uses = chain.uses_of(value).collect::<BTreeSet<_>>();
         assert!(

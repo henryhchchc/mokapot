@@ -1,5 +1,5 @@
 use crate::ir::generator::{
-    DiscoveryValue, ExecutionError, ProvisionalValueId,
+    ExecutionError, OperandState, SsaValueId,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 #[cfg(test)]
@@ -16,7 +16,7 @@ fn args_locals_checking() {
 
 proptest! {
     #[test]
-    fn push_pop(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn push_pop(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -33,7 +33,7 @@ proptest! {
     }
 
     #[test]
-    fn push_pop_dual_slot(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn push_pop_dual_slot(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -59,7 +59,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
+            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -80,7 +80,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
+            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
@@ -95,7 +95,7 @@ proptest! {
     }
 
     #[test]
-    fn slot_mismatch(values in any::<DiscoveryValue>()) {
+    fn slot_mismatch(values in any::<OperandState>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -111,7 +111,7 @@ proptest! {
     }
 
     #[test]
-    fn mixed_width_values(values in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn mixed_width_values(values in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),

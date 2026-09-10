@@ -88,7 +88,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         panic!("the loop header must contain one phi")
     };
 
-    assert_eq!(preheader.instructions().len(), 0);
+    assert_eq!(preheader.operations().len(), 0);
     assert_eq!(
         ir.source_map()
             .origins_of(preheader.terminator().id())
@@ -113,7 +113,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     };
     let definition = ir
         .blocks()
-        .flat_map(BasicBlock::instructions)
+        .flat_map(BasicBlock::operations)
         .find(|instruction| instruction.id() == backedge_definition)
         .unwrap();
     assert!(definition.uses().contains(&phi.value()));
@@ -127,7 +127,7 @@ fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
 
     assert_eq!(blocks.len(), 2);
     assert!(blocks.iter().all(|block| block.phis().is_empty()));
-    assert!(blocks[0].instructions().is_empty());
+    assert!(blocks[0].operations().is_empty());
     assert_eq!(blocks[0].terminator().successors().len(), 1);
     assert!(matches!(
         blocks[0].terminator().successors()[0].transfer(),

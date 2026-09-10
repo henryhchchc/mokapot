@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::super::DiscoveryValue;
+use super::super::OperandState;
 
 pub(crate) type SlotWidth = bool;
 pub(crate) const SINGLE_SLOT: SlotWidth = false;
@@ -19,7 +19,7 @@ pub(crate) const DUAL_SLOT: SlotWidth = true;
 use super::{entry::Entry, error::ExecutionError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct JvmStackFrame<V = DiscoveryValue> {
+pub struct JvmStackFrame<V = OperandState> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
@@ -73,20 +73,20 @@ impl<V: Clone + JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
     }
 }
 
-impl JvmStackFrame<DiscoveryValue> {
+impl JvmStackFrame<OperandState> {
     pub(crate) fn new(
         is_static: bool,
         desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, ExecutionError> {
-        let this_value = (!is_static).then_some(DiscoveryValue::This);
+        let this_value = (!is_static).then_some(OperandState::This);
         let parameters = desc
             .parameters_types
             .iter()
             .enumerate()
             .map(|(index, _)| {
-                DiscoveryValue::Arg(
+                OperandState::Arg(
                     u16::try_from(index).expect("descriptor parameter count fits u16"),
                 )
             })

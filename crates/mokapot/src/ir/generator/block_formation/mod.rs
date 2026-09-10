@@ -1,18 +1,35 @@
+//! Forms maximal basic blocks from analyzed JVM locations.
+
+mod block_plan;
+
+pub(in crate::ir::generator) use block_plan::BlockPlan;
+
 use super::{
-    BTreeMap, BTreeSet, BlockId, DiscoveryValue, GeneratedMethod, JvmStackFrame,
-    LiftedControlTransfer, Location, MokaIRBuildError, MokaIRGenerator, PlannedBlock, ScalarValue,
-    collect_phi_candidates, method, next_temp_value, ssa,
+    BTreeMap, BTreeSet, BlockId, JvmFrameAnalysis, LiftedControlTransfer, Location,
+    MokaIRBuildError, OperandState,
 };
 
-impl MokaIRGenerator<'_> {
+/// The block layout produced from analyzed JVM locations.
+pub(super) struct BlockLayout<'method> {
+    pub(super) analysis: JvmFrameAnalysis<'method>,
+    pub(super) entry: BlockId,
+    pub(super) bytecode_entry: BlockId,
+    pub(super) needs_entry_preheader: bool,
+    pub(super) plans: Vec<BlockPlan>,
+    pub(super) location_to_block: BTreeMap<Location, BlockId>,
+}
+
+/// Forms maximal basic blocks from a completed JVM frame analysis.
+pub(super) fn form(analysis: JvmFrameAnalysis<'_>) -> Result<BlockLayout<'_>, MokaIRBuildError> {
+    analysis.form_blocks()
+}
+
+impl<'method> JvmFrameAnalysis<'method> {
     #[expect(
         clippy::too_many_lines,
         reason = "block partitioning and identity allocation form one invariant-preserving pass"
     )]
-    pub(super) fn assemble_blocks(
-        mut self,
-        facts: &BTreeMap<Location, JvmStackFrame>,
-    ) -> Result<GeneratedMethod, MokaIRBuildError> {
+    fn form_blocks(self) -> Result<BlockLayout<'method>, MokaIRBuildError> {
         let entry_location = self
             .initial_seed
             .as_ref()
@@ -45,7 +62,7 @@ impl MokaIRGenerator<'_> {
 
         for (location, instruction) in &self.lifted {
             let arms = self.outgoing.get(location).map_or(
-                &[] as &[(Location, LiftedControlTransfer<DiscoveryValue>)],
+                &[] as &[(Location, LiftedControlTransfer<OperandState>)],
                 Vec::as_slice,
             );
             if instruction.is_explicit_transfer()
@@ -71,7 +88,7 @@ impl MokaIRGenerator<'_> {
                 .get(current)
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             let arms = self.outgoing.get(current).map_or(
-                &[] as &[(Location, LiftedControlTransfer<DiscoveryValue>)],
+                &[] as &[(Location, LiftedControlTransfer<OperandState>)],
                 Vec::as_slice,
             );
             let plain_fallthrough = !instruction.is_explicit_transfer()
@@ -121,76 +138,16 @@ impl MokaIRGenerator<'_> {
         }
         let plans = grouped
             .into_iter()
-            .map(|(id, pcs)| PlannedBlock { id, pcs })
+            .map(|(id, locations)| BlockPlan { id, locations })
             .collect::<Vec<_>>();
 
-        let mut next_temp = self
-            .value_ids
-            .values()
-            .chain(self.caught_exception_ids.values())
-            .map(|value| value.index())
-            .max()
-            .unwrap_or(0)
-            .checked_add(1)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let this_temp = if self
-            .method
-            .access_flags
-            .contains(method::AccessFlags::STATIC)
-        {
-            None
-        } else {
-            Some(next_temp_value(&mut next_temp)?)
-        };
-        let parameter_temps = self
-            .method
-            .descriptor
-            .parameters_types
-            .iter()
-            .map(|_| next_temp_value(&mut next_temp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let scalar_this = this_temp.map(ScalarValue::Value);
-        let scalar_parameters = parameter_temps
-            .iter()
-            .copied()
-            .map(ScalarValue::Value)
-            .collect::<Vec<_>>();
-        let initial_scalar_frame = JvmStackFrame::with_inputs(
-            &self.method.descriptor,
-            self.body.max_locals,
-            self.body.max_stack,
-            scalar_this,
-            &scalar_parameters,
-        )?;
-
-        let (entry_frames, phi_blocks) = self.scalar_entry_frames(
-            &plans,
-            facts,
-            bytecode_entry,
-            needs_entry_preheader,
-            &initial_scalar_frame,
-            this_temp,
-            &parameter_temps,
-            &mut next_temp,
-        )?;
-        let scalar_blocks =
-            self.translate_scalar_blocks(&plans, entry_frames, &location_to_block)?;
-        let candidates = collect_phi_candidates(
-            &scalar_blocks,
-            &phi_blocks,
-            needs_entry_preheader.then_some((bytecode_entry, &initial_scalar_frame)),
-        )?;
-        let simplified =
-            ssa::simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
-        self.materialize_scalar_method(
+        Ok(BlockLayout {
+            analysis: self,
             entry,
             bytecode_entry,
             needs_entry_preheader,
-            scalar_blocks,
-            &phi_blocks,
-            &simplified,
-            this_temp,
-            &parameter_temps,
-        )
+            plans,
+            location_to_block,
+        })
     }
 }

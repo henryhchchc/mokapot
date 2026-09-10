@@ -21,15 +21,15 @@ fn straight_line_instructions_coalesce_into_one_block() {
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 1);
-    assert_eq!(blocks[0].instructions().len(), 1);
+    assert_eq!(blocks[0].operations().len(), 1);
     assert!(matches!(
         blocks[0].terminator().kind(),
         TerminatorKind::Return(Some(_))
     ));
     let ids = blocks[0]
-        .instructions()
+        .operations()
         .iter()
-        .map(IrInstruction::id)
+        .map(IrOperation::id)
         .chain(once(blocks[0].terminator().id()))
         .collect::<HashSet<_>>();
     assert_eq!(ids.len(), 2);
@@ -62,8 +62,8 @@ fn value_identities_do_not_depend_on_sparse_program_counters() {
     let values = |method: &MokaIRMethod| {
         method
             .blocks()
-            .flat_map(BasicBlock::instructions)
-            .filter_map(IrInstruction::def)
+            .flat_map(BasicBlock::operations)
+            .filter_map(IrOperation::def)
             .collect::<Vec<_>>()
     };
 

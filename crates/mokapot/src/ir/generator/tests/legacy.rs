@@ -16,7 +16,7 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
         .find(|block| {
             block.terminator().id() == id
                 || block
-                    .instructions()
+                    .operations()
                     .iter()
                     .any(|instruction| instruction.id() == id)
         })

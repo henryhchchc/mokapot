@@ -1,11 +1,11 @@
-use super::{BlockId, Instruction, Phi, Terminator};
+use super::{BlockId, Operation, Phi, Terminator};
 
 /// A maximal basic block ending in exactly one terminator.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
     id: BlockId,
     phis: Vec<Phi>,
-    instructions: Vec<Instruction>,
+    operations: Vec<Operation>,
     terminator: Terminator,
 }
 
@@ -13,13 +13,13 @@ impl BasicBlock {
     pub(crate) const fn new(
         id: BlockId,
         phis: Vec<Phi>,
-        instructions: Vec<Instruction>,
+        operations: Vec<Operation>,
         terminator: Terminator,
     ) -> Self {
         Self {
             id,
             phis,
-            instructions,
+            operations,
             terminator,
         }
     }
@@ -33,10 +33,10 @@ impl BasicBlock {
     pub fn phis(&self) -> &[Phi] {
         &self.phis
     }
-    /// Returns the ordinary instructions in execution order.
+    /// Returns the ordinary operations in execution order.
     #[must_use]
-    pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
+    pub fn operations(&self) -> &[Operation] {
+        &self.operations
     }
     /// Returns the block terminator.
     #[must_use]

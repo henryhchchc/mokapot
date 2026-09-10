@@ -1,18 +1,25 @@
-mod analysis;
-mod assembly;
-mod build_model;
+//! Converts JVM bytecode into completed `MokaIR`.
+//!
+//! Generation proceeds through four explicit phases:
+//!
+//! 1. [`jvm_frame_analysis`] abstractly executes JVM locals and operand stacks
+//!    to determine reachable expanded locations and their incoming states.
+//! 2. [`block_formation`] partitions those locations into maximal basic blocks.
+//! 3. [`ssa`] replays the blocks with exact values, constructs predecessor-indexed
+//!    phis, and simplifies redundant phis.
+//! 4. [`emission`] assigns public identities and emits the completed `MokaIR` body.
+//!
+//! The [`lifting`] module contains JVM opcode semantics shared by frame analysis
+//! and SSA construction.
+
+mod block_formation;
+mod emission;
 mod error;
-mod fallibility;
 mod jvm_frame;
-mod legacy;
+mod jvm_frame_analysis;
 mod lifted_instruction;
 mod lifting;
-mod materialize;
-mod merge;
-mod remap;
-mod scalar;
 mod ssa;
-mod value;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,22 +27,18 @@ pub use error::MokaIRBuildError;
 use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
-use self::build_model::{
-    GeneratedMethod, OutgoingState, PairedFrameValue, PlannedBlock, ScalarArm, ScalarBlock,
-    ScalarEntryFrames, next_temp_value,
-};
-use self::fallibility::FallibilityContext;
+use self::jvm_frame_analysis::JvmFrameAnalysis;
+use self::jvm_frame_analysis::operand_state::OperandState;
 use self::lifted_instruction::LiftedInstruction;
-use self::value::{DiscoveryValue, FrameOperand, ProvisionalValueId, ScalarValue};
+use self::lifting::frame_operand::FrameOperand;
+use self::ssa::value::{SsaFrameValue, SsaValueId};
 
 use self::jvm_frame::JvmStackFrame;
-use self::legacy::{Location, Normalizer as LegacyNormalizer, ReturnAddress};
-use self::merge::{collect_phi_candidates, unavailable_value_slots};
-use self::remap::{remap_expression, remap_transfer};
+use self::jvm_frame_analysis::legacy::{Location, ReturnAddress};
 use super::{
-    BasicBlock, BlockId, EdgeId, Instruction as IrInstruction, InstructionId, InstructionKind,
-    MokaIRMethod, Phi, PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition,
-    ValueId,
+    BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation as IrOperation,
+    OperationKind, Phi, PhiInput, SourceMap, Successor, Terminator, TerminatorKind,
+    ValueDefinition, ValueId,
     control_flow::{ControlTransfer, LiftedControlTransfer},
     expression::LiftedCondition,
 };
@@ -49,36 +52,11 @@ use crate::{
     },
 };
 
-struct MokaIRGenerator<'method> {
-    lifted: BTreeMap<Location, LiftedInstruction>,
-    outgoing: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<DiscoveryValue>)>>,
-    outgoing_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
-    value_ids: BTreeMap<Location, ProvisionalValueId>,
-    caught_exception_ids: BTreeMap<Location, ProvisionalValueId>,
-    method: &'method Method,
-    body: &'method MethodBody,
-    fallibility: FallibilityContext,
-    legacy: LegacyNormalizer,
-    discovering: bool,
-    next_lifted_value: u32,
-    initial_seed: Option<(Location, JvmStackFrame)>,
-}
-
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let generated = MokaIRGenerator::for_method(method)?.generate()?;
-    Ok(MokaIRMethod::new(
-        method.access_flags,
-        method.name.clone(),
-        method.descriptor.clone(),
-        method.owner.clone(),
-        generated.entry,
-        generated.blocks,
-        generated.source_map,
-        generated.this_value,
-        generated.parameter_values,
-        generated.caught_exceptions,
-        generated.value_definitions,
-    ))
+    let analysis = JvmFrameAnalysis::for_method(method)?.run()?;
+    let block_layout = block_formation::form(analysis)?;
+    let ssa = ssa::construct(block_layout)?;
+    Ok(emission::emit(ssa)?.into_method(method))
 }
 
 #[cfg(test)]
