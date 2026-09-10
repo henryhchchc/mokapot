@@ -6,65 +6,54 @@ mod model;
 mod simplify;
 pub(in crate::ir::generator) mod value;
 
-use super::block_formation::BlockLayout;
+use super::block_formation::{BlockEntry, JvmBlockGraph};
 use super::{
-    BTreeMap, BlockId, FrameOperand, JvmFrameFacts, JvmStackFrame, LiftedControlTransfer,
+    BTreeMap, BlockId, FrameOperand, JvmReplayPlan, JvmStackFrame, LiftedControlTransfer,
     LiftedInstruction, Location, Method, MokaIRBuildError, OperandState, ReturnAddress,
     SsaFrameValue, SsaValueId, jvm_frame, method,
 };
 
-pub(in crate::ir::generator) use merge::{collect_phi_candidates, unavailable_value_slots};
-pub(in crate::ir::generator) use model::{
-    PairedFrameValue, SsaArm, SsaBlock, SsaEntryFrames, next_ssa_value,
-};
-pub(in crate::ir::generator) use simplify::{SimplifiedPhis, simplify_phis};
+use merge::{collect_phi_candidates, unavailable_value_slots};
+use model::{PairedFrameValue, SsaArm, SsaBlock, SsaEntryFrames, SsaPhi, next_ssa_value};
+use simplify::simplify_phis;
 
 /// The internal SSA representation consumed by `MokaIR` emission.
-pub(super) struct SsaMethod<'method> {
-    pub(super) method: &'method Method,
-    pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    pub(super) entry: BlockId,
-    pub(super) bytecode_entry: BlockId,
-    pub(super) needs_entry_preheader: bool,
-    pub(super) blocks: Vec<SsaBlock>,
-    pub(super) phi_blocks: BTreeMap<SsaValueId, BlockId>,
-    pub(super) simplified_phis: SimplifiedPhis,
-    pub(super) this_value: Option<SsaValueId>,
-    pub(super) parameter_values: Vec<SsaValueId>,
+pub(super) struct SsaGraph {
+    pub entry: BlockEntry,
+    pub caught_exceptions: BTreeMap<BlockId, SsaValueId>,
+    pub blocks: Vec<SsaBlock>,
+    pub phis: Vec<SsaPhi>,
+    pub value_aliases: BTreeMap<SsaValueId, SsaValueId>,
+    pub this_value: Option<SsaValueId>,
+    pub parameter_values: Vec<SsaValueId>,
 }
 
-/// Constructs exact SSA frames, blocks, and phis from a planned block layout.
+/// Constructs exact SSA frames, blocks, and phis from a block-level JVM graph.
 pub(super) fn construct(
-    frame_facts: JvmFrameFacts<'_>,
-    layout: BlockLayout,
-) -> Result<SsaMethod<'_>, MokaIRBuildError> {
-    let BlockLayout {
+    method: &Method,
+    graph: JvmBlockGraph,
+) -> Result<SsaGraph, MokaIRBuildError> {
+    let JvmBlockGraph {
         entry,
-        bytecode_entry,
-        needs_entry_preheader,
-        plans,
+        initial_frame: analyzed_initial_frame,
+        blocks: jvm_blocks,
         location_to_block,
-    } = layout;
-    let mut next_value = frame_facts
-        .definition_ids
-        .values()
-        .chain(frame_facts.caught_exception_ids.values())
-        .map(|value| value.index())
-        .max()
+        replay,
+    } = graph;
+    let bytecode_entry = entry.bytecode_entry();
+    let has_entry_preheader = matches!(entry, BlockEntry::Preheader { .. });
+    let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
+    let mut next_value = replay
+        .max_value_index()
         .unwrap_or(0)
         .checked_add(1)
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let this_value = if frame_facts
-        .method
-        .access_flags
-        .contains(method::AccessFlags::STATIC)
-    {
+    let this_value = if method.access_flags.contains(method::AccessFlags::STATIC) {
         None
     } else {
         Some(next_ssa_value(&mut next_value)?)
     };
-    let parameter_values = frame_facts
-        .method
+    let parameter_values = method
         .descriptor
         .parameters_types
         .iter()
@@ -77,44 +66,68 @@ pub(super) fn construct(
         .map(SsaFrameValue::Value)
         .collect::<Vec<_>>();
     let initial_frame = JvmStackFrame::with_inputs(
-        &frame_facts.method.descriptor,
-        frame_facts.body.max_locals,
-        frame_facts.body.max_stack,
+        &method.descriptor,
+        body.max_locals,
+        body.max_stack,
         frame_this,
         &frame_parameters,
     )?;
 
-    let (blocks, phi_blocks) = {
-        let builder = construction::SsaBuilder::new(&frame_facts);
-        let (entry_frames, phi_blocks) = builder.entry_frames(
-            &plans,
-            bytecode_entry,
-            needs_entry_preheader,
-            &initial_frame,
-            this_value,
-            &parameter_values,
-            &mut next_value,
-        )?;
-        let blocks = builder.construct_blocks(&plans, entry_frames, &location_to_block)?;
-        (blocks, phi_blocks)
-    };
+    let caught_exceptions = jvm_blocks
+        .iter()
+        .filter_map(|block| {
+            block
+                .locations
+                .first()
+                .and_then(|&leader| replay.caught_exception(leader))
+                .map(|value| (block.id, value))
+        })
+        .collect();
+    let (entry_frames, phi_blocks) = construction::entry_frames(
+        &jvm_blocks,
+        entry,
+        &initial_frame,
+        &analyzed_initial_frame,
+        this_value,
+        &parameter_values,
+        &mut next_value,
+    )?;
+    let blocks = construction::construct_blocks(
+        method,
+        &replay,
+        &jvm_blocks,
+        entry_frames,
+        &location_to_block,
+    )?;
     let candidates = collect_phi_candidates(
         &blocks,
         &phi_blocks,
-        needs_entry_preheader.then_some((bytecode_entry, &initial_frame)),
+        has_entry_preheader.then_some((bytecode_entry, &initial_frame)),
     )?;
     let simplified_phis =
         simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+    let phis = simplified_phis
+        .candidates
+        .into_iter()
+        .map(|(value, inputs)| {
+            let block = phi_blocks
+                .get(&value)
+                .copied()
+                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            Ok(SsaPhi {
+                block,
+                value,
+                inputs,
+            })
+        })
+        .collect::<Result<Vec<_>, MokaIRBuildError>>()?;
 
-    Ok(SsaMethod {
-        method: frame_facts.method,
-        caught_exception_ids: frame_facts.caught_exception_ids,
+    Ok(SsaGraph {
+        caught_exceptions,
         entry,
-        bytecode_entry,
-        needs_entry_preheader,
         blocks,
-        phi_blocks,
-        simplified_phis,
+        phis,
+        value_aliases: simplified_phis.substitutions,
         this_value,
         parameter_values,
     })

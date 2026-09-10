@@ -7,7 +7,7 @@ use super::{
 };
 use crate::ir::BlockId;
 
-pub(in crate::ir::generator) fn collect_phi_candidates(
+pub(super) fn collect_phi_candidates(
     blocks: &[SsaBlock],
     phi_blocks: &BTreeMap<SsaValueId, BlockId>,
     preheader: Option<(BlockId, &JvmStackFrame<SsaFrameValue>)>,
@@ -20,12 +20,12 @@ pub(in crate::ir::generator) fn collect_phi_candidates(
                 source
                     .arms
                     .iter()
-                    .filter(move |arm| arm.target == target.plan.id)
-                    .map(move |arm| (source.plan.id, &arm.frame))
+                    .filter(move |arm| arm.target == target.id)
+                    .map(move |arm| (source.id, &arm.frame))
             })
             .collect::<Vec<_>>();
         if let Some((preheader_target, frame)) = &preheader
-            && *preheader_target == target.plan.id
+            && *preheader_target == target.id
         {
             incoming.push((BlockId::new(0), frame));
         }
@@ -41,7 +41,7 @@ pub(in crate::ir::generator) fn collect_phi_candidates(
                 let (Some(result), Some(value)) = (result, value) else {
                     continue;
                 };
-                if phi_blocks.get(&result) != Some(&target.plan.id) {
+                if phi_blocks.get(&result) != Some(&target.id) {
                     continue;
                 }
                 match inputs.entry(result).or_default().entry(predecessor) {
@@ -57,7 +57,7 @@ pub(in crate::ir::generator) fn collect_phi_candidates(
             }
         }
         for (&result, &block) in phi_blocks {
-            if block != target.plan.id {
+            if block != target.id {
                 continue;
             }
             if let Some(values) = inputs.remove(&result)
@@ -123,7 +123,7 @@ fn paired_frame_values(
         .collect::<Result<_, _>>()
 }
 
-pub(in crate::ir::generator) fn unavailable_value_slots(
+pub(super) fn unavailable_value_slots(
     merged: &JvmStackFrame,
     incoming: &[&JvmStackFrame],
 ) -> Result<(Vec<usize>, Vec<usize>), MokaIRBuildError> {

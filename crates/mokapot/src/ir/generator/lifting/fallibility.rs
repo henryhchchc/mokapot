@@ -4,12 +4,12 @@ use crate::jvm::{ConstantValue, Method, code::Instruction, method};
 
 /// Method-level context needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct FallibilityContext {
+pub(in crate::ir::generator) struct FallibilityContext {
     return_can_throw: bool,
 }
 
 impl FallibilityContext {
-    pub(crate) fn for_method(method: &Method) -> Self {
+    pub(in crate::ir::generator) fn for_method(method: &Method) -> Self {
         // Exact structured-locking analysis is path- and alias-sensitive, so
         // explicit monitor use conservatively makes every method exit fallible.
         let has_explicit_monitor_operation = method.body.as_ref().is_some_and(|body| {
