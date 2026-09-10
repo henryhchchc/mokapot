@@ -24,6 +24,7 @@ use self::build_model::{
     GeneratedMethod, OutgoingState, PairedFrameValue, PlannedBlock, ScalarArm, ScalarBlock,
     ScalarEntryFrames, next_temp_value,
 };
+use self::fallibility::FallibilityContext;
 use self::lifted_instruction::LiftedInstruction;
 use self::value::{DiscoveryValue, FrameOperand, ProvisionalValueId, ScalarValue};
 
@@ -56,6 +57,7 @@ struct MokaIRGenerator<'method> {
     caught_exception_ids: BTreeMap<Location, ProvisionalValueId>,
     method: &'method Method,
     body: &'method MethodBody,
+    fallibility: FallibilityContext,
     legacy: LegacyNormalizer,
     discovering: bool,
     next_lifted_value: u32,

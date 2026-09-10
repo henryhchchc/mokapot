@@ -1,7 +1,7 @@
 use super::{
     BTreeMap, BlockId, DiscoveryValue, JvmStackFrame, LiftedInstruction, Location,
     MokaIRBuildError, MokaIRGenerator, PlannedBlock, ProvisionalValueId, ScalarArm, ScalarBlock,
-    ScalarEntryFrames, ScalarValue, fallibility, next_temp_value, unavailable_value_slots,
+    ScalarEntryFrames, ScalarValue, next_temp_value, unavailable_value_slots,
 };
 
 impl MokaIRGenerator<'_> {
@@ -134,7 +134,7 @@ impl MokaIRGenerator<'_> {
                             self.lift_instruction(&jvm_instruction, location, &mut frame)?;
                         (
                             instruction,
-                            fallibility::is_synchronously_fallible(&jvm_instruction),
+                            self.fallibility.is_synchronously_fallible(&jvm_instruction),
                         )
                     }
                     Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
