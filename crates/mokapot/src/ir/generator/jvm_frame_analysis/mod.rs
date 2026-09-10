@@ -1,45 +1,54 @@
 //! Abstractly executes JVM frames to determine reachable states.
 
-pub(super) mod fallibility;
-pub(super) mod legacy;
 pub(in crate::ir::generator) mod operand_state;
 
 use super::{
-    BTreeMap, BooleanVariable, BranchGuard, ConstantValue, DataflowProblem, Entry, FrameOperand,
-    JvmStackFrame, LiftedCondition, LiftedControlTransfer, LiftedInstruction, LiftedValue, Method,
-    MethodBody, MokaIRBuildError, OperandState, ProgramCounter, SsaValueId, method,
+    BTreeMap, DataflowProblem, JvmStackFrame, LegacyNormalizer, LiftedControlTransfer,
+    LiftedInstruction, Location, Method, MethodBody, MokaIRBuildError, NormalizedJvm, OperandState,
+    ProgramCounter, ReturnAddress, SsaValueId, method,
 };
-use fallibility::FallibilityContext;
-use legacy::{Location, Normalizer as LegacyNormalizer};
+use crate::ir::generator::lifting::{
+    fallibility::FallibilityContext,
+    lift_instruction,
+    semantics::{JvmSemantics, outgoing_from},
+};
 
-pub(in crate::ir::generator) type OutgoingState<OP> =
-    (Location, LiftedControlTransfer<OP>, JvmStackFrame<OP>);
-
-/// The fixed-point JVM frame analysis and the state needed by later phases.
-pub(in crate::ir::generator) struct JvmFrameAnalysis<'method> {
-    pub(in crate::ir::generator) facts: BTreeMap<Location, JvmStackFrame>,
-    pub(in crate::ir::generator) lifted: BTreeMap<Location, LiftedInstruction>,
-    pub(in crate::ir::generator) outgoing:
-        BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
-    pub(in crate::ir::generator) outgoing_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
-    pub(in crate::ir::generator) value_ids: BTreeMap<Location, SsaValueId>,
-    pub(in crate::ir::generator) caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    pub(in crate::ir::generator) method: &'method Method,
-    pub(in crate::ir::generator) body: &'method MethodBody,
-    pub(in crate::ir::generator) fallibility: FallibilityContext,
-    pub(in crate::ir::generator) legacy: LegacyNormalizer,
-    analyzing: bool,
-    next_lifted_value: u32,
-    pub(in crate::ir::generator) initial_seed: Option<(Location, JvmStackFrame)>,
+/// Mutable state used only while solving JVM frame facts.
+pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
+    method: &'method Method,
+    body: &'method MethodBody,
+    fallibility: FallibilityContext,
+    normalizer: LegacyNormalizer,
+    definition_ids: BTreeMap<Location, SsaValueId>,
+    caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    next_definition_id: u32,
+    instructions: BTreeMap<Location, LiftedInstruction>,
+    successors: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
+    successor_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
+    entry: Option<(Location, JvmStackFrame)>,
 }
 
-impl DataflowProblem for JvmFrameAnalysis<'_> {
+/// Reachable JVM locations, their incoming frames, and normalized control flow.
+pub(in crate::ir::generator) struct JvmFrameFacts<'method> {
+    pub method: &'method Method,
+    pub body: &'method MethodBody,
+    pub entry: (Location, JvmStackFrame),
+    pub frames: BTreeMap<Location, JvmStackFrame>,
+    pub instructions: BTreeMap<Location, LiftedInstruction>,
+    pub successors: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<OperandState>)>>,
+    pub successor_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
+    pub definition_ids: BTreeMap<Location, SsaValueId>,
+    pub caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    pub normalized: NormalizedJvm,
+}
+
+impl DataflowProblem for JvmFrameAnalyzer<'_> {
     type Location = Location;
     type Fact = JvmStackFrame;
     type Err = MokaIRBuildError;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        self.initial_seed.clone().into_iter().collect::<Vec<_>>()
+        self.entry.clone().into_iter().collect::<Vec<_>>()
     }
 
     fn flow(
@@ -53,7 +62,7 @@ impl DataflowProblem for JvmFrameAnalysis<'_> {
                 handler_pc,
                 context,
             } => {
-                let target = self.legacy.bytecode(handler_pc, context)?;
+                let target = self.normalizer.bytecode(handler_pc, context)?;
                 (
                     LiftedInstruction::HandlerEntry,
                     vec![(
@@ -72,29 +81,31 @@ impl DataflowProblem for JvmFrameAnalysis<'_> {
                     .instruction_at(pc)
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?
                     .clone();
+                let fallible = self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
-                    self.lift_instruction(&jvm_instruction, location, &mut normal_frame)?;
-                let outgoing = self.analyze_frame_and_conditions(
+                    lift_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
+                let outgoing = outgoing_from(
+                    self,
                     location,
                     &pre_frame,
                     normal_frame,
                     &instruction,
-                    self.fallibility.is_synchronously_fallible(&jvm_instruction),
-                    &|id| OperandState::CaughtException(id),
+                    fallible,
+                    &OperandState::CaughtException,
                 )?;
                 (instruction, outgoing)
             }
         };
 
-        self.lifted.insert(location, instruction);
-        self.outgoing.insert(
+        self.instructions.insert(location, instruction);
+        self.successors.insert(
             location,
             outgoing
                 .iter()
                 .map(|(target, transfer, _)| (*target, transfer.clone()))
                 .collect(),
         );
-        self.outgoing_frames.insert(
+        self.successor_frames.insert(
             location,
             outgoing.iter().map(|(_, _, frame)| frame.clone()).collect(),
         );
@@ -105,7 +116,7 @@ impl DataflowProblem for JvmFrameAnalysis<'_> {
     }
 }
 
-impl<'method> JvmFrameAnalysis<'method> {
+impl<'method> JvmFrameAnalyzer<'method> {
     pub(super) fn for_method(method: &'method Method) -> Result<Self, MokaIRBuildError> {
         let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
         let first_pc = body
@@ -119,66 +130,77 @@ impl<'method> JvmFrameAnalysis<'method> {
             body.max_locals,
             body.max_stack,
         )?;
-        let entry = Location::entry(first_pc);
 
         Ok(Self {
-            facts: BTreeMap::default(),
-            lifted: BTreeMap::default(),
-            outgoing: BTreeMap::default(),
-            outgoing_frames: BTreeMap::default(),
-            value_ids: BTreeMap::default(),
-            caught_exception_ids: BTreeMap::default(),
             method,
             body,
-            fallibility: fallibility::FallibilityContext::for_method(method),
-            legacy: LegacyNormalizer::new(first_pc),
-            analyzing: true,
-            next_lifted_value: 0,
-            initial_seed: Some((entry, initial_frame)),
+            fallibility: FallibilityContext::for_method(method),
+            normalizer: LegacyNormalizer::new(first_pc),
+            definition_ids: BTreeMap::new(),
+            caught_exception_ids: BTreeMap::new(),
+            next_definition_id: 0,
+            instructions: BTreeMap::new(),
+            successors: BTreeMap::new(),
+            successor_frames: BTreeMap::new(),
+            entry: Some((Location::entry(first_pc), initial_frame)),
         })
     }
 
-    pub(super) fn value_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
-        if let Some(value) = self.value_ids.get(&location) {
-            return Ok(*value);
-        }
-        if !self.analyzing || !matches!(location, Location::Bytecode { .. }) {
+    pub(super) fn run(mut self) -> Result<JvmFrameFacts<'method>, MokaIRBuildError> {
+        use crate::analysis::fixed_point::solve;
+
+        let frames = solve(&mut self)?;
+        Ok(JvmFrameFacts {
+            method: self.method,
+            body: self.body,
+            entry: self.entry.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+            frames,
+            instructions: self.instructions,
+            successors: self.successors,
+            successor_frames: self.successor_frames,
+            definition_ids: self.definition_ids,
+            caught_exception_ids: self.caught_exception_ids,
+            normalized: self.normalizer.finish(),
+        })
+    }
+
+    fn next_definition_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+        let id = SsaValueId::new(self.next_definition_id);
+        self.next_definition_id = self
+            .next_definition_id
+            .checked_add(1)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        Ok(id)
+    }
+}
+
+impl JvmSemantics for JvmFrameAnalyzer<'_> {
+    fn body(&self) -> &MethodBody {
+        self.body
+    }
+
+    fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
+        if !matches!(location, Location::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        let value = self.next_temporary_value()?;
-        self.value_ids.insert(location, value);
-        Ok(value)
+        if let Some(&id) = self.definition_ids.get(&location) {
+            return Ok(id);
+        }
+        let id = self.next_definition_id()?;
+        self.definition_ids.insert(location, id);
+        Ok(id)
     }
 
     fn caught_exception_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
-        if let Some(value) = self.caught_exception_ids.get(&location) {
-            return Ok(*value);
-        }
-        if !self.analyzing || !matches!(location, Location::Handler { .. }) {
+        if !matches!(location, Location::Handler { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        let value = self.next_temporary_value()?;
-        self.caught_exception_ids.insert(location, value);
-        Ok(value)
-    }
-
-    fn next_temporary_value(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
-        let value = SsaValueId::new(self.next_lifted_value);
-        self.next_lifted_value = self
-            .next_lifted_value
-            .checked_add(1)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        Ok(value)
-    }
-
-    pub(super) fn next_pc_of(
-        &self,
-        pc: ProgramCounter,
-    ) -> Result<ProgramCounter, MokaIRBuildError> {
-        self.body
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
+        if let Some(&id) = self.caught_exception_ids.get(&location) {
+            return Ok(id);
+        }
+        let id = self.next_definition_id()?;
+        self.caught_exception_ids.insert(location, id);
+        Ok(id)
     }
 
     fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
@@ -188,7 +210,7 @@ impl<'method> JvmFrameAnalysis<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.legacy.bytecode(self.next_pc_of(pc)?, context)
+        self.normalizer.bytecode(self.next_pc_of(pc)?, context)
     }
 
     fn target_location(
@@ -199,185 +221,38 @@ impl<'method> JvmFrameAnalysis<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.legacy.bytecode(target, context)
+        self.normalizer.bytecode(target, context)
     }
 
-    fn exception_edges<OP: FrameOperand>(
+    fn handler_location(
         &mut self,
         location: Location,
-        pre_frame: &JvmStackFrame<OP>,
-        caught_value: &impl Fn(SsaValueId) -> OP,
-    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
-        let pc = location
-            .source_pc()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        handler: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let entries = self
-            .body
-            .exception_table
-            .iter()
-            .filter(|entry| entry.covers(pc))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut outgoing = Vec::with_capacity(entries.len() + 1);
-        let mut exhaustive = false;
-        for entry in entries {
-            let handler = self.legacy.handler(entry.handler_pc, context)?;
-            let caught = caught_value(self.caught_exception_at(handler)?);
-            outgoing.push((
-                handler,
-                LiftedControlTransfer::Exception(entry.catch_type.clone()),
-                pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
-            ));
-            exhaustive = entry
-                .catch_type
-                .as_ref()
-                .is_none_or(|caught_type| caught_type.0.as_ref() == "java/lang/Throwable");
-            if exhaustive {
-                break;
-            }
-        }
-        if !exhaustive {
-            let unwind = self.legacy.register(Location::Unwind)?;
-            outgoing.push((
-                unwind,
-                LiftedControlTransfer::Unwind,
-                pre_frame.same_locals_empty_stack_frame(),
-            ));
-        }
-        Ok(outgoing)
+        self.normalizer.handler(handler, context)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "all control-flow forms are classified together"
-    )]
-    pub(super) fn analyze_frame_and_conditions<OP: FrameOperand>(
+    fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
+        self.normalizer.register(Location::Unwind)
+    }
+
+    fn enter_subroutine(
         &mut self,
         location: Location,
-        pre_frame: &JvmStackFrame<OP>,
-        normal_frame: JvmStackFrame<OP>,
-        instruction: &LiftedInstruction<OP>,
-        fallible: bool,
-        caught_value: &impl Fn(SsaValueId) -> OP,
-    ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
-        use LiftedControlTransfer::{Conditional, Normal, Unconditional};
-
-        Ok(match instruction {
-            LiftedInstruction::HandlerEntry => {
-                let Location::Handler {
-                    handler_pc,
-                    context,
-                } = location
-                else {
-                    return Err(MokaIRBuildError::MalformedControlFlow);
-                };
-                vec![(
-                    self.legacy.bytecode(handler_pc, context)?,
-                    Unconditional,
-                    normal_frame,
-                )]
-            }
-            LiftedInstruction::Return(_) if fallible => {
-                self.exception_edges(location, pre_frame, caught_value)?
-            }
-            LiftedInstruction::Unwind | LiftedInstruction::Return(_) => Vec::new(),
-            LiftedInstruction::Throw(_) => {
-                self.exception_edges(location, pre_frame, caught_value)?
-            }
-            LiftedInstruction::Subroutine { target, .. } => {
-                vec![(*target, Unconditional, normal_frame)]
-            }
-            LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) if fallible => {
-                let mut outgoing = vec![(self.next_location(location)?, Normal, normal_frame)];
-                outgoing.extend(self.exception_edges(location, pre_frame, caught_value)?);
-                outgoing
-            }
-            LiftedInstruction::Erased
-            | LiftedInstruction::Definition { .. }
-            | LiftedInstruction::Effect(_) => {
-                vec![(self.next_location(location)?, Unconditional, normal_frame)]
-            }
-            LiftedInstruction::Jump {
-                condition: None,
-                target,
-            } => vec![(
-                self.target_location(location, *target)?,
-                Unconditional,
-                normal_frame,
-            )],
-            LiftedInstruction::Jump {
-                condition: Some(condition),
-                target,
-            } => {
-                let condition: BooleanVariable<_> = condition.clone().into();
-                vec![
-                    (
-                        self.target_location(location, *target)?,
-                        Conditional(BranchGuard::of(condition.clone())),
-                        normal_frame.same_frame(),
-                    ),
-                    (
-                        self.next_location(location)?,
-                        Conditional(BranchGuard::of(!condition)),
-                        normal_frame,
-                    ),
-                ]
-            }
-            LiftedInstruction::Switch {
-                default,
-                branches,
-                match_value,
-            } => {
-                let mut outgoing = Vec::with_capacity(branches.len() + 1);
-                for (&case, &target) in branches {
-                    let value = LiftedValue::Constant(ConstantValue::Integer(case));
-                    let condition = BooleanVariable::Positive(LiftedCondition::Equal(
-                        match_value.clone().into(),
-                        value,
-                    ));
-                    outgoing.push((
-                        self.target_location(location, target)?,
-                        Conditional(BranchGuard::of(condition)),
-                        normal_frame.same_frame(),
-                    ));
-                }
-                let default_guard = branches
-                    .keys()
-                    .map(|case| {
-                        BooleanVariable::Negative(LiftedCondition::Equal(
-                            match_value.clone().into(),
-                            LiftedValue::Constant(ConstantValue::Integer(*case)),
-                        ))
-                    })
-                    .collect();
-                outgoing.push((
-                    self.target_location(location, *default)?,
-                    Conditional(default_guard),
-                    normal_frame,
-                ));
-                outgoing
-            }
-            LiftedInstruction::SubroutineReturn(value) => {
-                let address = value
-                    .return_address()
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-                vec![(
-                    self.legacy.return_from(location, address)?,
-                    Unconditional,
-                    normal_frame,
-                )]
-            }
-        })
+        target: ProgramCounter,
+        continuation: ProgramCounter,
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+        self.normalizer.enter(location, target, continuation)
     }
 
-    pub(super) fn run(mut self) -> Result<Self, MokaIRBuildError> {
-        use crate::analysis::fixed_point::solve;
-
-        self.facts = solve(&mut self)?;
-        self.analyzing = false;
-        Ok(self)
+    fn return_from(
+        &mut self,
+        location: Location,
+        address: ReturnAddress,
+    ) -> Result<Location, MokaIRBuildError> {
+        self.normalizer.return_from(location, address)
     }
 }

@@ -1,19 +1,32 @@
 use super::super::block_formation::BlockPlan;
 use super::{
-    BTreeMap, BlockId, JvmFrameAnalysis, JvmStackFrame, LiftedInstruction, Location,
-    MokaIRBuildError, OperandState, SsaArm, SsaBlock, SsaEntryFrames, SsaFrameValue, SsaValueId,
+    BTreeMap, BlockId, JvmFrameFacts, JvmStackFrame, LiftedInstruction, Location, MokaIRBuildError,
+    OperandState, ReturnAddress, SsaArm, SsaBlock, SsaEntryFrames, SsaFrameValue, SsaValueId,
     next_ssa_value, unavailable_value_slots,
 };
+use crate::ir::generator::lifting::{
+    fallibility::FallibilityContext,
+    lift_instruction,
+    semantics::{JvmSemantics, outgoing_from},
+};
+use crate::jvm::code::{MethodBody, ProgramCounter};
 
-impl JvmFrameAnalysis<'_> {
+pub(super) struct SsaBuilder<'analysis, 'method> {
+    frame_facts: &'analysis JvmFrameFacts<'method>,
+}
+
+impl<'analysis, 'method> SsaBuilder<'analysis, 'method> {
+    pub(super) const fn new(frame_facts: &'analysis JvmFrameFacts<'method>) -> Self {
+        Self { frame_facts }
+    }
+
     #[expect(
         clippy::too_many_arguments,
         reason = "entry-state construction joins method inputs, analysis facts, and deterministic allocation"
     )]
-    pub(in crate::ir::generator) fn ssa_entry_frames(
+    pub(super) fn entry_frames(
         &self,
         plans: &[BlockPlan],
-        facts: &BTreeMap<Location, JvmStackFrame>,
         bytecode_entry: BlockId,
         needs_entry_preheader: bool,
         initial_frame: &JvmStackFrame<SsaFrameValue>,
@@ -32,7 +45,9 @@ impl JvmFrameAnalysis<'_> {
                 .locations
                 .first()
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            let analyzed = facts
+            let analyzed = self
+                .frame_facts
+                .frames
                 .get(&leader)
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if matches!(leader, Location::Unwind) {
@@ -46,10 +61,7 @@ impl JvmFrameAnalysis<'_> {
             }
             let mut incoming = self.incoming_frames_at(leader)?;
             if plan.id == bytecode_entry && needs_entry_preheader {
-                let (_, initial) = self
-                    .initial_seed
-                    .as_ref()
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+                let initial = &self.frame_facts.entry.1;
                 incoming.push(initial);
             }
             let (unavailable_locals, unavailable_stack) =
@@ -90,9 +102,10 @@ impl JvmFrameAnalysis<'_> {
         target: Location,
     ) -> Result<Vec<&JvmStackFrame>, MokaIRBuildError> {
         let mut incoming = Vec::new();
-        for (source, arms) in &self.outgoing {
+        for (source, arms) in &self.frame_facts.successors {
             let frames = self
-                .outgoing_frames
+                .frame_facts
+                .successor_frames
                 .get(source)
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if arms.len() != frames.len() {
@@ -108,12 +121,14 @@ impl JvmFrameAnalysis<'_> {
         Ok(incoming)
     }
 
-    pub(in crate::ir::generator) fn construct_ssa_blocks(
-        &mut self,
+    pub(super) fn construct_blocks(
+        &self,
         plans: &[BlockPlan],
         mut entry_frames: BTreeMap<BlockId, JvmStackFrame<SsaFrameValue>>,
         location_to_block: &BTreeMap<Location, BlockId>,
     ) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
+        let mut replay = SsaReplay::new(self.frame_facts);
+        let fallibility = FallibilityContext::for_method(self.frame_facts.method);
         let mut blocks = Vec::with_capacity(plans.len());
         for plan in plans {
             let entry_frame = entry_frames
@@ -127,15 +142,16 @@ impl JvmFrameAnalysis<'_> {
                 let (instruction, fallible) = match location {
                     Location::Bytecode { pc, .. } => {
                         let jvm_instruction = self
+                            .frame_facts
                             .body
                             .instruction_at(pc)
                             .ok_or(MokaIRBuildError::MalformedControlFlow)?
                             .clone();
                         let instruction =
-                            self.lift_instruction(&jvm_instruction, location, &mut frame)?;
+                            lift_instruction(&mut replay, &jvm_instruction, location, &mut frame)?;
                         (
                             instruction,
-                            self.fallibility.is_synchronously_fallible(&jvm_instruction),
+                            fallibility.is_synchronously_fallible(&jvm_instruction),
                         )
                     }
                     Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
@@ -143,28 +159,28 @@ impl JvmFrameAnalysis<'_> {
                 };
                 let is_last = index + 1 == plan.locations.len();
                 if is_last {
-                    arms = self
-                        .analyze_frame_and_conditions(
-                            location,
-                            &pre_frame,
-                            frame.clone(),
-                            &instruction,
-                            fallible,
-                            &|value| SsaFrameValue::Value(value),
-                        )?
-                        .into_iter()
-                        .map(|(target, transfer, frame)| {
-                            location_to_block
-                                .get(&target)
-                                .copied()
-                                .map(|target| SsaArm {
-                                    target,
-                                    transfer,
-                                    frame,
-                                })
-                                .ok_or(MokaIRBuildError::MalformedControlFlow)
-                        })
-                        .collect::<Result<_, _>>()?;
+                    arms = outgoing_from(
+                        &mut replay,
+                        location,
+                        &pre_frame,
+                        frame.clone(),
+                        &instruction,
+                        fallible,
+                        &|value| SsaFrameValue::Value(value),
+                    )?
+                    .into_iter()
+                    .map(|(target, transfer, frame)| {
+                        location_to_block
+                            .get(&target)
+                            .copied()
+                            .map(|target| SsaArm {
+                                target,
+                                transfer,
+                                frame,
+                            })
+                            .ok_or(MokaIRBuildError::MalformedControlFlow)
+                    })
+                    .collect::<Result<_, _>>()?;
                 } else if instruction.is_explicit_transfer() {
                     return Err(MokaIRBuildError::MalformedControlFlow);
                 }
@@ -178,5 +194,94 @@ impl JvmFrameAnalysis<'_> {
             });
         }
         Ok(blocks)
+    }
+}
+
+struct SsaReplay<'facts, 'method> {
+    frame_facts: &'facts JvmFrameFacts<'method>,
+}
+
+impl<'facts, 'method> SsaReplay<'facts, 'method> {
+    const fn new(frame_facts: &'facts JvmFrameFacts<'method>) -> Self {
+        Self { frame_facts }
+    }
+}
+
+impl JvmSemantics for SsaReplay<'_, '_> {
+    fn body(&self) -> &MethodBody {
+        self.frame_facts.body
+    }
+
+    fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
+        self.frame_facts
+            .definition_ids
+            .get(&location)
+            .copied()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+
+    fn caught_exception_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
+        self.frame_facts
+            .caught_exception_ids
+            .get(&location)
+            .copied()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+
+    fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.frame_facts
+            .normalized
+            .bytecode(self.next_pc_of(pc)?, context)
+    }
+
+    fn target_location(
+        &mut self,
+        location: Location,
+        target: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.frame_facts.normalized.bytecode(target, context)
+    }
+
+    fn handler_location(
+        &mut self,
+        location: Location,
+        handler: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.frame_facts.normalized.handler(handler, context)
+    }
+
+    fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
+        self.frame_facts.normalized.unwind()
+    }
+
+    fn enter_subroutine(
+        &mut self,
+        location: Location,
+        target: ProgramCounter,
+        continuation: ProgramCounter,
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+        self.frame_facts
+            .normalized
+            .enter(location, target, continuation)
+    }
+
+    fn return_from(
+        &mut self,
+        location: Location,
+        address: ReturnAddress,
+    ) -> Result<Location, MokaIRBuildError> {
+        self.frame_facts.normalized.return_from(location, address)
     }
 }

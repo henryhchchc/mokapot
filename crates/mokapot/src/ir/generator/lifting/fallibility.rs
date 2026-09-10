@@ -1,7 +1,5 @@
 //! JVM instruction fallibility classification.
 
-//! JVM instruction fallibility classification.
-
 use crate::jvm::{ConstantValue, Method, code::Instruction, method};
 
 /// Method-level context needed to classify instruction fallibility.
