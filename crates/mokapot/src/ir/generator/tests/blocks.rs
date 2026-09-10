@@ -17,7 +17,7 @@ fn straight_line_instructions_coalesce_into_one_block() {
         "()I",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 1);
@@ -29,7 +29,7 @@ fn straight_line_instructions_coalesce_into_one_block() {
     let ids = blocks[0]
         .instructions()
         .iter()
-        .map(MokaInstruction::id)
+        .map(IrInstruction::id)
         .chain(once(blocks[0].terminator().id()))
         .collect::<HashSet<_>>();
     assert_eq!(ids.len(), 2);
@@ -37,7 +37,7 @@ fn straight_line_instructions_coalesce_into_one_block() {
 
 #[test]
 fn value_identities_do_not_depend_on_sparse_program_counters() {
-    let compact = method(
+    let compact = build(&method(
         [
             (0.into(), Instruction::IConst0),
             (1.into(), Instruction::Pop),
@@ -46,10 +46,9 @@ fn value_identities_do_not_depend_on_sparse_program_counters() {
         ],
         "()I",
         vec![],
-    )
-    .brew()
+    ))
     .unwrap();
-    let sparse = method(
+    let sparse = build(&method(
         [
             (0.into(), Instruction::IConst0),
             (100.into(), Instruction::Pop),
@@ -58,14 +57,13 @@ fn value_identities_do_not_depend_on_sparse_program_counters() {
         ],
         "()I",
         vec![],
-    )
-    .brew()
+    ))
     .unwrap();
     let values = |method: &MokaIRMethod| {
         method
             .blocks()
             .flat_map(BasicBlock::instructions)
-            .filter_map(MokaInstruction::def)
+            .filter_map(IrInstruction::def)
             .collect::<Vec<_>>()
     };
 
@@ -84,7 +82,7 @@ fn unreachable_bytecode_is_omitted() {
         "()V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
 
     assert_eq!(ir.blocks().len(), 2);
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
@@ -102,7 +100,7 @@ fn backward_target_starts_a_block_even_when_transfer_is_last() {
         "()V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
 
     assert_eq!(ir.blocks().len(), 2);
     let loop_block = ir.blocks().nth(1).unwrap();
@@ -124,7 +122,7 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
         "(I)V",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let entry = ir.block(ir.entry_block()).unwrap();
     let fallthrough = entry.terminator().successors()[1].target();
     let synthetic = ir.block(fallthrough).unwrap().terminator();

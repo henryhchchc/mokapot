@@ -8,7 +8,7 @@ use crate::{
     jvm::references::ClassRef,
 };
 
-fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &MokaInstruction {
+fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &IrInstruction {
     method
         .source_map()
         .instructions_at(pc)
@@ -65,7 +65,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
             catch_type: None,
         }],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
 
     let normal_target = fallible
@@ -87,7 +87,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let handler_entry = ir.block(handler_entry).unwrap();
     let caught = ir.caught_exception(handler_entry.id()).unwrap();
     assert_eq!(
-        ir.value_definition(caught),
+        ir.definition_of(caught),
         Some(ValueDefinition::CaughtException(handler_entry.id()))
     );
     assert!(handler_entry.phis().is_empty());
@@ -148,7 +148,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
             },
         ],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
     let transfers = fallible
         .terminator()
@@ -189,7 +189,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
             catch_type: None,
         }],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
 
     assert_eq!(ir.blocks().len(), 1);
     assert!(ir.blocks().all(|block| {
@@ -223,18 +223,20 @@ fn exceptional_state_excludes_the_fallible_result() {
             catch_type: None,
         }],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let result = instruction_at(&ir, 1.into()).def().unwrap();
     let normal_return = terminator_at(&ir, 2.into()).id();
     let handler_return = terminator_at(&ir, 12.into()).id();
-    let uses = DefUseChain::new(&ir).used_at(result);
+    let uses = DefUseChain::new(&ir)
+        .uses_of(result)
+        .collect::<BTreeSet<_>>();
 
     assert_eq!(uses, BTreeSet::from([UseSite::Instruction(normal_return)]));
     assert!(!uses.contains(&UseSite::Instruction(handler_return)));
     assert!(
         ir.blocks()
             .filter_map(|block| ir.caught_exception(block.id()))
-            .all(|caught| ir.value_definition(caught).is_some())
+            .all(|caught| ir.definition_of(caught).is_some())
     );
 }
 
@@ -258,7 +260,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
         "(Ljava/lang/Object;)Ljava/lang/Object;",
         vec![],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let unwind_targets = [1, 4].map(|pc| {
         let block = block_containing_instruction(&ir, instruction_at(&ir, pc.into()).id());
         block
@@ -313,7 +315,7 @@ fn throw_has_only_ordered_exceptional_outcomes() {
             catch_type: Some("java/lang/RuntimeException".parse().unwrap()),
         }],
     );
-    let ir = method.brew().unwrap();
+    let ir = build(&method).unwrap();
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
         .successors()
