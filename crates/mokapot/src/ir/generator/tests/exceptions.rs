@@ -3,7 +3,10 @@
     reason = "generator tests share the fixture helpers from their parent module"
 )]
 use super::*;
-use crate::{ir::DefUseChain, jvm::references::ClassRef};
+use crate::{
+    ir::{DefUseChain, UseSite},
+    jvm::references::ClassRef,
+};
 
 fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &MokaInstruction {
     method
@@ -226,8 +229,8 @@ fn exceptional_state_excludes_the_fallible_result() {
     let handler_return = terminator_at(&ir, 12.into()).id();
     let uses = DefUseChain::new(&ir).used_at(result);
 
-    assert_eq!(uses, BTreeSet::from([normal_return]));
-    assert!(!uses.contains(&handler_return));
+    assert_eq!(uses, BTreeSet::from([UseSite::Instruction(normal_return)]));
+    assert!(!uses.contains(&UseSite::Instruction(handler_return)));
     assert!(
         ir.blocks()
             .filter_map(|block| ir.caught_exception(block.id()))
