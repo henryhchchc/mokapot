@@ -51,7 +51,7 @@ impl DataflowProblem for MokaIRGenerator<'_> {
                     &pre_frame,
                     normal_frame,
                     &instruction,
-                    fallibility::is_synchronously_fallible(&jvm_instruction),
+                    self.fallibility.is_synchronously_fallible(&jvm_instruction),
                     &|id| DiscoveryValue::CaughtException(id),
                 )?;
                 (instruction, outgoing)
@@ -101,6 +101,7 @@ impl<'method> MokaIRGenerator<'method> {
             caught_exception_ids: BTreeMap::default(),
             method,
             body,
+            fallibility: fallibility::FallibilityContext::for_method(method),
             legacy: super::LegacyNormalizer::new(first_pc),
             discovering: true,
             next_lifted_value: 0,
@@ -255,6 +256,9 @@ impl<'method> MokaIRGenerator<'method> {
                     Unconditional,
                     normal_frame,
                 )]
+            }
+            LiftedInstruction::Return(_) if fallible => {
+                self.exception_edges(location, pre_frame, caught_value)?
             }
             LiftedInstruction::Unwind | LiftedInstruction::Return(_) => Vec::new(),
             LiftedInstruction::Throw(_) => {
