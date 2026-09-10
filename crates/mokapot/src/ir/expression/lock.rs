@@ -4,7 +4,7 @@ use crate::ir::ValueId;
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP: std::fmt::Display = ValueId> {
+pub enum Operation<OP = ValueId> {
     /// Acquires the lock.
     #[display("acquire {_0}")]
     Acquire(OP),

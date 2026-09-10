@@ -10,7 +10,7 @@ use crate::ir::{
     },
 };
 
-pub(super) fn remap_expression<OP: std::fmt::Display>(
+pub(super) fn remap_expression<OP>(
     expression: LiftedExpression<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Expression, MokaIRBuildError> {
@@ -45,7 +45,7 @@ pub(super) fn remap_expression<OP: std::fmt::Display>(
     })
 }
 
-fn remap_math<OP: std::fmt::Display>(
+fn remap_math<OP>(
     operation: LiftedMathOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<MathOperation, MokaIRBuildError> {
@@ -76,7 +76,7 @@ fn remap_math<OP: std::fmt::Display>(
     })
 }
 
-fn remap_array<OP: std::fmt::Display>(
+fn remap_array<OP>(
     operation: LiftedArrayOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<ArrayOperation, MokaIRBuildError> {
@@ -117,7 +117,7 @@ fn remap_array<OP: std::fmt::Display>(
     })
 }
 
-fn remap_field<OP: std::fmt::Display>(
+fn remap_field<OP>(
     access: LiftedFieldAccess<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<FieldAccess, MokaIRBuildError> {
@@ -143,7 +143,7 @@ fn remap_field<OP: std::fmt::Display>(
     })
 }
 
-fn remap_conversion<OP: std::fmt::Display>(
+fn remap_conversion<OP>(
     operation: LiftedConversion<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Conversion, MokaIRBuildError> {
@@ -170,7 +170,7 @@ fn remap_conversion<OP: std::fmt::Display>(
     })
 }
 
-fn remap_lock<OP: std::fmt::Display>(
+fn remap_lock<OP>(
     operation: LiftedLockOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<LockOperation, MokaIRBuildError> {
@@ -180,7 +180,7 @@ fn remap_lock<OP: std::fmt::Display>(
     })
 }
 
-pub(super) fn remap_transfer<OP: Eq + std::hash::Hash + std::fmt::Display>(
+pub(super) fn remap_transfer<OP: Eq + std::hash::Hash>(
     transfer: LiftedControlTransfer<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<ControlTransfer, MokaIRBuildError> {
@@ -198,7 +198,7 @@ pub(super) fn remap_transfer<OP: Eq + std::hash::Hash + std::fmt::Display>(
     })
 }
 
-fn remap_literal<OP: std::fmt::Display>(
+fn remap_literal<OP>(
     literal: BooleanVariable<LiftedCondition<LiftedValue<OP>>>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<BooleanVariable<Predicate>, MokaIRBuildError> {
@@ -212,7 +212,7 @@ fn remap_literal<OP: std::fmt::Display>(
     })
 }
 
-fn remap_guard_condition<OP: std::fmt::Display>(
+fn remap_guard_condition<OP>(
     condition: LiftedCondition<LiftedValue<OP>>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Predicate, MokaIRBuildError> {

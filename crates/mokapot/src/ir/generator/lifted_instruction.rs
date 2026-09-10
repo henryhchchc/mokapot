@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, fmt};
+use std::collections::BTreeMap;
 
 use super::{Location, OperandState, SsaValueId};
 use crate::ir::expression::{LiftedCondition, LiftedExpression};
 use crate::jvm::code::ProgramCounter;
 
 #[derive(Debug, Clone)]
-pub(super) enum LiftedInstruction<OP: fmt::Display = OperandState> {
+pub(super) enum LiftedInstruction<OP = OperandState> {
     HandlerEntry,
     Unwind,
     Erased,
@@ -31,7 +31,7 @@ pub(super) enum LiftedInstruction<OP: fmt::Display = OperandState> {
     SubroutineReturn(OP),
 }
 
-impl<OP: fmt::Display> LiftedInstruction<OP> {
+impl<OP> LiftedInstruction<OP> {
     pub(super) const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,

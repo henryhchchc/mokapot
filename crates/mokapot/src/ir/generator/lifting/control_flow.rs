@@ -5,7 +5,7 @@
 use super::*;
 
 #[inline]
-pub(super) fn conditional_jump<OP: Clone + std::fmt::Display>(
+pub(super) fn conditional_jump<OP: Clone>(
     frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
     condition: impl FnOnce(OP) -> Condition<OP>,
@@ -18,7 +18,7 @@ pub(super) fn conditional_jump<OP: Clone + std::fmt::Display>(
 }
 
 #[inline]
-pub(super) fn cmp_jump<OP: Clone + std::fmt::Display>(
+pub(super) fn cmp_jump<OP: Clone>(
     frame: &mut JvmStackFrame<OP>,
     target: ProgramCounter,
     condition: impl FnOnce(OP, OP) -> Condition<OP>,

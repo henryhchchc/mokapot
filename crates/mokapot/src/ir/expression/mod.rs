@@ -41,6 +41,8 @@ pub(crate) use lock::Operation as LiftedLockOperation;
 pub(crate) use math::Operation as LiftedMathOperation;
 
 mod model {
+    use std::fmt;
+
     use itertools::Itertools;
 
     use super::{
@@ -49,8 +51,8 @@ mod model {
     };
 
     /// An expression parameterized by the lifting operand representation.
-    #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-    pub enum Expression<OP: std::fmt::Display> {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum Expression<OP> {
         /// A constant value.
         Const(ConstantValue),
         /// A function call
@@ -59,14 +61,6 @@ mod model {
         /// - `invokevirtual`
         /// - `invokespecial`
         /// - `invokeinterface`
-        #[display(
-            "call {} {}{}::{}({})",
-            method.descriptor.return_type,
-            this.as_ref().map(|it| format!("{it}@")).unwrap_or_default(),
-            method.owner,
-            method.name,
-            args.iter().map(std::string::ToString::to_string).join(", "),
-        )]
         Call {
             /// The method being called.
             method: MethodRef,
@@ -79,13 +73,6 @@ mod model {
         /// A call to a bootstrap method to create a closure.
         /// Corresponds to the following JVM instructions:
         /// - `invokedynamic`
-        #[display(
-            "closure {} {}#{}({})",
-            closure_descriptor.return_type,
-            name,
-            bootstrap_method_index,
-            captures.iter().map(ToString::to_string).join(", "),
-        )]
         Closure {
             /// The name of the closure.
             name: String,
@@ -107,8 +94,45 @@ mod model {
         /// An operation on a monitor.
         Synchronization(LiftedLockOperation<OP>),
         /// Creates a new object.
-        #[display("new {_0}")]
         New(ClassRef),
+    }
+
+    impl<OP: fmt::Display> fmt::Display for Expression<OP> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Const(value) => value.fmt(f),
+                Self::Call { method, this, args } => write!(
+                    f,
+                    "call {} {}{}::{}({})",
+                    method.descriptor.return_type,
+                    this.as_ref()
+                        .map(|value| format!("{value}@"))
+                        .unwrap_or_default(),
+                    method.owner,
+                    method.name,
+                    args.iter().format(", "),
+                ),
+                Self::Closure {
+                    name,
+                    captures,
+                    bootstrap_method_index,
+                    closure_descriptor,
+                } => write!(
+                    f,
+                    "closure {} {}#{}({})",
+                    closure_descriptor.return_type,
+                    name,
+                    bootstrap_method_index,
+                    captures.iter().format(", "),
+                ),
+                Self::Math(operation) => operation.fmt(f),
+                Self::Field(access) => access.fmt(f),
+                Self::Array(operation) => operation.fmt(f),
+                Self::Conversion(operation) => operation.fmt(f),
+                Self::Synchronization(operation) => operation.fmt(f),
+                Self::New(class) => write!(f, "new {class}"),
+            }
+        }
     }
 }
 

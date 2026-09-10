@@ -4,7 +4,7 @@ use crate::{ir::ValueId, types::reference_type::ReferenceType};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP: std::fmt::Display = ValueId> {
+pub enum Operation<OP = ValueId> {
     /// Converts an `int` to a `long`.
     #[display("{_0} as long")]
     Int2Long(OP),

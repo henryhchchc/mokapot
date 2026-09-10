@@ -4,7 +4,7 @@ use crate::ir::ValueId;
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
-pub enum Operation<OP: std::fmt::Display = ValueId> {
+pub enum Operation<OP = ValueId> {
     /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display("{_0} + {_1}")]
     Add(OP, OP),
