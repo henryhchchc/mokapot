@@ -25,7 +25,7 @@ fn straight_line_instructions_coalesce_into_one_block() {
     let ids = blocks[0]
         .operations()
         .iter()
-        .map(IrOperation::id)
+        .map(Operation::id)
         .chain(once(blocks[0].terminator().id()))
         .collect::<HashSet<_>>();
     assert_eq!(ids.len(), 2);
@@ -59,7 +59,7 @@ fn value_identities_do_not_depend_on_sparse_program_counters() {
         method
             .blocks()
             .flat_map(BasicBlock::operations)
-            .filter_map(IrOperation::def)
+            .filter_map(Operation::def)
             .collect::<Vec<_>>()
     };
 

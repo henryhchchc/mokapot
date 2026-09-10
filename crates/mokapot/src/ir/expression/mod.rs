@@ -17,28 +17,15 @@ mod field;
 mod lock;
 mod math;
 
-/// An array operation over scalar SSA values.
-pub type ArrayOperation = array::Operation<ValueId>;
-/// A condition over scalar SSA values.
-pub type Condition = condition::Condition<ValueId>;
+pub use array::Operation as ArrayOperation;
+pub use condition::Condition;
 /// A branch predicate over scalar SSA values and JVM constants.
-pub type Predicate = condition::Condition<crate::ir::control_flow::path_condition::Value>;
-/// A scalar value conversion.
-pub type Conversion = conversion::Operation<ValueId>;
-/// A field access over scalar SSA values.
-pub type FieldAccess = field::Access<ValueId>;
-/// A monitor operation over a scalar SSA value.
-pub type LockOperation = lock::Operation<ValueId>;
-/// A mathematical operation over scalar SSA values.
-pub type MathOperation = math::Operation<ValueId>;
+pub type Predicate = Condition<crate::ir::control_flow::path_condition::Value>;
+pub use conversion::Operation as Conversion;
+pub use field::Access as FieldAccess;
+pub use lock::Operation as LockOperation;
 pub use math::NaNTreatment;
-
-pub(crate) use array::Operation as LiftedArrayOperation;
-pub(crate) use condition::Condition as LiftedCondition;
-pub(crate) use conversion::Operation as LiftedConversion;
-pub(crate) use field::Access as LiftedFieldAccess;
-pub(crate) use lock::Operation as LiftedLockOperation;
-pub(crate) use math::Operation as LiftedMathOperation;
+pub use math::Operation as MathOperation;
 
 mod model {
     use std::fmt;
@@ -46,13 +33,13 @@ mod model {
     use itertools::Itertools;
 
     use super::{
-        ClassRef, ConstantValue, LiftedArrayOperation, LiftedConversion, LiftedFieldAccess,
-        LiftedLockOperation, LiftedMathOperation, MethodDescriptor, MethodRef,
+        ArrayOperation, ClassRef, ConstantValue, Conversion, FieldAccess, LockOperation,
+        MathOperation, MethodDescriptor, MethodRef, ValueId,
     };
 
     /// An expression parameterized by the lifting operand representation.
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Expression<OP> {
+    pub enum Expression<OP = ValueId> {
         /// A constant value.
         Const(ConstantValue),
         /// A function call
@@ -84,15 +71,15 @@ mod model {
             closure_descriptor: MethodDescriptor,
         },
         /// A mathematical operation.
-        Math(LiftedMathOperation<OP>),
+        Math(MathOperation<OP>),
         /// A field access.
-        Field(LiftedFieldAccess<OP>),
+        Field(FieldAccess<OP>),
         /// An array operation.
-        Array(LiftedArrayOperation<OP>),
+        Array(ArrayOperation<OP>),
         /// A type conversion.
-        Conversion(LiftedConversion<OP>),
+        Conversion(Conversion<OP>),
         /// An operation on a monitor.
-        Synchronization(LiftedLockOperation<OP>),
+        Synchronization(LockOperation<OP>),
         /// Creates a new object.
         New(ClassRef),
     }
@@ -136,9 +123,7 @@ mod model {
     }
 }
 
-/// An expression in Moka IR over scalar SSA values.
-pub type Expression = model::Expression<ValueId>;
-pub(crate) use model::Expression as LiftedExpression;
+pub use model::Expression;
 
 impl Expression {
     /// Returns the values used by the expression.

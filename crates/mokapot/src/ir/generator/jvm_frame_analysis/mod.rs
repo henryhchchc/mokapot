@@ -3,9 +3,9 @@
 pub(in crate::ir::generator) mod operand_state;
 
 use super::{
-    BTreeMap, DataflowProblem, JvmStackFrame, LegacyNormalizer, LiftedControlTransfer,
-    LiftedInstruction, Location, Method, MethodBody, MokaIRBuildError, NormalizedJvm, OperandState,
-    ProgramCounter, ReturnAddress, SsaValueId, method,
+    BTreeMap, ControlTransfer, DataflowProblem, Instruction, JvmStackFrame, Location, Method,
+    MethodBody, MokaIRBuildError, NormalizedJvm, Normalizer, OperandState, ProgramCounter,
+    ReturnAddress, SsaValueId, method,
 };
 use crate::ir::generator::lifting::{
     fallibility::FallibilityContext,
@@ -17,7 +17,7 @@ use crate::ir::generator::lifting::{
 pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
     body: &'method MethodBody,
     fallibility: FallibilityContext,
-    normalizer: LegacyNormalizer,
+    normalizer: Normalizer,
     definition_ids: BTreeMap<Location, SsaValueId>,
     caught_exception_ids: BTreeMap<Location, SsaValueId>,
     next_definition_id: u32,
@@ -28,7 +28,7 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
 /// One outgoing edge and the abstract frame reaching its target.
 pub(in crate::ir::generator) struct JvmOutgoing {
     pub target: Location,
-    pub transfer: LiftedControlTransfer<OperandState>,
+    pub transfer: ControlTransfer<OperandState>,
     pub frame: JvmStackFrame,
 }
 
@@ -76,15 +76,11 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
             } => {
                 let target = self.normalizer.bytecode(handler_pc, context)?;
                 (
-                    LiftedInstruction::HandlerEntry,
-                    vec![(
-                        target,
-                        LiftedControlTransfer::Unconditional,
-                        fact.same_frame(),
-                    )],
+                    Instruction::HandlerEntry,
+                    vec![(target, ControlTransfer::Unconditional, fact.same_frame())],
                 )
             }
-            Location::Unwind => (LiftedInstruction::Unwind, Vec::new()),
+            Location::Unwind => (Instruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
                 let pre_frame = fact.same_frame();
                 let mut normal_frame = fact.same_frame();
@@ -149,7 +145,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(Self {
             body,
             fallibility: FallibilityContext::for_method(method),
-            normalizer: LegacyNormalizer::new(first_pc),
+            normalizer: Normalizer::new(first_pc),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             next_definition_id: 0,

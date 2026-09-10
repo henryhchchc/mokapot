@@ -1,27 +1,26 @@
 use super::super::MokaIRBuildError;
 use crate::ir::{
     ValueId,
-    control_flow::path_condition::{BooleanVariable, BranchGuard, LiftedValue, Value},
-    control_flow::{ControlTransfer, LiftedControlTransfer},
+    control_flow::ControlTransfer,
+    control_flow::path_condition::{BooleanVariable, BranchGuard, Value},
     expression::{
-        ArrayOperation, Conversion, Expression, FieldAccess, LiftedArrayOperation, LiftedCondition,
-        LiftedConversion, LiftedExpression, LiftedFieldAccess, LiftedLockOperation,
-        LiftedMathOperation, LockOperation, MathOperation, Predicate,
+        ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
+        MathOperation, Predicate,
     },
 };
 
 pub(super) fn remap_expression<OP>(
-    expression: LiftedExpression<OP>,
+    expression: Expression<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Expression, MokaIRBuildError> {
     Ok(match expression {
-        LiftedExpression::Const(value) => Expression::Const(value),
-        LiftedExpression::Call { method, this, args } => Expression::Call {
+        Expression::Const(value) => Expression::Const(value),
+        Expression::Call { method, this, args } => Expression::Call {
             method,
             this: this.map(remap).transpose()?,
             args: args.into_iter().map(remap).collect::<Result<_, _>>()?,
         },
-        LiftedExpression::Closure {
+        Expression::Closure {
             name,
             captures,
             bootstrap_method_index,
@@ -32,63 +31,59 @@ pub(super) fn remap_expression<OP>(
             bootstrap_method_index,
             closure_descriptor,
         },
-        LiftedExpression::Math(operation) => Expression::Math(remap_math(operation, remap)?),
-        LiftedExpression::Field(access) => Expression::Field(remap_field(access, remap)?),
-        LiftedExpression::Array(operation) => Expression::Array(remap_array(operation, remap)?),
-        LiftedExpression::Conversion(operation) => {
+        Expression::Math(operation) => Expression::Math(remap_math(operation, remap)?),
+        Expression::Field(access) => Expression::Field(remap_field(access, remap)?),
+        Expression::Array(operation) => Expression::Array(remap_array(operation, remap)?),
+        Expression::Conversion(operation) => {
             Expression::Conversion(remap_conversion(operation, remap)?)
         }
-        LiftedExpression::Synchronization(operation) => {
+        Expression::Synchronization(operation) => {
             Expression::Synchronization(remap_lock(operation, remap)?)
         }
-        LiftedExpression::New(class) => Expression::New(class),
+        Expression::New(class) => Expression::New(class),
     })
 }
 
 fn remap_math<OP>(
-    operation: LiftedMathOperation<OP>,
+    operation: MathOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<MathOperation, MokaIRBuildError> {
     Ok(match operation {
-        LiftedMathOperation::Add(a, b) => MathOperation::Add(remap(a)?, remap(b)?),
-        LiftedMathOperation::Subtract(a, b) => MathOperation::Subtract(remap(a)?, remap(b)?),
-        LiftedMathOperation::Multiply(a, b) => MathOperation::Multiply(remap(a)?, remap(b)?),
-        LiftedMathOperation::Divide(a, b) => MathOperation::Divide(remap(a)?, remap(b)?),
-        LiftedMathOperation::Remainder(a, b) => MathOperation::Remainder(remap(a)?, remap(b)?),
-        LiftedMathOperation::Negate(value) => MathOperation::Negate(remap(value)?),
-        LiftedMathOperation::Increment(value, amount) => {
-            MathOperation::Increment(remap(value)?, amount)
-        }
-        LiftedMathOperation::ShiftLeft(a, b) => MathOperation::ShiftLeft(remap(a)?, remap(b)?),
-        LiftedMathOperation::ShiftRight(a, b) => MathOperation::ShiftRight(remap(a)?, remap(b)?),
-        LiftedMathOperation::LogicalShiftRight(a, b) => {
+        MathOperation::Add(a, b) => MathOperation::Add(remap(a)?, remap(b)?),
+        MathOperation::Subtract(a, b) => MathOperation::Subtract(remap(a)?, remap(b)?),
+        MathOperation::Multiply(a, b) => MathOperation::Multiply(remap(a)?, remap(b)?),
+        MathOperation::Divide(a, b) => MathOperation::Divide(remap(a)?, remap(b)?),
+        MathOperation::Remainder(a, b) => MathOperation::Remainder(remap(a)?, remap(b)?),
+        MathOperation::Negate(value) => MathOperation::Negate(remap(value)?),
+        MathOperation::Increment(value, amount) => MathOperation::Increment(remap(value)?, amount),
+        MathOperation::ShiftLeft(a, b) => MathOperation::ShiftLeft(remap(a)?, remap(b)?),
+        MathOperation::ShiftRight(a, b) => MathOperation::ShiftRight(remap(a)?, remap(b)?),
+        MathOperation::LogicalShiftRight(a, b) => {
             MathOperation::LogicalShiftRight(remap(a)?, remap(b)?)
         }
-        LiftedMathOperation::BitwiseAnd(a, b) => MathOperation::BitwiseAnd(remap(a)?, remap(b)?),
-        LiftedMathOperation::BitwiseOr(a, b) => MathOperation::BitwiseOr(remap(a)?, remap(b)?),
-        LiftedMathOperation::BitwiseXor(a, b) => MathOperation::BitwiseXor(remap(a)?, remap(b)?),
-        LiftedMathOperation::LongComparison(a, b) => {
-            MathOperation::LongComparison(remap(a)?, remap(b)?)
-        }
-        LiftedMathOperation::FloatingPointComparison(a, b, nan) => {
+        MathOperation::BitwiseAnd(a, b) => MathOperation::BitwiseAnd(remap(a)?, remap(b)?),
+        MathOperation::BitwiseOr(a, b) => MathOperation::BitwiseOr(remap(a)?, remap(b)?),
+        MathOperation::BitwiseXor(a, b) => MathOperation::BitwiseXor(remap(a)?, remap(b)?),
+        MathOperation::LongComparison(a, b) => MathOperation::LongComparison(remap(a)?, remap(b)?),
+        MathOperation::FloatingPointComparison(a, b, nan) => {
             MathOperation::FloatingPointComparison(remap(a)?, remap(b)?, nan)
         }
     })
 }
 
 fn remap_array<OP>(
-    operation: LiftedArrayOperation<OP>,
+    operation: ArrayOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<ArrayOperation, MokaIRBuildError> {
     Ok(match operation {
-        LiftedArrayOperation::New {
+        ArrayOperation::New {
             element_type,
             length,
         } => ArrayOperation::New {
             element_type,
             length: remap(length)?,
         },
-        LiftedArrayOperation::NewMultiDim {
+        ArrayOperation::NewMultiDim {
             element_type,
             dimensions,
         } => ArrayOperation::NewMultiDim {
@@ -98,11 +93,11 @@ fn remap_array<OP>(
                 .map(remap)
                 .collect::<Result<_, _>>()?,
         },
-        LiftedArrayOperation::Read { array_ref, index } => ArrayOperation::Read {
+        ArrayOperation::Read { array_ref, index } => ArrayOperation::Read {
             array_ref: remap(array_ref)?,
             index: remap(index)?,
         },
-        LiftedArrayOperation::Write {
+        ArrayOperation::Write {
             array_ref,
             index,
             value,
@@ -111,27 +106,27 @@ fn remap_array<OP>(
             index: remap(index)?,
             value: remap(value)?,
         },
-        LiftedArrayOperation::Length { array_ref } => ArrayOperation::Length {
+        ArrayOperation::Length { array_ref } => ArrayOperation::Length {
             array_ref: remap(array_ref)?,
         },
     })
 }
 
 fn remap_field<OP>(
-    access: LiftedFieldAccess<OP>,
+    access: FieldAccess<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<FieldAccess, MokaIRBuildError> {
     Ok(match access {
-        LiftedFieldAccess::ReadStatic { field } => FieldAccess::ReadStatic { field },
-        LiftedFieldAccess::WriteStatic { field, value } => FieldAccess::WriteStatic {
+        FieldAccess::ReadStatic { field } => FieldAccess::ReadStatic { field },
+        FieldAccess::WriteStatic { field, value } => FieldAccess::WriteStatic {
             field,
             value: remap(value)?,
         },
-        LiftedFieldAccess::ReadInstance { object_ref, field } => FieldAccess::ReadInstance {
+        FieldAccess::ReadInstance { object_ref, field } => FieldAccess::ReadInstance {
             object_ref: remap(object_ref)?,
             field,
         },
-        LiftedFieldAccess::WriteInstance {
+        FieldAccess::WriteInstance {
             object_ref,
             field,
             value,
@@ -144,52 +139,50 @@ fn remap_field<OP>(
 }
 
 fn remap_conversion<OP>(
-    operation: LiftedConversion<OP>,
+    operation: Conversion<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Conversion, MokaIRBuildError> {
     Ok(match operation {
-        LiftedConversion::Int2Long(value) => Conversion::Int2Long(remap(value)?),
-        LiftedConversion::Int2Float(value) => Conversion::Int2Float(remap(value)?),
-        LiftedConversion::Int2Double(value) => Conversion::Int2Double(remap(value)?),
-        LiftedConversion::Long2Int(value) => Conversion::Long2Int(remap(value)?),
-        LiftedConversion::Long2Float(value) => Conversion::Long2Float(remap(value)?),
-        LiftedConversion::Long2Double(value) => Conversion::Long2Double(remap(value)?),
-        LiftedConversion::Float2Int(value) => Conversion::Float2Int(remap(value)?),
-        LiftedConversion::Float2Long(value) => Conversion::Float2Long(remap(value)?),
-        LiftedConversion::Float2Double(value) => Conversion::Float2Double(remap(value)?),
-        LiftedConversion::Double2Int(value) => Conversion::Double2Int(remap(value)?),
-        LiftedConversion::Double2Long(value) => Conversion::Double2Long(remap(value)?),
-        LiftedConversion::Double2Float(value) => Conversion::Double2Float(remap(value)?),
-        LiftedConversion::Int2Byte(value) => Conversion::Int2Byte(remap(value)?),
-        LiftedConversion::Int2Char(value) => Conversion::Int2Char(remap(value)?),
-        LiftedConversion::Int2Short(value) => Conversion::Int2Short(remap(value)?),
-        LiftedConversion::CheckCast(value, target) => Conversion::CheckCast(remap(value)?, target),
-        LiftedConversion::InstanceOf(value, target) => {
-            Conversion::InstanceOf(remap(value)?, target)
-        }
+        Conversion::Int2Long(value) => Conversion::Int2Long(remap(value)?),
+        Conversion::Int2Float(value) => Conversion::Int2Float(remap(value)?),
+        Conversion::Int2Double(value) => Conversion::Int2Double(remap(value)?),
+        Conversion::Long2Int(value) => Conversion::Long2Int(remap(value)?),
+        Conversion::Long2Float(value) => Conversion::Long2Float(remap(value)?),
+        Conversion::Long2Double(value) => Conversion::Long2Double(remap(value)?),
+        Conversion::Float2Int(value) => Conversion::Float2Int(remap(value)?),
+        Conversion::Float2Long(value) => Conversion::Float2Long(remap(value)?),
+        Conversion::Float2Double(value) => Conversion::Float2Double(remap(value)?),
+        Conversion::Double2Int(value) => Conversion::Double2Int(remap(value)?),
+        Conversion::Double2Long(value) => Conversion::Double2Long(remap(value)?),
+        Conversion::Double2Float(value) => Conversion::Double2Float(remap(value)?),
+        Conversion::Int2Byte(value) => Conversion::Int2Byte(remap(value)?),
+        Conversion::Int2Char(value) => Conversion::Int2Char(remap(value)?),
+        Conversion::Int2Short(value) => Conversion::Int2Short(remap(value)?),
+        Conversion::CheckCast(value, target) => Conversion::CheckCast(remap(value)?, target),
+        Conversion::InstanceOf(value, target) => Conversion::InstanceOf(remap(value)?, target),
     })
 }
 
 fn remap_lock<OP>(
-    operation: LiftedLockOperation<OP>,
+    operation: LockOperation<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<LockOperation, MokaIRBuildError> {
     Ok(match operation {
-        LiftedLockOperation::Acquire(value) => LockOperation::Acquire(remap(value)?),
-        LiftedLockOperation::Release(value) => LockOperation::Release(remap(value)?),
+        LockOperation::Acquire(value) => LockOperation::Acquire(remap(value)?),
+        LockOperation::Release(value) => LockOperation::Release(remap(value)?),
     })
 }
 
 pub(super) fn remap_transfer<OP: Eq + std::hash::Hash>(
-    transfer: LiftedControlTransfer<OP>,
+    transfer: ControlTransfer<OP>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<ControlTransfer, MokaIRBuildError> {
     Ok(match transfer {
-        LiftedControlTransfer::Unconditional => ControlTransfer::Unconditional,
-        LiftedControlTransfer::Normal => ControlTransfer::Normal,
-        LiftedControlTransfer::Exception(types) => ControlTransfer::Exception(types),
-        LiftedControlTransfer::Unwind => ControlTransfer::Unwind,
-        LiftedControlTransfer::Conditional(guard) => ControlTransfer::Conditional(
+        ControlTransfer::Unconditional => ControlTransfer::Unconditional,
+        ControlTransfer::Normal => ControlTransfer::Normal,
+        ControlTransfer::Exception(types) => ControlTransfer::Exception(types),
+        ControlTransfer::Unwind => ControlTransfer::Unwind,
+        ControlTransfer::Conditional(guard) => ControlTransfer::Conditional(
             guard
                 .into_iter()
                 .map(|literal| remap_literal(literal, remap))
@@ -199,7 +192,7 @@ pub(super) fn remap_transfer<OP: Eq + std::hash::Hash>(
 }
 
 fn remap_literal<OP>(
-    literal: BooleanVariable<LiftedCondition<LiftedValue<OP>>>,
+    literal: BooleanVariable<Condition<Value<OP>>>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<BooleanVariable<Predicate>, MokaIRBuildError> {
     Ok(match literal {
@@ -213,29 +206,27 @@ fn remap_literal<OP>(
 }
 
 fn remap_guard_condition<OP>(
-    condition: LiftedCondition<LiftedValue<OP>>,
+    condition: Condition<Value<OP>>,
     remap: &impl Fn(OP) -> Result<ValueId, MokaIRBuildError>,
 ) -> Result<Predicate, MokaIRBuildError> {
     let value = |value| match value {
-        LiftedValue::Variable(value) => remap(value).map(Value::Variable),
-        LiftedValue::Constant(value) => Ok(Value::Constant(value)),
+        Value::Variable(value) => remap(value).map(Value::Variable),
+        Value::Constant(value) => Ok(Value::Constant(value)),
     };
     Ok(match condition {
-        LiftedCondition::Equal(a, b) => Predicate::Equal(value(a)?, value(b)?),
-        LiftedCondition::NotEqual(a, b) => Predicate::NotEqual(value(a)?, value(b)?),
-        LiftedCondition::LessThan(a, b) => Predicate::LessThan(value(a)?, value(b)?),
-        LiftedCondition::LessThanOrEqual(a, b) => Predicate::LessThanOrEqual(value(a)?, value(b)?),
-        LiftedCondition::GreaterThan(a, b) => Predicate::GreaterThan(value(a)?, value(b)?),
-        LiftedCondition::GreaterThanOrEqual(a, b) => {
-            Predicate::GreaterThanOrEqual(value(a)?, value(b)?)
-        }
-        LiftedCondition::IsNull(a) => Predicate::IsNull(value(a)?),
-        LiftedCondition::IsNotNull(a) => Predicate::IsNotNull(value(a)?),
-        LiftedCondition::IsZero(a) => Predicate::IsZero(value(a)?),
-        LiftedCondition::IsNonZero(a) => Predicate::IsNonZero(value(a)?),
-        LiftedCondition::IsPositive(a) => Predicate::IsPositive(value(a)?),
-        LiftedCondition::IsNegative(a) => Predicate::IsNegative(value(a)?),
-        LiftedCondition::IsNonNegative(a) => Predicate::IsNonNegative(value(a)?),
-        LiftedCondition::IsNonPositive(a) => Predicate::IsNonPositive(value(a)?),
+        Condition::Equal(a, b) => Predicate::Equal(value(a)?, value(b)?),
+        Condition::NotEqual(a, b) => Predicate::NotEqual(value(a)?, value(b)?),
+        Condition::LessThan(a, b) => Predicate::LessThan(value(a)?, value(b)?),
+        Condition::LessThanOrEqual(a, b) => Predicate::LessThanOrEqual(value(a)?, value(b)?),
+        Condition::GreaterThan(a, b) => Predicate::GreaterThan(value(a)?, value(b)?),
+        Condition::GreaterThanOrEqual(a, b) => Predicate::GreaterThanOrEqual(value(a)?, value(b)?),
+        Condition::IsNull(a) => Predicate::IsNull(value(a)?),
+        Condition::IsNotNull(a) => Predicate::IsNotNull(value(a)?),
+        Condition::IsZero(a) => Predicate::IsZero(value(a)?),
+        Condition::IsNonZero(a) => Predicate::IsNonZero(value(a)?),
+        Condition::IsPositive(a) => Predicate::IsPositive(value(a)?),
+        Condition::IsNegative(a) => Predicate::IsNegative(value(a)?),
+        Condition::IsNonNegative(a) => Predicate::IsNonNegative(value(a)?),
+        Condition::IsNonPositive(a) => Predicate::IsNonPositive(value(a)?),
     })
 }

@@ -3,12 +3,12 @@
 use crate::{
     ir::{
         control_flow::{
-            LiftedControlTransfer,
-            path_condition::{BooleanVariable, BranchGuard, LiftedValue},
+            ControlTransfer,
+            path_condition::{BooleanVariable, BranchGuard, Value},
         },
-        expression::LiftedCondition,
+        expression::Condition,
         generator::{
-            Entry, FrameOperand, JvmStackFrame, LiftedInstruction, Location, MokaIRBuildError,
+            Entry, FrameOperand, Instruction, JvmStackFrame, Location, MokaIRBuildError,
             ReturnAddress, SsaValueId,
         },
     },
@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-type OutgoingState<OP> = (Location, LiftedControlTransfer<OP>, JvmStackFrame<OP>);
+type OutgoingState<OP> = (Location, ControlTransfer<OP>, JvmStackFrame<OP>);
 
 /// Capabilities required by shared JVM lifting semantics.
 pub(in crate::ir::generator) trait JvmSemantics {
@@ -88,7 +88,7 @@ fn exception_edges<OP: FrameOperand>(
         let caught = caught_value(semantics.caught_exception_at(handler)?);
         outgoing.push((
             handler,
-            LiftedControlTransfer::Exception(entry.catch_type.clone()),
+            ControlTransfer::Exception(entry.catch_type.clone()),
             pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
         ));
         exhaustive = entry
@@ -102,7 +102,7 @@ fn exception_edges<OP: FrameOperand>(
     if !exhaustive {
         outgoing.push((
             semantics.unwind_location()?,
-            LiftedControlTransfer::Unwind,
+            ControlTransfer::Unwind,
             pre_frame.same_locals_empty_stack_frame(),
         ));
     }
@@ -118,14 +118,14 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
     location: Location,
     pre_frame: &JvmStackFrame<OP>,
     normal_frame: JvmStackFrame<OP>,
-    instruction: &LiftedInstruction<OP>,
+    instruction: &Instruction<OP>,
     fallible: bool,
     caught_value: &impl Fn(SsaValueId) -> OP,
 ) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
-    use LiftedControlTransfer::{Conditional, Normal, Unconditional};
+    use ControlTransfer::{Conditional, Normal, Unconditional};
 
     Ok(match instruction {
-        LiftedInstruction::HandlerEntry => {
+        Instruction::HandlerEntry => {
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
@@ -135,17 +135,15 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
                 normal_frame,
             )]
         }
-        LiftedInstruction::Return(_) if fallible => {
+        Instruction::Return(_) if fallible => {
             exception_edges(semantics, location, pre_frame, caught_value)?
         }
-        LiftedInstruction::Unwind | LiftedInstruction::Return(_) => Vec::new(),
-        LiftedInstruction::Throw(_) => {
-            exception_edges(semantics, location, pre_frame, caught_value)?
-        }
-        LiftedInstruction::Subroutine { target, .. } => {
+        Instruction::Unwind | Instruction::Return(_) => Vec::new(),
+        Instruction::Throw(_) => exception_edges(semantics, location, pre_frame, caught_value)?,
+        Instruction::Subroutine { target, .. } => {
             vec![(*target, Unconditional, normal_frame)]
         }
-        LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) if fallible => {
+        Instruction::Definition { .. } | Instruction::Effect(_) if fallible => {
             let mut outgoing = vec![(semantics.next_location(location)?, Normal, normal_frame)];
             outgoing.extend(exception_edges(
                 semantics,
@@ -155,14 +153,12 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             )?);
             outgoing
         }
-        LiftedInstruction::Erased
-        | LiftedInstruction::Definition { .. }
-        | LiftedInstruction::Effect(_) => vec![(
+        Instruction::Erased | Instruction::Definition { .. } | Instruction::Effect(_) => vec![(
             semantics.next_location(location)?,
             Unconditional,
             normal_frame,
         )],
-        LiftedInstruction::Jump {
+        Instruction::Jump {
             condition: None,
             target,
         } => vec![(
@@ -170,7 +166,7 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             Unconditional,
             normal_frame,
         )],
-        LiftedInstruction::Jump {
+        Instruction::Jump {
             condition: Some(condition),
             target,
         } => {
@@ -188,18 +184,16 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
                 ),
             ]
         }
-        LiftedInstruction::Switch {
+        Instruction::Switch {
             default,
             branches,
             match_value,
         } => {
             let mut outgoing = Vec::with_capacity(branches.len() + 1);
             for (&case, &target) in branches {
-                let value = LiftedValue::Constant(ConstantValue::Integer(case));
-                let condition = BooleanVariable::Positive(LiftedCondition::Equal(
-                    match_value.clone().into(),
-                    value,
-                ));
+                let value = Value::Constant(ConstantValue::Integer(case));
+                let condition =
+                    BooleanVariable::Positive(Condition::Equal(match_value.clone().into(), value));
                 outgoing.push((
                     semantics.target_location(location, target)?,
                     Conditional(BranchGuard::of(condition)),
@@ -209,9 +203,9 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             let default_guard = branches
                 .keys()
                 .map(|case| {
-                    BooleanVariable::Negative(LiftedCondition::Equal(
+                    BooleanVariable::Negative(Condition::Equal(
                         match_value.clone().into(),
-                        LiftedValue::Constant(ConstantValue::Integer(*case)),
+                        Value::Constant(ConstantValue::Integer(*case)),
                     ))
                 })
                 .collect();
@@ -222,7 +216,7 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             ));
             outgoing
         }
-        LiftedInstruction::SubroutineReturn(value) => {
+        Instruction::SubroutineReturn(value) => {
             let address = value
                 .return_address()
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;

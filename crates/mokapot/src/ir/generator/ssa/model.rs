@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use super::{
-    BlockId, JvmStackFrame, LiftedControlTransfer, LiftedInstruction, Location, MokaIRBuildError,
+    BlockId, ControlTransfer, Instruction, JvmStackFrame, Location, MokaIRBuildError,
     SsaFrameValue, SsaValueId,
 };
 
 #[derive(Debug, Clone)]
 pub(in crate::ir::generator) struct SsaArm {
     pub(in crate::ir::generator) target: BlockId,
-    pub(in crate::ir::generator) transfer: LiftedControlTransfer<SsaFrameValue>,
+    pub(in crate::ir::generator) transfer: ControlTransfer<SsaFrameValue>,
     pub(in crate::ir::generator) frame: JvmStackFrame<SsaFrameValue>,
 }
 
@@ -16,7 +16,7 @@ pub(in crate::ir::generator) struct SsaArm {
 pub(in crate::ir::generator) struct SsaBlock {
     pub id: BlockId,
     pub(in crate::ir::generator) entry_frame: JvmStackFrame<SsaFrameValue>,
-    pub(in crate::ir::generator) instructions: Vec<(Location, LiftedInstruction<SsaFrameValue>)>,
+    pub(in crate::ir::generator) instructions: Vec<(Location, Instruction<SsaFrameValue>)>,
     pub(in crate::ir::generator) arms: Vec<SsaArm>,
 }
 
@@ -31,8 +31,6 @@ pub(super) type SsaEntryFrames = (
     BTreeMap<BlockId, JvmStackFrame<SsaFrameValue>>,
     BTreeMap<SsaValueId, BlockId>,
 );
-
-pub(super) type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 pub(super) fn next_ssa_value(next: &mut u32) -> Result<SsaValueId, MokaIRBuildError> {
     let value = SsaValueId::new(*next);

@@ -12,9 +12,8 @@ use crate::{
 
 use super::super::OperandState;
 
-pub(crate) type SlotWidth = bool;
-pub(crate) const SINGLE_SLOT: SlotWidth = false;
-pub(crate) const DUAL_SLOT: SlotWidth = true;
+pub(crate) const SINGLE_SLOT: bool = false;
+pub(crate) const DUAL_SLOT: bool = true;
 
 use super::{entry::Entry, error::ExecutionError};
 
@@ -132,7 +131,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn pop_value<const SLOT: SlotWidth>(&mut self) -> Result<V, ExecutionError> {
+    pub(crate) fn pop_value<const SLOT: bool>(&mut self) -> Result<V, ExecutionError> {
         let value = match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
@@ -152,10 +151,7 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(value)
     }
 
-    pub(crate) fn push_value<const SLOT: SlotWidth>(
-        &mut self,
-        value: V,
-    ) -> Result<(), ExecutionError> {
+    pub(crate) fn push_value<const SLOT: bool>(&mut self, value: V) -> Result<(), ExecutionError> {
         if SLOT == DUAL_SLOT {
             self.push_raw(Entry::Top)?;
         }
@@ -196,7 +192,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn get_local<const SLOT: SlotWidth>(&self, idx: u16) -> Result<V, ExecutionError> {
+    pub(crate) fn get_local<const SLOT: bool>(&self, idx: u16) -> Result<V, ExecutionError> {
         let idx = usize::from(idx);
         let lower_slot = self
             .local_variables
@@ -222,7 +218,7 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(value)
     }
 
-    pub(crate) fn set_local<const SLOT: SlotWidth>(
+    pub(crate) fn set_local<const SLOT: bool>(
         &mut self,
         idx: u16,
         value: V,

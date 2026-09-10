@@ -6,9 +6,9 @@ use self::remap::{remap_expression, remap_transfer};
 use super::block_formation::BlockEntry;
 use super::ssa::SsaGraph;
 use super::{
-    BTreeMap, BasicBlock, ControlTransfer, EdgeId, InstructionId, IrOperation, LiftedInstruction,
-    MokaIRBuildError, MokaIRMethod, OperationKind, Phi, PhiInput, SourceMap, SsaFrameValue,
-    SsaValueId, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+    BTreeMap, BasicBlock, ControlTransfer, EdgeId, Instruction, InstructionId, MokaIRBuildError,
+    MokaIRMethod, Operation, OperationKind, Phi, PhiInput, SourceMap, SsaFrameValue, SsaValueId,
+    Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
 };
 
 /// Emits final identities, blocks, and provenance from internal SSA.
@@ -100,14 +100,14 @@ pub(super) fn emit(
         for (location, instruction) in &block.instructions {
             let retained = matches!(
                 instruction,
-                LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_)
+                Instruction::Definition { .. } | Instruction::Effect(_)
             );
             if !retained {
                 continue;
             }
             let id = allocate_instruction_id(&mut next_instruction)?;
             instruction_ids.insert(*location, id);
-            if let LiftedInstruction::Definition { value, .. } = instruction {
+            if let Instruction::Definition { value, .. } = instruction {
                 allocate_final_value(
                     *value,
                     ValueDefinition::Instruction(id),
@@ -170,22 +170,22 @@ pub(super) fn emit(
         let mut instructions = Vec::new();
         for (location, lifted) in &block.instructions {
             let kind = match lifted.clone() {
-                LiftedInstruction::Definition { value, expr } => Some(OperationKind::Definition {
+                Instruction::Definition { value, expr } => Some(OperationKind::Definition {
                     value: remap(value)?,
                     expr: remap_expression(expr, &remap_operand)?,
                 }),
-                LiftedInstruction::Effect(expr) => Some(OperationKind::Effect {
+                Instruction::Effect(expr) => Some(OperationKind::Effect {
                     expr: remap_expression(expr, &remap_operand)?,
                 }),
-                LiftedInstruction::HandlerEntry
-                | LiftedInstruction::Unwind
-                | LiftedInstruction::Erased
-                | LiftedInstruction::Subroutine { .. }
-                | LiftedInstruction::Jump { .. }
-                | LiftedInstruction::Switch { .. }
-                | LiftedInstruction::Return(_)
-                | LiftedInstruction::Throw(_)
-                | LiftedInstruction::SubroutineReturn(_) => None,
+                Instruction::HandlerEntry
+                | Instruction::Unwind
+                | Instruction::Erased
+                | Instruction::Subroutine { .. }
+                | Instruction::Jump { .. }
+                | Instruction::Switch { .. }
+                | Instruction::Return(_)
+                | Instruction::Throw(_)
+                | Instruction::SubroutineReturn(_) => None,
             };
             if let Some(kind) = kind {
                 let id = *instruction_ids
@@ -195,7 +195,7 @@ pub(super) fn emit(
                     .source_pc()
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?;
                 source_map.insert(pc, id);
-                instructions.push(IrOperation::new(id, kind));
+                instructions.push(Operation::new(id, kind));
             }
         }
 
@@ -216,25 +216,25 @@ pub(super) fn emit(
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let source_backed = last.is_explicit_transfer() && last_location.source_pc().is_some();
         let kind = match last {
-            LiftedInstruction::Unwind => TerminatorKind::Unwind,
-            LiftedInstruction::Jump {
+            Instruction::Unwind => TerminatorKind::Unwind,
+            Instruction::Jump {
                 condition: Some(_), ..
             } => TerminatorKind::Branch,
-            LiftedInstruction::HandlerEntry
-            | LiftedInstruction::Jump {
+            Instruction::HandlerEntry
+            | Instruction::Jump {
                 condition: None, ..
             }
-            | LiftedInstruction::Subroutine { .. }
-            | LiftedInstruction::SubroutineReturn(_)
-            | LiftedInstruction::Erased => TerminatorKind::Goto,
-            LiftedInstruction::Switch { match_value, .. } => TerminatorKind::Switch {
+            | Instruction::Subroutine { .. }
+            | Instruction::SubroutineReturn(_)
+            | Instruction::Erased => TerminatorKind::Goto,
+            Instruction::Switch { match_value, .. } => TerminatorKind::Switch {
                 match_value: remap_operand(*match_value)?,
             },
-            LiftedInstruction::Return(value) => {
+            Instruction::Return(value) => {
                 TerminatorKind::Return(value.map(remap_operand).transpose()?)
             }
-            LiftedInstruction::Throw(value) => TerminatorKind::Throw(remap_operand(*value)?),
-            LiftedInstruction::Definition { .. } | LiftedInstruction::Effect(_) => {
+            Instruction::Throw(value) => TerminatorKind::Throw(remap_operand(*value)?),
+            Instruction::Definition { .. } | Instruction::Effect(_) => {
                 if successors
                     .iter()
                     .any(|successor| matches!(successor.transfer(), ControlTransfer::Normal))

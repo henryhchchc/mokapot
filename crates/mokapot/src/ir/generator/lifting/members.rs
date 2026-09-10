@@ -1,5 +1,5 @@
 use super::{
-    DUAL_SLOT, Expression, FieldAccess, FieldType, FrameOperand, IR, Instruction, JvmStackFrame,
+    DUAL_SLOT, Expression, FieldAccess, FieldType, FrameOperand, Instruction, JVM, JvmStackFrame,
     MokaIRBuildError, PrimitiveType, ReturnType, SINGLE_SLOT, SsaValueId,
 };
 
@@ -8,22 +8,22 @@ use super::{
     reason = "the match is an exhaustive opcode-family dispatch"
 )]
 pub(super) fn lift<OP: FrameOperand>(
-    jvm_instruction: &Instruction,
+    jvm_instruction: &JVM,
     def: SsaValueId,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         GetStatic(field) => {
             frame.typed_push(&field.field_type, def.into())?;
             let field = field.clone();
             let field_op = FieldAccess::ReadStatic { field };
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
@@ -33,7 +33,7 @@ pub(super) fn lift<OP: FrameOperand>(
             let field = field.clone();
             frame.typed_push(&field.field_type, def.into())?;
             let field_op = FieldAccess::ReadInstance { object_ref, field };
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
@@ -49,7 +49,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 field: field.clone(),
                 value,
             };
-            IR::Effect(Expression::Field(field_op))
+            Instruction::Effect(Expression::Field(field_op))
         }
         PutField(field) => {
             use PrimitiveType::{Double, Long};
@@ -64,7 +64,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 field: field.clone(),
                 value,
             };
-            IR::Effect(Expression::Field(field_op))
+            Instruction::Effect(Expression::Field(field_op))
         }
         InvokeVirtual(method_ref) | InvokeSpecial(method_ref) | InvokeInterface(method_ref, _) => {
             let arguments = frame.pop_args(&method_ref.descriptor)?;
@@ -78,12 +78,12 @@ pub(super) fn lift<OP: FrameOperand>(
                 frame.typed_push(return_type, def.into())?;
             }
             if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
+                Instruction::Definition {
                     value: def,
                     expr: rhs,
                 }
             } else {
-                IR::Effect(rhs)
+                Instruction::Effect(rhs)
             }
         }
         InvokeStatic(method_ref) => {
@@ -97,12 +97,12 @@ pub(super) fn lift<OP: FrameOperand>(
                 frame.typed_push(return_type, def.into())?;
             }
             if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
+                Instruction::Definition {
                     value: def,
                     expr: rhs,
                 }
             } else {
-                IR::Effect(rhs)
+                Instruction::Effect(rhs)
             }
         }
         InvokeDynamic {
@@ -121,12 +121,12 @@ pub(super) fn lift<OP: FrameOperand>(
                 frame.typed_push(return_type, def.into())?;
             }
             if matches!(descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
+                Instruction::Definition {
                     value: def,
                     expr: rhs,
                 }
             } else {
-                IR::Effect(rhs)
+                Instruction::Effect(rhs)
             }
         }
         _ => return Ok(None),

@@ -1,7 +1,7 @@
 use crate::{
     ir::{
         self, ValueId,
-        expression::{LiftedCondition as Condition, Predicate},
+        expression::{Condition, Predicate},
     },
     jvm::ConstantValue,
 };
@@ -44,12 +44,11 @@ fn canonicalize_condition<T>(condition: Condition<T>) -> BooleanVariable<Conditi
     }
 }
 
-impl<T, V> From<ir::expression::LiftedCondition<T>>
-    for BooleanVariable<ir::expression::LiftedCondition<V>>
+impl<T, V> From<ir::expression::Condition<T>> for BooleanVariable<ir::expression::Condition<V>>
 where
     V: From<T>,
 {
-    fn from(value: ir::expression::LiftedCondition<T>) -> Self {
+    fn from(value: ir::expression::Condition<T>) -> Self {
         #[allow(clippy::enum_glob_use)]
         use Condition::*;
 
@@ -74,11 +73,11 @@ where
 }
 
 mod model {
-    use super::ConstantValue;
+    use super::{ConstantValue, ValueId};
 
     /// An operand or constant parameterized by the lifting operand representation.
     #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
-    pub enum Value<OP> {
+    pub enum Value<OP = ValueId> {
         /// A value produced by the IR.
         Variable(OP),
         /// A JVM constant embedded in the condition.
@@ -86,9 +85,7 @@ mod model {
     }
 }
 
-/// A scalar SSA value or JVM constant referenced by a path predicate.
-pub type Value = model::Value<ValueId>;
-pub(crate) use model::Value as LiftedValue;
+pub use model::Value;
 
 impl Predicate {
     pub(crate) fn uses(&self) -> std::collections::HashSet<ValueId> {
@@ -111,8 +108,8 @@ impl Predicate {
         values
             .into_iter()
             .filter_map(|value| match value {
-                LiftedValue::Variable(value) => Some(value),
-                LiftedValue::Constant(_) => None,
+                Value::Variable(value) => Some(value),
+                Value::Constant(_) => None,
             })
             .copied()
             .collect()

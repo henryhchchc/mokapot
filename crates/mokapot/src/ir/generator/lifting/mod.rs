@@ -17,22 +17,20 @@ use locals::{load_local, store_local};
 use operations::{binary_op_math, conversion_op};
 
 use super::{
-    FrameOperand, LiftedInstruction as IR, Location, MokaIRBuildError, SsaValueId,
+    FrameOperand, Instruction, Location, MokaIRBuildError, SsaValueId,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 use crate::{
     ir::{
         expression::{
-            LiftedArrayOperation as ArrayOperation, LiftedCondition as Condition,
-            LiftedConversion as Conversion, LiftedExpression as Expression,
-            LiftedFieldAccess as FieldAccess, LiftedLockOperation as LockOperation,
-            LiftedMathOperation as MathOperation, NaNTreatment,
+            ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
+            MathOperation, NaNTreatment,
         },
         generator::jvm_frame::StackOperations,
     },
     jvm::{
         ConstantValue,
-        code::{Instruction, ProgramCounter, WideInstruction},
+        code::{Instruction as JVM, ProgramCounter, WideInstruction},
     },
     types::{
         field_type::{FieldType, PrimitiveType},
@@ -43,10 +41,10 @@ use semantics::JvmSemantics;
 
 pub(super) fn lift_instruction<OP: FrameOperand>(
     semantics: &mut impl JvmSemantics,
-    jvm_instruction: &Instruction,
+    jvm_instruction: &JVM,
     location: Location,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<IR<OP>, MokaIRBuildError> {
+) -> Result<Instruction<OP>, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
