@@ -7,7 +7,10 @@ use std::{
 use itertools::Itertools;
 
 use super::literal::BooleanVariable;
-use crate::intrinsics::{HashUnordered, hashset_partial_order};
+use crate::{
+    intrinsics::{HashUnordered, hashset_partial_order},
+    ir::TryMapValues,
+};
 
 /// A conjunction of literals.
 ///
@@ -141,9 +144,31 @@ impl<P> IntoIterator for BranchGuard<P> {
     }
 }
 
+impl<P, OUT> TryMapValues<OUT> for BranchGuard<P>
+where
+    P: TryMapValues<OUT>,
+    P::Mapped: Eq + Hash,
+{
+    type Value = P::Value;
+    type Mapped = BranchGuard<P::Mapped>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(P::Value) -> Result<OUT, E>,
+    ) -> Result<BranchGuard<P::Mapped>, E> {
+        Ok(BranchGuard(
+            self.0
+                .into_iter()
+                .map(|literal| literal.try_map_values(&mut remap))
+                .collect::<Result<_, E>>()?,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::{TryMapValues, expression::Condition};
 
     #[test]
     fn display_orders_literals_stably() {
@@ -157,5 +182,21 @@ mod tests {
         ]);
 
         assert_eq!(lhs.to_string(), rhs.to_string());
+    }
+
+    #[test]
+    fn maps_values_and_preserves_literal_polarity() {
+        let guard = BranchGuard::from_iter([
+            BooleanVariable::Positive(Condition::IsZero(1_u8)),
+            BooleanVariable::Negative(Condition::IsNull(2)),
+        ]);
+
+        assert_eq!(
+            guard.try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
+            Ok(BranchGuard::from_iter([
+                BooleanVariable::Positive(Condition::IsZero(11_u16)),
+                BooleanVariable::Negative(Condition::IsNull(12)),
+            ]))
+        );
     }
 }

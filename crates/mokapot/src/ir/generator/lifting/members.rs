@@ -1,40 +1,55 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{
+    DUAL_SLOT, Expression, FieldAccess, FieldType, FrameOperand, Instruction, JVM, JvmStackFrame,
+    MokaIRBuildError, PrimitiveType, ReturnType, SINGLE_SLOT, SsaValueId, required_definition,
+};
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    match instruction {
+        JVM::GetStatic(_) | JVM::GetField(_) => true,
+        JVM::InvokeVirtual(method)
+        | JVM::InvokeSpecial(method)
+        | JVM::InvokeInterface(method, _)
+        | JVM::InvokeStatic(method) => !matches!(method.descriptor.return_type, ReturnType::Void),
+        JVM::InvokeDynamic { descriptor, .. } => {
+            !matches!(descriptor.return_type, ReturnType::Void)
+        }
+        _ => false,
+    }
+}
 
 #[expect(
     clippy::too_many_lines,
     reason = "the match is an exhaustive opcode-family dispatch"
 )]
 pub(super) fn lift<OP: FrameOperand>(
-    jvm_instruction: &Instruction,
-    def: ProvisionalValueId,
+    jvm_instruction: &JVM,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<IR<OP>>, MokaIRBuildError> {
+) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
     )]
-    use Instruction::*;
+    use JVM::*;
 
     let instruction = match jvm_instruction {
         GetStatic(field) => {
+            let def = required_definition(definition)?;
             frame.typed_push(&field.field_type, def.into())?;
             let field = field.clone();
             let field_op = FieldAccess::ReadStatic { field };
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
         }
         GetField(field) => {
+            let def = required_definition(definition)?;
             let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let field = field.clone();
             frame.typed_push(&field.field_type, def.into())?;
             let field_op = FieldAccess::ReadInstance { object_ref, field };
-            IR::Definition {
+            Instruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
@@ -50,7 +65,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 field: field.clone(),
                 value,
             };
-            IR::Effect(Expression::Field(field_op))
+            Instruction::Effect(Expression::Field(field_op))
         }
         PutField(field) => {
             use PrimitiveType::{Double, Long};
@@ -65,7 +80,7 @@ pub(super) fn lift<OP: FrameOperand>(
                 field: field.clone(),
                 value,
             };
-            IR::Effect(Expression::Field(field_op))
+            Instruction::Effect(Expression::Field(field_op))
         }
         InvokeVirtual(method_ref) | InvokeSpecial(method_ref) | InvokeInterface(method_ref, _) => {
             let arguments = frame.pop_args(&method_ref.descriptor)?;
@@ -75,16 +90,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 this: Some(object_ref),
                 args: arguments,
             };
-            if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
-                    value: def,
-                    expr: rhs,
+            match &method_ref.descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                IR::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         InvokeStatic(method_ref) => {
@@ -94,16 +109,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 this: None,
                 args: arguments,
             };
-            if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
-                    value: def,
-                    expr: rhs,
+            match &method_ref.descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                IR::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         InvokeDynamic {
@@ -118,16 +133,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 captures: arguments,
                 closure_descriptor: descriptor.to_owned(),
             };
-            if let ReturnType::Some(ref return_type) = descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(descriptor.return_type, ReturnType::Some(_)) {
-                IR::Definition {
-                    value: def,
-                    expr: rhs,
+            match &descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                IR::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         _ => return Ok(None),

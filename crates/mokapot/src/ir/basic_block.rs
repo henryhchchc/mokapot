@@ -1,28 +1,18 @@
-use super::{BlockId, Instruction, Phi, Terminator};
+use super::{BlockId, Operation, Phi, Terminator};
 
-/// A maximal basic block ending in exactly one terminator.
+/// A maximal reachable basic block in completed `MokaIR`.
+///
+/// Its phis are evaluated simultaneously on entry, its operations execute in
+/// order, and its single terminator defines every outgoing control-flow arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
-    id: BlockId,
-    phis: Vec<Phi>,
-    instructions: Vec<Instruction>,
-    terminator: Terminator,
+    pub(super) id: BlockId,
+    pub(super) phis: Vec<Phi>,
+    pub(super) operations: Vec<Operation>,
+    pub(super) terminator: Terminator,
 }
 
 impl BasicBlock {
-    pub(crate) const fn new(
-        id: BlockId,
-        phis: Vec<Phi>,
-        instructions: Vec<Instruction>,
-        terminator: Terminator,
-    ) -> Self {
-        Self {
-            id,
-            phis,
-            instructions,
-            terminator,
-        }
-    }
     /// Returns this block's method-local identity.
     #[must_use]
     pub const fn id(&self) -> BlockId {
@@ -33,10 +23,10 @@ impl BasicBlock {
     pub fn phis(&self) -> &[Phi] {
         &self.phis
     }
-    /// Returns the ordinary instructions in execution order.
+    /// Returns the ordinary operations in execution order.
     #[must_use]
-    pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
+    pub fn operations(&self) -> &[Operation] {
+        &self.operations
     }
     /// Returns the block terminator.
     #[must_use]

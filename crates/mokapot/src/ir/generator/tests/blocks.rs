@@ -1,7 +1,3 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "generator tests share the fixture helpers from their parent module"
-)]
 use super::*;
 use std::iter::once;
 
@@ -21,15 +17,15 @@ fn straight_line_instructions_coalesce_into_one_block() {
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 1);
-    assert_eq!(blocks[0].instructions().len(), 1);
+    assert_eq!(blocks[0].operations().len(), 1);
     assert!(matches!(
         blocks[0].terminator().kind(),
         TerminatorKind::Return(Some(_))
     ));
     let ids = blocks[0]
-        .instructions()
+        .operations()
         .iter()
-        .map(IrInstruction::id)
+        .map(Operation::id)
         .chain(once(blocks[0].terminator().id()))
         .collect::<HashSet<_>>();
     assert_eq!(ids.len(), 2);
@@ -62,8 +58,8 @@ fn value_identities_do_not_depend_on_sparse_program_counters() {
     let values = |method: &MokaIRMethod| {
         method
             .blocks()
-            .flat_map(BasicBlock::instructions)
-            .filter_map(IrInstruction::def)
+            .flat_map(BasicBlock::operations)
+            .filter_map(Operation::def)
             .collect::<Vec<_>>()
     };
 

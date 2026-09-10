@@ -21,23 +21,46 @@ impl<V: PartialOrd> PartialOrd for Entry<V> {
             (Entry::Top, Entry::Top)
             | (Entry::UninitializedLocal, Entry::UninitializedLocal)
             | (Entry::OutOfScope, Entry::OutOfScope) => Some(Equal),
-            (Entry::UninitializedLocal, _) | (_, Entry::OutOfScope) => Some(Less),
-            (_, Entry::UninitializedLocal) | (Entry::OutOfScope, _) => Some(Greater),
+            (Entry::Value(_), Entry::UninitializedLocal) | (_, Entry::OutOfScope) => Some(Less),
+            (Entry::UninitializedLocal, Entry::Value(_)) | (Entry::OutOfScope, _) => Some(Greater),
+            (Entry::Top, Entry::UninitializedLocal) | (Entry::UninitializedLocal, Entry::Top) => {
+                None
+            }
         }
     }
 }
 
 impl<V: JoinSemiLattice> JoinSemiLattice for Entry<V> {
-    fn join(self, other: Self) -> Self {
+    fn join_assign(&mut self, other: Self) -> bool {
+        self.join_assign_with(
+            other,
+            crate::analysis::fixed_point::JoinSemiLattice::join_assign,
+        )
+    }
+}
+
+impl<V> Entry<V> {
+    pub(super) fn join_assign_with(
+        &mut self,
+        other: Self,
+        join_values: impl FnOnce(&mut V, V) -> bool,
+    ) -> bool {
         use Entry::{OutOfScope, Top, UninitializedLocal, Value};
         match (self, other) {
-            (Value(lhs), Value(rhs)) => Value(lhs.join(rhs)),
-            (Top, Top) => Top,
-            (UninitializedLocal, it) | (it, UninitializedLocal) => it,
-            // NOTE: When `lhs` and `rhs` are different variants, it indicates that the local
-            //       variable slot is reused. In this case, we do not merge it since it will be
-            //       overridden afterwards.
-            (_, Top | OutOfScope) | (OutOfScope | Top, _) => OutOfScope,
+            (Value(lhs), Value(rhs)) => join_values(lhs, rhs),
+            (Top, Top) | (UninitializedLocal, UninitializedLocal | Value(_)) | (OutOfScope, _) => {
+                false
+            }
+            (slot @ Value(_), UninitializedLocal) => {
+                *slot = UninitializedLocal;
+                true
+            }
+            // Different slot shapes indicate local-variable slot reuse. Such a
+            // slot is unavailable until a later instruction overwrites it.
+            (slot, Top | OutOfScope) | (slot @ Top, _) => {
+                *slot = OutOfScope;
+                true
+            }
         }
     }
 }
@@ -67,9 +90,10 @@ mod tests {
     }
 
     impl JoinSemiLattice for TestSet {
-        fn join(mut self, other: Self) -> Self {
+        fn join_assign(&mut self, other: Self) -> bool {
+            let old_len = self.0.len();
             self.0.extend(other.0);
-            self
+            self.0.len() != old_len
         }
     }
 

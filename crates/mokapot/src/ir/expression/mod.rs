@@ -1,7 +1,7 @@
 //! Module for the expressions in Moka IR.
 use std::collections::HashSet;
 
-use super::ValueId;
+use super::{TryMapValues, ValueId};
 use crate::{
     jvm::{
         ConstantValue,
@@ -17,40 +17,29 @@ mod field;
 mod lock;
 mod math;
 
-/// An array operation over scalar SSA values.
-pub type ArrayOperation = array::Operation<ValueId>;
-/// A condition over scalar SSA values.
-pub type Condition = condition::Condition<ValueId>;
+pub use array::Operation as ArrayOperation;
+pub use condition::Condition;
 /// A branch predicate over scalar SSA values and JVM constants.
-pub type Predicate = condition::Condition<crate::ir::control_flow::path_condition::Value>;
-/// A scalar value conversion.
-pub type Conversion = conversion::Operation<ValueId>;
-/// A field access over scalar SSA values.
-pub type FieldAccess = field::Access<ValueId>;
-/// A monitor operation over a scalar SSA value.
-pub type LockOperation = lock::Operation<ValueId>;
-/// A mathematical operation over scalar SSA values.
-pub type MathOperation = math::Operation<ValueId>;
+pub type Predicate = Condition<crate::ir::control_flow::path_condition::Value>;
+pub use conversion::Operation as Conversion;
+pub use field::Access as FieldAccess;
+pub use lock::Operation as LockOperation;
 pub use math::NaNTreatment;
-
-pub(crate) use array::Operation as LiftedArrayOperation;
-pub(crate) use condition::Condition as LiftedCondition;
-pub(crate) use conversion::Operation as LiftedConversion;
-pub(crate) use field::Access as LiftedFieldAccess;
-pub(crate) use lock::Operation as LiftedLockOperation;
-pub(crate) use math::Operation as LiftedMathOperation;
+pub use math::Operation as MathOperation;
 
 mod model {
+    use std::fmt;
+
     use itertools::Itertools;
 
     use super::{
-        ClassRef, ConstantValue, LiftedArrayOperation, LiftedConversion, LiftedFieldAccess,
-        LiftedLockOperation, LiftedMathOperation, MethodDescriptor, MethodRef,
+        ArrayOperation, ClassRef, ConstantValue, Conversion, FieldAccess, LockOperation,
+        MathOperation, MethodDescriptor, MethodRef, ValueId,
     };
 
     /// An expression parameterized by the lifting operand representation.
-    #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-    pub enum Expression<OP: std::fmt::Display> {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum Expression<OP = ValueId> {
         /// A constant value.
         Const(ConstantValue),
         /// A function call
@@ -59,14 +48,6 @@ mod model {
         /// - `invokevirtual`
         /// - `invokespecial`
         /// - `invokeinterface`
-        #[display(
-            "call {} {}{}::{}({})",
-            method.descriptor.return_type,
-            this.as_ref().map(|it| format!("{it}@")).unwrap_or_default(),
-            method.owner,
-            method.name,
-            args.iter().map(std::string::ToString::to_string).join(", "),
-        )]
         Call {
             /// The method being called.
             method: MethodRef,
@@ -79,13 +60,6 @@ mod model {
         /// A call to a bootstrap method to create a closure.
         /// Corresponds to the following JVM instructions:
         /// - `invokedynamic`
-        #[display(
-            "closure {} {}#{}({})",
-            closure_descriptor.return_type,
-            name,
-            bootstrap_method_index,
-            captures.iter().map(ToString::to_string).join(", "),
-        )]
         Closure {
             /// The name of the closure.
             name: String,
@@ -97,24 +71,100 @@ mod model {
             closure_descriptor: MethodDescriptor,
         },
         /// A mathematical operation.
-        Math(LiftedMathOperation<OP>),
+        Math(MathOperation<OP>),
         /// A field access.
-        Field(LiftedFieldAccess<OP>),
+        Field(FieldAccess<OP>),
         /// An array operation.
-        Array(LiftedArrayOperation<OP>),
+        Array(ArrayOperation<OP>),
         /// A type conversion.
-        Conversion(LiftedConversion<OP>),
+        Conversion(Conversion<OP>),
         /// An operation on a monitor.
-        Synchronization(LiftedLockOperation<OP>),
+        Synchronization(LockOperation<OP>),
         /// Creates a new object.
-        #[display("new {_0}")]
         New(ClassRef),
+    }
+
+    impl<OP: fmt::Display> fmt::Display for Expression<OP> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Const(value) => value.fmt(f),
+                Self::Call { method, this, args } => write!(
+                    f,
+                    "call {} {}{}::{}({})",
+                    method.descriptor.return_type,
+                    this.as_ref()
+                        .map(|value| format!("{value}@"))
+                        .unwrap_or_default(),
+                    method.owner,
+                    method.name,
+                    args.iter().format(", "),
+                ),
+                Self::Closure {
+                    name,
+                    captures,
+                    bootstrap_method_index,
+                    closure_descriptor,
+                } => write!(
+                    f,
+                    "closure {} {}#{}({})",
+                    closure_descriptor.return_type,
+                    name,
+                    bootstrap_method_index,
+                    captures.iter().format(", "),
+                ),
+                Self::Math(operation) => operation.fmt(f),
+                Self::Field(access) => access.fmt(f),
+                Self::Array(operation) => operation.fmt(f),
+                Self::Conversion(operation) => operation.fmt(f),
+                Self::Synchronization(operation) => operation.fmt(f),
+                Self::New(class) => write!(f, "new {class}"),
+            }
+        }
     }
 }
 
-/// An expression in Moka IR over scalar SSA values.
-pub type Expression = model::Expression<ValueId>;
-pub(crate) use model::Expression as LiftedExpression;
+pub use model::Expression;
+
+impl<OP, OUT> TryMapValues<OUT> for Expression<OP> {
+    type Value = OP;
+    type Mapped = Expression<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Expression<OUT>, E> {
+        Ok(match self {
+            Self::Const(value) => Expression::Const(value),
+            Self::Call { method, this, args } => Expression::Call {
+                method,
+                this: this.map(&mut remap).transpose()?,
+                args: args.into_iter().map(&mut remap).collect::<Result<_, _>>()?,
+            },
+            Self::Closure {
+                name,
+                captures,
+                bootstrap_method_index,
+                closure_descriptor,
+            } => Expression::Closure {
+                name,
+                captures: captures
+                    .into_iter()
+                    .map(&mut remap)
+                    .collect::<Result<_, _>>()?,
+                bootstrap_method_index,
+                closure_descriptor,
+            },
+            Self::Math(operation) => Expression::Math(operation.try_map_values(remap)?),
+            Self::Field(access) => Expression::Field(access.try_map_values(remap)?),
+            Self::Array(operation) => Expression::Array(operation.try_map_values(remap)?),
+            Self::Conversion(operation) => Expression::Conversion(operation.try_map_values(remap)?),
+            Self::Synchronization(operation) => {
+                Expression::Synchronization(operation.try_map_values(remap)?)
+            }
+            Self::New(class) => Expression::New(class),
+        })
+    }
+}
 
 impl Expression {
     /// Returns the values used by the expression.
@@ -130,5 +180,37 @@ impl Expression {
             Self::Synchronization(monitor_op) => monitor_op.uses(),
             _ => HashSet::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Expression, MathOperation, TryMapValues};
+
+    #[test]
+    fn maps_nested_values_and_propagates_errors() {
+        let expression = Expression::Math(MathOperation::Add(1_u8, 2));
+        assert_eq!(
+            expression.try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
+            Ok(Expression::Math(MathOperation::Add(11_u16, 12)))
+        );
+
+        let expression = Expression::Math(MathOperation::Add(1_u8, 2));
+        assert_eq!(
+            expression.try_map_values(|value| {
+                if value == 2 {
+                    Err("unmapped")
+                } else {
+                    Ok(value)
+                }
+            }),
+            Err("unmapped")
+        );
+
+        assert_eq!(
+            Expression::<u8>::Const(crate::jvm::ConstantValue::Integer(3))
+                .try_map_values(|_| Err::<u16, _>("unreachable")),
+            Ok(Expression::Const(crate::jvm::ConstantValue::Integer(3)))
+        );
     }
 }

@@ -31,7 +31,9 @@ impl UseSite {
     }
 }
 
-/// A method-local index of SSA definitions and uses.
+/// An owned, method-local index of scalar SSA definitions and uses.
+///
+/// Phi uses remain predecessor-sensitive through [`UseSite::PhiInput`].
 #[derive(Debug)]
 pub struct DefUseChain {
     defs: HashMap<ValueId, ValueDefinition>,
@@ -56,11 +58,11 @@ impl DefUseChain {
                         });
                 }
             }
-            for instruction in block.instructions() {
-                for value in instruction.uses() {
+            for operation in block.operations() {
+                for value in operation.uses() {
                     uses.entry(value)
                         .or_default()
-                        .insert(UseSite::Instruction(instruction.id()));
+                        .insert(UseSite::Instruction(operation.id()));
                 }
             }
             for value in block.terminator().uses() {

@@ -1,35 +1,47 @@
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    ir::generator::{DiscoveryValue, ProvisionalValueId, jvm_frame::entry::Entry},
+    ir::generator::{OperandState, ReturnAddress, SsaValueId, jvm_frame::entry::Entry},
 };
 
 #[test]
-fn merge_value_ref() {
-    let lhs = Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(0)));
-    let rhs = Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(1)));
+fn context_free_value_conflict_is_invalid() {
+    let lhs = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+    let rhs = Entry::Value(OperandState::Value(SsaValueId::new(1)));
 
     let result = lhs.join(rhs);
-    assert_eq!(result, Entry::Value(DiscoveryValue::Merged));
+    assert_eq!(result, Entry::Value(OperandState::Invalid));
 }
 
 #[test]
 fn merge_same_value_ref() {
-    let lhs = Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(0)));
-    let rhs = Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(0)));
+    let lhs = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+    let rhs = Entry::Value(OperandState::Value(SsaValueId::new(0)));
 
     let result = lhs.join(rhs);
     assert_eq!(
         result,
-        Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(0)))
+        Entry::Value(OperandState::Value(SsaValueId::new(0)))
     );
 }
 
 #[test]
 fn incompatible_legacy_values_become_invalid() {
-    let value = Entry::Value(DiscoveryValue::Local(ProvisionalValueId::new(0)));
-    let address = Entry::Value(DiscoveryValue::ReturnAddress(
-        crate::ir::generator::legacy::ReturnAddress::for_test(0),
-    ));
+    let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+    let address = Entry::Value(OperandState::ReturnAddress(ReturnAddress::for_test(0)));
 
-    assert_eq!(value.join(address), Entry::Value(DiscoveryValue::Invalid));
+    assert_eq!(value.join(address), Entry::Value(OperandState::Invalid));
+}
+
+#[test]
+fn a_value_missing_on_one_path_is_unavailable() {
+    let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+
+    assert_eq!(
+        value.clone().join(Entry::UninitializedLocal),
+        Entry::UninitializedLocal
+    );
+    assert_eq!(
+        Entry::UninitializedLocal.join(value),
+        Entry::UninitializedLocal
+    );
 }

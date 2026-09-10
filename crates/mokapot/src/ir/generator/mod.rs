@@ -1,18 +1,29 @@
-mod analysis;
-mod assembly;
-mod build_model;
+//! Converts JVM bytecode into completed `MokaIR`.
+//!
+//! Generation proceeds through four explicit phases:
+//!
+//! 1. [`jvm_frame_analysis`] produces a reachable JVM control-flow graph with
+//!    exact symbolic instructions and edge frames.
+//! 2. [`block_formation`] consumes that graph and groups its locations and edge
+//!    frames into maximal JVM blocks.
+//! 3. [`ssa`] uses those frames to construct and simplify predecessor-indexed
+//!    phis, then lowers the result to scalar operations and explicit terminators
+//!    without JVM frame state.
+//! 4. [`emission`] consumes the lowered SSA graph, assigns public identities, and emits
+//!    the completed [`MokaIRMethod`].
+//!
+//! The [`lifting`] module contains the JVM opcode semantics used by frame analysis.
+
+mod block_formation;
+mod emission;
 mod error;
-mod fallibility;
+mod identity;
+mod instruction;
 mod jvm_frame;
-mod legacy;
-mod lifted_instruction;
+mod jvm_frame_analysis;
 mod lifting;
-mod materialize;
-mod merge;
-mod remap;
-mod scalar;
+mod normalized_jvm;
 mod ssa;
-mod value;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,65 +31,33 @@ pub use error::MokaIRBuildError;
 use jvm_frame::Entry;
 pub use jvm_frame::ExecutionError;
 
-use self::build_model::{
-    GeneratedMethod, OutgoingState, PairedFrameValue, PlannedBlock, ScalarArm, ScalarBlock,
-    ScalarEntryFrames, next_temp_value,
-};
-use self::fallibility::FallibilityContext;
-use self::lifted_instruction::LiftedInstruction;
-use self::value::{DiscoveryValue, FrameOperand, ProvisionalValueId, ScalarValue};
+use self::identity::SsaValueId;
+use self::instruction::Instruction;
+use self::jvm_frame_analysis::operand_state::OperandState;
+use self::jvm_frame_analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer, MergeIdentity};
+use self::lifting::frame_operand::FrameOperand;
 
 use self::jvm_frame::JvmStackFrame;
-use self::legacy::{Location, Normalizer as LegacyNormalizer, ReturnAddress};
-use self::merge::{collect_phi_candidates, unavailable_value_slots};
-use self::remap::{remap_expression, remap_transfer};
+use self::normalized_jvm::{Location, Normalizer, ReturnAddress};
 use super::{
-    BasicBlock, BlockId, EdgeId, Instruction as IrInstruction, InstructionId, InstructionKind,
-    MokaIRMethod, Phi, PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition,
-    ValueId,
-    control_flow::{ControlTransfer, LiftedControlTransfer},
-    expression::LiftedCondition,
+    BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation, OperationKind, Phi,
+    PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+    control_flow::ControlTransfer,
 };
 use crate::{
     analysis::fixed_point::DataflowProblem,
-    ir::control_flow::path_condition::{BooleanVariable, BranchGuard, LiftedValue},
     jvm::{
-        ConstantValue, Method,
+        Method,
         code::{MethodBody, ProgramCounter},
         method,
     },
 };
 
-struct MokaIRGenerator<'method> {
-    lifted: BTreeMap<Location, LiftedInstruction>,
-    outgoing: BTreeMap<Location, Vec<(Location, LiftedControlTransfer<DiscoveryValue>)>>,
-    outgoing_frames: BTreeMap<Location, Vec<JvmStackFrame>>,
-    value_ids: BTreeMap<Location, ProvisionalValueId>,
-    caught_exception_ids: BTreeMap<Location, ProvisionalValueId>,
-    method: &'method Method,
-    body: &'method MethodBody,
-    fallibility: FallibilityContext,
-    legacy: LegacyNormalizer,
-    discovering: bool,
-    next_lifted_value: u32,
-    initial_seed: Option<(Location, JvmStackFrame)>,
-}
-
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let generated = MokaIRGenerator::for_method(method)?.generate()?;
-    Ok(MokaIRMethod::new(
-        method.access_flags,
-        method.name.clone(),
-        method.descriptor.clone(),
-        method.owner.clone(),
-        generated.entry,
-        generated.blocks,
-        generated.source_map,
-        generated.this_value,
-        generated.parameter_values,
-        generated.caught_exceptions,
-        generated.value_definitions,
-    ))
+    let analyzed_cfg = JvmFrameAnalyzer::for_method(method)?.run()?;
+    let block_graph = block_formation::form(analyzed_cfg)?;
+    let ssa_graph = ssa::construct(block_graph)?;
+    emission::emit(method, ssa_graph)
 }
 
 #[cfg(test)]

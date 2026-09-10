@@ -1,7 +1,3 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "generator tests share the fixture helpers from their parent module"
-)]
 use super::*;
 use crate::jvm::code::WideInstruction;
 
@@ -16,7 +12,7 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
         .find(|block| {
             block.terminator().id() == id
                 || block
-                    .instructions()
+                    .operations()
                     .iter()
                     .any(|instruction| instruction.id() == id)
         })

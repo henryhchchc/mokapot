@@ -9,24 +9,31 @@ use crate::{
     types::method_descriptor::MethodDescriptor,
 };
 
-/// Represents a JVM method where the instructions have been converted to Moka IR.
+/// A completed scalar-SSA representation of the reachable part of a JVM method.
+///
+/// Blocks, instructions, edges, and values have opaque identities local to this
+/// method. Its block terminators are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
-    access_flags: method::AccessFlags,
-    name: String,
-    descriptor: MethodDescriptor,
-    owner: ClassRef,
-    entry_block: BlockId,
-    blocks: Vec<BasicBlock>,
-    source_map: SourceMap,
-    this_value: Option<ValueId>,
-    parameter_values: Vec<ValueId>,
-    caught_exceptions: BTreeMap<BlockId, ValueId>,
-    value_definitions: Vec<ValueDefinition>,
+    pub(super) access_flags: method::AccessFlags,
+    pub(super) name: String,
+    pub(super) descriptor: MethodDescriptor,
+    pub(super) owner: ClassRef,
+    pub(super) entry_block: BlockId,
+    pub(super) blocks: Vec<BasicBlock>,
+    pub(super) source_map: SourceMap,
+    pub(super) this_value: Option<ValueId>,
+    pub(super) parameter_values: Vec<ValueId>,
+    pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
+    pub(super) value_definitions: Vec<ValueDefinition>,
 }
 
 impl MokaIRMethod {
-    /// Builds Moka IR from a JVM method.
+    /// Builds completed `MokaIR` from a JVM method.
+    ///
+    /// JVM stack and local state are eliminated during construction. Legacy
+    /// subroutines are normalized, trivial phis are removed, and only reachable
+    /// blocks are emitted.
     ///
     /// # Errors
     ///
@@ -34,38 +41,6 @@ impl MokaIRMethod {
     /// control flow cannot be represented as valid Moka IR.
     pub fn from_method(method: &JvmMethod) -> Result<Self, MokaIRBuildError> {
         generator::generate(method)
-    }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the private constructor assembles independently owned method metadata and IR"
-    )]
-    pub(crate) const fn new(
-        access_flags: method::AccessFlags,
-        name: String,
-        descriptor: MethodDescriptor,
-        owner: ClassRef,
-        entry_block: BlockId,
-        blocks: Vec<BasicBlock>,
-        source_map: SourceMap,
-        this_value: Option<ValueId>,
-        parameter_values: Vec<ValueId>,
-        caught_exceptions: BTreeMap<BlockId, ValueId>,
-        value_definitions: Vec<ValueDefinition>,
-    ) -> Self {
-        Self {
-            access_flags,
-            name,
-            descriptor,
-            owner,
-            entry_block,
-            blocks,
-            source_map,
-            this_value,
-            parameter_values,
-            caught_exceptions,
-            value_definitions,
-        }
     }
 
     /// Returns the method access flags.
@@ -105,6 +80,8 @@ impl MokaIRMethod {
     }
 
     /// Returns all reachable blocks in deterministic source order.
+    ///
+    /// Each block exposes entry phis, ordered operations, and one terminator.
     #[must_use]
     pub fn blocks(&self) -> impl ExactSizeIterator<Item = &BasicBlock> {
         self.blocks.iter()
@@ -135,6 +112,9 @@ impl MokaIRMethod {
     }
 
     /// Returns the caught-exception value introduced by a synthetic handler-entry block.
+    ///
+    /// Handler-entry blocks and their caught values are synthetic and therefore
+    /// need not have JVM source provenance.
     #[must_use]
     pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
         self.caught_exceptions.get(&block).copied()
@@ -164,6 +144,8 @@ impl MokaIRMethod {
     }
 
     /// Returns a borrowed control-flow view derived from block terminators.
+    ///
+    /// The returned view does not store an independent edge set.
     #[must_use]
     pub fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
         ControlFlowGraph::new(&self.blocks, self.entry_block)

@@ -1,5 +1,6 @@
+use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::ir::generator::{
-    DiscoveryValue, ExecutionError, ProvisionalValueId,
+    ExecutionError, OperandState, SsaValueId,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 #[cfg(test)]
@@ -14,9 +15,19 @@ fn args_locals_checking() {
     assert!(correct.is_ok());
 }
 
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn joining_frames_with_different_stack_capacities_panics() {
+    let desc = "()V".parse().expect("valid descriptor");
+    let mut lhs = JvmStackFrame::new(true, &desc, 0, 1).expect("valid frame");
+    let rhs = JvmStackFrame::new(true, &desc, 0, 2).expect("valid frame");
+
+    lhs.join_assign(rhs);
+}
+
 proptest! {
     #[test]
-    fn push_pop(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn push_pop(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -33,7 +44,7 @@ proptest! {
     }
 
     #[test]
-    fn push_pop_dual_slot(args in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn push_pop_dual_slot(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -59,7 +70,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -80,7 +91,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = DiscoveryValue::Local(ProvisionalValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
@@ -95,7 +106,7 @@ proptest! {
     }
 
     #[test]
-    fn slot_mismatch(values in any::<DiscoveryValue>()) {
+    fn slot_mismatch(values in any::<OperandState>()) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
@@ -111,7 +122,7 @@ proptest! {
     }
 
     #[test]
-    fn mixed_width_values(values in prop::collection::vec(any::<DiscoveryValue>(), 0..10)) {
+    fn mixed_width_values(values in prop::collection::vec(any::<OperandState>(), 0..10)) {
         let mut stack_frame = JvmStackFrame::new(
             true,
             &"()V".parse().expect("Invalid method desc"),
