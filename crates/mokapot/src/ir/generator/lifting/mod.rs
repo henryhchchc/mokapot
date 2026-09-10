@@ -2,6 +2,7 @@
 
 mod constants;
 mod control_flow;
+pub(in crate::ir::generator) mod frame_operand;
 mod locals;
 mod members;
 mod memory;
@@ -14,8 +15,8 @@ use locals::{load_local, store_local};
 use operations::{binary_op_math, conversion_op};
 
 use super::{
-    FrameOperand, LiftedInstruction as IR, Location, MokaIRBuildError, MokaIRGenerator,
-    ProvisionalValueId,
+    FrameOperand, JvmFrameAnalysis, LiftedInstruction as IR, Location, MokaIRBuildError,
+    SsaValueId,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 use crate::{
@@ -38,7 +39,7 @@ use crate::{
     },
 };
 
-impl MokaIRGenerator<'_> {
+impl JvmFrameAnalysis<'_> {
     pub(super) fn lift_instruction<OP>(
         &mut self,
         jvm_instruction: &Instruction,

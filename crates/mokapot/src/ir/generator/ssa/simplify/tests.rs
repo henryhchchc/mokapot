@@ -1,7 +1,7 @@
 use super::*;
 
-fn value(index: u32) -> ProvisionalValueId {
-    ProvisionalValueId::new(index)
+fn value(index: u32) -> SsaValueId {
+    SsaValueId::new(index)
 }
 
 fn block(index: u32) -> BlockId {

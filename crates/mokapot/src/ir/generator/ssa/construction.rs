@@ -1,25 +1,26 @@
+use super::super::block_formation::BlockPlan;
 use super::{
-    BTreeMap, BlockId, DiscoveryValue, JvmStackFrame, LiftedInstruction, Location,
-    MokaIRBuildError, MokaIRGenerator, PlannedBlock, ProvisionalValueId, ScalarArm, ScalarBlock,
-    ScalarEntryFrames, ScalarValue, next_temp_value, unavailable_value_slots,
+    BTreeMap, BlockId, JvmFrameAnalysis, JvmStackFrame, LiftedInstruction, Location,
+    MokaIRBuildError, OperandState, SsaArm, SsaBlock, SsaEntryFrames, SsaFrameValue, SsaValueId,
+    next_ssa_value, unavailable_value_slots,
 };
 
-impl MokaIRGenerator<'_> {
+impl JvmFrameAnalysis<'_> {
     #[expect(
         clippy::too_many_arguments,
-        reason = "entry-state construction joins method inputs, discovery facts, and deterministic allocation"
+        reason = "entry-state construction joins method inputs, analysis facts, and deterministic allocation"
     )]
-    pub(super) fn scalar_entry_frames(
+    pub(in crate::ir::generator) fn ssa_entry_frames(
         &self,
-        plans: &[PlannedBlock],
+        plans: &[BlockPlan],
         facts: &BTreeMap<Location, JvmStackFrame>,
         bytecode_entry: BlockId,
         needs_entry_preheader: bool,
-        initial_frame: &JvmStackFrame<ScalarValue>,
-        this_temp: Option<ProvisionalValueId>,
-        parameter_temps: &[ProvisionalValueId],
+        initial_frame: &JvmStackFrame<SsaFrameValue>,
+        this_temp: Option<SsaValueId>,
+        parameter_temps: &[SsaValueId],
         next_temp: &mut u32,
-    ) -> Result<ScalarEntryFrames, MokaIRBuildError> {
+    ) -> Result<SsaEntryFrames, MokaIRBuildError> {
         let mut frames = BTreeMap::new();
         let mut phi_blocks = BTreeMap::new();
         for plan in plans {
@@ -28,15 +29,15 @@ impl MokaIRGenerator<'_> {
                 continue;
             }
             let leader = *plan
-                .pcs
+                .locations
                 .first()
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            let discovered = facts
+            let analyzed = facts
                 .get(&leader)
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if matches!(leader, Location::Unwind) {
-                let frame = discovered.without_values().try_map_values(
-                    |_| -> Result<ScalarValue, MokaIRBuildError> {
+                let frame = analyzed.without_values().try_map_values(
+                    |_| -> Result<SsaFrameValue, MokaIRBuildError> {
                         Err(MokaIRBuildError::MalformedControlFlow)
                     },
                 )?;
@@ -52,28 +53,28 @@ impl MokaIRGenerator<'_> {
                 incoming.push(initial);
             }
             let (unavailable_locals, unavailable_stack) =
-                unavailable_value_slots(discovered, &incoming)?;
-            let mut frame = discovered.try_map_values(|value| {
+                unavailable_value_slots(analyzed, &incoming)?;
+            let mut frame = analyzed.try_map_values(|value| {
                 Ok(match value {
-                    DiscoveryValue::This => {
-                        ScalarValue::Value(this_temp.ok_or(MokaIRBuildError::MalformedControlFlow)?)
-                    }
-                    DiscoveryValue::Arg(index) => ScalarValue::Value(
+                    OperandState::This => SsaFrameValue::Value(
+                        this_temp.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                    ),
+                    OperandState::Arg(index) => SsaFrameValue::Value(
                         parameter_temps
                             .get(usize::from(*index))
                             .copied()
                             .ok_or(MokaIRBuildError::MalformedControlFlow)?,
                     ),
-                    DiscoveryValue::Local(value) | DiscoveryValue::CaughtException(value) => {
-                        ScalarValue::Value(*value)
+                    OperandState::Local(value) | OperandState::CaughtException(value) => {
+                        SsaFrameValue::Value(*value)
                     }
-                    DiscoveryValue::ReturnAddress(address) => ScalarValue::ReturnAddress(*address),
-                    DiscoveryValue::Merged => {
-                        let value = next_temp_value(next_temp)?;
+                    OperandState::ReturnAddress(address) => SsaFrameValue::ReturnAddress(*address),
+                    OperandState::Merged => {
+                        let value = next_ssa_value(next_temp)?;
                         phi_blocks.insert(value, plan.id);
-                        ScalarValue::Value(value)
+                        SsaFrameValue::Value(value)
                     }
-                    DiscoveryValue::Invalid => {
+                    OperandState::Invalid => {
                         return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                 })
@@ -107,21 +108,21 @@ impl MokaIRGenerator<'_> {
         Ok(incoming)
     }
 
-    pub(super) fn translate_scalar_blocks(
+    pub(in crate::ir::generator) fn construct_ssa_blocks(
         &mut self,
-        plans: &[PlannedBlock],
-        mut entry_frames: BTreeMap<BlockId, JvmStackFrame<ScalarValue>>,
+        plans: &[BlockPlan],
+        mut entry_frames: BTreeMap<BlockId, JvmStackFrame<SsaFrameValue>>,
         location_to_block: &BTreeMap<Location, BlockId>,
-    ) -> Result<Vec<ScalarBlock>, MokaIRBuildError> {
+    ) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
         let mut blocks = Vec::with_capacity(plans.len());
         for plan in plans {
             let entry_frame = entry_frames
                 .remove(&plan.id)
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             let mut frame = entry_frame.clone();
-            let mut instructions = Vec::with_capacity(plan.pcs.len());
+            let mut instructions = Vec::with_capacity(plan.locations.len());
             let mut arms = Vec::new();
-            for (index, &location) in plan.pcs.iter().enumerate() {
+            for (index, &location) in plan.locations.iter().enumerate() {
                 let pre_frame = frame.clone();
                 let (instruction, fallible) = match location {
                     Location::Bytecode { pc, .. } => {
@@ -140,7 +141,7 @@ impl MokaIRGenerator<'_> {
                     Location::Handler { .. } => (LiftedInstruction::HandlerEntry, false),
                     Location::Unwind => (LiftedInstruction::Unwind, false),
                 };
-                let is_last = index + 1 == plan.pcs.len();
+                let is_last = index + 1 == plan.locations.len();
                 if is_last {
                     arms = self
                         .analyze_frame_and_conditions(
@@ -149,14 +150,14 @@ impl MokaIRGenerator<'_> {
                             frame.clone(),
                             &instruction,
                             fallible,
-                            &|value| ScalarValue::Value(value),
+                            &|value| SsaFrameValue::Value(value),
                         )?
                         .into_iter()
                         .map(|(target, transfer, frame)| {
                             location_to_block
                                 .get(&target)
                                 .copied()
-                                .map(|target| ScalarArm {
+                                .map(|target| SsaArm {
                                     target,
                                     transfer,
                                     frame,
@@ -169,7 +170,7 @@ impl MokaIRGenerator<'_> {
                 }
                 instructions.push((location, instruction));
             }
-            blocks.push(ScalarBlock {
+            blocks.push(SsaBlock {
                 plan: plan.clone(),
                 entry_frame,
                 instructions,

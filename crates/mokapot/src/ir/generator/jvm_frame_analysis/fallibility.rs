@@ -1,13 +1,17 @@
+//! JVM instruction fallibility classification.
+
+//! JVM instruction fallibility classification.
+
 use crate::jvm::{ConstantValue, Method, code::Instruction, method};
 
 /// Method-level context needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct FallibilityContext {
+pub(crate) struct FallibilityContext {
     return_can_throw: bool,
 }
 
 impl FallibilityContext {
-    pub(super) fn for_method(method: &Method) -> Self {
+    pub(crate) fn for_method(method: &Method) -> Self {
         // Exact structured-locking analysis is path- and alias-sensitive, so
         // explicit monitor use conservatively makes every method exit fallible.
         let has_explicit_monitor_operation = method.body.as_ref().is_some_and(|body| {
@@ -32,7 +36,7 @@ impl FallibilityContext {
     /// This is deliberately an exhaustive opcode classification. It includes
     /// resolution, initialization, allocation, bootstrap, and method-exit
     /// failures in addition to the instruction's most obvious runtime exception.
-    pub(super) const fn is_synchronously_fallible(self, instruction: &Instruction) -> bool {
+    pub(crate) const fn is_synchronously_fallible(self, instruction: &Instruction) -> bool {
         use Instruction::{
             AALoad, AAStore, ANewArray, AReturn, AThrow, ArrayLength, BALoad, BAStore, CALoad,
             CAStore, CheckCast, DALoad, DAStore, DReturn, FALoad, FAStore, FReturn, GetField,

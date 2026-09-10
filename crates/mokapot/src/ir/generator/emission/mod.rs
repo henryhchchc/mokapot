@@ -1,27 +1,60 @@
-use super::{
-    BTreeMap, BasicBlock, BlockId, ControlTransfer, EdgeId, GeneratedMethod, InstructionId,
-    InstructionKind, IrInstruction, LiftedInstruction, MokaIRBuildError, MokaIRGenerator, Phi,
-    PhiInput, ProvisionalValueId, ScalarBlock, ScalarValue, SourceMap, Successor, Terminator,
-    TerminatorKind, ValueDefinition, ValueId, remap_expression, remap_transfer, ssa,
-};
+//! Emits completed public `MokaIR` from internal SSA construction state.
 
-impl MokaIRGenerator<'_> {
+mod body;
+mod remap;
+
+use self::remap::{remap_expression, remap_transfer};
+use super::ssa::{SsaBlock, SsaMethod};
+use super::{
+    BTreeMap, BasicBlock, BlockId, ControlTransfer, EdgeId, InstructionId, IrOperation,
+    JvmFrameAnalysis, LiftedInstruction, MokaIRBuildError, OperationKind, Phi, PhiInput, SourceMap,
+    SsaFrameValue, SsaValueId, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+    ssa,
+};
+pub(in crate::ir::generator) use body::GeneratedBody;
+
+/// Emits final identities, blocks, and provenance from internal SSA.
+pub(super) fn emit(ssa: SsaMethod<'_>) -> Result<GeneratedBody, MokaIRBuildError> {
+    let SsaMethod {
+        analysis,
+        entry,
+        bytecode_entry,
+        needs_entry_preheader,
+        blocks,
+        phi_blocks,
+        simplified_phis,
+        this_value,
+        parameter_values,
+    } = ssa;
+    analysis.materialize_ssa(
+        entry,
+        bytecode_entry,
+        needs_entry_preheader,
+        blocks,
+        &phi_blocks,
+        &simplified_phis,
+        this_value,
+        &parameter_values,
+    )
+}
+
+impl JvmFrameAnalysis<'_> {
     #[expect(
         clippy::too_many_arguments,
         clippy::too_many_lines,
         reason = "final SSA allocation and block materialization form one ordered pass"
     )]
-    pub(super) fn materialize_scalar_method(
+    fn materialize_ssa(
         &self,
         entry: BlockId,
         bytecode_entry: BlockId,
         needs_entry_preheader: bool,
-        scalar_blocks: Vec<ScalarBlock>,
-        phi_blocks: &BTreeMap<ProvisionalValueId, BlockId>,
+        blocks: Vec<SsaBlock>,
+        phi_blocks: &BTreeMap<SsaValueId, BlockId>,
         simplified: &ssa::SimplifiedPhis,
-        this_temp: Option<ProvisionalValueId>,
-        parameter_temps: &[ProvisionalValueId],
-    ) -> Result<GeneratedMethod, MokaIRBuildError> {
+        this_temp: Option<SsaValueId>,
+        parameter_temps: &[SsaValueId],
+    ) -> Result<GeneratedBody, MokaIRBuildError> {
         let mut next_instruction = 0_u32;
         let mut next_value = 0_u32;
         let mut temp_values = BTreeMap::new();
@@ -62,10 +95,10 @@ impl MokaIRGenerator<'_> {
         }
 
         let mut caught_exceptions = BTreeMap::new();
-        for block in &scalar_blocks {
+        for block in &blocks {
             let leader = *block
                 .plan
-                .pcs
+                .locations
                 .first()
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if let Some(&temp) = self.caught_exception_ids.get(&leader) {
@@ -122,12 +155,12 @@ impl MokaIRGenerator<'_> {
 
         let remap = |value| resolve_final_value(value, &simplified.substitutions, &temp_values);
         let remap_operand = |value| match value {
-            ScalarValue::Value(value) => remap(value),
-            ScalarValue::ReturnAddress(_) => Err(MokaIRBuildError::MalformedControlFlow),
+            SsaFrameValue::Value(value) => remap(value),
+            SsaFrameValue::ReturnAddress(_) => Err(MokaIRBuildError::MalformedControlFlow),
         };
         let mut source_map = SourceMap::default();
-        let mut blocks =
-            Vec::with_capacity(scalar_blocks.len() + usize::from(needs_entry_preheader));
+        let mut emitted_blocks =
+            Vec::with_capacity(blocks.len() + usize::from(needs_entry_preheader));
         let mut next_edge = 0_u32;
         if needs_entry_preheader {
             let successor = Successor::new(
@@ -142,10 +175,10 @@ impl MokaIRGenerator<'_> {
                 TerminatorKind::Goto,
                 vec![successor],
             );
-            blocks.push(BasicBlock::new(entry, vec![], vec![], terminator));
+            emitted_blocks.push(BasicBlock::new(entry, vec![], vec![], terminator));
         }
 
-        for block in scalar_blocks {
+        for block in blocks {
             let mut phis = Vec::new();
             for (&temp, &phi_block) in phi_blocks {
                 if phi_block != block.plan.id {
@@ -171,12 +204,12 @@ impl MokaIRGenerator<'_> {
             for (location, lifted) in &block.instructions {
                 let kind = match lifted.clone() {
                     LiftedInstruction::Definition { value, expr } => {
-                        Some(InstructionKind::Definition {
+                        Some(OperationKind::Definition {
                             value: remap(value)?,
                             expr: remap_expression(expr, &remap_operand)?,
                         })
                     }
-                    LiftedInstruction::Effect(expr) => Some(InstructionKind::Effect {
+                    LiftedInstruction::Effect(expr) => Some(OperationKind::Effect {
                         expr: remap_expression(expr, &remap_operand)?,
                     }),
                     LiftedInstruction::HandlerEntry
@@ -197,7 +230,7 @@ impl MokaIRGenerator<'_> {
                         .source_pc()
                         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
                     source_map.insert(pc, id);
-                    instructions.push(IrInstruction::new(id, kind));
+                    instructions.push(IrOperation::new(id, kind));
                 }
             }
 
@@ -259,7 +292,7 @@ impl MokaIRGenerator<'_> {
                 );
             }
             let terminator = Terminator::new(terminator_id, kind, successors);
-            blocks.push(BasicBlock::new(
+            emitted_blocks.push(BasicBlock::new(
                 block.plan.id,
                 phis,
                 instructions,
@@ -267,9 +300,9 @@ impl MokaIRGenerator<'_> {
             ));
         }
 
-        Ok(GeneratedMethod {
+        Ok(GeneratedBody {
             entry,
-            blocks,
+            blocks: emitted_blocks,
             source_map,
             this_value,
             parameter_values,
@@ -296,10 +329,10 @@ fn allocate_edge_id(next: &mut u32) -> Result<EdgeId, MokaIRBuildError> {
 }
 
 fn allocate_final_value(
-    temp: ProvisionalValueId,
+    temp: SsaValueId,
     definition: ValueDefinition,
     next: &mut u32,
-    values: &mut BTreeMap<ProvisionalValueId, ValueId>,
+    values: &mut BTreeMap<SsaValueId, ValueId>,
     definitions: &mut Vec<ValueDefinition>,
 ) -> Result<ValueId, MokaIRBuildError> {
     if values.contains_key(&temp) {
@@ -315,9 +348,9 @@ fn allocate_final_value(
 }
 
 fn resolve_final_value(
-    mut value: ProvisionalValueId,
-    substitutions: &BTreeMap<ProvisionalValueId, ProvisionalValueId>,
-    values: &BTreeMap<ProvisionalValueId, ValueId>,
+    mut value: SsaValueId,
+    substitutions: &BTreeMap<SsaValueId, SsaValueId>,
+    values: &BTreeMap<SsaValueId, ValueId>,
 ) -> Result<ValueId, MokaIRBuildError> {
     while let Some(&replacement) = substitutions.get(&value) {
         value = replacement;

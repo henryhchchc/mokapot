@@ -10,7 +10,7 @@ use super::*;
 )]
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &Instruction,
-    def: ProvisionalValueId,
+    def: SsaValueId,
     frame: &mut JvmStackFrame<OP>,
 ) -> Result<Option<IR<OP>>, MokaIRBuildError> {
     #[allow(

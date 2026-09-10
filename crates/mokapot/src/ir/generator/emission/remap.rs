@@ -1,4 +1,4 @@
-use super::MokaIRBuildError;
+use super::super::MokaIRBuildError;
 use crate::ir::{
     ValueId,
     control_flow::path_condition::{BooleanVariable, BranchGuard, LiftedValue, Value},

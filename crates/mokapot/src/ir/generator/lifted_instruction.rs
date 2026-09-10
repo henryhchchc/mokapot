@@ -1,16 +1,16 @@
 use std::{collections::BTreeMap, fmt};
 
-use super::{DiscoveryValue, Location, ProvisionalValueId};
+use super::{Location, OperandState, SsaValueId};
 use crate::ir::expression::{LiftedCondition, LiftedExpression};
 use crate::jvm::code::ProgramCounter;
 
 #[derive(Debug, Clone)]
-pub(super) enum LiftedInstruction<OP: fmt::Display = DiscoveryValue> {
+pub(super) enum LiftedInstruction<OP: fmt::Display = OperandState> {
     HandlerEntry,
     Unwind,
     Erased,
     Definition {
-        value: ProvisionalValueId,
+        value: SsaValueId,
         expr: LiftedExpression<OP>,
     },
     Effect(LiftedExpression<OP>),

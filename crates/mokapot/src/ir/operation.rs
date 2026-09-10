@@ -2,9 +2,9 @@ use std::{collections::HashSet, fmt};
 
 use super::{InstructionId, ValueId, expression::Expression};
 
-/// The ordinary operation performed by a Moka IR instruction.
+/// The kind of an ordinary Moka IR operation.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum InstructionKind {
+pub enum OperationKind {
     /// Evaluates an expression and defines its result.
     #[display("{value} = {expr}")]
     Definition {
@@ -21,7 +21,7 @@ pub enum InstructionKind {
     },
 }
 
-impl InstructionKind {
+impl OperationKind {
     /// Returns the value defined by this operation, if any.
     #[must_use]
     pub const fn def(&self) -> Option<ValueId> {
@@ -40,40 +40,40 @@ impl InstructionKind {
     }
 }
 
-/// An identified ordinary instruction.
+/// An identified ordinary non-phi, non-terminator operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Instruction {
+pub struct Operation {
     id: InstructionId,
-    kind: InstructionKind,
+    kind: OperationKind,
 }
 
-impl Instruction {
-    pub(crate) const fn new(id: InstructionId, kind: InstructionKind) -> Self {
+impl Operation {
+    pub(crate) const fn new(id: InstructionId, kind: OperationKind) -> Self {
         Self { id, kind }
     }
-    /// Returns this instruction's method-local identity.
+    /// Returns this operation's method-local instruction identity.
     #[must_use]
     pub const fn id(&self) -> InstructionId {
         self.id
     }
-    /// Returns the operation performed by this instruction.
+    /// Returns the kind of operation performed.
     #[must_use]
-    pub const fn kind(&self) -> &InstructionKind {
+    pub const fn kind(&self) -> &OperationKind {
         &self.kind
     }
-    /// Returns the value defined by this instruction, if any.
+    /// Returns the value defined by this operation, if any.
     #[must_use]
     pub const fn def(&self) -> Option<ValueId> {
         self.kind.def()
     }
-    /// Returns the values used by this instruction.
+    /// Returns the values used by this operation.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
         self.kind.uses()
     }
 }
 
-impl fmt::Display for Instruction {
+impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.kind.fmt(f)
     }

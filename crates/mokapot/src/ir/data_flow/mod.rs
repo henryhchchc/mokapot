@@ -56,11 +56,11 @@ impl DefUseChain {
                         });
                 }
             }
-            for instruction in block.instructions() {
-                for value in instruction.uses() {
+            for operation in block.operations() {
+                for value in operation.uses() {
                     uses.entry(value)
                         .or_default()
-                        .insert(UseSite::Instruction(instruction.id()));
+                        .insert(UseSite::Instruction(operation.id()));
                 }
             }
             for value in block.terminator().uses() {
