@@ -1,7 +1,3 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "generator tests share the fixture helpers from their parent module"
-)]
 use super::*;
 use crate::jvm::code::WideInstruction;
 

@@ -1,8 +1,4 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{FrameOperand, IR, Instruction, JvmStackFrame, MokaIRBuildError, StackOperations};
 
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &Instruction,

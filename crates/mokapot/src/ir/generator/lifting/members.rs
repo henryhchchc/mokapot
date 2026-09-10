@@ -1,8 +1,7 @@
-#[allow(
-    clippy::wildcard_imports,
-    reason = "opcode-family lifters share the private lifting vocabulary"
-)]
-use super::*;
+use super::{
+    DUAL_SLOT, Expression, FieldAccess, FieldType, FrameOperand, IR, Instruction, JvmStackFrame,
+    MokaIRBuildError, PrimitiveType, ReturnType, SINGLE_SLOT, SsaValueId,
+};
 
 #[expect(
     clippy::too_many_lines,
