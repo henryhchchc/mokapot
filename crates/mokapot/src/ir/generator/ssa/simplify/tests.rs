@@ -21,6 +21,12 @@ fn canonicalizes_trivial_phi_chains() {
         simplified.substitutions,
         BTreeMap::from([(value(1), value(100)), (value(2), value(100))])
     );
+    assert!(
+        simplified
+            .substitutions
+            .values()
+            .all(|value| !simplified.substitutions.contains_key(value))
+    );
 }
 
 #[test]

@@ -412,3 +412,36 @@ impl JvmSemantics for JvmFrameAnalyzer<'_> {
         self.normalizer.return_from(location, address)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::{
+        analysis::fixed_point::solve, ir::generator::tests::method,
+        jvm::code::Instruction as JvmInstruction,
+    };
+
+    #[test]
+    fn reprocessing_loop_locations_reuses_definition_identities() {
+        let method = method(
+            [
+                (0.into(), JvmInstruction::IConst0),
+                (1.into(), JvmInstruction::IStore0),
+                (2.into(), JvmInstruction::ILoad0),
+                (3.into(), JvmInstruction::IConst1),
+                (4.into(), JvmInstruction::IAdd),
+                (5.into(), JvmInstruction::IStore0),
+                (6.into(), JvmInstruction::Goto(2.into())),
+            ],
+            "()V",
+            vec![],
+        );
+        let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+        let _: BTreeMap<Location, JvmStackFrame> = solve(&mut analyzer).expect("valid loop");
+
+        assert_eq!(analyzer.definition_ids.len(), 7);
+        assert_eq!(analyzer.next_definition_id, 7);
+    }
+}
