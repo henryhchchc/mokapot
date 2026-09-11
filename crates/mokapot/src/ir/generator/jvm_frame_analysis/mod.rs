@@ -7,10 +7,13 @@ use super::{
     MethodBody, MokaIRBuildError, NormalizedJvm, Normalizer, OperandState, ProgramCounter,
     ReturnAddress, SsaValueId, method,
 };
-use crate::ir::generator::lifting::{
-    fallibility::FallibilityContext,
-    lift_instruction,
-    semantics::{JvmSemantics, outgoing_from},
+use crate::{
+    analysis::fixed_point::DataflowOutput,
+    ir::generator::lifting::{
+        fallibility::FallibilityContext,
+        lift_instruction,
+        semantics::{JvmSemantics, outgoing_from},
+    },
 };
 
 /// Mutable state used only while solving JVM frame facts.
@@ -21,8 +24,31 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
     definition_ids: BTreeMap<Location, SsaValueId>,
     caught_exception_ids: BTreeMap<Location, SsaValueId>,
     next_definition_id: u32,
-    lifted_locations: BTreeMap<Location, (bool, Vec<JvmOutgoing>)>,
     entry: Option<(Location, JvmStackFrame)>,
+}
+
+/// Transfer output retained for one reachable JVM location.
+pub(in crate::ir::generator) struct JvmFlowOutput {
+    is_explicit_transfer: bool,
+    outgoing: Vec<JvmOutgoing>,
+}
+
+impl DataflowOutput<Location, JvmStackFrame> for JvmFlowOutput {
+    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a Location, &'a JvmStackFrame)>
+    where
+        Location: 'a,
+        JvmStackFrame: 'a,
+    {
+        self.outgoing
+            .iter()
+            .map(|outgoing| (&outgoing.target, &outgoing.frame))
+    }
+
+    fn into_successors(self) -> impl Iterator<Item = (Location, JvmStackFrame)> {
+        self.outgoing
+            .into_iter()
+            .map(|outgoing| (outgoing.target, outgoing.frame))
+    }
 }
 
 /// One outgoing edge and the abstract frame reaching its target.
@@ -88,6 +114,7 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
     type Location = Location;
     type Fact = JvmStackFrame;
     type Err = MokaIRBuildError;
+    type Output = JvmFlowOutput;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         self.entry.clone().into_iter().collect::<Vec<_>>()
@@ -97,7 +124,7 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
+    ) -> Result<Self::Output, Self::Err> {
         let location = *location;
         let (instruction, outgoing) = match location {
             Location::Handler {
@@ -135,25 +162,17 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
             }
         };
 
-        let is_explicit_transfer = instruction.is_explicit_transfer();
-        self.lifted_locations.insert(
-            location,
-            (
-                is_explicit_transfer,
-                outgoing
-                    .iter()
-                    .map(|(target, transfer, frame)| JvmOutgoing {
-                        target: *target,
-                        transfer: JvmTransferCategory::from(transfer),
-                        frame: frame.clone(),
-                    })
-                    .collect(),
-            ),
-        );
-        Ok(outgoing
-            .into_iter()
-            .map(|(target, _, frame)| (target, frame))
-            .collect::<Vec<_>>())
+        Ok(JvmFlowOutput {
+            is_explicit_transfer: instruction.is_explicit_transfer(),
+            outgoing: outgoing
+                .into_iter()
+                .map(|(target, transfer, frame)| JvmOutgoing {
+                    target,
+                    transfer: JvmTransferCategory::from(&transfer),
+                    frame,
+                })
+                .collect(),
+        })
     }
 }
 
@@ -179,33 +198,35 @@ impl<'method> JvmFrameAnalyzer<'method> {
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             next_definition_id: 0,
-            lifted_locations: BTreeMap::new(),
             entry: Some((Location::entry(first_pc), initial_frame)),
         })
     }
 
     pub(super) fn run(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-        use crate::analysis::fixed_point::solve;
+        use crate::analysis::fixed_point::{FixedPointResult, solve_with_outputs};
 
-        let frames: BTreeMap<Location, JvmStackFrame> = solve(&mut self)?;
+        let result: FixedPointResult<
+            BTreeMap<Location, JvmStackFrame>,
+            BTreeMap<Location, JvmFlowOutput>,
+        > = solve_with_outputs(&mut self)?;
+        let (frames, mut outputs) = result.into_parts();
         let locations: BTreeMap<Location, AnalyzedLocation> = frames
             .into_iter()
             .map(|(location, incoming)| {
-                let (is_explicit_transfer, outgoing) = self
-                    .lifted_locations
+                let output = outputs
                     .remove(&location)
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?;
                 Ok((
                     location,
                     AnalyzedLocation {
                         incoming,
-                        is_explicit_transfer,
-                        outgoing,
+                        is_explicit_transfer: output.is_explicit_transfer,
+                        outgoing: output.outgoing,
                     },
                 ))
             })
             .collect::<Result<_, MokaIRBuildError>>()?;
-        if !self.lifted_locations.is_empty() {
+        if !outputs.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
         let (entry_location, initial_frame) =

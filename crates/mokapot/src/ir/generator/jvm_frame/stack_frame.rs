@@ -24,7 +24,7 @@ pub struct JvmStackFrame<V = OperandState> {
     operand_stack: Vec<Entry<V>>,
 }
 
-impl<V: Clone + PartialOrd> PartialOrd for JvmStackFrame<V> {
+impl<V: PartialOrd> PartialOrd for JvmStackFrame<V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use std::cmp::Ordering::Equal;
         if self.max_stack != other.max_stack {
@@ -43,32 +43,26 @@ impl<V: Clone + PartialOrd> PartialOrd for JvmStackFrame<V> {
     }
 }
 
-impl<V: Clone + JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
+impl<V: JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
     /// Joins two stack frames by merging their local variables and operand stacks.
     ///
     /// # Panics
     ///
-    /// This function panics if the local variables or operand stacks of the two stack frames have different lengths.
-    fn join(self, other: Self) -> Self {
-        let local_variables = self
+    /// This function panics if the stack capacity, local-variable count, or
+    /// operand-stack height differs between the two frames.
+    fn join_assign(&mut self, other: Self) -> bool {
+        assert_eq!(self.max_stack, other.max_stack);
+        let locals_changed = self
             .local_variables
-            .clone()
-            .into_iter()
+            .iter_mut()
             .zip_eq(other.local_variables)
-            .map(|(lhs, rhs)| lhs.join(rhs))
-            .collect();
-        let operand_stack = self
+            .fold(false, |changed, (lhs, rhs)| lhs.join_assign(rhs) || changed);
+        let stack_changed = self
             .operand_stack
-            .clone()
-            .into_iter()
+            .iter_mut()
             .zip_eq(other.operand_stack)
-            .map(|(lhs, rhs)| lhs.join(rhs))
-            .collect();
-        Self {
-            max_stack: self.max_stack,
-            local_variables,
-            operand_stack,
-        }
+            .fold(false, |changed, (lhs, rhs)| lhs.join_assign(rhs) || changed);
+        locals_changed || stack_changed
     }
 }
 

@@ -45,14 +45,20 @@ impl FrameOperand for OperandState {
 }
 
 impl crate::analysis::fixed_point::JoinSemiLattice for OperandState {
-    fn join(self, other: Self) -> Self {
-        if self == other {
-            return self;
+    fn join_assign(&mut self, other: Self) -> bool {
+        if *self == other {
+            return false;
         }
-        match (self, other) {
+        let joined = match (*self, other) {
             (Self::Invalid | Self::ReturnAddress(_), _)
             | (_, Self::Invalid | Self::ReturnAddress(_)) => Self::Invalid,
             _ => Self::Merged,
+        };
+        if *self == joined {
+            false
+        } else {
+            *self = joined;
+            true
         }
     }
 }

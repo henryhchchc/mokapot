@@ -28,16 +28,25 @@ impl<V: PartialOrd> PartialOrd for Entry<V> {
 }
 
 impl<V: JoinSemiLattice> JoinSemiLattice for Entry<V> {
-    fn join(self, other: Self) -> Self {
+    fn join_assign(&mut self, other: Self) -> bool {
         use Entry::{OutOfScope, Top, UninitializedLocal, Value};
         match (self, other) {
-            (Value(lhs), Value(rhs)) => Value(lhs.join(rhs)),
-            (Top, Top) => Top,
-            (UninitializedLocal, it) | (it, UninitializedLocal) => it,
+            (Value(lhs), Value(rhs)) => lhs.join_assign(rhs),
+            (Top, Top) | (UninitializedLocal, UninitializedLocal) | (OutOfScope, OutOfScope) => {
+                false
+            }
+            (slot @ UninitializedLocal, other) => {
+                *slot = other;
+                true
+            }
+            (_, UninitializedLocal) | (OutOfScope, _) => false,
             // NOTE: When `lhs` and `rhs` are different variants, it indicates that the local
             //       variable slot is reused. In this case, we do not merge it since it will be
             //       overridden afterwards.
-            (_, Top | OutOfScope) | (OutOfScope | Top, _) => OutOfScope,
+            (slot, Top | OutOfScope) | (slot @ Top, _) => {
+                *slot = OutOfScope;
+                true
+            }
         }
     }
 }
@@ -67,9 +76,10 @@ mod tests {
     }
 
     impl JoinSemiLattice for TestSet {
-        fn join(mut self, other: Self) -> Self {
+        fn join_assign(&mut self, other: Self) -> bool {
+            let old_len = self.0.len();
             self.0.extend(other.0);
-            self
+            self.0.len() != old_len
         }
     }
 
