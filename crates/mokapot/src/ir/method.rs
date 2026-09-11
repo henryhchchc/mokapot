@@ -12,17 +12,17 @@ use crate::{
 /// Represents a JVM method where the instructions have been converted to Moka IR.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
-    access_flags: method::AccessFlags,
-    name: String,
-    descriptor: MethodDescriptor,
-    owner: ClassRef,
-    entry_block: BlockId,
-    blocks: Vec<BasicBlock>,
-    source_map: SourceMap,
-    this_value: Option<ValueId>,
-    parameter_values: Vec<ValueId>,
-    caught_exceptions: BTreeMap<BlockId, ValueId>,
-    value_definitions: Vec<ValueDefinition>,
+    pub(super) access_flags: method::AccessFlags,
+    pub(super) name: String,
+    pub(super) descriptor: MethodDescriptor,
+    pub(super) owner: ClassRef,
+    pub(super) entry_block: BlockId,
+    pub(super) blocks: Vec<BasicBlock>,
+    pub(super) source_map: SourceMap,
+    pub(super) this_value: Option<ValueId>,
+    pub(super) parameter_values: Vec<ValueId>,
+    pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
+    pub(super) value_definitions: Vec<ValueDefinition>,
 }
 
 impl MokaIRMethod {
@@ -34,38 +34,6 @@ impl MokaIRMethod {
     /// control flow cannot be represented as valid Moka IR.
     pub fn from_method(method: &JvmMethod) -> Result<Self, MokaIRBuildError> {
         generator::generate(method)
-    }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the private constructor assembles independently owned method metadata and IR"
-    )]
-    pub(crate) const fn new(
-        access_flags: method::AccessFlags,
-        name: String,
-        descriptor: MethodDescriptor,
-        owner: ClassRef,
-        entry_block: BlockId,
-        blocks: Vec<BasicBlock>,
-        source_map: SourceMap,
-        this_value: Option<ValueId>,
-        parameter_values: Vec<ValueId>,
-        caught_exceptions: BTreeMap<BlockId, ValueId>,
-        value_definitions: Vec<ValueDefinition>,
-    ) -> Self {
-        Self {
-            access_flags,
-            name,
-            descriptor,
-            owner,
-            entry_block,
-            blocks,
-            source_map,
-            this_value,
-            parameter_values,
-            caught_exceptions,
-            value_definitions,
-        }
     }
 
     /// Returns the method access flags.

@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 
-use crate::{ir::ValueId, types::field_type::FieldType};
+use crate::{
+    ir::{TryMapValues, ValueId},
+    types::field_type::FieldType,
+};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -67,6 +70,52 @@ impl Operation<ValueId> {
             } => HashSet::from([*array_ref, *index, *value]),
             Self::Length { array_ref } => HashSet::from([*array_ref]),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
+    type Value = OP;
+    type Mapped = Operation<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Operation<OUT>, E> {
+        Ok(match self {
+            Self::New {
+                element_type,
+                length,
+            } => Operation::New {
+                element_type,
+                length: remap(length)?,
+            },
+            Self::NewMultiDim {
+                element_type,
+                dimensions,
+            } => Operation::NewMultiDim {
+                element_type,
+                dimensions: dimensions
+                    .into_iter()
+                    .map(&mut remap)
+                    .collect::<Result<_, _>>()?,
+            },
+            Self::Read { array_ref, index } => Operation::Read {
+                array_ref: remap(array_ref)?,
+                index: remap(index)?,
+            },
+            Self::Write {
+                array_ref,
+                index,
+                value,
+            } => Operation::Write {
+                array_ref: remap(array_ref)?,
+                index: remap(index)?,
+                value: remap(value)?,
+            },
+            Self::Length { array_ref } => Operation::Length {
+                array_ref: remap(array_ref)?,
+            },
+        })
     }
 }
 

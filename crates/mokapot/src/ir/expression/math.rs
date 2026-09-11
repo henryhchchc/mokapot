@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::ValueId;
+use crate::ir::{TryMapValues, ValueId};
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
@@ -71,6 +71,38 @@ impl Operation<ValueId> {
             | Self::FloatingPointComparison(a, b, _) => HashSet::from([*a, *b]),
             Self::Negate(a) | Self::Increment(a, _) => HashSet::from([*a]),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
+    type Value = OP;
+    type Mapped = Operation<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Operation<OUT>, E> {
+        Ok(match self {
+            Self::Add(lhs, rhs) => Operation::Add(remap(lhs)?, remap(rhs)?),
+            Self::Subtract(lhs, rhs) => Operation::Subtract(remap(lhs)?, remap(rhs)?),
+            Self::Multiply(lhs, rhs) => Operation::Multiply(remap(lhs)?, remap(rhs)?),
+            Self::Divide(lhs, rhs) => Operation::Divide(remap(lhs)?, remap(rhs)?),
+            Self::Remainder(lhs, rhs) => Operation::Remainder(remap(lhs)?, remap(rhs)?),
+            Self::Negate(operand) => Operation::Negate(remap(operand)?),
+            Self::Increment(operand, amount) => Operation::Increment(remap(operand)?, amount),
+            Self::ShiftLeft(lhs, rhs) => Operation::ShiftLeft(remap(lhs)?, remap(rhs)?),
+            Self::ShiftRight(lhs, rhs) => Operation::ShiftRight(remap(lhs)?, remap(rhs)?),
+            Self::LogicalShiftRight(lhs, rhs) => {
+                Operation::LogicalShiftRight(remap(lhs)?, remap(rhs)?)
+            }
+            Self::BitwiseAnd(lhs, rhs) => Operation::BitwiseAnd(remap(lhs)?, remap(rhs)?),
+            Self::BitwiseOr(lhs, rhs) => Operation::BitwiseOr(remap(lhs)?, remap(rhs)?),
+            Self::BitwiseXor(lhs, rhs) => Operation::BitwiseXor(remap(lhs)?, remap(rhs)?),
+            Self::LongComparison(lhs, rhs) => Operation::LongComparison(remap(lhs)?, remap(rhs)?),
+            Self::FloatingPointComparison(lhs, rhs, treatment) => {
+                Operation::FloatingPointComparison(remap(lhs)?, remap(rhs)?, treatment)
+            }
+        })
     }
 }
 

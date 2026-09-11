@@ -6,8 +6,9 @@
 //!    abstract frame facts.
 //! 2. [`block_formation`] consumes that graph and produces a block-level JVM graph.
 //! 3. [`ssa`] consumes the block graph, replays each block with exact values,
-//!    constructs predecessor-indexed phis, and simplifies them.
-//! 4. [`emission`] consumes the SSA graph, assigns public identities, and emits
+//!    constructs and simplifies predecessor-indexed phis, and lowers the result
+//!    to scalar operations and explicit terminators without JVM frame state.
+//! 4. [`emission`] consumes the lowered SSA graph, assigns public identities, and emits
 //!    the completed [`MokaIRMethod`].
 //!
 //! The [`lifting`] module contains JVM opcode semantics shared by frame analysis
@@ -33,7 +34,9 @@ pub use jvm_frame::ExecutionError;
 use self::identity::SsaValueId;
 use self::instruction::Instruction;
 use self::jvm_frame_analysis::operand_state::OperandState;
-use self::jvm_frame_analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer, JvmReplayPlan};
+use self::jvm_frame_analysis::{
+    AnalyzedJvmCfg, JvmFrameAnalyzer, JvmReplayPlan, JvmTransferCategory,
+};
 use self::lifting::frame_operand::FrameOperand;
 use self::ssa::value::SsaFrameValue;
 

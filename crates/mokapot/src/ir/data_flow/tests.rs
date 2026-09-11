@@ -29,106 +29,119 @@ const LOOP_PHI: InstructionId = InstructionId::new(3);
 const MERGE_TERMINATOR: InstructionId = InstructionId::new(4);
 const RETURN: InstructionId = InstructionId::new(5);
 
+fn merge_phi(id: InstructionId, value: ValueId, merge_value: ValueId) -> Phi {
+    Phi {
+        id,
+        value,
+        inputs: vec![
+            PhiInput {
+                predecessor: ENTRY,
+                value: THIS,
+            },
+            PhiInput {
+                predecessor: ALTERNATE,
+                value: THIS,
+            },
+            PhiInput {
+                predecessor: MERGE,
+                value: merge_value,
+            },
+        ],
+    }
+}
+
 fn method_with_phi_uses() -> MokaIRMethod {
     let condition: BooleanVariable<Predicate> = Condition::IsZero(PARAMETER).into();
-    let phi = Phi::new(
-        PHI,
-        MERGED,
-        vec![
-            PhiInput::new(ENTRY, THIS),
-            PhiInput::new(ALTERNATE, THIS),
-            PhiInput::new(MERGE, THIS),
-        ],
-    );
-    let loop_phi = Phi::new(
-        LOOP_PHI,
-        LOOP_CARRIED,
-        vec![
-            PhiInput::new(ENTRY, THIS),
-            PhiInput::new(ALTERNATE, THIS),
-            PhiInput::new(MERGE, LOOP_CARRIED),
-        ],
-    );
-    let entry = BasicBlock::new(
-        ENTRY,
-        vec![],
-        vec![],
-        Terminator::new(
-            BRANCH,
-            TerminatorKind::Branch,
-            vec![
-                Successor::new(
-                    EdgeId::new(0),
-                    MERGE,
-                    ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-                ),
-                Successor::new(
-                    EdgeId::new(1),
-                    ALTERNATE,
-                    ControlTransfer::Conditional(BranchGuard::of(!condition)),
-                ),
+    let phi = merge_phi(PHI, MERGED, THIS);
+    let loop_phi = merge_phi(LOOP_PHI, LOOP_CARRIED, LOOP_CARRIED);
+    let entry = BasicBlock {
+        id: ENTRY,
+        phis: vec![],
+        operations: vec![],
+        terminator: Terminator {
+            id: BRANCH,
+            kind: TerminatorKind::Branch,
+            successors: vec![
+                Successor {
+                    id: EdgeId::new(0),
+                    target: MERGE,
+                    transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
+                },
+                Successor {
+                    id: EdgeId::new(1),
+                    target: ALTERNATE,
+                    transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
+                },
             ],
-        ),
-    );
-    let alternate = BasicBlock::new(
-        ALTERNATE,
-        vec![],
-        vec![],
-        Terminator::new(
-            InstructionId::new(1),
-            TerminatorKind::Goto,
-            vec![Successor::new(
-                EdgeId::new(2),
-                MERGE,
-                ControlTransfer::Unconditional,
-            )],
-        ),
-    );
-    let merge = BasicBlock::new(
-        MERGE,
-        vec![phi, loop_phi],
-        vec![],
-        Terminator::new(MERGE_TERMINATOR, TerminatorKind::Branch, {
-            let condition: BooleanVariable<Predicate> = Condition::IsZero(MERGED).into();
-            vec![
-                Successor::new(
-                    EdgeId::new(3),
-                    HANDLER,
-                    ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-                ),
-                Successor::new(
-                    EdgeId::new(4),
-                    MERGE,
-                    ControlTransfer::Conditional(BranchGuard::of(!condition)),
-                ),
-            ]
-        }),
-    );
-    let handler = BasicBlock::new(
-        HANDLER,
-        vec![],
-        vec![],
-        Terminator::new(RETURN, TerminatorKind::Return(Some(PARAMETER)), vec![]),
-    );
-    MokaIRMethod::new(
-        method::AccessFlags::empty(),
-        "test".to_owned(),
-        "(I)I".parse().unwrap(),
-        "org/mokapot/Test".parse().unwrap(),
-        ENTRY,
-        vec![entry, alternate, merge, handler],
-        SourceMap::default(),
-        Some(THIS),
-        vec![PARAMETER],
-        BTreeMap::from([(HANDLER, CAUGHT)]),
-        vec![
+        },
+    };
+    let alternate = BasicBlock {
+        id: ALTERNATE,
+        phis: vec![],
+        operations: vec![],
+        terminator: Terminator {
+            id: InstructionId::new(1),
+            kind: TerminatorKind::Goto,
+            successors: vec![Successor {
+                id: EdgeId::new(2),
+                target: MERGE,
+                transfer: ControlTransfer::Unconditional,
+            }],
+        },
+    };
+    let merge = BasicBlock {
+        id: MERGE,
+        phis: vec![phi, loop_phi],
+        operations: vec![],
+        terminator: Terminator {
+            id: MERGE_TERMINATOR,
+            kind: TerminatorKind::Branch,
+            successors: {
+                let condition: BooleanVariable<Predicate> = Condition::IsZero(MERGED).into();
+                vec![
+                    Successor {
+                        id: EdgeId::new(3),
+                        target: HANDLER,
+                        transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
+                    },
+                    Successor {
+                        id: EdgeId::new(4),
+                        target: MERGE,
+                        transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
+                    },
+                ]
+            },
+        },
+    };
+    let handler = BasicBlock {
+        id: HANDLER,
+        phis: vec![],
+        operations: vec![],
+        terminator: Terminator {
+            id: RETURN,
+            kind: TerminatorKind::Return(Some(PARAMETER)),
+            successors: vec![],
+        },
+    };
+    MokaIRMethod {
+        access_flags: method::AccessFlags::empty(),
+        name: "test".to_owned(),
+        descriptor: "(I)I".parse().unwrap(),
+        owner: "org/mokapot/Test".parse().unwrap(),
+        entry_block: ENTRY,
+        blocks: vec![entry, alternate, merge, handler],
+        source_map: SourceMap::default(),
+        this_value: Some(THIS),
+        parameter_values: vec![PARAMETER],
+        caught_exceptions: BTreeMap::from([(HANDLER, CAUGHT)]),
+        value_definitions: vec![
             ValueDefinition::This,
             ValueDefinition::Parameter(0),
             ValueDefinition::CaughtException(HANDLER),
             ValueDefinition::Instruction(PHI),
             ValueDefinition::Instruction(LOOP_PHI),
         ],
-    )
+    }
 }
 
 #[test]

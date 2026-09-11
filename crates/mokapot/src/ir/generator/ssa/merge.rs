@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    MokaIRBuildError, OperandState, SsaBlock, SsaFrameValue, SsaValueId,
+    MokaIRBuildError, OperandState, ReplayedBlock, SsaFrameValue, SsaValueId,
     jvm_frame::{Entry, JvmStackFrame},
 };
 use crate::ir::BlockId;
@@ -9,9 +9,9 @@ use crate::ir::BlockId;
 type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 pub(super) fn collect_phi_candidates(
-    blocks: &[SsaBlock],
+    blocks: &[ReplayedBlock],
     phi_blocks: &BTreeMap<SsaValueId, BlockId>,
-    preheader: Option<(BlockId, &JvmStackFrame<SsaFrameValue>)>,
+    preheader: Option<(BlockId, BlockId, &JvmStackFrame<SsaFrameValue>)>,
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     for target in blocks {
@@ -25,10 +25,10 @@ pub(super) fn collect_phi_candidates(
                     .map(move |arm| (source.id, &arm.frame))
             })
             .collect::<Vec<_>>();
-        if let Some((preheader_target, frame)) = &preheader
+        if let Some((preheader_target, preheader_id, frame)) = &preheader
             && *preheader_target == target.id
         {
-            incoming.push((BlockId::new(0), frame));
+            incoming.push((*preheader_id, frame));
         }
 
         let predecessor_count = incoming
@@ -156,4 +156,40 @@ pub(super) fn unavailable_value_slots(
         unavailable(merged.local_variables(), false),
         unavailable(merged.operand_stack(), true),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::generator::{SsaFrameValue, ssa::model::ReplayedBlock};
+
+    #[test]
+    fn preheader_uses_its_allocated_predecessor_id() {
+        let descriptor = "(I)V".parse().expect("valid descriptor");
+        let result = SsaValueId::new(10);
+        let incoming = SsaValueId::new(11);
+        let target = BlockId::new(4);
+        let preheader = BlockId::new(9);
+        let target_frame =
+            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[SsaFrameValue::Value(result)])
+                .expect("frame fits descriptor");
+        let preheader_frame =
+            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[SsaFrameValue::Value(incoming)])
+                .expect("frame fits descriptor");
+        let blocks = vec![ReplayedBlock {
+            id: target,
+            entry_frame: target_frame,
+            instructions: Vec::new(),
+            arms: Vec::new(),
+        }];
+
+        let candidates = collect_phi_candidates(
+            &blocks,
+            &BTreeMap::from([(result, target)]),
+            Some((target, preheader, &preheader_frame)),
+        )
+        .expect("preheader provides the phi input");
+
+        assert_eq!(candidates[&result], vec![(preheader, incoming)]);
+    }
 }

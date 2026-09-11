@@ -18,15 +18,11 @@ pub enum ValueDefinition {
 /// One incoming value of a phi node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PhiInput {
-    predecessor: BlockId,
-    value: ValueId,
+    pub(super) predecessor: BlockId,
+    pub(super) value: ValueId,
 }
 
 impl PhiInput {
-    pub(crate) const fn new(predecessor: BlockId, value: ValueId) -> Self {
-        Self { predecessor, value }
-    }
-
     /// Returns the predecessor selecting this input.
     #[must_use]
     pub const fn predecessor(&self) -> BlockId {
@@ -43,16 +39,12 @@ impl PhiInput {
 /// A value merge at basic-block entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    id: InstructionId,
-    value: ValueId,
-    inputs: Vec<PhiInput>,
+    pub(super) id: InstructionId,
+    pub(super) value: ValueId,
+    pub(super) inputs: Vec<PhiInput>,
 }
 
 impl Phi {
-    pub(crate) const fn new(id: InstructionId, value: ValueId, inputs: Vec<PhiInput>) -> Self {
-        Self { id, value, inputs }
-    }
-
     /// Returns this phi's method-local instruction identity.
     #[must_use]
     pub const fn id(&self) -> InstructionId {
@@ -84,8 +76,15 @@ mod tests {
 
     #[test]
     fn phi_exposes_predecessor_inputs() {
-        let input = PhiInput::new(BlockId::new(1), ValueId::new(2));
-        let phi = Phi::new(InstructionId::new(3), ValueId::new(4), vec![input]);
+        let input = PhiInput {
+            predecessor: BlockId::new(1),
+            value: ValueId::new(2),
+        };
+        let phi = Phi {
+            id: InstructionId::new(3),
+            value: ValueId::new(4),
+            inputs: vec![input],
+        };
         assert_eq!(phi.id(), InstructionId::new(3));
         assert_eq!(phi.value(), ValueId::new(4));
         assert_eq!(phi.inputs(), &[input]);

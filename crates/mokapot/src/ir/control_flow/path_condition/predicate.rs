@@ -1,6 +1,6 @@
 use crate::{
     ir::{
-        self, ValueId,
+        self, TryMapValues, ValueId,
         expression::{Condition, Predicate},
     },
     jvm::ConstantValue,
@@ -86,6 +86,21 @@ mod model {
 }
 
 pub use model::Value;
+
+impl<OP, OUT> TryMapValues<OUT> for Value<OP> {
+    type Value = OP;
+    type Mapped = Value<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Value<OUT>, E> {
+        match self {
+            Self::Variable(value) => remap(value).map(Value::Variable),
+            Self::Constant(value) => Ok(Value::Constant(value)),
+        }
+    }
+}
 
 impl Predicate {
     pub(crate) fn uses(&self) -> std::collections::HashSet<ValueId> {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::ValueId;
+use crate::ir::{TryMapValues, ValueId};
 
 /// A condition that can be used in a conditional jump.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::Display)]
@@ -69,6 +69,35 @@ impl Condition {
             | Self::IsNonNegative(a)
             | Self::IsNonPositive(a) => HashSet::from([*a]),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Condition<OP> {
+    type Value = OP;
+    type Mapped = Condition<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Condition<OUT>, E> {
+        Ok(match self {
+            Self::Equal(lhs, rhs) => Condition::Equal(remap(lhs)?, remap(rhs)?),
+            Self::NotEqual(lhs, rhs) => Condition::NotEqual(remap(lhs)?, remap(rhs)?),
+            Self::LessThan(lhs, rhs) => Condition::LessThan(remap(lhs)?, remap(rhs)?),
+            Self::LessThanOrEqual(lhs, rhs) => Condition::LessThanOrEqual(remap(lhs)?, remap(rhs)?),
+            Self::GreaterThan(lhs, rhs) => Condition::GreaterThan(remap(lhs)?, remap(rhs)?),
+            Self::GreaterThanOrEqual(lhs, rhs) => {
+                Condition::GreaterThanOrEqual(remap(lhs)?, remap(rhs)?)
+            }
+            Self::IsNull(operand) => Condition::IsNull(remap(operand)?),
+            Self::IsNotNull(operand) => Condition::IsNotNull(remap(operand)?),
+            Self::IsZero(operand) => Condition::IsZero(remap(operand)?),
+            Self::IsNonZero(operand) => Condition::IsNonZero(remap(operand)?),
+            Self::IsPositive(operand) => Condition::IsPositive(remap(operand)?),
+            Self::IsNegative(operand) => Condition::IsNegative(remap(operand)?),
+            Self::IsNonNegative(operand) => Condition::IsNonNegative(remap(operand)?),
+            Self::IsNonPositive(operand) => Condition::IsNonPositive(remap(operand)?),
+        })
     }
 }
 

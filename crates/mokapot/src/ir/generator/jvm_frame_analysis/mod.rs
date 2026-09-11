@@ -28,8 +28,38 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
 /// One outgoing edge and the abstract frame reaching its target.
 pub(in crate::ir::generator) struct JvmOutgoing {
     pub target: Location,
-    pub transfer: ControlTransfer<OperandState>,
+    pub transfer: JvmTransferCategory,
     pub frame: JvmStackFrame,
+}
+
+/// The control-flow category of an abstract outgoing JVM edge.
+///
+/// Frame analysis needs only the category; exact guards are replayed while
+/// constructing scalar SSA.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::ir::generator) enum JvmTransferCategory {
+    /// An ordinary unguarded transfer.
+    Unconditional,
+    /// A guarded branch transfer.
+    Conditional,
+    /// The normal outcome of a fallible instruction.
+    Normal,
+    /// An outcome caught by an exception-table entry.
+    Exception,
+    /// An exceptional outcome leaving the method.
+    Unwind,
+}
+
+impl From<&ControlTransfer<OperandState>> for JvmTransferCategory {
+    fn from(transfer: &ControlTransfer<OperandState>) -> Self {
+        match transfer {
+            ControlTransfer::Unconditional => Self::Unconditional,
+            ControlTransfer::Conditional(_) => Self::Conditional,
+            ControlTransfer::Normal => Self::Normal,
+            ControlTransfer::Exception(_) => Self::Exception,
+            ControlTransfer::Unwind => Self::Unwind,
+        }
+    }
 }
 
 /// Completed abstract-execution facts for one reachable JVM location.
@@ -114,7 +144,7 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
                     .iter()
                     .map(|(target, transfer, frame)| JvmOutgoing {
                         target: *target,
-                        transfer: transfer.clone(),
+                        transfer: JvmTransferCategory::from(transfer),
                         frame: frame.clone(),
                     })
                     .collect(),
