@@ -34,6 +34,8 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
 
     type Err = Infallible;
 
+    type Output = Vec<(Self::Location, Self::Fact)>;
+
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         [(self.cfg.entry_block(), PathConditionFact::one(self.budget))]
     }
@@ -42,7 +44,7 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
+    ) -> Result<Self::Output, Self::Err> {
         Ok(self
             .cfg
             .outgoing_edges(*location)
@@ -125,9 +127,14 @@ impl<P> JoinSemiLattice for PathConditionFact<P>
 where
     P: Hash + Eq + Clone,
 {
-    fn join(self, other: Self) -> Self {
+    fn join_assign(&mut self, other: Self) -> bool {
         debug_assert_eq!(self.budget, other.budget);
-        Self::new(self.inner | other.inner, self.budget)
+        if other <= *self {
+            return false;
+        }
+        let inner = std::mem::replace(&mut self.inner, PathCondition::zero());
+        *self = Self::new(inner | other.inner, self.budget);
+        true
     }
 }
 

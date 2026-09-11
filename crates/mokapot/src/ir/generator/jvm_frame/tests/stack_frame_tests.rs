@@ -1,3 +1,4 @@
+use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::ir::generator::{
     ExecutionError, OperandState, SsaValueId,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
@@ -12,6 +13,16 @@ fn args_locals_checking() {
     assert!(too_small_locals.is_err());
     let correct = JvmStackFrame::new(false, &desc, 4, 2);
     assert!(correct.is_ok());
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn joining_frames_with_different_stack_capacities_panics() {
+    let desc = "()V".parse().expect("valid descriptor");
+    let mut lhs = JvmStackFrame::new(true, &desc, 0, 1).expect("valid frame");
+    let rhs = JvmStackFrame::new(true, &desc, 0, 2).expect("valid frame");
+
+    lhs.join_assign(rhs);
 }
 
 proptest! {
