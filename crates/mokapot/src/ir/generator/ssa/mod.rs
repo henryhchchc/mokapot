@@ -1,6 +1,7 @@
 //! Constructs and simplifies scalar SSA from planned basic blocks.
 
 mod construction;
+mod finalization;
 mod merge;
 mod model;
 mod simplify;
@@ -9,26 +10,23 @@ pub(in crate::ir::generator) mod value;
 use super::block_formation::{BlockEntry, JvmBlockGraph};
 use super::{
     BTreeMap, BlockId, ControlTransfer, FrameOperand, Instruction, JvmReplayPlan, JvmStackFrame,
-    Location, Method, MokaIRBuildError, OperandState, ReturnAddress, SsaFrameValue, SsaValueId,
-    jvm_frame, method,
+    Location, Method, MokaIRBuildError, OperandState, OperationKind, ReturnAddress, SsaFrameValue,
+    SsaValueId, TerminatorKind, jvm_frame, method,
 };
-
 use merge::{collect_phi_candidates, unavailable_value_slots};
-use model::{SsaArm, SsaBlock, SsaEntryFrames, SsaPhi, next_ssa_value};
+pub(in crate::ir::generator) use model::SsaBlock;
+use model::{ReplayedArm, ReplayedBlock, SsaEntryFrames, SsaPhi, SsaSuccessor, next_ssa_value};
 use simplify::simplify_phis;
 
-/// The internal SSA representation consumed by `MokaIR` emission.
+/// Fully lowered scalar SSA consumed by final identity allocation and emission.
 pub(super) struct SsaGraph {
-    pub entry: BlockEntry,
-    pub caught_exceptions: BTreeMap<BlockId, SsaValueId>,
+    pub entry: BlockId,
     pub blocks: Vec<SsaBlock>,
-    pub phis: Vec<SsaPhi>,
-    pub value_aliases: BTreeMap<SsaValueId, SsaValueId>,
     pub this_value: Option<SsaValueId>,
     pub parameter_values: Vec<SsaValueId>,
 }
 
-/// Constructs exact SSA frames, blocks, and phis from a block-level JVM graph.
+/// Replays JVM blocks, simplifies phis, and discards JVM construction state.
 pub(super) fn construct(
     method: &Method,
     graph: JvmBlockGraph,
@@ -40,26 +38,21 @@ pub(super) fn construct(
         location_to_block,
         replay,
     } = graph;
-    let bytecode_entry = entry.bytecode_entry();
-    let has_entry_preheader = matches!(entry, BlockEntry::Preheader { .. });
     let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
     let mut next_value = replay
         .max_value_index()
         .unwrap_or(0)
         .checked_add(1)
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let this_value = if method.access_flags.contains(method::AccessFlags::STATIC) {
-        None
-    } else {
-        Some(next_ssa_value(&mut next_value)?)
-    };
+    let this_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
+        .then(|| next_ssa_value(&mut next_value))
+        .transpose()?;
     let parameter_values = method
         .descriptor
         .parameters_types
         .iter()
         .map(|_| next_ssa_value(&mut next_value))
         .collect::<Result<Vec<_>, _>>()?;
-    let frame_this = this_value.map(SsaFrameValue::Value);
     let frame_parameters = parameter_values
         .iter()
         .copied()
@@ -69,20 +62,9 @@ pub(super) fn construct(
         &method.descriptor,
         body.max_locals,
         body.max_stack,
-        frame_this,
+        this_value.map(SsaFrameValue::Value),
         &frame_parameters,
     )?;
-
-    let caught_exceptions = jvm_blocks
-        .iter()
-        .filter_map(|block| {
-            block
-                .locations
-                .first()
-                .and_then(|&leader| replay.caught_exception(leader))
-                .map(|value| (block.id, value))
-        })
-        .collect();
     let (entry_frames, phi_blocks) = construction::entry_frames(
         &jvm_blocks,
         entry,
@@ -99,35 +81,20 @@ pub(super) fn construct(
         entry_frames,
         &location_to_block,
     )?;
-    let candidates = collect_phi_candidates(
-        &blocks,
-        &phi_blocks,
-        has_entry_preheader.then_some((bytecode_entry, &initial_frame)),
-    )?;
-    let simplified_phis =
+    let preheader = match entry {
+        BlockEntry::Direct(_) => None,
+        BlockEntry::Preheader {
+            synthetic,
+            bytecode,
+        } => Some((bytecode, synthetic, &initial_frame)),
+    };
+    let candidates = collect_phi_candidates(&blocks, &phi_blocks, preheader)?;
+    let simplified =
         simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
-    let phis = simplified_phis
-        .candidates
-        .into_iter()
-        .map(|(value, inputs)| {
-            let block = phi_blocks
-                .get(&value)
-                .copied()
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            Ok(SsaPhi {
-                block,
-                value,
-                inputs,
-            })
-        })
-        .collect::<Result<Vec<_>, MokaIRBuildError>>()?;
-
+    let blocks = finalization::finalize(entry, &replay, blocks, &phi_blocks, simplified)?;
     Ok(SsaGraph {
-        caught_exceptions,
-        entry,
+        entry: entry.method_entry(),
         blocks,
-        phis,
-        value_aliases: simplified_phis.substitutions,
         this_value,
         parameter_values,
     })

@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{ir::ValueId, jvm::references::FieldRef};
+use crate::{
+    ir::{TryMapValues, ValueId},
+    jvm::references::FieldRef,
+};
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -51,6 +54,37 @@ impl Access<ValueId> {
             } => HashSet::from([*object_ref, *value]),
             Self::ReadStatic { .. } => HashSet::default(),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Access<OP> {
+    type Value = OP;
+    type Mapped = Access<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Access<OUT>, E> {
+        Ok(match self {
+            Self::ReadStatic { field } => Access::ReadStatic { field },
+            Self::WriteStatic { field, value } => Access::WriteStatic {
+                field,
+                value: remap(value)?,
+            },
+            Self::ReadInstance { object_ref, field } => Access::ReadInstance {
+                object_ref: remap(object_ref)?,
+                field,
+            },
+            Self::WriteInstance {
+                object_ref,
+                field,
+                value,
+            } => Access::WriteInstance {
+                object_ref: remap(object_ref)?,
+                field,
+                value: remap(value)?,
+            },
+        })
     }
 }
 

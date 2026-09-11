@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{ir::ValueId, types::reference_type::ReferenceType};
+use crate::{
+    ir::{TryMapValues, ValueId},
+    types::reference_type::ReferenceType,
+};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -80,6 +83,36 @@ impl Operation<ValueId> {
             | Self::CheckCast(arg, _)
             | Self::InstanceOf(arg, _) => HashSet::from([*arg]),
         }
+    }
+}
+
+impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
+    type Value = OP;
+    type Mapped = Operation<OUT>;
+
+    fn try_map_values<E>(
+        self,
+        mut remap: impl FnMut(OP) -> Result<OUT, E>,
+    ) -> Result<Operation<OUT>, E> {
+        Ok(match self {
+            Self::Int2Long(value) => Operation::Int2Long(remap(value)?),
+            Self::Int2Float(value) => Operation::Int2Float(remap(value)?),
+            Self::Int2Double(value) => Operation::Int2Double(remap(value)?),
+            Self::Long2Int(value) => Operation::Long2Int(remap(value)?),
+            Self::Long2Float(value) => Operation::Long2Float(remap(value)?),
+            Self::Long2Double(value) => Operation::Long2Double(remap(value)?),
+            Self::Float2Int(value) => Operation::Float2Int(remap(value)?),
+            Self::Float2Long(value) => Operation::Float2Long(remap(value)?),
+            Self::Float2Double(value) => Operation::Float2Double(remap(value)?),
+            Self::Double2Int(value) => Operation::Double2Int(remap(value)?),
+            Self::Double2Long(value) => Operation::Double2Long(remap(value)?),
+            Self::Double2Float(value) => Operation::Double2Float(remap(value)?),
+            Self::Int2Byte(value) => Operation::Int2Byte(remap(value)?),
+            Self::Int2Char(value) => Operation::Int2Char(remap(value)?),
+            Self::Int2Short(value) => Operation::Int2Short(remap(value)?),
+            Self::CheckCast(value, target) => Operation::CheckCast(remap(value)?, target),
+            Self::InstanceOf(value, target) => Operation::InstanceOf(remap(value)?, target),
+        })
     }
 }
 

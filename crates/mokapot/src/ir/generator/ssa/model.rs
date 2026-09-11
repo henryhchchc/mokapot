@@ -2,27 +2,44 @@ use std::collections::BTreeMap;
 
 use super::{
     BlockId, ControlTransfer, Instruction, JvmStackFrame, Location, MokaIRBuildError,
-    SsaFrameValue, SsaValueId,
+    OperationKind, SsaFrameValue, SsaValueId, TerminatorKind,
 };
+use crate::jvm::code::ProgramCounter;
 
 #[derive(Debug, Clone)]
-pub(in crate::ir::generator) struct SsaArm {
-    pub(in crate::ir::generator) target: BlockId,
-    pub(in crate::ir::generator) transfer: ControlTransfer<SsaFrameValue>,
-    pub(in crate::ir::generator) frame: JvmStackFrame<SsaFrameValue>,
+pub(super) struct ReplayedArm {
+    pub(super) target: BlockId,
+    pub(super) transfer: ControlTransfer<SsaFrameValue>,
+    pub(super) frame: JvmStackFrame<SsaFrameValue>,
 }
 
 #[derive(Debug, Clone)]
+pub(super) struct ReplayedBlock {
+    pub(super) id: BlockId,
+    pub(super) entry_frame: JvmStackFrame<SsaFrameValue>,
+    pub(super) instructions: Vec<(Location, Instruction<SsaFrameValue>)>,
+    pub(super) arms: Vec<ReplayedArm>,
+}
+
+/// One outgoing arm from an SSA block.
+pub(in crate::ir::generator) struct SsaSuccessor {
+    pub target: BlockId,
+    pub transfer: ControlTransfer<SsaValueId>,
+}
+
+/// A scalar SSA block ready for final IR emission.
 pub(in crate::ir::generator) struct SsaBlock {
     pub id: BlockId,
-    pub(in crate::ir::generator) entry_frame: JvmStackFrame<SsaFrameValue>,
-    pub(in crate::ir::generator) instructions: Vec<(Location, Instruction<SsaFrameValue>)>,
-    pub(in crate::ir::generator) arms: Vec<SsaArm>,
+    pub caught_exception: Option<SsaValueId>,
+    pub phis: Vec<SsaPhi>,
+    pub operations: Vec<(ProgramCounter, OperationKind<SsaValueId>)>,
+    pub terminator: TerminatorKind<SsaValueId>,
+    pub terminator_source: Option<ProgramCounter>,
+    pub successors: Vec<SsaSuccessor>,
 }
 
 /// A retained SSA phi and its predecessor-indexed inputs.
 pub(in crate::ir::generator) struct SsaPhi {
-    pub block: BlockId,
     pub value: SsaValueId,
     pub inputs: Vec<(BlockId, SsaValueId)>,
 }

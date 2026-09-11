@@ -113,6 +113,28 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         .find(|instruction| instruction.id() == backedge_definition)
         .unwrap();
     assert!(definition.uses().contains(&phi.value()));
+
+    // The synthetic entry precedes the loop phi and its forward-referenced input.
+    assert_eq!(preheader.terminator().id(), InstructionId::new(0));
+    assert_eq!(phi.id(), InstructionId::new(1));
+    assert_eq!(phi.value(), ValueId::new(1));
+    assert_eq!(header.terminator().id(), InstructionId::new(2));
+    assert_eq!(backedge_definition, InstructionId::new(4));
+    assert_eq!(backedge_value, ValueId::new(3));
+    assert_eq!(ir.parameter_values(), &[ValueId::new(0)]);
+    assert_eq!(
+        ir.source_map()
+            .instructions_at(4.into())
+            .collect::<Vec<_>>(),
+        vec![backedge_definition]
+    );
+    assert_eq!(
+        ir.blocks()
+            .flat_map(|block| block.terminator().successors())
+            .map(Successor::id)
+            .collect::<Vec<_>>(),
+        (0..4).map(EdgeId::new).collect::<Vec<_>>()
+    );
 }
 
 #[test]

@@ -24,3 +24,27 @@ pub use operation::{Operation, OperationKind};
 pub use phi::{Phi, PhiInput, ValueDefinition};
 pub use source_map::SourceMap;
 pub use terminator::{Successor, Terminator, TerminatorKind};
+
+/// Maps all IR values contained by a structure into a corresponding structure.
+///
+/// Implementations preserve non-value data and stop at the first mapping
+/// error. When an implementation contains values in an unordered collection,
+/// traversal follows that collection's iteration order; mappers must map equal
+/// values consistently.
+pub trait TryMapValues<OUT> {
+    /// The type of IR values contained by this structure.
+    type Value;
+
+    /// The corresponding structure after its values have been mapped to `OUT`.
+    type Mapped;
+
+    /// Maps contained values, stopping at the first mapping error.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first error from `remap`.
+    fn try_map_values<E>(
+        self,
+        remap: impl FnMut(Self::Value) -> Result<OUT, E>,
+    ) -> Result<Self::Mapped, E>;
+}

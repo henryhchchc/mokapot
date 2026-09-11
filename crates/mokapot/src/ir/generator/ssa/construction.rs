@@ -1,8 +1,8 @@
 use super::super::block_formation::{BlockEntry, JvmBlock};
 use super::{
     BTreeMap, BlockId, Instruction, JvmReplayPlan, JvmStackFrame, Location, Method,
-    MokaIRBuildError, OperandState, ReturnAddress, SsaArm, SsaBlock, SsaEntryFrames, SsaFrameValue,
-    SsaValueId, next_ssa_value, unavailable_value_slots,
+    MokaIRBuildError, OperandState, ReplayedArm, ReplayedBlock, ReturnAddress, SsaEntryFrames,
+    SsaFrameValue, SsaValueId, next_ssa_value, unavailable_value_slots,
 };
 use crate::ir::generator::lifting::{
     fallibility::FallibilityContext,
@@ -85,7 +85,7 @@ pub(super) fn construct_blocks(
     jvm_blocks: &[JvmBlock],
     mut entry_frames: BTreeMap<BlockId, JvmStackFrame<SsaFrameValue>>,
     location_to_block: &BTreeMap<Location, BlockId>,
-) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
+) -> Result<Vec<ReplayedBlock>, MokaIRBuildError> {
     let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
     let mut replay = SsaReplay::new(body, replay_plan);
     let fallibility = FallibilityContext::for_method(method);
@@ -131,7 +131,7 @@ pub(super) fn construct_blocks(
                     location_to_block
                         .get(&target)
                         .copied()
-                        .map(|target| SsaArm {
+                        .map(|target| ReplayedArm {
                             target,
                             transfer,
                             frame,
@@ -144,7 +144,7 @@ pub(super) fn construct_blocks(
             }
             instructions.push((location, instruction));
         }
-        blocks.push(SsaBlock {
+        blocks.push(ReplayedBlock {
             id: block.id,
             entry_frame,
             instructions,
