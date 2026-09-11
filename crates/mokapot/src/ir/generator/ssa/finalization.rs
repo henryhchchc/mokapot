@@ -14,7 +14,14 @@ pub(super) fn finalize(
     phi_blocks: &BTreeMap<SsaValueId, BlockId>,
     simplified: SimplifiedPhis,
 ) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
-    let canonical = |value| canonical_value(value, &simplified.substitutions);
+    // `simplify_phis` returns substitutions whose targets are already canonical.
+    let canonical = |value| {
+        simplified
+            .substitutions
+            .get(&value)
+            .copied()
+            .unwrap_or(value)
+    };
     let mut phis_by_block = BTreeMap::<BlockId, Vec<SsaPhi>>::new();
     for (value, inputs) in simplified.candidates {
         let block = phi_blocks
@@ -23,10 +30,10 @@ pub(super) fn finalize(
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let inputs = inputs
             .into_iter()
-            .map(|(predecessor, value)| canonical(value).map(|value| (predecessor, value)))
-            .collect::<Result<_, _>>()?;
+            .map(|(predecessor, value)| (predecessor, canonical(value)))
+            .collect();
         phis_by_block.entry(block).or_default().push(SsaPhi {
-            value: canonical(value)?,
+            value: canonical(value),
             inputs,
         });
     }
@@ -70,14 +77,13 @@ fn finalize_block(
     block: ReplayedBlock,
     replay: &JvmReplayPlan,
     phis: Vec<SsaPhi>,
-    canonical: &impl Fn(SsaValueId) -> Result<SsaValueId, MokaIRBuildError>,
+    canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<SsaBlock, MokaIRBuildError> {
     let caught_exception = block
         .instructions
         .first()
         .and_then(|(location, _)| replay.caught_exception(*location))
-        .map(canonical)
-        .transpose()?;
+        .map(canonical);
     let (last_location, last_instruction) = block
         .instructions
         .last()
@@ -91,7 +97,7 @@ fn finalize_block(
     for (location, instruction) in block.instructions {
         let kind = match instruction {
             Instruction::Definition { value, expr } => Some(OperationKind::Definition {
-                value: canonical(value)?,
+                value: canonical(value),
                 expr: expr.try_map_values(|value| remap_operand(value, canonical))?,
             }),
             Instruction::Effect(expr) => Some(OperationKind::Effect {
@@ -135,7 +141,7 @@ fn finalize_block(
 fn classify_terminator(
     instruction: &Instruction<SsaFrameValue>,
     arms: &[ReplayedArm],
-    canonical: &impl Fn(SsaValueId) -> Result<SsaValueId, MokaIRBuildError>,
+    canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<TerminatorKind<SsaValueId>, MokaIRBuildError> {
     Ok(match instruction {
         Instruction::Unwind => TerminatorKind::Unwind,
@@ -172,22 +178,10 @@ fn classify_terminator(
 }
 fn remap_operand(
     operand: SsaFrameValue,
-    canonical: &impl Fn(SsaValueId) -> Result<SsaValueId, MokaIRBuildError>,
+    canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<SsaValueId, MokaIRBuildError> {
     match operand {
-        SsaFrameValue::Value(value) => canonical(value),
+        SsaFrameValue::Value(value) => Ok(canonical(value)),
         SsaFrameValue::ReturnAddress(_) => Err(MokaIRBuildError::MalformedControlFlow),
     }
-}
-fn canonical_value(
-    mut value: SsaValueId,
-    aliases: &BTreeMap<SsaValueId, SsaValueId>,
-) -> Result<SsaValueId, MokaIRBuildError> {
-    for _ in 0..=aliases.len() {
-        let Some(&next) = aliases.get(&value) else {
-            return Ok(value);
-        };
-        value = next;
-    }
-    Err(MokaIRBuildError::MalformedControlFlow)
 }
