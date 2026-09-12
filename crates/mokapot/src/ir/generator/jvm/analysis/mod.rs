@@ -2,7 +2,6 @@
 
 mod analyzer;
 mod fact;
-mod semantics;
 
 pub(in crate::ir::generator) use analyzer::JvmFrameAnalyzer;
 pub(in crate::ir::generator) use fact::{

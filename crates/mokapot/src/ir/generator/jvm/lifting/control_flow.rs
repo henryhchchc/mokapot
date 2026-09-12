@@ -4,9 +4,10 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
+                analysis::JvmFrameAnalyzer,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::Instruction,
-                lifting::{frame_operand::FrameOperand, semantics::JvmSemantics},
+                lifting::frame_operand::FrameOperand,
                 normalization::Location,
             },
         },
@@ -42,7 +43,7 @@ pub(super) fn cmp_jump<OP: Clone>(
 }
 
 pub(super) fn lift<OP: FrameOperand>(
-    semantics: &mut impl JvmSemantics,
+    semantics: &mut JvmFrameAnalyzer<'_>,
     jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,

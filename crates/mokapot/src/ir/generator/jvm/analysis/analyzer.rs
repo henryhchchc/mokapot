@@ -21,7 +21,11 @@ use crate::{
             },
         },
     },
-    jvm::{Method, code::MethodBody, method},
+    jvm::{
+        Method,
+        code::{MethodBody, ProgramCounter},
+        method,
+    },
 };
 
 /// Mutable state used only while solving JVM frame facts.
@@ -112,6 +116,10 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
 }
 
 impl<'method> JvmFrameAnalyzer<'method> {
+    pub(in crate::ir::generator) const fn body(&self) -> &MethodBody {
+        self.body
+    }
+
     pub(in crate::ir::generator) fn for_method(
         method: &'method Method,
     ) -> Result<Self, MokaIRBuildError> {
@@ -220,6 +228,110 @@ impl<'method> JvmFrameAnalyzer<'method> {
 
     pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
+    }
+
+    pub(in crate::ir::generator) fn definition_at(
+        &mut self,
+        location: Location,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
+        if !matches!(location, Location::Bytecode { .. }) {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
+        if let Some(&id) = self.definition_ids.get(&location) {
+            return Ok(id);
+        }
+        let id = self.new_value_id()?;
+        self.definition_ids.insert(location, id);
+        Ok(id)
+    }
+
+    pub(in crate::ir::generator) fn caught_exception_at(
+        &mut self,
+        location: Location,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
+        if !matches!(location, Location::Handler { .. }) {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
+        if let Some(&id) = self.caught_exception_ids.get(&location) {
+            return Ok(id);
+        }
+        let id = self.new_value_id()?;
+        self.caught_exception_ids.insert(location, id);
+        Ok(id)
+    }
+
+    pub(in crate::ir::generator) fn next_pc_of(
+        &self,
+        pc: ProgramCounter,
+    ) -> Result<ProgramCounter, MokaIRBuildError> {
+        self.body
+            .instructions
+            .next_pc_of(&pc)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+
+    pub(in crate::ir::generator) fn next_location(
+        &mut self,
+        location: Location,
+    ) -> Result<Location, MokaIRBuildError> {
+        let pc = location
+            .source_pc()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalizer.bytecode(self.next_pc_of(pc)?, context)
+    }
+
+    pub(in crate::ir::generator) fn target_location(
+        &mut self,
+        location: Location,
+        target: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalizer.bytecode(target, context)
+    }
+
+    pub(in crate::ir::generator) fn handler_location(
+        &mut self,
+        location: Location,
+        handler: ProgramCounter,
+    ) -> Result<Location, MokaIRBuildError> {
+        let context = location
+            .context()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        self.normalizer.handler(handler, context)
+    }
+
+    pub(in crate::ir::generator) fn unwind_location(
+        &mut self,
+    ) -> Result<Location, MokaIRBuildError> {
+        self.normalizer.register(Location::Unwind)
+    }
+
+    pub(in crate::ir::generator) fn enter_subroutine(
+        &mut self,
+        location: Location,
+        target: ProgramCounter,
+        continuation: ProgramCounter,
+    ) -> Result<
+        (
+            Location,
+            crate::ir::generator::jvm::normalization::ReturnAddress,
+        ),
+        MokaIRBuildError,
+    > {
+        self.normalizer.enter(location, target, continuation)
+    }
+
+    pub(in crate::ir::generator) fn return_from(
+        &mut self,
+        location: Location,
+        address: crate::ir::generator::jvm::normalization::ReturnAddress,
+    ) -> Result<Location, MokaIRBuildError> {
+        self.normalizer.return_from(location, address)
     }
 }
 

@@ -17,15 +17,17 @@ use crate::{
     ir::generator::{
         error::MokaIRBuildError,
         identity::SsaValueId,
-        jvm::{frame::JvmStackFrame, instruction::Instruction, normalization::Location},
+        jvm::{
+            analysis::JvmFrameAnalyzer, frame::JvmStackFrame, instruction::Instruction,
+            normalization::Location,
+        },
     },
     jvm::code::Instruction as JVM,
 };
 use frame_operand::FrameOperand;
-use semantics::JvmSemantics;
 
 pub(super) fn lift_instruction<OP: FrameOperand>(
-    semantics: &mut impl JvmSemantics,
+    semantics: &mut JvmFrameAnalyzer<'_>,
     jvm_instruction: &JVM,
     location: Location,
     frame: &mut JvmStackFrame<OP>,

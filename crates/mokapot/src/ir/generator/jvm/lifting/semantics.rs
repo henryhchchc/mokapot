@@ -1,4 +1,4 @@
-//! Narrow services required to interpret JVM instruction semantics.
+//! Shared JVM outgoing-edge semantics.
 
 use crate::{
     ir::{
@@ -11,68 +11,21 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
+                analysis::JvmFrameAnalyzer,
                 frame::{Entry, JvmStackFrame},
                 instruction::Instruction,
                 lifting::frame_operand::FrameOperand,
-                normalization::{Location, ReturnAddress},
+                normalization::Location,
             },
         },
     },
-    jvm::{
-        ConstantValue,
-        code::{MethodBody, ProgramCounter},
-    },
+    jvm::ConstantValue,
 };
 
 type OutgoingState<OP> = (Location, ControlTransfer<OP>, JvmStackFrame<OP>);
 
-/// Capabilities required by shared JVM lifting semantics.
-pub(in crate::ir::generator) trait JvmSemantics {
-    fn body(&self) -> &MethodBody;
-
-    fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError>;
-
-    fn caught_exception_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError>;
-
-    fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBuildError> {
-        self.body()
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
-    }
-
-    fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError>;
-
-    fn target_location(
-        &mut self,
-        location: Location,
-        target: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError>;
-
-    fn handler_location(
-        &mut self,
-        location: Location,
-        handler: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError>;
-
-    fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError>;
-
-    fn enter_subroutine(
-        &mut self,
-        location: Location,
-        target: ProgramCounter,
-        continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError>;
-
-    fn return_from(
-        &mut self,
-        location: Location,
-        address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError>;
-}
-
 fn exception_edges<OP: FrameOperand>(
-    semantics: &mut impl JvmSemantics,
+    semantics: &mut JvmFrameAnalyzer<'_>,
     location: Location,
     pre_frame: &JvmStackFrame<OP>,
     caught_value: &impl Fn(SsaValueId) -> OP,
@@ -120,7 +73,7 @@ fn exception_edges<OP: FrameOperand>(
     reason = "all control-flow forms are classified together"
 )]
 pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
-    semantics: &mut impl JvmSemantics,
+    semantics: &mut JvmFrameAnalyzer<'_>,
     location: Location,
     pre_frame: &JvmStackFrame<OP>,
     normal_frame: JvmStackFrame<OP>,
