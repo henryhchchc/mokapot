@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::SsaValueId;
-use crate::ir::BlockId;
+use crate::ir::{BlockId, generator::identity::SsaValueId};
 
 /// The result of simplifying a set of provisional phi nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
