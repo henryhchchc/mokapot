@@ -35,7 +35,7 @@ impl BlockEntry {
 /// Block-level JVM graph consumed by SSA construction.
 pub(super) struct JvmBlockGraph {
     pub entry: BlockEntry,
-    pub initial_frame: JvmStackFrame,
+    pub initial_frame: Option<JvmStackFrame>,
     pub blocks: Vec<JvmBlock>,
     pub phi_blocks: BTreeMap<SsaValueId, BlockId>,
     pub merge_values: BTreeMap<MergeIdentity, SsaValueId>,
@@ -226,7 +226,13 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
 
     Ok(JvmBlockGraph {
         entry,
-        initial_frame: analyzed_cfg.initial_frame,
+        initial_frame: needs_entry_preheader
+            .then(|| {
+                analyzed_cfg
+                    .initial_frame
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)
+            })
+            .transpose()?,
         blocks,
         phi_blocks,
         merge_values: analyzed_cfg.phi_values,

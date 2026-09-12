@@ -152,7 +152,8 @@ pub(in crate::ir::generator) struct AnalyzedLocation {
 /// Reachable JVM locations and abstract control-flow facts.
 pub(in crate::ir::generator) struct AnalyzedJvmCfg {
     pub entry_location: Location,
-    pub initial_frame: JvmStackFrame,
+    /// The original entry frame, retained only when a backedge needs a preheader input.
+    pub initial_frame: Option<JvmStackFrame>,
     pub locations: BTreeMap<Location, AnalyzedLocation>,
     pub phi_values: BTreeMap<MergeIdentity, SsaValueId>,
     pub this_value: Option<SsaValueId>,
@@ -335,11 +336,17 @@ impl<'method> JvmFrameAnalyzer<'method> {
         if !outputs.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        let (entry_location, initial_frame) =
-            self.entry.ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let (entry_location, initial_frame) = self
+            .entry
+            .take()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let needs_entry_preheader = locations
+            .values()
+            .flat_map(|location| &location.outgoing)
+            .any(|outgoing| outgoing.target == entry_location);
         Ok(AnalyzedJvmCfg {
             entry_location,
-            initial_frame: initial_frame.into_frame(),
+            initial_frame: needs_entry_preheader.then(|| initial_frame.into_frame()),
             locations,
             phi_values,
             this_value: self.this_value,
@@ -501,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn reprocessing_loop_locations_reuses_definition_identities() {
+    fn reprocessing_loop_allocates_identities_only_for_definitions() {
         let method = method(
             [
                 (0.into(), JvmInstruction::IConst0),
@@ -518,7 +525,42 @@ mod tests {
         let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
         let _: BTreeMap<Location, JvmFrameFact> = solve(&mut analyzer).expect("valid loop");
 
-        assert_eq!(analyzer.definition_ids.len(), 7);
-        assert_eq!(analyzer.next_value_index, 7);
+        assert_eq!(analyzer.definition_ids.len(), 3);
+        assert_eq!(analyzer.next_value_index, 3);
+        assert!(
+            analyzer
+                .definition_ids
+                .contains_key(&Location::entry(0.into()))
+        );
+        assert!(
+            analyzer
+                .definition_ids
+                .contains_key(&Location::entry(3.into()))
+        );
+        assert!(
+            analyzer
+                .definition_ids
+                .contains_key(&Location::entry(4.into()))
+        );
+        assert!(
+            !analyzer
+                .definition_ids
+                .contains_key(&Location::entry(1.into()))
+        );
+        assert!(
+            !analyzer
+                .definition_ids
+                .contains_key(&Location::entry(2.into()))
+        );
+        assert!(
+            !analyzer
+                .definition_ids
+                .contains_key(&Location::entry(5.into()))
+        );
+        assert!(
+            !analyzer
+                .definition_ids
+                .contains_key(&Location::entry(6.into()))
+        );
     }
 }

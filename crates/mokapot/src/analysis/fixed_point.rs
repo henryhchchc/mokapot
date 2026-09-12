@@ -443,27 +443,57 @@ where
     P::Location: Clone,
     M: FactsMap<P::Location, P::Fact>,
 {
+    solve_accumulating(problem, |_, output, facts, worklist| {
+        for (successor, propagated) in output.into_successors() {
+            schedule_if_changed(facts, worklist, successor, propagated);
+        }
+    })
+}
+
+/// Runs the accumulating worklist algorithm, delegating transfer-output handling.
+///
+/// The ordinary and output-retaining solvers have identical fact and worklist
+/// semantics. Their only difference is whether a transfer output is consumed
+/// for propagation or also retained, so this private engine keeps that behavior
+/// at the call site rather than maintaining two worklist implementations.
+fn solve_accumulating<P, M, HandleOutput>(
+    problem: &mut P,
+    mut handle_output: HandleOutput,
+) -> Result<M, P::Err>
+where
+    P: DataflowProblem,
+    P::Location: Clone,
+    M: FactsMap<P::Location, P::Fact>,
+    HandleOutput: FnMut(P::Location, P::Output, &mut M, &mut M::Worklist),
+{
     let mut facts = M::default();
     let mut worklist = M::Worklist::default();
 
     for (location, fact) in problem.seeds() {
-        if facts.insert_or_join(location.clone(), fact) {
-            worklist.schedule(location);
-        }
+        schedule_if_changed(&mut facts, &mut worklist, location, fact);
     }
 
     while let Some(location) = worklist.pop_one() {
         let fact = facts
             .get(&location)
             .expect("scheduled locations must have a stored fact");
-        for (successor, propagated) in problem.flow(&location, fact)?.into_successors() {
-            if facts.insert_or_join(successor.clone(), propagated) {
-                worklist.schedule(successor);
-            }
-        }
+        let output = problem.flow(&location, fact)?;
+        handle_output(location, output, &mut facts, &mut worklist);
     }
 
     Ok(facts)
+}
+
+/// Joins a propagated fact and schedules its location when the joined fact changed.
+fn schedule_if_changed<L, F, M>(facts: &mut M, worklist: &mut M::Worklist, location: L, fact: F)
+where
+    L: Clone,
+    F: JoinSemiLattice,
+    M: FactsMap<L, F>,
+{
+    if facts.insert_or_join(location.clone(), fact) {
+        worklist.schedule(location);
+    }
 }
 
 /// A completed fixed-point solution with retained transfer outputs.
@@ -544,29 +574,13 @@ where
     M: FactsMap<P::Location, P::Fact>,
     O: FactsMap<P::Location, P::Output>,
 {
-    let mut facts = M::default();
     let mut outputs = O::default();
-    let mut worklist = M::Worklist::default();
-
-    for (location, fact) in problem.seeds() {
-        if facts.insert_or_join(location.clone(), fact) {
-            worklist.schedule(location);
-        }
-    }
-
-    while let Some(location) = worklist.pop_one() {
-        let fact = facts
-            .get(&location)
-            .expect("scheduled locations must have a stored fact");
-        let output = problem.flow(&location, fact)?;
+    let facts = solve_accumulating(problem, |location, output, facts, worklist| {
         for (successor, propagated) in output.successors() {
-            let successor = successor.clone();
-            if facts.insert_or_join(successor.clone(), propagated.clone()) {
-                worklist.schedule(successor);
-            }
+            schedule_if_changed(facts, worklist, successor.clone(), propagated.clone());
         }
         outputs.insert(location, output);
-    }
+    })?;
 
     Ok(FixedPointResult { facts, outputs })
 }

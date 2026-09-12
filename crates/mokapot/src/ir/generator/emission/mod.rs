@@ -178,7 +178,7 @@ fn materialize_block(
 struct Allocation {
     next_instruction: u32,
     next_edge: u32,
-    values: BTreeMap<SsaValueId, ValueId>,
+    values: Vec<Option<ValueId>>,
     definitions: Vec<ValueDefinition>,
 }
 
@@ -206,22 +206,84 @@ impl Allocation {
         temporary: SsaValueId,
         definition: ValueDefinition,
     ) -> Result<ValueId, MokaIRBuildError> {
-        let index = u32::try_from(self.definitions.len())
+        let value_index = u32::try_from(self.definitions.len())
             .ok()
             .filter(|index| *index < u32::MAX)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let value = ValueId::new(index);
-        if self.values.insert(temporary, value).is_some() {
+        let temporary = ssa_index(temporary)?;
+        let required_len = temporary
+            .checked_add(1)
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let additional = required_len.saturating_sub(self.values.len());
+        self.values
+            .try_reserve(additional)
+            .map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+        if self.values.len() < required_len {
+            self.values.resize(required_len, None);
+        }
+        if self.values[temporary].is_some() {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
+        let value = ValueId::new(value_index);
+        self.values[temporary] = Some(value);
         self.definitions.push(definition);
         Ok(value)
     }
 
     fn resolve(&self, value: SsaValueId) -> Result<ValueId, MokaIRBuildError> {
         self.values
-            .get(&value)
-            .copied()
+            .get(ssa_index(value)?)
+            .and_then(|value| *value)
             .ok_or(MokaIRBuildError::MalformedControlFlow)
+    }
+}
+
+fn ssa_index(value: SsaValueId) -> Result<usize, MokaIRBuildError> {
+    usize::try_from(value.index()).map_err(|_| MokaIRBuildError::MalformedControlFlow)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allocation_rejects_duplicate_temporary_values() {
+        let mut allocation = Allocation::default();
+
+        assert_eq!(
+            allocation
+                .value(SsaValueId::new(0), ValueDefinition::This)
+                .expect("first assignment succeeds"),
+            ValueId::new(0)
+        );
+        assert!(matches!(
+            allocation.value(SsaValueId::new(0), ValueDefinition::This),
+            Err(MokaIRBuildError::MalformedControlFlow)
+        ));
+    }
+
+    #[test]
+    fn allocation_preserves_sparse_temporary_value_gaps() {
+        let mut allocation = Allocation::default();
+        let assigned = allocation
+            .value(SsaValueId::new(3), ValueDefinition::This)
+            .expect("sparse assignment succeeds");
+
+        assert_eq!(assigned, ValueId::new(0));
+        assert_eq!(allocation.values, vec![None, None, None, Some(assigned)]);
+        assert_eq!(
+            allocation
+                .resolve(SsaValueId::new(3))
+                .expect("assigned value resolves"),
+            assigned
+        );
+        assert!(matches!(
+            allocation.resolve(SsaValueId::new(2)),
+            Err(MokaIRBuildError::MalformedControlFlow)
+        ));
+        assert!(matches!(
+            allocation.resolve(SsaValueId::new(4)),
+            Err(MokaIRBuildError::MalformedControlFlow)
+        ));
     }
 }

@@ -1,8 +1,21 @@
 use super::{
     ArrayOperation, Conversion, DUAL_SLOT, Expression, FieldType, FrameOperand, Instruction, JVM,
     JvmStackFrame, LockOperation, MokaIRBuildError, SINGLE_SLOT, SsaValueId, WideInstruction,
-    conversion_op,
+    conversion_op, required_definition,
 };
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    matches!(
+        instruction,
+        JVM::New(_)
+            | JVM::ANewArray(_)
+            | JVM::NewArray(_)
+            | JVM::MultiANewArray(_, _)
+            | JVM::ArrayLength
+            | JVM::CheckCast(_)
+            | JVM::InstanceOf(_)
+    )
+}
 
 #[expect(
     clippy::too_many_lines,
@@ -10,7 +23,7 @@ use super::{
 )]
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &JVM,
-    def: SsaValueId,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
 ) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
@@ -21,6 +34,7 @@ pub(super) fn lift<OP: FrameOperand>(
 
     let instruction = match jvm_instruction {
         New(class) => {
+            let def = required_definition(definition)?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             Instruction::Definition {
                 value: def,
@@ -28,6 +42,7 @@ pub(super) fn lift<OP: FrameOperand>(
             }
         }
         ANewArray(element_type) => {
+            let def = required_definition(definition)?;
             let count = frame.pop_value::<SINGLE_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             let array_op = ArrayOperation::New {
@@ -40,6 +55,7 @@ pub(super) fn lift<OP: FrameOperand>(
             }
         }
         NewArray(prim_type) => {
+            let def = required_definition(definition)?;
             let count = frame.pop_value::<SINGLE_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             let array_op = ArrayOperation::New {
@@ -52,6 +68,7 @@ pub(super) fn lift<OP: FrameOperand>(
             }
         }
         MultiANewArray(element_type, dimension) => {
+            let def = required_definition(definition)?;
             let counts: Vec<_> = (0..*dimension)
                 .map(|_| frame.pop_value::<SINGLE_SLOT>())
                 .collect::<Result<_, _>>()?;
@@ -63,6 +80,7 @@ pub(super) fn lift<OP: FrameOperand>(
             Instruction::Definition { value: def, expr }
         }
         ArrayLength => {
+            let def = required_definition(definition)?;
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             let expr = Expression::Array(ArrayOperation::Length { array_ref });
@@ -73,11 +91,13 @@ pub(super) fn lift<OP: FrameOperand>(
             Instruction::Throw(exception_ref)
         }
         CheckCast(target_type) => {
+            let def = required_definition(definition)?;
             conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, |value| {
                 Conversion::CheckCast(value, target_type.clone())
             })?
         }
         InstanceOf(target_type) => {
+            let def = required_definition(definition)?;
             conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, |value| {
                 Conversion::InstanceOf(value, target_type.clone())
             })?
