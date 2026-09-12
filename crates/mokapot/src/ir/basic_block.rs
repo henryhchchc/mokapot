@@ -1,6 +1,9 @@
 use super::{BlockId, Operation, Phi, Terminator};
 
-/// A maximal basic block ending in exactly one terminator.
+/// A maximal reachable basic block in completed `MokaIR`.
+///
+/// Its phis are evaluated simultaneously on entry, its operations execute in
+/// order, and its single terminator defines every outgoing control-flow arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
     pub(super) id: BlockId,

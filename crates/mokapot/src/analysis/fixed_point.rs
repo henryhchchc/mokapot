@@ -7,7 +7,7 @@
 //! - [`DataflowProblem`]: Defines the analysis problem (initial facts + flow function)
 //! - [`DataflowOutput`]: Exposes the successor facts produced by a flow function
 //! - [`FactsMap`]: Abstraction over map data structures (e.g., `BTreeMap`, `HashMap`)
-//! - [`solve`] and [`solve_with_recomputed_outputs`]: Run the worklist algorithm
+//! - [`solve`] and an internal recomputing variant: Run the worklist algorithm
 //!
 //! # Theoretical Background
 //!
@@ -132,7 +132,7 @@ pub trait JoinSemiLattice: PartialOrd {
 /// Successor facts produced by a dataflow transfer function.
 ///
 /// The consuming iterator lets [`solve`] propagate facts without cloning them.
-/// The borrowed iterator lets [`solve_with_recomputed_outputs`] retain transfer
+/// The borrowed iterator lets the internal recomputing solver retain transfer
 /// outputs while comparing and replacing their successor facts.
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait DataflowOutput<L, F> {
