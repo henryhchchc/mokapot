@@ -64,18 +64,18 @@ impl DataflowOutput<Location, JvmFrameFact> for JvmFlowOutput {
 pub(in crate::ir::generator) struct JvmOutgoing {
     pub target: Location,
     pub transfer: ControlTransfer<OperandState>,
-    pub frame: JvmStackFrame,
+    pub frame: JvmStackFrame<OperandState>,
 }
 
 /// A frame tagged with the location at which its values are merged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::ir::generator) struct JvmFrameFact {
     location: Location,
-    frame: JvmStackFrame,
+    frame: JvmStackFrame<OperandState>,
 }
 
 impl JvmFrameFact {
-    fn new(location: Location, frame: JvmStackFrame) -> Self {
+    fn new(location: Location, frame: JvmStackFrame<OperandState>) -> Self {
         let frame = if matches!(location, Location::Unwind) {
             frame.erase_values()
         } else {
@@ -84,7 +84,7 @@ impl JvmFrameFact {
         Self { location, frame }
     }
 
-    fn into_frame(self) -> JvmStackFrame {
+    fn into_frame(self) -> JvmStackFrame<OperandState> {
         self.frame
     }
 }
@@ -141,7 +141,7 @@ impl PartialOrd for JvmFrameFact {
 
 /// Completed abstract-execution facts for one reachable JVM location.
 pub(in crate::ir::generator) struct AnalyzedLocation {
-    pub incoming: JvmStackFrame,
+    pub incoming: JvmStackFrame<OperandState>,
     pub instruction: Instruction,
     pub outgoing: Vec<JvmOutgoing>,
     pub caught_exception: Option<SsaValueId>,
@@ -151,7 +151,7 @@ pub(in crate::ir::generator) struct AnalyzedLocation {
 pub(in crate::ir::generator) struct AnalyzedJvmCfg {
     pub entry_location: Location,
     /// The original frame entering the method.
-    pub initial_frame: JvmStackFrame,
+    pub initial_frame: JvmStackFrame<OperandState>,
     pub locations: BTreeMap<Location, AnalyzedLocation>,
     pub phi_values: BTreeMap<MergeIdentity, SsaValueId>,
     pub this_value: Option<SsaValueId>,
@@ -450,22 +450,36 @@ mod tests {
             tests::method,
         },
         jvm::code::Instruction as JvmInstruction,
+        types::method_descriptor::MethodDescriptor,
     };
+
+    fn frame_with_inputs(
+        descriptor: &MethodDescriptor,
+        max_locals: u16,
+        max_stack: u16,
+        this_value: Option<SsaValueId>,
+        parameters: &[SsaValueId],
+    ) -> JvmStackFrame<OperandState> {
+        let parameters = parameters
+            .iter()
+            .copied()
+            .map(OperandState::Value)
+            .collect::<Vec<_>>();
+        JvmStackFrame::with_inputs(
+            descriptor,
+            max_locals,
+            max_stack,
+            this_value.map(OperandState::Value),
+            &parameters,
+        )
+        .expect("frame fits descriptor")
+    }
 
     #[test]
     fn merge_identity_is_stable_for_a_location_and_slot() {
         let descriptor = "(I)V".parse().expect("valid descriptor");
         let location = Location::entry(0.into());
-        let frame = |value| {
-            JvmStackFrame::with_inputs(
-                &descriptor,
-                1,
-                0,
-                None,
-                &[OperandState::Value(SsaValueId::new(value))],
-            )
-            .expect("frame fits descriptor")
-        };
+        let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
         let mut merged = JvmFrameFact::new(location, frame(1));
 
         assert!(merged.join_assign(JvmFrameFact::new(location, frame(2))));
@@ -481,21 +495,52 @@ mod tests {
     #[test]
     fn unwind_facts_discard_irrelevant_values_before_merging() {
         let descriptor = "(I)V".parse().expect("valid descriptor");
-        let frame = |value| {
-            JvmStackFrame::with_inputs(
-                &descriptor,
-                1,
-                0,
-                None,
-                &[OperandState::Value(SsaValueId::new(value))],
-            )
-            .expect("frame fits descriptor")
-        };
+        let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
         let mut unwind = JvmFrameFact::new(Location::Unwind, frame(1));
 
         assert!(unwind.frame.values().next().is_none());
         assert!(!unwind.join_assign(JvmFrameFact::new(Location::Unwind, frame(2))));
         assert!(unwind.frame.values().next().is_none());
+    }
+
+    #[test]
+    fn context_free_value_conflict_is_invalid() {
+        let lhs = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+        let rhs = Entry::Value(OperandState::Value(SsaValueId::new(1)));
+
+        assert_eq!(lhs.join(rhs), Entry::Value(OperandState::Invalid));
+    }
+
+    #[test]
+    fn context_free_same_value_is_unchanged() {
+        let value = OperandState::Value(SsaValueId::new(0));
+
+        assert_eq!(
+            Entry::Value(value).join(Entry::Value(value)),
+            Entry::Value(value)
+        );
+    }
+
+    #[test]
+    fn incompatible_legacy_values_become_invalid() {
+        let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+        let address = Entry::Value(OperandState::ReturnAddress(ReturnAddress::for_test(0)));
+
+        assert_eq!(value.join(address), Entry::Value(OperandState::Invalid));
+    }
+
+    #[test]
+    fn a_value_missing_on_one_path_is_unavailable() {
+        let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
+
+        assert_eq!(
+            value.clone().join(Entry::UninitializedLocal),
+            Entry::UninitializedLocal
+        );
+        assert_eq!(
+            Entry::UninitializedLocal.join(value),
+            Entry::UninitializedLocal
+        );
     }
 
     #[test]

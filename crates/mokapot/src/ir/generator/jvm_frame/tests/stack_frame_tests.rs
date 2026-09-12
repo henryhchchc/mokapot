@@ -1,17 +1,19 @@
 use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::ir::generator::{
-    ExecutionError, OperandState, SsaValueId,
-    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+    ExecutionError,
+    jvm_frame::{DUAL_SLOT, SINGLE_SLOT},
 };
 #[cfg(test)]
 use proptest::prelude::*;
 
+use super::{TestValue, frame};
+
 #[test]
 fn args_locals_checking() {
     let desc = "([ID)I".parse().unwrap();
-    let too_small_locals = JvmStackFrame::new(false, &desc, 2, 2);
+    let too_small_locals = frame(false, &desc, 2, 2);
     assert!(too_small_locals.is_err());
-    let correct = JvmStackFrame::new(false, &desc, 4, 2);
+    let correct = frame(false, &desc, 4, 2);
     assert!(correct.is_ok());
 }
 
@@ -19,16 +21,16 @@ fn args_locals_checking() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn joining_frames_with_different_stack_capacities_panics() {
     let desc = "()V".parse().expect("valid descriptor");
-    let mut lhs = JvmStackFrame::new(true, &desc, 0, 1).expect("valid frame");
-    let rhs = JvmStackFrame::new(true, &desc, 0, 2).expect("valid frame");
+    let mut lhs = frame(true, &desc, 0, 1).expect("valid frame");
+    let rhs = frame(true, &desc, 0, 2).expect("valid frame");
 
     lhs.join_assign(rhs);
 }
 
 proptest! {
     #[test]
-    fn push_pop(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn push_pop(args in prop::collection::vec(any::<TestValue>(), 0..10)) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
@@ -44,8 +46,8 @@ proptest! {
     }
 
     #[test]
-    fn push_pop_dual_slot(args in prop::collection::vec(any::<OperandState>(), 0..10)) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn push_pop_dual_slot(args in prop::collection::vec(any::<TestValue>(), 0..10)) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
@@ -63,14 +65,14 @@ proptest! {
     #[test]
     fn overflow(push_count in 10u16..20, capacity in 0u16..10) {
         prop_assume!(push_count > capacity);
-        let mut stack_frame = JvmStackFrame::new(
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
+            let value = TestValue(u32::from(i));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -84,14 +86,14 @@ proptest! {
 
     #[test]
     fn underflow(push_count in 0u16..10, pop_count in 10u16..20) {
-        let mut stack_frame = JvmStackFrame::new(
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
+            let value = TestValue(u32::from(i));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
@@ -106,8 +108,8 @@ proptest! {
     }
 
     #[test]
-    fn slot_mismatch(values in any::<OperandState>()) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn slot_mismatch(values in any::<TestValue>()) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
@@ -122,8 +124,8 @@ proptest! {
     }
 
     #[test]
-    fn mixed_width_values(values in prop::collection::vec(any::<OperandState>(), 0..10)) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn mixed_width_values(values in prop::collection::vec(any::<TestValue>(), 0..10)) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,

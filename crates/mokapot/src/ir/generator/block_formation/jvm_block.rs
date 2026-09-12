@@ -8,14 +8,14 @@ use super::super::{
 pub(in crate::ir::generator) struct JvmBlockArm {
     pub target: BlockId,
     pub transfer: ControlTransfer<OperandState>,
-    pub frame: JvmStackFrame,
+    pub frame: JvmStackFrame<OperandState>,
 }
 
 /// A maximal JVM block with exact symbolic operands and outgoing frames.
 #[derive(Debug)]
 pub(in crate::ir::generator) struct JvmBlock {
     pub id: BlockId,
-    pub entry_frame: JvmStackFrame,
+    pub entry_frame: JvmStackFrame<OperandState>,
     pub operations: Vec<(ProgramCounter, OperationKind<OperandState>)>,
     pub terminator: TerminatorKind<OperandState>,
     pub terminator_source: Option<ProgramCounter>,

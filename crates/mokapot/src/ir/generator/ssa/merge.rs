@@ -50,7 +50,8 @@ pub(super) fn collect_phi_candidates(
     merge_plan: &MergePlan,
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
-    let mut incoming_by_target = BTreeMap::<BlockId, Vec<(BlockId, &JvmStackFrame)>>::new();
+    let mut incoming_by_target =
+        BTreeMap::<BlockId, Vec<(BlockId, &JvmStackFrame<OperandState>)>>::new();
     for source in blocks {
         for arm in &source.arms {
             incoming_by_target
@@ -127,8 +128,8 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &JvmStackFrame,
-    source: &JvmStackFrame,
+    target: &JvmStackFrame<OperandState>,
+    source: &JvmStackFrame<OperandState>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
     if target.local_variables().len() != source.local_variables().len()

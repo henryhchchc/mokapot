@@ -10,10 +10,6 @@ use crate::{
     },
 };
 
-use super::super::OperandState;
-#[cfg(test)]
-use super::super::SsaValueId;
-
 pub(crate) const SINGLE_SLOT: bool = false;
 pub(crate) const DUAL_SLOT: bool = true;
 
@@ -27,7 +23,7 @@ pub(in crate::ir::generator) enum FrameSlot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct JvmStackFrame<V = OperandState> {
+pub struct JvmStackFrame<V> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
@@ -112,29 +108,6 @@ impl<V> JvmStackFrame<V> {
                 }) || changed
             });
         locals_changed || stack_changed
-    }
-}
-
-#[cfg(test)]
-impl JvmStackFrame<OperandState> {
-    pub(crate) fn new(
-        is_static: bool,
-        desc: &MethodDescriptor,
-        max_locals: u16,
-        max_stack: u16,
-    ) -> Result<Self, ExecutionError> {
-        let this_value = (!is_static).then_some(OperandState::Value(SsaValueId::new(0)));
-        let parameter_offset = u32::from(!is_static);
-        let parameters = desc
-            .parameters_types
-            .iter()
-            .enumerate()
-            .map(|(index, _)| {
-                let index = u32::try_from(index).expect("descriptor parameter count fits u32");
-                OperandState::Value(SsaValueId::new(index + parameter_offset))
-            })
-            .collect::<Vec<_>>();
-        Self::with_inputs(desc, max_locals, max_stack, this_value, &parameters)
     }
 }
 

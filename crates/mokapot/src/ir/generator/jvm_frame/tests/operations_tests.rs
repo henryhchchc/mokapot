@@ -1,21 +1,23 @@
 use crate::ir::generator::{
-    ExecutionError, OperandState, SsaValueId,
-    jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
+    ExecutionError,
+    jvm_frame::{SINGLE_SLOT, StackOperations},
 };
 #[cfg(test)]
 use proptest::prelude::*;
 
+use super::{TestValue, frame};
+
 proptest! {
     #[test]
     fn jvm_pop(pop_count in 0u16..10) {
-        let mut stack_frame = JvmStackFrame::new(
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             pop_count,
         ).unwrap();
         for i in 0..pop_count {
-            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
+            let value = TestValue(u32::from(i));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -29,14 +31,14 @@ proptest! {
 
     #[test]
     fn jvm_pop2(pop_count in 0u16..10) {
-        let mut stack_frame = JvmStackFrame::new(
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
             pop_count * 2,
         ).unwrap();
         for i in 0..(pop_count * 2) {
-            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
+            let value = TestValue(u32::from(i));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -49,8 +51,8 @@ proptest! {
     }
 
     #[test]
-    fn jvm_dup(value in any::<OperandState>()) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn jvm_dup(value in any::<TestValue>()) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
@@ -65,8 +67,8 @@ proptest! {
     }
 
     #[test]
-    fn jvm_dup_x1([v1, v2] in any::<[OperandState;2]>()) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn jvm_dup_x1([v1, v2] in any::<[TestValue;2]>()) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
@@ -84,8 +86,8 @@ proptest! {
     }
 
     #[test]
-    fn jvm_swap([v1, v2] in any::<[OperandState;2]>()) {
-        let mut stack_frame = JvmStackFrame::new(
+    fn jvm_swap([v1, v2] in any::<[TestValue;2]>()) {
+        let mut stack_frame = frame(
             true,
             &"()V".parse().expect("Invalid method desc"),
             0,
