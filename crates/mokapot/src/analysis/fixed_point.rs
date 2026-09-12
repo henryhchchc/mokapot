@@ -7,7 +7,7 @@
 //! - [`DataflowProblem`]: Defines the analysis problem (initial facts + flow function)
 //! - [`DataflowOutput`]: Exposes the successor facts produced by a flow function
 //! - [`FactsMap`]: Abstraction over map data structures (e.g., `BTreeMap`, `HashMap`)
-//! - [`solve`] and [`solve_with_outputs`]: Run the worklist algorithm
+//! - [`solve`] and [`solve_with_recomputed_outputs`]: Run the worklist algorithm
 //!
 //! # Theoretical Background
 //!
@@ -132,8 +132,8 @@ pub trait JoinSemiLattice: PartialOrd {
 /// Successor facts produced by a dataflow transfer function.
 ///
 /// The consuming iterator lets [`solve`] propagate facts without cloning them.
-/// The borrowed iterator lets [`solve_with_outputs`] retain the output while
-/// propagating its successor facts.
+/// The borrowed iterator lets [`solve_with_recomputed_outputs`] retain transfer
+/// outputs while comparing and replacing their successor facts.
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait DataflowOutput<L, F> {
     /// Iterates over successor locations and their propagated facts by reference.
@@ -315,9 +315,6 @@ pub trait FactsMap<L, F>: Default {
     /// Returns the fact stored at `location`, if any.
     fn get(&self, location: &L) -> Option<&F>;
 
-    /// Inserts a fact, returning the previously stored fact, if any.
-    fn insert(&mut self, location: L, fact: F) -> Option<F>;
-
     /// Inserts a fact, joining with any existing fact at that location.
     ///
     /// If no fact exists at the location, the new fact is inserted directly.
@@ -340,10 +337,6 @@ where
 
     fn get(&self, location: &L) -> Option<&F> {
         BTreeMap::get(self, location)
-    }
-
-    fn insert(&mut self, location: L, fact: F) -> Option<F> {
-        BTreeMap::insert(self, location, fact)
     }
 
     fn insert_or_join(&mut self, location: L, fact: F) -> bool
@@ -370,10 +363,6 @@ where
 
     fn get(&self, location: &L) -> Option<&F> {
         HashMap::get(self, location)
-    }
-
-    fn insert(&mut self, location: L, fact: F) -> Option<F> {
-        HashMap::insert(self, location, fact)
     }
 
     fn insert_or_join(&mut self, location: L, fact: F) -> bool
@@ -451,11 +440,6 @@ where
 }
 
 /// Runs the accumulating worklist algorithm, delegating transfer-output handling.
-///
-/// The ordinary and output-retaining solvers have identical fact and worklist
-/// semantics. Their only difference is whether a transfer output is consumed
-/// for propagation or also retained, so this private engine keeps that behavior
-/// at the call site rather than maintaining two worklist implementations.
 fn solve_accumulating<P, M, HandleOutput>(
     problem: &mut P,
     mut handle_output: HandleOutput,
@@ -532,59 +516,6 @@ impl<Facts, Outputs> FixedPointResult<Facts, Outputs> {
     }
 }
 
-/// Computes a fixed point and retains each location's latest transfer output.
-///
-/// Unlike [`solve`], this function preserves the output returned by
-/// [`DataflowProblem::flow`] at every reachable location. This is useful when
-/// transfer produces artifacts—such as instructions or classified edges—that
-/// a later phase needs in addition to the fixed-point facts.
-///
-/// Retaining an output means its successor facts cannot be moved into the fact
-/// map. They are cloned once for propagation. Joining an already-reached
-/// destination still happens in place.
-///
-/// # Monotonicity and changing successors
-///
-/// This is an accumulating solver: it never retracts facts already propagated
-/// to a location. Therefore, when a location's incoming fact grows, its later
-/// output must subsume its earlier output component-wise. New successors may be
-/// added, but a successor or propagated contribution must not disappear. The
-/// returned output map contains only the latest output, not the history of
-/// outputs used during solving.
-///
-/// # Errors
-///
-/// Returns an error if the flow function fails at any location.
-///
-/// # Panics
-///
-/// Panics if a custom [`FactsMap`] or its associated [`LocationWorklist`]
-/// violates the storage and scheduling contracts.
-///
-/// # Termination
-///
-/// Termination is guaranteed if the fact lattice has finite height and the
-/// flow function is monotonic.
-#[instability::unstable(feature = "fixed-point-analyses")]
-pub fn solve_with_outputs<P, M, O>(problem: &mut P) -> Result<FixedPointResult<M, O>, P::Err>
-where
-    P: DataflowProblem,
-    P::Location: Clone,
-    P::Fact: Clone,
-    M: FactsMap<P::Location, P::Fact>,
-    O: FactsMap<P::Location, P::Output>,
-{
-    let mut outputs = O::default();
-    let facts = solve_accumulating(problem, |location, output, facts, worklist| {
-        for (successor, propagated) in output.successors() {
-            schedule_if_changed(facts, worklist, successor.clone(), propagated.clone());
-        }
-        outputs.insert(location, output);
-    })?;
-
-    Ok(FixedPointResult { facts, outputs })
-}
-
 type OrderedFixedPointResult<P> = FixedPointResult<
     BTreeMap<<P as DataflowProblem>::Location, <P as DataflowProblem>::Fact>,
     BTreeMap<<P as DataflowProblem>::Location, <P as DataflowProblem>::Output>,
@@ -617,11 +548,10 @@ fn recompute_fact<L: Ord, F: Clone + JoinSemiLattice>(
 
 /// Solves a dataflow problem while replacing superseded edge contributions.
 ///
-/// Unlike [`solve_with_outputs`], this solver retains the latest contribution
-/// from each source location and recomputes a destination fact when that source
-/// output changes. This supports transfer artifacts whose symbolic identities
-/// can change as a predecessor fact grows without retaining stale identities in
-/// downstream facts.
+/// This solver retains the latest contribution from each source location and
+/// recomputes a destination fact when that source output changes. This supports
+/// transfer artifacts whose symbolic identities can change as a predecessor fact
+/// grows without retaining stale identities in downstream facts.
 pub(crate) fn solve_with_recomputed_outputs<P>(
     problem: &mut P,
 ) -> Result<OrderedFixedPointResult<P>, P::Err>
@@ -758,8 +688,7 @@ mod test {
     use proptest::prelude::*;
 
     use crate::analysis::fixed_point::{
-        DataflowOutput, DataflowProblem, FixedPointResult, JoinSemiLattice, solve,
-        solve_with_outputs, solve_with_recomputed_outputs,
+        DataflowProblem, JoinSemiLattice, solve, solve_with_recomputed_outputs,
     };
 
     #[derive(Debug, Clone, PartialEq, Eq, proptest_derive::Arbitrary)]
@@ -875,76 +804,6 @@ mod test {
             solve(&mut NonCloneFacts).expect("infallible non-clone analysis");
 
         assert_eq!(facts[&1], NonCloneMax(2));
-    }
-
-    #[derive(Debug, PartialEq, Eq)]
-    struct TestOutput {
-        revision: usize,
-        successors: Vec<(u8, TestSet)>,
-    }
-
-    impl DataflowOutput<u8, TestSet> for TestOutput {
-        fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a u8, &'a TestSet)>
-        where
-            u8: 'a,
-            TestSet: 'a,
-        {
-            self.successors
-                .iter()
-                .map(|(location, fact)| (location, fact))
-        }
-
-        fn into_successors(self) -> impl Iterator<Item = (u8, TestSet)> {
-            self.successors.into_iter()
-        }
-    }
-
-    struct GrowingSuccessors;
-
-    impl DataflowProblem for GrowingSuccessors {
-        type Location = u8;
-        type Fact = TestSet;
-        type Err = Infallible;
-        type Output = TestOutput;
-
-        fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-            [(0, TestSet(BTreeSet::from([0])))]
-        }
-
-        fn flow(
-            &mut self,
-            location: &Self::Location,
-            fact: &Self::Fact,
-        ) -> Result<Self::Output, Self::Err> {
-            let successors = match location {
-                0 if fact.0.contains(&1) => {
-                    vec![(1, fact.clone()), (2, TestSet(BTreeSet::from([2])))]
-                }
-                0 => vec![(1, fact.clone())],
-                1 => vec![(0, TestSet(BTreeSet::from([1])))],
-                2 => Vec::new(),
-                _ => unreachable!(),
-            };
-            Ok(TestOutput {
-                revision: fact.0.len(),
-                successors,
-            })
-        }
-    }
-
-    #[test]
-    fn retained_output_is_latest_and_growing_successors_are_propagated() {
-        let mut problem = GrowingSuccessors;
-
-        let result: FixedPointResult<BTreeMap<_, _>, BTreeMap<_, _>> =
-            solve_with_outputs(&mut problem).expect("infallible analysis");
-
-        assert_eq!(result.facts()[&0], TestSet(BTreeSet::from([0, 1])));
-        assert_eq!(result.facts()[&1], TestSet(BTreeSet::from([0, 1])));
-        assert_eq!(result.facts()[&2], TestSet(BTreeSet::from([2])));
-        assert_eq!(result.outputs().len(), 3);
-        assert_eq!(result.outputs()[&0].revision, 2);
-        assert_eq!(result.outputs()[&0].successors.len(), 2);
     }
 
     struct ReplacingSuccessor;
