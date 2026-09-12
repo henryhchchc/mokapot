@@ -2,24 +2,12 @@ mod operations_tests;
 mod stack_frame_tests;
 
 use crate::{
-    analysis::fixed_point::JoinSemiLattice,
     ir::generator::jvm::frame::{ExecutionError, JvmStackFrame},
     types::method_descriptor::MethodDescriptor,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, proptest_derive::Arbitrary)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, proptest_derive::Arbitrary)]
 struct TestValue(u32);
-
-impl JoinSemiLattice for TestValue {
-    fn join_assign(&mut self, other: Self) -> bool {
-        if *self >= other {
-            false
-        } else {
-            *self = other;
-            true
-        }
-    }
-}
 
 fn frame(
     is_static: bool,

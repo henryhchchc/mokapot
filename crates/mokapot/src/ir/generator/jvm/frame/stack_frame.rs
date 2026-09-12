@@ -2,12 +2,9 @@ use std::iter::once;
 
 use itertools::Itertools;
 
-use crate::{
-    analysis::fixed_point::JoinSemiLattice,
-    types::{
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::MethodDescriptor,
-    },
+use crate::types::{
+    field_type::{FieldType, PrimitiveType},
+    method_descriptor::MethodDescriptor,
 };
 
 pub(crate) const SINGLE_SLOT: bool = false;
@@ -27,37 +24,6 @@ pub struct JvmStackFrame<V> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
-}
-
-impl<V: PartialOrd> PartialOrd for JvmStackFrame<V> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use std::cmp::Ordering::Equal;
-        if self.max_stack != other.max_stack {
-            return None;
-        }
-        if self.operand_stack.len() != other.operand_stack.len() {
-            return None;
-        }
-        let stack_order = self.operand_stack.partial_cmp(&other.operand_stack);
-        let locals_order = self.local_variables.partial_cmp(&other.local_variables);
-        match (stack_order, locals_order) {
-            (Some(Equal), ord) | (ord, Some(Equal)) => ord,
-            (ord @ Some(s_ord), Some(l_ord)) if s_ord == l_ord => ord,
-            _ => None,
-        }
-    }
-}
-
-impl<V: JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
-    /// Joins two stack frames by merging their local variables and operand stacks.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the stack capacity, local-variable count, or
-    /// operand-stack height differs between the two frames.
-    fn join_assign(&mut self, other: Self) -> bool {
-        self.join_assign_values_with(other, |_, lhs, rhs| lhs.join_assign(rhs))
-    }
 }
 
 impl<V> JvmStackFrame<V> {

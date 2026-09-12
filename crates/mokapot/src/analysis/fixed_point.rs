@@ -7,7 +7,7 @@
 //! - [`DataflowProblem`]: Defines the analysis problem (initial facts + flow function)
 //! - [`DataflowOutput`]: Exposes the successor facts produced by a flow function
 //! - [`FactsMap`]: Abstraction over map data structures (e.g., `BTreeMap`, `HashMap`)
-//! - [`solve`] and an internal recomputing variant: Run the worklist algorithm
+//! - [`solve`]: Runs the worklist algorithm
 //!
 //! # Theoretical Background
 //!
@@ -132,29 +132,13 @@ pub trait JoinSemiLattice: PartialOrd {
 /// Successor facts produced by a dataflow transfer function.
 ///
 /// The consuming iterator lets [`solve`] propagate facts without cloning them.
-/// The borrowed iterator lets the internal recomputing solver retain transfer
-/// outputs while comparing and replacing their successor facts.
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait DataflowOutput<L, F> {
-    /// Iterates over successor locations and their propagated facts by reference.
-    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a L, &'a F)>
-    where
-        L: 'a,
-        F: 'a;
-
     /// Consumes this output and iterates over its successor facts.
     fn into_successors(self) -> impl Iterator<Item = (L, F)>;
 }
 
 impl<L, F> DataflowOutput<L, F> for Vec<(L, F)> {
-    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a L, &'a F)>
-    where
-        L: 'a,
-        F: 'a,
-    {
-        self.iter().map(|(location, fact)| (location, fact))
-    }
-
     fn into_successors(self) -> impl Iterator<Item = (L, F)> {
         self.into_iter()
     }
@@ -480,177 +464,6 @@ where
     }
 }
 
-/// A completed fixed-point solution with retained transfer outputs.
-///
-/// The facts are the joined incoming facts at each reachable location. The
-/// outputs are the latest transfer result computed from each location's final
-/// incoming fact.
-#[derive(Debug)]
-#[instability::unstable(feature = "fixed-point-analyses")]
-pub struct FixedPointResult<Facts, Outputs> {
-    facts: Facts,
-    outputs: Outputs,
-}
-
-#[cfg_attr(
-    not(feature = "unstable-fixed-point-analyses"),
-    allow(
-        dead_code,
-        reason = "accessors are public only when the unstable API is enabled"
-    )
-)]
-impl<Facts, Outputs> FixedPointResult<Facts, Outputs> {
-    /// Returns the final incoming facts.
-    pub const fn facts(&self) -> &Facts {
-        &self.facts
-    }
-
-    /// Returns the latest transfer outputs.
-    pub const fn outputs(&self) -> &Outputs {
-        &self.outputs
-    }
-
-    /// Separates the solution into its incoming facts and transfer outputs.
-    pub fn into_parts(self) -> (Facts, Outputs) {
-        (self.facts, self.outputs)
-    }
-}
-
-type OrderedFixedPointResult<P> = FixedPointResult<
-    BTreeMap<<P as DataflowProblem>::Location, <P as DataflowProblem>::Fact>,
-    BTreeMap<<P as DataflowProblem>::Location, <P as DataflowProblem>::Output>,
->;
-
-fn recompute_fact<L: Ord, F: Clone + JoinSemiLattice>(
-    location: &L,
-    seeds: &BTreeMap<L, Vec<F>>,
-    incoming_edges: &BTreeMap<L, BTreeMap<L, Vec<F>>>,
-) -> Option<F> {
-    let mut incoming = seeds
-        .get(location)
-        .into_iter()
-        .flatten()
-        .chain(
-            incoming_edges
-                .get(location)
-                .into_iter()
-                .flat_map(|incoming| incoming.values())
-                .flatten(),
-        )
-        .cloned();
-    incoming.next().map(|mut fact| {
-        for contribution in incoming {
-            fact.join_assign(contribution);
-        }
-        fact
-    })
-}
-
-/// Solves a dataflow problem while replacing superseded edge contributions.
-///
-/// This solver retains the latest contribution from each source location and
-/// recomputes a destination fact when that source output changes. This supports
-/// transfer artifacts whose symbolic identities can change as a predecessor fact
-/// grows without retaining stale identities in downstream facts.
-pub(crate) fn solve_with_recomputed_outputs<P>(
-    problem: &mut P,
-) -> Result<OrderedFixedPointResult<P>, P::Err>
-where
-    P: DataflowProblem,
-    P::Location: Clone + Ord,
-    P::Fact: Clone,
-{
-    let mut seeds = BTreeMap::<P::Location, Vec<P::Fact>>::new();
-    for (location, fact) in problem.seeds() {
-        seeds.entry(location).or_default().push(fact);
-    }
-
-    let mut facts = BTreeMap::<P::Location, P::Fact>::new();
-    let mut outputs = BTreeMap::<P::Location, P::Output>::new();
-    let mut incoming_edges = BTreeMap::<P::Location, BTreeMap<P::Location, Vec<P::Fact>>>::new();
-    let mut outgoing_targets = BTreeMap::<P::Location, BTreeSet<P::Location>>::new();
-    let mut dirty = seeds.keys().cloned().collect::<BTreeSet<_>>();
-    let mut worklist = BTreeSet::new();
-
-    while !dirty.is_empty() || !worklist.is_empty() {
-        while let Some(location) = dirty.pop_first() {
-            match recompute_fact(&location, &seeds, &incoming_edges) {
-                Some(fact) if facts.get(&location) != Some(&fact) => {
-                    facts.insert(location.clone(), fact);
-                    worklist.insert(location);
-                }
-                None if facts.remove(&location).is_some() => {
-                    worklist.remove(&location);
-                    outputs.remove(&location);
-                    if let Some(targets) = outgoing_targets.remove(&location) {
-                        for target in targets {
-                            let incoming = incoming_edges
-                                .get_mut(&target)
-                                .expect("an outgoing target has incoming contributions");
-                            incoming.remove(&location);
-                            if incoming.is_empty() {
-                                incoming_edges.remove(&target);
-                            }
-                            dirty.insert(target);
-                        }
-                    }
-                }
-                Some(_) | None => {}
-            }
-        }
-
-        let Some(location) = worklist.pop_first() else {
-            continue;
-        };
-        let fact = facts
-            .get(&location)
-            .expect("scheduled locations must have a stored fact");
-        let output = problem.flow(&location, fact)?;
-        let mut outgoing = BTreeMap::<P::Location, Vec<P::Fact>>::new();
-        for (target, contribution) in output.successors() {
-            outgoing
-                .entry(target.clone())
-                .or_default()
-                .push(contribution.clone());
-        }
-        let targets = outgoing.keys().cloned().collect::<BTreeSet<_>>();
-        let previous_targets = outgoing_targets.remove(&location).unwrap_or_default();
-        let affected = previous_targets
-            .iter()
-            .chain(outgoing.keys())
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        for target in affected {
-            let replacement = outgoing.remove(&target);
-            if incoming_edges
-                .get(&target)
-                .and_then(|incoming| incoming.get(&location))
-                == replacement.as_ref()
-            {
-                continue;
-            }
-            if let Some(replacement) = replacement {
-                incoming_edges
-                    .entry(target.clone())
-                    .or_default()
-                    .insert(location.clone(), replacement);
-            } else if let Some(incoming) = incoming_edges.get_mut(&target) {
-                incoming.remove(&location);
-                if incoming.is_empty() {
-                    incoming_edges.remove(&target);
-                }
-            }
-            dirty.insert(target);
-        }
-        if !targets.is_empty() {
-            outgoing_targets.insert(location.clone(), targets);
-        }
-        outputs.insert(location, output);
-    }
-
-    Ok(FixedPointResult { facts, outputs })
-}
-
 // ============================================================================
 // Common Lattice Implementations
 // ============================================================================
@@ -687,9 +500,7 @@ mod test {
 
     use proptest::prelude::*;
 
-    use crate::analysis::fixed_point::{
-        DataflowProblem, JoinSemiLattice, solve, solve_with_recomputed_outputs,
-    };
+    use crate::analysis::fixed_point::{DataflowProblem, JoinSemiLattice, solve};
 
     #[derive(Debug, Clone, PartialEq, Eq, proptest_derive::Arbitrary)]
     struct TestSet(BTreeSet<u8>);
@@ -804,44 +615,6 @@ mod test {
             solve(&mut NonCloneFacts).expect("infallible non-clone analysis");
 
         assert_eq!(facts[&1], NonCloneMax(2));
-    }
-
-    struct ReplacingSuccessor;
-
-    impl DataflowProblem for ReplacingSuccessor {
-        type Location = u8;
-        type Fact = TestSet;
-        type Err = Infallible;
-        type Output = Vec<(Self::Location, Self::Fact)>;
-
-        fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-            [(0, TestSet(BTreeSet::from([0])))]
-        }
-
-        fn flow(
-            &mut self,
-            location: &Self::Location,
-            fact: &Self::Fact,
-        ) -> Result<Self::Output, Self::Err> {
-            Ok(match location {
-                0 => vec![
-                    (1, TestSet(BTreeSet::from([0]))),
-                    (2, TestSet(BTreeSet::from([u8::from(fact.0.contains(&1))]))),
-                ],
-                1 => vec![(0, TestSet(BTreeSet::from([1])))],
-                2 => Vec::new(),
-                _ => unreachable!(),
-            })
-        }
-    }
-
-    #[test]
-    fn recomputed_solver_replaces_superseded_edge_contributions() {
-        let result =
-            solve_with_recomputed_outputs(&mut ReplacingSuccessor).expect("infallible analysis");
-
-        assert_eq!(result.facts()[&0], TestSet(BTreeSet::from([0, 1])));
-        assert_eq!(result.facts()[&2], TestSet(BTreeSet::from([1])));
     }
 
     proptest! {

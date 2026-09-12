@@ -1,4 +1,3 @@
-use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::ir::generator::{
     ExecutionError,
     jvm::frame::{DUAL_SLOT, SINGLE_SLOT},
@@ -24,7 +23,7 @@ fn joining_frames_with_different_stack_capacities_panics() {
     let mut lhs = frame(true, &desc, 0, 1).expect("valid frame");
     let rhs = frame(true, &desc, 0, 2).expect("valid frame");
 
-    lhs.join_assign(rhs);
+    lhs.join_assign_values_with(rhs, |_, _, _| false);
 }
 
 proptest! {

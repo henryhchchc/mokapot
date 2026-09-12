@@ -1,17 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    analysis::fixed_point::{DataflowProblem, FixedPointResult, solve_with_recomputed_outputs},
     ir::{
         control_flow::ControlTransfer,
         generator::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                analysis::fact::{
-                    AnalyzedJvmCfg, AnalyzedLocation, JvmFlowOutgoing, JvmFlowOutput, JvmFrameFact,
-                    JvmOutgoing, OperandState,
-                },
+                analysis::fact::{AnalyzedJvmCfg, AnalyzedLocation, JvmOutgoing, OperandState},
+                analysis::solver::{self, LocationOutput, normalize_frame_for},
                 frame::JvmStackFrame,
                 instruction::Instruction,
                 lifting::{
@@ -38,29 +35,17 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
     pub(super) value_id_allocator: ValueIdAllocator,
     this_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
-    entry: JvmFrameFact,
+    entry_location: Location,
+    initial_frame: JvmStackFrame<OperandState>,
 }
 
-impl DataflowProblem for JvmFrameAnalyzer<'_> {
-    type Location = Location;
-    type Fact = JvmFrameFact;
-    type Err = MokaIRBuildError;
-    type Output = JvmFlowOutput;
-
-    fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        std::iter::once((self.entry.location, self.entry.clone()))
-    }
-
-    fn flow(
+impl<'method> JvmFrameAnalyzer<'method> {
+    pub(super) fn transfer(
         &mut self,
-        location: &Self::Location,
-        fact: &Self::Fact,
-    ) -> Result<Self::Output, Self::Err> {
-        let location = *location;
-        if fact.location != location {
-            return Err(MokaIRBuildError::MalformedControlFlow);
-        }
-        let incoming = fact.frame.clone();
+        location: Location,
+        incoming: &JvmStackFrame<OperandState>,
+    ) -> Result<LocationOutput, MokaIRBuildError> {
+        let incoming = incoming.clone();
         let (instruction, outgoing) = match location {
             Location::Handler {
                 handler_pc,
@@ -101,21 +86,19 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
             }
         };
 
-        Ok(JvmFlowOutput {
+        Ok(LocationOutput {
             instruction,
             outgoing: outgoing
                 .into_iter()
-                .map(|(target, transfer, frame)| JvmFlowOutgoing {
+                .map(|(target, transfer, frame)| JvmOutgoing {
                     target,
                     transfer,
-                    frame: JvmFrameFact::new(target, frame),
+                    frame: normalize_frame_for(target, frame),
                 })
                 .collect(),
         })
     }
-}
 
-impl<'method> JvmFrameAnalyzer<'method> {
     pub(in crate::ir::generator) const fn body(&self) -> &MethodBody {
         self.body
     }
@@ -151,7 +134,6 @@ impl<'method> JvmFrameAnalyzer<'method> {
             &frame_parameters,
         )?;
         let entry_location = Location::entry(first_pc);
-        let entry = JvmFrameFact::new(entry_location, initial_frame);
         let analyzer = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
@@ -161,20 +143,17 @@ impl<'method> JvmFrameAnalyzer<'method> {
             value_id_allocator,
             this_value,
             parameter_values,
-            entry,
+            entry_location,
+            initial_frame,
         };
         Ok(analyzer)
     }
 
     pub(in crate::ir::generator) fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-        let result: FixedPointResult<
-            BTreeMap<Location, JvmFrameFact>,
-            BTreeMap<Location, JvmFlowOutput>,
-        > = solve_with_recomputed_outputs(&mut self)?;
-        let (frames, mut outputs) = result.into_parts();
-        let merge_identities = frames
+        let locations = self.solve_locations()?;
+        let merge_identities = locations
             .values()
-            .flat_map(|fact| fact.frame.values())
+            .flat_map(|location| location.incoming.values())
             .filter_map(|value| match value {
                 OperandState::Merged(identity) => Some(*identity),
                 OperandState::Value(_) | OperandState::ReturnAddress(_) | OperandState::Invalid => {
@@ -186,44 +165,22 @@ impl<'method> JvmFrameAnalyzer<'method> {
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        let locations: BTreeMap<Location, AnalyzedLocation> = frames
-            .into_iter()
-            .map(|(location, fact)| {
-                let output = outputs
-                    .remove(&location)
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-                Ok((
-                    location,
-                    AnalyzedLocation {
-                        incoming: fact.into_frame(),
-                        instruction: output.instruction,
-                        outgoing: output
-                            .outgoing
-                            .into_iter()
-                            .map(|outgoing| JvmOutgoing {
-                                target: outgoing.target,
-                                transfer: outgoing.transfer,
-                                frame: outgoing.frame.into_frame(),
-                            })
-                            .collect(),
-                        caught_exception: self.caught_exception_ids.get(&location).copied(),
-                    },
-                ))
-            })
-            .collect::<Result<_, MokaIRBuildError>>()?;
-        if !outputs.is_empty() {
-            return Err(MokaIRBuildError::MalformedControlFlow);
-        }
-        let entry_location = self.entry.location;
-        let initial_frame = self.entry.into_frame();
         Ok(AnalyzedJvmCfg {
-            entry_location,
-            initial_frame,
+            entry_location: self.entry_location,
+            initial_frame: self.initial_frame,
             locations,
             phi_values,
             this_value: self.this_value,
             parameter_values: self.parameter_values,
         })
+    }
+
+    pub(super) fn solve_locations(
+        &mut self,
+    ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
+        let entry_location = self.entry_location;
+        let initial_frame = self.initial_frame.clone();
+        solver::solve(self, entry_location, initial_frame)
     }
 
     pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {

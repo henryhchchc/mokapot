@@ -1,16 +1,14 @@
-use std::collections::BTreeMap;
-
 use super::{
     analyzer::JvmFrameAnalyzer,
-    fact::{JvmFrameFact, MergeIdentity, OperandState},
+    fact::{MergeIdentity, OperandState},
+    solver::{merge_frame_at, normalize_frame_for},
 };
 use crate::{
-    analysis::fixed_point::{JoinSemiLattice, solve},
     ir::generator::{
         identity::SsaValueId,
         jvm::{
             frame::{Entry, FrameSlot, JvmStackFrame},
-            normalization::{Location, ReturnAddress},
+            normalization::Location,
         },
         tests::method,
     },
@@ -45,67 +43,56 @@ fn merge_identity_is_stable_for_a_location_and_slot() {
     let descriptor = "(I)V".parse().expect("valid descriptor");
     let location = Location::entry(0.into());
     let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
-    let mut merged = JvmFrameFact::new(location, frame(1));
+    let mut merged = frame(1);
 
-    assert!(merged.join_assign(JvmFrameFact::new(location, frame(2))));
+    assert!(merge_frame_at(location, &mut merged, frame(2)));
     let expected = OperandState::Merged(MergeIdentity {
         location,
         slot: FrameSlot::Local(0),
     });
-    assert_eq!(merged.frame.local_variables(), &[Entry::Value(expected)]);
-    assert!(!merged.join_assign(JvmFrameFact::new(location, frame(3))));
-    assert_eq!(merged.frame.local_variables(), &[Entry::Value(expected)]);
+    assert_eq!(merged.local_variables(), &[Entry::Value(expected)]);
+    assert!(!merge_frame_at(location, &mut merged, frame(3)));
+    assert_eq!(merged.local_variables(), &[Entry::Value(expected)]);
+}
+
+#[test]
+fn frame_merge_is_permutation_independent() {
+    let descriptor = "(I)V".parse().expect("valid descriptor");
+    let location = Location::entry(0.into());
+    let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
+    let expected = [Entry::Value(OperandState::Merged(MergeIdentity {
+        location,
+        slot: FrameSlot::Local(0),
+    }))];
+
+    for order in [
+        [1, 2, 3],
+        [1, 3, 2],
+        [2, 1, 3],
+        [2, 3, 1],
+        [3, 1, 2],
+        [3, 2, 1],
+    ] {
+        let mut merged = frame(order[0]);
+        merge_frame_at(location, &mut merged, frame(order[1]));
+        merge_frame_at(location, &mut merged, frame(order[2]));
+        assert_eq!(merged.local_variables(), expected);
+    }
 }
 
 #[test]
 fn unwind_facts_discard_irrelevant_values_before_merging() {
     let descriptor = "(I)V".parse().expect("valid descriptor");
     let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
-    let mut unwind = JvmFrameFact::new(Location::Unwind, frame(1));
+    let mut unwind = normalize_frame_for(Location::Unwind, frame(1));
 
-    assert!(unwind.frame.values().next().is_none());
-    assert!(!unwind.join_assign(JvmFrameFact::new(Location::Unwind, frame(2))));
-    assert!(unwind.frame.values().next().is_none());
-}
-
-#[test]
-fn context_free_value_conflict_is_invalid() {
-    let lhs = Entry::Value(OperandState::Value(SsaValueId::new(0)));
-    let rhs = Entry::Value(OperandState::Value(SsaValueId::new(1)));
-
-    assert_eq!(lhs.join(rhs), Entry::Value(OperandState::Invalid));
-}
-
-#[test]
-fn context_free_same_value_is_unchanged() {
-    let value = OperandState::Value(SsaValueId::new(0));
-
-    assert_eq!(
-        Entry::Value(value).join(Entry::Value(value)),
-        Entry::Value(value)
-    );
-}
-
-#[test]
-fn incompatible_legacy_values_become_invalid() {
-    let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
-    let address = Entry::Value(OperandState::ReturnAddress(ReturnAddress::for_test(0)));
-
-    assert_eq!(value.join(address), Entry::Value(OperandState::Invalid));
-}
-
-#[test]
-fn a_value_missing_on_one_path_is_unavailable() {
-    let value = Entry::Value(OperandState::Value(SsaValueId::new(0)));
-
-    assert_eq!(
-        value.clone().join(Entry::UninitializedLocal),
-        Entry::UninitializedLocal
-    );
-    assert_eq!(
-        Entry::UninitializedLocal.join(value),
-        Entry::UninitializedLocal
-    );
+    assert!(unwind.values().next().is_none());
+    assert!(!merge_frame_at(
+        Location::Unwind,
+        &mut unwind,
+        normalize_frame_for(Location::Unwind, frame(2)),
+    ));
+    assert!(unwind.values().next().is_none());
 }
 
 #[test]
@@ -124,7 +111,7 @@ fn reprocessing_loop_allocates_identities_only_for_definitions() {
         vec![],
     );
     let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
-    let _: BTreeMap<Location, JvmFrameFact> = solve(&mut analyzer).expect("valid loop");
+    analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(analyzer.definition_ids.len(), 3);
     assert_eq!(analyzer.value_id_allocator.next_value_idx, 3);

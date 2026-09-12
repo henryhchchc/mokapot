@@ -2,6 +2,7 @@
 
 mod analyzer;
 mod fact;
+mod solver;
 
 pub(in crate::ir::generator) use analyzer::JvmFrameAnalyzer;
 pub(in crate::ir::generator) use fact::{

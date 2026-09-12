@@ -1,17 +1,14 @@
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::collections::BTreeMap;
 
-use crate::{
-    analysis::fixed_point::{DataflowOutput, JoinSemiLattice},
-    ir::{
-        control_flow::ControlTransfer,
-        generator::{
-            identity::SsaValueId,
-            jvm::{
-                frame::{FrameSlot, JvmStackFrame},
-                instruction::Instruction,
-                lifting::frame_operand::FrameOperand,
-                normalization::{Location, ReturnAddress},
-            },
+use crate::ir::{
+    control_flow::ControlTransfer,
+    generator::{
+        identity::SsaValueId,
+        jvm::{
+            frame::{FrameSlot, JvmStackFrame},
+            instruction::Instruction,
+            lifting::frame_operand::FrameOperand,
+            normalization::{Location, ReturnAddress},
         },
     },
 };
@@ -25,28 +22,16 @@ pub(in crate::ir::generator) struct MergeIdentity {
 }
 
 /// The abstract state of an operand during JVM frame analysis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(in crate::ir::generator) enum OperandState {
-    Value(SsaValueId),
+    Value(#[from] SsaValueId),
     #[display("%return_address")]
-    ReturnAddress(ReturnAddress),
+    ReturnAddress(#[from] ReturnAddress),
     #[display("%merged")]
     Merged(MergeIdentity),
     #[display("%invalid")]
     Invalid,
-}
-
-impl From<SsaValueId> for OperandState {
-    fn from(value: SsaValueId) -> Self {
-        Self::Value(value)
-    }
-}
-
-impl From<ReturnAddress> for OperandState {
-    fn from(value: ReturnAddress) -> Self {
-        Self::ReturnAddress(value)
-    }
 }
 
 impl FrameOperand for OperandState {
@@ -59,137 +44,6 @@ impl FrameOperand for OperandState {
 
     fn contains_return_address(&self) -> bool {
         matches!(self, Self::ReturnAddress(_) | Self::Invalid)
-    }
-}
-
-impl JoinSemiLattice for OperandState {
-    fn join_assign(&mut self, other: Self) -> bool {
-        if *self == other {
-            return false;
-        }
-        let joined = Self::Invalid;
-        if *self == joined {
-            false
-        } else {
-            *self = joined;
-            true
-        }
-    }
-}
-
-impl PartialOrd for OperandState {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        use Ordering::{Equal, Greater, Less};
-
-        if self == other {
-            Some(Equal)
-        } else {
-            match (self, other) {
-                (Self::Invalid, _) => Some(Greater),
-                (_, Self::Invalid) => Some(Less),
-                _ => None,
-            }
-        }
-    }
-}
-
-/// A frame tagged with the location at which its values are merged.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) struct JvmFrameFact {
-    pub(super) location: Location,
-    pub(super) frame: JvmStackFrame<OperandState>,
-}
-
-impl JvmFrameFact {
-    pub(super) fn new(location: Location, frame: JvmStackFrame<OperandState>) -> Self {
-        let frame = if matches!(location, Location::Unwind) {
-            frame.erase_values()
-        } else {
-            frame
-        };
-        Self { location, frame }
-    }
-
-    pub(super) fn into_frame(self) -> JvmStackFrame<OperandState> {
-        self.frame
-    }
-}
-
-impl JoinSemiLattice for JvmFrameFact {
-    fn join_assign(&mut self, other: Self) -> bool {
-        assert_eq!(self.location, other.location);
-        let location = self.location;
-        self.frame
-            .join_assign_values_with(other.frame, |slot, lhs, rhs| {
-                if *lhs == rhs {
-                    return false;
-                }
-                let merged = MergeIdentity { location, slot };
-                let value = match (*lhs, rhs) {
-                    (OperandState::Invalid | OperandState::ReturnAddress(_), _)
-                    | (_, OperandState::Invalid | OperandState::ReturnAddress(_)) => {
-                        OperandState::Invalid
-                    }
-                    (OperandState::Merged(identity), _) if identity == merged => return false,
-                    _ => OperandState::Merged(merged),
-                };
-                if *lhs == value {
-                    false
-                } else {
-                    *lhs = value;
-                    true
-                }
-            })
-    }
-}
-
-impl PartialOrd for JvmFrameFact {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        use Ordering::{Equal, Greater, Less};
-
-        if self.location != other.location {
-            return None;
-        }
-        let mut lhs = self.clone();
-        let mut rhs = other.clone();
-        let lhs_changes = JoinSemiLattice::join_assign(&mut lhs, other.clone());
-        let rhs_changes = JoinSemiLattice::join_assign(&mut rhs, self.clone());
-        match (lhs_changes, rhs_changes) {
-            (false, false) => Some(Equal),
-            (false, true) => Some(Greater),
-            (true, false) => Some(Less),
-            (true, true) => None,
-        }
-    }
-}
-
-/// Transfer output for one reachable JVM location.
-pub(in crate::ir::generator) struct JvmFlowOutput {
-    pub(super) instruction: Instruction,
-    pub(super) outgoing: Vec<JvmFlowOutgoing>,
-}
-
-pub(super) struct JvmFlowOutgoing {
-    pub(super) target: Location,
-    pub(super) transfer: ControlTransfer<OperandState>,
-    pub(super) frame: JvmFrameFact,
-}
-
-impl DataflowOutput<Location, JvmFrameFact> for JvmFlowOutput {
-    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a Location, &'a JvmFrameFact)>
-    where
-        Location: 'a,
-        JvmFrameFact: 'a,
-    {
-        self.outgoing
-            .iter()
-            .map(|outgoing| (&outgoing.target, &outgoing.frame))
-    }
-
-    fn into_successors(self) -> impl Iterator<Item = (Location, JvmFrameFact)> {
-        self.outgoing
-            .into_iter()
-            .map(|outgoing| (outgoing.target, outgoing.frame))
     }
 }
 
