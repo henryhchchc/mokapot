@@ -116,10 +116,9 @@ impl<'method> JvmFrameAnalyzer<'method> {
         method: &'method Method,
     ) -> Result<Self, MokaIRBuildError> {
         let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
-        let first_pc = body
+        let (first_pc, _) = body
             .instructions
             .entry_point()
-            .map(|(pc, _)| *pc)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let mut value_id_allocator = ValueIdAllocator::default();
         let this_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
@@ -159,7 +158,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(analyzer)
     }
 
-    pub(in crate::ir::generator) fn run(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
+    pub(in crate::ir::generator) fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
         let result: FixedPointResult<
             BTreeMap<Location, JvmFrameFact>,
             BTreeMap<Location, JvmFlowOutput>,
