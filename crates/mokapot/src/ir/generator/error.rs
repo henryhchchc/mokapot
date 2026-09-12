@@ -1,4 +1,4 @@
-use super::ExecutionError;
+use crate::ir::generator::jvm::frame::ExecutionError;
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]

@@ -1,18 +1,25 @@
-//! Finalizes frame-free lowered blocks into scalar SSA blocks.
-use super::super::block_formation::BlockEntry;
-use super::{
-    BTreeMap, BlockId, ControlTransfer, Instruction, MokaIRBuildError, OperationKind, SsaBlock,
-    SsaPhi, SsaSuccessor, SsaValueId, TerminatorKind,
-    merge::FinalPhiPlan,
-    model::{LoweredBlock, LoweredBlockArm, LoweredOperand},
-    simplify::SimplifiedPhis,
+//! Resolves formed JVM blocks into scalar SSA blocks.
+use std::collections::BTreeMap;
+
+use crate::ir::{
+    BlockId, TryMapValues,
+    generator::{
+        block_formation::{JvmBlock, JvmBlockArm},
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        ssa::{
+            merge::MergePlan,
+            model::{SsaBlock, SsaPhi, SsaSuccessor},
+            simplify::SimplifiedPhis,
+        },
+    },
 };
-use crate::ir::TryMapValues;
+
+type PhiCandidate = (SsaValueId, Vec<(BlockId, SsaValueId)>);
 
 pub(super) fn finalize(
-    entry: BlockEntry,
-    blocks: Vec<LoweredBlock>,
-    phi_plan: &FinalPhiPlan,
+    blocks: Vec<JvmBlock>,
+    merge_plan: &MergePlan,
     simplified: SimplifiedPhis,
 ) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
@@ -23,46 +30,23 @@ pub(super) fn finalize(
             .copied()
             .unwrap_or(value)
     };
-    let mut phis_by_block = BTreeMap::<BlockId, Vec<SsaPhi>>::new();
+    let mut phis_by_block = BTreeMap::<BlockId, Vec<PhiCandidate>>::new();
     for (value, inputs) in simplified.candidates {
-        let block = phi_plan
+        let block = merge_plan
             .block_for(value)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let inputs = inputs
-            .into_iter()
-            .map(|(predecessor, value)| (predecessor, canonical(value)))
-            .collect();
-        phis_by_block.entry(block).or_default().push(SsaPhi {
-            value: canonical(value),
-            inputs,
-        });
+        phis_by_block
+            .entry(block)
+            .or_default()
+            .push((value, inputs));
     }
-    let mut finalized = Vec::with_capacity(
-        blocks.len() + usize::from(matches!(entry, BlockEntry::Preheader { .. })),
-    );
-    if let BlockEntry::Preheader {
-        synthetic,
-        bytecode,
-    } = entry
-    {
-        finalized.push(SsaBlock {
-            id: synthetic,
-            caught_exception: None,
-            phis: vec![],
-            operations: vec![],
-            terminator: TerminatorKind::Goto,
-            terminator_source: None,
-            successors: vec![SsaSuccessor {
-                target: bytecode,
-                transfer: ControlTransfer::Unconditional,
-            }],
-        });
-    }
+    let mut finalized = Vec::with_capacity(blocks.len());
     for block in blocks {
         let id = block.id;
         finalized.push(finalize_block(
             block,
             phis_by_block.remove(&id).unwrap_or_default(),
+            merge_plan,
             &canonical,
         )?);
     }
@@ -73,57 +57,58 @@ pub(super) fn finalize(
     }
 }
 fn finalize_block(
-    block: LoweredBlock,
-    phis: Vec<SsaPhi>,
+    block: JvmBlock,
+    phis: Vec<PhiCandidate>,
+    merge_plan: &MergePlan,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<SsaBlock, MokaIRBuildError> {
-    let caught_exception = block.caught_exception.map(canonical);
-    let (last_location, last_instruction) = block
-        .instructions
-        .last()
-        .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let terminator_source = last_instruction
-        .is_explicit_transfer()
-        .then(|| last_location.source_pc())
-        .flatten();
-    let terminator = classify_terminator(last_instruction, &block.arms, canonical)?;
-    let mut operations = Vec::new();
-    for (location, instruction) in block.instructions {
-        let kind = match instruction {
-            Instruction::Definition { value, expr } => Some(OperationKind::Definition {
-                value: canonical(value),
-                expr: expr.try_map_values(|value| remap_operand(value, canonical))?,
-            }),
-            Instruction::Effect(expr) => Some(OperationKind::Effect {
-                expr: expr.try_map_values(|value| remap_operand(value, canonical))?,
-            }),
-            _ => None,
-        };
-        if let Some(kind) = kind {
-            operations.push((
-                location
-                    .source_pc()
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)?,
-                kind,
-            ));
-        }
-    }
-    let successors = block
-        .arms
+    let JvmBlock {
+        id,
+        entry_frame: _,
+        operations,
+        terminator,
+        terminator_source,
+        arms,
+        caught_exception,
+    } = block;
+    let resolve = |operand| merge_plan.resolve(operand).map(canonical);
+    let caught_exception = caught_exception.map(canonical);
+    let phis = phis
+        .into_iter()
+        .map(|(value, inputs)| SsaPhi {
+            value: canonical(value),
+            inputs: inputs
+                .into_iter()
+                .map(|(predecessor, value)| (predecessor, canonical(value)))
+                .collect(),
+        })
+        .collect();
+    let operations = operations
+        .into_iter()
+        .map(|(source, operation)| {
+            operation
+                .try_map_values(&resolve)
+                .map(|operation| (source, operation))
+        })
+        .collect::<Result<_, _>>()?;
+    let terminator = terminator.try_map_values(&resolve)?;
+    let successors = arms
         .into_iter()
         .map(
-            |LoweredBlockArm {
-                 target, transfer, ..
+            |JvmBlockArm {
+                 target,
+                 transfer,
+                 frame: _,
              }| {
                 Ok(SsaSuccessor {
                     target,
-                    transfer: transfer.try_map_values(|value| remap_operand(value, canonical))?,
+                    transfer: transfer.try_map_values(&resolve)?,
                 })
             },
         )
         .collect::<Result<_, MokaIRBuildError>>()?;
     Ok(SsaBlock {
-        id: block.id,
+        id,
         caught_exception,
         phis,
         operations,
@@ -131,52 +116,4 @@ fn finalize_block(
         terminator_source,
         successors,
     })
-}
-fn classify_terminator(
-    instruction: &Instruction<LoweredOperand>,
-    arms: &[LoweredBlockArm],
-    canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> Result<TerminatorKind<SsaValueId>, MokaIRBuildError> {
-    Ok(match instruction {
-        Instruction::Unwind => TerminatorKind::Unwind,
-        Instruction::Jump {
-            condition: Some(_), ..
-        } => TerminatorKind::Branch,
-        Instruction::HandlerEntry
-        | Instruction::Jump {
-            condition: None, ..
-        }
-        | Instruction::Subroutine { .. }
-        | Instruction::SubroutineReturn(_)
-        | Instruction::Erased => TerminatorKind::Goto,
-        Instruction::Switch { match_value, .. } => TerminatorKind::Switch {
-            match_value: remap_operand(*match_value, canonical)?,
-        },
-        Instruction::Return(value) => TerminatorKind::Return(
-            value
-                .map(|value| remap_operand(value, canonical))
-                .transpose()?,
-        ),
-        Instruction::Throw(value) => TerminatorKind::Throw(remap_operand(*value, canonical)?),
-        Instruction::Definition { .. } | Instruction::Effect(_) => {
-            if arms
-                .iter()
-                .any(|arm| matches!(arm.transfer, ControlTransfer::Normal))
-            {
-                TerminatorKind::Fallible
-            } else {
-                TerminatorKind::Goto
-            }
-        }
-    })
-}
-
-fn remap_operand(
-    operand: LoweredOperand,
-    canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> Result<SsaValueId, MokaIRBuildError> {
-    match operand {
-        LoweredOperand::Value(value) => Ok(canonical(value)),
-        LoweredOperand::ReturnAddress(_) => Err(MokaIRBuildError::MalformedControlFlow),
-    }
 }

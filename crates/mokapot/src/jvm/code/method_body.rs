@@ -124,14 +124,8 @@ impl<I> InstructionList<I> {
 
     /// Returns the first instruction in the list.
     #[must_use]
-    pub fn entry_point(&self) -> Option<(&ProgramCounter, &I)> {
-        self.0.first_key_value()
-    }
-
-    /// Returns the last instruction in the list.
-    #[must_use]
-    pub fn last_instruction(&self) -> Option<(&ProgramCounter, &I)> {
-        self.0.last_key_value()
+    pub fn entry_point(&self) -> Option<(ProgramCounter, &I)> {
+        self.0.first_key_value().map(|(pc, insn)| (*pc, insn))
     }
 
     /// Returns the program counter of the next instruction after the given one.
@@ -242,13 +236,6 @@ mod test {
             other_attributes: vec![],
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
-    }
-
-    #[test]
-    fn last_instruction() {
-        let instruction_list =
-            InstructionList::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
-        assert_eq!(Some((&2.into(), &30)), instruction_list.last_instruction());
     }
 
     #[test]

@@ -1,8 +1,16 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use super::*;
-use crate::jvm::code::{
-    ExceptionTableEntry, Instruction, InstructionList, MethodBody, ProgramCounter,
+use crate::{
+    ir::{
+        BasicBlock, EdgeId, InstructionId, MokaIRBuildError, MokaIRMethod, Operation,
+        OperationKind, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+        control_flow::ControlTransfer,
+    },
+    jvm::{
+        Method,
+        code::{ExceptionTableEntry, Instruction, InstructionList, MethodBody, ProgramCounter},
+        method,
+    },
 };
 
 pub(super) fn method(
