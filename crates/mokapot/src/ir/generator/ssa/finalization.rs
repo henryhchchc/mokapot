@@ -1,20 +1,18 @@
-//! Lowers frame-bearing JVM blocks into scalar SSA blocks.
+//! Finalizes frame-free lowered blocks into scalar SSA blocks.
 use super::super::block_formation::BlockEntry;
 use super::{
-    BTreeMap, BlockId, ControlTransfer, Instruction, MergeIdentity, MokaIRBuildError, OperandState,
-    OperationKind, SsaBlock, SsaPhi, SsaSuccessor, SsaValueId, TerminatorKind,
+    BTreeMap, BlockId, ControlTransfer, Instruction, MokaIRBuildError, OperationKind, SsaBlock,
+    SsaPhi, SsaSuccessor, SsaValueId, TerminatorKind,
+    merge::FinalPhiPlan,
+    model::{LoweredBlock, LoweredBlockArm, LoweredOperand},
     simplify::SimplifiedPhis,
 };
-use crate::ir::{
-    TryMapValues,
-    generator::block_formation::{JvmBlock, JvmBlockArm},
-};
+use crate::ir::TryMapValues;
 
 pub(super) fn finalize(
     entry: BlockEntry,
-    blocks: Vec<JvmBlock>,
-    phi_blocks: &BTreeMap<SsaValueId, BlockId>,
-    merge_values: &BTreeMap<MergeIdentity, SsaValueId>,
+    blocks: Vec<LoweredBlock>,
+    phi_plan: &FinalPhiPlan,
     simplified: SimplifiedPhis,
 ) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
@@ -27,9 +25,8 @@ pub(super) fn finalize(
     };
     let mut phis_by_block = BTreeMap::<BlockId, Vec<SsaPhi>>::new();
     for (value, inputs) in simplified.candidates {
-        let block = phi_blocks
-            .get(&value)
-            .copied()
+        let block = phi_plan
+            .block_for(value)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let inputs = inputs
             .into_iter()
@@ -66,7 +63,6 @@ pub(super) fn finalize(
         finalized.push(finalize_block(
             block,
             phis_by_block.remove(&id).unwrap_or_default(),
-            merge_values,
             &canonical,
         )?);
     }
@@ -77,9 +73,8 @@ pub(super) fn finalize(
     }
 }
 fn finalize_block(
-    block: JvmBlock,
+    block: LoweredBlock,
     phis: Vec<SsaPhi>,
-    merge_values: &BTreeMap<MergeIdentity, SsaValueId>,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<SsaBlock, MokaIRBuildError> {
     let caught_exception = block.caught_exception.map(canonical);
@@ -91,16 +86,16 @@ fn finalize_block(
         .is_explicit_transfer()
         .then(|| last_location.source_pc())
         .flatten();
-    let terminator = classify_terminator(last_instruction, &block.arms, merge_values, canonical)?;
+    let terminator = classify_terminator(last_instruction, &block.arms, canonical)?;
     let mut operations = Vec::new();
     for (location, instruction) in block.instructions {
         let kind = match instruction {
             Instruction::Definition { value, expr } => Some(OperationKind::Definition {
                 value: canonical(value),
-                expr: expr.try_map_values(|value| remap_operand(value, merge_values, canonical))?,
+                expr: expr.try_map_values(|value| remap_operand(value, canonical))?,
             }),
             Instruction::Effect(expr) => Some(OperationKind::Effect {
-                expr: expr.try_map_values(|value| remap_operand(value, merge_values, canonical))?,
+                expr: expr.try_map_values(|value| remap_operand(value, canonical))?,
             }),
             _ => None,
         };
@@ -117,13 +112,12 @@ fn finalize_block(
         .arms
         .into_iter()
         .map(
-            |JvmBlockArm {
+            |LoweredBlockArm {
                  target, transfer, ..
              }| {
                 Ok(SsaSuccessor {
                     target,
-                    transfer: transfer
-                        .try_map_values(|value| remap_operand(value, merge_values, canonical))?,
+                    transfer: transfer.try_map_values(|value| remap_operand(value, canonical))?,
                 })
             },
         )
@@ -139,9 +133,8 @@ fn finalize_block(
     })
 }
 fn classify_terminator(
-    instruction: &Instruction,
-    arms: &[JvmBlockArm],
-    merge_values: &BTreeMap<MergeIdentity, SsaValueId>,
+    instruction: &Instruction<LoweredOperand>,
+    arms: &[LoweredBlockArm],
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<TerminatorKind<SsaValueId>, MokaIRBuildError> {
     Ok(match instruction {
@@ -157,16 +150,14 @@ fn classify_terminator(
         | Instruction::SubroutineReturn(_)
         | Instruction::Erased => TerminatorKind::Goto,
         Instruction::Switch { match_value, .. } => TerminatorKind::Switch {
-            match_value: remap_operand(*match_value, merge_values, canonical)?,
+            match_value: remap_operand(*match_value, canonical)?,
         },
         Instruction::Return(value) => TerminatorKind::Return(
             value
-                .map(|value| remap_operand(value, merge_values, canonical))
+                .map(|value| remap_operand(value, canonical))
                 .transpose()?,
         ),
-        Instruction::Throw(value) => {
-            TerminatorKind::Throw(remap_operand(*value, merge_values, canonical)?)
-        }
+        Instruction::Throw(value) => TerminatorKind::Throw(remap_operand(*value, canonical)?),
         Instruction::Definition { .. } | Instruction::Effect(_) => {
             if arms
                 .iter()
@@ -179,20 +170,13 @@ fn classify_terminator(
         }
     })
 }
+
 fn remap_operand(
-    operand: OperandState,
-    merge_values: &BTreeMap<MergeIdentity, SsaValueId>,
+    operand: LoweredOperand,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<SsaValueId, MokaIRBuildError> {
     match operand {
-        OperandState::Value(value) => Ok(canonical(value)),
-        OperandState::Merged(identity) => merge_values
-            .get(&identity)
-            .copied()
-            .map(canonical)
-            .ok_or(MokaIRBuildError::MalformedControlFlow),
-        OperandState::ReturnAddress(_) | OperandState::Invalid => {
-            Err(MokaIRBuildError::MalformedControlFlow)
-        }
+        LoweredOperand::Value(value) => Ok(canonical(value)),
+        LoweredOperand::ReturnAddress(_) => Err(MokaIRBuildError::MalformedControlFlow),
     }
 }

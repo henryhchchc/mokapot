@@ -10,7 +10,7 @@ use super::{
     BTreeMap, BlockId, ControlTransfer, Instruction, MergeIdentity, MokaIRBuildError, OperandState,
     OperationKind, SsaValueId, TerminatorKind,
 };
-use merge::collect_phi_candidates;
+use merge::{PhiPlan, collect_phi_candidates};
 pub(in crate::ir::generator) use model::SsaBlock;
 use model::{SsaPhi, SsaSuccessor};
 use simplify::simplify_phis;
@@ -34,17 +34,24 @@ pub(super) fn construct(graph: JvmBlockGraph) -> Result<SsaGraph, MokaIRBuildErr
         this_value,
         parameter_values,
     } = graph;
+    let phi_plan = PhiPlan::new(phi_blocks, merge_values);
     let preheader = match entry {
         BlockEntry::Direct(_) => None,
         BlockEntry::Preheader {
             synthetic,
             bytecode,
-        } => Some((bytecode, synthetic, &initial_frame)),
+        } => Some((
+            bytecode,
+            synthetic,
+            initial_frame
+                .as_ref()
+                .ok_or(MokaIRBuildError::MalformedControlFlow)?,
+        )),
     };
-    let candidates = collect_phi_candidates(&blocks, &phi_blocks, &merge_values, preheader)?;
+    let collected = collect_phi_candidates(blocks, phi_plan, preheader)?;
     let simplified =
-        simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
-    let blocks = finalization::finalize(entry, blocks, &phi_blocks, &merge_values, simplified)?;
+        simplify_phis(collected.candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+    let blocks = finalization::finalize(entry, collected.blocks, &collected.phi_plan, simplified)?;
     Ok(SsaGraph {
         entry: entry.method_entry(),
         blocks,

@@ -1,8 +1,13 @@
 use super::{
     Conversion, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
     MathOperation, MokaIRBuildError, NaNTreatment, SINGLE_SLOT, SsaValueId, WideInstruction,
-    binary_op_math, conversion_op,
+    binary_op_math, conversion_op, required_definition,
 };
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    matches!(instruction.opcode(), 96..=152)
+        || matches!(instruction, JVM::Wide(WideInstruction::IInc(_, _)))
+}
 
 #[expect(
     clippy::too_many_lines,
@@ -10,7 +15,7 @@ use super::{
 )]
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &JVM,
-    def: SsaValueId,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
 ) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
@@ -18,6 +23,11 @@ pub(super) fn lift<OP: FrameOperand>(
         reason = "this function exhaustively dispatches one opcode family"
     )]
     use JVM::*;
+
+    if !defines_value(jvm_instruction) {
+        return Ok(None);
+    }
+    let def = required_definition(definition)?;
 
     let instruction = match jvm_instruction {
         IAdd | FAdd => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Add)?,

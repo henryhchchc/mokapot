@@ -1,7 +1,21 @@
 use super::{
     DUAL_SLOT, Expression, FieldAccess, FieldType, FrameOperand, Instruction, JVM, JvmStackFrame,
-    MokaIRBuildError, PrimitiveType, ReturnType, SINGLE_SLOT, SsaValueId,
+    MokaIRBuildError, PrimitiveType, ReturnType, SINGLE_SLOT, SsaValueId, required_definition,
 };
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    match instruction {
+        JVM::GetStatic(_) | JVM::GetField(_) => true,
+        JVM::InvokeVirtual(method)
+        | JVM::InvokeSpecial(method)
+        | JVM::InvokeInterface(method, _)
+        | JVM::InvokeStatic(method) => !matches!(method.descriptor.return_type, ReturnType::Void),
+        JVM::InvokeDynamic { descriptor, .. } => {
+            !matches!(descriptor.return_type, ReturnType::Void)
+        }
+        _ => false,
+    }
+}
 
 #[expect(
     clippy::too_many_lines,
@@ -9,7 +23,7 @@ use super::{
 )]
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &JVM,
-    def: SsaValueId,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
 ) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
@@ -20,6 +34,7 @@ pub(super) fn lift<OP: FrameOperand>(
 
     let instruction = match jvm_instruction {
         GetStatic(field) => {
+            let def = required_definition(definition)?;
             frame.typed_push(&field.field_type, def.into())?;
             let field = field.clone();
             let field_op = FieldAccess::ReadStatic { field };
@@ -29,6 +44,7 @@ pub(super) fn lift<OP: FrameOperand>(
             }
         }
         GetField(field) => {
+            let def = required_definition(definition)?;
             let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let field = field.clone();
             frame.typed_push(&field.field_type, def.into())?;
@@ -74,16 +90,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 this: Some(object_ref),
                 args: arguments,
             };
-            if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                Instruction::Definition {
-                    value: def,
-                    expr: rhs,
+            match &method_ref.descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                Instruction::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         InvokeStatic(method_ref) => {
@@ -93,16 +109,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 this: None,
                 args: arguments,
             };
-            if let ReturnType::Some(ref return_type) = method_ref.descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(method_ref.descriptor.return_type, ReturnType::Some(_)) {
-                Instruction::Definition {
-                    value: def,
-                    expr: rhs,
+            match &method_ref.descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                Instruction::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         InvokeDynamic {
@@ -117,16 +133,16 @@ pub(super) fn lift<OP: FrameOperand>(
                 captures: arguments,
                 closure_descriptor: descriptor.to_owned(),
             };
-            if let ReturnType::Some(ref return_type) = descriptor.return_type {
-                frame.typed_push(return_type, def.into())?;
-            }
-            if matches!(descriptor.return_type, ReturnType::Some(_)) {
-                Instruction::Definition {
-                    value: def,
-                    expr: rhs,
+            match &descriptor.return_type {
+                ReturnType::Some(return_type) => {
+                    let def = required_definition(definition)?;
+                    frame.typed_push(return_type, def.into())?;
+                    Instruction::Definition {
+                        value: def,
+                        expr: rhs,
+                    }
                 }
-            } else {
-                Instruction::Effect(rhs)
+                ReturnType::Void => Instruction::Effect(rhs),
             }
         }
         _ => return Ok(None),

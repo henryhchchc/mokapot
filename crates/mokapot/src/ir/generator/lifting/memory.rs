@@ -1,11 +1,25 @@
 use super::{
     ArrayOperation, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
-    MokaIRBuildError, SINGLE_SLOT, SsaValueId, load_local, store_local,
+    MokaIRBuildError, SINGLE_SLOT, SsaValueId, load_local, required_definition, store_local,
 };
+
+pub(super) const fn defines_value(instruction: &JVM) -> bool {
+    matches!(
+        instruction,
+        JVM::IALoad
+            | JVM::FALoad
+            | JVM::AALoad
+            | JVM::BALoad
+            | JVM::CALoad
+            | JVM::SALoad
+            | JVM::LALoad
+            | JVM::DALoad
+    )
+}
 
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &JVM,
-    def: SsaValueId,
+    definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OP>,
 ) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
     #[allow(
@@ -28,6 +42,7 @@ pub(super) fn lift<OP: FrameOperand>(
         LLoad2 | DLoad2 => load_local::<DUAL_SLOT, _>(frame, 2)?,
         LLoad3 | DLoad3 => load_local::<DUAL_SLOT, _>(frame, 3)?,
         IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => {
+            let def = required_definition(definition)?;
             let index = frame.pop_value::<SINGLE_SLOT>()?;
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
@@ -39,6 +54,7 @@ pub(super) fn lift<OP: FrameOperand>(
             }
         }
         LALoad | DALoad => {
+            let def = required_definition(definition)?;
             let index = frame.pop_value::<SINGLE_SLOT>()?;
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
