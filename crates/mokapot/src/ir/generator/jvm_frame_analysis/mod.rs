@@ -3,9 +3,9 @@
 pub(in crate::ir::generator) mod operand_state;
 
 use super::{
-    BTreeMap, ControlTransfer, DataflowProblem, Instruction, JvmStackFrame, Location, Method,
-    MethodBody, MokaIRBuildError, NormalizedJvm, Normalizer, OperandState, ProgramCounter,
-    ReturnAddress, SsaValueId, method,
+    BTreeMap, BTreeSet, ControlTransfer, DataflowProblem, Instruction, JvmStackFrame, Location,
+    Method, MethodBody, MokaIRBuildError, Normalizer, OperandState, ProgramCounter, ReturnAddress,
+    SsaValueId, method,
 };
 use crate::{
     analysis::fixed_point::DataflowOutput,
@@ -15,6 +15,7 @@ use crate::{
         semantics::{JvmSemantics, outgoing_from},
     },
 };
+pub(in crate::ir::generator) use operand_state::MergeIdentity;
 
 /// Mutable state used only while solving JVM frame facts.
 pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
@@ -23,67 +24,118 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
     normalizer: Normalizer,
     definition_ids: BTreeMap<Location, SsaValueId>,
     caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    next_definition_id: u32,
-    entry: Option<(Location, JvmStackFrame)>,
+    next_value_index: u32,
+    this_value: Option<SsaValueId>,
+    parameter_values: Vec<SsaValueId>,
+    entry: Option<(Location, JvmFrameFact)>,
 }
 
 /// Transfer output retained for one reachable JVM location.
 pub(in crate::ir::generator) struct JvmFlowOutput {
+    instruction: Instruction,
     is_explicit_transfer: bool,
-    outgoing: Vec<JvmOutgoing>,
+    outgoing: Vec<JvmFlowOutgoing>,
 }
 
-impl DataflowOutput<Location, JvmStackFrame> for JvmFlowOutput {
-    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a Location, &'a JvmStackFrame)>
+struct JvmFlowOutgoing {
+    target: Location,
+    transfer: ControlTransfer<OperandState>,
+    frame: JvmFrameFact,
+}
+
+impl DataflowOutput<Location, JvmFrameFact> for JvmFlowOutput {
+    fn successors<'a>(&'a self) -> impl Iterator<Item = (&'a Location, &'a JvmFrameFact)>
     where
         Location: 'a,
-        JvmStackFrame: 'a,
+        JvmFrameFact: 'a,
     {
         self.outgoing
             .iter()
             .map(|outgoing| (&outgoing.target, &outgoing.frame))
     }
 
-    fn into_successors(self) -> impl Iterator<Item = (Location, JvmStackFrame)> {
+    fn into_successors(self) -> impl Iterator<Item = (Location, JvmFrameFact)> {
         self.outgoing
             .into_iter()
             .map(|outgoing| (outgoing.target, outgoing.frame))
     }
 }
 
-/// One outgoing edge and the abstract frame reaching its target.
+/// One outgoing edge and its exact symbolic frame.
 pub(in crate::ir::generator) struct JvmOutgoing {
     pub target: Location,
-    pub transfer: JvmTransferCategory,
+    pub transfer: ControlTransfer<OperandState>,
     pub frame: JvmStackFrame,
 }
 
-/// The control-flow category of an abstract outgoing JVM edge.
-///
-/// Frame analysis needs only the category; exact guards are replayed while
-/// constructing scalar SSA.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::ir::generator) enum JvmTransferCategory {
-    /// An ordinary unguarded transfer.
-    Unconditional,
-    /// A guarded branch transfer.
-    Conditional,
-    /// The normal outcome of a fallible instruction.
-    Normal,
-    /// An outcome caught by an exception-table entry.
-    Exception,
-    /// An exceptional outcome leaving the method.
-    Unwind,
+/// A frame tagged with the location at which its values are merged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::ir::generator) struct JvmFrameFact {
+    location: Location,
+    frame: JvmStackFrame,
 }
 
-impl From<&ControlTransfer<OperandState>> for JvmTransferCategory {
-    fn from(transfer: &ControlTransfer<OperandState>) -> Self {
-        match transfer {
-            ControlTransfer::Unconditional => Self::Unconditional,
-            ControlTransfer::Conditional(_) => Self::Conditional,
-            ControlTransfer::Normal => Self::Normal,
-            ControlTransfer::Exception(_) => Self::Exception,
-            ControlTransfer::Unwind => Self::Unwind,
+impl JvmFrameFact {
+    fn new(location: Location, frame: JvmStackFrame) -> Self {
+        let frame = if matches!(location, Location::Unwind) {
+            frame.erase_values()
+        } else {
+            frame
+        };
+        Self { location, frame }
+    }
+
+    fn into_frame(self) -> JvmStackFrame {
+        self.frame
+    }
+}
+
+impl crate::analysis::fixed_point::JoinSemiLattice for JvmFrameFact {
+    fn join_assign(&mut self, other: Self) -> bool {
+        assert_eq!(self.location, other.location);
+        let location = self.location;
+        self.frame
+            .join_assign_values_with(other.frame, |slot, lhs, rhs| {
+                if *lhs == rhs {
+                    return false;
+                }
+                let merged = MergeIdentity { location, slot };
+                let value = match (*lhs, rhs) {
+                    (OperandState::Invalid | OperandState::ReturnAddress(_), _)
+                    | (_, OperandState::Invalid | OperandState::ReturnAddress(_)) => {
+                        OperandState::Invalid
+                    }
+                    (OperandState::Merged(identity), _) if identity == merged => return false,
+                    _ => OperandState::Merged(merged),
+                };
+                if *lhs == value {
+                    false
+                } else {
+                    *lhs = value;
+                    true
+                }
+            })
+    }
+}
+
+impl PartialOrd for JvmFrameFact {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+
+        if self.location != other.location {
+            return None;
+        }
+        let mut lhs = self.clone();
+        let mut rhs = other.clone();
+        let lhs_changes =
+            crate::analysis::fixed_point::JoinSemiLattice::join_assign(&mut lhs, other.clone());
+        let rhs_changes =
+            crate::analysis::fixed_point::JoinSemiLattice::join_assign(&mut rhs, self.clone());
+        match (lhs_changes, rhs_changes) {
+            (false, false) => Some(Equal),
+            (false, true) => Some(Greater),
+            (true, false) => Some(Less),
+            (true, true) => None,
         }
     }
 }
@@ -91,15 +143,10 @@ impl From<&ControlTransfer<OperandState>> for JvmTransferCategory {
 /// Completed abstract-execution facts for one reachable JVM location.
 pub(in crate::ir::generator) struct AnalyzedLocation {
     pub incoming: JvmStackFrame,
+    pub instruction: Instruction,
     pub is_explicit_transfer: bool,
     pub outgoing: Vec<JvmOutgoing>,
-}
-
-/// Immutable lookups required to replay bytecode with exact SSA operands.
-pub(in crate::ir::generator) struct JvmReplayPlan {
-    definition_ids: BTreeMap<Location, SsaValueId>,
-    caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    normalized: NormalizedJvm,
+    pub caught_exception: Option<SsaValueId>,
 }
 
 /// Reachable JVM locations and abstract control-flow facts.
@@ -107,12 +154,14 @@ pub(in crate::ir::generator) struct AnalyzedJvmCfg {
     pub entry_location: Location,
     pub initial_frame: JvmStackFrame,
     pub locations: BTreeMap<Location, AnalyzedLocation>,
-    pub replay: JvmReplayPlan,
+    pub phi_values: BTreeMap<MergeIdentity, SsaValueId>,
+    pub this_value: Option<SsaValueId>,
+    pub parameter_values: Vec<SsaValueId>,
 }
 
 impl DataflowProblem for JvmFrameAnalyzer<'_> {
     type Location = Location;
-    type Fact = JvmStackFrame;
+    type Fact = JvmFrameFact;
     type Err = MokaIRBuildError;
     type Output = JvmFlowOutput;
 
@@ -126,6 +175,10 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
         fact: &Self::Fact,
     ) -> Result<Self::Output, Self::Err> {
         let location = *location;
+        if fact.location != location {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
+        let incoming = fact.frame.clone();
         let (instruction, outgoing) = match location {
             Location::Handler {
                 handler_pc,
@@ -134,13 +187,17 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
                 let target = self.normalizer.bytecode(handler_pc, context)?;
                 (
                     Instruction::HandlerEntry,
-                    vec![(target, ControlTransfer::Unconditional, fact.same_frame())],
+                    vec![(
+                        target,
+                        ControlTransfer::Unconditional,
+                        incoming.same_frame(),
+                    )],
                 )
             }
             Location::Unwind => (Instruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
-                let pre_frame = fact.same_frame();
-                let mut normal_frame = fact.same_frame();
+                let pre_frame = incoming.same_frame();
+                let mut normal_frame = incoming.same_frame();
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
@@ -156,20 +213,22 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
                     normal_frame,
                     &instruction,
                     fallible,
-                    &OperandState::CaughtException,
+                    &OperandState::Value,
                 )?;
                 (instruction, outgoing)
             }
         };
 
+        let is_explicit_transfer = instruction.is_explicit_transfer();
         Ok(JvmFlowOutput {
-            is_explicit_transfer: instruction.is_explicit_transfer(),
+            instruction,
+            is_explicit_transfer,
             outgoing: outgoing
                 .into_iter()
-                .map(|(target, transfer, frame)| JvmOutgoing {
+                .map(|(target, transfer, frame)| JvmFlowOutgoing {
                     target,
-                    transfer: JvmTransferCategory::from(&transfer),
-                    frame,
+                    transfer,
+                    frame: JvmFrameFact::new(target, frame),
                 })
                 .collect(),
         })
@@ -184,44 +243,91 @@ impl<'method> JvmFrameAnalyzer<'method> {
             .entry_point()
             .map(|(pc, _)| *pc)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let initial_frame = JvmStackFrame::new(
-            method.access_flags.contains(method::AccessFlags::STATIC),
-            &method.descriptor,
-            body.max_locals,
-            body.max_stack,
-        )?;
-
-        Ok(Self {
+        let mut analyzer = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
             normalizer: Normalizer::new(first_pc),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
-            next_definition_id: 0,
-            entry: Some((Location::entry(first_pc), initial_frame)),
-        })
+            next_value_index: 0,
+            this_value: None,
+            parameter_values: Vec::new(),
+            entry: None,
+        };
+        analyzer.this_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
+            .then(|| analyzer.next_value_id())
+            .transpose()?;
+        analyzer.parameter_values = method
+            .descriptor
+            .parameters_types
+            .iter()
+            .map(|_| analyzer.next_value_id())
+            .collect::<Result<_, _>>()?;
+        let frame_parameters = analyzer
+            .parameter_values
+            .iter()
+            .copied()
+            .map(OperandState::Value)
+            .collect::<Vec<_>>();
+        let initial_frame = JvmStackFrame::with_inputs(
+            &method.descriptor,
+            body.max_locals,
+            body.max_stack,
+            analyzer.this_value.map(OperandState::Value),
+            &frame_parameters,
+        )?;
+        let entry_location = Location::entry(first_pc);
+        analyzer.entry = Some((
+            entry_location,
+            JvmFrameFact::new(entry_location, initial_frame),
+        ));
+        Ok(analyzer)
     }
 
     pub(super) fn run(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-        use crate::analysis::fixed_point::{FixedPointResult, solve_with_outputs};
+        use crate::analysis::fixed_point::{FixedPointResult, solve_with_recomputed_outputs};
 
         let result: FixedPointResult<
-            BTreeMap<Location, JvmStackFrame>,
+            BTreeMap<Location, JvmFrameFact>,
             BTreeMap<Location, JvmFlowOutput>,
-        > = solve_with_outputs(&mut self)?;
+        > = solve_with_recomputed_outputs(&mut self)?;
         let (frames, mut outputs) = result.into_parts();
+        let merge_identities = frames
+            .values()
+            .flat_map(|fact| fact.frame.values())
+            .filter_map(|value| match value {
+                OperandState::Merged(identity) => Some(*identity),
+                OperandState::Value(_) | OperandState::ReturnAddress(_) | OperandState::Invalid => {
+                    None
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        let phi_values = merge_identities
+            .into_iter()
+            .map(|identity| self.next_value_id().map(|value| (identity, value)))
+            .collect::<Result<_, _>>()?;
         let locations: BTreeMap<Location, AnalyzedLocation> = frames
             .into_iter()
-            .map(|(location, incoming)| {
+            .map(|(location, fact)| {
                 let output = outputs
                     .remove(&location)
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?;
                 Ok((
                     location,
                     AnalyzedLocation {
-                        incoming,
+                        incoming: fact.into_frame(),
+                        instruction: output.instruction,
                         is_explicit_transfer: output.is_explicit_transfer,
-                        outgoing: output.outgoing,
+                        outgoing: output
+                            .outgoing
+                            .into_iter()
+                            .map(|outgoing| JvmOutgoing {
+                                target: outgoing.target,
+                                transfer: outgoing.transfer,
+                                frame: outgoing.frame.into_frame(),
+                            })
+                            .collect(),
+                        caught_exception: self.caught_exception_ids.get(&location).copied(),
                     },
                 ))
             })
@@ -233,121 +339,21 @@ impl<'method> JvmFrameAnalyzer<'method> {
             self.entry.ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(AnalyzedJvmCfg {
             entry_location,
-            initial_frame,
+            initial_frame: initial_frame.into_frame(),
             locations,
-            replay: JvmReplayPlan {
-                definition_ids: self.definition_ids,
-                caught_exception_ids: self.caught_exception_ids,
-                normalized: self.normalizer.finish(),
-            },
+            phi_values,
+            this_value: self.this_value,
+            parameter_values: self.parameter_values,
         })
     }
 
-    fn next_definition_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
-        let id = SsaValueId::new(self.next_definition_id);
-        self.next_definition_id = self
-            .next_definition_id
+    fn next_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+        let id = SsaValueId::new(self.next_value_index);
+        self.next_value_index = self
+            .next_value_index
             .checked_add(1)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(id)
-    }
-}
-
-impl JvmReplayPlan {
-    pub(in crate::ir::generator) fn max_value_index(&self) -> Option<u32> {
-        self.definition_ids
-            .values()
-            .chain(self.caught_exception_ids.values())
-            .map(|value| value.index())
-            .max()
-    }
-
-    pub(in crate::ir::generator) fn definition_at(
-        &self,
-        location: Location,
-    ) -> Result<SsaValueId, MokaIRBuildError> {
-        self.definition_ids
-            .get(&location)
-            .copied()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
-    }
-
-    pub(in crate::ir::generator) fn caught_exception_at(
-        &self,
-        location: Location,
-    ) -> Result<SsaValueId, MokaIRBuildError> {
-        self.caught_exception_ids
-            .get(&location)
-            .copied()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
-    }
-
-    pub(in crate::ir::generator) fn caught_exception(
-        &self,
-        location: Location,
-    ) -> Option<SsaValueId> {
-        self.caught_exception_ids.get(&location).copied()
-    }
-
-    pub(in crate::ir::generator) fn next_location(
-        &self,
-        body: &MethodBody,
-        location: Location,
-    ) -> Result<Location, MokaIRBuildError> {
-        let pc = location
-            .source_pc()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let context = location
-            .context()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let next = body
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalized.bytecode(next, context)
-    }
-
-    pub(in crate::ir::generator) fn target_location(
-        &self,
-        location: Location,
-        target: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError> {
-        let context = location
-            .context()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalized.bytecode(target, context)
-    }
-
-    pub(in crate::ir::generator) fn handler_location(
-        &self,
-        location: Location,
-        handler: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError> {
-        let context = location
-            .context()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalized.handler(handler, context)
-    }
-
-    pub(in crate::ir::generator) fn unwind_location(&self) -> Result<Location, MokaIRBuildError> {
-        self.normalized.unwind()
-    }
-
-    pub(in crate::ir::generator) fn enter_subroutine(
-        &self,
-        location: Location,
-        target: ProgramCounter,
-        continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
-        self.normalized.enter(location, target, continuation)
-    }
-
-    pub(in crate::ir::generator) fn return_from(
-        &self,
-        location: Location,
-        address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.normalized.return_from(location, address)
     }
 }
 
@@ -363,7 +369,7 @@ impl JvmSemantics for JvmFrameAnalyzer<'_> {
         if let Some(&id) = self.definition_ids.get(&location) {
             return Ok(id);
         }
-        let id = self.next_definition_id()?;
+        let id = self.next_value_id()?;
         self.definition_ids.insert(location, id);
         Ok(id)
     }
@@ -375,7 +381,7 @@ impl JvmSemantics for JvmFrameAnalyzer<'_> {
         if let Some(&id) = self.caught_exception_ids.get(&location) {
             return Ok(id);
         }
-        let id = self.next_definition_id()?;
+        let id = self.next_value_id()?;
         self.caught_exception_ids.insert(location, id);
         Ok(id)
     }
@@ -440,9 +446,59 @@ mod tests {
 
     use super::*;
     use crate::{
-        analysis::fixed_point::solve, ir::generator::tests::method,
+        analysis::fixed_point::{JoinSemiLattice, solve},
+        ir::generator::{
+            jvm_frame::{Entry, FrameSlot},
+            tests::method,
+        },
         jvm::code::Instruction as JvmInstruction,
     };
+
+    #[test]
+    fn merge_identity_is_stable_for_a_location_and_slot() {
+        let descriptor = "(I)V".parse().expect("valid descriptor");
+        let location = Location::entry(0.into());
+        let frame = |value| {
+            JvmStackFrame::with_inputs(
+                &descriptor,
+                1,
+                0,
+                None,
+                &[OperandState::Value(SsaValueId::new(value))],
+            )
+            .expect("frame fits descriptor")
+        };
+        let mut merged = JvmFrameFact::new(location, frame(1));
+
+        assert!(merged.join_assign(JvmFrameFact::new(location, frame(2))));
+        let expected = OperandState::Merged(MergeIdentity {
+            location,
+            slot: FrameSlot::Local(0),
+        });
+        assert_eq!(merged.frame.local_variables(), &[Entry::Value(expected)]);
+        assert!(!merged.join_assign(JvmFrameFact::new(location, frame(3))));
+        assert_eq!(merged.frame.local_variables(), &[Entry::Value(expected)]);
+    }
+
+    #[test]
+    fn unwind_facts_discard_irrelevant_values_before_merging() {
+        let descriptor = "(I)V".parse().expect("valid descriptor");
+        let frame = |value| {
+            JvmStackFrame::with_inputs(
+                &descriptor,
+                1,
+                0,
+                None,
+                &[OperandState::Value(SsaValueId::new(value))],
+            )
+            .expect("frame fits descriptor")
+        };
+        let mut unwind = JvmFrameFact::new(Location::Unwind, frame(1));
+
+        assert!(unwind.frame.values().next().is_none());
+        assert!(!unwind.join_assign(JvmFrameFact::new(Location::Unwind, frame(2))));
+        assert!(unwind.frame.values().next().is_none());
+    }
 
     #[test]
     fn reprocessing_loop_locations_reuses_definition_identities() {
@@ -460,9 +516,9 @@ mod tests {
             vec![],
         );
         let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
-        let _: BTreeMap<Location, JvmStackFrame> = solve(&mut analyzer).expect("valid loop");
+        let _: BTreeMap<Location, JvmFrameFact> = solve(&mut analyzer).expect("valid loop");
 
         assert_eq!(analyzer.definition_ids.len(), 7);
-        assert_eq!(analyzer.next_definition_id, 7);
+        assert_eq!(analyzer.next_value_index, 7);
     }
 }

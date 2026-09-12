@@ -11,11 +11,20 @@ use crate::{
 };
 
 use super::super::OperandState;
+#[cfg(test)]
+use super::super::SsaValueId;
 
 pub(crate) const SINGLE_SLOT: bool = false;
 pub(crate) const DUAL_SLOT: bool = true;
 
 use super::{entry::Entry, error::ExecutionError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub(in crate::ir::generator) enum FrameSlot {
+    Local(usize),
+    Stack(usize),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct JvmStackFrame<V = OperandState> {
@@ -51,21 +60,62 @@ impl<V: JoinSemiLattice> JoinSemiLattice for JvmStackFrame<V> {
     /// This function panics if the stack capacity, local-variable count, or
     /// operand-stack height differs between the two frames.
     fn join_assign(&mut self, other: Self) -> bool {
+        self.join_assign_values_with(other, |_, lhs, rhs| lhs.join_assign(rhs))
+    }
+}
+
+impl<V> JvmStackFrame<V> {
+    pub(in crate::ir::generator) fn erase_values(mut self) -> Self {
+        for entry in &mut self.local_variables {
+            if matches!(entry, Entry::Value(_) | Entry::UninitializedLocal) {
+                *entry = Entry::UninitializedLocal;
+            }
+        }
+        self.operand_stack.clear();
+        self
+    }
+
+    pub(in crate::ir::generator) fn values(&self) -> impl Iterator<Item = &V> {
+        self.local_variables
+            .iter()
+            .chain(&self.operand_stack)
+            .filter_map(|entry| match entry {
+                Entry::Value(value) => Some(value),
+                Entry::Top | Entry::UninitializedLocal | Entry::OutOfScope => None,
+            })
+    }
+
+    pub(in crate::ir::generator) fn join_assign_values_with(
+        &mut self,
+        other: Self,
+        mut join_values: impl FnMut(FrameSlot, &mut V, V) -> bool,
+    ) -> bool {
         assert_eq!(self.max_stack, other.max_stack);
         let locals_changed = self
             .local_variables
             .iter_mut()
             .zip_eq(other.local_variables)
-            .fold(false, |changed, (lhs, rhs)| lhs.join_assign(rhs) || changed);
+            .enumerate()
+            .fold(false, |changed, (index, (lhs, rhs))| {
+                lhs.join_assign_with(rhs, |lhs, rhs| {
+                    join_values(FrameSlot::Local(index), lhs, rhs)
+                }) || changed
+            });
         let stack_changed = self
             .operand_stack
             .iter_mut()
             .zip_eq(other.operand_stack)
-            .fold(false, |changed, (lhs, rhs)| lhs.join_assign(rhs) || changed);
+            .enumerate()
+            .fold(false, |changed, (index, (lhs, rhs))| {
+                lhs.join_assign_with(rhs, |lhs, rhs| {
+                    join_values(FrameSlot::Stack(index), lhs, rhs)
+                }) || changed
+            });
         locals_changed || stack_changed
     }
 }
 
+#[cfg(test)]
 impl JvmStackFrame<OperandState> {
     pub(crate) fn new(
         is_static: bool,
@@ -73,15 +123,15 @@ impl JvmStackFrame<OperandState> {
         max_locals: u16,
         max_stack: u16,
     ) -> Result<Self, ExecutionError> {
-        let this_value = (!is_static).then_some(OperandState::This);
+        let this_value = (!is_static).then_some(OperandState::Value(SsaValueId::new(0)));
+        let parameter_offset = u32::from(!is_static);
         let parameters = desc
             .parameters_types
             .iter()
             .enumerate()
             .map(|(index, _)| {
-                OperandState::Arg(
-                    u16::try_from(index).expect("descriptor parameter count fits u16"),
-                )
+                let index = u32::try_from(index).expect("descriptor parameter count fits u32");
+                OperandState::Value(SsaValueId::new(index + parameter_offset))
             })
             .collect::<Vec<_>>();
         Self::with_inputs(desc, max_locals, max_stack, this_value, &parameters)
@@ -258,76 +308,12 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn without_values(&self) -> Self {
-        Self {
-            max_stack: self.max_stack,
-            local_variables: self
-                .local_variables
-                .iter()
-                .map(|entry| match entry {
-                    Entry::Value(_) | Entry::UninitializedLocal => Entry::UninitializedLocal,
-                    Entry::Top => Entry::Top,
-                    Entry::OutOfScope => Entry::OutOfScope,
-                })
-                .collect(),
-            operand_stack: Vec::with_capacity(self.max_stack.into()),
-        }
-    }
-
-    pub(crate) fn try_map_values<U: Clone, E>(
-        &self,
-        mut map: impl FnMut(&V) -> Result<U, E>,
-    ) -> Result<JvmStackFrame<U>, E> {
-        fn map_entry<V, U, E>(
-            entry: &Entry<V>,
-            map: &mut dyn FnMut(&V) -> Result<U, E>,
-        ) -> Result<Entry<U>, E> {
-            Ok(match entry {
-                Entry::Value(value) => Entry::Value(map(value)?),
-                Entry::Top => Entry::Top,
-                Entry::UninitializedLocal => Entry::UninitializedLocal,
-                Entry::OutOfScope => Entry::OutOfScope,
-            })
-        }
-
-        Ok(JvmStackFrame {
-            max_stack: self.max_stack,
-            local_variables: self
-                .local_variables
-                .iter()
-                .map(|entry| map_entry(entry, &mut map))
-                .collect::<Result<_, _>>()?,
-            operand_stack: self
-                .operand_stack
-                .iter()
-                .map(|entry| map_entry(entry, &mut map))
-                .collect::<Result<_, _>>()?,
-        })
-    }
-
     pub(crate) fn local_variables(&self) -> &[Entry<V>] {
         &self.local_variables
     }
 
     pub(crate) fn operand_stack(&self) -> &[Entry<V>] {
         &self.operand_stack
-    }
-
-    pub(crate) fn invalidate_values_at(
-        &mut self,
-        local_indices: impl IntoIterator<Item = usize>,
-        stack_indices: impl IntoIterator<Item = usize>,
-    ) {
-        for index in local_indices {
-            if let Some(entry) = self.local_variables.get_mut(index) {
-                *entry = Entry::UninitializedLocal;
-            }
-        }
-        for index in stack_indices {
-            if let Some(entry) = self.operand_stack.get_mut(index) {
-                *entry = Entry::UninitializedLocal;
-            }
-        }
     }
 }
 

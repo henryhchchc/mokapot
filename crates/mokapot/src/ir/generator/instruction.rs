@@ -4,7 +4,7 @@ use super::{Location, OperandState, SsaValueId};
 use crate::ir::expression::{Condition, Expression};
 use crate::jvm::code::ProgramCounter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) enum Instruction<OP = OperandState> {
     HandlerEntry,
     Unwind,

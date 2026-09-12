@@ -1,27 +1,29 @@
-use super::super::{FrameOperand, ReturnAddress, SsaValueId};
+use super::super::{FrameOperand, Location, ReturnAddress, SsaValueId, jvm_frame::FrameSlot};
+
+/// A stable identity for a frame value merged at a JVM location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub(in crate::ir::generator) struct MergeIdentity {
+    pub location: Location,
+    pub slot: FrameSlot,
+}
 
 /// The abstract state of an operand during JVM frame analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(in crate::ir::generator) enum OperandState {
-    #[display("%this")]
-    This,
-    #[display("%arg{_0}")]
-    Arg(u16),
-    Local(SsaValueId),
-    #[display("%caught_exception{_0}")]
-    CaughtException(SsaValueId),
+    Value(SsaValueId),
     #[display("%return_address")]
     ReturnAddress(ReturnAddress),
     #[display("%merged")]
-    Merged,
+    Merged(MergeIdentity),
     #[display("%invalid")]
     Invalid,
 }
 
 impl From<SsaValueId> for OperandState {
     fn from(value: SsaValueId) -> Self {
-        Self::Local(value)
+        Self::Value(value)
     }
 }
 
@@ -49,11 +51,7 @@ impl crate::analysis::fixed_point::JoinSemiLattice for OperandState {
         if *self == other {
             return false;
         }
-        let joined = match (*self, other) {
-            (Self::Invalid | Self::ReturnAddress(_), _)
-            | (_, Self::Invalid | Self::ReturnAddress(_)) => Self::Invalid,
-            _ => Self::Merged,
-        };
+        let joined = Self::Invalid;
         if *self == joined {
             false
         } else {
@@ -71,16 +69,8 @@ impl PartialOrd for OperandState {
             Some(Equal)
         } else {
             match (self, other) {
-                (
-                    Self::Merged,
-                    Self::This | Self::Arg(_) | Self::Local(_) | Self::CaughtException(_),
-                )
-                | (Self::Invalid, _) => Some(Greater),
-                (
-                    Self::This | Self::Arg(_) | Self::Local(_) | Self::CaughtException(_),
-                    Self::Merged,
-                )
-                | (_, Self::Invalid) => Some(Less),
+                (Self::Invalid, _) => Some(Greater),
+                (_, Self::Invalid) => Some(Less),
                 _ => None,
             }
         }

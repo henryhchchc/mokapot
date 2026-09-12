@@ -19,6 +19,7 @@ impl ContextId {
 
 /// A private expanded control-flow location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) enum Location {
     Bytecode {
         context: ContextId,
@@ -82,15 +83,6 @@ pub(crate) struct Normalizer {
     returns: BTreeMap<ContextId, ProgramCounter>,
 }
 
-/// Completed context-sensitive expansion of legacy JVM subroutines.
-#[derive(Debug)]
-pub(crate) struct NormalizedJvm {
-    contexts: Vec<Option<CallFrame>>,
-    interned: BTreeMap<CallFrame, ContextId>,
-    locations: BTreeSet<Location>,
-    returns: BTreeMap<ContextId, ProgramCounter>,
-}
-
 impl Normalizer {
     pub(crate) fn new(entry: ProgramCounter) -> Self {
         Self {
@@ -98,15 +90,6 @@ impl Normalizer {
             interned: BTreeMap::new(),
             locations: BTreeSet::from([Location::entry(entry)]),
             returns: BTreeMap::new(),
-        }
-    }
-
-    pub(crate) fn finish(self) -> NormalizedJvm {
-        NormalizedJvm {
-            contexts: self.contexts,
-            interned: self.interned,
-            locations: self.locations,
-            returns: self.returns,
         }
     }
 
@@ -215,98 +198,6 @@ impl Normalizer {
             }
             cursor = frame.parent;
         }
-    }
-
-    fn frame(&self, context: ContextId) -> Result<Option<CallFrame>, MokaIRBuildError> {
-        self.contexts
-            .get(usize::try_from(context.0).map_err(|_| MokaIRBuildError::MalformedControlFlow)?)
-            .copied()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
-    }
-}
-
-impl NormalizedJvm {
-    pub(crate) fn bytecode(
-        &self,
-        pc: ProgramCounter,
-        context: ContextId,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.location(Location::Bytecode { pc, context })
-    }
-
-    pub(crate) fn handler(
-        &self,
-        handler_pc: ProgramCounter,
-        context: ContextId,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.location(Location::Handler {
-            handler_pc,
-            context,
-        })
-    }
-
-    pub(crate) fn unwind(&self) -> Result<Location, MokaIRBuildError> {
-        self.location(Location::Unwind)
-    }
-
-    pub(crate) fn enter(
-        &self,
-        location: Location,
-        target: ProgramCounter,
-        continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
-        let Location::Bytecode {
-            pc: call_site,
-            context: parent,
-        } = location
-        else {
-            return Err(MokaIRBuildError::MalformedControlFlow);
-        };
-        let frame = CallFrame {
-            parent,
-            call_site,
-            target,
-            continuation,
-        };
-        let context = *self
-            .interned
-            .get(&frame)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        Ok((self.bytecode(target, context)?, ReturnAddress(context)))
-    }
-
-    pub(crate) fn return_from(
-        &self,
-        location: Location,
-        address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError> {
-        let Location::Bytecode {
-            context: current,
-            pc: return_pc,
-        } = location
-        else {
-            return Err(MokaIRBuildError::MalformedControlFlow);
-        };
-        let mut cursor = current;
-        loop {
-            let frame = self
-                .frame(cursor)?
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            if cursor == address.0 {
-                if self.returns.get(&cursor) != Some(&return_pc) {
-                    return Err(MokaIRBuildError::MalformedControlFlow);
-                }
-                return self.bytecode(frame.continuation, frame.parent);
-            }
-            cursor = frame.parent;
-        }
-    }
-
-    fn location(&self, location: Location) -> Result<Location, MokaIRBuildError> {
-        self.locations
-            .contains(&location)
-            .then_some(location)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
     fn frame(&self, context: ContextId) -> Result<Option<CallFrame>, MokaIRBuildError> {

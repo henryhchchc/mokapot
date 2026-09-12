@@ -3,16 +3,15 @@
 //! Generation proceeds through four explicit phases:
 //!
 //! 1. [`jvm_frame_analysis`] produces a reachable JVM control-flow graph with
-//!    abstract frame facts.
-//! 2. [`block_formation`] consumes that graph and produces a block-level JVM graph.
-//! 3. [`ssa`] consumes the block graph, replays each block with exact values,
-//!    constructs and simplifies predecessor-indexed phis, and lowers the result
-//!    to scalar operations and explicit terminators without JVM frame state.
+//!    exact symbolic instructions and edge frames.
+//! 2. [`block_formation`] consumes that graph, drops internal edge frames, and
+//!    produces a block-level JVM graph.
+//! 3. [`ssa`] constructs and simplifies predecessor-indexed phis, then lowers
+//!    the result to scalar operations and explicit terminators without JVM frame state.
 //! 4. [`emission`] consumes the lowered SSA graph, assigns public identities, and emits
 //!    the completed [`MokaIRMethod`].
 //!
-//! The [`lifting`] module contains JVM opcode semantics shared by frame analysis
-//! and SSA construction.
+//! The [`lifting`] module contains the JVM opcode semantics used by frame analysis.
 
 mod block_formation;
 mod emission;
@@ -34,14 +33,11 @@ pub use jvm_frame::ExecutionError;
 use self::identity::SsaValueId;
 use self::instruction::Instruction;
 use self::jvm_frame_analysis::operand_state::OperandState;
-use self::jvm_frame_analysis::{
-    AnalyzedJvmCfg, JvmFrameAnalyzer, JvmReplayPlan, JvmTransferCategory,
-};
+use self::jvm_frame_analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer, MergeIdentity};
 use self::lifting::frame_operand::FrameOperand;
-use self::ssa::value::SsaFrameValue;
 
 use self::jvm_frame::JvmStackFrame;
-use self::normalized_jvm::{Location, NormalizedJvm, Normalizer, ReturnAddress};
+use self::normalized_jvm::{Location, Normalizer, ReturnAddress};
 use super::{
     BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation, OperationKind, Phi,
     PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
@@ -59,7 +55,7 @@ use crate::{
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let analyzed_cfg = JvmFrameAnalyzer::for_method(method)?.run()?;
     let block_graph = block_formation::form(analyzed_cfg)?;
-    let ssa_graph = ssa::construct(method, block_graph)?;
+    let ssa_graph = ssa::construct(block_graph)?;
     emission::emit(method, ssa_graph)
 }
 
