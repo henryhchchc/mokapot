@@ -1,4 +1,4 @@
-use super::super::{ReturnAddress, SsaValueId};
+use crate::ir::generator::{identity::SsaValueId, jvm::normalization::ReturnAddress};
 
 /// An operand that can inhabit a JVM frame while bytecode is lifted.
 pub(in crate::ir::generator) trait FrameOperand:

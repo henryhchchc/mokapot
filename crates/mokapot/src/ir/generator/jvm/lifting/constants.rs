@@ -1,6 +1,17 @@
-use super::{
-    ConstantValue, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
-    MokaIRBuildError, SINGLE_SLOT, SsaValueId, required_definition,
+use crate::{
+    ir::{
+        expression::Expression,
+        generator::{
+            error::MokaIRBuildError,
+            identity::SsaValueId,
+            jvm::{
+                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                instruction::Instruction,
+                lifting::{frame_operand::FrameOperand, required_definition},
+            },
+        },
+    },
+    jvm::{ConstantValue, code::Instruction as JVM},
 };
 
 pub(super) const fn defines_value(instruction: &JVM) -> bool {

@@ -1,6 +1,21 @@
-use super::{
-    ArrayOperation, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
-    MokaIRBuildError, SINGLE_SLOT, SsaValueId, load_local, required_definition, store_local,
+use crate::{
+    ir::{
+        expression::{ArrayOperation, Expression},
+        generator::{
+            error::MokaIRBuildError,
+            identity::SsaValueId,
+            jvm::{
+                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                instruction::Instruction,
+                lifting::{
+                    frame_operand::FrameOperand,
+                    locals::{load_local, store_local},
+                    required_definition,
+                },
+            },
+        },
+    },
+    jvm::code::Instruction as JVM,
 };
 
 pub(super) const fn defines_value(instruction: &JVM) -> bool {

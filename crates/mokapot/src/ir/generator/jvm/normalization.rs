@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::jvm::code::ProgramCounter;
 
-use super::MokaIRBuildError;
+use crate::ir::generator::error::MokaIRBuildError;
 
 pub(crate) const LOCATION_BUDGET: usize = 1_048_576;
 

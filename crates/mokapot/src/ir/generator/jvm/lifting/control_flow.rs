@@ -1,6 +1,17 @@
-use super::{
-    Condition, DUAL_SLOT, FrameOperand, Instruction, JVM, JvmSemantics, JvmStackFrame, Location,
-    MokaIRBuildError, ProgramCounter, SINGLE_SLOT, WideInstruction,
+use crate::{
+    ir::{
+        expression::Condition,
+        generator::{
+            error::MokaIRBuildError,
+            jvm::{
+                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                instruction::Instruction,
+                lifting::{frame_operand::FrameOperand, semantics::JvmSemantics},
+                normalization::Location,
+            },
+        },
+    },
+    jvm::code::{Instruction as JVM, ProgramCounter, WideInstruction},
 };
 
 #[inline]

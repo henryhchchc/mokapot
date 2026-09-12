@@ -13,30 +13,15 @@ mod operations;
 pub(in crate::ir::generator) mod semantics;
 mod stack;
 
-use locals::{load_local, store_local};
-use operations::{binary_op_math, conversion_op};
-
-use super::{
-    FrameOperand, Instruction, Location, MokaIRBuildError, SsaValueId,
-    jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
-};
 use crate::{
-    ir::{
-        expression::{
-            ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
-            MathOperation, NaNTreatment,
-        },
-        generator::jvm_frame::StackOperations,
+    ir::generator::{
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        jvm::{frame::JvmStackFrame, instruction::Instruction, normalization::Location},
     },
-    jvm::{
-        ConstantValue,
-        code::{Instruction as JVM, ProgramCounter, WideInstruction},
-    },
-    types::{
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::ReturnType,
-    },
+    jvm::code::Instruction as JVM,
 };
+use frame_operand::FrameOperand;
 use semantics::JvmSemantics;
 
 pub(super) fn lift_instruction<OP: FrameOperand>(

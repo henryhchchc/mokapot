@@ -5,14 +5,12 @@ mod merge;
 mod model;
 mod simplify;
 
-use super::block_formation::JvmBlockGraph;
-use super::{
-    BTreeMap, BlockId, ControlTransfer, MergeIdentity, MokaIRBuildError, OperandState,
-    OperationKind, SsaValueId, TerminatorKind,
+use crate::ir::{
+    BlockId,
+    generator::{block_formation::JvmBlockGraph, error::MokaIRBuildError, identity::SsaValueId},
 };
 use merge::{MergePlan, collect_phi_candidates};
 pub(in crate::ir::generator) use model::SsaBlock;
-use model::{SsaPhi, SsaSuccessor};
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.

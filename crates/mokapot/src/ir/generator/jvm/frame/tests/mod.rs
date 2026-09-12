@@ -3,7 +3,7 @@ mod stack_frame_tests;
 
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
-    ir::generator::jvm_frame::{ExecutionError, JvmStackFrame},
+    ir::generator::jvm::frame::{ExecutionError, JvmStackFrame},
     types::method_descriptor::MethodDescriptor,
 };
 

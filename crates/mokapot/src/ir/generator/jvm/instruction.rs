@@ -1,11 +1,18 @@
 use std::collections::BTreeMap;
 
-use super::{Location, OperandState, SsaValueId};
-use crate::ir::expression::{Condition, Expression};
-use crate::jvm::code::ProgramCounter;
+use crate::{
+    ir::{
+        expression::{Condition, Expression},
+        generator::{
+            identity::SsaValueId,
+            jvm::{analysis::OperandState, normalization::Location},
+        },
+    },
+    jvm::code::ProgramCounter,
+};
 
 #[derive(Debug)]
-pub(super) enum Instruction<OP = OperandState> {
+pub(in crate::ir::generator) enum Instruction<OP = OperandState> {
     HandlerEntry,
     Unwind,
     Erased,
@@ -32,7 +39,7 @@ pub(super) enum Instruction<OP = OperandState> {
 }
 
 impl<OP> Instruction<OP> {
-    pub(super) const fn is_explicit_transfer(&self) -> bool {
+    pub(in crate::ir::generator) const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,
             Self::HandlerEntry

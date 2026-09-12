@@ -8,8 +8,14 @@ use crate::{
         },
         expression::Condition,
         generator::{
-            Entry, FrameOperand, Instruction, JvmStackFrame, Location, MokaIRBuildError,
-            ReturnAddress, SsaValueId,
+            error::MokaIRBuildError,
+            identity::SsaValueId,
+            jvm::{
+                frame::{Entry, JvmStackFrame},
+                instruction::Instruction,
+                lifting::frame_operand::FrameOperand,
+                normalization::{Location, ReturnAddress},
+            },
         },
     },
     jvm::{

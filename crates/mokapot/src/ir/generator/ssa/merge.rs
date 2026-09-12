@@ -1,10 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{MergeIdentity, MokaIRBuildError, OperandState, SsaValueId};
-use crate::ir::BlockId;
-use crate::ir::generator::{
-    block_formation::JvmBlock,
-    jvm_frame::{Entry, JvmStackFrame},
+use crate::ir::{
+    BlockId,
+    generator::{
+        block_formation::JvmBlock,
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        jvm::{
+            analysis::{MergeIdentity, OperandState},
+            frame::{Entry, JvmStackFrame},
+        },
+    },
 };
 
 type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
@@ -165,11 +171,13 @@ fn paired_frame_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::TerminatorKind;
-    use crate::ir::generator::{
-        ControlTransfer, Location,
-        block_formation::{JvmBlock, JvmBlockArm},
-        jvm_frame::FrameSlot,
+    use crate::ir::{
+        TerminatorKind,
+        control_flow::ControlTransfer,
+        generator::{
+            block_formation::{JvmBlock, JvmBlockArm},
+            jvm::{frame::FrameSlot, normalization::Location},
+        },
     };
 
     #[test]

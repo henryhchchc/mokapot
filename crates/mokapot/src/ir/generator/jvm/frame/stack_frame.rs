@@ -13,7 +13,7 @@ use crate::{
 pub(crate) const SINGLE_SLOT: bool = false;
 pub(crate) const DUAL_SLOT: bool = true;
 
-use super::{entry::Entry, error::ExecutionError};
+use crate::ir::generator::jvm::frame::{entry::Entry, error::ExecutionError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

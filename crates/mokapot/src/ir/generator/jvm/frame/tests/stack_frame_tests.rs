@@ -1,7 +1,7 @@
 use crate::analysis::fixed_point::JoinSemiLattice;
 use crate::ir::generator::{
     ExecutionError,
-    jvm_frame::{DUAL_SLOT, SINGLE_SLOT},
+    jvm::frame::{DUAL_SLOT, SINGLE_SLOT},
 };
 #[cfg(test)]
 use proptest::prelude::*;

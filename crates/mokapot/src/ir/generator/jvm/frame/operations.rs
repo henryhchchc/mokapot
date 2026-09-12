@@ -1,4 +1,4 @@
-use super::{error::ExecutionError, stack_frame::JvmStackFrame};
+use crate::ir::generator::jvm::frame::{error::ExecutionError, stack_frame::JvmStackFrame};
 
 /// Stack manipulation operations for JVM frames
 pub(crate) trait StackOperations {

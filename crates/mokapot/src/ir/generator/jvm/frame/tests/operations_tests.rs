@@ -1,6 +1,6 @@
 use crate::ir::generator::{
     ExecutionError,
-    jvm_frame::{SINGLE_SLOT, StackOperations},
+    jvm::frame::{SINGLE_SLOT, StackOperations},
 };
 #[cfg(test)]
 use proptest::prelude::*;

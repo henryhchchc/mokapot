@@ -1,4 +1,7 @@
-use super::{FrameOperand, Instruction, JvmStackFrame, MokaIRBuildError};
+use crate::ir::generator::{
+    error::MokaIRBuildError,
+    jvm::{frame::JvmStackFrame, instruction::Instruction, lifting::frame_operand::FrameOperand},
+};
 
 #[inline]
 pub(super) fn load_local<const SLOT: bool, OP: FrameOperand>(

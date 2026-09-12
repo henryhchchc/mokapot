@@ -1,5 +1,10 @@
-use super::{BlockId, ControlTransfer, OperationKind, SsaValueId, TerminatorKind};
-use crate::jvm::code::ProgramCounter;
+use crate::{
+    ir::{
+        BlockId, OperationKind, TerminatorKind, control_flow::ControlTransfer,
+        generator::identity::SsaValueId,
+    },
+    jvm::code::ProgramCounter,
+};
 
 /// One outgoing arm from an SSA block.
 pub(in crate::ir::generator) struct SsaSuccessor {

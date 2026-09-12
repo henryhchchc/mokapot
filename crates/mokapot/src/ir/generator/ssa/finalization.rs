@@ -1,10 +1,19 @@
 //! Resolves formed JVM blocks into scalar SSA blocks.
-use super::{
-    BTreeMap, BlockId, MokaIRBuildError, SsaBlock, SsaPhi, SsaSuccessor, SsaValueId,
-    merge::MergePlan, simplify::SimplifiedPhis,
+use std::collections::BTreeMap;
+
+use crate::ir::{
+    BlockId, TryMapValues,
+    generator::{
+        block_formation::{JvmBlock, JvmBlockArm},
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        ssa::{
+            merge::MergePlan,
+            model::{SsaBlock, SsaPhi, SsaSuccessor},
+            simplify::SimplifiedPhis,
+        },
+    },
 };
-use crate::ir::TryMapValues;
-use crate::ir::generator::block_formation::{JvmBlock, JvmBlockArm};
 
 type PhiCandidate = (SsaValueId, Vec<(BlockId, SsaValueId)>);
 

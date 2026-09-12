@@ -1,5 +1,10 @@
-use super::{
-    Conversion, Expression, Instruction, JvmStackFrame, MathOperation, MokaIRBuildError, SsaValueId,
+use crate::ir::{
+    expression::{Conversion, Expression, MathOperation},
+    generator::{
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        jvm::{frame::JvmStackFrame, instruction::Instruction},
+    },
 };
 
 #[inline]

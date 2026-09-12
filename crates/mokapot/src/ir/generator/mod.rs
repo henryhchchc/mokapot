@@ -2,7 +2,7 @@
 //!
 //! Generation proceeds through four explicit phases:
 //!
-//! 1. [`jvm_frame_analysis`] produces a reachable JVM control-flow graph with
+//! 1. [`jvm::analysis`] produces a reachable JVM control-flow graph with
 //!    exact symbolic instructions and edge frames.
 //! 2. [`block_formation`] consumes that graph, groups its locations and edge
 //!    frames into maximal JVM blocks, and classifies their scalar operations and
@@ -11,46 +11,25 @@
 //!    scalar operands directly into semantic blocks.
 //! 4. [`emission`] assigns public identities and emits the completed [`MokaIRMethod`].
 //!
-//! The [`lifting`] module contains the JVM opcode semantics used by frame analysis.
+//! The [`jvm::lifting`] module contains the JVM opcode semantics used by frame
+//! analysis.
 
 mod block_formation;
 mod emission;
 mod error;
 mod identity;
-mod instruction;
-mod jvm_frame;
-mod jvm_frame_analysis;
-mod lifting;
-mod normalized_jvm;
+mod jvm;
 mod ssa;
 
-use std::collections::{BTreeMap, BTreeSet};
-
 pub use error::MokaIRBuildError;
-use jvm_frame::Entry;
-pub use jvm_frame::ExecutionError;
+#[allow(
+    unused_imports,
+    reason = "the re-export preserves the generator error surface"
+)]
+pub use jvm::frame::ExecutionError;
 
-use self::identity::SsaValueId;
-use self::instruction::Instruction;
-use self::jvm_frame_analysis::operand_state::OperandState;
-use self::jvm_frame_analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer, MergeIdentity};
-use self::lifting::frame_operand::FrameOperand;
-
-use self::jvm_frame::JvmStackFrame;
-use self::normalized_jvm::{Location, Normalizer, ReturnAddress};
-use super::{
-    BasicBlock, BlockId, EdgeId, InstructionId, MokaIRMethod, Operation, OperationKind, Phi,
-    PhiInput, SourceMap, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
-    control_flow::ControlTransfer,
-};
-use crate::{
-    analysis::fixed_point::DataflowProblem,
-    jvm::{
-        Method,
-        code::{MethodBody, ProgramCounter},
-        method,
-    },
-};
+use crate::{ir::MokaIRMethod, jvm::Method};
+use jvm::analysis::JvmFrameAnalyzer;
 
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let analyzed_cfg = JvmFrameAnalyzer::for_method(method)?.run()?;

@@ -1,7 +1,21 @@
-use super::{
-    Conversion, DUAL_SLOT, Expression, FrameOperand, Instruction, JVM, JvmStackFrame,
-    MathOperation, MokaIRBuildError, NaNTreatment, SINGLE_SLOT, SsaValueId, WideInstruction,
-    binary_op_math, conversion_op, required_definition,
+use crate::{
+    ir::{
+        expression::{Conversion, Expression, MathOperation, NaNTreatment},
+        generator::{
+            error::MokaIRBuildError,
+            identity::SsaValueId,
+            jvm::{
+                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                instruction::Instruction,
+                lifting::{
+                    frame_operand::FrameOperand,
+                    operations::{binary_op_math, conversion_op},
+                    required_definition,
+                },
+            },
+        },
+    },
+    jvm::code::{Instruction as JVM, WideInstruction},
 };
 
 pub(super) const fn defines_value(instruction: &JVM) -> bool {

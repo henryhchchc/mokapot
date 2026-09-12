@@ -1,4 +1,14 @@
-use super::{FrameOperand, Instruction, JVM, JvmStackFrame, MokaIRBuildError, StackOperations};
+use crate::{
+    ir::generator::{
+        error::MokaIRBuildError,
+        jvm::{
+            frame::{JvmStackFrame, StackOperations},
+            instruction::Instruction,
+            lifting::frame_operand::FrameOperand,
+        },
+    },
+    jvm::code::Instruction as JVM,
+};
 
 pub(super) fn lift<OP: FrameOperand>(
     jvm_instruction: &JVM,
