@@ -1,141 +1,193 @@
-## MokaIR
+# MokaIR
 
-MokaIR is an intermediate representation of JVM bytecode in [mokapot](https://github.com/henryhchchc/mokapot).
-It is in a register-based, SSA form, and is designed to be easy to analyze.
-Please checkout the module [`mokapot::ir`](https://docs.rs/mokapot/latest/mokapot/ir/index.html) for more information.
+MokaIR is mokapot's register-based, scalar static single-assignment (SSA)
+representation of a JVM method. It exposes semantic operations and control
+flow without exposing the JVM operand stack or local-variable slots.
 
-🚧 MokaIR is currently unstable. APIs and implementations are subjected to breaking changes.
+MokaIR is currently unstable. Enable the `unstable-moka-ir` feature (or the
+umbrella `unstable` feature) to use it.
 
-To generate MokaIR from a method, use the following code.
+## Constructing a method
 
-```rust
-use mokapot:jvm::Method;
-use mokapot::ir::{MokaIRMethod, MokaIRMethodExt};
+Parse a class file, select a method with a body, and call
+[`MokaIRMethod::from_method`](https://docs.rs/mokapot/latest/mokapot/ir/struct.MokaIRMethod.html#method.from_method):
 
-fn moka_ir(method: &Method) -> Result<MokaIRMethod, Box<dyn std::error::Error>> {
-    let moka_ir_method = method.brew()?;
-    Ok(moka_ir_method)
+```rust,no_run
+use std::{fs::File, io::BufReader};
+
+use mokapot::{ir::MokaIRMethod, jvm::Class};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut reader = BufReader::new(File::open("Example.class")?);
+    let class = Class::from_reader(&mut reader)?;
+
+    for method in &class.methods {
+        if method.body.is_none() {
+            continue;
+        }
+
+        let ir = MokaIRMethod::from_method(method)?;
+        println!("{} has {} reachable blocks", ir.name(), ir.blocks().len());
+    }
+
+    Ok(())
 }
 ```
 
-The following is an example of the generated IR from the method `test()` in [TestAnalysis.java](/test_data/mokapot/org/mokapot/test/TestAnalysis.java).
+Construction includes only blocks reachable from method entry. A method
+without bytecode, or reachable bytecode that cannot be represented as valid
+MokaIR, returns `MokaIRBuildError`; construction does not expose a partial
+method.
 
-You may notice that there are lots of `nop`s in the generated MokaIR.
-This because we indent to maintain a bijection between the original bytecode and the generated MokaIR.
-Such a bijection facilitates the analysis involving dynamic execution - the runtime information (e.g., coverage) can be applied to MokaIR without needing any remapping.
+## Blocks and instructions
 
-| Address | JVM Instruction   | MokaIR                                                                                |
-| :------ | :---------------- | :------------------------------------------------------------------------------------ |
-| `#0000` | `ldc`             | `%0 = String("233")`                                                                  |
-| `#0002` | `astore_3`        | `nop`                                                                                 |
-| `#0003` | `iconst_2`        | `%3 = int(2)`                                                                         |
-| `#0004` | `istore`          | `nop`                                                                                 |
-| `#0006` | `iload_1`         | `nop`                                                                                 |
-| `#0007` | `iload`           | `nop`                                                                                 |
-| `#0009` | `iadd`            | `%9 = %arg0 + %3`                                                                     |
-| `#000A` | `istore`          | `nop`                                                                                 |
-| `#000C` | `iload_1`         | `nop`                                                                                 |
-| `#000D` | `ifge`            | `if %arg0 >= 0 goto #0013`                                                            |
-| `#0010` | `iconst_3`        | `%16 = int(3)`                                                                        |
-| `#0011` | `istore`          | `nop`                                                                                 |
-| `#0013` | `aload_0`         | `nop`                                                                                 |
-| `#0014` | `aload_3`         | `nop`                                                                                 |
-| `#0015` | `iload`           | `nop`                                                                                 |
-| `#0017` | `iload_2`         | `nop`                                                                                 |
-| `#0018` | `invokevirtual`   | `%24 = call int %this@org/mokapot/test/TestAnalysis::callMe(%0, Phi(%3, %16), %arg1)` |
-| `#001B` | `istore`          | `nop`                                                                                 |
-| `#001D` | `iload`           | `nop`                                                                                 |
-| `#001F` | `ireturn`         | `return %24`                                                                          |
-| `#0020` | `astore_3`        | `nop`                                                                                 |
-| `#0021` | `getstatic`       | `%33 = read java/lang/System.out`                                                     |
-| `#0024` | `aload_3`         | `nop`                                                                                 |
-| `#0025` | `invokevirtual`   | `%37 = call void %33@java/io/PrintStream::println(%caught_exception)`                 |
-| `#0028` | `iconst_0`        | `%40 = int(0)`                                                                        |
-| `#0029` | `istore_3`        | `nop`                                                                                 |
-| `#002A` | `iload_3`         | `nop`                                                                                 |
-| `#002B` | `iload_2`         | `nop`                                                                                 |
-| `#002C` | `if_icmpge`       | `if Phi(%40, %64) >= %arg1 goto #0046`                                                |
-| `#002F` | `getstatic`       | `%47 = read java/lang/System.out`                                                     |
-| `#0032` | `ldc`             | `%50 = String(0x61 0x02 0xED 0xA0 0x80 0x62 0x63 0x64 0x65 0x66) // Invalid UTF-8`    |
-| `#0034` | `invokevirtual`   | `%52 = call void %47@java/io/PrintStream::println(%50)`                               |
-| `#0037` | `aload_0`         | `nop`                                                                                 |
-| `#0038` | `ldc`             | `%56 = String("233")`                                                                 |
-| `#003A` | `iconst_0`        | `%58 = int(0)`                                                                        |
-| `#003B` | `iconst_0`        | `%59 = int(0)`                                                                        |
-| `#003C` | `invokevirtual`   | `%60 = call int %this@org/mokapot/test/TestAnalysis::callMe(%56, %58, %59)`           |
-| `#003F` | `pop`             | `nop`                                                                                 |
-| `#0040` | `iinc`            | `%64 = Phi(%40, %64) + 1`                                                             |
-| `#0043` | `goto`            | `goto #002A`                                                                          |
-| `#0046` | `iload_1`         | `nop`                                                                                 |
-| `#0047` | `ifle`            | `if %arg0 <= 0 goto #0051`                                                            |
-| `#004A` | `iload_2`         | `nop`                                                                                 |
-| `#004B` | `ifle`            | `if %arg1 <= 0 goto #0057`                                                            |
-| `#004E` | `goto`            | `goto #0055`                                                                          |
-| `#0051` | `iload_2`         | `nop`                                                                                 |
-| `#0052` | `ifge`            | `if %arg1 >= 0 goto #0057`                                                            |
-| `#0055` | `iconst_0`        | `%85 = int(0)`                                                                        |
-| `#0056` | `ireturn`         | `return %85`                                                                          |
-| `#0057` | `iload_1`         | `nop`                                                                                 |
-| `#0058` | `invokedynamic`   | `%88 = closure java/util/function/IntUnaryOperator applyAsInt#0(%arg0)`               |
-| `#005D` | `astore_3`        | `nop`                                                                                 |
-| `#005E` | `aload_3`         | `nop`                                                                                 |
-| `#005F` | `iconst_0`        | `%95 = int(0)`                                                                        |
-| `#0060` | `invokeinterface` | `%96 = call int %88@java/util/function/IntUnaryOperator::applyAsInt(%95)`             |
-| `#0065` | `istore`          | `nop`                                                                                 |
-| `#0067` | `iconst_3`        | `%103 = int(3)`                                                                       |
-| `#0068` | `newarray`        | `%104 = new int[%103]`                                                                |
-| `#006A` | `dup`             | `nop`                                                                                 |
-| `#006B` | `iconst_0`        | `%107 = int(0)`                                                                       |
-| `#006C` | `iconst_0`        | `%108 = int(0)`                                                                       |
-| `#006D` | `iastore`         | `%109 = %104[%107] = %108`                                                            |
-| `#006E` | `dup`             | `nop`                                                                                 |
-| `#006F` | `iconst_1`        | `%111 = int(1)`                                                                       |
-| `#0070` | `iconst_1`        | `%112 = int(1)`                                                                       |
-| `#0071` | `iastore`         | `%113 = %104[%111] = %112`                                                            |
-| `#0072` | `dup`             | `nop`                                                                                 |
-| `#0073` | `iconst_2`        | `%115 = int(2)`                                                                       |
-| `#0074` | `iconst_2`        | `%116 = int(2)`                                                                       |
-| `#0075` | `iastore`         | `%117 = %104[%115] = %116`                                                            |
-| `#0076` | `astore`          | `nop`                                                                                 |
-| `#0078` | `aload`           | `nop`                                                                                 |
-| `#007A` | `iconst_0`        | `%122 = int(0)`                                                                       |
-| `#007B` | `iload_1`         | `nop`                                                                                 |
-| `#007C` | `iadd`            | `%124 = %122 + %arg0`                                                                 |
-| `#007D` | `iaload`          | `%125 = %104[%124]`                                                                   |
-| `#007E` | `istore`          | `nop`                                                                                 |
-| `#0080` | `aload`           | `nop`                                                                                 |
-| `#0082` | `iload`           | `nop`                                                                                 |
-| `#0084` | `iload`           | `nop`                                                                                 |
-| `#0086` | `iastore`         | `%134 = %104[%125] = %125`                                                            |
-| `#0087` | `iload`           | `nop`                                                                                 |
-| `#0089` | `lookupswitch`    | `switch %125 { 1 => #00A4, 3 => #00AF, else => #00BA }`                               |
-| `#00A4` | `aload_0`         | `nop`                                                                                 |
-| `#00A5` | `aconst_null`     | `%165 = null`                                                                         |
-| `#00A6` | `iconst_2`        | `%166 = int(2)`                                                                       |
-| `#00A7` | `iconst_3`        | `%167 = int(3)`                                                                       |
-| `#00A8` | `invokevirtual`   | `%168 = call int %this@org/mokapot/test/TestAnalysis::callMe(%165, %166, %167)`       |
-| `#00AB` | `pop`             | `nop`                                                                                 |
-| `#00AC` | `goto`            | `goto #00BA`                                                                          |
-| `#00AF` | `aload_0`         | `nop`                                                                                 |
-| `#00B0` | `aconst_null`     | `%176 = null`                                                                         |
-| `#00B1` | `iconst_2`        | `%177 = int(2)`                                                                       |
-| `#00B2` | `iconst_3`        | `%178 = int(3)`                                                                       |
-| `#00B3` | `invokevirtual`   | `%179 = call int %this@org/mokapot/test/TestAnalysis::callMe(%176, %177, %178)`       |
-| `#00B6` | `pop`             | `nop`                                                                                 |
-| `#00B7` | `goto`            | `goto #00BA`                                                                          |
-| `#00BA` | `iload`           | `nop`                                                                                 |
-| `#00BC` | `tableswitch`     | `switch %96 { 1 => #00D8, 2 => #00E2, 3 => #00EC, else => #00F6 }`                    |
-| `#00D8` | `getstatic`       | `%216 = read java/lang/System.out`                                                    |
-| `#00DB` | `iconst_1`        | `%219 = int(1)`                                                                       |
-| `#00DC` | `invokevirtual`   | `%220 = call void %216@java/io/PrintStream::println(%219)`                            |
-| `#00DF` | `goto`            | `goto #00F6`                                                                          |
-| `#00E2` | `getstatic`       | `%226 = read java/lang/System.out`                                                    |
-| `#00E5` | `iconst_2`        | `%229 = int(2)`                                                                       |
-| `#00E6` | `invokevirtual`   | `%230 = call void %226@java/io/PrintStream::println(%229)`                            |
-| `#00E9` | `goto`            | `goto #00F6`                                                                          |
-| `#00EC` | `getstatic`       | `%236 = read java/lang/System.out`                                                    |
-| `#00EF` | `iconst_3`        | `%239 = int(3)`                                                                       |
-| `#00F0` | `invokevirtual`   | `%240 = call void %236@java/io/PrintStream::println(%239)`                            |
-| `#00F3` | `goto`            | `goto #00F6`                                                                          |
-| `#00F6` | `iload_2`         | `nop`                                                                                 |
-| `#00F7` | `ireturn`         | `return %arg1`                                                                        |
+`MokaIRMethod::blocks` returns maximal basic blocks in deterministic source
+order. The method's `entry_block` identifies where execution begins. Each
+block contains, in order:
+
+1. zero or more block-entry `Phi` nodes;
+2. zero or more semantic `Operation`s;
+3. exactly one `Terminator`.
+
+The terminator's ordered `Successor` arms are the authoritative control-flow
+edges. Each arm has a target block and a `ControlTransfer`: unconditional,
+conditional, normal, exception-table, or unwind. Separate arms remain
+separate even when they have the same source and target.
+
+```rust,no_run
+# use mokapot::ir::MokaIRMethod;
+# use mokapot::jvm::Method;
+fn inspect(method: &Method) -> Result<(), mokapot::ir::MokaIRBuildError> {
+    let ir = MokaIRMethod::from_method(method)?;
+
+    for block in ir.blocks() {
+        println!("{}:", block.id());
+        for phi in block.phis() {
+            println!("  {} defines {}", phi.id(), phi.value());
+        }
+        for operation in block.operations() {
+            println!("  {}: {}", operation.id(), operation);
+        }
+        println!("  {}: {}", block.terminator().id(), block.terminator());
+
+        for successor in block.terminator().successors() {
+            println!(
+                "    {} -> {} ({:?})",
+                successor.id(),
+                successor.target(),
+                successor.transfer(),
+            );
+        }
+    }
+
+    Ok(())
+}
+```
+
+`BlockId`, `InstructionId`, `EdgeId`, and `ValueId` are opaque, method-local
+identities. Do not derive relationships from their displayed numbers or reuse
+an identity with another method.
+
+## Scalar SSA values
+
+Every operand names one `ValueId`, and every value has exactly one
+`ValueDefinition`. Definitions include the receiver (`this`), parameters,
+caught exceptions, phi nodes, and value-producing operations. Use
+`MokaIRMethod::definition_of` to locate a value's definition.
+
+`OperationKind::Definition` evaluates an expression and defines a value.
+`OperationKind::Effect` evaluates an expression only for its effects. For
+example, a field or array write and a void call remain ordered operations but
+do not receive meaningless result values.
+
+A phi input associates a value with the predecessor block that selects it:
+
+```rust,no_run
+# use mokapot::ir::MokaIRMethod;
+# use mokapot::jvm::Method;
+# fn inspect(method: &Method) -> Result<(), mokapot::ir::MokaIRBuildError> {
+# let ir = MokaIRMethod::from_method(method)?;
+for block in ir.blocks() {
+    for phi in block.phis() {
+        for input in phi.inputs() {
+            println!(
+                "{} receives {} from {}",
+                phi.value(),
+                input.value(),
+                input.predecessor(),
+            );
+        }
+    }
+}
+# Ok(())
+# }
+```
+
+Loop-carried values can make this graph cyclic. Trivial phis are removed during
+construction. JVM loads, stores, stack manipulation, and `nop` affect lifting
+state but do not produce placeholder MokaIR instructions.
+
+`DefUseChain` builds an owned method-local definition/use index. Phi uses retain
+the predecessor that selects them:
+
+```rust,no_run
+# use mokapot::ir::{DefUseChain, MokaIRMethod};
+# use mokapot::jvm::Method;
+# fn inspect(method: &Method) -> Result<(), mokapot::ir::MokaIRBuildError> {
+# let ir = MokaIRMethod::from_method(method)?;
+let def_use = DefUseChain::new(&ir);
+for value in ir.parameter_values() {
+    println!("{value}: {:?}", def_use.definition_of(*value));
+    for use_site in def_use.uses_of(*value) {
+        println!("  used at {use_site:?}");
+    }
+}
+# Ok(())
+# }
+```
+
+## Exceptional and legacy control flow
+
+A potentially throwing definition or effect with modeled handlers ends its
+block with normal and exceptional arms. A value-producing operation's result
+is available only on its normal successor; exceptional successors receive
+pre-operation locals. A throw, or a return whose method exit can fail, can have
+only exceptional arms. Exception-table arms preserve JVM order and are followed
+by an unwind arm when no modeled handler is exhaustive.
+
+Each reachable handler context starts with a synthetic handler-entry block and
+a distinct caught-exception value. Query it with
+`MokaIRMethod::caught_exception`. Synthetic handler entries and unwind nodes do
+not claim source provenance.
+
+Legacy `jsr` and `ret` subroutines are expanded context-sensitively during
+lifting. Completed MokaIR contains only ordinary control flow; one JVM program
+counter can therefore correspond to several IR nodes.
+
+## Source provenance and coverage
+
+`MokaIRMethod::source_map` returns a sparse, bidirectional relation rather than
+a bytecode-to-IR bijection:
+
+- `instructions_at(pc)` returns every directly related MokaIR instruction;
+- `origins_of(id)` returns every directly related JVM program counter.
+
+Either iterator may be empty. Erased JVM stack/local operations can have no IR
+node, while phis, synthetic handler entries, preheaders, and unwind nodes can
+have no JVM origin. A normalized legacy instruction can have multiple related
+IR nodes.
+
+For coverage transfer, mark the nodes returned by `instructions_at` for each
+covered JVM program counter. Do not infer coverage for a node whose
+`origins_of` iterator is empty.
+
+## Analysis views
+
+`MokaIRMethod::control_flow_graph` derives a borrowed graph solely from block
+terminators. It supports node and edge iteration, outgoing edges, exit blocks,
+and path-condition analysis. The optional `petgraph` feature adds petgraph CFG
+traits without introducing a second source of control-flow truth.
+
+Together, the block CFG, `DefUseChain`, and sparse `SourceMap` provide the
+public views needed for control-flow, scalar data-flow, and JVM-origin-aware
+analysis.

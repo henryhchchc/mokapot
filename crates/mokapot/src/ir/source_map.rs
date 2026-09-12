@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::InstructionId;
 use crate::jvm::code::ProgramCounter;
 
-/// A sparse, bidirectional relation between JVM locations and Moka IR nodes.
+/// A sparse, bidirectional relation between JVM locations and `MokaIR` nodes.
+///
+/// This is not a bijection. A JVM instruction may have zero, one, or several
+/// related IR nodes, and a synthetic IR node may have no JVM origin.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     by_pc: BTreeMap<ProgramCounter, BTreeSet<InstructionId>>,
@@ -19,7 +22,10 @@ impl SourceMap {
             .insert(pc);
     }
 
-    /// Returns the IR nodes related to a JVM instruction location.
+    /// Returns every IR node directly related to a JVM instruction location.
+    ///
+    /// The iterator is empty when lifting erased the instruction without
+    /// producing a semantic IR node.
     pub fn instructions_at(&self, pc: ProgramCounter) -> impl Iterator<Item = InstructionId> + '_ {
         self.by_pc
             .get(&pc)
@@ -27,7 +33,10 @@ impl SourceMap {
             .flat_map(|nodes| nodes.iter().copied())
     }
 
-    /// Returns the JVM instruction locations related to an IR node.
+    /// Returns every JVM instruction location directly related to an IR node.
+    ///
+    /// The iterator is empty for phis and other synthetic nodes. Consumers must
+    /// not infer source coverage for such nodes.
     pub fn origins_of(
         &self,
         instruction: InstructionId,

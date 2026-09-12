@@ -15,7 +15,7 @@ pub enum ValueDefinition {
     Instruction(InstructionId),
 }
 
-/// One incoming value of a phi node.
+/// One predecessor-selected incoming value of a phi node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PhiInput {
     pub(super) predecessor: BlockId,
@@ -36,7 +36,10 @@ impl PhiInput {
     }
 }
 
-/// A value merge at basic-block entry.
+/// A scalar value merge at basic-block entry.
+///
+/// Inputs are indexed by predecessor block, not edge. Parallel arms from one
+/// predecessor must therefore agree on the supplied value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
     pub(super) id: InstructionId,

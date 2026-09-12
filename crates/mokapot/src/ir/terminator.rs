@@ -6,6 +6,9 @@ use super::{
 };
 
 /// One ordered outgoing arm of a terminator.
+///
+/// Arms have independent identities, so parallel transfers between the same
+/// two blocks remain distinguishable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Successor {
     pub(super) id: EdgeId,
@@ -103,6 +106,8 @@ impl Terminator {
         &self.kind
     }
     /// Returns the ordered outgoing arms.
+    ///
+    /// Exception arms retain JVM handler-table precedence.
     #[must_use]
     pub fn successors(&self) -> &[Successor] {
         &self.successors

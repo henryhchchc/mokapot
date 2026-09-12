@@ -4,10 +4,11 @@
 //!
 //! 1. [`jvm_frame_analysis`] produces a reachable JVM control-flow graph with
 //!    exact symbolic instructions and edge frames.
-//! 2. [`block_formation`] consumes that graph, drops internal edge frames, and
-//!    produces a block-level JVM graph.
-//! 3. [`ssa`] constructs and simplifies predecessor-indexed phis, then lowers
-//!    the result to scalar operations and explicit terminators without JVM frame state.
+//! 2. [`block_formation`] consumes that graph and groups its locations and edge
+//!    frames into maximal JVM blocks.
+//! 3. [`ssa`] uses those frames to construct and simplify predecessor-indexed
+//!    phis, then lowers the result to scalar operations and explicit terminators
+//!    without JVM frame state.
 //! 4. [`emission`] consumes the lowered SSA graph, assigns public identities, and emits
 //!    the completed [`MokaIRMethod`].
 //!

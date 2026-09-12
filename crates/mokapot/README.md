@@ -55,8 +55,11 @@ See the [examples](examples/) directory for more code samples.
 
 ### MokaIR
 
-MokaIR is an intermediate representation of JVM bytecode in this library.
-See [docs/MokaIR.md](../../docs/MokaIR.md) for details.
+MokaIR is a scalar SSA representation of reachable JVM method behavior. It
+uses maximal basic blocks, explicit predecessor-indexed phis and terminators,
+edge-sensitive exceptional control flow, and sparse JVM source provenance.
+See the [MokaIR guide](../../docs/MokaIR.md) for construction and analysis
+examples.
 
 ## Contributing
 

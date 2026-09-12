@@ -5,6 +5,7 @@ This directory contains example applications that demonstrate how to use the Mok
 ## Available Examples
 
 - [**disassembler**](disassembler/) - A Java class file disassembler similar to the `javap` tool.
+- [**moka_ir**](moka_ir.rs) - Builds and prints scalar SSA MokaIR for methods in a class file.
 
 ## Running the Examples
 
@@ -12,4 +13,10 @@ To run an example, use the following command from the project root:
 
 ```sh
 cargo run --example <example-name> -- [arguments]
+```
+
+For example:
+
+```sh
+cargo run --example moka_ir --features unstable-moka-ir -- Example.class
 ```

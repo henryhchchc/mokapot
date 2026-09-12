@@ -10,8 +10,7 @@
 //! Both are type aliases for [`BytecodeError`] parameterized by their
 //! respective [`ParseErrorKind`] or [`GenerationErrorKind`].
 //!
-//! Additionally, this module provides the [`ParsingErrorContext`] trait, which
-//! allows for more context to be added to errors during parsing.
+//! Parsing errors can also retain context describing where a failure occurred.
 
 use std::{
     error::Error,

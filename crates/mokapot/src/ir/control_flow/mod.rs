@@ -14,7 +14,7 @@ use crate::{
 mod transfer {
     use super::{BranchGuard, ClassRef, Condition, Hash, Value, ValueId};
 
-    /// A state transfer parameterized by the lifting operand representation.
+    /// The semantics of one control-flow successor arm.
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
         /// An unconditional control transfer.
@@ -25,7 +25,8 @@ mod transfer {
         Conditional(BranchGuard<Condition<Value<OP>>>),
         /// An exceptional outcome selected by this catch type.
         ///
-        /// `None` denotes a catch-all exception-table entry.
+        /// `None` denotes a catch-all exception-table entry. Arm order retains
+        /// JVM exception-handler precedence.
         Exception(Option<ClassRef>),
         /// An exceptional outcome that leaves the method.
         Unwind,
