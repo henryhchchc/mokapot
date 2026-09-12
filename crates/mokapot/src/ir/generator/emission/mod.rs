@@ -7,7 +7,7 @@ use super::{
 };
 use crate::ir::TryMapValues;
 
-/// Emits final identities, blocks, and provenance from fully lowered SSA.
+/// Emits final identities, blocks, and provenance from scalar SSA blocks.
 pub(super) fn emit(
     method: &super::Method,
     ssa: SsaGraph,

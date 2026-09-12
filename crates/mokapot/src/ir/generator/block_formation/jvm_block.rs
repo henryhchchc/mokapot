@@ -1,5 +1,6 @@
 use super::super::{
-    BlockId, ControlTransfer, Instruction, JvmStackFrame, Location, OperandState, SsaValueId,
+    BlockId, ControlTransfer, JvmStackFrame, OperandState, OperationKind, ProgramCounter,
+    SsaValueId, TerminatorKind,
 };
 
 /// One exact outgoing edge from a formed JVM block.
@@ -15,7 +16,9 @@ pub(in crate::ir::generator) struct JvmBlockArm {
 pub(in crate::ir::generator) struct JvmBlock {
     pub id: BlockId,
     pub entry_frame: JvmStackFrame,
-    pub instructions: Vec<(Location, Instruction)>,
+    pub operations: Vec<(ProgramCounter, OperationKind<OperandState>)>,
+    pub terminator: TerminatorKind<OperandState>,
+    pub terminator_source: Option<ProgramCounter>,
     pub arms: Vec<JvmBlockArm>,
     pub caught_exception: Option<SsaValueId>,
 }

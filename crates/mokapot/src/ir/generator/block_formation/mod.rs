@@ -1,41 +1,17 @@
-//! Forms maximal basic blocks from analyzed JVM locations.
+//! Forms semantic maximal blocks from analyzed JVM locations and frame facts.
 
 mod jvm_block;
 
 pub(in crate::ir::generator) use jvm_block::{JvmBlock, JvmBlockArm};
 
 use super::{
-    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, ControlTransfer, JvmStackFrame, Location,
-    MergeIdentity, MokaIRBuildError, SsaValueId,
+    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, ControlTransfer, Instruction, Location,
+    MergeIdentity, MokaIRBuildError, OperandState, OperationKind, SsaValueId, TerminatorKind,
 };
-
-/// How control enters the formed block graph.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::ir::generator) enum BlockEntry {
-    /// The method begins directly at the bytecode entry block.
-    Direct(BlockId),
-    /// A synthetic block separates method entry from a loop header.
-    Preheader {
-        synthetic: BlockId,
-        bytecode: BlockId,
-    },
-}
-
-impl BlockEntry {
-    pub(in crate::ir::generator) const fn method_entry(&self) -> BlockId {
-        match *self {
-            Self::Direct(block)
-            | Self::Preheader {
-                synthetic: block, ..
-            } => block,
-        }
-    }
-}
 
 /// Block-level JVM graph consumed by SSA construction.
 pub(super) struct JvmBlockGraph {
-    pub entry: BlockEntry,
-    pub initial_frame: Option<JvmStackFrame>,
+    pub entry: BlockId,
     pub blocks: Vec<JvmBlock>,
     pub phi_blocks: BTreeMap<SsaValueId, BlockId>,
     pub merge_values: BTreeMap<MergeIdentity, SsaValueId>,
@@ -43,7 +19,7 @@ pub(super) struct JvmBlockGraph {
     pub parameter_values: Vec<SsaValueId>,
 }
 
-/// Forms maximal basic blocks from completed JVM frame facts.
+/// Forms maximal semantic blocks from completed JVM frame facts.
 #[expect(
     clippy::too_many_lines,
     reason = "block partitioning and identity allocation form one invariant-preserving pass"
@@ -85,7 +61,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
     );
 
     for facts in analyzed_cfg.locations.values() {
-        if facts.is_explicit_transfer
+        if facts.instruction.is_explicit_transfer()
             || facts.outgoing.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
@@ -107,7 +83,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
             .locations
             .get(current)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let plain_fallthrough = !facts.is_explicit_transfer
+        let plain_fallthrough = !facts.instruction.is_explicit_transfer()
             && facts.outgoing.len() == 1
             && facts.outgoing[0].target == *next
             && matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional);
@@ -136,12 +112,9 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         .get(&entry_location)
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
     let entry = if needs_entry_preheader {
-        BlockEntry::Preheader {
-            synthetic: BlockId::new(0),
-            bytecode: bytecode_entry,
-        }
+        BlockId::new(0)
     } else {
-        BlockEntry::Direct(bytecode_entry)
+        bytecode_entry
     };
 
     let mut location_to_block = BTreeMap::new();
@@ -167,12 +140,14 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         })
         .collect::<Result<_, _>>()?;
     let mut analyzed_locations = analyzed_cfg.locations;
-    let blocks = grouped
+    let mut blocks = grouped
         .into_iter()
         .map(|(id, locations)| {
             let mut entry_frame = None;
             let mut caught_exception = None;
-            let mut instructions = Vec::with_capacity(locations.len());
+            let mut operations = Vec::with_capacity(locations.len());
+            let mut terminator = None;
+            let mut terminator_source = None;
             let mut arms = Vec::new();
             for (index, location) in locations.iter().copied().enumerate() {
                 let facts = analyzed_locations
@@ -201,7 +176,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
                         .collect::<Result<_, _>>()?;
                 } else {
                     let next = locations[index + 1];
-                    if facts.is_explicit_transfer
+                    if facts.instruction.is_explicit_transfer()
                         || facts.outgoing.len() != 1
                         || facts.outgoing[0].target != next
                         || !matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional)
@@ -209,12 +184,60 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
                         return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                 }
-                instructions.push((location, facts.instruction));
+                if is_last {
+                    let explicit_transfer = facts.instruction.is_explicit_transfer();
+                    let has_normal_successor = arms
+                        .iter()
+                        .any(|arm| matches!(arm.transfer, ControlTransfer::Normal));
+                    let (operation, kind) =
+                        classify_block_end(facts.instruction, has_normal_successor);
+                    if let Some(operation) = operation {
+                        operations.push((
+                            location
+                                .source_pc()
+                                .ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                            operation,
+                        ));
+                    }
+                    terminator = Some(kind);
+                    terminator_source = explicit_transfer.then(|| location.source_pc()).flatten();
+                } else {
+                    match facts.instruction {
+                        Instruction::Definition { value, expr } => operations.push((
+                            location
+                                .source_pc()
+                                .ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                            OperationKind::Definition {
+                                value: OperandState::Value(value),
+                                expr,
+                            },
+                        )),
+                        Instruction::Effect(expr) => operations.push((
+                            location
+                                .source_pc()
+                                .ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                            OperationKind::Effect { expr },
+                        )),
+                        Instruction::Erased => {}
+                        Instruction::HandlerEntry
+                        | Instruction::Unwind
+                        | Instruction::Jump { .. }
+                        | Instruction::Switch { .. }
+                        | Instruction::Return(_)
+                        | Instruction::Throw(_)
+                        | Instruction::Subroutine { .. }
+                        | Instruction::SubroutineReturn(_) => {
+                            return Err(MokaIRBuildError::MalformedControlFlow);
+                        }
+                    }
+                }
             }
             Ok(JvmBlock {
                 id,
                 entry_frame: entry_frame.ok_or(MokaIRBuildError::MalformedControlFlow)?,
-                instructions,
+                operations,
+                terminator: terminator.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                terminator_source,
                 arms,
                 caught_exception,
             })
@@ -224,19 +247,123 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
 
+    if needs_entry_preheader {
+        blocks.insert(
+            0,
+            JvmBlock {
+                id: entry,
+                entry_frame: analyzed_cfg.initial_frame.clone(),
+                operations: Vec::new(),
+                terminator: TerminatorKind::Goto,
+                terminator_source: None,
+                arms: vec![JvmBlockArm {
+                    target: bytecode_entry,
+                    transfer: ControlTransfer::Unconditional,
+                    frame: analyzed_cfg.initial_frame,
+                }],
+                caught_exception: None,
+            },
+        );
+    }
+
     Ok(JvmBlockGraph {
         entry,
-        initial_frame: needs_entry_preheader
-            .then(|| {
-                analyzed_cfg
-                    .initial_frame
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)
-            })
-            .transpose()?,
         blocks,
         phi_blocks,
         merge_values: analyzed_cfg.phi_values,
         this_value: analyzed_cfg.this_value,
         parameter_values: analyzed_cfg.parameter_values,
     })
+}
+
+fn classify_block_end(
+    instruction: Instruction,
+    has_normal_successor: bool,
+) -> (
+    Option<OperationKind<OperandState>>,
+    TerminatorKind<OperandState>,
+) {
+    match instruction {
+        Instruction::Unwind => (None, TerminatorKind::Unwind),
+        Instruction::Jump {
+            condition: Some(_), ..
+        } => (None, TerminatorKind::Branch),
+        Instruction::HandlerEntry
+        | Instruction::Jump {
+            condition: None, ..
+        }
+        | Instruction::Subroutine { .. }
+        | Instruction::SubroutineReturn(_)
+        | Instruction::Erased => (None, TerminatorKind::Goto),
+        Instruction::Switch { match_value, .. } => (None, TerminatorKind::Switch { match_value }),
+        Instruction::Return(value) => (None, TerminatorKind::Return(value)),
+        Instruction::Throw(value) => (None, TerminatorKind::Throw(value)),
+        Instruction::Definition { value, expr } => (
+            Some(OperationKind::Definition {
+                value: OperandState::Value(value),
+                expr,
+            }),
+            implicit_terminator(has_normal_successor),
+        ),
+        Instruction::Effect(expr) => (
+            Some(OperationKind::Effect { expr }),
+            implicit_terminator(has_normal_successor),
+        ),
+    }
+}
+
+const fn implicit_terminator(has_normal_successor: bool) -> TerminatorKind<OperandState> {
+    if has_normal_successor {
+        TerminatorKind::Fallible
+    } else {
+        TerminatorKind::Goto
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::{expression::Expression, generator::ReturnAddress},
+        jvm::ConstantValue,
+    };
+
+    #[test]
+    fn pseudo_and_legacy_instructions_become_semantic_gotos() {
+        let instructions = [
+            Instruction::HandlerEntry,
+            Instruction::Erased,
+            Instruction::Subroutine {
+                target: Location::Unwind,
+            },
+            Instruction::SubroutineReturn(OperandState::ReturnAddress(ReturnAddress::for_test(0))),
+        ];
+
+        for instruction in instructions {
+            let (operation, terminator) = classify_block_end(instruction, false);
+            assert!(operation.is_none());
+            assert_eq!(terminator, TerminatorKind::Goto);
+        }
+    }
+
+    #[test]
+    fn fallible_definition_becomes_an_operation_and_terminator() {
+        let value = SsaValueId::new(7);
+        let (operation, terminator) = classify_block_end(
+            Instruction::Definition {
+                value,
+                expr: Expression::Const(ConstantValue::Integer(1)),
+            },
+            true,
+        );
+
+        assert!(matches!(
+            operation,
+            Some(OperationKind::Definition {
+                value: OperandState::Value(actual),
+                ..
+            }) if actual == value
+        ));
+        assert_eq!(terminator, TerminatorKind::Fallible);
+    }
 }

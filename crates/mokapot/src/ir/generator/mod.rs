@@ -4,13 +4,12 @@
 //!
 //! 1. [`jvm_frame_analysis`] produces a reachable JVM control-flow graph with
 //!    exact symbolic instructions and edge frames.
-//! 2. [`block_formation`] consumes that graph and groups its locations and edge
-//!    frames into maximal JVM blocks.
-//! 3. [`ssa`] uses those frames to construct and simplify predecessor-indexed
-//!    phis, then lowers the result to scalar operations and explicit terminators
-//!    without JVM frame state.
-//! 4. [`emission`] consumes the lowered SSA graph, assigns public identities, and emits
-//!    the completed [`MokaIRMethod`].
+//! 2. [`block_formation`] consumes that graph, groups its locations and edge
+//!    frames into maximal JVM blocks, and classifies their scalar operations and
+//!    explicit terminators.
+//! 3. [`ssa`] collects and simplifies predecessor-indexed phis, then materializes
+//!    scalar operands directly into semantic blocks.
+//! 4. [`emission`] assigns public identities and emits the completed [`MokaIRMethod`].
 //!
 //! The [`lifting`] module contains the JVM opcode semantics used by frame analysis.
 

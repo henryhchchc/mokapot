@@ -30,10 +30,9 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
     entry: Option<(Location, JvmFrameFact)>,
 }
 
-/// Transfer output retained for one reachable JVM location.
+/// Transfer output for one reachable JVM location.
 pub(in crate::ir::generator) struct JvmFlowOutput {
     instruction: Instruction,
-    is_explicit_transfer: bool,
     outgoing: Vec<JvmFlowOutgoing>,
 }
 
@@ -144,7 +143,6 @@ impl PartialOrd for JvmFrameFact {
 pub(in crate::ir::generator) struct AnalyzedLocation {
     pub incoming: JvmStackFrame,
     pub instruction: Instruction,
-    pub is_explicit_transfer: bool,
     pub outgoing: Vec<JvmOutgoing>,
     pub caught_exception: Option<SsaValueId>,
 }
@@ -152,8 +150,8 @@ pub(in crate::ir::generator) struct AnalyzedLocation {
 /// Reachable JVM locations and abstract control-flow facts.
 pub(in crate::ir::generator) struct AnalyzedJvmCfg {
     pub entry_location: Location,
-    /// The original entry frame, retained only when a backedge needs a preheader input.
-    pub initial_frame: Option<JvmStackFrame>,
+    /// The original frame entering the method.
+    pub initial_frame: JvmStackFrame,
     pub locations: BTreeMap<Location, AnalyzedLocation>,
     pub phi_values: BTreeMap<MergeIdentity, SsaValueId>,
     pub this_value: Option<SsaValueId>,
@@ -220,10 +218,8 @@ impl DataflowProblem for JvmFrameAnalyzer<'_> {
             }
         };
 
-        let is_explicit_transfer = instruction.is_explicit_transfer();
         Ok(JvmFlowOutput {
             instruction,
-            is_explicit_transfer,
             outgoing: outgoing
                 .into_iter()
                 .map(|(target, transfer, frame)| JvmFlowOutgoing {
@@ -318,7 +314,6 @@ impl<'method> JvmFrameAnalyzer<'method> {
                     AnalyzedLocation {
                         incoming: fact.into_frame(),
                         instruction: output.instruction,
-                        is_explicit_transfer: output.is_explicit_transfer,
                         outgoing: output
                             .outgoing
                             .into_iter()
@@ -340,13 +335,9 @@ impl<'method> JvmFrameAnalyzer<'method> {
             .entry
             .take()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let needs_entry_preheader = locations
-            .values()
-            .flat_map(|location| &location.outgoing)
-            .any(|outgoing| outgoing.target == entry_location);
         Ok(AnalyzedJvmCfg {
             entry_location,
-            initial_frame: needs_entry_preheader.then(|| initial_frame.into_frame()),
+            initial_frame: initial_frame.into_frame(),
             locations,
             phi_values,
             this_value: self.this_value,
