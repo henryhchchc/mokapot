@@ -8,8 +8,4 @@ impl SsaValueId {
     pub(in crate::ir::generator) const fn new(index: u32) -> Self {
         Self(index)
     }
-
-    pub(in crate::ir::generator) const fn index(self) -> u32 {
-        self.0
-    }
 }

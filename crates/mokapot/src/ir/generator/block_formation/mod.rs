@@ -2,11 +2,11 @@
 
 mod jvm_block;
 
-pub(in crate::ir::generator) use jvm_block::JvmBlock;
+pub(in crate::ir::generator) use jvm_block::{JvmBlock, JvmBlockArm};
 
 use super::{
-    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, JvmReplayPlan, JvmStackFrame, JvmTransferCategory,
-    Location, MokaIRBuildError,
+    AnalyzedJvmCfg, BTreeMap, BTreeSet, BlockId, ControlTransfer, JvmStackFrame, Location,
+    MergeIdentity, MokaIRBuildError, SsaValueId,
 };
 
 /// How control enters the formed block graph.
@@ -30,15 +30,6 @@ impl BlockEntry {
             } => block,
         }
     }
-
-    pub(in crate::ir::generator) const fn bytecode_entry(&self) -> BlockId {
-        match *self {
-            Self::Direct(block)
-            | Self::Preheader {
-                bytecode: block, ..
-            } => block,
-        }
-    }
 }
 
 /// Block-level JVM graph consumed by SSA construction.
@@ -46,8 +37,10 @@ pub(super) struct JvmBlockGraph {
     pub entry: BlockEntry,
     pub initial_frame: JvmStackFrame,
     pub blocks: Vec<JvmBlock>,
-    pub location_to_block: BTreeMap<Location, BlockId>,
-    pub replay: JvmReplayPlan,
+    pub phi_blocks: BTreeMap<SsaValueId, BlockId>,
+    pub merge_values: BTreeMap<MergeIdentity, SsaValueId>,
+    pub this_value: Option<SsaValueId>,
+    pub parameter_values: Vec<SsaValueId>,
 }
 
 /// Forms maximal basic blocks from completed JVM frame facts.
@@ -64,23 +57,24 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
 
     let mut leaders = BTreeSet::from([entry_location]);
     leaders.extend(
+        analyzed_cfg
+            .phi_values
+            .keys()
+            .map(|identity| identity.location),
+    );
+    leaders.extend(
         reachable
             .iter()
             .copied()
             .filter(|location| !matches!(location, Location::Bytecode { .. })),
     );
     let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
-    let mut incoming_frames: BTreeMap<Location, Vec<JvmStackFrame>> = BTreeMap::new();
     for (&source, facts) in &analyzed_cfg.locations {
         for outgoing in &facts.outgoing {
             predecessors
                 .entry(outgoing.target)
                 .or_default()
                 .insert(source);
-            incoming_frames
-                .entry(outgoing.target)
-                .or_default()
-                .push(outgoing.frame.clone());
         }
     }
     leaders.extend(
@@ -95,9 +89,9 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
             || facts.outgoing.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
-                    JvmTransferCategory::Normal
-                        | JvmTransferCategory::Exception
-                        | JvmTransferCategory::Unwind
+                    ControlTransfer::Normal
+                        | ControlTransfer::Exception(_)
+                        | ControlTransfer::Unwind
                 )
             })
         {
@@ -116,10 +110,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         let plain_fallthrough = !facts.is_explicit_transfer
             && facts.outgoing.len() == 1
             && facts.outgoing[0].target == *next
-            && matches!(
-                facts.outgoing[0].transfer,
-                JvmTransferCategory::Unconditional
-            );
+            && matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional);
         if !plain_fallthrough {
             leaders.insert(*next);
         }
@@ -164,31 +155,82 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         location_to_block.insert(location, id);
         grouped.entry(id).or_default().push(location);
     }
+    let phi_blocks = analyzed_cfg
+        .phi_values
+        .iter()
+        .map(|(identity, &value)| {
+            location_to_block
+                .get(&identity.location)
+                .copied()
+                .map(|block| (value, block))
+                .ok_or(MokaIRBuildError::MalformedControlFlow)
+        })
+        .collect::<Result<_, _>>()?;
+    let mut analyzed_locations = analyzed_cfg.locations;
     let blocks = grouped
         .into_iter()
         .map(|(id, locations)| {
-            let leader = *locations
-                .first()
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            let analyzed_entry = analyzed_cfg
-                .locations
-                .get(&leader)
-                .map(|facts| facts.incoming.clone())
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            let mut entry_frame = None;
+            let mut caught_exception = None;
+            let mut instructions = Vec::with_capacity(locations.len());
+            let mut arms = Vec::new();
+            for (index, location) in locations.iter().copied().enumerate() {
+                let facts = analyzed_locations
+                    .remove(&location)
+                    .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+                if index == 0 {
+                    entry_frame = Some(facts.incoming);
+                    caught_exception = facts.caught_exception;
+                }
+                let is_last = index + 1 == locations.len();
+                if is_last {
+                    arms = facts
+                        .outgoing
+                        .into_iter()
+                        .map(|outgoing| {
+                            location_to_block
+                                .get(&outgoing.target)
+                                .copied()
+                                .map(|target| JvmBlockArm {
+                                    target,
+                                    transfer: outgoing.transfer,
+                                    frame: outgoing.frame,
+                                })
+                                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                        })
+                        .collect::<Result<_, _>>()?;
+                } else {
+                    let next = locations[index + 1];
+                    if facts.is_explicit_transfer
+                        || facts.outgoing.len() != 1
+                        || facts.outgoing[0].target != next
+                        || !matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional)
+                    {
+                        return Err(MokaIRBuildError::MalformedControlFlow);
+                    }
+                }
+                instructions.push((location, facts.instruction));
+            }
             Ok(JvmBlock {
                 id,
-                locations,
-                analyzed_entry,
-                incoming_frames: incoming_frames.remove(&leader).unwrap_or_default(),
+                entry_frame: entry_frame.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+                instructions,
+                arms,
+                caught_exception,
             })
         })
         .collect::<Result<Vec<_>, MokaIRBuildError>>()?;
+    if !analyzed_locations.is_empty() {
+        return Err(MokaIRBuildError::MalformedControlFlow);
+    }
 
     Ok(JvmBlockGraph {
         entry,
         initial_frame: analyzed_cfg.initial_frame,
         blocks,
-        location_to_block,
-        replay: analyzed_cfg.replay,
+        phi_blocks,
+        merge_values: analyzed_cfg.phi_values,
+        this_value: analyzed_cfg.this_value,
+        parameter_values: analyzed_cfg.parameter_values,
     })
 }

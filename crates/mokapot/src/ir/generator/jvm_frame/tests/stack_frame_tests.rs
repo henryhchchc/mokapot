@@ -70,7 +70,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -91,7 +91,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {

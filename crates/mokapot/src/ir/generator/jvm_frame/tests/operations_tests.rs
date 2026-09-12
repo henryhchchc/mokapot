@@ -15,7 +15,7 @@ proptest! {
             pop_count,
         ).unwrap();
         for i in 0..pop_count {
-            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -36,7 +36,7 @@ proptest! {
             pop_count * 2,
         ).unwrap();
         for i in 0..(pop_count * 2) {
-            let value = OperandState::Local(SsaValueId::new(u32::from(i)));
+            let value = OperandState::Value(SsaValueId::new(u32::from(i)));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
