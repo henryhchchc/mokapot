@@ -8,7 +8,8 @@ use crate::{
             frame::JvmStackFrame,
             instruction::RegisterInstruction,
             lifting::{
-                fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
+                fallibility::FallibilityContext, lift_register_instruction,
+                successors::build_successors,
             },
             normalization::{Location, Normalizer},
             symbolic_execution::fact::{SymbolicJvmCfg, SymbolicJvmNode, SymbolicValue},
@@ -42,11 +43,11 @@ impl<'method> JvmSymbolicExecutor<'method> {
         location: Location,
         incoming_frame: JvmStackFrame<SymbolicValue>,
     ) -> Result<SymbolicJvmNode, MokaIRBuildError> {
-        let (instruction, outgoing) = match location {
+        let (instruction, outgoing_edges) = match location {
             Location::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.same_frame();
-                let outgoing = outgoing_from(
+                let outgoing_edges = build_successors(
                     self,
                     location,
                     &incoming_frame,
@@ -54,7 +55,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
                     &instruction,
                     false,
                 )?;
-                (instruction, outgoing)
+                (instruction, outgoing_edges)
             }
             Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
@@ -64,25 +65,26 @@ impl<'method> JvmSymbolicExecutor<'method> {
                     .instruction_at(pc)
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?
                     .clone();
-                let fallible = self.fallibility.is_synchronously_fallible(&jvm_instruction);
+                let can_throw_synchronously =
+                    self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
-                    lift_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
-                let outgoing = outgoing_from(
+                    lift_register_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
+                let outgoing_edges = build_successors(
                     self,
                     location,
                     &incoming_frame,
                     normal_frame,
                     &instruction,
-                    fallible,
+                    can_throw_synchronously,
                 )?;
-                (instruction, outgoing)
+                (instruction, outgoing_edges)
             }
         };
 
         Ok(SymbolicJvmNode {
             incoming_frame,
             instruction,
-            outgoing_edges: outgoing,
+            outgoing_edges,
             caught_exception_value: self.caught_exception_ids.get(&location).copied(),
         })
     }

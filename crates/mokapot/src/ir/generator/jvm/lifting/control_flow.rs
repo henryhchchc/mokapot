@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[inline]
-pub(super) fn conditional_jump(
+pub(super) fn unary_branch(
     frame: &mut JvmStackFrame<SymbolicValue>,
     target: ProgramCounter,
     condition: impl FnOnce(SymbolicValue) -> Condition<SymbolicValue>,
@@ -28,7 +28,7 @@ pub(super) fn conditional_jump(
 }
 
 #[inline]
-pub(super) fn cmp_jump(
+pub(super) fn comparison_branch(
     frame: &mut JvmStackFrame<SymbolicValue>,
     target: ProgramCounter,
     condition: impl FnOnce(SymbolicValue, SymbolicValue) -> Condition<SymbolicValue>,
@@ -41,8 +41,8 @@ pub(super) fn cmp_jump(
     })
 }
 
-pub(super) fn lift(
-    semantics: &mut JvmSymbolicExecutor<'_>,
+pub(super) fn try_lift(
+    executor: &mut JvmSymbolicExecutor<'_>,
     jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,
@@ -55,28 +55,29 @@ pub(super) fn lift(
     use JVM::*;
 
     let instruction = match jvm_instruction {
-        IfEq(target) => conditional_jump(frame, *target, Condition::IsZero)?,
-        IfNe(target) => conditional_jump(frame, *target, Condition::IsNonZero)?,
-        IfLt(target) => conditional_jump(frame, *target, Condition::IsNegative)?,
-        IfGe(target) => conditional_jump(frame, *target, Condition::IsNonNegative)?,
-        IfGt(target) => conditional_jump(frame, *target, Condition::IsPositive)?,
-        IfLe(target) => conditional_jump(frame, *target, Condition::IsNonPositive)?,
-        IfNull(target) => conditional_jump(frame, *target, Condition::IsNull)?,
-        IfNonNull(target) => conditional_jump(frame, *target, Condition::IsNotNull)?,
-        IfICmpEq(target) | IfACmpEq(target) => cmp_jump(frame, *target, Condition::Equal)?,
-        IfICmpNe(target) | IfACmpNe(target) => cmp_jump(frame, *target, Condition::NotEqual)?,
-        IfICmpGe(target) => cmp_jump(frame, *target, Condition::GreaterThanOrEqual)?,
-        IfICmpLt(target) => cmp_jump(frame, *target, Condition::LessThan)?,
-        IfICmpGt(target) => cmp_jump(frame, *target, Condition::GreaterThan)?,
-        IfICmpLe(target) => cmp_jump(frame, *target, Condition::LessThanOrEqual)?,
+        IfEq(target) => unary_branch(frame, *target, Condition::IsZero)?,
+        IfNe(target) => unary_branch(frame, *target, Condition::IsNonZero)?,
+        IfLt(target) => unary_branch(frame, *target, Condition::IsNegative)?,
+        IfGe(target) => unary_branch(frame, *target, Condition::IsNonNegative)?,
+        IfGt(target) => unary_branch(frame, *target, Condition::IsPositive)?,
+        IfLe(target) => unary_branch(frame, *target, Condition::IsNonPositive)?,
+        IfNull(target) => unary_branch(frame, *target, Condition::IsNull)?,
+        IfNonNull(target) => unary_branch(frame, *target, Condition::IsNotNull)?,
+        IfICmpEq(target) | IfACmpEq(target) => comparison_branch(frame, *target, Condition::Equal)?,
+        IfICmpNe(target) | IfACmpNe(target) => {
+            comparison_branch(frame, *target, Condition::NotEqual)?
+        }
+        IfICmpGe(target) => comparison_branch(frame, *target, Condition::GreaterThanOrEqual)?,
+        IfICmpLt(target) => comparison_branch(frame, *target, Condition::LessThan)?,
+        IfICmpGt(target) => comparison_branch(frame, *target, Condition::GreaterThan)?,
+        IfICmpLe(target) => comparison_branch(frame, *target, Condition::LessThanOrEqual)?,
         Goto(target) | GotoW(target) => RegisterInstruction::Jump {
             condition: None,
             target: *target,
         },
         Jsr(target) | JsrW(target) => {
-            let next_pc = semantics.next_pc_of(pc)?;
-            let (target, return_address) =
-                semantics.enter_subroutine(location, *target, next_pc)?;
+            let next_pc = executor.next_pc_of(pc)?;
+            let (target, return_address) = executor.enter_subroutine(location, *target, next_pc)?;
             frame.push_value::<SINGLE_SLOT>(return_address.into())?;
             RegisterInstruction::Subroutine { target }
         }
@@ -122,6 +123,10 @@ pub(super) fn lift(
             RegisterInstruction::Return(Some(value))
         }
         Return => RegisterInstruction::Return(None),
+        AThrow => {
+            let exception_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            RegisterInstruction::Throw(exception_ref)
+        }
         _ => return Ok(None),
     };
     Ok(Some(instruction))

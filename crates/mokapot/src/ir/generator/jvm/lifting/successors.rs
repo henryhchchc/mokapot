@@ -1,4 +1,4 @@
-//! Shared JVM outgoing-edge semantics.
+//! Shared JVM successor construction.
 
 use crate::{
     ir::{
@@ -20,60 +20,62 @@ use crate::{
     jvm::ConstantValue,
 };
 
-fn exception_edges(
-    semantics: &mut JvmSymbolicExecutor<'_>,
+fn build_exception_successors(
+    executor: &mut JvmSymbolicExecutor<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<SymbolicValue>,
+    incoming_frame: &JvmStackFrame<SymbolicValue>,
 ) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let entries = semantics
+    let handlers = executor
         .body()
         .exception_table
         .iter()
         .filter(|entry| entry.covers(pc))
         .cloned()
         .collect::<Vec<_>>();
-    let mut outgoing = Vec::with_capacity(entries.len() + 1);
-    let mut exhaustive = false;
-    for entry in entries {
-        let handler = semantics.handler_location(location, entry.handler_pc)?;
-        let caught = SymbolicValue::Value(semantics.caught_exception_at(handler)?);
-        outgoing.push(SymbolicJvmEdge {
+    let mut successors = Vec::with_capacity(handlers.len() + 1);
+    let mut catches_all = false;
+    for entry in handlers {
+        let handler = executor.handler_location(location, entry.handler_pc)?;
+        let caught = SymbolicValue::Value(executor.caught_exception_at(handler)?);
+        successors.push(SymbolicJvmEdge {
             target: handler,
             transfer: ControlTransfer::Exception(entry.catch_type.clone()),
-            target_frame: pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
+            target_frame: incoming_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
         });
-        exhaustive = entry
+        catches_all = entry
             .catch_type
             .as_ref()
             .is_none_or(|caught_type| caught_type.0.as_ref() == "java/lang/Throwable");
-        if exhaustive {
+        if catches_all {
             break;
         }
     }
-    if !exhaustive {
-        outgoing.push(SymbolicJvmEdge {
-            target: semantics.unwind_location()?,
+    if !catches_all {
+        successors.push(SymbolicJvmEdge {
+            target: executor.unwind_location()?,
             transfer: ControlTransfer::Unwind,
-            target_frame: pre_frame.same_locals_empty_stack_frame().erase_values(),
+            target_frame: incoming_frame
+                .same_locals_empty_stack_frame()
+                .erase_values(),
         });
     }
-    Ok(outgoing)
+    Ok(successors)
 }
 
 #[expect(
     clippy::too_many_lines,
     reason = "all control-flow forms are classified together"
 )]
-pub(crate) fn outgoing_from(
-    semantics: &mut JvmSymbolicExecutor<'_>,
+pub(crate) fn build_successors(
+    executor: &mut JvmSymbolicExecutor<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<SymbolicValue>,
-    normal_frame: JvmStackFrame<SymbolicValue>,
+    incoming_frame: &JvmStackFrame<SymbolicValue>,
+    post_frame: JvmStackFrame<SymbolicValue>,
     instruction: &RegisterInstruction,
-    fallible: bool,
+    can_throw_synchronously: bool,
 ) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
@@ -83,48 +85,56 @@ pub(crate) fn outgoing_from(
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![SymbolicJvmEdge {
-                target: semantics.target_location(location, handler_pc)?,
+                target: executor.target_location(location, handler_pc)?,
                 transfer: Unconditional,
-                target_frame: normal_frame,
+                target_frame: post_frame,
             }]
         }
-        RegisterInstruction::Return(_) if fallible => {
-            exception_edges(semantics, location, pre_frame)?
+        RegisterInstruction::Return(_) if can_throw_synchronously => {
+            build_exception_successors(executor, location, incoming_frame)?
         }
         RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
-        RegisterInstruction::Throw(_) => exception_edges(semantics, location, pre_frame)?,
+        RegisterInstruction::Throw(_) => {
+            build_exception_successors(executor, location, incoming_frame)?
+        }
         RegisterInstruction::Subroutine { target, .. } => {
             vec![SymbolicJvmEdge {
                 target: *target,
                 transfer: Unconditional,
-                target_frame: normal_frame,
+                target_frame: post_frame,
             }]
         }
-        RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_) if fallible => {
-            let mut outgoing = vec![SymbolicJvmEdge {
-                target: semantics.next_location(location)?,
+        RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_)
+            if can_throw_synchronously =>
+        {
+            let mut successors = vec![SymbolicJvmEdge {
+                target: executor.next_location(location)?,
                 transfer: Normal,
-                target_frame: normal_frame,
+                target_frame: post_frame,
             }];
-            outgoing.extend(exception_edges(semantics, location, pre_frame)?);
-            outgoing
+            successors.extend(build_exception_successors(
+                executor,
+                location,
+                incoming_frame,
+            )?);
+            successors
         }
         RegisterInstruction::Erased
         | RegisterInstruction::Definition { .. }
         | RegisterInstruction::Effect(_) => {
             vec![SymbolicJvmEdge {
-                target: semantics.next_location(location)?,
+                target: executor.next_location(location)?,
                 transfer: Unconditional,
-                target_frame: normal_frame,
+                target_frame: post_frame,
             }]
         }
         RegisterInstruction::Jump {
             condition: None,
             target,
         } => vec![SymbolicJvmEdge {
-            target: semantics.target_location(location, *target)?,
+            target: executor.target_location(location, *target)?,
             transfer: Unconditional,
-            target_frame: normal_frame,
+            target_frame: post_frame,
         }],
         RegisterInstruction::Jump {
             condition: Some(condition),
@@ -133,14 +143,14 @@ pub(crate) fn outgoing_from(
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
                 SymbolicJvmEdge {
-                    target: semantics.target_location(location, *target)?,
+                    target: executor.target_location(location, *target)?,
                     transfer: Conditional(BranchGuard::of(condition.clone())),
-                    target_frame: normal_frame.same_frame(),
+                    target_frame: post_frame.same_frame(),
                 },
                 SymbolicJvmEdge {
-                    target: semantics.next_location(location)?,
+                    target: executor.next_location(location)?,
                     transfer: Conditional(BranchGuard::of(!condition)),
-                    target_frame: normal_frame,
+                    target_frame: post_frame,
                 },
             ]
         }
@@ -149,15 +159,15 @@ pub(crate) fn outgoing_from(
             branches,
             match_value,
         } => {
-            let mut outgoing = Vec::with_capacity(branches.len() + 1);
+            let mut successors = Vec::with_capacity(branches.len() + 1);
             for (&case, &target) in branches {
                 let value = Value::Constant(ConstantValue::Integer(case));
                 let condition =
                     BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
-                outgoing.push(SymbolicJvmEdge {
-                    target: semantics.target_location(location, target)?,
+                successors.push(SymbolicJvmEdge {
+                    target: executor.target_location(location, target)?,
                     transfer: Conditional(BranchGuard::of(condition)),
-                    target_frame: normal_frame.same_frame(),
+                    target_frame: post_frame.same_frame(),
                 });
             }
             let default_guard = branches
@@ -169,21 +179,21 @@ pub(crate) fn outgoing_from(
                     ))
                 })
                 .collect();
-            outgoing.push(SymbolicJvmEdge {
-                target: semantics.target_location(location, *default)?,
+            successors.push(SymbolicJvmEdge {
+                target: executor.target_location(location, *default)?,
                 transfer: Conditional(default_guard),
-                target_frame: normal_frame,
+                target_frame: post_frame,
             });
-            outgoing
+            successors
         }
         RegisterInstruction::SubroutineReturn(value) => {
             let SymbolicValue::ReturnAddress(address) = value else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![SymbolicJvmEdge {
-                target: semantics.return_from(location, *address)?,
+                target: executor.return_from(location, *address)?,
                 transfer: Unconditional,
-                target_frame: normal_frame,
+                target_frame: post_frame,
             }]
         }
     })
@@ -208,7 +218,7 @@ mod tests {
         )
         .expect("frame fits descriptor");
 
-        let edges = exception_edges(&mut analyzer, Location::entry(0.into()), &frame)
+        let edges = build_exception_successors(&mut analyzer, Location::entry(0.into()), &frame)
             .expect("valid exception edge");
 
         assert_eq!(edges.len(), 1);

@@ -1,16 +1,17 @@
-//! Lifts stack-based JVM instructions into Moka IR instructions.
+//! Lifts stack-based JVM instructions into register-based instructions.
 
+mod arrays;
+mod calls;
 mod constants;
 mod control_flow;
 pub(super) mod fallibility;
+mod fields;
 mod locals;
-mod members;
-mod memory;
 mod numeric;
-mod objects;
 mod operations;
-pub(super) mod semantics;
+mod references;
 mod stack;
+pub(super) mod successors;
 
 use crate::{
     ir::generator::{
@@ -25,8 +26,8 @@ use crate::{
     },
     jvm::code::Instruction as JVM,
 };
-pub(super) fn lift_instruction(
-    semantics: &mut JvmSymbolicExecutor<'_>,
+pub(super) fn lift_register_instruction(
+    executor: &mut JvmSymbolicExecutor<'_>,
     jvm_instruction: &JVM,
     location: Location,
     frame: &mut JvmStackFrame<SymbolicValue>,
@@ -34,30 +35,38 @@ pub(super) fn lift_instruction(
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let definition = instruction_defines_value(jvm_instruction)
-        .then(|| semantics.definition_at(location))
+    let definition = produces_register_value(jvm_instruction)
+        .then(|| executor.definition_at(location))
         .transpose()?;
 
-    if let Some(instruction) = constants::lift(jvm_instruction, definition, frame)? {
+    if let Some(instruction) = constants::try_lift(jvm_instruction, definition, frame)? {
         return Ok(instruction);
     }
-    if let Some(instruction) = memory::lift(jvm_instruction, definition, frame)? {
+    if let Some(instruction) = locals::try_lift(jvm_instruction, definition, frame)? {
         return Ok(instruction);
     }
-    if let Some(instruction) = stack::lift(jvm_instruction, frame)? {
+    if let Some(instruction) = arrays::try_lift(jvm_instruction, definition, frame)? {
         return Ok(instruction);
     }
-    if let Some(instruction) = numeric::lift(jvm_instruction, definition, frame)? {
+    if let Some(instruction) = stack::try_lift(jvm_instruction, frame)? {
         return Ok(instruction);
     }
-    if let Some(instruction) = control_flow::lift(semantics, jvm_instruction, location, pc, frame)?
+    if let Some(instruction) = numeric::try_lift(jvm_instruction, definition, frame)? {
+        return Ok(instruction);
+    }
+    if let Some(instruction) =
+        control_flow::try_lift(executor, jvm_instruction, location, pc, frame)?
     {
         return Ok(instruction);
     }
-    if let Some(instruction) = members::lift(jvm_instruction, definition, frame)? {
+    if let Some(instruction) = fields::try_lift(jvm_instruction, definition, frame)? {
         return Ok(instruction);
     }
-    objects::lift(jvm_instruction, definition, frame)?.ok_or(MokaIRBuildError::MalformedControlFlow)
+    if let Some(instruction) = calls::try_lift(jvm_instruction, definition, frame)? {
+        return Ok(instruction);
+    }
+    references::try_lift(jvm_instruction, definition, frame)?
+        .ok_or(MokaIRBuildError::MalformedControlFlow)
 }
 
 /// Reports whether lifting an opcode creates an IR value identity.
@@ -65,14 +74,16 @@ pub(super) fn lift_instruction(
 /// This stays alongside the opcode-family dispatchers so values are allocated
 /// before frame mutation but never for effects, control flow, or erased stack
 /// operations.
-const fn instruction_defines_value(instruction: &JVM) -> bool {
-    constants::defines_value(instruction)
-        || memory::defines_value(instruction)
-        || numeric::defines_value(instruction)
-        || members::defines_value(instruction)
-        || objects::defines_value(instruction)
+const fn produces_register_value(instruction: &JVM) -> bool {
+    constants::produces_value(instruction)
+        || locals::produces_value(instruction)
+        || arrays::produces_value(instruction)
+        || numeric::produces_value(instruction)
+        || fields::produces_value(instruction)
+        || calls::produces_value(instruction)
+        || references::produces_value(instruction)
 }
 
-fn required_definition(definition: Option<SsaValueId>) -> Result<SsaValueId, MokaIRBuildError> {
+fn require_definition_id(definition: Option<SsaValueId>) -> Result<SsaValueId, MokaIRBuildError> {
     definition.ok_or(MokaIRBuildError::MalformedControlFlow)
 }

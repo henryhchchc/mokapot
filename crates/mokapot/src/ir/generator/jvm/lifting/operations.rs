@@ -11,7 +11,7 @@ use crate::ir::{
 };
 
 #[inline]
-pub(super) fn conversion_op<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
+pub(super) fn lift_conversion<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
     frame: &mut JvmStackFrame<SymbolicValue>,
     def: SsaValueId,
     conversion: impl FnOnce(SymbolicValue) -> Conversion<SymbolicValue>,
@@ -25,7 +25,7 @@ pub(super) fn conversion_op<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
 }
 
 #[inline]
-pub(super) fn binary_op_math<const SLOT: bool>(
+pub(super) fn lift_binary_math<const SLOT: bool>(
     frame: &mut JvmStackFrame<SymbolicValue>,
     def_id: SsaValueId,
     math: impl FnOnce(SymbolicValue, SymbolicValue) -> MathOperation<SymbolicValue>,

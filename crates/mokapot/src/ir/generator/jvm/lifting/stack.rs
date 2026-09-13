@@ -10,7 +10,7 @@ use crate::{
     jvm::code::Instruction as JVM,
 };
 
-pub(super) fn lift(
+pub(super) fn try_lift(
     jvm_instruction: &JVM,
     frame: &mut JvmStackFrame<SymbolicValue>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
