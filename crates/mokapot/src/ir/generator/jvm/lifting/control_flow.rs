@@ -76,7 +76,7 @@ pub(super) fn try_lift(
             target: *target,
         },
         Jsr(target) | JsrW(target) => {
-            let next_pc = executor.next_pc_of(pc)?;
+            let next_pc = executor.next_program_counter(pc)?;
             let (target, return_address) = executor.enter_subroutine(location, *target, next_pc)?;
             frame.push_value::<CATEGORY_1>(return_address.into())?;
             RegisterInstruction::Subroutine { target }

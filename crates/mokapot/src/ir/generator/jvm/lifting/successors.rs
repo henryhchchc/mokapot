@@ -1,4 +1,4 @@
-//! Shared JVM successor construction.
+//! Symbolic JVM edge construction.
 
 use crate::{
     ir::{
@@ -20,7 +20,7 @@ use crate::{
     jvm::ConstantValue,
 };
 
-fn build_exception_successors(
+fn build_exception_edges(
     executor: &mut Executor<'_>,
     location: Location,
     incoming_frame: &Frame<Value>,
@@ -35,12 +35,12 @@ fn build_exception_successors(
         .filter(|entry| entry.covers(pc))
         .cloned()
         .collect::<Vec<_>>();
-    let mut successors = Vec::with_capacity(handlers.len() + 1);
+    let mut edges = Vec::with_capacity(handlers.len() + 1);
     let mut catches_all = false;
     for entry in handlers {
-        let handler = executor.handler_location(location, entry.handler_pc)?;
-        let caught = Value::Ssa(executor.caught_exception_at(handler)?);
-        successors.push(Edge {
+        let handler = executor.exception_handler_location(location, entry.handler_pc)?;
+        let caught = Value::Ssa(executor.caught_exception_id_at(handler)?);
+        edges.push(Edge {
             target: handler,
             transfer: ControlTransfer::Exception(entry.catch_type.clone()),
             target_frame: incoming_frame.with_single_stack_entry(Entry::Value(caught)),
@@ -54,7 +54,7 @@ fn build_exception_successors(
         }
     }
     if !catches_all {
-        successors.push(Edge {
+        edges.push(Edge {
             target: executor.unwind_location()?,
             transfer: ControlTransfer::Unwind,
             target_frame: incoming_frame
@@ -62,18 +62,18 @@ fn build_exception_successors(
                 .into_unwind_frame(),
         });
     }
-    Ok(successors)
+    Ok(edges)
 }
 
 #[expect(
     clippy::too_many_lines,
     reason = "all control-flow forms are classified together"
 )]
-pub(crate) fn build_successors(
+pub(crate) fn build_outgoing_edges(
     executor: &mut Executor<'_>,
     location: Location,
     incoming_frame: &Frame<Value>,
-    post_frame: Frame<Value>,
+    normal_frame: Frame<Value>,
     instruction: &RegisterInstruction,
     can_throw_synchronously: bool,
 ) -> Result<Vec<Edge>, MokaIRBuildError> {
@@ -85,56 +85,50 @@ pub(crate) fn build_successors(
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![Edge {
-                target: executor.target_location(location, handler_pc)?,
+                target: executor.bytecode_location_at(location, handler_pc)?,
                 transfer: Unconditional,
-                target_frame: post_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Return(_) if can_throw_synchronously => {
-            build_exception_successors(executor, location, incoming_frame)?
+            build_exception_edges(executor, location, incoming_frame)?
         }
         RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
-        RegisterInstruction::Throw(_) => {
-            build_exception_successors(executor, location, incoming_frame)?
-        }
+        RegisterInstruction::Throw(_) => build_exception_edges(executor, location, incoming_frame)?,
         RegisterInstruction::Subroutine { target, .. } => {
             vec![Edge {
                 target: *target,
                 transfer: Unconditional,
-                target_frame: post_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_)
             if can_throw_synchronously =>
         {
-            let mut successors = vec![Edge {
-                target: executor.next_location(location)?,
+            let mut edges = vec![Edge {
+                target: executor.fallthrough_location(location)?,
                 transfer: Normal,
-                target_frame: post_frame,
+                target_frame: normal_frame,
             }];
-            successors.extend(build_exception_successors(
-                executor,
-                location,
-                incoming_frame,
-            )?);
-            successors
+            edges.extend(build_exception_edges(executor, location, incoming_frame)?);
+            edges
         }
         RegisterInstruction::Erased
         | RegisterInstruction::Definition { .. }
         | RegisterInstruction::Effect(_) => {
             vec![Edge {
-                target: executor.next_location(location)?,
+                target: executor.fallthrough_location(location)?,
                 transfer: Unconditional,
-                target_frame: post_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Jump {
             condition: None,
             target,
         } => vec![Edge {
-            target: executor.target_location(location, *target)?,
+            target: executor.bytecode_location_at(location, *target)?,
             transfer: Unconditional,
-            target_frame: post_frame,
+            target_frame: normal_frame,
         }],
         RegisterInstruction::Jump {
             condition: Some(condition),
@@ -143,14 +137,14 @@ pub(crate) fn build_successors(
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
                 Edge {
-                    target: executor.target_location(location, *target)?,
+                    target: executor.bytecode_location_at(location, *target)?,
                     transfer: Conditional(BranchGuard::of(condition.clone())),
-                    target_frame: post_frame.clone(),
+                    target_frame: normal_frame.clone(),
                 },
                 Edge {
-                    target: executor.next_location(location)?,
+                    target: executor.fallthrough_location(location)?,
                     transfer: Conditional(BranchGuard::of(!condition)),
-                    target_frame: post_frame,
+                    target_frame: normal_frame,
                 },
             ]
         }
@@ -159,15 +153,15 @@ pub(crate) fn build_successors(
             branches,
             match_value,
         } => {
-            let mut successors = Vec::with_capacity(branches.len() + 1);
+            let mut edges = Vec::with_capacity(branches.len() + 1);
             for (&case, &target) in branches {
                 let value = PathValue::Constant(ConstantValue::Integer(case));
                 let condition =
                     BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
-                successors.push(Edge {
-                    target: executor.target_location(location, target)?,
+                edges.push(Edge {
+                    target: executor.bytecode_location_at(location, target)?,
                     transfer: Conditional(BranchGuard::of(condition)),
-                    target_frame: post_frame.clone(),
+                    target_frame: normal_frame.clone(),
                 });
             }
             let default_guard = branches
@@ -179,12 +173,12 @@ pub(crate) fn build_successors(
                     ))
                 })
                 .collect();
-            successors.push(Edge {
-                target: executor.target_location(location, *default)?,
+            edges.push(Edge {
+                target: executor.bytecode_location_at(location, *default)?,
                 transfer: Conditional(default_guard),
-                target_frame: post_frame,
+                target_frame: normal_frame,
             });
-            successors
+            edges
         }
         RegisterInstruction::SubroutineReturn(value) => {
             let Value::ReturnAddress(address) = value else {
@@ -193,7 +187,7 @@ pub(crate) fn build_successors(
             vec![Edge {
                 target: executor.return_from(location, *address)?,
                 transfer: Unconditional,
-                target_frame: post_frame,
+                target_frame: normal_frame,
             }]
         }
     })
@@ -208,7 +202,7 @@ mod tests {
     #[test]
     fn unwind_edges_erase_symbolic_values() {
         let method = method([(0.into(), JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut analyzer = Executor::for_method(&method).expect("valid method");
+        let mut executor = Executor::for_method(&method).expect("valid method");
         let frame = Frame::for_method_entry(
             &method.descriptor,
             1,
@@ -218,7 +212,7 @@ mod tests {
         )
         .expect("frame fits descriptor");
 
-        let edges = build_exception_successors(&mut analyzer, Location::entry(0.into()), &frame)
+        let edges = build_exception_edges(&mut executor, Location::entry(0.into()), &frame)
             .expect("valid exception edge");
 
         assert_eq!(edges.len(), 1);

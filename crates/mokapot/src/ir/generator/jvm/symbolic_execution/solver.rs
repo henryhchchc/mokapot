@@ -1,7 +1,7 @@
-//! Recomputing worklist specialized for symbolic JVM frames.
+//! Fixed-point execution of symbolic JVM frames.
 //!
-//! Each source's retained output is the authoritative edge contribution.
-//! Replacing it updates a predecessor index before destination frames are
+//! Each source node's retained edges are the authoritative frame contributions.
+//! Replacing them updates a predecessor index before destination frames are
 //! recomputed, so obsolete symbolic values never leak into the result.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
-    analyzer::Executor,
+    executor::Executor,
     fact::{Edge, FrameMergeSite, Node, Value},
 };
 use crate::ir::generator::{
@@ -18,87 +18,84 @@ use crate::ir::generator::{
     jvm::{frame::Frame, normalization::Location},
 };
 
-struct SolverState {
-    entry: (Location, Frame<Value>),
-    completed: BTreeMap<Location, Node>,
+struct State {
+    entry_input: (Location, Frame<Value>),
+    nodes: BTreeMap<Location, Node>,
     predecessors: BTreeMap<Location, BTreeSet<Location>>,
-    dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, Frame<Value>>,
+    inputs_to_recompute: BTreeSet<Location>,
+    pending_executions: BTreeMap<Location, Frame<Value>>,
 }
 
 #[cfg(test)]
-type CompletedFingerprint = BTreeMap<Location, (Frame<Value>, Vec<(Location, Frame<Value>)>)>;
+type NodeFingerprint = BTreeMap<Location, (Frame<Value>, Vec<(Location, Frame<Value>)>)>;
 
 #[cfg(test)]
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct SolverFingerprint {
-    completed: CompletedFingerprint,
-    dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, Frame<Value>>,
+struct Fingerprint {
+    nodes: NodeFingerprint,
+    inputs_to_recompute: BTreeSet<Location>,
+    pending_executions: BTreeMap<Location, Frame<Value>>,
 }
 
-impl SolverState {
+impl State {
     fn new(entry_location: Location, initial_frame: Frame<Value>) -> Self {
         Self {
-            entry: (entry_location, initial_frame),
-            completed: BTreeMap::new(),
+            entry_input: (entry_location, initial_frame),
+            nodes: BTreeMap::new(),
             predecessors: BTreeMap::new(),
-            dirty: BTreeSet::from([entry_location]),
-            queued_inputs: BTreeMap::new(),
+            inputs_to_recompute: BTreeSet::from([entry_location]),
+            pending_executions: BTreeMap::new(),
         }
     }
 
-    fn recompute_dirty(&mut self) {
-        while let Some(location) = self.dirty.pop_first() {
-            match self.recompute_frame(location) {
+    fn recompute_inputs(&mut self) {
+        while let Some(location) = self.inputs_to_recompute.pop_first() {
+            match self.recompute_input_frame(location) {
                 Some(incoming_frame)
-                    if self
-                        .completed
-                        .get(&location)
-                        .map(|result| &result.incoming_frame)
+                    if self.nodes.get(&location).map(|node| &node.incoming_frame)
                         != Some(&incoming_frame) =>
                 {
-                    self.queued_inputs.insert(location, incoming_frame);
+                    self.pending_executions.insert(location, incoming_frame);
                 }
-                None => self.remove_unreachable(location),
+                None => self.remove_unreachable_node(location),
                 Some(_) => {
-                    self.queued_inputs.remove(&location);
+                    self.pending_executions.remove(&location);
                 }
             }
         }
     }
 
-    fn recompute_frame(&self, location: Location) -> Option<Frame<Value>> {
-        let seed = (location == self.entry.0).then_some(&self.entry.1);
-        let mut incoming = seed.into_iter().chain(
+    fn recompute_input_frame(&self, location: Location) -> Option<Frame<Value>> {
+        let entry_frame = (location == self.entry_input.0).then_some(&self.entry_input.1);
+        let mut contributions = entry_frame.into_iter().chain(
             self.predecessors
                 .get(&location)
                 .into_iter()
                 .flatten()
                 .flat_map(|source| {
-                    self.completed
+                    self.nodes
                         .get(source)
-                        .expect("predecessors must have a retained output")
+                        .expect("predecessors must have retained nodes")
                         .outgoing_edges
                         .iter()
                         .filter(move |edge| edge.target == location)
                         .map(|edge| &edge.target_frame)
                 }),
         );
-        incoming.next().cloned().map(|mut frame| {
-            for contribution in incoming {
-                merge_frame_at(location, &mut frame, contribution.clone());
+        contributions.next().cloned().map(|mut frame| {
+            for contribution in contributions {
+                merge_input_frame_at(location, &mut frame, contribution.clone());
             }
             frame
         })
     }
 
-    fn remove_unreachable(&mut self, location: Location) {
-        self.queued_inputs.remove(&location);
-        let Some(result) = self.completed.remove(&location) else {
+    fn remove_unreachable_node(&mut self, location: Location) {
+        self.pending_executions.remove(&location);
+        let Some(node) = self.nodes.remove(&location) else {
             return;
         };
-        for target in result
+        for target in node
             .outgoing_edges
             .into_iter()
             .map(|outgoing| outgoing.target)
@@ -112,17 +109,19 @@ impl SolverState {
             if predecessors.is_empty() {
                 self.predecessors.remove(&target);
             }
-            self.dirty.insert(target);
+            self.inputs_to_recompute.insert(target);
         }
-        self.purge_detached_nodes();
+        self.remove_unreachable_nodes();
     }
 
-    fn replace_result(&mut self, location: Location, result: Node) {
-        let current_targets = targets(&result.outgoing_edges);
+    fn replace_node(&mut self, location: Location, node: Node) {
+        let current_targets = edge_targets(&node.outgoing_edges);
         let previous_targets = self
-            .completed
+            .nodes
             .get(&location)
-            .map_or_else(BTreeSet::new, |previous| targets(&previous.outgoing_edges));
+            .map_or_else(BTreeSet::new, |previous| {
+                edge_targets(&previous.outgoing_edges)
+            });
         let targets_removed = !previous_targets.is_subset(&current_targets);
         for target in previous_targets.difference(&current_targets) {
             let predecessors = self
@@ -140,21 +139,22 @@ impl SolverState {
                 .or_default()
                 .insert(location);
         }
-        self.dirty
+        self.inputs_to_recompute
             .extend(previous_targets.union(&current_targets).copied());
-        self.completed.insert(location, result);
+        self.nodes.insert(location, node);
         if targets_removed {
-            self.purge_detached_nodes();
+            self.remove_unreachable_nodes();
         }
     }
 
-    fn purge_detached_nodes(&mut self) {
+    fn remove_unreachable_nodes(&mut self) {
         let reachable = self.reachable_locations();
-        self.completed
+        self.nodes
             .retain(|location, _| reachable.contains(location));
-        self.queued_inputs
+        self.pending_executions
             .retain(|location, _| reachable.contains(location));
-        self.dirty.retain(|location| reachable.contains(location));
+        self.inputs_to_recompute
+            .retain(|location| reachable.contains(location));
 
         let mut changed = BTreeSet::new();
         self.predecessors.retain(|target, sources| {
@@ -168,54 +168,54 @@ impl SolverState {
             }
             !sources.is_empty()
         });
-        self.dirty.extend(changed);
+        self.inputs_to_recompute.extend(changed);
     }
 
     fn reachable_locations(&self) -> BTreeSet<Location> {
         let mut reachable = BTreeSet::new();
-        let mut pending = BTreeSet::from([self.entry.0]);
+        let mut pending = BTreeSet::from([self.entry_input.0]);
         while let Some(location) = pending.pop_first() {
             if !reachable.insert(location) {
                 continue;
             }
-            if let Some(result) = self.completed.get(&location) {
-                pending.extend(result.outgoing_edges.iter().map(|edge| edge.target));
+            if let Some(node) = self.nodes.get(&location) {
+                pending.extend(node.outgoing_edges.iter().map(|edge| edge.target));
             }
         }
         reachable
     }
 
     #[cfg(test)]
-    fn fingerprint(&self) -> SolverFingerprint {
-        SolverFingerprint {
-            completed: self
-                .completed
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint {
+            nodes: self
+                .nodes
                 .iter()
-                .map(|(&location, result)| {
-                    let outgoing = result
+                .map(|(&location, node)| {
+                    let outgoing = node
                         .outgoing_edges
                         .iter()
                         .map(|edge| (edge.target, edge.target_frame.clone()))
                         .collect();
-                    (location, (result.incoming_frame.clone(), outgoing))
+                    (location, (node.incoming_frame.clone(), outgoing))
                 })
                 .collect(),
-            dirty: self.dirty.clone(),
-            queued_inputs: self.queued_inputs.clone(),
+            inputs_to_recompute: self.inputs_to_recompute.clone(),
+            pending_executions: self.pending_executions.clone(),
         }
     }
 }
 
-fn targets(outgoing: &[Edge]) -> BTreeSet<Location> {
+fn edge_targets(outgoing: &[Edge]) -> BTreeSet<Location> {
     outgoing.iter().map(|edge| edge.target).collect()
 }
 
-pub(super) fn solve(
-    analyzer: &mut Executor<'_>,
+pub(super) fn execute_to_fixpoint(
+    executor: &mut Executor<'_>,
     entry_location: Location,
     initial_frame: Frame<Value>,
 ) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
-    let mut state = SolverState::new(entry_location, initial_frame);
+    let mut state = State::new(entry_location, initial_frame);
 
     #[cfg(test)]
     let mut seen = HashSet::new();
@@ -223,26 +223,26 @@ pub(super) fn solve(
     // Normalization bounds the set of locations, while definition and merge
     // identities are interned by location. This bounds the symbolic frames the
     // solver can encounter, but replacement is not monotone; the test-only
-    // fingerprint catches a repeated state if transfer changes ever introduce
+    // fingerprint catches a repeated state if execution changes ever introduce
     // an oscillation.
-    while !state.dirty.is_empty() || !state.queued_inputs.is_empty() {
+    while !state.inputs_to_recompute.is_empty() || !state.pending_executions.is_empty() {
         #[cfg(test)]
         assert!(
             seen.insert(state.fingerprint()),
             "JVM symbolic execution entered a solver-state cycle"
         );
-        state.recompute_dirty();
-        let Some((location, incoming)) = state.queued_inputs.pop_first() else {
+        state.recompute_inputs();
+        let Some((location, incoming_frame)) = state.pending_executions.pop_first() else {
             continue;
         };
-        let result = analyzer.transfer(location, incoming)?;
-        state.replace_result(location, result);
+        let node = executor.execute_location(location, incoming_frame)?;
+        state.replace_node(location, node);
     }
 
-    Ok(state.completed)
+    Ok(state.nodes)
 }
 
-pub(super) fn merge_frame_at(
+pub(super) fn merge_input_frame_at(
     location: Location,
     frame: &mut Frame<Value>,
     contribution: Frame<Value>,
@@ -309,10 +309,10 @@ mod tests {
     fn parallel_edges_from_one_predecessor_all_contribute() {
         let source = Location::entry(0.into());
         let target = Location::entry(1.into());
-        let mut state = SolverState::new(source, frame(0));
-        state.recompute_dirty();
+        let mut state = State::new(source, frame(0));
+        state.recompute_inputs();
 
-        state.replace_result(
+        state.replace_node(
             source,
             Node {
                 incoming_frame: frame(0),
@@ -332,11 +332,11 @@ mod tests {
                 caught_exception_value: None,
             },
         );
-        state.recompute_dirty();
+        state.recompute_inputs();
 
         assert_eq!(state.predecessors[&target], BTreeSet::from([source]));
         assert_eq!(
-            state.queued_inputs[&target].local_slots(),
+            state.pending_executions[&target].local_slots(),
             &[Entry::Value(Value::Merged(FrameMergeSite {
                 location: target,
                 slot: Position::Local(0),
@@ -348,24 +348,24 @@ mod tests {
     fn replacing_an_edge_discards_its_superseded_frame() {
         let source = Location::entry(0.into());
         let target = Location::entry(1.into());
-        let mut state = SolverState::new(source, frame(0));
-        state.recompute_dirty();
+        let mut state = State::new(source, frame(0));
+        state.recompute_inputs();
 
-        state.replace_result(source, result_to(target, frame(1)));
-        state.recompute_dirty();
+        state.replace_node(source, result_to(target, frame(1)));
+        state.recompute_inputs();
         assert_eq!(
-            state.queued_inputs[&target].local_slots(),
+            state.pending_executions[&target].local_slots(),
             &[Entry::Value(Value::Ssa(SsaValueId::new(1)))]
         );
 
-        state.replace_result(source, result_to(target, frame(2)));
-        state.recompute_dirty();
+        state.replace_node(source, result_to(target, frame(2)));
+        state.recompute_inputs();
         assert_eq!(
-            state.queued_inputs[&target].local_slots(),
+            state.pending_executions[&target].local_slots(),
             &[Entry::Value(Value::Ssa(SsaValueId::new(2)))]
         );
 
-        state.replace_result(
+        state.replace_node(
             source,
             Node {
                 incoming_frame: frame(0),
@@ -374,9 +374,9 @@ mod tests {
                 caught_exception_value: None,
             },
         );
-        state.recompute_dirty();
-        assert!(!state.completed.contains_key(&target));
-        assert!(!state.queued_inputs.contains_key(&target));
+        state.recompute_inputs();
+        assert!(!state.nodes.contains_key(&target));
+        assert!(!state.pending_executions.contains_key(&target));
     }
 
     #[test]
@@ -384,19 +384,19 @@ mod tests {
         let source = Location::entry(0.into());
         let first = Location::entry(1.into());
         let second = Location::entry(2.into());
-        let mut state = SolverState::new(source, frame(0));
-        state.recompute_dirty();
+        let mut state = State::new(source, frame(0));
+        state.recompute_inputs();
 
-        state.replace_result(source, result_to(first, frame(1)));
-        state.recompute_dirty();
-        state.replace_result(first, result_to(second, frame(1)));
-        state.recompute_dirty();
-        state.replace_result(second, result_to(first, frame(1)));
-        state.recompute_dirty();
-        assert!(state.completed.contains_key(&first));
-        assert!(state.completed.contains_key(&second));
+        state.replace_node(source, result_to(first, frame(1)));
+        state.recompute_inputs();
+        state.replace_node(first, result_to(second, frame(1)));
+        state.recompute_inputs();
+        state.replace_node(second, result_to(first, frame(1)));
+        state.recompute_inputs();
+        assert!(state.nodes.contains_key(&first));
+        assert!(state.nodes.contains_key(&second));
 
-        state.replace_result(
+        state.replace_node(
             source,
             Node {
                 incoming_frame: frame(0),
@@ -406,12 +406,9 @@ mod tests {
             },
         );
 
-        assert_eq!(
-            state.completed.keys().copied().collect::<Vec<_>>(),
-            [source]
-        );
+        assert_eq!(state.nodes.keys().copied().collect::<Vec<_>>(), [source]);
         assert!(state.predecessors.is_empty());
-        assert!(!state.queued_inputs.contains_key(&first));
-        assert!(!state.queued_inputs.contains_key(&second));
+        assert!(!state.pending_executions.contains_key(&first));
+        assert!(!state.pending_executions.contains_key(&second));
     }
 }

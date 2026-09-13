@@ -36,7 +36,7 @@ pub(super) fn lift_register_instruction(
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
     let definition = produces_register_value(jvm_instruction)
-        .then(|| executor.definition_at(location))
+        .then(|| executor.definition_id_at(location))
         .transpose()?;
 
     if let Some(instruction) = constants::try_lift(jvm_instruction, definition, frame)? {

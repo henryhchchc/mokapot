@@ -9,7 +9,7 @@ use crate::{
             instruction::RegisterInstruction,
             lifting::{
                 fallibility::FallibilityContext, lift_register_instruction,
-                successors::build_successors,
+                successors::build_outgoing_edges,
             },
             normalization::{Location, Normalizer},
             symbolic_execution::fact::{Cfg, Node, Value},
@@ -38,7 +38,7 @@ pub(crate) struct Executor<'method> {
 }
 
 impl<'method> Executor<'method> {
-    pub fn transfer(
+    pub fn execute_location(
         &mut self,
         location: Location,
         incoming_frame: Frame<Value>,
@@ -47,7 +47,7 @@ impl<'method> Executor<'method> {
             Location::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.clone();
-                let outgoing_edges = build_successors(
+                let outgoing_edges = build_outgoing_edges(
                     self,
                     location,
                     &incoming_frame,
@@ -69,7 +69,7 @@ impl<'method> Executor<'method> {
                     self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
                     lift_register_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
-                let outgoing_edges = build_successors(
+                let outgoing_edges = build_outgoing_edges(
                     self,
                     location,
                     &incoming_frame,
@@ -122,7 +122,7 @@ impl<'method> Executor<'method> {
             &frame_parameters,
         )?;
         let entry_location = Location::entry(first_pc);
-        let analyzer = Self {
+        let executor = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
             normalizer: Normalizer::new(first_pc),
@@ -134,11 +134,11 @@ impl<'method> Executor<'method> {
             entry_location,
             initial_frame,
         };
-        Ok(analyzer)
+        Ok(executor)
     }
 
-    pub fn analyze(mut self) -> Result<Cfg, MokaIRBuildError> {
-        let nodes = self.solve_locations()?;
+    pub fn execute(mut self) -> Result<Cfg, MokaIRBuildError> {
+        let nodes = self.execute_reachable_locations()?;
         let merge_identities = nodes
             .values()
             .flat_map(|node| node.incoming_frame.iter_values())
@@ -161,17 +161,19 @@ impl<'method> Executor<'method> {
         })
     }
 
-    pub fn solve_locations(&mut self) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
+    pub fn execute_reachable_locations(
+        &mut self,
+    ) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
         let entry_location = self.entry_location;
         let initial_frame = self.initial_frame.clone();
-        solver::solve(self, entry_location, initial_frame)
+        solver::execute_to_fixpoint(self, entry_location, initial_frame)
     }
 
     pub fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn definition_id_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
         if !matches!(location, Location::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
@@ -183,7 +185,7 @@ impl<'method> Executor<'method> {
         Ok(id)
     }
 
-    pub fn caught_exception_at(
+    pub fn caught_exception_id_at(
         &mut self,
         location: Location,
     ) -> Result<SsaValueId, MokaIRBuildError> {
@@ -198,24 +200,31 @@ impl<'method> Executor<'method> {
         Ok(id)
     }
 
-    pub fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBuildError> {
+    pub fn next_program_counter(
+        &self,
+        pc: ProgramCounter,
+    ) -> Result<ProgramCounter, MokaIRBuildError> {
         self.body
             .instructions
             .next_pc_of(&pc)
             .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
-    pub fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+    pub fn fallthrough_location(
+        &mut self,
+        location: Location,
+    ) -> Result<Location, MokaIRBuildError> {
         let pc = location
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.bytecode(self.next_pc_of(pc)?, context)
+        self.normalizer
+            .bytecode(self.next_program_counter(pc)?, context)
     }
 
-    pub fn target_location(
+    pub fn bytecode_location_at(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -226,7 +235,7 @@ impl<'method> Executor<'method> {
         self.normalizer.bytecode(target, context)
     }
 
-    pub fn handler_location(
+    pub fn exception_handler_location(
         &mut self,
         location: Location,
         handler: ProgramCounter,
