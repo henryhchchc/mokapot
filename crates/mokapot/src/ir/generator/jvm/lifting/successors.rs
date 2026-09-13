@@ -79,7 +79,7 @@ pub(crate) fn build_outgoing_edges(
 ) -> Result<Vec<Edge>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
-    Ok(match instruction {
+    let edges = match instruction {
         RegisterInstruction::HandlerEntry => {
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
@@ -190,7 +190,8 @@ pub(crate) fn build_outgoing_edges(
                 target_frame: normal_frame,
             }]
         }
-    })
+    };
+    Ok(edges)
 }
 
 #[cfg(test)]
