@@ -1,19 +1,19 @@
 use crate::ir::generator::{
     error::MokaIRBuildError,
     jvm::{
-        frame::JvmStackFrame, instruction::RegisterInstruction, symbolic_execution::OperandState,
+        frame::JvmStackFrame, instruction::RegisterInstruction, symbolic_execution::SymbolicValue,
     },
 };
 
 #[inline]
 pub(super) fn load_local<const SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     idx: u16,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let value = frame.get_local::<SLOT>(idx)?;
     if matches!(
         value,
-        OperandState::ReturnAddress(_) | OperandState::Invalid
+        SymbolicValue::ReturnAddress(_) | SymbolicValue::Invalid
     ) {
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
@@ -23,7 +23,7 @@ pub(super) fn load_local<const SLOT: bool>(
 
 #[inline]
 pub(super) fn store_local<const SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     idx: u16,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let value = frame.pop_value::<SLOT>()?;

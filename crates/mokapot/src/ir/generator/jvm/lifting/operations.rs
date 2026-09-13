@@ -5,16 +5,16 @@ use crate::ir::{
         identity::SsaValueId,
         jvm::{
             frame::JvmStackFrame, instruction::RegisterInstruction,
-            symbolic_execution::OperandState,
+            symbolic_execution::SymbolicValue,
         },
     },
 };
 
 #[inline]
 pub(super) fn conversion_op<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     def: SsaValueId,
-    conversion: impl FnOnce(OperandState) -> Conversion<OperandState>,
+    conversion: impl FnOnce(SymbolicValue) -> Conversion<SymbolicValue>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let operand = frame.pop_value::<OPERAND_SLOT>()?;
     frame.push_value::<RESULT_SLOT>(def.into())?;
@@ -26,9 +26,9 @@ pub(super) fn conversion_op<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
 
 #[inline]
 pub(super) fn binary_op_math<const SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     def_id: SsaValueId,
-    math: impl FnOnce(OperandState, OperandState) -> MathOperation<OperandState>,
+    math: impl FnOnce(SymbolicValue, SymbolicValue) -> MathOperation<SymbolicValue>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let rhs = frame.pop_value::<SLOT>()?;
     let lhs = frame.pop_value::<SLOT>()?;

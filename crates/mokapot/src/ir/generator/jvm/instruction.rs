@@ -5,7 +5,7 @@ use crate::{
         expression::{Condition, Expression},
         generator::{
             identity::SsaValueId,
-            jvm::{normalization::Location, symbolic_execution::OperandState},
+            jvm::{normalization::Location, symbolic_execution::SymbolicValue},
         },
     },
     jvm::code::ProgramCounter,
@@ -18,24 +18,24 @@ pub(crate) enum RegisterInstruction {
     Erased,
     Definition {
         value: SsaValueId,
-        expr: Expression<OperandState>,
+        expr: Expression<SymbolicValue>,
     },
-    Effect(Expression<OperandState>),
+    Effect(Expression<SymbolicValue>),
     Jump {
-        condition: Option<Condition<OperandState>>,
+        condition: Option<Condition<SymbolicValue>>,
         target: ProgramCounter,
     },
     Switch {
-        match_value: OperandState,
+        match_value: SymbolicValue,
         branches: BTreeMap<i32, ProgramCounter>,
         default: ProgramCounter,
     },
-    Return(Option<OperandState>),
-    Throw(OperandState),
+    Return(Option<SymbolicValue>),
+    Throw(SymbolicValue),
     Subroutine {
         target: Location,
     },
-    SubroutineReturn(OperandState),
+    SubroutineReturn(SymbolicValue),
 }
 
 impl RegisterInstruction {

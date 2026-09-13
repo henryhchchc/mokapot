@@ -11,7 +11,7 @@ use crate::{
                     locals::{load_local, store_local},
                     required_definition,
                 },
-                symbolic_execution::OperandState,
+                symbolic_execution::SymbolicValue,
             },
         },
     },
@@ -35,7 +35,7 @@ pub(super) const fn defines_value(instruction: &JVM) -> bool {
 pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,

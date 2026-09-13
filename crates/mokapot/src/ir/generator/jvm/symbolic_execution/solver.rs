@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use super::{
     analyzer::JvmSymbolicExecutor,
-    fact::{AnalyzedLocation, JvmOutgoing, MergeIdentity, OperandState},
+    fact::{FrameMergeSite, SymbolicJvmEdge, SymbolicJvmNode, SymbolicValue},
 };
 use crate::ir::generator::{
     error::MokaIRBuildError,
@@ -19,19 +19,19 @@ use crate::ir::generator::{
 };
 
 struct SolverState {
-    entry: (Location, JvmStackFrame<OperandState>),
-    completed: BTreeMap<Location, AnalyzedLocation>,
+    entry: (Location, JvmStackFrame<SymbolicValue>),
+    completed: BTreeMap<Location, SymbolicJvmNode>,
     predecessors: BTreeMap<Location, BTreeSet<Location>>,
     dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, JvmStackFrame<OperandState>>,
+    queued_inputs: BTreeMap<Location, JvmStackFrame<SymbolicValue>>,
 }
 
 #[cfg(test)]
 type CompletedFingerprint = BTreeMap<
     Location,
     (
-        JvmStackFrame<OperandState>,
-        Vec<(Location, JvmStackFrame<OperandState>)>,
+        JvmStackFrame<SymbolicValue>,
+        Vec<(Location, JvmStackFrame<SymbolicValue>)>,
     ),
 >;
 
@@ -40,11 +40,11 @@ type CompletedFingerprint = BTreeMap<
 struct SolverFingerprint {
     completed: CompletedFingerprint,
     dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, JvmStackFrame<OperandState>>,
+    queued_inputs: BTreeMap<Location, JvmStackFrame<SymbolicValue>>,
 }
 
 impl SolverState {
-    fn new(entry_location: Location, initial_frame: JvmStackFrame<OperandState>) -> Self {
+    fn new(entry_location: Location, initial_frame: JvmStackFrame<SymbolicValue>) -> Self {
         Self {
             entry: (entry_location, initial_frame),
             completed: BTreeMap::new(),
@@ -57,11 +57,14 @@ impl SolverState {
     fn recompute_dirty(&mut self) {
         while let Some(location) = self.dirty.pop_first() {
             match self.recompute_frame(location) {
-                Some(incoming)
-                    if self.completed.get(&location).map(|result| &result.incoming)
-                        != Some(&incoming) =>
+                Some(incoming_frame)
+                    if self
+                        .completed
+                        .get(&location)
+                        .map(|result| &result.incoming_frame)
+                        != Some(&incoming_frame) =>
                 {
-                    self.queued_inputs.insert(location, incoming);
+                    self.queued_inputs.insert(location, incoming_frame);
                 }
                 None => self.remove_unreachable(location),
                 Some(_) => {
@@ -71,7 +74,7 @@ impl SolverState {
         }
     }
 
-    fn recompute_frame(&self, location: Location) -> Option<JvmStackFrame<OperandState>> {
+    fn recompute_frame(&self, location: Location) -> Option<JvmStackFrame<SymbolicValue>> {
         let seed = (location == self.entry.0).then_some(&self.entry.1);
         let mut incoming = seed.into_iter().chain(
             self.predecessors
@@ -82,10 +85,10 @@ impl SolverState {
                     self.completed
                         .get(source)
                         .expect("predecessors must have a retained output")
-                        .outgoing
+                        .outgoing_edges
                         .iter()
                         .filter(move |edge| edge.target == location)
-                        .map(|edge| &edge.frame)
+                        .map(|edge| &edge.target_frame)
                 }),
         );
         incoming.next().cloned().map(|mut frame| {
@@ -102,7 +105,7 @@ impl SolverState {
             return;
         };
         for target in result
-            .outgoing
+            .outgoing_edges
             .into_iter()
             .map(|outgoing| outgoing.target)
             .collect::<BTreeSet<_>>()
@@ -120,12 +123,12 @@ impl SolverState {
         self.purge_detached_nodes();
     }
 
-    fn replace_result(&mut self, location: Location, result: AnalyzedLocation) {
-        let current_targets = targets(&result.outgoing);
+    fn replace_result(&mut self, location: Location, result: SymbolicJvmNode) {
+        let current_targets = targets(&result.outgoing_edges);
         let previous_targets = self
             .completed
             .get(&location)
-            .map_or_else(BTreeSet::new, |previous| targets(&previous.outgoing));
+            .map_or_else(BTreeSet::new, |previous| targets(&previous.outgoing_edges));
         let targets_removed = !previous_targets.is_subset(&current_targets);
         for target in previous_targets.difference(&current_targets) {
             let predecessors = self
@@ -182,7 +185,7 @@ impl SolverState {
                 continue;
             }
             if let Some(result) = self.completed.get(&location) {
-                pending.extend(result.outgoing.iter().map(|edge| edge.target));
+                pending.extend(result.outgoing_edges.iter().map(|edge| edge.target));
             }
         }
         reachable
@@ -196,11 +199,11 @@ impl SolverState {
                 .iter()
                 .map(|(&location, result)| {
                     let outgoing = result
-                        .outgoing
+                        .outgoing_edges
                         .iter()
-                        .map(|edge| (edge.target, edge.frame.clone()))
+                        .map(|edge| (edge.target, edge.target_frame.clone()))
                         .collect();
-                    (location, (result.incoming.clone(), outgoing))
+                    (location, (result.incoming_frame.clone(), outgoing))
                 })
                 .collect(),
             dirty: self.dirty.clone(),
@@ -209,15 +212,15 @@ impl SolverState {
     }
 }
 
-fn targets(outgoing: &[JvmOutgoing]) -> BTreeSet<Location> {
+fn targets(outgoing: &[SymbolicJvmEdge]) -> BTreeSet<Location> {
     outgoing.iter().map(|edge| edge.target).collect()
 }
 
 pub(super) fn solve(
     analyzer: &mut JvmSymbolicExecutor<'_>,
     entry_location: Location,
-    initial_frame: JvmStackFrame<OperandState>,
-) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
+    initial_frame: JvmStackFrame<SymbolicValue>,
+) -> Result<BTreeMap<Location, SymbolicJvmNode>, MokaIRBuildError> {
     let mut state = SolverState::new(entry_location, initial_frame);
 
     #[cfg(test)]
@@ -247,19 +250,21 @@ pub(super) fn solve(
 
 pub(super) fn merge_frame_at(
     location: Location,
-    frame: &mut JvmStackFrame<OperandState>,
-    contribution: JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
+    contribution: JvmStackFrame<SymbolicValue>,
 ) -> bool {
     frame.join_assign_values_with(contribution, |slot, lhs, rhs| {
         if *lhs == rhs {
             return false;
         }
-        let identity = MergeIdentity { location, slot };
+        let identity = FrameMergeSite { location, slot };
         let merged = match (*lhs, rhs) {
-            (OperandState::Invalid | OperandState::ReturnAddress(_), _)
-            | (_, OperandState::Invalid | OperandState::ReturnAddress(_)) => OperandState::Invalid,
-            (OperandState::Merged(current), _) if current == identity => return false,
-            _ => OperandState::Merged(identity),
+            (SymbolicValue::Invalid | SymbolicValue::ReturnAddress(_), _)
+            | (_, SymbolicValue::Invalid | SymbolicValue::ReturnAddress(_)) => {
+                SymbolicValue::Invalid
+            }
+            (SymbolicValue::Merged(current), _) if current == identity => return false,
+            _ => SymbolicValue::Merged(identity),
         };
         if *lhs == merged {
             false
@@ -284,30 +289,30 @@ mod tests {
         },
     };
 
-    fn frame(value: u32) -> JvmStackFrame<OperandState> {
+    fn frame(value: u32) -> JvmStackFrame<SymbolicValue> {
         JvmStackFrame::with_inputs(
             &"(I)V".parse().expect("valid descriptor"),
             1,
             0,
             None,
-            &[OperandState::Value(SsaValueId::new(value))],
+            &[SymbolicValue::Value(SsaValueId::new(value))],
         )
         .expect("frame fits descriptor")
     }
 
     fn result_to(
         target: Location,
-        outgoing_frame: JvmStackFrame<OperandState>,
-    ) -> AnalyzedLocation {
-        AnalyzedLocation {
-            incoming: frame(0),
+        outgoing_frame: JvmStackFrame<SymbolicValue>,
+    ) -> SymbolicJvmNode {
+        SymbolicJvmNode {
+            incoming_frame: frame(0),
             instruction: RegisterInstruction::Erased,
-            outgoing: vec![JvmOutgoing {
+            outgoing_edges: vec![SymbolicJvmEdge {
                 target,
                 transfer: ControlTransfer::Unconditional,
-                frame: outgoing_frame,
+                target_frame: outgoing_frame,
             }],
-            caught_exception: None,
+            caught_exception_value: None,
         }
     }
 
@@ -320,22 +325,22 @@ mod tests {
 
         state.replace_result(
             source,
-            AnalyzedLocation {
-                incoming: frame(0),
+            SymbolicJvmNode {
+                incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                outgoing: vec![
-                    JvmOutgoing {
+                outgoing_edges: vec![
+                    SymbolicJvmEdge {
                         target,
                         transfer: ControlTransfer::Unconditional,
-                        frame: frame(1),
+                        target_frame: frame(1),
                     },
-                    JvmOutgoing {
+                    SymbolicJvmEdge {
                         target,
                         transfer: ControlTransfer::Unconditional,
-                        frame: frame(2),
+                        target_frame: frame(2),
                     },
                 ],
-                caught_exception: None,
+                caught_exception_value: None,
             },
         );
         state.recompute_dirty();
@@ -343,7 +348,7 @@ mod tests {
         assert_eq!(state.predecessors[&target], BTreeSet::from([source]));
         assert_eq!(
             state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(OperandState::Merged(MergeIdentity {
+            &[Entry::Value(SymbolicValue::Merged(FrameMergeSite {
                 location: target,
                 slot: FrameSlot::Local(0),
             }))]
@@ -361,23 +366,23 @@ mod tests {
         state.recompute_dirty();
         assert_eq!(
             state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(OperandState::Value(SsaValueId::new(1)))]
+            &[Entry::Value(SymbolicValue::Value(SsaValueId::new(1)))]
         );
 
         state.replace_result(source, result_to(target, frame(2)));
         state.recompute_dirty();
         assert_eq!(
             state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(OperandState::Value(SsaValueId::new(2)))]
+            &[Entry::Value(SymbolicValue::Value(SsaValueId::new(2)))]
         );
 
         state.replace_result(
             source,
-            AnalyzedLocation {
-                incoming: frame(0),
+            SymbolicJvmNode {
+                incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                outgoing: Vec::new(),
-                caught_exception: None,
+                outgoing_edges: Vec::new(),
+                caught_exception_value: None,
             },
         );
         state.recompute_dirty();
@@ -404,11 +409,11 @@ mod tests {
 
         state.replace_result(
             source,
-            AnalyzedLocation {
-                incoming: frame(0),
+            SymbolicJvmNode {
+                incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                outgoing: Vec::new(),
-                caught_exception: None,
+                outgoing_edges: Vec::new(),
+                caught_exception_value: None,
             },
         );
 

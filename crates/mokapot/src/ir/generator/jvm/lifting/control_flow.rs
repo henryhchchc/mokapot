@@ -7,7 +7,7 @@ use crate::{
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::RegisterInstruction,
                 normalization::Location,
-                symbolic_execution::{JvmSymbolicExecutor, OperandState},
+                symbolic_execution::{JvmSymbolicExecutor, SymbolicValue},
             },
         },
     },
@@ -16,9 +16,9 @@ use crate::{
 
 #[inline]
 pub(super) fn conditional_jump(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     target: ProgramCounter,
-    condition: impl FnOnce(OperandState) -> Condition<OperandState>,
+    condition: impl FnOnce(SymbolicValue) -> Condition<SymbolicValue>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let operand = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(RegisterInstruction::Jump {
@@ -29,9 +29,9 @@ pub(super) fn conditional_jump(
 
 #[inline]
 pub(super) fn cmp_jump(
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
     target: ProgramCounter,
-    condition: impl FnOnce(OperandState, OperandState) -> Condition<OperandState>,
+    condition: impl FnOnce(SymbolicValue, SymbolicValue) -> Condition<SymbolicValue>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let rhs = frame.pop_value::<SINGLE_SLOT>()?;
     let lhs = frame.pop_value::<SINGLE_SLOT>()?;
@@ -46,7 +46,7 @@ pub(super) fn lift(
     jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,

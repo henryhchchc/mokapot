@@ -12,7 +12,7 @@ use crate::{
                 frame::JvmStackFrame,
                 instruction::RegisterInstruction,
                 normalization::Location,
-                symbolic_execution::{AnalyzedLocation, JvmOutgoing, OperandState},
+                symbolic_execution::{SymbolicJvmEdge, SymbolicJvmNode, SymbolicValue},
             },
         },
     },
@@ -25,15 +25,15 @@ use super::{
 };
 
 pub(super) fn materialize_blocks(
-    mut analyzed_locations: BTreeMap<Location, AnalyzedLocation>,
+    mut symbolic_nodes: BTreeMap<Location, SymbolicJvmNode>,
     layout: &BlockLayout,
 ) -> Result<Vec<JvmBlock>, MokaIRBuildError> {
     let blocks = layout
         .locations()
         .iter()
-        .map(|(&id, locations)| materialize_block(id, locations, &mut analyzed_locations, layout))
+        .map(|(&id, locations)| materialize_block(id, locations, &mut symbolic_nodes, layout))
         .collect::<Result<Vec<_>, _>>()?;
-    if analyzed_locations.is_empty() {
+    if symbolic_nodes.is_empty() {
         Ok(blocks)
     } else {
         Err(MokaIRBuildError::MalformedControlFlow)
@@ -43,7 +43,7 @@ pub(super) fn materialize_blocks(
 fn materialize_block(
     id: BlockId,
     locations: &[Location],
-    analyzed_locations: &mut BTreeMap<Location, AnalyzedLocation>,
+    symbolic_nodes: &mut BTreeMap<Location, SymbolicJvmNode>,
     layout: &BlockLayout,
 ) -> Result<JvmBlock, MokaIRBuildError> {
     let mut entry_frame = None;
@@ -54,28 +54,29 @@ fn materialize_block(
     let mut arms = Vec::new();
 
     for (index, location) in locations.iter().copied().enumerate() {
-        let AnalyzedLocation {
-            incoming,
+        let SymbolicJvmNode {
+            incoming_frame,
             instruction,
-            outgoing,
-            caught_exception: location_exception,
-        } = analyzed_locations
+            outgoing_edges,
+            caught_exception_value: location_exception,
+        } = symbolic_nodes
             .remove(&location)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         if index == 0 {
-            entry_frame = Some(incoming);
+            entry_frame = Some(incoming_frame);
             caught_exception = location_exception;
         }
         let is_last = index + 1 == locations.len();
         if is_last {
-            let end = materialize_block_end(location, instruction, outgoing, layout)?;
+            let end = materialize_block_end(location, instruction, outgoing_edges, layout)?;
             operations.extend(end.operation);
             terminator = Some(end.terminator);
             terminator_source = end.terminator_source;
             arms = end.arms;
         } else {
             let next = locations[index + 1];
-            let operation = materialize_internal_operation(location, instruction, &outgoing, next)?;
+            let operation =
+                materialize_internal_operation(location, instruction, &outgoing_edges, next)?;
             operations.extend(operation);
         }
     }
@@ -94,9 +95,9 @@ fn materialize_block(
 fn materialize_internal_operation(
     location: Location,
     instruction: RegisterInstruction,
-    outgoing: &[JvmOutgoing],
+    outgoing: &[SymbolicJvmEdge],
     next: Location,
-) -> Result<Option<(ProgramCounter, OperationKind<OperandState>)>, MokaIRBuildError> {
+) -> Result<Option<(ProgramCounter, OperationKind<SymbolicValue>)>, MokaIRBuildError> {
     if instruction.is_explicit_transfer()
         || outgoing.len() != 1
         || outgoing[0].target != next
@@ -106,7 +107,7 @@ fn materialize_internal_operation(
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: OperandState::Value(value),
+            value: SymbolicValue::Value(value),
             expr,
         }),
         RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
@@ -133,8 +134,8 @@ fn materialize_internal_operation(
 }
 
 struct BlockEnd {
-    operation: Option<(ProgramCounter, OperationKind<OperandState>)>,
-    terminator: TerminatorKind<OperandState>,
+    operation: Option<(ProgramCounter, OperationKind<SymbolicValue>)>,
+    terminator: TerminatorKind<SymbolicValue>,
     terminator_source: Option<ProgramCounter>,
     arms: Vec<JvmBlockArm>,
 }
@@ -142,7 +143,7 @@ struct BlockEnd {
 fn materialize_block_end(
     location: Location,
     instruction: RegisterInstruction,
-    outgoing: Vec<JvmOutgoing>,
+    outgoing: Vec<SymbolicJvmEdge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, MokaIRBuildError> {
     let explicit_transfer = instruction.is_explicit_transfer();
@@ -154,7 +155,7 @@ fn materialize_block_end(
                 .map(|target| JvmBlockArm {
                     target,
                     transfer: outgoing.transfer,
-                    frame: outgoing.frame,
+                    frame: outgoing.target_frame,
                 })
                 .ok_or(MokaIRBuildError::MalformedControlFlow)
         })
@@ -183,7 +184,7 @@ fn materialize_block_end(
 pub(super) fn insert_entry_preheader(
     mut blocks: Vec<JvmBlock>,
     layout: &BlockLayout,
-    initial_frame: JvmStackFrame<OperandState>,
+    initial_frame: JvmStackFrame<SymbolicValue>,
 ) -> Vec<JvmBlock> {
     if layout.has_entry_preheader() {
         let entry_block = JvmBlock {
@@ -208,8 +209,8 @@ pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
     has_normal_successor: bool,
 ) -> (
-    Option<OperationKind<OperandState>>,
-    TerminatorKind<OperandState>,
+    Option<OperationKind<SymbolicValue>>,
+    TerminatorKind<SymbolicValue>,
 ) {
     match instruction {
         RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
@@ -230,7 +231,7 @@ pub(super) fn classify_block_end(
         RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
         RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
-                value: OperandState::Value(value),
+                value: SymbolicValue::Value(value),
                 expr,
             }),
             implicit_terminator(has_normal_successor),
@@ -242,7 +243,7 @@ pub(super) fn classify_block_end(
     }
 }
 
-const fn implicit_terminator(has_normal_successor: bool) -> TerminatorKind<OperandState> {
+const fn implicit_terminator(has_normal_successor: bool) -> TerminatorKind<SymbolicValue> {
     if has_normal_successor {
         TerminatorKind::Fallible
     } else {

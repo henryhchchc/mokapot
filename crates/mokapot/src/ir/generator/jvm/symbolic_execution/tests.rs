@@ -1,6 +1,6 @@
 use super::{
     analyzer::JvmSymbolicExecutor,
-    fact::{MergeIdentity, OperandState},
+    fact::{FrameMergeSite, SymbolicValue},
     solver::merge_frame_at,
 };
 use crate::{
@@ -22,17 +22,17 @@ fn frame_with_inputs(
     max_stack: u16,
     this_value: Option<SsaValueId>,
     parameters: &[SsaValueId],
-) -> JvmStackFrame<OperandState> {
+) -> JvmStackFrame<SymbolicValue> {
     let parameters = parameters
         .iter()
         .copied()
-        .map(OperandState::Value)
+        .map(SymbolicValue::Value)
         .collect::<Vec<_>>();
     JvmStackFrame::with_inputs(
         descriptor,
         max_locals,
         max_stack,
-        this_value.map(OperandState::Value),
+        this_value.map(SymbolicValue::Value),
         &parameters,
     )
     .expect("frame fits descriptor")
@@ -46,7 +46,7 @@ fn merge_identity_is_stable_for_a_location_and_slot() {
     let mut merged = frame(1);
 
     assert!(merge_frame_at(location, &mut merged, frame(2)));
-    let expected = OperandState::Merged(MergeIdentity {
+    let expected = SymbolicValue::Merged(FrameMergeSite {
         location,
         slot: FrameSlot::Local(0),
     });
@@ -60,7 +60,7 @@ fn frame_merge_is_permutation_independent() {
     let descriptor = "(I)V".parse().expect("valid descriptor");
     let location = Location::entry(0.into());
     let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
-    let expected = [Entry::Value(OperandState::Merged(MergeIdentity {
+    let expected = [Entry::Value(SymbolicValue::Merged(FrameMergeSite {
         location,
         slot: FrameSlot::Local(0),
     }))];
@@ -151,13 +151,13 @@ fn reprocessing_replaces_stale_predecessor_output() {
         vec![],
     );
     let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
-    let locations = analyzer.solve_locations().expect("valid loop");
+    let nodes = analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(
-        locations[&Location::entry(2.into())]
-            .incoming
+        nodes[&Location::entry(2.into())]
+            .incoming_frame
             .operand_stack(),
-        &[Entry::Value(OperandState::Merged(MergeIdentity {
+        &[Entry::Value(SymbolicValue::Merged(FrameMergeSite {
             location: Location::entry(1.into()),
             slot: FrameSlot::Stack(0),
         }))]

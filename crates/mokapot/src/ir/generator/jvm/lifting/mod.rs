@@ -20,7 +20,7 @@ use crate::{
             frame::JvmStackFrame,
             instruction::RegisterInstruction,
             normalization::Location,
-            symbolic_execution::{JvmSymbolicExecutor, OperandState},
+            symbolic_execution::{JvmSymbolicExecutor, SymbolicValue},
         },
     },
     jvm::code::Instruction as JVM,
@@ -29,7 +29,7 @@ pub(super) fn lift_instruction(
     semantics: &mut JvmSymbolicExecutor<'_>,
     jvm_instruction: &JVM,
     location: Location,
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let pc = location
         .source_pc()

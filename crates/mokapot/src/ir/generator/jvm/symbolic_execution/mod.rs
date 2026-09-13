@@ -5,7 +5,9 @@ mod fact;
 mod solver;
 
 pub(super) use analyzer::JvmSymbolicExecutor;
-pub(crate) use fact::{AnalyzedJvmCfg, AnalyzedLocation, JvmOutgoing, MergeIdentity, OperandState};
+pub(crate) use fact::{
+    FrameMergeSite, SymbolicJvmCfg, SymbolicJvmEdge, SymbolicJvmNode, SymbolicValue,
+};
 
 #[cfg(test)]
 mod tests;

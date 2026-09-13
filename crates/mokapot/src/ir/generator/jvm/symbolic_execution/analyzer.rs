@@ -11,7 +11,7 @@ use crate::{
                 fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
             },
             normalization::{Location, Normalizer},
-            symbolic_execution::fact::{AnalyzedJvmCfg, AnalyzedLocation, OperandState},
+            symbolic_execution::fact::{SymbolicJvmCfg, SymbolicJvmNode, SymbolicValue},
             symbolic_execution::solver,
         },
     },
@@ -30,29 +30,35 @@ pub(crate) struct JvmSymbolicExecutor<'method> {
     pub(super) definition_ids: BTreeMap<Location, SsaValueId>,
     pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
     pub(super) value_id_allocator: ValueIdAllocator,
-    this_value: Option<SsaValueId>,
+    receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
     entry_location: Location,
-    initial_frame: JvmStackFrame<OperandState>,
+    initial_frame: JvmStackFrame<SymbolicValue>,
 }
 
 impl<'method> JvmSymbolicExecutor<'method> {
     pub fn transfer(
         &mut self,
         location: Location,
-        incoming: JvmStackFrame<OperandState>,
-    ) -> Result<AnalyzedLocation, MokaIRBuildError> {
+        incoming_frame: JvmStackFrame<SymbolicValue>,
+    ) -> Result<SymbolicJvmNode, MokaIRBuildError> {
         let (instruction, outgoing) = match location {
             Location::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
-                let normal_frame = incoming.same_frame();
-                let outgoing =
-                    outgoing_from(self, location, &incoming, normal_frame, &instruction, false)?;
+                let normal_frame = incoming_frame.same_frame();
+                let outgoing = outgoing_from(
+                    self,
+                    location,
+                    &incoming_frame,
+                    normal_frame,
+                    &instruction,
+                    false,
+                )?;
                 (instruction, outgoing)
             }
             Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
-                let mut normal_frame = incoming.same_frame();
+                let mut normal_frame = incoming_frame.same_frame();
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
@@ -64,7 +70,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
                 let outgoing = outgoing_from(
                     self,
                     location,
-                    &incoming,
+                    &incoming_frame,
                     normal_frame,
                     &instruction,
                     fallible,
@@ -73,11 +79,11 @@ impl<'method> JvmSymbolicExecutor<'method> {
             }
         };
 
-        Ok(AnalyzedLocation {
-            incoming,
+        Ok(SymbolicJvmNode {
+            incoming_frame,
             instruction,
-            outgoing,
-            caught_exception: self.caught_exception_ids.get(&location).copied(),
+            outgoing_edges: outgoing,
+            caught_exception_value: self.caught_exception_ids.get(&location).copied(),
         })
     }
 
@@ -92,7 +98,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
             .entry_point()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let mut value_id_allocator = ValueIdAllocator::default();
-        let this_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
+        let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
             .then(|| value_id_allocator.new_value_id())
             .transpose()?;
         let parameter_values: Vec<SsaValueId> = method
@@ -104,13 +110,13 @@ impl<'method> JvmSymbolicExecutor<'method> {
         let frame_parameters = parameter_values
             .iter()
             .copied()
-            .map(OperandState::Value)
+            .map(SymbolicValue::Value)
             .collect::<Vec<_>>();
         let initial_frame = JvmStackFrame::with_inputs(
             &method.descriptor,
             body.max_locals,
             body.max_stack,
-            this_value.map(OperandState::Value),
+            receiver_value.map(SymbolicValue::Value),
             &frame_parameters,
         )?;
         let entry_location = Location::entry(first_pc);
@@ -121,7 +127,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             value_id_allocator,
-            this_value,
+            receiver_value,
             parameter_values,
             entry_location,
             initial_frame,
@@ -129,35 +135,35 @@ impl<'method> JvmSymbolicExecutor<'method> {
         Ok(analyzer)
     }
 
-    pub fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-        let locations = self.solve_locations()?;
-        let merge_identities = locations
+    pub fn analyze(mut self) -> Result<SymbolicJvmCfg, MokaIRBuildError> {
+        let nodes = self.solve_locations()?;
+        let merge_identities = nodes
             .values()
-            .flat_map(|location| location.incoming.values())
+            .flat_map(|node| node.incoming_frame.values())
             .filter_map(|value| match value {
-                OperandState::Merged(identity) => Some(*identity),
-                OperandState::Value(_) | OperandState::ReturnAddress(_) | OperandState::Invalid => {
-                    None
-                }
+                SymbolicValue::Merged(identity) => Some(*identity),
+                SymbolicValue::Value(_)
+                | SymbolicValue::ReturnAddress(_)
+                | SymbolicValue::Invalid => None,
             })
             .collect::<BTreeSet<_>>();
         let phi_values = merge_identities
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        Ok(AnalyzedJvmCfg {
+        Ok(SymbolicJvmCfg {
             entry_location: self.entry_location,
             initial_frame: self.initial_frame,
-            locations,
+            nodes,
             phi_values,
-            this_value: self.this_value,
+            receiver_value: self.receiver_value,
             parameter_values: self.parameter_values,
         })
     }
 
     pub fn solve_locations(
         &mut self,
-    ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
+    ) -> Result<BTreeMap<Location, SymbolicJvmNode>, MokaIRBuildError> {
         let entry_location = self.entry_location;
         let initial_frame = self.initial_frame.clone();
         solver::solve(self, entry_location, initial_frame)

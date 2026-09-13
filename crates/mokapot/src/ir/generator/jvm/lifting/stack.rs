@@ -4,7 +4,7 @@ use crate::{
         jvm::{
             frame::{JvmStackFrame, StackOperations},
             instruction::RegisterInstruction,
-            symbolic_execution::OperandState,
+            symbolic_execution::SymbolicValue,
         },
     },
     jvm::code::Instruction as JVM,
@@ -12,7 +12,7 @@ use crate::{
 
 pub(super) fn lift(
     jvm_instruction: &JVM,
-    frame: &mut JvmStackFrame<OperandState>,
+    frame: &mut JvmStackFrame<SymbolicValue>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,

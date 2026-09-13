@@ -8,7 +8,7 @@ use crate::ir::{
         identity::SsaValueId,
         jvm::{
             frame::{Entry, JvmStackFrame},
-            symbolic_execution::{MergeIdentity, OperandState},
+            symbolic_execution::{FrameMergeSite, SymbolicValue},
         },
     },
 };
@@ -17,13 +17,13 @@ type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 /// Provisional value and placement data for JVM frame merges.
 pub(super) struct MergePlan {
-    merge_values: BTreeMap<MergeIdentity, SsaValueId>,
+    merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
     phi_blocks: BTreeMap<SsaValueId, BlockId>,
 }
 
 impl MergePlan {
     pub const fn new(
-        merge_values: BTreeMap<MergeIdentity, SsaValueId>,
+        merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
         phi_blocks: BTreeMap<SsaValueId, BlockId>,
     ) -> Self {
         Self {
@@ -36,15 +36,15 @@ impl MergePlan {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub fn resolve(&self, operand: OperandState) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn resolve(&self, operand: SymbolicValue) -> Result<SsaValueId, MokaIRBuildError> {
         match operand {
-            OperandState::Value(value) => Ok(value),
-            OperandState::Merged(identity) => self
+            SymbolicValue::Value(value) => Ok(value),
+            SymbolicValue::Merged(identity) => self
                 .merge_values
                 .get(&identity)
                 .copied()
                 .ok_or(MokaIRBuildError::MalformedControlFlow),
-            OperandState::ReturnAddress(_) | OperandState::Invalid => {
+            SymbolicValue::ReturnAddress(_) | SymbolicValue::Invalid => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
         }
@@ -57,7 +57,7 @@ pub(super) fn collect_phi_candidates(
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
-        BTreeMap::<BlockId, Vec<(BlockId, &JvmStackFrame<OperandState>)>>::new();
+        BTreeMap::<BlockId, Vec<(BlockId, &JvmStackFrame<SymbolicValue>)>>::new();
     for source in blocks {
         for arm in &source.arms {
             incoming_by_target
@@ -134,8 +134,8 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &JvmStackFrame<OperandState>,
-    source: &JvmStackFrame<OperandState>,
+    target: &JvmStackFrame<SymbolicValue>,
+    source: &JvmStackFrame<SymbolicValue>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
     if target.local_variables().len() != source.local_variables().len()
@@ -150,11 +150,11 @@ fn paired_frame_values(
         .chain(target.operand_stack().iter().zip(source.operand_stack()))
         .map(|(target, source)| match (target, source) {
             (
-                Entry::Value(OperandState::ReturnAddress(lhs)),
-                Entry::Value(OperandState::ReturnAddress(rhs)),
+                Entry::Value(SymbolicValue::ReturnAddress(lhs)),
+                Entry::Value(SymbolicValue::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Entry::Value(OperandState::ReturnAddress(_)), _)
-            | (_, Entry::Value(OperandState::ReturnAddress(_))) => {
+            (Entry::Value(SymbolicValue::ReturnAddress(_)), _)
+            | (_, Entry::Value(SymbolicValue::ReturnAddress(_))) => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
             (Entry::Value(result), Entry::Value(value)) => Ok((
@@ -188,10 +188,10 @@ mod tests {
         let target = BlockId::new(4);
         let preheader = BlockId::new(9);
         let target_frame =
-            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[OperandState::Value(result)])
+            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[SymbolicValue::Value(result)])
                 .expect("frame fits descriptor");
         let preheader_frame =
-            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[OperandState::Value(incoming)])
+            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[SymbolicValue::Value(incoming)])
                 .expect("frame fits descriptor");
         let blocks = vec![
             JvmBlock {
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn merge_plan_resolves_merge_identities() {
-        let identity = MergeIdentity {
+        let identity = FrameMergeSite {
             location: Location::Unwind,
             slot: FrameSlot::Local(0),
         };
@@ -235,7 +235,7 @@ mod tests {
 
         let merge_plan = MergePlan::new(BTreeMap::from([(identity, resolved)]), BTreeMap::new());
         let actual = merge_plan
-            .resolve(OperandState::Merged(identity))
+            .resolve(SymbolicValue::Merged(identity))
             .expect("known merge identity resolves");
 
         assert_eq!(actual, resolved);

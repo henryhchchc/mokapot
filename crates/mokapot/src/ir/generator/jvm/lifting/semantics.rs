@@ -13,7 +13,7 @@ use crate::{
                 frame::{Entry, JvmStackFrame},
                 instruction::RegisterInstruction,
                 normalization::Location,
-                symbolic_execution::{JvmOutgoing, JvmSymbolicExecutor, OperandState},
+                symbolic_execution::{JvmSymbolicExecutor, SymbolicJvmEdge, SymbolicValue},
             },
         },
     },
@@ -23,8 +23,8 @@ use crate::{
 fn exception_edges(
     semantics: &mut JvmSymbolicExecutor<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<OperandState>,
-) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
+    pre_frame: &JvmStackFrame<SymbolicValue>,
+) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -39,11 +39,11 @@ fn exception_edges(
     let mut exhaustive = false;
     for entry in entries {
         let handler = semantics.handler_location(location, entry.handler_pc)?;
-        let caught = OperandState::Value(semantics.caught_exception_at(handler)?);
-        outgoing.push(JvmOutgoing {
+        let caught = SymbolicValue::Value(semantics.caught_exception_at(handler)?);
+        outgoing.push(SymbolicJvmEdge {
             target: handler,
             transfer: ControlTransfer::Exception(entry.catch_type.clone()),
-            frame: pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
+            target_frame: pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
         });
         exhaustive = entry
             .catch_type
@@ -54,10 +54,10 @@ fn exception_edges(
         }
     }
     if !exhaustive {
-        outgoing.push(JvmOutgoing {
+        outgoing.push(SymbolicJvmEdge {
             target: semantics.unwind_location()?,
             transfer: ControlTransfer::Unwind,
-            frame: pre_frame.same_locals_empty_stack_frame().erase_values(),
+            target_frame: pre_frame.same_locals_empty_stack_frame().erase_values(),
         });
     }
     Ok(outgoing)
@@ -70,11 +70,11 @@ fn exception_edges(
 pub(crate) fn outgoing_from(
     semantics: &mut JvmSymbolicExecutor<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<OperandState>,
-    normal_frame: JvmStackFrame<OperandState>,
+    pre_frame: &JvmStackFrame<SymbolicValue>,
+    normal_frame: JvmStackFrame<SymbolicValue>,
     instruction: &RegisterInstruction,
     fallible: bool,
-) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
+) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
     Ok(match instruction {
@@ -82,10 +82,10 @@ pub(crate) fn outgoing_from(
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
-            vec![JvmOutgoing {
+            vec![SymbolicJvmEdge {
                 target: semantics.target_location(location, handler_pc)?,
                 transfer: Unconditional,
-                frame: normal_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Return(_) if fallible => {
@@ -94,17 +94,17 @@ pub(crate) fn outgoing_from(
         RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
         RegisterInstruction::Throw(_) => exception_edges(semantics, location, pre_frame)?,
         RegisterInstruction::Subroutine { target, .. } => {
-            vec![JvmOutgoing {
+            vec![SymbolicJvmEdge {
                 target: *target,
                 transfer: Unconditional,
-                frame: normal_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_) if fallible => {
-            let mut outgoing = vec![JvmOutgoing {
+            let mut outgoing = vec![SymbolicJvmEdge {
                 target: semantics.next_location(location)?,
                 transfer: Normal,
-                frame: normal_frame,
+                target_frame: normal_frame,
             }];
             outgoing.extend(exception_edges(semantics, location, pre_frame)?);
             outgoing
@@ -112,19 +112,19 @@ pub(crate) fn outgoing_from(
         RegisterInstruction::Erased
         | RegisterInstruction::Definition { .. }
         | RegisterInstruction::Effect(_) => {
-            vec![JvmOutgoing {
+            vec![SymbolicJvmEdge {
                 target: semantics.next_location(location)?,
                 transfer: Unconditional,
-                frame: normal_frame,
+                target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Jump {
             condition: None,
             target,
-        } => vec![JvmOutgoing {
+        } => vec![SymbolicJvmEdge {
             target: semantics.target_location(location, *target)?,
             transfer: Unconditional,
-            frame: normal_frame,
+            target_frame: normal_frame,
         }],
         RegisterInstruction::Jump {
             condition: Some(condition),
@@ -132,15 +132,15 @@ pub(crate) fn outgoing_from(
         } => {
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
-                JvmOutgoing {
+                SymbolicJvmEdge {
                     target: semantics.target_location(location, *target)?,
                     transfer: Conditional(BranchGuard::of(condition.clone())),
-                    frame: normal_frame.same_frame(),
+                    target_frame: normal_frame.same_frame(),
                 },
-                JvmOutgoing {
+                SymbolicJvmEdge {
                     target: semantics.next_location(location)?,
                     transfer: Conditional(BranchGuard::of(!condition)),
-                    frame: normal_frame,
+                    target_frame: normal_frame,
                 },
             ]
         }
@@ -154,10 +154,10 @@ pub(crate) fn outgoing_from(
                 let value = Value::Constant(ConstantValue::Integer(case));
                 let condition =
                     BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
-                outgoing.push(JvmOutgoing {
+                outgoing.push(SymbolicJvmEdge {
                     target: semantics.target_location(location, target)?,
                     transfer: Conditional(BranchGuard::of(condition)),
-                    frame: normal_frame.same_frame(),
+                    target_frame: normal_frame.same_frame(),
                 });
             }
             let default_guard = branches
@@ -169,21 +169,21 @@ pub(crate) fn outgoing_from(
                     ))
                 })
                 .collect();
-            outgoing.push(JvmOutgoing {
+            outgoing.push(SymbolicJvmEdge {
                 target: semantics.target_location(location, *default)?,
                 transfer: Conditional(default_guard),
-                frame: normal_frame,
+                target_frame: normal_frame,
             });
             outgoing
         }
         RegisterInstruction::SubroutineReturn(value) => {
-            let OperandState::ReturnAddress(address) = value else {
+            let SymbolicValue::ReturnAddress(address) = value else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
-            vec![JvmOutgoing {
+            vec![SymbolicJvmEdge {
                 target: semantics.return_from(location, *address)?,
                 transfer: Unconditional,
-                frame: normal_frame,
+                target_frame: normal_frame,
             }]
         }
     })
@@ -204,7 +204,7 @@ mod tests {
             1,
             0,
             None,
-            &[OperandState::Value(SsaValueId::new(0))],
+            &[SymbolicValue::Value(SsaValueId::new(0))],
         )
         .expect("frame fits descriptor");
 
@@ -214,6 +214,6 @@ mod tests {
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].target, Location::Unwind);
         assert!(matches!(edges[0].transfer, ControlTransfer::Unwind));
-        assert!(edges[0].frame.values().next().is_none());
+        assert!(edges[0].target_frame.values().next().is_none());
     }
 }
