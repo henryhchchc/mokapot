@@ -1,6 +1,6 @@
 use crate::{
     ir::{
-        expression::{Expression, FieldAccess},
+        expression::FieldAccess,
         generator::{
             error::MokaIRBuildError,
             identity::SsaValueId,
@@ -27,56 +27,43 @@ pub(super) fn try_lift(
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     let instruction = match jvm_instruction {
         JVM::GetStatic(field) => {
-            let definition = require_definition_id(definition)?;
-            frame.push_value_of_type(&field.field_type, definition.into())?;
-            let field_op = FieldAccess::ReadStatic {
-                field: field.clone(),
-            };
-            RegisterInstruction::Definition {
-                value: definition,
-                expr: Expression::Field(field_op),
-            }
+            let value = require_definition_id(definition)?;
+            frame.push_value_of_type(&field.field_type, value.into())?;
+            let field = field.clone();
+            let expr = FieldAccess::ReadStatic { field }.into();
+            RegisterInstruction::Definition { value, expr }
         }
         JVM::GetField(field) => {
-            let definition = require_definition_id(definition)?;
+            let value = require_definition_id(definition)?;
             let object_ref = frame.pop_value::<CATEGORY_1>()?;
-            frame.push_value_of_type(&field.field_type, definition.into())?;
-            let field_op = FieldAccess::ReadInstance {
-                object_ref,
-                field: field.clone(),
-            };
-            RegisterInstruction::Definition {
-                value: definition,
-                expr: Expression::Field(field_op),
-            }
+            frame.push_value_of_type(&field.field_type, value.into())?;
+            let field = field.clone();
+            let expr = FieldAccess::ReadInstance { object_ref, field }.into();
+            RegisterInstruction::Definition { value, expr }
         }
         JVM::PutStatic(field) => {
             use PrimitiveType::{Double, Long};
-            let value = if let FieldType::Base(Double | Long) = field.field_type {
-                frame.pop_value::<CATEGORY_2>()
-            } else {
-                frame.pop_value::<CATEGORY_1>()
+            let value = match field.field_type {
+                FieldType::Base(Double | Long) => frame.pop_value::<CATEGORY_2>(),
+                _ => frame.pop_value::<CATEGORY_1>(),
             }?;
-            let field_op = FieldAccess::WriteStatic {
-                field: field.clone(),
-                value,
-            };
-            RegisterInstruction::Effect(Expression::Field(field_op))
+            let field = field.clone();
+            let field_op = FieldAccess::WriteStatic { field, value }.into();
+            RegisterInstruction::Effect(field_op)
         }
         JVM::PutField(field) => {
             use PrimitiveType::{Double, Long};
-            let value = if let FieldType::Base(Double | Long) = field.field_type {
-                frame.pop_value::<CATEGORY_2>()
-            } else {
-                frame.pop_value::<CATEGORY_1>()
+            let value = match field.field_type {
+                FieldType::Base(Double | Long) => frame.pop_value::<CATEGORY_2>(),
+                _ => frame.pop_value::<CATEGORY_1>(),
             }?;
-            let object_ref = frame.pop_value::<CATEGORY_1>()?;
             let field_op = FieldAccess::WriteInstance {
-                object_ref,
+                object_ref: frame.pop_value::<CATEGORY_1>()?,
                 field: field.clone(),
                 value,
-            };
-            RegisterInstruction::Effect(Expression::Field(field_op))
+            }
+            .into();
+            RegisterInstruction::Effect(field_op)
         }
         _ => return Ok(None),
     };

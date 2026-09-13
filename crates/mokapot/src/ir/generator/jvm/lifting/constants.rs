@@ -46,73 +46,71 @@ pub(super) fn try_lift(
     definition: Option<SsaValueId>,
     frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
-    #[allow(
-        clippy::enum_glob_use,
-        reason = "this function exhaustively dispatches one opcode family"
-    )]
-    use JVM::*;
+    use JVM::{
+        AConstNull, BiPush, Breakpoint, DConst0, DConst1, FConst0, FConst1, FConst2, IConst0,
+        IConst1, IConst2, IConst3, IConst4, IConst5, IConstM1, ImpDep1, ImpDep2, LConst0, LConst1,
+        Ldc, Ldc2W, LdcW, Nop, SiPush,
+    };
 
     let instruction = match jvm_instruction {
         Nop | Breakpoint | ImpDep1 | ImpDep2 => RegisterInstruction::Erased,
         AConstNull => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
             let expr = Expression::Const(ConstantValue::Null);
-            RegisterInstruction::Definition { value: def, expr }
+            RegisterInstruction::Definition { value, expr }
         }
         IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
             let int_value = i32::from(jvm_instruction.opcode()) - 3;
             let expr = Expression::Const(ConstantValue::Integer(int_value));
-            RegisterInstruction::Definition { value: def, expr }
+            RegisterInstruction::Definition { value, expr }
         }
         LConst0 | LConst1 => {
-            let def = require_definition_id(definition)?;
-            let value = def.into();
-            frame.push_value::<CATEGORY_2>(value)?;
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_2>(value.into())?;
             let long_value = i64::from(jvm_instruction.opcode()) - 9;
             let expr = Expression::Const(ConstantValue::Long(long_value));
-            RegisterInstruction::Definition { value: def, expr }
+            RegisterInstruction::Definition { value, expr }
         }
         FConst0 | FConst1 | FConst2 => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
             let float_value = f32::from(jvm_instruction.opcode()) - 11.0;
             let expr = Expression::Const(ConstantValue::Float(float_value));
-            RegisterInstruction::Definition { value: def, expr }
+            RegisterInstruction::Definition { value, expr }
         }
         DConst0 | DConst1 => {
-            let def = require_definition_id(definition)?;
-            let value = def.into();
-            frame.push_value::<CATEGORY_2>(value)?;
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_2>(value.into())?;
             let double_value = f64::from(jvm_instruction.opcode()) - 14.0;
             let expr = Expression::Const(ConstantValue::Double(double_value));
-            RegisterInstruction::Definition { value: def, expr }
+            RegisterInstruction::Definition { value, expr }
         }
-        BiPush(value) => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
-            let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
-            RegisterInstruction::Definition { value: def, expr }
+        BiPush(jvm_value) => {
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
+            let expr = Expression::Const(ConstantValue::Integer(i32::from(*jvm_value)));
+            RegisterInstruction::Definition { value, expr }
         }
-        SiPush(value) => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
-            let expr = Expression::Const(ConstantValue::Integer(i32::from(*value)));
-            RegisterInstruction::Definition { value: def, expr }
+        SiPush(jvm_value) => {
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
+            let expr = Expression::Const(ConstantValue::Integer(i32::from(*jvm_value)));
+            RegisterInstruction::Definition { value, expr }
         }
-        Ldc(value) | LdcW(value) => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_1>(def.into())?;
-            let expr = Expression::Const(value.clone());
-            RegisterInstruction::Definition { value: def, expr }
+        Ldc(jvm_value) | LdcW(jvm_value) => {
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_1>(value.into())?;
+            let expr = Expression::Const(jvm_value.clone());
+            RegisterInstruction::Definition { value, expr }
         }
-        Ldc2W(value) => {
-            let def = require_definition_id(definition)?;
-            frame.push_value::<CATEGORY_2>(def.into())?;
-            let expr = Expression::Const(value.clone());
-            RegisterInstruction::Definition { value: def, expr }
+        Ldc2W(jvm_value) => {
+            let value = require_definition_id(definition)?;
+            frame.push_value::<CATEGORY_2>(value.into())?;
+            let expr = Expression::Const(jvm_value.clone());
+            RegisterInstruction::Definition { value, expr }
         }
         _ => return Ok(None),
     };

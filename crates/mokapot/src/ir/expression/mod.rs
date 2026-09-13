@@ -38,7 +38,7 @@ mod model {
     };
 
     /// An expression parameterized by the lifting operand representation.
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]
     pub enum Expression<OP = ValueId> {
         /// A constant value.
         Const(ConstantValue),
@@ -71,15 +71,15 @@ mod model {
             closure_descriptor: MethodDescriptor,
         },
         /// A mathematical operation.
-        Math(MathOperation<OP>),
+        Math(#[from] MathOperation<OP>),
         /// A field access.
-        Field(FieldAccess<OP>),
+        Field(#[from] FieldAccess<OP>),
         /// An array operation.
-        Array(ArrayOperation<OP>),
+        Array(#[from] ArrayOperation<OP>),
         /// A type conversion.
-        Conversion(Conversion<OP>),
+        Conversion(#[from] Conversion<OP>),
         /// An operation on a monitor.
-        Synchronization(LockOperation<OP>),
+        Synchronization(#[from] LockOperation<OP>),
         /// Creates a new object.
         New(ClassRef),
     }

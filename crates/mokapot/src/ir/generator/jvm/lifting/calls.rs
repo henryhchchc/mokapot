@@ -38,42 +38,33 @@ pub(super) fn try_lift(
         JVM::InvokeVirtual(method_ref)
         | JVM::InvokeSpecial(method_ref)
         | JVM::InvokeInterface(method_ref, _) => {
-            let arguments = frame.pop_arguments(&method_ref.descriptor)?;
-            let object_ref = frame.pop_value::<CATEGORY_1>()?;
-            let expression = Expression::Call {
-                method: method_ref.clone(),
-                this: Some(object_ref),
-                args: arguments,
-            };
+            let args = frame.pop_arguments(&method_ref.descriptor)?;
+            let this = Some(frame.pop_value::<CATEGORY_1>()?);
+            let method = method_ref.clone();
+            let expr = Expression::Call { method, this, args };
             match &method_ref.descriptor.return_type {
                 ReturnType::Some(return_type) => {
-                    let definition = require_definition_id(definition)?;
-                    frame.push_value_of_type(return_type, definition.into())?;
-                    RegisterInstruction::Definition {
-                        value: definition,
-                        expr: expression,
-                    }
+                    let value = require_definition_id(definition)?;
+                    frame.push_value_of_type(return_type, value.into())?;
+                    RegisterInstruction::Definition { value, expr }
                 }
-                ReturnType::Void => RegisterInstruction::Effect(expression),
+                ReturnType::Void => RegisterInstruction::Effect(expr),
             }
         }
         JVM::InvokeStatic(method_ref) => {
-            let arguments = frame.pop_arguments(&method_ref.descriptor)?;
-            let expression = Expression::Call {
+            let args = frame.pop_arguments(&method_ref.descriptor)?;
+            let expr = Expression::Call {
                 method: method_ref.clone(),
                 this: None,
-                args: arguments,
+                args,
             };
             match &method_ref.descriptor.return_type {
                 ReturnType::Some(return_type) => {
-                    let definition = require_definition_id(definition)?;
-                    frame.push_value_of_type(return_type, definition.into())?;
-                    RegisterInstruction::Definition {
-                        value: definition,
-                        expr: expression,
-                    }
+                    let value = require_definition_id(definition)?;
+                    frame.push_value_of_type(return_type, value.into())?;
+                    RegisterInstruction::Definition { value, expr }
                 }
-                ReturnType::Void => RegisterInstruction::Effect(expression),
+                ReturnType::Void => RegisterInstruction::Effect(expr),
             }
         }
         JVM::InvokeDynamic {
@@ -81,23 +72,19 @@ pub(super) fn try_lift(
             bootstrap_method_index,
             name,
         } => {
-            let arguments = frame.pop_arguments(descriptor)?;
-            let expression = Expression::Closure {
+            let expr = Expression::Closure {
+                captures: frame.pop_arguments(descriptor)?,
                 bootstrap_method_index: *bootstrap_method_index,
                 name: name.to_owned(),
-                captures: arguments,
                 closure_descriptor: descriptor.to_owned(),
             };
             match &descriptor.return_type {
                 ReturnType::Some(return_type) => {
-                    let definition = require_definition_id(definition)?;
-                    frame.push_value_of_type(return_type, definition.into())?;
-                    RegisterInstruction::Definition {
-                        value: definition,
-                        expr: expression,
-                    }
+                    let value = require_definition_id(definition)?;
+                    frame.push_value_of_type(return_type, value.into())?;
+                    RegisterInstruction::Definition { value, expr }
                 }
-                ReturnType::Void => RegisterInstruction::Effect(expression),
+                ReturnType::Void => RegisterInstruction::Effect(expr),
             }
         }
         _ => return Ok(None),

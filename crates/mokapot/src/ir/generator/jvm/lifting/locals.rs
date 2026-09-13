@@ -1,6 +1,6 @@
 use crate::{
     ir::{
-        expression::{Expression, MathOperation},
+        expression::MathOperation,
         generator::{
             error::MokaIRBuildError,
             identity::SsaValueId,
@@ -27,11 +27,13 @@ pub(super) fn try_lift(
     definition: Option<SsaValueId>,
     frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
-    #[allow(
-        clippy::enum_glob_use,
-        reason = "this function exhaustively dispatches one opcode family"
-    )]
-    use JVM::*;
+    use JVM::{
+        ALoad, ALoad0, ALoad1, ALoad2, ALoad3, AStore, AStore0, AStore1, AStore2, AStore3, DLoad,
+        DLoad0, DLoad1, DLoad2, DLoad3, DStore, DStore0, DStore1, DStore2, DStore3, FLoad, FLoad0,
+        FLoad1, FLoad2, FLoad3, FStore, FStore0, FStore1, FStore2, FStore3, IInc, ILoad, ILoad0,
+        ILoad1, ILoad2, ILoad3, IStore, IStore0, IStore1, IStore2, IStore3, LLoad, LLoad0, LLoad1,
+        LLoad2, LLoad3, LStore, LStore0, LStore1, LStore2, LStore3, Wide,
+    };
 
     let instruction = match jvm_instruction {
         ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local::<CATEGORY_1>(frame, u16::from(*idx))?,
@@ -97,14 +99,11 @@ fn increment_local(
     constant: i32,
     definition: Option<SsaValueId>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let definition = require_definition_id(definition)?;
+    let value = require_definition_id(definition)?;
     let base = frame.get_local::<CATEGORY_1>(idx)?;
-    frame.set_local::<CATEGORY_1>(idx, definition.into())?;
-    let operation = MathOperation::Increment(base, constant);
-    Ok(RegisterInstruction::Definition {
-        value: definition,
-        expr: Expression::Math(operation),
-    })
+    frame.set_local::<CATEGORY_1>(idx, value.into())?;
+    let expr = MathOperation::Increment(base, constant).into();
+    Ok(RegisterInstruction::Definition { value, expr })
 }
 
 #[inline]

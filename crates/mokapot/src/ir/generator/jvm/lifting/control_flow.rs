@@ -48,11 +48,11 @@ pub(super) fn try_lift(
     pc: ProgramCounter,
     frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
-    #[allow(
-        clippy::enum_glob_use,
-        reason = "this function exhaustively dispatches one opcode family"
-    )]
-    use JVM::*;
+    use JVM::{
+        AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq, IfGe,
+        IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt, IfNe,
+        IfNonNull, IfNull, Jsr, JsrW, LReturn, LookupSwitch, Ret, Return, TableSwitch, Wide,
+    };
 
     let instruction = match jvm_instruction {
         IfEq(target) => unary_branch(frame, *target, Condition::IsZero)?,
@@ -82,8 +82,8 @@ pub(super) fn try_lift(
             RegisterInstruction::Subroutine { target }
         }
         Ret(idx) => {
-            let idx = (*idx).into();
-            let return_address = frame.get_local::<CATEGORY_1>(idx)?;
+            let local_index = (*idx).into();
+            let return_address = frame.get_local::<CATEGORY_1>(local_index)?;
             RegisterInstruction::SubroutineReturn(return_address)
         }
         Wide(WideInstruction::Ret(idx)) => {
@@ -94,26 +94,19 @@ pub(super) fn try_lift(
             range,
             jump_targets,
             default,
-        } => {
-            let condition = frame.pop_value::<CATEGORY_1>()?;
-            let branches = range.clone().zip(jump_targets.clone()).collect();
-            RegisterInstruction::Switch {
-                match_value: condition,
-                default: *default,
-                branches,
-            }
-        }
+        } => RegisterInstruction::Switch {
+            match_value: frame.pop_value::<CATEGORY_1>()?,
+            default: *default,
+            branches: range.clone().zip(jump_targets.clone()).collect(),
+        },
         LookupSwitch {
             default,
             match_targets,
-        } => {
-            let condition = frame.pop_value::<CATEGORY_1>()?;
-            RegisterInstruction::Switch {
-                match_value: condition,
-                default: *default,
-                branches: match_targets.clone(),
-            }
-        }
+        } => RegisterInstruction::Switch {
+            match_value: frame.pop_value::<CATEGORY_1>()?,
+            default: *default,
+            branches: match_targets.clone(),
+        },
         IReturn | FReturn | AReturn => {
             let value = frame.pop_value::<CATEGORY_1>()?;
             RegisterInstruction::Return(Some(value))

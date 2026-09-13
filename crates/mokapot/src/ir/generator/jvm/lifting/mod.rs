@@ -26,6 +26,7 @@ use crate::{
     },
     jvm::code::Instruction as JVM,
 };
+
 pub(super) fn lift_register_instruction(
     executor: &mut Executor<'_>,
     jvm_instruction: &JVM,
