@@ -5,11 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
+                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::Instruction,
-                lifting::{
-                    frame_operand::FrameOperand, operations::conversion_op, required_definition,
-                },
+                lifting::{operations::conversion_op, required_definition},
             },
         },
     },
@@ -34,11 +33,11 @@ pub(super) const fn defines_value(instruction: &JVM) -> bool {
     clippy::too_many_lines,
     reason = "the match is an exhaustive opcode-family dispatch"
 )]
-pub(super) fn lift<OP: FrameOperand>(
+pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Option<Instruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -105,13 +104,13 @@ pub(super) fn lift<OP: FrameOperand>(
         }
         CheckCast(target_type) => {
             let def = required_definition(definition)?;
-            conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, |value| {
+            conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, |value| {
                 Conversion::CheckCast(value, target_type.clone())
             })?
         }
         InstanceOf(target_type) => {
             let def = required_definition(definition)?;
-            conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, |value| {
+            conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, |value| {
                 Conversion::InstanceOf(value, target_type.clone())
             })?
         }

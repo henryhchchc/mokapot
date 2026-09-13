@@ -12,33 +12,33 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(in crate::ir::generator) enum Instruction<OP = OperandState> {
+pub(in crate::ir::generator) enum Instruction {
     HandlerEntry,
     Unwind,
     Erased,
     Definition {
         value: SsaValueId,
-        expr: Expression<OP>,
+        expr: Expression<OperandState>,
     },
-    Effect(Expression<OP>),
+    Effect(Expression<OperandState>),
     Jump {
-        condition: Option<Condition<OP>>,
+        condition: Option<Condition<OperandState>>,
         target: ProgramCounter,
     },
     Switch {
-        match_value: OP,
+        match_value: OperandState,
         branches: BTreeMap<i32, ProgramCounter>,
         default: ProgramCounter,
     },
-    Return(Option<OP>),
-    Throw(OP),
+    Return(Option<OperandState>),
+    Throw(OperandState),
     Subroutine {
         target: Location,
     },
-    SubroutineReturn(OP),
+    SubroutineReturn(OperandState),
 }
 
-impl<OP> Instruction<OP> {
+impl Instruction {
     pub(in crate::ir::generator) const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,

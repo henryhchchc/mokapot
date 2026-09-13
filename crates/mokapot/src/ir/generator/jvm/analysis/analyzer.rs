@@ -1,21 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    ir::{
-        control_flow::ControlTransfer,
-        generator::{
-            error::MokaIRBuildError,
-            identity::SsaValueId,
-            jvm::{
-                analysis::fact::{AnalyzedJvmCfg, AnalyzedLocation, JvmOutgoing, OperandState},
-                analysis::solver::{self, LocationOutput, normalize_frame_for},
-                frame::JvmStackFrame,
-                instruction::Instruction,
-                lifting::{
-                    fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
-                },
-                normalization::{Location, Normalizer},
+    ir::generator::{
+        error::MokaIRBuildError,
+        identity::SsaValueId,
+        jvm::{
+            analysis::fact::{AnalyzedJvmCfg, AnalyzedLocation, OperandState},
+            analysis::solver,
+            frame::JvmStackFrame,
+            instruction::Instruction,
+            lifting::{
+                fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
             },
+            normalization::{Location, Normalizer},
         },
     },
     jvm::{
@@ -43,27 +40,18 @@ impl<'method> JvmFrameAnalyzer<'method> {
     pub(super) fn transfer(
         &mut self,
         location: Location,
-        incoming: &JvmStackFrame<OperandState>,
-    ) -> Result<LocationOutput, MokaIRBuildError> {
-        let incoming = incoming.clone();
+        incoming: JvmStackFrame<OperandState>,
+    ) -> Result<AnalyzedLocation, MokaIRBuildError> {
         let (instruction, outgoing) = match location {
-            Location::Handler {
-                handler_pc,
-                context,
-            } => {
-                let target = self.normalizer.bytecode(handler_pc, context)?;
-                (
-                    Instruction::HandlerEntry,
-                    vec![(
-                        target,
-                        ControlTransfer::Unconditional,
-                        incoming.same_frame(),
-                    )],
-                )
+            Location::Handler { .. } => {
+                let instruction = Instruction::HandlerEntry;
+                let normal_frame = incoming.same_frame();
+                let outgoing =
+                    outgoing_from(self, location, &incoming, normal_frame, &instruction, false)?;
+                (instruction, outgoing)
             }
             Location::Unwind => (Instruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
-                let pre_frame = incoming.same_frame();
                 let mut normal_frame = incoming.same_frame();
                 let jvm_instruction = self
                     .body
@@ -76,26 +64,20 @@ impl<'method> JvmFrameAnalyzer<'method> {
                 let outgoing = outgoing_from(
                     self,
                     location,
-                    &pre_frame,
+                    &incoming,
                     normal_frame,
                     &instruction,
                     fallible,
-                    &OperandState::Value,
                 )?;
                 (instruction, outgoing)
             }
         };
 
-        Ok(LocationOutput {
+        Ok(AnalyzedLocation {
+            incoming,
             instruction,
-            outgoing: outgoing
-                .into_iter()
-                .map(|(target, transfer, frame)| JvmOutgoing {
-                    target,
-                    transfer,
-                    frame: normalize_frame_for(target, frame),
-                })
-                .collect(),
+            outgoing,
+            caught_exception: self.caught_exception_ids.get(&location).copied(),
         })
     }
 

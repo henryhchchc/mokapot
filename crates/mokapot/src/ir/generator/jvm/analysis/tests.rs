@@ -1,7 +1,7 @@
 use super::{
     analyzer::JvmFrameAnalyzer,
     fact::{MergeIdentity, OperandState},
-    solver::{merge_frame_at, normalize_frame_for},
+    solver::merge_frame_at,
 };
 use crate::{
     ir::generator::{
@@ -81,21 +81,6 @@ fn frame_merge_is_permutation_independent() {
 }
 
 #[test]
-fn unwind_facts_discard_irrelevant_values_before_merging() {
-    let descriptor = "(I)V".parse().expect("valid descriptor");
-    let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
-    let mut unwind = normalize_frame_for(Location::Unwind, frame(1));
-
-    assert!(unwind.values().next().is_none());
-    assert!(!merge_frame_at(
-        Location::Unwind,
-        &mut unwind,
-        normalize_frame_for(Location::Unwind, frame(2)),
-    ));
-    assert!(unwind.values().next().is_none());
-}
-
-#[test]
 fn reprocessing_loop_allocates_identities_only_for_definitions() {
     let method = method(
         [
@@ -149,5 +134,32 @@ fn reprocessing_loop_allocates_identities_only_for_definitions() {
         !analyzer
             .definition_ids
             .contains_key(&Location::entry(6.into()))
+    );
+}
+
+#[test]
+fn reprocessing_replaces_stale_predecessor_output() {
+    let method = method(
+        [
+            (0.into(), JvmInstruction::IConst0),
+            (1.into(), JvmInstruction::Nop),
+            (2.into(), JvmInstruction::Pop),
+            (3.into(), JvmInstruction::IConst1),
+            (4.into(), JvmInstruction::Goto(1.into())),
+        ],
+        "()V",
+        vec![],
+    );
+    let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+    let locations = analyzer.solve_locations().expect("valid loop");
+
+    assert_eq!(
+        locations[&Location::entry(2.into())]
+            .incoming
+            .operand_stack(),
+        &[Entry::Value(OperandState::Merged(MergeIdentity {
+            location: Location::entry(1.into()),
+            slot: FrameSlot::Stack(0),
+        }))]
     );
 }

@@ -3,7 +3,6 @@
 mod constants;
 mod control_flow;
 pub(in crate::ir::generator) mod fallibility;
-pub(in crate::ir::generator) mod frame_operand;
 mod locals;
 mod members;
 mod memory;
@@ -18,20 +17,20 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::JvmFrameAnalyzer, frame::JvmStackFrame, instruction::Instruction,
+            analysis::{JvmFrameAnalyzer, OperandState},
+            frame::JvmStackFrame,
+            instruction::Instruction,
             normalization::Location,
         },
     },
     jvm::code::Instruction as JVM,
 };
-use frame_operand::FrameOperand;
-
-pub(super) fn lift_instruction<OP: FrameOperand>(
+pub(super) fn lift_instruction(
     semantics: &mut JvmFrameAnalyzer<'_>,
     jvm_instruction: &JVM,
     location: Location,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Instruction<OP>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Instruction, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;

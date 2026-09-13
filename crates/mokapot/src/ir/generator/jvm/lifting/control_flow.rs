@@ -4,10 +4,9 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                analysis::JvmFrameAnalyzer,
+                analysis::{JvmFrameAnalyzer, OperandState},
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::Instruction,
-                lifting::frame_operand::FrameOperand,
                 normalization::Location,
             },
         },
@@ -16,11 +15,11 @@ use crate::{
 };
 
 #[inline]
-pub(super) fn conditional_jump<OP: Clone>(
-    frame: &mut JvmStackFrame<OP>,
+pub(super) fn conditional_jump(
+    frame: &mut JvmStackFrame<OperandState>,
     target: ProgramCounter,
-    condition: impl FnOnce(OP) -> Condition<OP>,
-) -> Result<Instruction<OP>, MokaIRBuildError> {
+    condition: impl FnOnce(OperandState) -> Condition<OperandState>,
+) -> Result<Instruction, MokaIRBuildError> {
     let operand = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(Instruction::Jump {
         condition: Some(condition(operand)),
@@ -29,11 +28,11 @@ pub(super) fn conditional_jump<OP: Clone>(
 }
 
 #[inline]
-pub(super) fn cmp_jump<OP: Clone>(
-    frame: &mut JvmStackFrame<OP>,
+pub(super) fn cmp_jump(
+    frame: &mut JvmStackFrame<OperandState>,
     target: ProgramCounter,
-    condition: impl FnOnce(OP, OP) -> Condition<OP>,
-) -> Result<Instruction<OP>, MokaIRBuildError> {
+    condition: impl FnOnce(OperandState, OperandState) -> Condition<OperandState>,
+) -> Result<Instruction, MokaIRBuildError> {
     let rhs = frame.pop_value::<SINGLE_SLOT>()?;
     let lhs = frame.pop_value::<SINGLE_SLOT>()?;
     Ok(Instruction::Jump {
@@ -42,13 +41,13 @@ pub(super) fn cmp_jump<OP: Clone>(
     })
 }
 
-pub(super) fn lift<OP: FrameOperand>(
+pub(super) fn lift(
     semantics: &mut JvmFrameAnalyzer<'_>,
     jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Option<Instruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"

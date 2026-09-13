@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
+                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::Instruction,
                 lifting::{
-                    frame_operand::FrameOperand,
                     operations::{binary_op_math, conversion_op},
                     required_definition,
                 },
@@ -27,11 +27,11 @@ pub(super) const fn defines_value(instruction: &JVM) -> bool {
     clippy::too_many_lines,
     reason = "the match is an exhaustive opcode-family dispatch"
 )]
-pub(super) fn lift<OP: FrameOperand>(
+pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Option<Instruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -44,16 +44,16 @@ pub(super) fn lift<OP: FrameOperand>(
     let def = required_definition(definition)?;
 
     let instruction = match jvm_instruction {
-        IAdd | FAdd => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Add)?,
-        ISub | FSub => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Subtract)?,
-        IMul | FMul => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Multiply)?,
-        IDiv | FDiv => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Divide)?,
-        IRem | FRem => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::Remainder)?,
-        LDiv | DDiv => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::Divide)?,
-        LAdd | DAdd => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::Add)?,
-        LSub | DSub => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::Subtract)?,
-        LMul | DMul => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::Multiply)?,
-        LRem | DRem => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::Remainder)?,
+        IAdd | FAdd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Add)?,
+        ISub | FSub => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Subtract)?,
+        IMul | FMul => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Multiply)?,
+        IDiv | FDiv => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Divide)?,
+        IRem | FRem => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::Remainder)?,
+        LDiv | DDiv => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Divide)?,
+        LAdd | DAdd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Add)?,
+        LSub | DSub => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Subtract)?,
+        LMul | DMul => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Multiply)?,
+        LRem | DRem => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::Remainder)?,
         INeg | FNeg => {
             let value = frame.pop_value::<SINGLE_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
@@ -73,8 +73,8 @@ pub(super) fn lift<OP: FrameOperand>(
                 expr: Expression::Math(math_op),
             }
         }
-        IShl => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::ShiftLeft)?,
-        IShr => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::ShiftRight)?,
+        IShl => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftLeft)?,
+        IShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::ShiftRight)?,
         LShl => {
             let shift_amount = frame.pop_value::<SINGLE_SLOT>()?;
             let base = frame.pop_value::<DUAL_SLOT>()?;
@@ -106,13 +106,13 @@ pub(super) fn lift<OP: FrameOperand>(
                 expr: Expression::Math(math_op),
             }
         }
-        IUShr => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::LogicalShiftRight)?,
-        IAnd => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::BitwiseAnd)?,
-        IOr => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::BitwiseOr)?,
-        IXor => binary_op_math::<SINGLE_SLOT, _>(frame, def, MathOperation::BitwiseXor)?,
-        LAnd => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::BitwiseAnd)?,
-        LOr => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::BitwiseOr)?,
-        LXor => binary_op_math::<DUAL_SLOT, _>(frame, def, MathOperation::BitwiseXor)?,
+        IUShr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::LogicalShiftRight)?,
+        IAnd => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
+        IOr => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseOr)?,
+        IXor => binary_op_math::<SINGLE_SLOT>(frame, def, MathOperation::BitwiseXor)?,
+        LAnd => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseAnd)?,
+        LOr => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseOr)?,
+        LXor => binary_op_math::<DUAL_SLOT>(frame, def, MathOperation::BitwiseXor)?,
         IInc(idx, constant) => {
             let idx = (*idx).into();
             let base = frame.get_local::<SINGLE_SLOT>(idx)?;
@@ -132,21 +132,21 @@ pub(super) fn lift<OP: FrameOperand>(
                 expr: Expression::Math(math_op),
             }
         }
-        I2F => conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Int2Float)?,
-        I2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Int2Long)?,
-        I2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Int2Double)?,
-        L2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Long2Int)?,
-        L2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Long2Float)?,
-        L2D => conversion_op::<DUAL_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Long2Double)?,
-        F2I => conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Float2Int)?,
-        F2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Float2Long)?,
-        F2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Float2Double)?,
-        D2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Double2Int)?,
-        D2L => conversion_op::<DUAL_SLOT, DUAL_SLOT, _>(frame, def, Conversion::Double2Long)?,
-        D2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Double2Float)?,
-        I2B => conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Int2Byte)?,
-        I2C => conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Int2Char)?,
-        I2S => conversion_op::<SINGLE_SLOT, SINGLE_SLOT, _>(frame, def, Conversion::Int2Short)?,
+        I2F => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Float)?,
+        I2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Int2Long)?,
+        I2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Int2Double)?,
+        L2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Long2Int)?,
+        L2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Long2Float)?,
+        L2D => conversion_op::<DUAL_SLOT, DUAL_SLOT>(frame, def, Conversion::Long2Double)?,
+        F2I => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Float2Int)?,
+        F2L => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Float2Long)?,
+        F2D => conversion_op::<SINGLE_SLOT, DUAL_SLOT>(frame, def, Conversion::Float2Double)?,
+        D2I => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Double2Int)?,
+        D2L => conversion_op::<DUAL_SLOT, DUAL_SLOT>(frame, def, Conversion::Double2Long)?,
+        D2F => conversion_op::<DUAL_SLOT, SINGLE_SLOT>(frame, def, Conversion::Double2Float)?,
+        I2B => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Byte)?,
+        I2C => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Char)?,
+        I2S => conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, Conversion::Int2Short)?,
         LCmp => {
             let rhs = frame.pop_value::<DUAL_SLOT>()?;
             let lhs = frame.pop_value::<DUAL_SLOT>()?;

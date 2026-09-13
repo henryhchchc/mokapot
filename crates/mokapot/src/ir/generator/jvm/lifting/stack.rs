@@ -2,18 +2,18 @@ use crate::{
     ir::generator::{
         error::MokaIRBuildError,
         jvm::{
+            analysis::OperandState,
             frame::{JvmStackFrame, StackOperations},
             instruction::Instruction,
-            lifting::frame_operand::FrameOperand,
         },
     },
     jvm::code::Instruction as JVM,
 };
 
-pub(super) fn lift<OP: FrameOperand>(
+pub(super) fn lift(
     jvm_instruction: &JVM,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Option<Instruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"

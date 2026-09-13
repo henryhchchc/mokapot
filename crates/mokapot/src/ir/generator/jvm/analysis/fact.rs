@@ -7,7 +7,6 @@ use crate::ir::{
         jvm::{
             frame::{FrameSlot, JvmStackFrame},
             instruction::Instruction,
-            lifting::frame_operand::FrameOperand,
             normalization::{Location, ReturnAddress},
         },
     },
@@ -32,19 +31,6 @@ pub(in crate::ir::generator) enum OperandState {
     Merged(MergeIdentity),
     #[display("%invalid")]
     Invalid,
-}
-
-impl FrameOperand for OperandState {
-    fn return_address(&self) -> Option<ReturnAddress> {
-        match self {
-            Self::ReturnAddress(address) => Some(*address),
-            _ => None,
-        }
-    }
-
-    fn contains_return_address(&self) -> bool {
-        matches!(self, Self::ReturnAddress(_) | Self::Invalid)
-    }
 }
 
 /// One outgoing edge and its exact symbolic frame.

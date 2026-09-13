@@ -15,54 +15,42 @@ use super::{
 };
 use crate::ir::generator::{
     error::MokaIRBuildError,
-    identity::SsaValueId,
-    jvm::{frame::JvmStackFrame, instruction::Instruction, normalization::Location},
+    jvm::{frame::JvmStackFrame, normalization::Location},
 };
 
-pub(super) struct LocationOutput {
-    pub(super) instruction: Instruction,
-    pub(super) outgoing: Vec<JvmOutgoing>,
-}
-
-struct NodeState {
-    incoming: JvmStackFrame<OperandState>,
-    output: Option<LocationOutput>,
-}
-
 struct SolverState {
-    entry_location: Location,
-    initial_frame: JvmStackFrame<OperandState>,
-    nodes: BTreeMap<Location, NodeState>,
+    entry: (Location, JvmStackFrame<OperandState>),
+    completed: BTreeMap<Location, AnalyzedLocation>,
     predecessors: BTreeMap<Location, BTreeSet<Location>>,
     dirty: BTreeSet<Location>,
-    worklist: BTreeSet<Location>,
+    queued_inputs: BTreeMap<Location, JvmStackFrame<OperandState>>,
 }
 
 #[cfg(test)]
-type OutputFingerprint = Vec<(Location, JvmStackFrame<OperandState>)>;
-
-#[cfg(test)]
-type NodeFingerprints =
-    BTreeMap<Location, (JvmStackFrame<OperandState>, Option<OutputFingerprint>)>;
+type CompletedFingerprint = BTreeMap<
+    Location,
+    (
+        JvmStackFrame<OperandState>,
+        Vec<(Location, JvmStackFrame<OperandState>)>,
+    ),
+>;
 
 #[cfg(test)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct SolverFingerprint {
-    nodes: NodeFingerprints,
-    predecessors: BTreeMap<Location, BTreeSet<Location>>,
+    completed: CompletedFingerprint,
     dirty: BTreeSet<Location>,
-    worklist: BTreeSet<Location>,
+    queued_inputs: BTreeMap<Location, JvmStackFrame<OperandState>>,
 }
 
 impl SolverState {
     fn new(entry_location: Location, initial_frame: JvmStackFrame<OperandState>) -> Self {
         Self {
-            entry_location,
-            initial_frame,
-            nodes: BTreeMap::new(),
+            entry: (entry_location, initial_frame),
+            completed: BTreeMap::new(),
             predecessors: BTreeMap::new(),
             dirty: BTreeSet::from([entry_location]),
-            worklist: BTreeSet::new(),
+            queued_inputs: BTreeMap::new(),
         }
     }
 
@@ -70,38 +58,29 @@ impl SolverState {
         while let Some(location) = self.dirty.pop_first() {
             match self.recompute_frame(location) {
                 Some(incoming)
-                    if self.nodes.get(&location).map(|node| &node.incoming) != Some(&incoming) =>
+                    if self.completed.get(&location).map(|result| &result.incoming)
+                        != Some(&incoming) =>
                 {
-                    match self.nodes.entry(location) {
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(NodeState {
-                                incoming,
-                                output: None,
-                            });
-                        }
-                        std::collections::btree_map::Entry::Occupied(mut entry) => {
-                            entry.get_mut().incoming = incoming;
-                        }
-                    }
-                    self.worklist.insert(location);
+                    self.queued_inputs.insert(location, incoming);
                 }
                 None => self.remove_unreachable(location),
-                Some(_) => {}
+                Some(_) => {
+                    self.queued_inputs.remove(&location);
+                }
             }
         }
     }
 
     fn recompute_frame(&self, location: Location) -> Option<JvmStackFrame<OperandState>> {
-        let seed = (location == self.entry_location).then_some(&self.initial_frame);
+        let seed = (location == self.entry.0).then_some(&self.entry.1);
         let mut incoming = seed.into_iter().chain(
             self.predecessors
                 .get(&location)
                 .into_iter()
                 .flatten()
                 .flat_map(|source| {
-                    self.nodes
+                    self.completed
                         .get(source)
-                        .and_then(|node| node.output.as_ref())
                         .expect("predecessors must have a retained output")
                         .outgoing
                         .iter()
@@ -118,14 +97,11 @@ impl SolverState {
     }
 
     fn remove_unreachable(&mut self, location: Location) {
-        let Some(node) = self.nodes.remove(&location) else {
+        self.queued_inputs.remove(&location);
+        let Some(result) = self.completed.remove(&location) else {
             return;
         };
-        self.worklist.remove(&location);
-        let Some(output) = node.output else {
-            return;
-        };
-        for target in output
+        for target in result
             .outgoing
             .into_iter()
             .map(|outgoing| outgoing.target)
@@ -144,54 +120,32 @@ impl SolverState {
         self.purge_detached_nodes();
     }
 
-    fn replace_output(&mut self, location: Location, output: LocationOutput) {
-        let current_targets = output
-            .outgoing
-            .iter()
-            .map(|edge| edge.target)
-            .collect::<BTreeSet<_>>();
-        let previous_targets = self.nodes[&location]
-            .output
-            .as_ref()
-            .into_iter()
-            .flat_map(|previous| &previous.outgoing)
-            .map(|edge| edge.target)
-            .collect::<BTreeSet<_>>();
+    fn replace_result(&mut self, location: Location, result: AnalyzedLocation) {
+        let current_targets = targets(&result.outgoing);
+        let previous_targets = self
+            .completed
+            .get(&location)
+            .map_or_else(BTreeSet::new, |previous| targets(&previous.outgoing));
         let targets_removed = !previous_targets.is_subset(&current_targets);
-        let affected = previous_targets
-            .union(&current_targets)
-            .copied()
-            .collect::<BTreeSet<_>>();
-        for target in affected {
-            match (
-                previous_targets.contains(&target),
-                current_targets.contains(&target),
-            ) {
-                (false, true) => {
-                    self.predecessors
-                        .entry(target)
-                        .or_default()
-                        .insert(location);
-                }
-                (true, false) => {
-                    let predecessors = self
-                        .predecessors
-                        .get_mut(&target)
-                        .expect("an outgoing target has a predecessor");
-                    predecessors.remove(&location);
-                    if predecessors.is_empty() {
-                        self.predecessors.remove(&target);
-                    }
-                }
-                (true, true) => {}
-                (false, false) => unreachable!("affected targets belong to an output"),
+        for target in previous_targets.difference(&current_targets) {
+            let predecessors = self
+                .predecessors
+                .get_mut(target)
+                .expect("an outgoing target has a predecessor");
+            predecessors.remove(&location);
+            if predecessors.is_empty() {
+                self.predecessors.remove(target);
             }
-            self.dirty.insert(target);
         }
-        self.nodes
-            .get_mut(&location)
-            .expect("processed locations must remain reachable")
-            .output = Some(output);
+        for &target in current_targets.difference(&previous_targets) {
+            self.predecessors
+                .entry(target)
+                .or_default()
+                .insert(location);
+        }
+        self.dirty
+            .extend(previous_targets.union(&current_targets).copied());
+        self.completed.insert(location, result);
         if targets_removed {
             self.purge_detached_nodes();
         }
@@ -199,10 +153,10 @@ impl SolverState {
 
     fn purge_detached_nodes(&mut self) {
         let reachable = self.reachable_locations();
-        self.nodes
+        self.completed
             .retain(|location, _| reachable.contains(location));
-        self.worklist
-            .retain(|location| reachable.contains(location));
+        self.queued_inputs
+            .retain(|location, _| reachable.contains(location));
         self.dirty.retain(|location| reachable.contains(location));
 
         let mut changed = BTreeSet::new();
@@ -222,65 +176,41 @@ impl SolverState {
 
     fn reachable_locations(&self) -> BTreeSet<Location> {
         let mut reachable = BTreeSet::new();
-        let mut pending = BTreeSet::from([self.entry_location]);
+        let mut pending = BTreeSet::from([self.entry.0]);
         while let Some(location) = pending.pop_first() {
             if !reachable.insert(location) {
                 continue;
             }
-            if let Some(output) = self
-                .nodes
-                .get(&location)
-                .and_then(|node| node.output.as_ref())
-            {
-                pending.extend(output.outgoing.iter().map(|edge| edge.target));
+            if let Some(result) = self.completed.get(&location) {
+                pending.extend(result.outgoing.iter().map(|edge| edge.target));
             }
         }
         reachable
     }
 
-    fn finish(
-        self,
-        caught_exception_ids: &BTreeMap<Location, SsaValueId>,
-    ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
-        self.nodes
-            .into_iter()
-            .map(|(location, node)| {
-                let output = node.output.ok_or(MokaIRBuildError::MalformedControlFlow)?;
-                Ok((
-                    location,
-                    AnalyzedLocation {
-                        incoming: node.incoming,
-                        instruction: output.instruction,
-                        outgoing: output.outgoing,
-                        caught_exception: caught_exception_ids.get(&location).copied(),
-                    },
-                ))
-            })
-            .collect()
-    }
-
     #[cfg(test)]
     fn fingerprint(&self) -> SolverFingerprint {
         SolverFingerprint {
-            nodes: self
-                .nodes
+            completed: self
+                .completed
                 .iter()
-                .map(|(&location, node)| {
-                    let outgoing = node.output.as_ref().map(|output| {
-                        output
-                            .outgoing
-                            .iter()
-                            .map(|edge| (edge.target, edge.frame.clone()))
-                            .collect()
-                    });
-                    (location, (node.incoming.clone(), outgoing))
+                .map(|(&location, result)| {
+                    let outgoing = result
+                        .outgoing
+                        .iter()
+                        .map(|edge| (edge.target, edge.frame.clone()))
+                        .collect();
+                    (location, (result.incoming.clone(), outgoing))
                 })
                 .collect(),
-            predecessors: self.predecessors.clone(),
             dirty: self.dirty.clone(),
-            worklist: self.worklist.clone(),
+            queued_inputs: self.queued_inputs.clone(),
         }
     }
+}
+
+fn targets(outgoing: &[JvmOutgoing]) -> BTreeSet<Location> {
+    outgoing.iter().map(|edge| edge.target).collect()
 }
 
 pub(super) fn solve(
@@ -293,26 +223,26 @@ pub(super) fn solve(
     #[cfg(test)]
     let mut seen = HashSet::new();
 
-    // Normalization bounds the location set. Every value created by transfer is
-    // interned by its defining location, and merging gives each destination
-    // slot one stable identity. Recomputing can therefore retract stale edges
-    // without creating an unbounded stream of fresh symbolic states.
-    while !state.dirty.is_empty() || !state.worklist.is_empty() {
+    // Normalization bounds the set of locations, while definition and merge
+    // identities are interned by location. This bounds the symbolic frames the
+    // solver can encounter, but replacement is not monotone; the test-only
+    // fingerprint catches a repeated state if transfer changes ever introduce
+    // an oscillation.
+    while !state.dirty.is_empty() || !state.queued_inputs.is_empty() {
         #[cfg(test)]
         assert!(
             seen.insert(state.fingerprint()),
             "JVM frame analysis entered a solver-state cycle"
         );
         state.recompute_dirty();
-        let Some(location) = state.worklist.pop_first() else {
+        let Some((location, incoming)) = state.queued_inputs.pop_first() else {
             continue;
         };
-        let incoming = state.nodes[&location].incoming.clone();
-        let output = analyzer.transfer(location, &incoming)?;
-        state.replace_output(location, output);
+        let result = analyzer.transfer(location, incoming)?;
+        state.replace_result(location, result);
     }
 
-    state.finish(&analyzer.caught_exception_ids)
+    Ok(state.completed)
 }
 
 pub(super) fn merge_frame_at(
@@ -340,17 +270,6 @@ pub(super) fn merge_frame_at(
     })
 }
 
-pub(super) fn normalize_frame_for(
-    location: Location,
-    frame: JvmStackFrame<OperandState>,
-) -> JvmStackFrame<OperandState> {
-    if matches!(location, Location::Unwind) {
-        frame.erase_values()
-    } else {
-        frame
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,7 +277,10 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             identity::SsaValueId,
-            jvm::frame::{Entry, FrameSlot},
+            jvm::{
+                frame::{Entry, FrameSlot},
+                instruction::Instruction,
+            },
         },
     };
 
@@ -373,14 +295,19 @@ mod tests {
         .expect("frame fits descriptor")
     }
 
-    fn output_to(target: Location, frame: JvmStackFrame<OperandState>) -> LocationOutput {
-        LocationOutput {
+    fn result_to(
+        target: Location,
+        outgoing_frame: JvmStackFrame<OperandState>,
+    ) -> AnalyzedLocation {
+        AnalyzedLocation {
+            incoming: frame(0),
             instruction: Instruction::Erased,
             outgoing: vec![JvmOutgoing {
                 target,
                 transfer: ControlTransfer::Unconditional,
-                frame,
+                frame: outgoing_frame,
             }],
+            caught_exception: None,
         }
     }
 
@@ -391,9 +318,10 @@ mod tests {
         let mut state = SolverState::new(source, frame(0));
         state.recompute_dirty();
 
-        state.replace_output(
+        state.replace_result(
             source,
-            LocationOutput {
+            AnalyzedLocation {
+                incoming: frame(0),
                 instruction: Instruction::Erased,
                 outgoing: vec![
                     JvmOutgoing {
@@ -407,13 +335,14 @@ mod tests {
                         frame: frame(2),
                     },
                 ],
+                caught_exception: None,
             },
         );
         state.recompute_dirty();
 
         assert_eq!(state.predecessors[&target], BTreeSet::from([source]));
         assert_eq!(
-            state.nodes[&target].incoming.local_variables(),
+            state.queued_inputs[&target].local_variables(),
             &[Entry::Value(OperandState::Merged(MergeIdentity {
                 location: target,
                 slot: FrameSlot::Local(0),
@@ -428,29 +357,32 @@ mod tests {
         let mut state = SolverState::new(source, frame(0));
         state.recompute_dirty();
 
-        state.replace_output(source, output_to(target, frame(1)));
+        state.replace_result(source, result_to(target, frame(1)));
         state.recompute_dirty();
         assert_eq!(
-            state.nodes[&target].incoming.local_variables(),
+            state.queued_inputs[&target].local_variables(),
             &[Entry::Value(OperandState::Value(SsaValueId::new(1)))]
         );
 
-        state.replace_output(source, output_to(target, frame(2)));
+        state.replace_result(source, result_to(target, frame(2)));
         state.recompute_dirty();
         assert_eq!(
-            state.nodes[&target].incoming.local_variables(),
+            state.queued_inputs[&target].local_variables(),
             &[Entry::Value(OperandState::Value(SsaValueId::new(2)))]
         );
 
-        state.replace_output(
+        state.replace_result(
             source,
-            LocationOutput {
+            AnalyzedLocation {
+                incoming: frame(0),
                 instruction: Instruction::Erased,
                 outgoing: Vec::new(),
+                caught_exception: None,
             },
         );
         state.recompute_dirty();
-        assert!(!state.nodes.contains_key(&target));
+        assert!(!state.completed.contains_key(&target));
+        assert!(!state.queued_inputs.contains_key(&target));
     }
 
     #[test]
@@ -461,26 +393,31 @@ mod tests {
         let mut state = SolverState::new(source, frame(0));
         state.recompute_dirty();
 
-        state.replace_output(source, output_to(first, frame(1)));
+        state.replace_result(source, result_to(first, frame(1)));
         state.recompute_dirty();
-        state.replace_output(first, output_to(second, frame(1)));
+        state.replace_result(first, result_to(second, frame(1)));
         state.recompute_dirty();
-        state.replace_output(second, output_to(first, frame(1)));
+        state.replace_result(second, result_to(first, frame(1)));
         state.recompute_dirty();
-        assert!(state.nodes.contains_key(&first));
-        assert!(state.nodes.contains_key(&second));
+        assert!(state.completed.contains_key(&first));
+        assert!(state.completed.contains_key(&second));
 
-        state.replace_output(
+        state.replace_result(
             source,
-            LocationOutput {
+            AnalyzedLocation {
+                incoming: frame(0),
                 instruction: Instruction::Erased,
                 outgoing: Vec::new(),
+                caught_exception: None,
             },
         );
 
-        assert_eq!(state.nodes.keys().copied().collect::<Vec<_>>(), [source]);
+        assert_eq!(
+            state.completed.keys().copied().collect::<Vec<_>>(),
+            [source]
+        );
         assert!(state.predecessors.is_empty());
-        assert!(!state.worklist.contains(&first));
-        assert!(!state.worklist.contains(&second));
+        assert!(!state.queued_inputs.contains_key(&first));
+        assert!(!state.queued_inputs.contains_key(&second));
     }
 }

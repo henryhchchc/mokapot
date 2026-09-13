@@ -9,12 +9,10 @@ use crate::{
         expression::Condition,
         generator::{
             error::MokaIRBuildError,
-            identity::SsaValueId,
             jvm::{
-                analysis::JvmFrameAnalyzer,
+                analysis::{JvmFrameAnalyzer, JvmOutgoing, OperandState},
                 frame::{Entry, JvmStackFrame},
                 instruction::Instruction,
-                lifting::frame_operand::FrameOperand,
                 normalization::Location,
             },
         },
@@ -22,14 +20,11 @@ use crate::{
     jvm::ConstantValue,
 };
 
-type OutgoingState<OP> = (Location, ControlTransfer<OP>, JvmStackFrame<OP>);
-
-fn exception_edges<OP: FrameOperand>(
+fn exception_edges(
     semantics: &mut JvmFrameAnalyzer<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<OP>,
-    caught_value: &impl Fn(SsaValueId) -> OP,
-) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
+    pre_frame: &JvmStackFrame<OperandState>,
+) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -44,12 +39,12 @@ fn exception_edges<OP: FrameOperand>(
     let mut exhaustive = false;
     for entry in entries {
         let handler = semantics.handler_location(location, entry.handler_pc)?;
-        let caught = caught_value(semantics.caught_exception_at(handler)?);
-        outgoing.push((
-            handler,
-            ControlTransfer::Exception(entry.catch_type.clone()),
-            pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
-        ));
+        let caught = OperandState::Value(semantics.caught_exception_at(handler)?);
+        outgoing.push(JvmOutgoing {
+            target: handler,
+            transfer: ControlTransfer::Exception(entry.catch_type.clone()),
+            frame: pre_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
+        });
         exhaustive = entry
             .catch_type
             .as_ref()
@@ -59,11 +54,11 @@ fn exception_edges<OP: FrameOperand>(
         }
     }
     if !exhaustive {
-        outgoing.push((
-            semantics.unwind_location()?,
-            ControlTransfer::Unwind,
-            pre_frame.same_locals_empty_stack_frame(),
-        ));
+        outgoing.push(JvmOutgoing {
+            target: semantics.unwind_location()?,
+            transfer: ControlTransfer::Unwind,
+            frame: pre_frame.same_locals_empty_stack_frame().erase_values(),
+        });
     }
     Ok(outgoing)
 }
@@ -72,15 +67,14 @@ fn exception_edges<OP: FrameOperand>(
     clippy::too_many_lines,
     reason = "all control-flow forms are classified together"
 )]
-pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
+pub(in crate::ir::generator) fn outgoing_from(
     semantics: &mut JvmFrameAnalyzer<'_>,
     location: Location,
-    pre_frame: &JvmStackFrame<OP>,
-    normal_frame: JvmStackFrame<OP>,
-    instruction: &Instruction<OP>,
+    pre_frame: &JvmStackFrame<OperandState>,
+    normal_frame: JvmStackFrame<OperandState>,
+    instruction: &Instruction,
     fallible: bool,
-    caught_value: &impl Fn(SsaValueId) -> OP,
-) -> Result<Vec<OutgoingState<OP>>, MokaIRBuildError> {
+) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
     Ok(match instruction {
@@ -88,59 +82,62 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
-            vec![(
-                semantics.target_location(location, handler_pc)?,
-                Unconditional,
-                normal_frame,
-            )]
+            vec![JvmOutgoing {
+                target: semantics.target_location(location, handler_pc)?,
+                transfer: Unconditional,
+                frame: normal_frame,
+            }]
         }
-        Instruction::Return(_) if fallible => {
-            exception_edges(semantics, location, pre_frame, caught_value)?
-        }
+        Instruction::Return(_) if fallible => exception_edges(semantics, location, pre_frame)?,
         Instruction::Unwind | Instruction::Return(_) => Vec::new(),
-        Instruction::Throw(_) => exception_edges(semantics, location, pre_frame, caught_value)?,
+        Instruction::Throw(_) => exception_edges(semantics, location, pre_frame)?,
         Instruction::Subroutine { target, .. } => {
-            vec![(*target, Unconditional, normal_frame)]
+            vec![JvmOutgoing {
+                target: *target,
+                transfer: Unconditional,
+                frame: normal_frame,
+            }]
         }
         Instruction::Definition { .. } | Instruction::Effect(_) if fallible => {
-            let mut outgoing = vec![(semantics.next_location(location)?, Normal, normal_frame)];
-            outgoing.extend(exception_edges(
-                semantics,
-                location,
-                pre_frame,
-                caught_value,
-            )?);
+            let mut outgoing = vec![JvmOutgoing {
+                target: semantics.next_location(location)?,
+                transfer: Normal,
+                frame: normal_frame,
+            }];
+            outgoing.extend(exception_edges(semantics, location, pre_frame)?);
             outgoing
         }
-        Instruction::Erased | Instruction::Definition { .. } | Instruction::Effect(_) => vec![(
-            semantics.next_location(location)?,
-            Unconditional,
-            normal_frame,
-        )],
+        Instruction::Erased | Instruction::Definition { .. } | Instruction::Effect(_) => {
+            vec![JvmOutgoing {
+                target: semantics.next_location(location)?,
+                transfer: Unconditional,
+                frame: normal_frame,
+            }]
+        }
         Instruction::Jump {
             condition: None,
             target,
-        } => vec![(
-            semantics.target_location(location, *target)?,
-            Unconditional,
-            normal_frame,
-        )],
+        } => vec![JvmOutgoing {
+            target: semantics.target_location(location, *target)?,
+            transfer: Unconditional,
+            frame: normal_frame,
+        }],
         Instruction::Jump {
             condition: Some(condition),
             target,
         } => {
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
-                (
-                    semantics.target_location(location, *target)?,
-                    Conditional(BranchGuard::of(condition.clone())),
-                    normal_frame.same_frame(),
-                ),
-                (
-                    semantics.next_location(location)?,
-                    Conditional(BranchGuard::of(!condition)),
-                    normal_frame,
-                ),
+                JvmOutgoing {
+                    target: semantics.target_location(location, *target)?,
+                    transfer: Conditional(BranchGuard::of(condition.clone())),
+                    frame: normal_frame.same_frame(),
+                },
+                JvmOutgoing {
+                    target: semantics.next_location(location)?,
+                    transfer: Conditional(BranchGuard::of(!condition)),
+                    frame: normal_frame,
+                },
             ]
         }
         Instruction::Switch {
@@ -152,38 +149,67 @@ pub(in crate::ir::generator) fn outgoing_from<OP: FrameOperand>(
             for (&case, &target) in branches {
                 let value = Value::Constant(ConstantValue::Integer(case));
                 let condition =
-                    BooleanVariable::Positive(Condition::Equal(match_value.clone().into(), value));
-                outgoing.push((
-                    semantics.target_location(location, target)?,
-                    Conditional(BranchGuard::of(condition)),
-                    normal_frame.same_frame(),
-                ));
+                    BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
+                outgoing.push(JvmOutgoing {
+                    target: semantics.target_location(location, target)?,
+                    transfer: Conditional(BranchGuard::of(condition)),
+                    frame: normal_frame.same_frame(),
+                });
             }
             let default_guard = branches
                 .keys()
                 .map(|case| {
                     BooleanVariable::Negative(Condition::Equal(
-                        match_value.clone().into(),
+                        (*match_value).into(),
                         Value::Constant(ConstantValue::Integer(*case)),
                     ))
                 })
                 .collect();
-            outgoing.push((
-                semantics.target_location(location, *default)?,
-                Conditional(default_guard),
-                normal_frame,
-            ));
+            outgoing.push(JvmOutgoing {
+                target: semantics.target_location(location, *default)?,
+                transfer: Conditional(default_guard),
+                frame: normal_frame,
+            });
             outgoing
         }
         Instruction::SubroutineReturn(value) => {
-            let address = value
-                .return_address()
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-            vec![(
-                semantics.return_from(location, address)?,
-                Unconditional,
-                normal_frame,
-            )]
+            let OperandState::ReturnAddress(address) = value else {
+                return Err(MokaIRBuildError::MalformedControlFlow);
+            };
+            vec![JvmOutgoing {
+                target: semantics.return_from(location, *address)?,
+                transfer: Unconditional,
+                frame: normal_frame,
+            }]
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::generator::{identity::SsaValueId, tests::method};
+    use crate::jvm::code::Instruction as JvmInstruction;
+
+    #[test]
+    fn unwind_edges_erase_symbolic_values() {
+        let method = method([(0.into(), JvmInstruction::Nop)], "(I)V", vec![]);
+        let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+        let frame = JvmStackFrame::with_inputs(
+            &method.descriptor,
+            1,
+            0,
+            None,
+            &[OperandState::Value(SsaValueId::new(0))],
+        )
+        .expect("frame fits descriptor");
+
+        let edges = exception_edges(&mut analyzer, Location::entry(0.into()), &frame)
+            .expect("valid exception edge");
+
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].target, Location::Unwind);
+        assert!(matches!(edges[0].transfer, ControlTransfer::Unwind));
+        assert!(edges[0].frame.values().next().is_none());
+    }
 }

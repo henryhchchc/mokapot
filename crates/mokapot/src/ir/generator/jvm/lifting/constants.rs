@@ -5,9 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
+                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
                 instruction::Instruction,
-                lifting::{frame_operand::FrameOperand, required_definition},
+                lifting::required_definition,
             },
         },
     },
@@ -40,11 +41,11 @@ pub(super) const fn defines_value(instruction: &JVM) -> bool {
     )
 }
 
-pub(super) fn lift<OP: FrameOperand>(
+pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<OP>,
-) -> Result<Option<Instruction<OP>>, MokaIRBuildError> {
+    frame: &mut JvmStackFrame<OperandState>,
+) -> Result<Option<Instruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"

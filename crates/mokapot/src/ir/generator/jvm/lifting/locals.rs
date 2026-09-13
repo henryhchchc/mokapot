@@ -1,15 +1,18 @@
 use crate::ir::generator::{
     error::MokaIRBuildError,
-    jvm::{frame::JvmStackFrame, instruction::Instruction, lifting::frame_operand::FrameOperand},
+    jvm::{analysis::OperandState, frame::JvmStackFrame, instruction::Instruction},
 };
 
 #[inline]
-pub(super) fn load_local<const SLOT: bool, OP: FrameOperand>(
-    frame: &mut JvmStackFrame<OP>,
+pub(super) fn load_local<const SLOT: bool>(
+    frame: &mut JvmStackFrame<OperandState>,
     idx: u16,
-) -> Result<Instruction<OP>, MokaIRBuildError> {
+) -> Result<Instruction, MokaIRBuildError> {
     let value = frame.get_local::<SLOT>(idx)?;
-    if value.contains_return_address() {
+    if matches!(
+        value,
+        OperandState::ReturnAddress(_) | OperandState::Invalid
+    ) {
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
     frame.push_value::<SLOT>(value)?;
@@ -17,10 +20,10 @@ pub(super) fn load_local<const SLOT: bool, OP: FrameOperand>(
 }
 
 #[inline]
-pub(super) fn store_local<const SLOT: bool, OP: FrameOperand>(
-    frame: &mut JvmStackFrame<OP>,
+pub(super) fn store_local<const SLOT: bool>(
+    frame: &mut JvmStackFrame<OperandState>,
     idx: u16,
-) -> Result<Instruction<OP>, MokaIRBuildError> {
+) -> Result<Instruction, MokaIRBuildError> {
     let value = frame.pop_value::<SLOT>()?;
     frame.set_local::<SLOT>(idx, value)?;
     Ok(Instruction::Erased)
