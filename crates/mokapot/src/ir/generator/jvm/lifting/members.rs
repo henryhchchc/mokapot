@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
-                instruction::Instruction,
+                instruction::RegisterInstruction,
                 lifting::required_definition,
+                symbolic_execution::OperandState,
             },
         },
     },
@@ -41,7 +41,7 @@ pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OperandState>,
-) -> Result<Option<Instruction>, MokaIRBuildError> {
+) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -54,7 +54,7 @@ pub(super) fn lift(
             frame.typed_push(&field.field_type, def.into())?;
             let field = field.clone();
             let field_op = FieldAccess::ReadStatic { field };
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
@@ -65,7 +65,7 @@ pub(super) fn lift(
             let field = field.clone();
             frame.typed_push(&field.field_type, def.into())?;
             let field_op = FieldAccess::ReadInstance { object_ref, field };
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Field(field_op),
             }
@@ -81,7 +81,7 @@ pub(super) fn lift(
                 field: field.clone(),
                 value,
             };
-            Instruction::Effect(Expression::Field(field_op))
+            RegisterInstruction::Effect(Expression::Field(field_op))
         }
         PutField(field) => {
             use PrimitiveType::{Double, Long};
@@ -96,7 +96,7 @@ pub(super) fn lift(
                 field: field.clone(),
                 value,
             };
-            Instruction::Effect(Expression::Field(field_op))
+            RegisterInstruction::Effect(Expression::Field(field_op))
         }
         InvokeVirtual(method_ref) | InvokeSpecial(method_ref) | InvokeInterface(method_ref, _) => {
             let arguments = frame.pop_args(&method_ref.descriptor)?;
@@ -110,12 +110,12 @@ pub(super) fn lift(
                 ReturnType::Some(return_type) => {
                     let def = required_definition(definition)?;
                     frame.typed_push(return_type, def.into())?;
-                    Instruction::Definition {
+                    RegisterInstruction::Definition {
                         value: def,
                         expr: rhs,
                     }
                 }
-                ReturnType::Void => Instruction::Effect(rhs),
+                ReturnType::Void => RegisterInstruction::Effect(rhs),
             }
         }
         InvokeStatic(method_ref) => {
@@ -129,12 +129,12 @@ pub(super) fn lift(
                 ReturnType::Some(return_type) => {
                     let def = required_definition(definition)?;
                     frame.typed_push(return_type, def.into())?;
-                    Instruction::Definition {
+                    RegisterInstruction::Definition {
                         value: def,
                         expr: rhs,
                     }
                 }
-                ReturnType::Void => Instruction::Effect(rhs),
+                ReturnType::Void => RegisterInstruction::Effect(rhs),
             }
         }
         InvokeDynamic {
@@ -153,12 +153,12 @@ pub(super) fn lift(
                 ReturnType::Some(return_type) => {
                     let def = required_definition(definition)?;
                     frame.typed_push(return_type, def.into())?;
-                    Instruction::Definition {
+                    RegisterInstruction::Definition {
                         value: def,
                         expr: rhs,
                     }
                 }
-                ReturnType::Void => Instruction::Effect(rhs),
+                ReturnType::Void => RegisterInstruction::Effect(rhs),
             }
         }
         _ => return Ok(None),

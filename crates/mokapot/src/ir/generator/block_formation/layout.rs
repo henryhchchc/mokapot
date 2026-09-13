@@ -9,8 +9,8 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::{AnalyzedJvmCfg, AnalyzedLocation, MergeIdentity},
             normalization::Location,
+            symbolic_execution::{AnalyzedJvmCfg, AnalyzedLocation, MergeIdentity},
         },
     },
 };
@@ -24,19 +24,19 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(analyzed_cfg: &AnalyzedJvmCfg) -> Result<Self, MokaIRBuildError> {
-        let reachable = analyzed_cfg.locations.keys().copied().collect::<Vec<_>>();
+    pub fn discover(symbolic_cfg: &AnalyzedJvmCfg) -> Result<Self, MokaIRBuildError> {
+        let reachable = symbolic_cfg.locations.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
 
-        let predecessors = predecessor_locations(&analyzed_cfg.locations);
-        let leaders = discover_leaders(analyzed_cfg, &reachable, &predecessors)?;
+        let predecessors = predecessor_locations(&symbolic_cfg.locations);
+        let leaders = discover_leaders(symbolic_cfg, &reachable, &predecessors)?;
         let needs_entry_preheader = predecessors
-            .get(&analyzed_cfg.entry_location)
+            .get(&symbolic_cfg.entry_location)
             .is_some_and(|sources| !sources.is_empty());
         let (entry, bytecode_entry, block_ids) =
-            allocate_block_ids(&leaders, analyzed_cfg.entry_location, needs_entry_preheader)?;
+            allocate_block_ids(&leaders, symbolic_cfg.entry_location, needs_entry_preheader)?;
         let grouped = group_locations(&reachable, &block_ids)?;
 
         Ok(Self {
@@ -98,13 +98,13 @@ fn predecessor_locations(
 }
 
 fn discover_leaders(
-    analyzed_cfg: &AnalyzedJvmCfg,
+    symbolic_cfg: &AnalyzedJvmCfg,
     reachable: &[Location],
     predecessors: &BTreeMap<Location, BTreeSet<Location>>,
 ) -> Result<BTreeSet<Location>, MokaIRBuildError> {
-    let mut leaders = BTreeSet::from([analyzed_cfg.entry_location]);
+    let mut leaders = BTreeSet::from([symbolic_cfg.entry_location]);
     leaders.extend(
-        analyzed_cfg
+        symbolic_cfg
             .phi_values
             .keys()
             .map(|identity| identity.location),
@@ -122,7 +122,7 @@ fn discover_leaders(
             .map(|(target, _)| *target),
     );
 
-    for facts in analyzed_cfg.locations.values() {
+    for facts in symbolic_cfg.locations.values() {
         if facts.instruction.is_explicit_transfer()
             || facts.outgoing.iter().any(|outgoing| {
                 matches!(
@@ -140,7 +140,7 @@ fn discover_leaders(
         let [current, next] = pair else {
             unreachable!()
         };
-        let facts = analyzed_cfg
+        let facts = symbolic_cfg
             .locations
             .get(current)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -152,7 +152,7 @@ fn discover_leaders(
             leaders.insert(*next);
         }
     }
-    leaders.retain(|location| analyzed_cfg.locations.contains_key(location));
+    leaders.retain(|location| symbolic_cfg.locations.contains_key(location));
     Ok(leaders)
 }
 

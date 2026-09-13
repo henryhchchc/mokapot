@@ -2,9 +2,9 @@ use crate::{
     ir::generator::{
         error::MokaIRBuildError,
         jvm::{
-            analysis::OperandState,
             frame::{JvmStackFrame, StackOperations},
-            instruction::Instruction,
+            instruction::RegisterInstruction,
+            symbolic_execution::OperandState,
         },
     },
     jvm::code::Instruction as JVM,
@@ -13,7 +13,7 @@ use crate::{
 pub(super) fn lift(
     jvm_instruction: &JVM,
     frame: &mut JvmStackFrame<OperandState>,
-) -> Result<Option<Instruction>, MokaIRBuildError> {
+) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -34,7 +34,7 @@ pub(super) fn lift(
                 Swap => frame.swap()?,
                 _ => unreachable!("By outer match arm"),
             }
-            Instruction::Erased
+            RegisterInstruction::Erased
         }
         _ => return Ok(None),
     };

@@ -10,7 +10,7 @@ mod tests;
 pub(super) use model::JvmBlockGraph;
 pub(crate) use model::{JvmBlock, JvmBlockArm};
 
-use crate::ir::generator::{error::MokaIRBuildError, jvm::analysis::AnalyzedJvmCfg};
+use crate::ir::generator::{error::MokaIRBuildError, jvm::symbolic_execution::AnalyzedJvmCfg};
 
 use self::{
     layout::BlockLayout,
@@ -18,9 +18,9 @@ use self::{
 };
 
 /// Forms maximal semantic blocks from completed JVM frame facts.
-pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIRBuildError> {
-    let layout = BlockLayout::discover(&analyzed_cfg)?;
-    let phi_blocks = layout.phi_blocks(&analyzed_cfg.phi_values)?;
+pub(super) fn form(symbolic_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIRBuildError> {
+    let layout = BlockLayout::discover(&symbolic_cfg)?;
+    let phi_blocks = layout.phi_blocks(&symbolic_cfg.phi_values)?;
     let AnalyzedJvmCfg {
         initial_frame,
         locations,
@@ -28,7 +28,7 @@ pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIR
         this_value,
         parameter_values,
         ..
-    } = analyzed_cfg;
+    } = symbolic_cfg;
     let blocks = materialize_blocks(locations, &layout)?;
     let blocks = insert_entry_preheader(blocks, &layout, initial_frame);
 

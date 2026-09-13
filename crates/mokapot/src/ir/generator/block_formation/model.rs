@@ -5,8 +5,8 @@ use crate::{
         generator::{
             identity::SsaValueId,
             jvm::{
-                analysis::{MergeIdentity, OperandState},
                 frame::JvmStackFrame,
+                symbolic_execution::{MergeIdentity, OperandState},
             },
         },
     },

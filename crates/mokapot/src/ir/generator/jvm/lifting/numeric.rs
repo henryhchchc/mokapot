@@ -5,13 +5,13 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
-                instruction::Instruction,
+                instruction::RegisterInstruction,
                 lifting::{
                     operations::{binary_op_math, conversion_op},
                     required_definition,
                 },
+                symbolic_execution::OperandState,
             },
         },
     },
@@ -31,7 +31,7 @@ pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OperandState>,
-) -> Result<Option<Instruction>, MokaIRBuildError> {
+) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -58,7 +58,7 @@ pub(super) fn lift(
             let value = frame.pop_value::<SINGLE_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             let math_op = MathOperation::Negate(value);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -68,7 +68,7 @@ pub(super) fn lift(
             let value = def.into();
             frame.push_value::<DUAL_SLOT>(value)?;
             let math_op = MathOperation::Negate(operand);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -81,7 +81,7 @@ pub(super) fn lift(
             let value = def.into();
             frame.push_value::<DUAL_SLOT>(value)?;
             let math_op = MathOperation::ShiftLeft(base, shift_amount);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -91,7 +91,7 @@ pub(super) fn lift(
             let base = frame.pop_value::<DUAL_SLOT>()?;
             frame.push_value::<DUAL_SLOT>(def.into())?;
             let math_op = MathOperation::ShiftRight(base, shift_amount);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -101,7 +101,7 @@ pub(super) fn lift(
             let base = frame.pop_value::<DUAL_SLOT>()?;
             frame.push_value::<DUAL_SLOT>(def.into())?;
             let math_op = MathOperation::LogicalShiftRight(base, shift_amount);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -118,7 +118,7 @@ pub(super) fn lift(
             let base = frame.get_local::<SINGLE_SLOT>(idx)?;
             frame.set_local::<SINGLE_SLOT>(idx, def.into())?;
             let math_op = MathOperation::Increment(base, *constant);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -127,7 +127,7 @@ pub(super) fn lift(
             let base = frame.get_local::<SINGLE_SLOT>(*idx)?;
             frame.set_local::<SINGLE_SLOT>(*idx, def.into())?;
             let math_op = MathOperation::Increment(base, *constant);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -152,7 +152,7 @@ pub(super) fn lift(
             let lhs = frame.pop_value::<DUAL_SLOT>()?;
             frame.push_value::<SINGLE_SLOT>(def.into())?;
             let math_op = MathOperation::LongComparison(lhs, rhs);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -167,7 +167,7 @@ pub(super) fn lift(
                 _ => unreachable!("By outer match arm"),
             };
             let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }
@@ -182,7 +182,7 @@ pub(super) fn lift(
                 _ => unreachable!("By outer match arm"),
             };
             let math_op = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment);
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Math(math_op),
             }

@@ -5,13 +5,13 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                analysis::OperandState,
                 frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
-                instruction::Instruction,
+                instruction::RegisterInstruction,
                 lifting::{
                     locals::{load_local, store_local},
                     required_definition,
                 },
+                symbolic_execution::OperandState,
             },
         },
     },
@@ -36,7 +36,7 @@ pub(super) fn lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
     frame: &mut JvmStackFrame<OperandState>,
-) -> Result<Option<Instruction>, MokaIRBuildError> {
+) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this function exhaustively dispatches one opcode family"
@@ -61,7 +61,7 @@ pub(super) fn lift(
             let array_op = ArrayOperation::Read { array_ref, index };
 
             frame.push_value::<SINGLE_SLOT>(def.into())?;
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
@@ -72,7 +72,7 @@ pub(super) fn lift(
             let array_ref = frame.pop_value::<SINGLE_SLOT>()?;
             let array_op = ArrayOperation::Read { array_ref, index };
             frame.push_value::<DUAL_SLOT>(def.into())?;
-            Instruction::Definition {
+            RegisterInstruction::Definition {
                 value: def,
                 expr: Expression::Array(array_op),
             }
@@ -99,7 +99,7 @@ pub(super) fn lift(
                 value,
             };
 
-            Instruction::Effect(Expression::Array(array_op))
+            RegisterInstruction::Effect(Expression::Array(array_op))
         }
         LAStore | DAStore => {
             let value = frame.pop_value::<DUAL_SLOT>()?;
@@ -110,7 +110,7 @@ pub(super) fn lift(
                 index,
                 value,
             };
-            Instruction::Effect(Expression::Array(array_op))
+            RegisterInstruction::Effect(Expression::Array(array_op))
         }
         _ => return Ok(None),
     };

@@ -5,14 +5,14 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::fact::{AnalyzedJvmCfg, AnalyzedLocation, OperandState},
-            analysis::solver,
             frame::JvmStackFrame,
-            instruction::Instruction,
+            instruction::RegisterInstruction,
             lifting::{
                 fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
             },
             normalization::{Location, Normalizer},
+            symbolic_execution::fact::{AnalyzedJvmCfg, AnalyzedLocation, OperandState},
+            symbolic_execution::solver,
         },
     },
     jvm::{
@@ -22,8 +22,8 @@ use crate::{
     },
 };
 
-/// Mutable state used only while solving JVM frame facts.
-pub(crate) struct JvmFrameAnalyzer<'method> {
+/// Mutable state used only while performing symbolic execution.
+pub(crate) struct JvmSymbolicExecutor<'method> {
     pub(super) body: &'method MethodBody,
     fallibility: FallibilityContext,
     pub(super) normalizer: Normalizer,
@@ -36,7 +36,7 @@ pub(crate) struct JvmFrameAnalyzer<'method> {
     initial_frame: JvmStackFrame<OperandState>,
 }
 
-impl<'method> JvmFrameAnalyzer<'method> {
+impl<'method> JvmSymbolicExecutor<'method> {
     pub fn transfer(
         &mut self,
         location: Location,
@@ -44,13 +44,13 @@ impl<'method> JvmFrameAnalyzer<'method> {
     ) -> Result<AnalyzedLocation, MokaIRBuildError> {
         let (instruction, outgoing) = match location {
             Location::Handler { .. } => {
-                let instruction = Instruction::HandlerEntry;
+                let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming.same_frame();
                 let outgoing =
                     outgoing_from(self, location, &incoming, normal_frame, &instruction, false)?;
                 (instruction, outgoing)
             }
-            Location::Unwind => (Instruction::Unwind, Vec::new()),
+            Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
                 let mut normal_frame = incoming.same_frame();
                 let jvm_instruction = self

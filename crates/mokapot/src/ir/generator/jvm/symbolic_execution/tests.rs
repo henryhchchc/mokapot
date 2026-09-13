@@ -1,5 +1,5 @@
 use super::{
-    analyzer::JvmFrameAnalyzer,
+    analyzer::JvmSymbolicExecutor,
     fact::{MergeIdentity, OperandState},
     solver::merge_frame_at,
 };
@@ -95,7 +95,7 @@ fn reprocessing_loop_allocates_identities_only_for_definitions() {
         "()V",
         vec![],
     );
-    let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+    let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
     analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(analyzer.definition_ids.len(), 3);
@@ -150,7 +150,7 @@ fn reprocessing_replaces_stale_predecessor_output() {
         "()V",
         vec![],
     );
-    let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+    let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
     let locations = analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(

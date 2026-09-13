@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
-    analyzer::JvmFrameAnalyzer,
+    analyzer::JvmSymbolicExecutor,
     fact::{AnalyzedLocation, JvmOutgoing, MergeIdentity, OperandState},
 };
 use crate::ir::generator::{
@@ -214,7 +214,7 @@ fn targets(outgoing: &[JvmOutgoing]) -> BTreeSet<Location> {
 }
 
 pub(super) fn solve(
-    analyzer: &mut JvmFrameAnalyzer<'_>,
+    analyzer: &mut JvmSymbolicExecutor<'_>,
     entry_location: Location,
     initial_frame: JvmStackFrame<OperandState>,
 ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
@@ -232,7 +232,7 @@ pub(super) fn solve(
         #[cfg(test)]
         assert!(
             seen.insert(state.fingerprint()),
-            "JVM frame analysis entered a solver-state cycle"
+            "JVM symbolic execution entered a solver-state cycle"
         );
         state.recompute_dirty();
         let Some((location, incoming)) = state.queued_inputs.pop_first() else {
@@ -279,7 +279,7 @@ mod tests {
             identity::SsaValueId,
             jvm::{
                 frame::{Entry, FrameSlot},
-                instruction::Instruction,
+                instruction::RegisterInstruction,
             },
         },
     };
@@ -301,7 +301,7 @@ mod tests {
     ) -> AnalyzedLocation {
         AnalyzedLocation {
             incoming: frame(0),
-            instruction: Instruction::Erased,
+            instruction: RegisterInstruction::Erased,
             outgoing: vec![JvmOutgoing {
                 target,
                 transfer: ControlTransfer::Unconditional,
@@ -322,7 +322,7 @@ mod tests {
             source,
             AnalyzedLocation {
                 incoming: frame(0),
-                instruction: Instruction::Erased,
+                instruction: RegisterInstruction::Erased,
                 outgoing: vec![
                     JvmOutgoing {
                         target,
@@ -375,7 +375,7 @@ mod tests {
             source,
             AnalyzedLocation {
                 incoming: frame(0),
-                instruction: Instruction::Erased,
+                instruction: RegisterInstruction::Erased,
                 outgoing: Vec::new(),
                 caught_exception: None,
             },
@@ -406,7 +406,7 @@ mod tests {
             source,
             AnalyzedLocation {
                 incoming: frame(0),
-                instruction: Instruction::Erased,
+                instruction: RegisterInstruction::Erased,
                 outgoing: Vec::new(),
                 caught_exception: None,
             },

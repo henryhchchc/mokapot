@@ -17,20 +17,20 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::{JvmFrameAnalyzer, OperandState},
             frame::JvmStackFrame,
-            instruction::Instruction,
+            instruction::RegisterInstruction,
             normalization::Location,
+            symbolic_execution::{JvmSymbolicExecutor, OperandState},
         },
     },
     jvm::code::Instruction as JVM,
 };
 pub(super) fn lift_instruction(
-    semantics: &mut JvmFrameAnalyzer<'_>,
+    semantics: &mut JvmSymbolicExecutor<'_>,
     jvm_instruction: &JVM,
     location: Location,
     frame: &mut JvmStackFrame<OperandState>,
-) -> Result<Instruction, MokaIRBuildError> {
+) -> Result<RegisterInstruction, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;

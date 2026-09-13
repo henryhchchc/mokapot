@@ -9,10 +9,10 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                analysis::{AnalyzedLocation, JvmOutgoing, OperandState},
                 frame::JvmStackFrame,
-                instruction::Instruction,
+                instruction::RegisterInstruction,
                 normalization::Location,
+                symbolic_execution::{AnalyzedLocation, JvmOutgoing, OperandState},
             },
         },
     },
@@ -93,7 +93,7 @@ fn materialize_block(
 
 fn materialize_internal_operation(
     location: Location,
-    instruction: Instruction,
+    instruction: RegisterInstruction,
     outgoing: &[JvmOutgoing],
     next: Location,
 ) -> Result<Option<(ProgramCounter, OperationKind<OperandState>)>, MokaIRBuildError> {
@@ -105,20 +105,22 @@ fn materialize_internal_operation(
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
     let operation = match instruction {
-        Instruction::Definition { value, expr } => Some(OperationKind::Definition {
+        RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
             value: OperandState::Value(value),
             expr,
         }),
-        Instruction::Effect(expr) => Some(OperationKind::Effect { expr }),
-        Instruction::Erased => None,
-        Instruction::HandlerEntry
-        | Instruction::Unwind
-        | Instruction::Jump { .. }
-        | Instruction::Switch { .. }
-        | Instruction::Return(_)
-        | Instruction::Throw(_)
-        | Instruction::Subroutine { .. }
-        | Instruction::SubroutineReturn(_) => return Err(MokaIRBuildError::MalformedControlFlow),
+        RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
+        RegisterInstruction::Erased => None,
+        RegisterInstruction::HandlerEntry
+        | RegisterInstruction::Unwind
+        | RegisterInstruction::Jump { .. }
+        | RegisterInstruction::Switch { .. }
+        | RegisterInstruction::Return(_)
+        | RegisterInstruction::Throw(_)
+        | RegisterInstruction::Subroutine { .. }
+        | RegisterInstruction::SubroutineReturn(_) => {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
     };
     operation
         .map(|operation| {
@@ -139,7 +141,7 @@ struct BlockEnd {
 
 fn materialize_block_end(
     location: Location,
-    instruction: Instruction,
+    instruction: RegisterInstruction,
     outgoing: Vec<JvmOutgoing>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, MokaIRBuildError> {
@@ -203,35 +205,37 @@ pub(super) fn insert_entry_preheader(
 }
 
 pub(super) fn classify_block_end(
-    instruction: Instruction,
+    instruction: RegisterInstruction,
     has_normal_successor: bool,
 ) -> (
     Option<OperationKind<OperandState>>,
     TerminatorKind<OperandState>,
 ) {
     match instruction {
-        Instruction::Unwind => (None, TerminatorKind::Unwind),
-        Instruction::Jump {
+        RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
+        RegisterInstruction::Jump {
             condition: Some(_), ..
         } => (None, TerminatorKind::Branch),
-        Instruction::HandlerEntry
-        | Instruction::Jump {
+        RegisterInstruction::HandlerEntry
+        | RegisterInstruction::Jump {
             condition: None, ..
         }
-        | Instruction::Subroutine { .. }
-        | Instruction::SubroutineReturn(_)
-        | Instruction::Erased => (None, TerminatorKind::Goto),
-        Instruction::Switch { match_value, .. } => (None, TerminatorKind::Switch { match_value }),
-        Instruction::Return(value) => (None, TerminatorKind::Return(value)),
-        Instruction::Throw(value) => (None, TerminatorKind::Throw(value)),
-        Instruction::Definition { value, expr } => (
+        | RegisterInstruction::Subroutine { .. }
+        | RegisterInstruction::SubroutineReturn(_)
+        | RegisterInstruction::Erased => (None, TerminatorKind::Goto),
+        RegisterInstruction::Switch { match_value, .. } => {
+            (None, TerminatorKind::Switch { match_value })
+        }
+        RegisterInstruction::Return(value) => (None, TerminatorKind::Return(value)),
+        RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
+        RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
                 value: OperandState::Value(value),
                 expr,
             }),
             implicit_terminator(has_normal_successor),
         ),
-        Instruction::Effect(expr) => (
+        RegisterInstruction::Effect(expr) => (
             Some(OperationKind::Effect { expr }),
             implicit_terminator(has_normal_successor),
         ),

@@ -7,8 +7,8 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::{MergeIdentity, OperandState},
             frame::{Entry, JvmStackFrame},
+            symbolic_execution::{MergeIdentity, OperandState},
         },
     },
 };

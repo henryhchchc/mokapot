@@ -10,10 +10,10 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                analysis::{JvmFrameAnalyzer, JvmOutgoing, OperandState},
                 frame::{Entry, JvmStackFrame},
-                instruction::Instruction,
+                instruction::RegisterInstruction,
                 normalization::Location,
+                symbolic_execution::{JvmOutgoing, JvmSymbolicExecutor, OperandState},
             },
         },
     },
@@ -21,7 +21,7 @@ use crate::{
 };
 
 fn exception_edges(
-    semantics: &mut JvmFrameAnalyzer<'_>,
+    semantics: &mut JvmSymbolicExecutor<'_>,
     location: Location,
     pre_frame: &JvmStackFrame<OperandState>,
 ) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
@@ -68,17 +68,17 @@ fn exception_edges(
     reason = "all control-flow forms are classified together"
 )]
 pub(crate) fn outgoing_from(
-    semantics: &mut JvmFrameAnalyzer<'_>,
+    semantics: &mut JvmSymbolicExecutor<'_>,
     location: Location,
     pre_frame: &JvmStackFrame<OperandState>,
     normal_frame: JvmStackFrame<OperandState>,
-    instruction: &Instruction,
+    instruction: &RegisterInstruction,
     fallible: bool,
 ) -> Result<Vec<JvmOutgoing>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
     Ok(match instruction {
-        Instruction::HandlerEntry => {
+        RegisterInstruction::HandlerEntry => {
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
@@ -88,17 +88,19 @@ pub(crate) fn outgoing_from(
                 frame: normal_frame,
             }]
         }
-        Instruction::Return(_) if fallible => exception_edges(semantics, location, pre_frame)?,
-        Instruction::Unwind | Instruction::Return(_) => Vec::new(),
-        Instruction::Throw(_) => exception_edges(semantics, location, pre_frame)?,
-        Instruction::Subroutine { target, .. } => {
+        RegisterInstruction::Return(_) if fallible => {
+            exception_edges(semantics, location, pre_frame)?
+        }
+        RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
+        RegisterInstruction::Throw(_) => exception_edges(semantics, location, pre_frame)?,
+        RegisterInstruction::Subroutine { target, .. } => {
             vec![JvmOutgoing {
                 target: *target,
                 transfer: Unconditional,
                 frame: normal_frame,
             }]
         }
-        Instruction::Definition { .. } | Instruction::Effect(_) if fallible => {
+        RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_) if fallible => {
             let mut outgoing = vec![JvmOutgoing {
                 target: semantics.next_location(location)?,
                 transfer: Normal,
@@ -107,14 +109,16 @@ pub(crate) fn outgoing_from(
             outgoing.extend(exception_edges(semantics, location, pre_frame)?);
             outgoing
         }
-        Instruction::Erased | Instruction::Definition { .. } | Instruction::Effect(_) => {
+        RegisterInstruction::Erased
+        | RegisterInstruction::Definition { .. }
+        | RegisterInstruction::Effect(_) => {
             vec![JvmOutgoing {
                 target: semantics.next_location(location)?,
                 transfer: Unconditional,
                 frame: normal_frame,
             }]
         }
-        Instruction::Jump {
+        RegisterInstruction::Jump {
             condition: None,
             target,
         } => vec![JvmOutgoing {
@@ -122,7 +126,7 @@ pub(crate) fn outgoing_from(
             transfer: Unconditional,
             frame: normal_frame,
         }],
-        Instruction::Jump {
+        RegisterInstruction::Jump {
             condition: Some(condition),
             target,
         } => {
@@ -140,7 +144,7 @@ pub(crate) fn outgoing_from(
                 },
             ]
         }
-        Instruction::Switch {
+        RegisterInstruction::Switch {
             default,
             branches,
             match_value,
@@ -172,7 +176,7 @@ pub(crate) fn outgoing_from(
             });
             outgoing
         }
-        Instruction::SubroutineReturn(value) => {
+        RegisterInstruction::SubroutineReturn(value) => {
             let OperandState::ReturnAddress(address) = value else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
@@ -194,7 +198,7 @@ mod tests {
     #[test]
     fn unwind_edges_erase_symbolic_values() {
         let method = method([(0.into(), JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut analyzer = JvmFrameAnalyzer::for_method(&method).expect("valid method");
+        let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
         let frame = JvmStackFrame::with_inputs(
             &method.descriptor,
             1,

@@ -6,7 +6,7 @@ use crate::ir::{
         identity::SsaValueId,
         jvm::{
             frame::{FrameSlot, JvmStackFrame},
-            instruction::Instruction,
+            instruction::RegisterInstruction,
             normalization::{Location, ReturnAddress},
         },
     },
@@ -20,7 +20,7 @@ pub(crate) struct MergeIdentity {
     pub slot: FrameSlot,
 }
 
-/// The abstract state of an operand during JVM frame analysis.
+/// The abstract state of an operand during symbolic execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) enum OperandState {
@@ -40,15 +40,15 @@ pub(crate) struct JvmOutgoing {
     pub frame: JvmStackFrame<OperandState>,
 }
 
-/// Completed abstract-execution facts for one reachable JVM location.
+/// Completed symbolic-execution facts for one reachable JVM location.
 pub(crate) struct AnalyzedLocation {
     pub incoming: JvmStackFrame<OperandState>,
-    pub instruction: Instruction,
+    pub instruction: RegisterInstruction,
     pub outgoing: Vec<JvmOutgoing>,
     pub caught_exception: Option<SsaValueId>,
 }
 
-/// Reachable JVM locations and abstract control-flow facts.
+/// Reachable JVM locations and symbolic-execution facts.
 pub(crate) struct AnalyzedJvmCfg {
     pub entry_location: Location,
     /// The original frame entering the method.

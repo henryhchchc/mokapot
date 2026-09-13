@@ -5,14 +5,14 @@ use crate::{
         expression::{Condition, Expression},
         generator::{
             identity::SsaValueId,
-            jvm::{analysis::OperandState, normalization::Location},
+            jvm::{normalization::Location, symbolic_execution::OperandState},
         },
     },
     jvm::code::ProgramCounter,
 };
 
 #[derive(Debug)]
-pub(crate) enum Instruction {
+pub(crate) enum RegisterInstruction {
     HandlerEntry,
     Unwind,
     Erased,
@@ -38,7 +38,7 @@ pub(crate) enum Instruction {
     SubroutineReturn(OperandState),
 }
 
-impl Instruction {
+impl RegisterInstruction {
     pub const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,
