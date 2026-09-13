@@ -179,7 +179,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            jvm::{frame::Position, normalization::Location},
+            jvm::{frame::Position, subroutine_expansion::Location},
         },
     };
 

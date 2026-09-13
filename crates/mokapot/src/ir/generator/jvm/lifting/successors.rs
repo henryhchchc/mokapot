@@ -12,7 +12,7 @@ use crate::{
             jvm::{
                 frame::{Entry, Frame},
                 instruction::RegisterInstruction,
-                normalization::Location,
+                subroutine_expansion::Location,
                 symbolic_execution::{Edge, Executor, Value},
             },
         },

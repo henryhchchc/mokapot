@@ -6,7 +6,7 @@ use crate::{
             jvm::{
                 frame::{CATEGORY_1, CATEGORY_2, Frame},
                 instruction::RegisterInstruction,
-                normalization::Location,
+                subroutine_expansion::Location,
                 symbolic_execution::{Executor, Value},
             },
         },

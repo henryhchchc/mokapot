@@ -9,7 +9,7 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::Frame, instruction::RegisterInstruction, normalization::Location,
+                frame::Frame, instruction::RegisterInstruction, subroutine_expansion::Location,
                 symbolic_execution,
             },
         },

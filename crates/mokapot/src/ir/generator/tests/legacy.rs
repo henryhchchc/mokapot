@@ -6,7 +6,7 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
         .source_map()
         .instructions_at(pc)
         .next()
-        .expect("the source PC must survive normalization");
+        .expect("the source PC must survive subroutine expansion");
     method
         .blocks()
         .find(|block| {
@@ -20,7 +20,7 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
 }
 
 #[test]
-fn normalizes_a_basic_jsr_ret_pair_to_gotos() {
+fn expands_a_basic_jsr_ret_pair_to_gotos() {
     let ir = build(&method(
         [
             (0.into(), Instruction::Jsr(10.into())),
@@ -108,7 +108,7 @@ fn supports_nested_subroutines_and_returns_to_an_ancestor() {
 }
 
 #[test]
-fn normalizes_jsr_w_and_wide_ret() {
+fn expands_jsr_w_and_wide_ret() {
     let ir = method(
         [
             (0.into(), Instruction::JsrW(10.into())),

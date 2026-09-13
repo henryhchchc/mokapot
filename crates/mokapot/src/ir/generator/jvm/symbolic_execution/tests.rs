@@ -8,7 +8,7 @@ use crate::{
         identity::SsaValueId,
         jvm::{
             frame::{Entry, Frame, Position},
-            normalization::Location,
+            subroutine_expansion::Location,
         },
         tests::method,
     },

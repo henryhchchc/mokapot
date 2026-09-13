@@ -1,4 +1,4 @@
-//! Context-sensitive normalization support for legacy JVM subroutines.
+//! Context-sensitive expansion of legacy JVM `jsr`/`ret` subroutines.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -6,14 +6,14 @@ use crate::jvm::code::ProgramCounter;
 
 use crate::ir::generator::error::MokaIRBuildError;
 
-pub(crate) const LOCATION_BUDGET: usize = 1_048_576;
+const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 
 /// An interned legacy-subroutine context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) struct ContextId(u32);
+pub(crate) struct Context(u32);
 
-impl ContextId {
+impl Context {
     const ROOT: Self = Self(0);
 }
 
@@ -22,12 +22,12 @@ impl ContextId {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) enum Location {
     Bytecode {
-        context: ContextId,
+        context: Context,
         pc: ProgramCounter,
     },
     Handler {
         handler_pc: ProgramCounter,
-        context: ContextId,
+        context: Context,
     },
     Unwind,
 }
@@ -35,7 +35,7 @@ pub(crate) enum Location {
 impl Location {
     pub const fn entry(pc: ProgramCounter) -> Self {
         Self::Bytecode {
-            context: ContextId::ROOT,
+            context: Context::ROOT,
             pc,
         }
     }
@@ -47,7 +47,7 @@ impl Location {
         }
     }
 
-    pub const fn context(self) -> Option<ContextId> {
+    pub const fn context(self) -> Option<Context> {
         match self {
             Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),
             Self::Unwind => None,
@@ -58,71 +58,71 @@ impl Location {
 /// The exact call activation represented by a JVM `returnAddress` value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) struct ReturnAddress(ContextId);
+pub(crate) struct ReturnAddress(Context);
 
 #[cfg(test)]
 impl ReturnAddress {
     pub const fn for_test(context: u32) -> Self {
-        Self(ContextId(context))
+        Self(Context(context))
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct CallFrame {
-    parent: ContextId,
+struct Activation {
+    parent: Context,
     call_site: ProgramCounter,
     target: ProgramCounter,
     continuation: ProgramCounter,
 }
 
 #[derive(Debug)]
-pub(crate) struct Normalizer {
-    contexts: Vec<Option<CallFrame>>,
-    interned: BTreeMap<CallFrame, ContextId>,
-    locations: BTreeSet<Location>,
-    returns: BTreeMap<ContextId, ProgramCounter>,
+pub(crate) struct Expander {
+    activations: Vec<Option<Activation>>,
+    contexts_by_activation: BTreeMap<Activation, Context>,
+    expanded_locations: BTreeSet<Location>,
+    return_pcs: BTreeMap<Context, ProgramCounter>,
 }
 
-impl Normalizer {
+impl Expander {
     pub fn new(entry: ProgramCounter) -> Self {
         Self {
-            contexts: vec![None],
-            interned: BTreeMap::new(),
-            locations: BTreeSet::from([Location::entry(entry)]),
-            returns: BTreeMap::new(),
+            activations: vec![None],
+            contexts_by_activation: BTreeMap::new(),
+            expanded_locations: BTreeSet::from([Location::entry(entry)]),
+            return_pcs: BTreeMap::new(),
         }
     }
 
-    pub fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
-        self.locations.insert(location);
-        if self.locations.len() > LOCATION_BUDGET {
+    pub fn register_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+        self.expanded_locations.insert(location);
+        if self.expanded_locations.len() > EXPANDED_LOCATION_LIMIT {
             return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
-                limit: LOCATION_BUDGET,
+                limit: EXPANDED_LOCATION_LIMIT,
             });
         }
         Ok(location)
     }
 
-    pub fn bytecode(
+    pub fn bytecode_location(
         &mut self,
         pc: ProgramCounter,
-        context: ContextId,
+        context: Context,
     ) -> Result<Location, MokaIRBuildError> {
-        self.register(Location::Bytecode { pc, context })
+        self.register_location(Location::Bytecode { pc, context })
     }
 
-    pub fn handler(
+    pub fn handler_location(
         &mut self,
         handler_pc: ProgramCounter,
-        context: ContextId,
+        context: Context,
     ) -> Result<Location, MokaIRBuildError> {
-        self.register(Location::Handler {
+        self.register_location(Location::Handler {
             handler_pc,
             context,
         })
     }
 
-    pub fn enter(
+    pub fn enter_subroutine(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -137,34 +137,37 @@ impl Normalizer {
         };
         let mut cursor = Some(parent);
         while let Some(context) = cursor {
-            let Some(frame) = self.frame(context)? else {
+            let Some(activation) = self.activation(context)? else {
                 break;
             };
-            if frame.target == target {
+            if activation.target == target {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             }
-            cursor = Some(frame.parent);
+            cursor = Some(activation.parent);
         }
-        let frame = CallFrame {
+        let activation = Activation {
             parent,
             call_site,
             target,
             continuation,
         };
-        let context = if let Some(&context) = self.interned.get(&frame) {
+        let context = if let Some(&context) = self.contexts_by_activation.get(&activation) {
             context
         } else {
-            let index = u32::try_from(self.contexts.len()).map_err(|_| {
+            let index = u32::try_from(self.activations.len()).map_err(|_| {
                 MokaIRBuildError::LegacySubroutineExpansionLimit {
-                    limit: LOCATION_BUDGET,
+                    limit: EXPANDED_LOCATION_LIMIT,
                 }
             })?;
-            let context = ContextId(index);
-            self.contexts.push(Some(frame));
-            self.interned.insert(frame, context);
+            let context = Context(index);
+            self.activations.push(Some(activation));
+            self.contexts_by_activation.insert(activation, context);
             context
         };
-        Ok((self.bytecode(target, context)?, ReturnAddress(context)))
+        Ok((
+            self.bytecode_location(target, context)?,
+            ReturnAddress(context),
+        ))
     }
 
     pub fn return_from(
@@ -181,27 +184,27 @@ impl Normalizer {
         };
         let mut cursor = current;
         loop {
-            let frame = self
-                .frame(cursor)?
+            let activation = self
+                .activation(cursor)?
                 .ok_or(MokaIRBuildError::MalformedControlFlow)?;
             if cursor == address.0 {
-                match self.returns.get(&cursor).copied() {
+                match self.return_pcs.get(&cursor).copied() {
                     Some(previous) if previous != return_pc => {
                         return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                     None => {
-                        self.returns.insert(cursor, return_pc);
+                        self.return_pcs.insert(cursor, return_pc);
                     }
                     Some(_) => {}
                 }
-                return self.bytecode(frame.continuation, frame.parent);
+                return self.bytecode_location(activation.continuation, activation.parent);
             }
-            cursor = frame.parent;
+            cursor = activation.parent;
         }
     }
 
-    fn frame(&self, context: ContextId) -> Result<Option<CallFrame>, MokaIRBuildError> {
-        self.contexts
+    fn activation(&self, context: Context) -> Result<Option<Activation>, MokaIRBuildError> {
+        self.activations
             .get(usize::try_from(context.0).map_err(|_| MokaIRBuildError::MalformedControlFlow)?)
             .copied()
             .ok_or(MokaIRBuildError::MalformedControlFlow)

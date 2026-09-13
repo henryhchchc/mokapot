@@ -1,9 +1,9 @@
-//! JVM-specific normalization, symbolic execution, and instruction lifting.
+//! JVM-specific subroutine expansion, symbolic execution, and instruction lifting.
 
 pub(super) mod frame;
 pub(super) mod instruction;
 pub(super) mod lifting;
-pub(super) mod normalization;
+pub(super) mod subroutine_expansion;
 pub(super) mod symbolic_execution;
 
 use crate::{ir::generator::error::MokaIRBuildError, jvm::Method};

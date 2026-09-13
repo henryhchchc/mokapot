@@ -15,7 +15,7 @@ use super::{
 };
 use crate::ir::generator::{
     error::MokaIRBuildError,
-    jvm::{frame::Frame, normalization::Location},
+    jvm::{frame::Frame, subroutine_expansion::Location},
 };
 
 struct State {
@@ -220,9 +220,9 @@ pub(super) fn execute_to_fixpoint(
     #[cfg(test)]
     let mut seen = HashSet::new();
 
-    // Normalization bounds the set of locations, while definition and merge
-    // identities are interned by location. This bounds the symbolic frames the
-    // solver can encounter, but replacement is not monotone; the test-only
+    // Subroutine expansion bounds the set of locations, while definition and
+    // merge identities are interned by location. This bounds the symbolic frames
+    // the solver can encounter, but replacement is not monotone; the test-only
     // fingerprint catches a repeated state if execution changes ever introduce
     // an oscillation.
     while !state.inputs_to_recompute.is_empty() || !state.pending_executions.is_empty() {

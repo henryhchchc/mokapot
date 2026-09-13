@@ -7,7 +7,7 @@ use crate::{
             identity::SsaValueId,
             jvm::{
                 instruction::RegisterInstruction,
-                normalization::{Location, ReturnAddress},
+                subroutine_expansion::{Location, ReturnAddress},
             },
         },
     },

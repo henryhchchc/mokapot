@@ -9,7 +9,7 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            normalization::Location,
+            subroutine_expansion::Location,
             symbolic_execution::{self, FrameMergeSite},
         },
     },

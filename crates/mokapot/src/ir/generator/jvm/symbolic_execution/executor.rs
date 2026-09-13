@@ -11,7 +11,7 @@ use crate::{
                 fallibility::FallibilityContext, lift_register_instruction,
                 successors::build_outgoing_edges,
             },
-            normalization::{Location, Normalizer},
+            subroutine_expansion::{Expander, Location, ReturnAddress},
             symbolic_execution::fact::{Cfg, Node, Value},
             symbolic_execution::solver,
         },
@@ -27,7 +27,7 @@ use crate::{
 pub(crate) struct Executor<'method> {
     pub(super) body: &'method MethodBody,
     fallibility: FallibilityContext,
-    pub(super) normalizer: Normalizer,
+    pub(super) subroutine_expander: Expander,
     pub(super) definition_ids: BTreeMap<Location, SsaValueId>,
     pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
     pub(super) value_id_allocator: ValueIdAllocator,
@@ -125,7 +125,7 @@ impl<'method> Executor<'method> {
         let executor = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
-            normalizer: Normalizer::new(first_pc),
+            subroutine_expander: Expander::new(first_pc),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             value_id_allocator,
@@ -220,8 +220,8 @@ impl<'method> Executor<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer
-            .bytecode(self.next_program_counter(pc)?, context)
+        self.subroutine_expander
+            .bytecode_location(self.next_program_counter(pc)?, context)
     }
 
     pub fn bytecode_location_at(
@@ -232,7 +232,7 @@ impl<'method> Executor<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.bytecode(target, context)
+        self.subroutine_expander.bytecode_location(target, context)
     }
 
     pub fn exception_handler_location(
@@ -243,11 +243,11 @@ impl<'method> Executor<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.handler(handler, context)
+        self.subroutine_expander.handler_location(handler, context)
     }
 
     pub fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
-        self.normalizer.register(Location::Unwind)
+        self.subroutine_expander.register_location(Location::Unwind)
     }
 
     pub fn enter_subroutine(
@@ -255,22 +255,17 @@ impl<'method> Executor<'method> {
         location: Location,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<
-        (
-            Location,
-            crate::ir::generator::jvm::normalization::ReturnAddress,
-        ),
-        MokaIRBuildError,
-    > {
-        self.normalizer.enter(location, target, continuation)
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+        self.subroutine_expander
+            .enter_subroutine(location, target, continuation)
     }
 
     pub fn return_from(
         &mut self,
         location: Location,
-        address: crate::ir::generator::jvm::normalization::ReturnAddress,
+        address: ReturnAddress,
     ) -> Result<Location, MokaIRBuildError> {
-        self.normalizer.return_from(location, address)
+        self.subroutine_expander.return_from(location, address)
     }
 }
 

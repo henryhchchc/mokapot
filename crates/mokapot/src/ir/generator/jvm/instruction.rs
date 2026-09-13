@@ -5,7 +5,7 @@ use crate::{
         expression::{Condition, Expression},
         generator::{
             identity::SsaValueId,
-            jvm::{normalization::Location, symbolic_execution::Value},
+            jvm::{subroutine_expansion::Location, symbolic_execution::Value},
         },
     },
     jvm::code::ProgramCounter,

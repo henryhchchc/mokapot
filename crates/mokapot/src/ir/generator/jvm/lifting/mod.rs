@@ -20,7 +20,7 @@ use crate::{
         jvm::{
             frame::Frame,
             instruction::RegisterInstruction,
-            normalization::Location,
+            subroutine_expansion::Location,
             symbolic_execution::{Executor, Value},
         },
     },

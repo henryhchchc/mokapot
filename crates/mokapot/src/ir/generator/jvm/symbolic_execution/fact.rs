@@ -7,7 +7,7 @@ use crate::ir::{
         jvm::{
             frame::{Frame, Position},
             instruction::RegisterInstruction,
-            normalization::{Location, ReturnAddress},
+            subroutine_expansion::{Location, ReturnAddress},
         },
     },
 };
