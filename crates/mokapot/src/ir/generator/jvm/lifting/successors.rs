@@ -28,15 +28,15 @@ fn build_exception_edges(
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-    let handlers = executor
+    let handlers: Vec<_> = executor
         .body()
         .exception_table
         .iter()
         .filter(|entry| entry.covers(pc))
         .cloned()
-        .collect::<Vec<_>>();
+        .collect();
     let mut edges = Vec::with_capacity(handlers.len() + 1);
-    let mut catches_all = false;
+    let mut has_catch_all = false;
     for entry in handlers {
         let handler = executor.exception_handler_location(location, entry.handler_pc)?;
         let caught = Value::Ssa(executor.caught_exception_id_at(handler)?);
@@ -45,15 +45,15 @@ fn build_exception_edges(
             transfer: ControlTransfer::Exception(entry.catch_type.clone()),
             target_frame: incoming_frame.with_single_stack_entry(Entry::Value(caught)),
         });
-        catches_all = entry
+        has_catch_all = entry
             .catch_type
             .as_ref()
             .is_none_or(|caught_type| caught_type.0.as_ref() == "java/lang/Throwable");
-        if catches_all {
+        if has_catch_all {
             break;
         }
     }
-    if !catches_all {
+    if !has_catch_all {
         edges.push(Edge {
             target: executor.unwind_location()?,
             transfer: ControlTransfer::Unwind,
