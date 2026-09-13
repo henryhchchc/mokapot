@@ -1,11 +1,7 @@
 use crate::{
     ir::generator::{
         error::MokaIRBuildError,
-        jvm::{
-            frame::{Frame, StackOperations},
-            instruction::RegisterInstruction,
-            symbolic_execution::Value,
-        },
+        jvm::{frame::Frame, instruction::RegisterInstruction, symbolic_execution::Value},
     },
     jvm::code::Instruction as JVM,
 };
