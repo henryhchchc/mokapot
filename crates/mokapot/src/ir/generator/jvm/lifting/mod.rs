@@ -2,14 +2,14 @@
 
 mod constants;
 mod control_flow;
-pub(in crate::ir::generator) mod fallibility;
+pub(super) mod fallibility;
 mod locals;
 mod members;
 mod memory;
 mod numeric;
 mod objects;
 mod operations;
-pub(in crate::ir::generator) mod semantics;
+pub(super) mod semantics;
 mod stack;
 
 use crate::{

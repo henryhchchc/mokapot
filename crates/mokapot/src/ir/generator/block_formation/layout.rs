@@ -24,7 +24,7 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub(super) fn discover(analyzed_cfg: &AnalyzedJvmCfg) -> Result<Self, MokaIRBuildError> {
+    pub fn discover(analyzed_cfg: &AnalyzedJvmCfg) -> Result<Self, MokaIRBuildError> {
         let reachable = analyzed_cfg.locations.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
@@ -47,19 +47,19 @@ impl BlockLayout {
         })
     }
 
-    pub(super) const fn entry(&self) -> BlockId {
+    pub const fn entry(&self) -> BlockId {
         self.entry
     }
 
-    pub(super) const fn locations(&self) -> &BTreeMap<BlockId, Vec<Location>> {
+    pub const fn locations(&self) -> &BTreeMap<BlockId, Vec<Location>> {
         &self.locations_by_block
     }
 
-    pub(super) fn block_at(&self, location: Location) -> Option<BlockId> {
+    pub fn block_at(&self, location: Location) -> Option<BlockId> {
         self.location_to_block.get(&location).copied()
     }
 
-    pub(super) fn phi_blocks(
+    pub fn phi_blocks(
         &self,
         phi_values: &BTreeMap<MergeIdentity, SsaValueId>,
     ) -> Result<BTreeMap<SsaValueId, BlockId>, MokaIRBuildError> {
@@ -73,11 +73,11 @@ impl BlockLayout {
             .collect()
     }
 
-    pub(super) fn has_entry_preheader(&self) -> bool {
+    pub fn has_entry_preheader(&self) -> bool {
         self.entry != self.bytecode_entry
     }
 
-    pub(super) const fn bytecode_entry(&self) -> BlockId {
+    pub const fn bytecode_entry(&self) -> BlockId {
         self.bytecode_entry
     }
 }

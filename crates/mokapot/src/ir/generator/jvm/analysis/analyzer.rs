@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Mutable state used only while solving JVM frame facts.
-pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
+pub(crate) struct JvmFrameAnalyzer<'method> {
     pub(super) body: &'method MethodBody,
     fallibility: FallibilityContext,
     pub(super) normalizer: Normalizer,
@@ -37,7 +37,7 @@ pub(in crate::ir::generator) struct JvmFrameAnalyzer<'method> {
 }
 
 impl<'method> JvmFrameAnalyzer<'method> {
-    pub(super) fn transfer(
+    pub fn transfer(
         &mut self,
         location: Location,
         incoming: JvmStackFrame<OperandState>,
@@ -81,13 +81,11 @@ impl<'method> JvmFrameAnalyzer<'method> {
         })
     }
 
-    pub(in crate::ir::generator) const fn body(&self) -> &MethodBody {
+    pub const fn body(&self) -> &MethodBody {
         self.body
     }
 
-    pub(in crate::ir::generator) fn for_method(
-        method: &'method Method,
-    ) -> Result<Self, MokaIRBuildError> {
+    pub fn for_method(method: &'method Method) -> Result<Self, MokaIRBuildError> {
         let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
         let (first_pc, _) = body
             .instructions
@@ -131,7 +129,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(analyzer)
     }
 
-    pub(in crate::ir::generator) fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
+    pub fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
         let locations = self.solve_locations()?;
         let merge_identities = locations
             .values()
@@ -157,7 +155,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         })
     }
 
-    pub(super) fn solve_locations(
+    pub fn solve_locations(
         &mut self,
     ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
         let entry_location = self.entry_location;
@@ -165,14 +163,11 @@ impl<'method> JvmFrameAnalyzer<'method> {
         solver::solve(self, entry_location, initial_frame)
     }
 
-    pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub(in crate::ir::generator) fn definition_at(
-        &mut self,
-        location: Location,
-    ) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
         if !matches!(location, Location::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
@@ -184,7 +179,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(id)
     }
 
-    pub(in crate::ir::generator) fn caught_exception_at(
+    pub fn caught_exception_at(
         &mut self,
         location: Location,
     ) -> Result<SsaValueId, MokaIRBuildError> {
@@ -199,20 +194,14 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(id)
     }
 
-    pub(in crate::ir::generator) fn next_pc_of(
-        &self,
-        pc: ProgramCounter,
-    ) -> Result<ProgramCounter, MokaIRBuildError> {
+    pub fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBuildError> {
         self.body
             .instructions
             .next_pc_of(&pc)
             .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
-    pub(in crate::ir::generator) fn next_location(
-        &mut self,
-        location: Location,
-    ) -> Result<Location, MokaIRBuildError> {
+    pub fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
         let pc = location
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -222,7 +211,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         self.normalizer.bytecode(self.next_pc_of(pc)?, context)
     }
 
-    pub(in crate::ir::generator) fn target_location(
+    pub fn target_location(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -233,7 +222,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         self.normalizer.bytecode(target, context)
     }
 
-    pub(in crate::ir::generator) fn handler_location(
+    pub fn handler_location(
         &mut self,
         location: Location,
         handler: ProgramCounter,
@@ -244,13 +233,11 @@ impl<'method> JvmFrameAnalyzer<'method> {
         self.normalizer.handler(handler, context)
     }
 
-    pub(in crate::ir::generator) fn unwind_location(
-        &mut self,
-    ) -> Result<Location, MokaIRBuildError> {
+    pub fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
         self.normalizer.register(Location::Unwind)
     }
 
-    pub(in crate::ir::generator) fn enter_subroutine(
+    pub fn enter_subroutine(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -265,7 +252,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         self.normalizer.enter(location, target, continuation)
     }
 
-    pub(in crate::ir::generator) fn return_from(
+    pub fn return_from(
         &mut self,
         location: Location,
         address: crate::ir::generator::jvm::normalization::ReturnAddress,

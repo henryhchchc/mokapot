@@ -10,7 +10,7 @@ use crate::ir::{
     generator::{block_formation::JvmBlockGraph, error::MokaIRBuildError, identity::SsaValueId},
 };
 use merge::{MergePlan, collect_phi_candidates};
-pub(in crate::ir::generator) use model::SsaBlock;
+pub(crate) use model::SsaBlock;
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.

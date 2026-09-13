@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(in crate::ir::generator) enum Instruction {
+pub(crate) enum Instruction {
     HandlerEntry,
     Unwind,
     Erased,
@@ -39,7 +39,7 @@ pub(in crate::ir::generator) enum Instruction {
 }
 
 impl Instruction {
-    pub(in crate::ir::generator) const fn is_explicit_transfer(&self) -> bool {
+    pub const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,
             Self::HandlerEntry

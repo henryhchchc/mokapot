@@ -29,11 +29,9 @@ pub use error::MokaIRBuildError;
 pub use jvm::frame::ExecutionError;
 
 use crate::{ir::MokaIRMethod, jvm::Method};
-use jvm::analysis::JvmFrameAnalyzer;
 
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let jvm_frame_analyzer = JvmFrameAnalyzer::for_method(method)?;
-    let analyzed_cfg = jvm_frame_analyzer.analyze()?;
+    let analyzed_cfg = jvm::analyze(method)?;
     let block_graph = block_formation::form(analyzed_cfg)?;
     let ssa_graph = ssa::construct(block_graph)?;
     emission::emit(method, ssa_graph)

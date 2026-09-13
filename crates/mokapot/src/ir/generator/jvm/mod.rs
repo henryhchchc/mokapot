@@ -1,7 +1,15 @@
 //! JVM-specific normalization, frame analysis, and instruction lifting.
 
-pub(in crate::ir::generator) mod analysis;
-pub(in crate::ir::generator) mod frame;
-pub(in crate::ir::generator) mod instruction;
-pub(in crate::ir::generator) mod lifting;
-pub(in crate::ir::generator) mod normalization;
+pub(super) mod analysis;
+pub(super) mod frame;
+pub(super) mod instruction;
+pub(super) mod lifting;
+pub(super) mod normalization;
+
+use crate::{ir::generator::error::MokaIRBuildError, jvm::Method};
+
+use self::analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer};
+
+pub(super) fn analyze(method: &Method) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
+    JvmFrameAnalyzer::for_method(method)?.analyze()
+}

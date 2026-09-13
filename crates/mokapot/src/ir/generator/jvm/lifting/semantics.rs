@@ -67,7 +67,7 @@ fn exception_edges(
     clippy::too_many_lines,
     reason = "all control-flow forms are classified together"
 )]
-pub(in crate::ir::generator) fn outgoing_from(
+pub(crate) fn outgoing_from(
     semantics: &mut JvmFrameAnalyzer<'_>,
     location: Location,
     pre_frame: &JvmStackFrame<OperandState>,

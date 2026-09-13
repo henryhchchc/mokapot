@@ -22,7 +22,7 @@ pub(super) struct MergePlan {
 }
 
 impl MergePlan {
-    pub(super) const fn new(
+    pub const fn new(
         merge_values: BTreeMap<MergeIdentity, SsaValueId>,
         phi_blocks: BTreeMap<SsaValueId, BlockId>,
     ) -> Self {
@@ -32,11 +32,11 @@ impl MergePlan {
         }
     }
 
-    pub(super) fn block_for(&self, value: SsaValueId) -> Option<BlockId> {
+    pub fn block_for(&self, value: SsaValueId) -> Option<BlockId> {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub(super) fn resolve(&self, operand: OperandState) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn resolve(&self, operand: OperandState) -> Result<SsaValueId, MokaIRBuildError> {
         match operand {
             OperandState::Value(value) => Ok(value),
             OperandState::Merged(identity) => self

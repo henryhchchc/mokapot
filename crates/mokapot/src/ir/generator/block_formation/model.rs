@@ -15,7 +15,7 @@ use crate::{
 use std::collections::BTreeMap;
 
 /// Block-level JVM graph consumed by SSA construction.
-pub(in crate::ir::generator) struct JvmBlockGraph {
+pub(crate) struct JvmBlockGraph {
     pub entry: BlockId,
     pub blocks: Vec<JvmBlock>,
     pub phi_blocks: BTreeMap<SsaValueId, BlockId>,
@@ -26,7 +26,7 @@ pub(in crate::ir::generator) struct JvmBlockGraph {
 
 /// One exact outgoing edge from a formed JVM block.
 #[derive(Debug)]
-pub(in crate::ir::generator) struct JvmBlockArm {
+pub(crate) struct JvmBlockArm {
     pub target: BlockId,
     pub transfer: ControlTransfer<OperandState>,
     pub frame: JvmStackFrame<OperandState>,
@@ -34,7 +34,7 @@ pub(in crate::ir::generator) struct JvmBlockArm {
 
 /// A maximal JVM block with exact symbolic operands and outgoing frames.
 #[derive(Debug)]
-pub(in crate::ir::generator) struct JvmBlock {
+pub(crate) struct JvmBlock {
     pub id: BlockId,
     pub entry_frame: JvmStackFrame<OperandState>,
     pub operations: Vec<(ProgramCounter, OperationKind<OperandState>)>,

@@ -15,7 +15,7 @@ use crate::ir::{
 /// A stable identity for a frame value merged at a JVM location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(in crate::ir::generator) struct MergeIdentity {
+pub(crate) struct MergeIdentity {
     pub location: Location,
     pub slot: FrameSlot,
 }
@@ -23,7 +23,7 @@ pub(in crate::ir::generator) struct MergeIdentity {
 /// The abstract state of an operand during JVM frame analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(in crate::ir::generator) enum OperandState {
+pub(crate) enum OperandState {
     Value(#[from] SsaValueId),
     #[display("%return_address")]
     ReturnAddress(#[from] ReturnAddress),
@@ -34,14 +34,14 @@ pub(in crate::ir::generator) enum OperandState {
 }
 
 /// One outgoing edge and its exact symbolic frame.
-pub(in crate::ir::generator) struct JvmOutgoing {
+pub(crate) struct JvmOutgoing {
     pub target: Location,
     pub transfer: ControlTransfer<OperandState>,
     pub frame: JvmStackFrame<OperandState>,
 }
 
 /// Completed abstract-execution facts for one reachable JVM location.
-pub(in crate::ir::generator) struct AnalyzedLocation {
+pub(crate) struct AnalyzedLocation {
     pub incoming: JvmStackFrame<OperandState>,
     pub instruction: Instruction,
     pub outgoing: Vec<JvmOutgoing>,
@@ -49,7 +49,7 @@ pub(in crate::ir::generator) struct AnalyzedLocation {
 }
 
 /// Reachable JVM locations and abstract control-flow facts.
-pub(in crate::ir::generator) struct AnalyzedJvmCfg {
+pub(crate) struct AnalyzedJvmCfg {
     pub entry_location: Location,
     /// The original frame entering the method.
     pub initial_frame: JvmStackFrame<OperandState>,

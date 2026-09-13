@@ -14,20 +14,20 @@ use crate::ir::generator::jvm::frame::{entry::Entry, error::ExecutionError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(in crate::ir::generator) enum FrameSlot {
+pub(crate) enum FrameSlot {
     Local(usize),
     Stack(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct JvmStackFrame<V> {
+pub(crate) struct JvmStackFrame<V> {
     max_stack: u16,
     local_variables: Box<[Entry<V>]>,
     operand_stack: Vec<Entry<V>>,
 }
 
 impl<V> JvmStackFrame<V> {
-    pub(in crate::ir::generator) fn erase_values(mut self) -> Self {
+    pub fn erase_values(mut self) -> Self {
         for entry in &mut self.local_variables {
             if matches!(entry, Entry::Value(_) | Entry::UninitializedLocal) {
                 *entry = Entry::UninitializedLocal;
@@ -37,7 +37,7 @@ impl<V> JvmStackFrame<V> {
         self
     }
 
-    pub(in crate::ir::generator) fn values(&self) -> impl Iterator<Item = &V> {
+    pub fn values(&self) -> impl Iterator<Item = &V> {
         self.local_variables
             .iter()
             .chain(&self.operand_stack)
@@ -47,7 +47,7 @@ impl<V> JvmStackFrame<V> {
             })
     }
 
-    pub(in crate::ir::generator) fn join_assign_values_with(
+    pub fn join_assign_values_with(
         &mut self,
         other: Self,
         mut join_values: impl FnMut(FrameSlot, &mut V, V) -> bool,
@@ -78,7 +78,7 @@ impl<V> JvmStackFrame<V> {
 }
 
 impl<V: Clone> JvmStackFrame<V> {
-    pub(crate) fn with_inputs(
+    pub fn with_inputs(
         desc: &MethodDescriptor,
         max_locals: u16,
         max_stack: u16,
@@ -97,13 +97,13 @@ impl<V: Clone> JvmStackFrame<V> {
         })
     }
 
-    pub(crate) fn pop_raw(&mut self) -> Result<Entry<V>, ExecutionError> {
+    pub fn pop_raw(&mut self) -> Result<Entry<V>, ExecutionError> {
         self.operand_stack
             .pop()
             .ok_or(ExecutionError::StackUnderflow)
     }
 
-    pub(crate) fn push_raw(&mut self, value: Entry<V>) -> Result<(), ExecutionError> {
+    pub fn push_raw(&mut self, value: Entry<V>) -> Result<(), ExecutionError> {
         let stack_size =
             u16::try_from(self.operand_stack.len()).expect("The stack size should be within u16");
         if stack_size >= self.max_stack {
@@ -114,7 +114,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn pop_value<const SLOT: bool>(&mut self) -> Result<V, ExecutionError> {
+    pub fn pop_value<const SLOT: bool>(&mut self) -> Result<V, ExecutionError> {
         let value = match self.pop_raw()? {
             Entry::Value(it) => Ok(it),
             Entry::Top => Err(ExecutionError::ValueMismatch),
@@ -134,17 +134,14 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(value)
     }
 
-    pub(crate) fn push_value<const SLOT: bool>(&mut self, value: V) -> Result<(), ExecutionError> {
+    pub fn push_value<const SLOT: bool>(&mut self, value: V) -> Result<(), ExecutionError> {
         if SLOT == DUAL_SLOT {
             self.push_raw(Entry::Top)?;
         }
         self.push_raw(Entry::Value(value))
     }
 
-    pub(crate) fn pop_args(
-        &mut self,
-        descriptor: &MethodDescriptor,
-    ) -> Result<Vec<V>, ExecutionError> {
+    pub fn pop_args(&mut self, descriptor: &MethodDescriptor) -> Result<Vec<V>, ExecutionError> {
         let mut args: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -155,11 +152,7 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(args)
     }
 
-    pub(crate) fn typed_push(
-        &mut self,
-        value_type: &FieldType,
-        value: V,
-    ) -> Result<(), ExecutionError> {
+    pub fn typed_push(&mut self, value_type: &FieldType, value: V) -> Result<(), ExecutionError> {
         if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
             self.push_value::<DUAL_SLOT>(value)
         } else {
@@ -167,7 +160,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn typed_pop(&mut self, value_type: &FieldType) -> Result<V, ExecutionError> {
+    pub fn typed_pop(&mut self, value_type: &FieldType) -> Result<V, ExecutionError> {
         if let FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) = value_type {
             self.pop_value::<DUAL_SLOT>()
         } else {
@@ -175,7 +168,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn get_local<const SLOT: bool>(&self, idx: u16) -> Result<V, ExecutionError> {
+    pub fn get_local<const SLOT: bool>(&self, idx: u16) -> Result<V, ExecutionError> {
         let idx = usize::from(idx);
         let lower_slot = self
             .local_variables
@@ -201,7 +194,7 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(value)
     }
 
-    pub(crate) fn set_local<const SLOT: bool>(
+    pub fn set_local<const SLOT: bool>(
         &mut self,
         idx: u16,
         value: V,
@@ -224,11 +217,11 @@ impl<V: Clone> JvmStackFrame<V> {
         Ok(())
     }
 
-    pub(crate) fn same_frame(&self) -> Self {
+    pub fn same_frame(&self) -> Self {
         self.clone()
     }
 
-    pub(crate) fn same_locals_1_stack_item_frame(&self, stack_value: Entry<V>) -> Self {
+    pub fn same_locals_1_stack_item_frame(&self, stack_value: Entry<V>) -> Self {
         let mut operand_stack = Vec::with_capacity(self.max_stack.into());
 
         operand_stack.push(stack_value);
@@ -239,7 +232,7 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn same_locals_empty_stack_frame(&self) -> Self {
+    pub fn same_locals_empty_stack_frame(&self) -> Self {
         Self {
             max_stack: self.max_stack,
             local_variables: self.local_variables.clone(),
@@ -247,11 +240,11 @@ impl<V: Clone> JvmStackFrame<V> {
         }
     }
 
-    pub(crate) fn local_variables(&self) -> &[Entry<V>] {
+    pub fn local_variables(&self) -> &[Entry<V>] {
         &self.local_variables
     }
 
-    pub(crate) fn operand_stack(&self) -> &[Entry<V>] {
+    pub fn operand_stack(&self) -> &[Entry<V>] {
         &self.operand_stack
     }
 }

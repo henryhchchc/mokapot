@@ -11,7 +11,7 @@ pub(crate) enum Entry<V> {
 }
 
 impl<V> Entry<V> {
-    pub(super) fn join_assign_with(
+    pub fn join_assign_with(
         &mut self,
         other: Self,
         join_values: impl FnOnce(&mut V, V) -> bool,

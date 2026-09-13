@@ -33,21 +33,21 @@ pub(crate) enum Location {
 }
 
 impl Location {
-    pub(crate) const fn entry(pc: ProgramCounter) -> Self {
+    pub const fn entry(pc: ProgramCounter) -> Self {
         Self::Bytecode {
             context: ContextId::ROOT,
             pc,
         }
     }
 
-    pub(crate) const fn source_pc(self) -> Option<ProgramCounter> {
+    pub const fn source_pc(self) -> Option<ProgramCounter> {
         match self {
             Self::Bytecode { pc, .. } => Some(pc),
             Self::Handler { .. } | Self::Unwind => None,
         }
     }
 
-    pub(crate) const fn context(self) -> Option<ContextId> {
+    pub const fn context(self) -> Option<ContextId> {
         match self {
             Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),
             Self::Unwind => None,
@@ -62,7 +62,7 @@ pub(crate) struct ReturnAddress(ContextId);
 
 #[cfg(test)]
 impl ReturnAddress {
-    pub(crate) const fn for_test(context: u32) -> Self {
+    pub const fn for_test(context: u32) -> Self {
         Self(ContextId(context))
     }
 }
@@ -84,7 +84,7 @@ pub(crate) struct Normalizer {
 }
 
 impl Normalizer {
-    pub(crate) fn new(entry: ProgramCounter) -> Self {
+    pub fn new(entry: ProgramCounter) -> Self {
         Self {
             contexts: vec![None],
             interned: BTreeMap::new(),
@@ -93,7 +93,7 @@ impl Normalizer {
         }
     }
 
-    pub(crate) fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+    pub fn register(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
         self.locations.insert(location);
         if self.locations.len() > LOCATION_BUDGET {
             return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
@@ -103,7 +103,7 @@ impl Normalizer {
         Ok(location)
     }
 
-    pub(crate) fn bytecode(
+    pub fn bytecode(
         &mut self,
         pc: ProgramCounter,
         context: ContextId,
@@ -111,7 +111,7 @@ impl Normalizer {
         self.register(Location::Bytecode { pc, context })
     }
 
-    pub(crate) fn handler(
+    pub fn handler(
         &mut self,
         handler_pc: ProgramCounter,
         context: ContextId,
@@ -122,7 +122,7 @@ impl Normalizer {
         })
     }
 
-    pub(crate) fn enter(
+    pub fn enter(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -167,7 +167,7 @@ impl Normalizer {
         Ok((self.bytecode(target, context)?, ReturnAddress(context)))
     }
 
-    pub(crate) fn return_from(
+    pub fn return_from(
         &mut self,
         location: Location,
         address: ReturnAddress,

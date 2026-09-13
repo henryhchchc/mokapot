@@ -8,7 +8,7 @@ mod model;
 mod tests;
 
 pub(super) use model::JvmBlockGraph;
-pub(in crate::ir::generator) use model::{JvmBlock, JvmBlockArm};
+pub(crate) use model::{JvmBlock, JvmBlockArm};
 
 use crate::ir::generator::{error::MokaIRBuildError, jvm::analysis::AnalyzedJvmCfg};
 
