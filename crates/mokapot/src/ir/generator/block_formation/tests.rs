@@ -6,9 +6,8 @@ use crate::{
         generator::{
             identity::SsaValueId,
             jvm::{
-                analysis::OperandState,
-                instruction::Instruction,
-                normalization::{Location, ReturnAddress},
+                instruction::RegisterInstruction,
+                subroutine_expansion::{Location, ReturnAddress},
             },
         },
     },
@@ -18,12 +17,16 @@ use crate::{
 #[test]
 fn pseudo_and_legacy_instructions_become_semantic_gotos() {
     let instructions = [
-        Instruction::HandlerEntry,
-        Instruction::Erased,
-        Instruction::Subroutine {
+        RegisterInstruction::HandlerEntry,
+        RegisterInstruction::Erased,
+        RegisterInstruction::Subroutine {
             target: Location::Unwind,
         },
-        Instruction::SubroutineReturn(OperandState::ReturnAddress(ReturnAddress::for_test(0))),
+        RegisterInstruction::SubroutineReturn(
+            crate::ir::generator::jvm::symbolic_execution::Value::ReturnAddress(
+                ReturnAddress::for_test(0),
+            ),
+        ),
     ];
 
     for instruction in instructions {
@@ -37,7 +40,7 @@ fn pseudo_and_legacy_instructions_become_semantic_gotos() {
 fn fallible_definition_becomes_an_operation_and_terminator() {
     let value = SsaValueId::new(7);
     let (operation, terminator) = classify_block_end(
-        Instruction::Definition {
+        RegisterInstruction::Definition {
             value,
             expr: Expression::Const(ConstantValue::Integer(1)),
         },
@@ -47,7 +50,7 @@ fn fallible_definition_becomes_an_operation_and_terminator() {
     assert!(matches!(
         operation,
         Some(OperationKind::Definition {
-            value: OperandState::Value(actual),
+            value: crate::ir::generator::jvm::symbolic_execution::Value::Ssa(actual),
             ..
         }) if actual == value
     ));

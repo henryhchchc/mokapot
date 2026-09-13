@@ -7,23 +7,23 @@ mod simplify;
 
 use crate::ir::{
     BlockId,
-    generator::{block_formation::JvmBlockGraph, error::MokaIRBuildError, identity::SsaValueId},
+    generator::{block_formation, error::MokaIRBuildError, identity::SsaValueId},
 };
 use merge::{MergePlan, collect_phi_candidates};
-pub(crate) use model::SsaBlock;
+pub(crate) use model::Block;
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.
-pub(super) struct SsaGraph {
+pub(super) struct Graph {
     pub entry: BlockId,
-    pub blocks: Vec<SsaBlock>,
+    pub blocks: Vec<Block>,
     pub this_value: Option<SsaValueId>,
     pub parameter_values: Vec<SsaValueId>,
 }
 
 /// Collects and simplifies phis, then resolves frame operands into scalar blocks.
-pub(super) fn construct(graph: JvmBlockGraph) -> Result<SsaGraph, MokaIRBuildError> {
-    let JvmBlockGraph {
+pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, MokaIRBuildError> {
+    let block_formation::Graph {
         entry,
         blocks,
         phi_blocks,
@@ -36,7 +36,7 @@ pub(super) fn construct(graph: JvmBlockGraph) -> Result<SsaGraph, MokaIRBuildErr
     let simplified =
         simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
     let blocks = finalization::finalize(blocks, &merge_plan, simplified)?;
-    Ok(SsaGraph {
+    Ok(Graph {
         entry,
         blocks,
         this_value,

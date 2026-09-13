@@ -4,15 +4,15 @@ use super::*;
 fn switch_retains_parallel_successor_arms() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad0),
+            (0, Instruction::ILoad0),
             (
-                1.into(),
+                1,
                 Instruction::LookupSwitch {
                     default: 10.into(),
                     match_targets: BTreeMap::from([(1, 10.into()), (2, 10.into())]),
                 },
             ),
-            (10.into(), Instruction::Return),
+            (10, Instruction::Return),
         ],
         "(I)V",
         vec![],
@@ -56,17 +56,17 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     ];
     let method = method(
         [
-            (0.into(), Instruction::AConstNull),
+            (0, Instruction::AConstNull),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (2.into(), Instruction::Pop),
-            (3.into(), Instruction::Return),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::Return),
-            (20.into(), Instruction::AStore0),
-            (21.into(), Instruction::Return),
+            (2, Instruction::Pop),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Return),
+            (20, Instruction::AStore0),
+            (21, Instruction::Return),
         ],
         "()V",
         exception_table,
@@ -97,13 +97,13 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
 fn normally_reachable_handler_still_starts_a_block() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
+            (0, Instruction::ALoad0),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/Throwable".parse().unwrap()),
             ),
-            (2.into(), Instruction::AStore1),
-            (3.into(), Instruction::Return),
+            (2, Instruction::AStore1),
+            (3, Instruction::Return),
         ],
         "(Ljava/lang/Throwable;)V",
         vec![ExceptionTableEntry {
@@ -143,10 +143,7 @@ fn normally_reachable_handler_still_starts_a_block() {
 #[test]
 fn throw_is_a_source_backed_terminator() {
     let method = method(
-        [
-            (0.into(), Instruction::ALoad0),
-            (1.into(), Instruction::AThrow),
-        ],
+        [(0, Instruction::ALoad0), (1, Instruction::AThrow)],
         "(Ljava/lang/Throwable;)V",
         vec![],
     );

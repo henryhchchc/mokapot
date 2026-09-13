@@ -1,15 +1,16 @@
 //! Resolves formed JVM blocks into scalar SSA blocks.
 use std::collections::BTreeMap;
 
+use super::model;
 use crate::ir::{
     BlockId, TryMapValues,
     generator::{
-        block_formation::{JvmBlock, JvmBlockArm},
+        block_formation,
         error::MokaIRBuildError,
         identity::SsaValueId,
         ssa::{
             merge::MergePlan,
-            model::{SsaBlock, SsaPhi, SsaSuccessor},
+            model::{Phi, Successor},
             simplify::SimplifiedPhis,
         },
     },
@@ -18,10 +19,10 @@ use crate::ir::{
 type PhiCandidate = (SsaValueId, Vec<(BlockId, SsaValueId)>);
 
 pub(super) fn finalize(
-    blocks: Vec<JvmBlock>,
+    blocks: Vec<block_formation::Block>,
     merge_plan: &MergePlan,
     simplified: SimplifiedPhis,
-) -> Result<Vec<SsaBlock>, MokaIRBuildError> {
+) -> Result<Vec<model::Block>, MokaIRBuildError> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
     let canonical = |value| {
         simplified
@@ -57,12 +58,12 @@ pub(super) fn finalize(
     }
 }
 fn finalize_block(
-    block: JvmBlock,
+    block: block_formation::Block,
     phis: Vec<PhiCandidate>,
     merge_plan: &MergePlan,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> Result<SsaBlock, MokaIRBuildError> {
-    let JvmBlock {
+) -> Result<model::Block, MokaIRBuildError> {
+    let block_formation::Block {
         id,
         entry_frame: _,
         operations,
@@ -75,7 +76,7 @@ fn finalize_block(
     let caught_exception = caught_exception.map(canonical);
     let phis = phis
         .into_iter()
-        .map(|(value, inputs)| SsaPhi {
+        .map(|(value, inputs)| Phi {
             value: canonical(value),
             inputs: inputs
                 .into_iter()
@@ -95,19 +96,19 @@ fn finalize_block(
     let successors = arms
         .into_iter()
         .map(
-            |JvmBlockArm {
+            |block_formation::Arm {
                  target,
                  transfer,
                  frame: _,
              }| {
-                Ok(SsaSuccessor {
+                Ok(Successor {
                     target,
                     transfer: transfer.try_map_values(&resolve)?,
                 })
             },
         )
         .collect::<Result<_, MokaIRBuildError>>()?;
-    Ok(SsaBlock {
+    Ok(model::Block {
         id,
         caught_exception,
         phis,

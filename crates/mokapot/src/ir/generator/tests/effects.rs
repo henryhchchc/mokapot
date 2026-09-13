@@ -4,11 +4,11 @@ use super::*;
 fn array_write_is_an_effect_without_a_definition() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
-            (1.into(), Instruction::ILoad1),
-            (2.into(), Instruction::ILoad2),
-            (3.into(), Instruction::IAStore),
-            (4.into(), Instruction::Return),
+            (0, Instruction::ALoad0),
+            (1, Instruction::ILoad1),
+            (2, Instruction::ILoad2),
+            (3, Instruction::IAStore),
+            (4, Instruction::Return),
         ],
         "([III)V",
         vec![],
@@ -36,11 +36,11 @@ fn array_write_is_an_effect_without_a_definition() {
 fn monitor_operations_are_effects_without_definitions() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
-            (1.into(), Instruction::MonitorEnter),
-            (2.into(), Instruction::ALoad0),
-            (3.into(), Instruction::MonitorExit),
-            (4.into(), Instruction::Return),
+            (0, Instruction::ALoad0),
+            (1, Instruction::MonitorEnter),
+            (2, Instruction::ALoad0),
+            (3, Instruction::MonitorExit),
+            (4, Instruction::Return),
         ],
         "(Ljava/lang/Object;)V",
         vec![],
