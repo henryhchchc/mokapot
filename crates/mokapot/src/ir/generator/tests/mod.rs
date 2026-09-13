@@ -8,16 +8,24 @@ use crate::{
     },
     jvm::{
         Method,
-        code::{ExceptionTableEntry, Instruction, InstructionList, MethodBody, ProgramCounter},
+        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
         method,
     },
 };
 
-pub(super) fn method(
-    instructions: impl IntoIterator<Item = (ProgramCounter, Instruction)>,
+pub(super) fn method<I, PC>(
+    instructions: I,
     descriptor: &str,
     exception_table: Vec<ExceptionTableEntry>,
-) -> Method {
+) -> Method
+where
+    I: IntoIterator<Item = (PC, Instruction)>,
+    PC: Into<ProgramCounter>,
+{
+    let instructions = instructions
+        .into_iter()
+        .map(|(pc, inst)| (pc.into(), inst))
+        .collect();
     Method {
         access_flags: method::AccessFlags::PUBLIC | method::AccessFlags::STATIC,
         name: "test".to_owned(),
@@ -26,7 +34,7 @@ pub(super) fn method(
         body: Some(MethodBody {
             max_stack: 4,
             max_locals: 4,
-            instructions: InstructionList::from_iter(instructions),
+            instructions,
             exception_table,
             line_number_table: None,
             local_variable_table: None,

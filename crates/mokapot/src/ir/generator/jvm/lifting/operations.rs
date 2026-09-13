@@ -1,39 +1,34 @@
 use crate::ir::{
-    expression::{Conversion, Expression, MathOperation},
+    expression::{Conversion, MathOperation},
     generator::{
         error::MokaIRBuildError,
         identity::SsaValueId,
-        jvm::{analysis::OperandState, frame::JvmStackFrame, instruction::Instruction},
+        jvm::{frame::Frame, instruction::RegisterInstruction, symbolic_execution::Value},
     },
 };
 
 #[inline]
-pub(super) fn conversion_op<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
-    def: SsaValueId,
-    conversion: impl FnOnce(OperandState) -> Conversion<OperandState>,
-) -> Result<Instruction, MokaIRBuildError> {
+pub(super) fn lift_conversion<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
+    frame: &mut Frame<Value>,
+    value: SsaValueId,
+    conversion: impl FnOnce(Value) -> Conversion<Value>,
+) -> Result<RegisterInstruction, MokaIRBuildError> {
     let operand = frame.pop_value::<OPERAND_SLOT>()?;
-    frame.push_value::<RESULT_SLOT>(def.into())?;
-    Ok(Instruction::Definition {
-        value: def,
-        expr: Expression::Conversion(conversion(operand)),
-    })
+    frame.push_value::<RESULT_SLOT>(value.into())?;
+    let expr = conversion(operand).into();
+    Ok(RegisterInstruction::Definition { value, expr })
 }
 
 #[inline]
-pub(super) fn binary_op_math<const SLOT: bool>(
-    frame: &mut JvmStackFrame<OperandState>,
-    def_id: SsaValueId,
-    math: impl FnOnce(OperandState, OperandState) -> MathOperation<OperandState>,
-) -> Result<Instruction, MokaIRBuildError> {
+pub(super) fn lift_binary_math<const SLOT: bool>(
+    frame: &mut Frame<Value>,
+    value: SsaValueId,
+    math: impl FnOnce(Value, Value) -> MathOperation<Value>,
+) -> Result<RegisterInstruction, MokaIRBuildError> {
     let rhs = frame.pop_value::<SLOT>()?;
     let lhs = frame.pop_value::<SLOT>()?;
-    frame.push_value::<SLOT>(def_id.into())?;
+    frame.push_value::<SLOT>(value.into())?;
 
-    let expr = Expression::Math(math(lhs, rhs));
-    Ok(Instruction::Definition {
-        value: def_id,
-        expr,
-    })
+    let expr = math(lhs, rhs).into();
+    Ok(RegisterInstruction::Definition { value, expr })
 }

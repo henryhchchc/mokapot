@@ -4,18 +4,18 @@ use super::*;
 fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
+            (0, Instruction::ALoad0),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (2.into(), Instruction::Pop),
-            (3.into(), Instruction::ALoad0),
+            (2, Instruction::Pop),
+            (3, Instruction::ALoad0),
             (
-                4.into(),
+                4,
                 Instruction::CheckCast("java/lang/Integer".parse().unwrap()),
             ),
-            (5.into(), Instruction::AReturn),
+            (5, Instruction::AReturn),
         ],
         "(Ljava/lang/Object;)Ljava/lang/Object;",
         vec![],
@@ -63,10 +63,10 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
 fn throw_has_only_ordered_exceptional_outcomes() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
-            (1.into(), Instruction::AThrow),
-            (10.into(), Instruction::AStore1),
-            (11.into(), Instruction::Return),
+            (0, Instruction::ALoad0),
+            (1, Instruction::AThrow),
+            (10, Instruction::AStore1),
+            (11, Instruction::Return),
         ],
         "(Ljava/lang/Throwable;)V",
         vec![ExceptionTableEntry {

@@ -4,13 +4,13 @@ use super::*;
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
+            (0, Instruction::ALoad0),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (2.into(), Instruction::AStore1),
-            (3.into(), Instruction::Return),
+            (2, Instruction::AStore1),
+            (3, Instruction::Return),
         ],
         "(Ljava/lang/Object;)V",
         vec![ExceptionTableEntry {
@@ -67,15 +67,15 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
 fn exceptional_state_excludes_the_fallible_result() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
+            (0, Instruction::ALoad0),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (2.into(), Instruction::AReturn),
-            (10.into(), Instruction::AStore1),
-            (11.into(), Instruction::ALoad0),
-            (12.into(), Instruction::AReturn),
+            (2, Instruction::AReturn),
+            (10, Instruction::AStore1),
+            (11, Instruction::ALoad0),
+            (12, Instruction::AReturn),
         ],
         "(Ljava/lang/Object;)Ljava/lang/Object;",
         vec![ExceptionTableEntry {

@@ -5,14 +5,12 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::fact::{AnalyzedJvmCfg, AnalyzedLocation, OperandState},
-            analysis::solver,
-            frame::JvmStackFrame,
-            instruction::Instruction,
-            lifting::{
-                fallibility::FallibilityContext, lift_instruction, semantics::outgoing_from,
-            },
-            normalization::{Location, Normalizer},
+            frame::Frame,
+            instruction::RegisterInstruction,
+            lifting::{fallibility::FallibilityContext, successors::build_outgoing_edges},
+            subroutine_expansion::{Expander, Location, ReturnAddress},
+            symbolic_execution::fact::{Cfg, Node, Value},
+            symbolic_execution::solver,
         },
     },
     jvm::{
@@ -22,62 +20,69 @@ use crate::{
     },
 };
 
-/// Mutable state used only while solving JVM frame facts.
-pub(crate) struct JvmFrameAnalyzer<'method> {
-    pub(super) body: &'method MethodBody,
+/// Mutable state used only while performing symbolic execution.
+pub(crate) struct Executor<'method> {
+    body: &'method MethodBody,
     fallibility: FallibilityContext,
-    pub(super) normalizer: Normalizer,
-    pub(super) definition_ids: BTreeMap<Location, SsaValueId>,
-    pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    pub(super) value_id_allocator: ValueIdAllocator,
-    this_value: Option<SsaValueId>,
+    subroutine_expander: Expander,
+    definition_ids: BTreeMap<Location, SsaValueId>,
+    caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    value_id_allocator: ValueIdAllocator,
+    receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
     entry_location: Location,
-    initial_frame: JvmStackFrame<OperandState>,
+    initial_frame: Frame<Value>,
 }
 
-impl<'method> JvmFrameAnalyzer<'method> {
-    pub fn transfer(
+impl<'method> Executor<'method> {
+    pub fn execute_location(
         &mut self,
         location: Location,
-        incoming: JvmStackFrame<OperandState>,
-    ) -> Result<AnalyzedLocation, MokaIRBuildError> {
-        let (instruction, outgoing) = match location {
+        incoming_frame: Frame<Value>,
+    ) -> Result<Node, MokaIRBuildError> {
+        let (instruction, outgoing_edges) = match location {
             Location::Handler { .. } => {
-                let instruction = Instruction::HandlerEntry;
-                let normal_frame = incoming.same_frame();
-                let outgoing =
-                    outgoing_from(self, location, &incoming, normal_frame, &instruction, false)?;
-                (instruction, outgoing)
+                let instruction = RegisterInstruction::HandlerEntry;
+                let normal_frame = incoming_frame.clone();
+                let outgoing_edges = build_outgoing_edges(
+                    self,
+                    location,
+                    &incoming_frame,
+                    normal_frame,
+                    &instruction,
+                    false,
+                )?;
+                (instruction, outgoing_edges)
             }
-            Location::Unwind => (Instruction::Unwind, Vec::new()),
+            Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
-                let mut normal_frame = incoming.same_frame();
+                let mut normal_frame = incoming_frame.clone();
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
                     .ok_or(MokaIRBuildError::MalformedControlFlow)?
                     .clone();
-                let fallible = self.fallibility.is_synchronously_fallible(&jvm_instruction);
+                let can_throw_synchronously =
+                    self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
-                    lift_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
-                let outgoing = outgoing_from(
+                    self.lift_register_instruction(&jvm_instruction, location, &mut normal_frame)?;
+                let outgoing_edges = build_outgoing_edges(
                     self,
                     location,
-                    &incoming,
+                    &incoming_frame,
                     normal_frame,
                     &instruction,
-                    fallible,
+                    can_throw_synchronously,
                 )?;
-                (instruction, outgoing)
+                (instruction, outgoing_edges)
             }
         };
 
-        Ok(AnalyzedLocation {
-            incoming,
+        Ok(Node {
+            incoming_frame,
             instruction,
-            outgoing,
-            caught_exception: self.caught_exception_ids.get(&location).copied(),
+            outgoing_edges,
+            caught_exception_value: self.caught_exception_ids.get(&location).copied(),
         })
     }
 
@@ -92,7 +97,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
             .entry_point()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let mut value_id_allocator = ValueIdAllocator::default();
-        let this_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
+        let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
             .then(|| value_id_allocator.new_value_id())
             .transpose()?;
         let parameter_values: Vec<SsaValueId> = method
@@ -104,70 +109,68 @@ impl<'method> JvmFrameAnalyzer<'method> {
         let frame_parameters = parameter_values
             .iter()
             .copied()
-            .map(OperandState::Value)
+            .map(Value::Ssa)
             .collect::<Vec<_>>();
-        let initial_frame = JvmStackFrame::with_inputs(
+        let initial_frame = Frame::for_method_entry(
             &method.descriptor,
             body.max_locals,
             body.max_stack,
-            this_value.map(OperandState::Value),
+            receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
         let entry_location = Location::entry(first_pc);
-        let analyzer = Self {
+        let executor = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
-            normalizer: Normalizer::new(first_pc),
+            subroutine_expander: Expander::new(first_pc),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             value_id_allocator,
-            this_value,
+            receiver_value,
             parameter_values,
             entry_location,
             initial_frame,
         };
-        Ok(analyzer)
+        Ok(executor)
     }
 
-    pub fn analyze(mut self) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-        let locations = self.solve_locations()?;
-        let merge_identities = locations
+    pub fn execute(mut self) -> Result<Cfg, MokaIRBuildError> {
+        let nodes = self.execute_reachable_locations()?;
+        let merge_identities = nodes
             .values()
-            .flat_map(|location| location.incoming.values())
+            .flat_map(|node| node.incoming_frame.iter_values())
             .filter_map(|value| match value {
-                OperandState::Merged(identity) => Some(*identity),
-                OperandState::Value(_) | OperandState::ReturnAddress(_) | OperandState::Invalid => {
-                    None
-                }
+                Value::Merged(identity) => Some(identity.to_owned()),
+                Value::Ssa(_) | Value::ReturnAddress(_) | Value::Invalid => None,
             })
             .collect::<BTreeSet<_>>();
         let phi_values = merge_identities
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        Ok(AnalyzedJvmCfg {
+        Ok(Cfg {
             entry_location: self.entry_location,
             initial_frame: self.initial_frame,
-            locations,
+            nodes,
             phi_values,
-            this_value: self.this_value,
+            receiver_value: self.receiver_value,
             parameter_values: self.parameter_values,
         })
     }
 
-    pub fn solve_locations(
+    pub fn execute_reachable_locations(
         &mut self,
-    ) -> Result<BTreeMap<Location, AnalyzedLocation>, MokaIRBuildError> {
+    ) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
         let entry_location = self.entry_location;
         let initial_frame = self.initial_frame.clone();
-        solver::solve(self, entry_location, initial_frame)
+        solver::execute_to_fixpoint(self, entry_location, initial_frame)
     }
 
     pub fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub fn definition_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn definition_id_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
         if !matches!(location, Location::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
@@ -179,7 +182,7 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(id)
     }
 
-    pub fn caught_exception_at(
+    pub fn caught_exception_id_at(
         &mut self,
         location: Location,
     ) -> Result<SsaValueId, MokaIRBuildError> {
@@ -194,24 +197,31 @@ impl<'method> JvmFrameAnalyzer<'method> {
         Ok(id)
     }
 
-    pub fn next_pc_of(&self, pc: ProgramCounter) -> Result<ProgramCounter, MokaIRBuildError> {
+    pub fn next_program_counter(
+        &self,
+        pc: ProgramCounter,
+    ) -> Result<ProgramCounter, MokaIRBuildError> {
         self.body
             .instructions
             .next_pc_of(&pc)
             .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
-    pub fn next_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+    pub fn fallthrough_location(
+        &mut self,
+        location: Location,
+    ) -> Result<Location, MokaIRBuildError> {
         let pc = location
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.bytecode(self.next_pc_of(pc)?, context)
+        self.subroutine_expander
+            .bytecode_location(self.next_program_counter(pc)?, context)
     }
 
-    pub fn target_location(
+    pub fn bytecode_location_at(
         &mut self,
         location: Location,
         target: ProgramCounter,
@@ -219,10 +229,10 @@ impl<'method> JvmFrameAnalyzer<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.bytecode(target, context)
+        self.subroutine_expander.bytecode_location(target, context)
     }
 
-    pub fn handler_location(
+    pub fn exception_handler_location(
         &mut self,
         location: Location,
         handler: ProgramCounter,
@@ -230,11 +240,11 @@ impl<'method> JvmFrameAnalyzer<'method> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.normalizer.handler(handler, context)
+        self.subroutine_expander.handler_location(handler, context)
     }
 
     pub fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
-        self.normalizer.register(Location::Unwind)
+        self.subroutine_expander.register_location(Location::Unwind)
     }
 
     pub fn enter_subroutine(
@@ -242,22 +252,17 @@ impl<'method> JvmFrameAnalyzer<'method> {
         location: Location,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<
-        (
-            Location,
-            crate::ir::generator::jvm::normalization::ReturnAddress,
-        ),
-        MokaIRBuildError,
-    > {
-        self.normalizer.enter(location, target, continuation)
+    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+        self.subroutine_expander
+            .enter_subroutine(location, target, continuation)
     }
 
     pub fn return_from(
         &mut self,
         location: Location,
-        address: crate::ir::generator::jvm::normalization::ReturnAddress,
+        address: ReturnAddress,
     ) -> Result<Location, MokaIRBuildError> {
-        self.normalizer.return_from(location, address)
+        self.subroutine_expander.return_from(location, address)
     }
 }
 
@@ -274,5 +279,51 @@ impl ValueIdAllocator {
             .checked_add(1)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::generator::{jvm::subroutine_expansion::Location, tests::method},
+        jvm::code::Instruction as JvmInstruction,
+    };
+
+    #[test]
+    fn reprocessing_loop_allocates_identities_only_for_definitions() {
+        let method = method(
+            [
+                (0, JvmInstruction::IConst0),
+                (1, JvmInstruction::IStore0),
+                (2, JvmInstruction::ILoad0),
+                (3, JvmInstruction::IConst1),
+                (4, JvmInstruction::IAdd),
+                (5, JvmInstruction::IStore0),
+                (6, JvmInstruction::Goto(2.into())),
+            ],
+            "()V",
+            vec![],
+        );
+        let mut executor = Executor::for_method(&method).expect("valid method");
+        executor.execute_reachable_locations().expect("valid loop");
+
+        assert_eq!(executor.definition_ids.len(), 3);
+        assert_eq!(executor.value_id_allocator.next_value_idx, 3);
+
+        for k in [0, 3, 4] {
+            assert!(
+                executor
+                    .definition_ids
+                    .contains_key(&Location::entry(k.into()))
+            );
+        }
+        for k in [1, 2, 5, 6] {
+            assert!(
+                !executor
+                    .definition_ids
+                    .contains_key(&Location::entry(k.into()))
+            );
+        }
     }
 }

@@ -4,12 +4,12 @@ use super::*;
 fn diamond_merge_uses_a_predecessor_indexed_phi() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad0),
-            (1.into(), Instruction::IfEq(5.into())),
-            (2.into(), Instruction::IConst1),
-            (3.into(), Instruction::Goto(6.into())),
-            (5.into(), Instruction::IConst2),
-            (6.into(), Instruction::IReturn),
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(5.into())),
+            (2, Instruction::IConst1),
+            (3, Instruction::Goto(6.into())),
+            (5, Instruction::IConst2),
+            (6, Instruction::IReturn),
         ],
         "(I)I",
         vec![],
@@ -40,14 +40,14 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
 fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad0),
-            (1.into(), Instruction::IfEq(5.into())),
-            (2.into(), Instruction::IConst1),
-            (3.into(), Instruction::IStore1),
-            (4.into(), Instruction::Goto(6.into())),
-            (5.into(), Instruction::Nop),
-            (6.into(), Instruction::ILoad1),
-            (7.into(), Instruction::IReturn),
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(5.into())),
+            (2, Instruction::IConst1),
+            (3, Instruction::IStore1),
+            (4, Instruction::Goto(6.into())),
+            (5, Instruction::Nop),
+            (6, Instruction::ILoad1),
+            (7, Instruction::IReturn),
         ],
         "(I)I",
         vec![],
@@ -55,7 +55,7 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 
     assert!(matches!(
         build(&method),
-        Err(MokaIRBuildError::ExecutionError(_))
+        Err(MokaIRBuildError::FrameError(_))
     ));
 }
 
@@ -63,15 +63,15 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad0),
-            (1.into(), Instruction::IfEq(8.into())),
-            (2.into(), Instruction::ILoad0),
-            (3.into(), Instruction::IConst1),
-            (4.into(), Instruction::ISub),
-            (5.into(), Instruction::IStore0),
-            (6.into(), Instruction::Goto(0.into())),
-            (8.into(), Instruction::ILoad0),
-            (9.into(), Instruction::IReturn),
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(8.into())),
+            (2, Instruction::ILoad0),
+            (3, Instruction::IConst1),
+            (4, Instruction::ISub),
+            (5, Instruction::IStore0),
+            (6, Instruction::Goto(0.into())),
+            (8, Instruction::ILoad0),
+            (9, Instruction::IReturn),
         ],
         "(I)I",
         vec![],
@@ -139,7 +139,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
 
 #[test]
 fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
-    let method = method([(0.into(), Instruction::Goto(0.into()))], "()V", vec![]);
+    let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
     let ir = build(&method).unwrap();
     let blocks = ir.blocks().collect::<Vec<_>>();
 
@@ -163,20 +163,20 @@ fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
 fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad1),
-            (1.into(), Instruction::IStore2),
-            (2.into(), Instruction::ILoad1),
-            (3.into(), Instruction::IStore3),
-            (4.into(), Instruction::ILoad0),
-            (5.into(), Instruction::IfEq(20.into())),
-            (8.into(), Instruction::ILoad2),
-            (9.into(), Instruction::ILoad3),
-            (10.into(), Instruction::IStore2),
-            (11.into(), Instruction::IStore3),
-            (12.into(), Instruction::IInc(0, -1)),
-            (15.into(), Instruction::Goto(4.into())),
-            (20.into(), Instruction::ILoad2),
-            (21.into(), Instruction::IReturn),
+            (0, Instruction::ILoad1),
+            (1, Instruction::IStore2),
+            (2, Instruction::ILoad1),
+            (3, Instruction::IStore3),
+            (4, Instruction::ILoad0),
+            (5, Instruction::IfEq(20.into())),
+            (8, Instruction::ILoad2),
+            (9, Instruction::ILoad3),
+            (10, Instruction::IStore2),
+            (11, Instruction::IStore3),
+            (12, Instruction::IInc(0, -1)),
+            (15, Instruction::Goto(4.into())),
+            (20, Instruction::ILoad2),
+            (21, Instruction::IReturn),
         ],
         "(II)I",
         vec![],
@@ -204,22 +204,22 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
 fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
     let method = method(
         [
-            (0.into(), Instruction::ILoad0),
-            (1.into(), Instruction::IfEq(10.into())),
-            (4.into(), Instruction::IConst1),
-            (5.into(), Instruction::IStore1),
-            (6.into(), Instruction::Goto(20.into())),
-            (10.into(), Instruction::IConst2),
-            (11.into(), Instruction::IStore1),
-            (12.into(), Instruction::Goto(30.into())),
-            (20.into(), Instruction::ILoad0),
-            (21.into(), Instruction::IfEq(30.into())),
-            (24.into(), Instruction::Goto(40.into())),
-            (30.into(), Instruction::ILoad0),
-            (31.into(), Instruction::IfEq(20.into())),
-            (34.into(), Instruction::Goto(40.into())),
-            (40.into(), Instruction::ILoad1),
-            (41.into(), Instruction::IReturn),
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(10.into())),
+            (4, Instruction::IConst1),
+            (5, Instruction::IStore1),
+            (6, Instruction::Goto(20.into())),
+            (10, Instruction::IConst2),
+            (11, Instruction::IStore1),
+            (12, Instruction::Goto(30.into())),
+            (20, Instruction::ILoad0),
+            (21, Instruction::IfEq(30.into())),
+            (24, Instruction::Goto(40.into())),
+            (30, Instruction::ILoad0),
+            (31, Instruction::IfEq(20.into())),
+            (34, Instruction::Goto(40.into())),
+            (40, Instruction::ILoad1),
+            (41, Instruction::IReturn),
         ],
         "(I)I",
         vec![],

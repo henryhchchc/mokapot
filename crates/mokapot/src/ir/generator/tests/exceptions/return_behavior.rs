@@ -5,11 +5,11 @@ fn synchronized_return_has_only_exceptional_successors() {
     let illegal_monitor_state: ClassRef = "java/lang/IllegalMonitorStateException".parse().unwrap();
     let mut method = method(
         [
-            (0.into(), Instruction::IConst1),
-            (1.into(), Instruction::IReturn),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::IConst0),
-            (12.into(), Instruction::IReturn),
+            (0, Instruction::IConst1),
+            (1, Instruction::IReturn),
+            (10, Instruction::AStore0),
+            (11, Instruction::IConst0),
+            (12, Instruction::IReturn),
         ],
         "()I",
         vec![ExceptionTableEntry {
@@ -48,7 +48,7 @@ fn synchronized_return_has_only_exceptional_successors() {
 
 #[test]
 fn unhandled_synchronized_return_reaches_unwind() {
-    let mut method = method([(0.into(), Instruction::Return)], "()V", vec![]);
+    let mut method = method([(0, Instruction::Return)], "()V", vec![]);
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
     let return_terminator = terminator_at(&ir, 0.into());
@@ -72,9 +72,9 @@ fn unhandled_synchronized_return_reaches_unwind() {
 fn explicit_monitor_operations_make_returns_fallible() {
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
-            (1.into(), Instruction::MonitorEnter),
-            (2.into(), Instruction::Return),
+            (0, Instruction::ALoad0),
+            (1, Instruction::MonitorEnter),
+            (2, Instruction::Return),
         ],
         "(Ljava/lang/Object;)V",
         vec![],
@@ -90,7 +90,7 @@ fn explicit_monitor_operations_make_returns_fallible() {
 
 #[test]
 fn monitor_free_nonsynchronized_return_remains_terminal() {
-    let method = method([(0.into(), Instruction::Return)], "()V", vec![]);
+    let method = method([(0, Instruction::Return)], "()V", vec![]);
     let ir = build(&method).unwrap();
     assert!(terminator_at(&ir, 0.into()).successors().is_empty());
 }

@@ -10,17 +10,13 @@ use crate::{
     ir::{
         BasicBlock, EdgeId, InstructionId, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{
-            error::MokaIRBuildError,
-            identity::SsaValueId,
-            ssa::{SsaBlock, SsaGraph},
-        },
+        generator::{error::MokaIRBuildError, identity::SsaValueId, ssa},
     },
     jvm::Method,
 };
 
 /// Emits final identities, blocks, and provenance from scalar SSA blocks.
-pub(super) fn emit(method: &Method, ssa: SsaGraph) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, MokaIRBuildError> {
     let mut allocation = Allocation::default();
     let this_value = ssa
         .this_value
@@ -80,7 +76,10 @@ struct BlockInstructions {
 }
 
 impl Allocation {
-    fn allocate_block(&mut self, block: &SsaBlock) -> Result<BlockInstructions, MokaIRBuildError> {
+    fn allocate_block(
+        &mut self,
+        block: &ssa::Block,
+    ) -> Result<BlockInstructions, MokaIRBuildError> {
         let caught_exception = block
             .caught_exception
             .map(|value| self.value(value, ValueDefinition::CaughtException(block.id)))
@@ -115,7 +114,7 @@ impl Allocation {
 }
 
 fn materialize_block(
-    block: SsaBlock,
+    block: ssa::Block,
     ids: BlockInstructions,
     allocation: &mut Allocation,
     source_map: &mut SourceMap,

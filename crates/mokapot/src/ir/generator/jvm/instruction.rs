@@ -5,40 +5,40 @@ use crate::{
         expression::{Condition, Expression},
         generator::{
             identity::SsaValueId,
-            jvm::{analysis::OperandState, normalization::Location},
+            jvm::{subroutine_expansion::Location, symbolic_execution::Value},
         },
     },
     jvm::code::ProgramCounter,
 };
 
 #[derive(Debug)]
-pub(crate) enum Instruction {
+pub(crate) enum RegisterInstruction {
     HandlerEntry,
     Unwind,
     Erased,
     Definition {
         value: SsaValueId,
-        expr: Expression<OperandState>,
+        expr: Expression<Value>,
     },
-    Effect(Expression<OperandState>),
+    Effect(Expression<Value>),
     Jump {
-        condition: Option<Condition<OperandState>>,
+        condition: Option<Condition<Value>>,
         target: ProgramCounter,
     },
     Switch {
-        match_value: OperandState,
+        match_value: Value,
         branches: BTreeMap<i32, ProgramCounter>,
         default: ProgramCounter,
     },
-    Return(Option<OperandState>),
-    Throw(OperandState),
+    Return(Option<Value>),
+    Throw(Value),
     Subroutine {
         target: Location,
     },
-    SubroutineReturn(OperandState),
+    SubroutineReturn(Value),
 }
 
-impl Instruction {
+impl RegisterInstruction {
     pub const fn is_explicit_transfer(&self) -> bool {
         matches!(
             self,

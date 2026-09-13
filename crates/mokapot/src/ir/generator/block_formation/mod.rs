@@ -1,4 +1,4 @@
-//! Forms semantic maximal blocks from analyzed JVM locations and frame facts.
+//! Forms semantic maximal blocks from symbolic JVM nodes and frame facts.
 
 mod layout;
 mod materialize;
@@ -7,10 +7,10 @@ mod model;
 #[cfg(test)]
 mod tests;
 
-pub(super) use model::JvmBlockGraph;
-pub(crate) use model::{JvmBlock, JvmBlockArm};
+pub(super) use model::Graph;
+pub(crate) use model::{Arm, Block};
 
-use crate::ir::generator::{error::MokaIRBuildError, jvm::analysis::AnalyzedJvmCfg};
+use crate::ir::generator::{error::MokaIRBuildError, jvm::symbolic_execution};
 
 use self::{
     layout::BlockLayout,
@@ -18,26 +18,26 @@ use self::{
 };
 
 /// Forms maximal semantic blocks from completed JVM frame facts.
-pub(super) fn form(analyzed_cfg: AnalyzedJvmCfg) -> Result<JvmBlockGraph, MokaIRBuildError> {
-    let layout = BlockLayout::discover(&analyzed_cfg)?;
-    let phi_blocks = layout.phi_blocks(&analyzed_cfg.phi_values)?;
-    let AnalyzedJvmCfg {
+pub(super) fn form(symbolic_cfg: symbolic_execution::Cfg) -> Result<Graph, MokaIRBuildError> {
+    let layout = BlockLayout::discover(&symbolic_cfg)?;
+    let phi_blocks = layout.phi_blocks(&symbolic_cfg.phi_values)?;
+    let symbolic_execution::Cfg {
         initial_frame,
-        locations,
+        nodes,
         phi_values,
-        this_value,
+        receiver_value,
         parameter_values,
         ..
-    } = analyzed_cfg;
-    let blocks = materialize_blocks(locations, &layout)?;
+    } = symbolic_cfg;
+    let blocks = materialize_blocks(nodes, &layout)?;
     let blocks = insert_entry_preheader(blocks, &layout, initial_frame);
 
-    Ok(JvmBlockGraph {
+    Ok(Graph {
         entry: layout.entry(),
         blocks,
         phi_blocks,
         merge_values: phi_values,
-        this_value,
+        this_value: receiver_value,
         parameter_values,
     })
 }

@@ -3,12 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ir::{
     BlockId,
     generator::{
-        block_formation::JvmBlock,
+        block_formation,
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::{MergeIdentity, OperandState},
-            frame::{Entry, JvmStackFrame},
+            frame::{Entry, Frame},
+            symbolic_execution::{self, FrameMergeSite},
         },
     },
 };
@@ -17,13 +17,13 @@ type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 /// Provisional value and placement data for JVM frame merges.
 pub(super) struct MergePlan {
-    merge_values: BTreeMap<MergeIdentity, SsaValueId>,
+    merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
     phi_blocks: BTreeMap<SsaValueId, BlockId>,
 }
 
 impl MergePlan {
     pub const fn new(
-        merge_values: BTreeMap<MergeIdentity, SsaValueId>,
+        merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
         phi_blocks: BTreeMap<SsaValueId, BlockId>,
     ) -> Self {
         Self {
@@ -36,15 +36,18 @@ impl MergePlan {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub fn resolve(&self, operand: OperandState) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn resolve(
+        &self,
+        operand: symbolic_execution::Value,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
         match operand {
-            OperandState::Value(value) => Ok(value),
-            OperandState::Merged(identity) => self
+            symbolic_execution::Value::Ssa(value) => Ok(value),
+            symbolic_execution::Value::Merged(identity) => self
                 .merge_values
                 .get(&identity)
                 .copied()
                 .ok_or(MokaIRBuildError::MalformedControlFlow),
-            OperandState::ReturnAddress(_) | OperandState::Invalid => {
+            symbolic_execution::Value::ReturnAddress(_) | symbolic_execution::Value::Invalid => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
         }
@@ -52,12 +55,12 @@ impl MergePlan {
 }
 
 pub(super) fn collect_phi_candidates(
-    blocks: &[JvmBlock],
+    blocks: &[block_formation::Block],
     merge_plan: &MergePlan,
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
-        BTreeMap::<BlockId, Vec<(BlockId, &JvmStackFrame<OperandState>)>>::new();
+        BTreeMap::<BlockId, Vec<(BlockId, &Frame<symbolic_execution::Value>)>>::new();
     for source in blocks {
         for arm in &source.arms {
             incoming_by_target
@@ -134,27 +137,27 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &JvmStackFrame<OperandState>,
-    source: &JvmStackFrame<OperandState>,
+    target: &Frame<symbolic_execution::Value>,
+    source: &Frame<symbolic_execution::Value>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
-    if target.local_variables().len() != source.local_variables().len()
-        || target.operand_stack().len() != source.operand_stack().len()
+    if target.local_slots().len() != source.local_slots().len()
+        || target.operand_slots().len() != source.operand_slots().len()
     {
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
     target
-        .local_variables()
+        .local_slots()
         .iter()
-        .zip(source.local_variables())
-        .chain(target.operand_stack().iter().zip(source.operand_stack()))
+        .zip(source.local_slots())
+        .chain(target.operand_slots().iter().zip(source.operand_slots()))
         .map(|(target, source)| match (target, source) {
             (
-                Entry::Value(OperandState::ReturnAddress(lhs)),
-                Entry::Value(OperandState::ReturnAddress(rhs)),
+                Entry::Value(symbolic_execution::Value::ReturnAddress(lhs)),
+                Entry::Value(symbolic_execution::Value::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Entry::Value(OperandState::ReturnAddress(_)), _)
-            | (_, Entry::Value(OperandState::ReturnAddress(_))) => {
+            (Entry::Value(symbolic_execution::Value::ReturnAddress(_)), _)
+            | (_, Entry::Value(symbolic_execution::Value::ReturnAddress(_))) => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
             (Entry::Value(result), Entry::Value(value)) => Ok((
@@ -175,8 +178,8 @@ mod tests {
         TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
-            block_formation::{JvmBlock, JvmBlockArm},
-            jvm::{frame::FrameSlot, normalization::Location},
+            block_formation,
+            jvm::{frame::Position, subroutine_expansion::Location},
         },
     };
 
@@ -187,27 +190,37 @@ mod tests {
         let incoming = SsaValueId::new(11);
         let target = BlockId::new(4);
         let preheader = BlockId::new(9);
-        let target_frame =
-            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[OperandState::Value(result)])
-                .expect("frame fits descriptor");
-        let preheader_frame =
-            JvmStackFrame::with_inputs(&descriptor, 1, 0, None, &[OperandState::Value(incoming)])
-                .expect("frame fits descriptor");
+        let target_frame = Frame::for_method_entry(
+            &descriptor,
+            1,
+            0,
+            None,
+            &[symbolic_execution::Value::Ssa(result)],
+        )
+        .expect("frame fits descriptor");
+        let preheader_frame = Frame::for_method_entry(
+            &descriptor,
+            1,
+            0,
+            None,
+            &[symbolic_execution::Value::Ssa(incoming)],
+        )
+        .expect("frame fits descriptor");
         let blocks = vec![
-            JvmBlock {
+            block_formation::Block {
                 id: preheader,
                 entry_frame: preheader_frame.clone(),
                 operations: Vec::new(),
                 terminator: TerminatorKind::Goto,
                 terminator_source: None,
-                arms: vec![JvmBlockArm {
+                arms: vec![block_formation::Arm {
                     target,
                     transfer: ControlTransfer::Unconditional,
                     frame: preheader_frame,
                 }],
                 caught_exception: None,
             },
-            JvmBlock {
+            block_formation::Block {
                 id: target,
                 entry_frame: target_frame,
                 operations: Vec::new(),
@@ -227,15 +240,15 @@ mod tests {
 
     #[test]
     fn merge_plan_resolves_merge_identities() {
-        let identity = MergeIdentity {
+        let identity = FrameMergeSite {
             location: Location::Unwind,
-            slot: FrameSlot::Local(0),
+            slot: Position::Local(0),
         };
         let resolved = SsaValueId::new(12);
 
         let merge_plan = MergePlan::new(BTreeMap::from([(identity, resolved)]), BTreeMap::new());
         let actual = merge_plan
-            .resolve(OperandState::Merged(identity))
+            .resolve(symbolic_execution::Value::Merged(identity))
             .expect("known merge identity resolves");
 
         assert_eq!(actual, resolved);

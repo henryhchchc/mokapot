@@ -9,13 +9,13 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            analysis::{AnalyzedJvmCfg, AnalyzedLocation, MergeIdentity},
-            normalization::Location,
+            subroutine_expansion::Location,
+            symbolic_execution::{self, FrameMergeSite},
         },
     },
 };
 
-/// The partition of analyzed locations into semantic blocks.
+/// The partition of symbolic JVM nodes into semantic blocks.
 pub(super) struct BlockLayout {
     entry: BlockId,
     bytecode_entry: BlockId,
@@ -24,19 +24,19 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(analyzed_cfg: &AnalyzedJvmCfg) -> Result<Self, MokaIRBuildError> {
-        let reachable = analyzed_cfg.locations.keys().copied().collect::<Vec<_>>();
+    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, MokaIRBuildError> {
+        let reachable = symbolic_cfg.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
 
-        let predecessors = predecessor_locations(&analyzed_cfg.locations);
-        let leaders = discover_leaders(analyzed_cfg, &reachable, &predecessors)?;
+        let predecessors = predecessor_locations(&symbolic_cfg.nodes);
+        let leaders = discover_leaders(symbolic_cfg, &reachable, &predecessors)?;
         let needs_entry_preheader = predecessors
-            .get(&analyzed_cfg.entry_location)
+            .get(&symbolic_cfg.entry_location)
             .is_some_and(|sources| !sources.is_empty());
         let (entry, bytecode_entry, block_ids) =
-            allocate_block_ids(&leaders, analyzed_cfg.entry_location, needs_entry_preheader)?;
+            allocate_block_ids(&leaders, symbolic_cfg.entry_location, needs_entry_preheader)?;
         let grouped = group_locations(&reachable, &block_ids)?;
 
         Ok(Self {
@@ -61,7 +61,7 @@ impl BlockLayout {
 
     pub fn phi_blocks(
         &self,
-        phi_values: &BTreeMap<MergeIdentity, SsaValueId>,
+        phi_values: &BTreeMap<FrameMergeSite, SsaValueId>,
     ) -> Result<BTreeMap<SsaValueId, BlockId>, MokaIRBuildError> {
         phi_values
             .iter()
@@ -83,11 +83,11 @@ impl BlockLayout {
 }
 
 fn predecessor_locations(
-    locations: &BTreeMap<Location, AnalyzedLocation>,
+    locations: &BTreeMap<Location, symbolic_execution::Node>,
 ) -> BTreeMap<Location, BTreeSet<Location>> {
     let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
     for (&source, facts) in locations {
-        for outgoing in &facts.outgoing {
+        for outgoing in &facts.outgoing_edges {
             predecessors
                 .entry(outgoing.target)
                 .or_default()
@@ -98,13 +98,13 @@ fn predecessor_locations(
 }
 
 fn discover_leaders(
-    analyzed_cfg: &AnalyzedJvmCfg,
+    symbolic_cfg: &symbolic_execution::Cfg,
     reachable: &[Location],
     predecessors: &BTreeMap<Location, BTreeSet<Location>>,
 ) -> Result<BTreeSet<Location>, MokaIRBuildError> {
-    let mut leaders = BTreeSet::from([analyzed_cfg.entry_location]);
+    let mut leaders = BTreeSet::from([symbolic_cfg.entry_location]);
     leaders.extend(
-        analyzed_cfg
+        symbolic_cfg
             .phi_values
             .keys()
             .map(|identity| identity.location),
@@ -122,9 +122,9 @@ fn discover_leaders(
             .map(|(target, _)| *target),
     );
 
-    for facts in analyzed_cfg.locations.values() {
+    for facts in symbolic_cfg.nodes.values() {
         if facts.instruction.is_explicit_transfer()
-            || facts.outgoing.iter().any(|outgoing| {
+            || facts.outgoing_edges.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
                     ControlTransfer::Normal
@@ -133,26 +133,29 @@ fn discover_leaders(
                 )
             })
         {
-            leaders.extend(facts.outgoing.iter().map(|outgoing| outgoing.target));
+            leaders.extend(facts.outgoing_edges.iter().map(|outgoing| outgoing.target));
         }
     }
     for pair in reachable.windows(2) {
         let [current, next] = pair else {
             unreachable!()
         };
-        let facts = analyzed_cfg
-            .locations
+        let facts = symbolic_cfg
+            .nodes
             .get(current)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let plain_fallthrough = !facts.instruction.is_explicit_transfer()
-            && facts.outgoing.len() == 1
-            && facts.outgoing[0].target == *next
-            && matches!(facts.outgoing[0].transfer, ControlTransfer::Unconditional);
+            && facts.outgoing_edges.len() == 1
+            && facts.outgoing_edges[0].target == *next
+            && matches!(
+                facts.outgoing_edges[0].transfer,
+                ControlTransfer::Unconditional
+            );
         if !plain_fallthrough {
             leaders.insert(*next);
         }
     }
-    leaders.retain(|location| analyzed_cfg.locations.contains_key(location));
+    leaders.retain(|location| symbolic_cfg.nodes.contains_key(location));
     Ok(leaders)
 }
 

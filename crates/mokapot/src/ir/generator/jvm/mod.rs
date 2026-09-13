@@ -1,15 +1,15 @@
-//! JVM-specific normalization, frame analysis, and instruction lifting.
+//! JVM-specific subroutine expansion, symbolic execution, and instruction lifting.
 
-pub(super) mod analysis;
 pub(super) mod frame;
 pub(super) mod instruction;
 pub(super) mod lifting;
-pub(super) mod normalization;
+pub(super) mod subroutine_expansion;
+pub(super) mod symbolic_execution;
 
 use crate::{ir::generator::error::MokaIRBuildError, jvm::Method};
 
-use self::analysis::{AnalyzedJvmCfg, JvmFrameAnalyzer};
-
-pub(super) fn analyze(method: &Method) -> Result<AnalyzedJvmCfg, MokaIRBuildError> {
-    JvmFrameAnalyzer::for_method(method)?.analyze()
+pub(super) fn build_symbolic_cfg(
+    method: &Method,
+) -> Result<symbolic_execution::Cfg, MokaIRBuildError> {
+    symbolic_execution::Executor::for_method(method)?.execute()
 }

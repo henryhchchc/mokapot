@@ -32,8 +32,8 @@ impl MokaIRMethod {
     /// Builds completed `MokaIR` from a JVM method.
     ///
     /// JVM stack and local state are eliminated during construction. Legacy
-    /// subroutines are normalized, trivial phis are removed, and only reachable
-    /// blocks are emitted.
+    /// subroutines are expanded into context-specific control flow, trivial phis
+    /// are removed, and only reachable blocks are emitted.
     ///
     /// # Errors
     ///
