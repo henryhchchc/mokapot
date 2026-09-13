@@ -22,11 +22,6 @@ mod jvm;
 mod ssa;
 
 pub use error::MokaIRBuildError;
-#[allow(
-    unused_imports,
-    reason = "the re-export preserves the generator error surface"
-)]
-pub use jvm::frame::JvmFrameError;
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 

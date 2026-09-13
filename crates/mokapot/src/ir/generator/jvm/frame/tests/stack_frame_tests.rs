@@ -1,7 +1,4 @@
-use crate::ir::generator::{
-    JvmFrameError,
-    jvm::frame::{CATEGORY_1, CATEGORY_2},
-};
+use crate::ir::generator::jvm::frame::{CATEGORY_1, CATEGORY_2, JvmFrameError};
 #[cfg(test)]
 use proptest::prelude::*;
 
