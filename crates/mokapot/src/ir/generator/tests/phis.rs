@@ -55,7 +55,7 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 
     assert!(matches!(
         build(&method),
-        Err(MokaIRBuildError::ExecutionError(_))
+        Err(MokaIRBuildError::FrameError(_))
     ));
 }
 

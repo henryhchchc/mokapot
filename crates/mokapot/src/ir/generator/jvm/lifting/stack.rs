@@ -2,9 +2,9 @@ use crate::{
     ir::generator::{
         error::MokaIRBuildError,
         jvm::{
-            frame::{JvmStackFrame, StackOperations},
+            frame::{Frame, StackOperations},
             instruction::RegisterInstruction,
-            symbolic_execution::SymbolicValue,
+            symbolic_execution::Value,
         },
     },
     jvm::code::Instruction as JVM,
@@ -12,7 +12,7 @@ use crate::{
 
 pub(super) fn try_lift(
     jvm_instruction: &JVM,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,

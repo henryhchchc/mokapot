@@ -4,16 +4,16 @@ use crate::{
     ir::{
         control_flow::{
             ControlTransfer,
-            path_condition::{BooleanVariable, BranchGuard, Value},
+            path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::{Entry, JvmStackFrame},
+                frame::{Entry, Frame},
                 instruction::RegisterInstruction,
                 normalization::Location,
-                symbolic_execution::{JvmSymbolicExecutor, SymbolicJvmEdge, SymbolicValue},
+                symbolic_execution::{Edge, Executor, Value},
             },
         },
     },
@@ -21,10 +21,10 @@ use crate::{
 };
 
 fn build_exception_successors(
-    executor: &mut JvmSymbolicExecutor<'_>,
+    executor: &mut Executor<'_>,
     location: Location,
-    incoming_frame: &JvmStackFrame<SymbolicValue>,
-) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
+    incoming_frame: &Frame<Value>,
+) -> Result<Vec<Edge>, MokaIRBuildError> {
     let pc = location
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -39,11 +39,11 @@ fn build_exception_successors(
     let mut catches_all = false;
     for entry in handlers {
         let handler = executor.handler_location(location, entry.handler_pc)?;
-        let caught = SymbolicValue::Value(executor.caught_exception_at(handler)?);
-        successors.push(SymbolicJvmEdge {
+        let caught = Value::Ssa(executor.caught_exception_at(handler)?);
+        successors.push(Edge {
             target: handler,
             transfer: ControlTransfer::Exception(entry.catch_type.clone()),
-            target_frame: incoming_frame.same_locals_1_stack_item_frame(Entry::Value(caught)),
+            target_frame: incoming_frame.with_single_stack_entry(Entry::Value(caught)),
         });
         catches_all = entry
             .catch_type
@@ -54,12 +54,12 @@ fn build_exception_successors(
         }
     }
     if !catches_all {
-        successors.push(SymbolicJvmEdge {
+        successors.push(Edge {
             target: executor.unwind_location()?,
             transfer: ControlTransfer::Unwind,
             target_frame: incoming_frame
-                .same_locals_empty_stack_frame()
-                .erase_values(),
+                .with_empty_operand_stack()
+                .into_unwind_frame(),
         });
     }
     Ok(successors)
@@ -70,13 +70,13 @@ fn build_exception_successors(
     reason = "all control-flow forms are classified together"
 )]
 pub(crate) fn build_successors(
-    executor: &mut JvmSymbolicExecutor<'_>,
+    executor: &mut Executor<'_>,
     location: Location,
-    incoming_frame: &JvmStackFrame<SymbolicValue>,
-    post_frame: JvmStackFrame<SymbolicValue>,
+    incoming_frame: &Frame<Value>,
+    post_frame: Frame<Value>,
     instruction: &RegisterInstruction,
     can_throw_synchronously: bool,
-) -> Result<Vec<SymbolicJvmEdge>, MokaIRBuildError> {
+) -> Result<Vec<Edge>, MokaIRBuildError> {
     use ControlTransfer::{Conditional, Normal, Unconditional};
 
     Ok(match instruction {
@@ -84,7 +84,7 @@ pub(crate) fn build_successors(
             let Location::Handler { handler_pc, .. } = location else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
-            vec![SymbolicJvmEdge {
+            vec![Edge {
                 target: executor.target_location(location, handler_pc)?,
                 transfer: Unconditional,
                 target_frame: post_frame,
@@ -98,7 +98,7 @@ pub(crate) fn build_successors(
             build_exception_successors(executor, location, incoming_frame)?
         }
         RegisterInstruction::Subroutine { target, .. } => {
-            vec![SymbolicJvmEdge {
+            vec![Edge {
                 target: *target,
                 transfer: Unconditional,
                 target_frame: post_frame,
@@ -107,7 +107,7 @@ pub(crate) fn build_successors(
         RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_)
             if can_throw_synchronously =>
         {
-            let mut successors = vec![SymbolicJvmEdge {
+            let mut successors = vec![Edge {
                 target: executor.next_location(location)?,
                 transfer: Normal,
                 target_frame: post_frame,
@@ -122,7 +122,7 @@ pub(crate) fn build_successors(
         RegisterInstruction::Erased
         | RegisterInstruction::Definition { .. }
         | RegisterInstruction::Effect(_) => {
-            vec![SymbolicJvmEdge {
+            vec![Edge {
                 target: executor.next_location(location)?,
                 transfer: Unconditional,
                 target_frame: post_frame,
@@ -131,7 +131,7 @@ pub(crate) fn build_successors(
         RegisterInstruction::Jump {
             condition: None,
             target,
-        } => vec![SymbolicJvmEdge {
+        } => vec![Edge {
             target: executor.target_location(location, *target)?,
             transfer: Unconditional,
             target_frame: post_frame,
@@ -142,12 +142,12 @@ pub(crate) fn build_successors(
         } => {
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
-                SymbolicJvmEdge {
+                Edge {
                     target: executor.target_location(location, *target)?,
                     transfer: Conditional(BranchGuard::of(condition.clone())),
-                    target_frame: post_frame.same_frame(),
+                    target_frame: post_frame.clone(),
                 },
-                SymbolicJvmEdge {
+                Edge {
                     target: executor.next_location(location)?,
                     transfer: Conditional(BranchGuard::of(!condition)),
                     target_frame: post_frame,
@@ -161,13 +161,13 @@ pub(crate) fn build_successors(
         } => {
             let mut successors = Vec::with_capacity(branches.len() + 1);
             for (&case, &target) in branches {
-                let value = Value::Constant(ConstantValue::Integer(case));
+                let value = PathValue::Constant(ConstantValue::Integer(case));
                 let condition =
                     BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
-                successors.push(SymbolicJvmEdge {
+                successors.push(Edge {
                     target: executor.target_location(location, target)?,
                     transfer: Conditional(BranchGuard::of(condition)),
-                    target_frame: post_frame.same_frame(),
+                    target_frame: post_frame.clone(),
                 });
             }
             let default_guard = branches
@@ -175,11 +175,11 @@ pub(crate) fn build_successors(
                 .map(|case| {
                     BooleanVariable::Negative(Condition::Equal(
                         (*match_value).into(),
-                        Value::Constant(ConstantValue::Integer(*case)),
+                        PathValue::Constant(ConstantValue::Integer(*case)),
                     ))
                 })
                 .collect();
-            successors.push(SymbolicJvmEdge {
+            successors.push(Edge {
                 target: executor.target_location(location, *default)?,
                 transfer: Conditional(default_guard),
                 target_frame: post_frame,
@@ -187,10 +187,10 @@ pub(crate) fn build_successors(
             successors
         }
         RegisterInstruction::SubroutineReturn(value) => {
-            let SymbolicValue::ReturnAddress(address) = value else {
+            let Value::ReturnAddress(address) = value else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
-            vec![SymbolicJvmEdge {
+            vec![Edge {
                 target: executor.return_from(location, *address)?,
                 transfer: Unconditional,
                 target_frame: post_frame,
@@ -208,13 +208,13 @@ mod tests {
     #[test]
     fn unwind_edges_erase_symbolic_values() {
         let method = method([(0.into(), JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
-        let frame = JvmStackFrame::with_inputs(
+        let mut analyzer = Executor::for_method(&method).expect("valid method");
+        let frame = Frame::for_method_entry(
             &method.descriptor,
             1,
             0,
             None,
-            &[SymbolicValue::Value(SsaValueId::new(0))],
+            &[Value::Ssa(SsaValueId::new(0))],
         )
         .expect("frame fits descriptor");
 
@@ -224,6 +224,6 @@ mod tests {
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].target, Location::Unwind);
         assert!(matches!(edges[0].transfer, ControlTransfer::Unwind));
-        assert!(edges[0].target_frame.values().next().is_none());
+        assert!(edges[0].target_frame.iter_values().next().is_none());
     }
 }

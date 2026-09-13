@@ -10,7 +10,7 @@ use crate::ir::{
         identity::SsaValueId,
         jvm::{
             normalization::Location,
-            symbolic_execution::{FrameMergeSite, SymbolicJvmCfg, SymbolicJvmNode},
+            symbolic_execution::{self, FrameMergeSite},
         },
     },
 };
@@ -24,7 +24,7 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(symbolic_cfg: &SymbolicJvmCfg) -> Result<Self, MokaIRBuildError> {
+    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, MokaIRBuildError> {
         let reachable = symbolic_cfg.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(MokaIRBuildError::MalformedControlFlow);
@@ -83,7 +83,7 @@ impl BlockLayout {
 }
 
 fn predecessor_locations(
-    locations: &BTreeMap<Location, SymbolicJvmNode>,
+    locations: &BTreeMap<Location, symbolic_execution::Node>,
 ) -> BTreeMap<Location, BTreeSet<Location>> {
     let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
     for (&source, facts) in locations {
@@ -98,7 +98,7 @@ fn predecessor_locations(
 }
 
 fn discover_leaders(
-    symbolic_cfg: &SymbolicJvmCfg,
+    symbolic_cfg: &symbolic_execution::Cfg,
     reachable: &[Location],
     predecessors: &BTreeMap<Location, BTreeSet<Location>>,
 ) -> Result<BTreeSet<Location>, MokaIRBuildError> {

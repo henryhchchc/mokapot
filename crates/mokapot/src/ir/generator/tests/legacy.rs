@@ -201,7 +201,7 @@ fn rejects_recursive_and_root_level_legacy_returns() {
     let root_ret = method([(0.into(), Instruction::Ret(0))], "()V", vec![]);
     assert!(matches!(
         build(&root_ret),
-        Err(MokaIRBuildError::ExecutionError(_) | MokaIRBuildError::MalformedControlFlow)
+        Err(MokaIRBuildError::FrameError(_) | MokaIRBuildError::MalformedControlFlow)
     ));
 
     let multiple_returns = method(

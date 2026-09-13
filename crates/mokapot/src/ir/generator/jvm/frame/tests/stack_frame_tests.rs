@@ -1,6 +1,6 @@
 use crate::ir::generator::{
-    ExecutionError,
-    jvm::frame::{DUAL_SLOT, SINGLE_SLOT},
+    JvmFrameError,
+    jvm::frame::{CATEGORY_1, CATEGORY_2},
 };
 #[cfg(test)]
 use proptest::prelude::*;
@@ -23,7 +23,7 @@ fn joining_frames_with_different_stack_capacities_panics() {
     let mut lhs = frame(true, &desc, 0, 1).expect("valid frame");
     let rhs = frame(true, &desc, 0, 2).expect("valid frame");
 
-    lhs.join_assign_values_with(rhs, |_, _, _| false);
+    lhs.merge_from_with(rhs, |_, _, _| false);
 }
 
 proptest! {
@@ -36,10 +36,10 @@ proptest! {
             args.len().try_into().unwrap(),
         ).unwrap();
         for arg in &args {
-            stack_frame.push_value::<SINGLE_SLOT>(*arg).expect("Fail to push");
+            stack_frame.push_value::<CATEGORY_1>(*arg).expect("Fail to push");
         }
         for arg in args.iter().rev() {
-            let popped = stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<CATEGORY_1>().expect("Fail to pop");
             assert_eq!(popped, arg.clone());
         }
     }
@@ -53,10 +53,10 @@ proptest! {
             (args.len() * 2).try_into().unwrap(),
         ).unwrap();
         for arg in &args {
-            stack_frame.push_value::<DUAL_SLOT>(*arg).expect("Fail to push");
+            stack_frame.push_value::<CATEGORY_2>(*arg).expect("Fail to push");
         }
         for arg in args.iter().rev() {
-            let popped = stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop");
+            let popped = stack_frame.pop_value::<CATEGORY_2>().expect("Fail to pop");
             assert_eq!(popped, arg.clone());
         }
     }
@@ -73,11 +73,11 @@ proptest! {
         for i in 0..push_count {
             let value = TestValue(u32::from(i));
             if i < capacity {
-                stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
+                stack_frame.push_value::<CATEGORY_1>(value).expect("Fail to push");
             } else {
                 assert!(matches!(
-                    stack_frame.push_value::<SINGLE_SLOT>(value),
-                    Err(ExecutionError::StackOverflow),
+                    stack_frame.push_value::<CATEGORY_1>(value),
+                    Err(JvmFrameError::StackOverflow),
                 ));
             }
         }
@@ -93,15 +93,15 @@ proptest! {
         ).unwrap();
         for i in 0..push_count {
             let value = TestValue(u32::from(i));
-            stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
+            stack_frame.push_value::<CATEGORY_1>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
-            stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop");
+            stack_frame.pop_value::<CATEGORY_1>().expect("Fail to pop");
         }
         for _ in push_count..pop_count {
             assert!(matches!(
-                stack_frame.pop_value::<SINGLE_SLOT>(),
-                Err(ExecutionError::StackUnderflow),
+                stack_frame.pop_value::<CATEGORY_1>(),
+                Err(JvmFrameError::StackUnderflow),
             ));
         }
     }
@@ -114,11 +114,11 @@ proptest! {
             0,
             2,
         ).unwrap();
-        stack_frame.push_value::<DUAL_SLOT>(values).unwrap();
-        stack_frame.pop_value::<SINGLE_SLOT>().unwrap();
+        stack_frame.push_value::<CATEGORY_2>(values).unwrap();
+        stack_frame.pop_value::<CATEGORY_1>().unwrap();
         assert!(matches!(
-            stack_frame.pop_value::<SINGLE_SLOT>(),
-            Err(ExecutionError::ValueMismatch),
+            stack_frame.pop_value::<CATEGORY_1>(),
+            Err(JvmFrameError::InvalidSlotLayout),
         ));
     }
 
@@ -132,16 +132,16 @@ proptest! {
         ).unwrap();
         for (i, value) in values.iter().enumerate() {
             if i % 2 == 0 {
-                stack_frame.push_value::<DUAL_SLOT>(*value).expect("Fail to push");
+                stack_frame.push_value::<CATEGORY_2>(*value).expect("Fail to push");
             } else {
-                stack_frame.push_value::<SINGLE_SLOT>(*value).expect("Fail to push");
+                stack_frame.push_value::<CATEGORY_1>(*value).expect("Fail to push");
             }
         }
         for (i, value) in values.iter().enumerate().rev() {
             let popped = if i % 2 == 0 {
-                stack_frame.pop_value::<DUAL_SLOT>().expect("Fail to pop")
+                stack_frame.pop_value::<CATEGORY_2>().expect("Fail to pop")
             } else {
-                stack_frame.pop_value::<SINGLE_SLOT>().expect("Fail to pop")
+                stack_frame.pop_value::<CATEGORY_1>().expect("Fail to pop")
             };
             assert_eq!(popped, value.clone());
         }

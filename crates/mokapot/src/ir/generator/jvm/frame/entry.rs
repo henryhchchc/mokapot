@@ -4,32 +4,30 @@ pub(crate) enum Entry<V> {
     Value(V),
     #[display("<top>")]
     Top,
-    #[display("<uninitialized_local>")]
-    UninitializedLocal,
-    #[display("<out_of_scope>")]
-    OutOfScope,
+    #[display("<unset_local>")]
+    UnsetLocal,
+    #[display("<unavailable>")]
+    Unavailable,
 }
 
 impl<V> Entry<V> {
-    pub fn join_assign_with(
+    pub fn merge_from_with(
         &mut self,
         other: Self,
         join_values: impl FnOnce(&mut V, V) -> bool,
     ) -> bool {
-        use Entry::{OutOfScope, Top, UninitializedLocal, Value};
+        use Entry::{Top, Unavailable, UnsetLocal, Value};
         match (self, other) {
             (Value(lhs), Value(rhs)) => join_values(lhs, rhs),
-            (Top, Top) | (UninitializedLocal, UninitializedLocal | Value(_)) | (OutOfScope, _) => {
-                false
-            }
-            (slot @ Value(_), UninitializedLocal) => {
-                *slot = UninitializedLocal;
+            (Top, Top) | (UnsetLocal, UnsetLocal | Value(_)) | (Unavailable, _) => false,
+            (slot @ Value(_), UnsetLocal) => {
+                *slot = UnsetLocal;
                 true
             }
             // Different slot shapes indicate local-variable slot reuse. Such a
             // slot is unavailable until a later instruction overwrites it.
-            (slot, Top | OutOfScope) | (slot @ Top, _) => {
-                *slot = OutOfScope;
+            (slot, Top | Unavailable) | (slot @ Top, _) => {
+                *slot = Unavailable;
                 true
             }
         }

@@ -1,13 +1,13 @@
 use super::{
-    analyzer::JvmSymbolicExecutor,
-    fact::{FrameMergeSite, SymbolicValue},
+    analyzer::Executor,
+    fact::{FrameMergeSite, Value},
     solver::merge_frame_at,
 };
 use crate::{
     ir::generator::{
         identity::SsaValueId,
         jvm::{
-            frame::{Entry, FrameSlot, JvmStackFrame},
+            frame::{Entry, Frame, Position},
             normalization::Location,
         },
         tests::method,
@@ -16,23 +16,23 @@ use crate::{
     types::method_descriptor::MethodDescriptor,
 };
 
-fn frame_with_inputs(
+fn method_entry_frame(
     descriptor: &MethodDescriptor,
     max_locals: u16,
     max_stack: u16,
     this_value: Option<SsaValueId>,
     parameters: &[SsaValueId],
-) -> JvmStackFrame<SymbolicValue> {
+) -> Frame<Value> {
     let parameters = parameters
         .iter()
         .copied()
-        .map(SymbolicValue::Value)
+        .map(Value::Ssa)
         .collect::<Vec<_>>();
-    JvmStackFrame::with_inputs(
+    Frame::for_method_entry(
         descriptor,
         max_locals,
         max_stack,
-        this_value.map(SymbolicValue::Value),
+        this_value.map(Value::Ssa),
         &parameters,
     )
     .expect("frame fits descriptor")
@@ -42,27 +42,27 @@ fn frame_with_inputs(
 fn merge_identity_is_stable_for_a_location_and_slot() {
     let descriptor = "(I)V".parse().expect("valid descriptor");
     let location = Location::entry(0.into());
-    let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
+    let frame = |value| method_entry_frame(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
     let mut merged = frame(1);
 
     assert!(merge_frame_at(location, &mut merged, frame(2)));
-    let expected = SymbolicValue::Merged(FrameMergeSite {
+    let expected = Value::Merged(FrameMergeSite {
         location,
-        slot: FrameSlot::Local(0),
+        slot: Position::Local(0),
     });
-    assert_eq!(merged.local_variables(), &[Entry::Value(expected)]);
+    assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
     assert!(!merge_frame_at(location, &mut merged, frame(3)));
-    assert_eq!(merged.local_variables(), &[Entry::Value(expected)]);
+    assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
 }
 
 #[test]
 fn frame_merge_is_permutation_independent() {
     let descriptor = "(I)V".parse().expect("valid descriptor");
     let location = Location::entry(0.into());
-    let frame = |value| frame_with_inputs(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
-    let expected = [Entry::Value(SymbolicValue::Merged(FrameMergeSite {
+    let frame = |value| method_entry_frame(&descriptor, 1, 0, None, &[SsaValueId::new(value)]);
+    let expected = [Entry::Value(Value::Merged(FrameMergeSite {
         location,
-        slot: FrameSlot::Local(0),
+        slot: Position::Local(0),
     }))];
 
     for order in [
@@ -76,7 +76,7 @@ fn frame_merge_is_permutation_independent() {
         let mut merged = frame(order[0]);
         merge_frame_at(location, &mut merged, frame(order[1]));
         merge_frame_at(location, &mut merged, frame(order[2]));
-        assert_eq!(merged.local_variables(), expected);
+        assert_eq!(merged.local_slots(), expected);
     }
 }
 
@@ -95,7 +95,7 @@ fn reprocessing_loop_allocates_identities_only_for_definitions() {
         "()V",
         vec![],
     );
-    let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
+    let mut analyzer = Executor::for_method(&method).expect("valid method");
     analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(analyzer.definition_ids.len(), 3);
@@ -150,16 +150,16 @@ fn reprocessing_replaces_stale_predecessor_output() {
         "()V",
         vec![],
     );
-    let mut analyzer = JvmSymbolicExecutor::for_method(&method).expect("valid method");
+    let mut analyzer = Executor::for_method(&method).expect("valid method");
     let nodes = analyzer.solve_locations().expect("valid loop");
 
     assert_eq!(
         nodes[&Location::entry(2.into())]
             .incoming_frame
-            .operand_stack(),
-        &[Entry::Value(SymbolicValue::Merged(FrameMergeSite {
+            .operand_slots(),
+        &[Entry::Value(Value::Merged(FrameMergeSite {
             location: Location::entry(1.into()),
-            slot: FrameSlot::Stack(0),
+            slot: Position::Stack(0),
         }))]
     );
 }

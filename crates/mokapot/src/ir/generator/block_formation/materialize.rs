@@ -9,10 +9,8 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::JvmStackFrame,
-                instruction::RegisterInstruction,
-                normalization::Location,
-                symbolic_execution::{SymbolicJvmEdge, SymbolicJvmNode, SymbolicValue},
+                frame::Frame, instruction::RegisterInstruction, normalization::Location,
+                symbolic_execution,
             },
         },
     },
@@ -21,13 +19,13 @@ use crate::{
 
 use super::{
     layout::BlockLayout,
-    model::{JvmBlock, JvmBlockArm},
+    model::{Arm, Block},
 };
 
 pub(super) fn materialize_blocks(
-    mut symbolic_nodes: BTreeMap<Location, SymbolicJvmNode>,
+    mut symbolic_nodes: BTreeMap<Location, symbolic_execution::Node>,
     layout: &BlockLayout,
-) -> Result<Vec<JvmBlock>, MokaIRBuildError> {
+) -> Result<Vec<Block>, MokaIRBuildError> {
     let blocks = layout
         .locations()
         .iter()
@@ -43,9 +41,9 @@ pub(super) fn materialize_blocks(
 fn materialize_block(
     id: BlockId,
     locations: &[Location],
-    symbolic_nodes: &mut BTreeMap<Location, SymbolicJvmNode>,
+    symbolic_nodes: &mut BTreeMap<Location, symbolic_execution::Node>,
     layout: &BlockLayout,
-) -> Result<JvmBlock, MokaIRBuildError> {
+) -> Result<Block, MokaIRBuildError> {
     let mut entry_frame = None;
     let mut caught_exception = None;
     let mut operations = Vec::with_capacity(locations.len());
@@ -54,7 +52,7 @@ fn materialize_block(
     let mut arms = Vec::new();
 
     for (index, location) in locations.iter().copied().enumerate() {
-        let SymbolicJvmNode {
+        let symbolic_execution::Node {
             incoming_frame,
             instruction,
             outgoing_edges,
@@ -81,7 +79,7 @@ fn materialize_block(
         }
     }
 
-    Ok(JvmBlock {
+    Ok(Block {
         id,
         entry_frame: entry_frame.ok_or(MokaIRBuildError::MalformedControlFlow)?,
         operations,
@@ -95,9 +93,9 @@ fn materialize_block(
 fn materialize_internal_operation(
     location: Location,
     instruction: RegisterInstruction,
-    outgoing: &[SymbolicJvmEdge],
+    outgoing: &[symbolic_execution::Edge],
     next: Location,
-) -> Result<Option<(ProgramCounter, OperationKind<SymbolicValue>)>, MokaIRBuildError> {
+) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, MokaIRBuildError> {
     if instruction.is_explicit_transfer()
         || outgoing.len() != 1
         || outgoing[0].target != next
@@ -107,7 +105,7 @@ fn materialize_internal_operation(
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: SymbolicValue::Value(value),
+            value: symbolic_execution::Value::Ssa(value),
             expr,
         }),
         RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
@@ -134,16 +132,16 @@ fn materialize_internal_operation(
 }
 
 struct BlockEnd {
-    operation: Option<(ProgramCounter, OperationKind<SymbolicValue>)>,
-    terminator: TerminatorKind<SymbolicValue>,
+    operation: Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>,
+    terminator: TerminatorKind<symbolic_execution::Value>,
     terminator_source: Option<ProgramCounter>,
-    arms: Vec<JvmBlockArm>,
+    arms: Vec<Arm>,
 }
 
 fn materialize_block_end(
     location: Location,
     instruction: RegisterInstruction,
-    outgoing: Vec<SymbolicJvmEdge>,
+    outgoing: Vec<symbolic_execution::Edge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, MokaIRBuildError> {
     let explicit_transfer = instruction.is_explicit_transfer();
@@ -152,7 +150,7 @@ fn materialize_block_end(
         .map(|outgoing| {
             layout
                 .block_at(outgoing.target)
-                .map(|target| JvmBlockArm {
+                .map(|target| Arm {
                     target,
                     transfer: outgoing.transfer,
                     frame: outgoing.target_frame,
@@ -182,18 +180,18 @@ fn materialize_block_end(
 }
 
 pub(super) fn insert_entry_preheader(
-    mut blocks: Vec<JvmBlock>,
+    mut blocks: Vec<Block>,
     layout: &BlockLayout,
-    initial_frame: JvmStackFrame<SymbolicValue>,
-) -> Vec<JvmBlock> {
+    initial_frame: Frame<symbolic_execution::Value>,
+) -> Vec<Block> {
     if layout.has_entry_preheader() {
-        let entry_block = JvmBlock {
+        let entry_block = Block {
             id: layout.entry(),
             entry_frame: initial_frame.clone(),
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
-            arms: vec![JvmBlockArm {
+            arms: vec![Arm {
                 target: layout.bytecode_entry(),
                 transfer: ControlTransfer::Unconditional,
                 frame: initial_frame,
@@ -209,8 +207,8 @@ pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
     has_normal_successor: bool,
 ) -> (
-    Option<OperationKind<SymbolicValue>>,
-    TerminatorKind<SymbolicValue>,
+    Option<OperationKind<symbolic_execution::Value>>,
+    TerminatorKind<symbolic_execution::Value>,
 ) {
     match instruction {
         RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
@@ -231,7 +229,7 @@ pub(super) fn classify_block_end(
         RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
         RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
-                value: SymbolicValue::Value(value),
+                value: symbolic_execution::Value::Ssa(value),
                 expr,
             }),
             implicit_terminator(has_normal_successor),
@@ -243,7 +241,9 @@ pub(super) fn classify_block_end(
     }
 }
 
-const fn implicit_terminator(has_normal_successor: bool) -> TerminatorKind<SymbolicValue> {
+const fn implicit_terminator(
+    has_normal_successor: bool,
+) -> TerminatorKind<symbolic_execution::Value> {
     if has_normal_successor {
         TerminatorKind::Fallible
     } else {

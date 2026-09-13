@@ -8,7 +8,6 @@ use crate::{
             jvm::{
                 instruction::RegisterInstruction,
                 normalization::{Location, ReturnAddress},
-                symbolic_execution::SymbolicValue,
             },
         },
     },
@@ -23,9 +22,11 @@ fn pseudo_and_legacy_instructions_become_semantic_gotos() {
         RegisterInstruction::Subroutine {
             target: Location::Unwind,
         },
-        RegisterInstruction::SubroutineReturn(SymbolicValue::ReturnAddress(
-            ReturnAddress::for_test(0),
-        )),
+        RegisterInstruction::SubroutineReturn(
+            crate::ir::generator::jvm::symbolic_execution::Value::ReturnAddress(
+                ReturnAddress::for_test(0),
+            ),
+        ),
     ];
 
     for instruction in instructions {
@@ -49,7 +50,7 @@ fn fallible_definition_becomes_an_operation_and_terminator() {
     assert!(matches!(
         operation,
         Some(OperationKind::Definition {
-            value: SymbolicValue::Value(actual),
+            value: crate::ir::generator::jvm::symbolic_execution::Value::Ssa(actual),
             ..
         }) if actual == value
     ));

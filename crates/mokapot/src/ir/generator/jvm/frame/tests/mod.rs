@@ -2,7 +2,7 @@ mod operations_tests;
 mod stack_frame_tests;
 
 use crate::{
-    ir::generator::jvm::frame::{ExecutionError, JvmStackFrame},
+    ir::generator::jvm::frame::{Frame, JvmFrameError},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -14,7 +14,7 @@ fn frame(
     descriptor: &MethodDescriptor,
     max_locals: u16,
     max_stack: u16,
-) -> Result<JvmStackFrame<TestValue>, ExecutionError> {
+) -> Result<Frame<TestValue>, JvmFrameError> {
     let this_value = (!is_static).then_some(TestValue(0));
     let parameter_offset = u32::from(!is_static);
     let parameters = descriptor
@@ -26,5 +26,5 @@ fn frame(
             TestValue(index + parameter_offset)
         })
         .collect::<Vec<_>>();
-    JvmStackFrame::with_inputs(descriptor, max_locals, max_stack, this_value, &parameters)
+    Frame::for_method_entry(descriptor, max_locals, max_stack, this_value, &parameters)
 }

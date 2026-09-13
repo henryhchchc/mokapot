@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                frame::{CATEGORY_1, CATEGORY_2, Frame},
                 instruction::RegisterInstruction,
                 lifting::require_definition_id,
-                symbolic_execution::SymbolicValue,
+                symbolic_execution::Value,
             },
         },
     },
@@ -23,12 +23,12 @@ pub(super) const fn produces_value(instruction: &JVM) -> bool {
 pub(super) fn try_lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     let instruction = match jvm_instruction {
         JVM::GetStatic(field) => {
             let definition = require_definition_id(definition)?;
-            frame.typed_push(&field.field_type, definition.into())?;
+            frame.push_value_of_type(&field.field_type, definition.into())?;
             let field_op = FieldAccess::ReadStatic {
                 field: field.clone(),
             };
@@ -39,8 +39,8 @@ pub(super) fn try_lift(
         }
         JVM::GetField(field) => {
             let definition = require_definition_id(definition)?;
-            let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
-            frame.typed_push(&field.field_type, definition.into())?;
+            let object_ref = frame.pop_value::<CATEGORY_1>()?;
+            frame.push_value_of_type(&field.field_type, definition.into())?;
             let field_op = FieldAccess::ReadInstance {
                 object_ref,
                 field: field.clone(),
@@ -53,9 +53,9 @@ pub(super) fn try_lift(
         JVM::PutStatic(field) => {
             use PrimitiveType::{Double, Long};
             let value = if let FieldType::Base(Double | Long) = field.field_type {
-                frame.pop_value::<DUAL_SLOT>()
+                frame.pop_value::<CATEGORY_2>()
             } else {
-                frame.pop_value::<SINGLE_SLOT>()
+                frame.pop_value::<CATEGORY_1>()
             }?;
             let field_op = FieldAccess::WriteStatic {
                 field: field.clone(),
@@ -66,11 +66,11 @@ pub(super) fn try_lift(
         JVM::PutField(field) => {
             use PrimitiveType::{Double, Long};
             let value = if let FieldType::Base(Double | Long) = field.field_type {
-                frame.pop_value::<DUAL_SLOT>()
+                frame.pop_value::<CATEGORY_2>()
             } else {
-                frame.pop_value::<SINGLE_SLOT>()
+                frame.pop_value::<CATEGORY_1>()
             }?;
-            let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            let object_ref = frame.pop_value::<CATEGORY_1>()?;
             let field_op = FieldAccess::WriteInstance {
                 object_ref,
                 field: field.clone(),

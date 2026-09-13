@@ -3,18 +3,15 @@ use crate::ir::{
     generator::{
         error::MokaIRBuildError,
         identity::SsaValueId,
-        jvm::{
-            frame::JvmStackFrame, instruction::RegisterInstruction,
-            symbolic_execution::SymbolicValue,
-        },
+        jvm::{frame::Frame, instruction::RegisterInstruction, symbolic_execution::Value},
     },
 };
 
 #[inline]
 pub(super) fn lift_conversion<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     def: SsaValueId,
-    conversion: impl FnOnce(SymbolicValue) -> Conversion<SymbolicValue>,
+    conversion: impl FnOnce(Value) -> Conversion<Value>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let operand = frame.pop_value::<OPERAND_SLOT>()?;
     frame.push_value::<RESULT_SLOT>(def.into())?;
@@ -26,9 +23,9 @@ pub(super) fn lift_conversion<const OPERAND_SLOT: bool, const RESULT_SLOT: bool>
 
 #[inline]
 pub(super) fn lift_binary_math<const SLOT: bool>(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     def_id: SsaValueId,
-    math: impl FnOnce(SymbolicValue, SymbolicValue) -> MathOperation<SymbolicValue>,
+    math: impl FnOnce(Value, Value) -> MathOperation<Value>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let rhs = frame.pop_value::<SLOT>()?;
     let lhs = frame.pop_value::<SLOT>()?;

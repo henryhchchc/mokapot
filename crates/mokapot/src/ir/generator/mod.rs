@@ -26,7 +26,7 @@ pub use error::MokaIRBuildError;
     unused_imports,
     reason = "the re-export preserves the generator error surface"
 )]
-pub use jvm::frame::ExecutionError;
+pub use jvm::frame::JvmFrameError;
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 

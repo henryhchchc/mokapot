@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                frame::{JvmStackFrame, SINGLE_SLOT},
+                frame::{CATEGORY_1, Frame},
                 instruction::RegisterInstruction,
                 lifting::{operations::lift_conversion, require_definition_id},
-                symbolic_execution::SymbolicValue,
+                symbolic_execution::Value,
             },
         },
     },
@@ -25,12 +25,12 @@ pub(super) const fn produces_value(instruction: &JVM) -> bool {
 pub(super) fn try_lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     let instruction = match jvm_instruction {
         JVM::New(class) => {
             let definition = require_definition_id(definition)?;
-            frame.push_value::<SINGLE_SLOT>(definition.into())?;
+            frame.push_value::<CATEGORY_1>(definition.into())?;
             RegisterInstruction::Definition {
                 value: definition,
                 expr: Expression::New(class.clone()),
@@ -38,23 +38,23 @@ pub(super) fn try_lift(
         }
         JVM::CheckCast(target_type) => {
             let definition = require_definition_id(definition)?;
-            lift_conversion::<SINGLE_SLOT, SINGLE_SLOT>(frame, definition, |value| {
+            lift_conversion::<CATEGORY_1, CATEGORY_1>(frame, definition, |value| {
                 Conversion::CheckCast(value, target_type.clone())
             })?
         }
         JVM::InstanceOf(target_type) => {
             let definition = require_definition_id(definition)?;
-            lift_conversion::<SINGLE_SLOT, SINGLE_SLOT>(frame, definition, |value| {
+            lift_conversion::<CATEGORY_1, CATEGORY_1>(frame, definition, |value| {
                 Conversion::InstanceOf(value, target_type.clone())
             })?
         }
         JVM::MonitorEnter => {
-            let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            let object_ref = frame.pop_value::<CATEGORY_1>()?;
             let expression = Expression::Synchronization(LockOperation::Acquire(object_ref));
             RegisterInstruction::Effect(expression)
         }
         JVM::MonitorExit => {
-            let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            let object_ref = frame.pop_value::<CATEGORY_1>()?;
             let expression = Expression::Synchronization(LockOperation::Release(object_ref));
             RegisterInstruction::Effect(expression)
         }

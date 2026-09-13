@@ -4,10 +4,10 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                frame::{CATEGORY_1, CATEGORY_2, Frame},
                 instruction::RegisterInstruction,
                 normalization::Location,
-                symbolic_execution::{JvmSymbolicExecutor, SymbolicValue},
+                symbolic_execution::{Executor, Value},
             },
         },
     },
@@ -16,11 +16,11 @@ use crate::{
 
 #[inline]
 pub(super) fn unary_branch(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     target: ProgramCounter,
-    condition: impl FnOnce(SymbolicValue) -> Condition<SymbolicValue>,
+    condition: impl FnOnce(Value) -> Condition<Value>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let operand = frame.pop_value::<SINGLE_SLOT>()?;
+    let operand = frame.pop_value::<CATEGORY_1>()?;
     Ok(RegisterInstruction::Jump {
         condition: Some(condition(operand)),
         target,
@@ -29,12 +29,12 @@ pub(super) fn unary_branch(
 
 #[inline]
 pub(super) fn comparison_branch(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     target: ProgramCounter,
-    condition: impl FnOnce(SymbolicValue, SymbolicValue) -> Condition<SymbolicValue>,
+    condition: impl FnOnce(Value, Value) -> Condition<Value>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let rhs = frame.pop_value::<SINGLE_SLOT>()?;
-    let lhs = frame.pop_value::<SINGLE_SLOT>()?;
+    let rhs = frame.pop_value::<CATEGORY_1>()?;
+    let lhs = frame.pop_value::<CATEGORY_1>()?;
     Ok(RegisterInstruction::Jump {
         condition: Some(condition(lhs, rhs)),
         target,
@@ -42,11 +42,11 @@ pub(super) fn comparison_branch(
 }
 
 pub(super) fn try_lift(
-    executor: &mut JvmSymbolicExecutor<'_>,
+    executor: &mut Executor<'_>,
     jvm_instruction: &JVM,
     location: Location,
     pc: ProgramCounter,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
@@ -78,16 +78,16 @@ pub(super) fn try_lift(
         Jsr(target) | JsrW(target) => {
             let next_pc = executor.next_pc_of(pc)?;
             let (target, return_address) = executor.enter_subroutine(location, *target, next_pc)?;
-            frame.push_value::<SINGLE_SLOT>(return_address.into())?;
+            frame.push_value::<CATEGORY_1>(return_address.into())?;
             RegisterInstruction::Subroutine { target }
         }
         Ret(idx) => {
             let idx = (*idx).into();
-            let return_address = frame.get_local::<SINGLE_SLOT>(idx)?;
+            let return_address = frame.get_local::<CATEGORY_1>(idx)?;
             RegisterInstruction::SubroutineReturn(return_address)
         }
         Wide(WideInstruction::Ret(idx)) => {
-            let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
+            let return_address = frame.get_local::<CATEGORY_1>(*idx)?;
             RegisterInstruction::SubroutineReturn(return_address)
         }
         TableSwitch {
@@ -95,7 +95,7 @@ pub(super) fn try_lift(
             jump_targets,
             default,
         } => {
-            let condition = frame.pop_value::<SINGLE_SLOT>()?;
+            let condition = frame.pop_value::<CATEGORY_1>()?;
             let branches = range.clone().zip(jump_targets.clone()).collect();
             RegisterInstruction::Switch {
                 match_value: condition,
@@ -107,7 +107,7 @@ pub(super) fn try_lift(
             default,
             match_targets,
         } => {
-            let condition = frame.pop_value::<SINGLE_SLOT>()?;
+            let condition = frame.pop_value::<CATEGORY_1>()?;
             RegisterInstruction::Switch {
                 match_value: condition,
                 default: *default,
@@ -115,16 +115,16 @@ pub(super) fn try_lift(
             }
         }
         IReturn | FReturn | AReturn => {
-            let value = frame.pop_value::<SINGLE_SLOT>()?;
+            let value = frame.pop_value::<CATEGORY_1>()?;
             RegisterInstruction::Return(Some(value))
         }
         LReturn | DReturn => {
-            let value = frame.pop_value::<DUAL_SLOT>()?;
+            let value = frame.pop_value::<CATEGORY_2>()?;
             RegisterInstruction::Return(Some(value))
         }
         Return => RegisterInstruction::Return(None),
         AThrow => {
-            let exception_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            let exception_ref = frame.pop_value::<CATEGORY_1>()?;
             RegisterInstruction::Throw(exception_ref)
         }
         _ => return Ok(None),

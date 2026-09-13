@@ -18,19 +18,19 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            frame::JvmStackFrame,
+            frame::Frame,
             instruction::RegisterInstruction,
             normalization::Location,
-            symbolic_execution::{JvmSymbolicExecutor, SymbolicValue},
+            symbolic_execution::{Executor, Value},
         },
     },
     jvm::code::Instruction as JVM,
 };
 pub(super) fn lift_register_instruction(
-    executor: &mut JvmSymbolicExecutor<'_>,
+    executor: &mut Executor<'_>,
     jvm_instruction: &JVM,
     location: Location,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let pc = location
         .source_pc()

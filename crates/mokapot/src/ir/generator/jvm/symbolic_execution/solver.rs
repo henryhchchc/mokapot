@@ -10,41 +10,35 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
-    analyzer::JvmSymbolicExecutor,
-    fact::{FrameMergeSite, SymbolicJvmEdge, SymbolicJvmNode, SymbolicValue},
+    analyzer::Executor,
+    fact::{Edge, FrameMergeSite, Node, Value},
 };
 use crate::ir::generator::{
     error::MokaIRBuildError,
-    jvm::{frame::JvmStackFrame, normalization::Location},
+    jvm::{frame::Frame, normalization::Location},
 };
 
 struct SolverState {
-    entry: (Location, JvmStackFrame<SymbolicValue>),
-    completed: BTreeMap<Location, SymbolicJvmNode>,
+    entry: (Location, Frame<Value>),
+    completed: BTreeMap<Location, Node>,
     predecessors: BTreeMap<Location, BTreeSet<Location>>,
     dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, JvmStackFrame<SymbolicValue>>,
+    queued_inputs: BTreeMap<Location, Frame<Value>>,
 }
 
 #[cfg(test)]
-type CompletedFingerprint = BTreeMap<
-    Location,
-    (
-        JvmStackFrame<SymbolicValue>,
-        Vec<(Location, JvmStackFrame<SymbolicValue>)>,
-    ),
->;
+type CompletedFingerprint = BTreeMap<Location, (Frame<Value>, Vec<(Location, Frame<Value>)>)>;
 
 #[cfg(test)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct SolverFingerprint {
     completed: CompletedFingerprint,
     dirty: BTreeSet<Location>,
-    queued_inputs: BTreeMap<Location, JvmStackFrame<SymbolicValue>>,
+    queued_inputs: BTreeMap<Location, Frame<Value>>,
 }
 
 impl SolverState {
-    fn new(entry_location: Location, initial_frame: JvmStackFrame<SymbolicValue>) -> Self {
+    fn new(entry_location: Location, initial_frame: Frame<Value>) -> Self {
         Self {
             entry: (entry_location, initial_frame),
             completed: BTreeMap::new(),
@@ -74,7 +68,7 @@ impl SolverState {
         }
     }
 
-    fn recompute_frame(&self, location: Location) -> Option<JvmStackFrame<SymbolicValue>> {
+    fn recompute_frame(&self, location: Location) -> Option<Frame<Value>> {
         let seed = (location == self.entry.0).then_some(&self.entry.1);
         let mut incoming = seed.into_iter().chain(
             self.predecessors
@@ -123,7 +117,7 @@ impl SolverState {
         self.purge_detached_nodes();
     }
 
-    fn replace_result(&mut self, location: Location, result: SymbolicJvmNode) {
+    fn replace_result(&mut self, location: Location, result: Node) {
         let current_targets = targets(&result.outgoing_edges);
         let previous_targets = self
             .completed
@@ -212,15 +206,15 @@ impl SolverState {
     }
 }
 
-fn targets(outgoing: &[SymbolicJvmEdge]) -> BTreeSet<Location> {
+fn targets(outgoing: &[Edge]) -> BTreeSet<Location> {
     outgoing.iter().map(|edge| edge.target).collect()
 }
 
 pub(super) fn solve(
-    analyzer: &mut JvmSymbolicExecutor<'_>,
+    analyzer: &mut Executor<'_>,
     entry_location: Location,
-    initial_frame: JvmStackFrame<SymbolicValue>,
-) -> Result<BTreeMap<Location, SymbolicJvmNode>, MokaIRBuildError> {
+    initial_frame: Frame<Value>,
+) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
     let mut state = SolverState::new(entry_location, initial_frame);
 
     #[cfg(test)]
@@ -250,21 +244,19 @@ pub(super) fn solve(
 
 pub(super) fn merge_frame_at(
     location: Location,
-    frame: &mut JvmStackFrame<SymbolicValue>,
-    contribution: JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
+    contribution: Frame<Value>,
 ) -> bool {
-    frame.join_assign_values_with(contribution, |slot, lhs, rhs| {
+    frame.merge_from_with(contribution, |slot, lhs, rhs| {
         if *lhs == rhs {
             return false;
         }
         let identity = FrameMergeSite { location, slot };
         let merged = match (*lhs, rhs) {
-            (SymbolicValue::Invalid | SymbolicValue::ReturnAddress(_), _)
-            | (_, SymbolicValue::Invalid | SymbolicValue::ReturnAddress(_)) => {
-                SymbolicValue::Invalid
-            }
-            (SymbolicValue::Merged(current), _) if current == identity => return false,
-            _ => SymbolicValue::Merged(identity),
+            (Value::Invalid | Value::ReturnAddress(_), _)
+            | (_, Value::Invalid | Value::ReturnAddress(_)) => Value::Invalid,
+            (Value::Merged(current), _) if current == identity => return false,
+            _ => Value::Merged(identity),
         };
         if *lhs == merged {
             false
@@ -283,31 +275,28 @@ mod tests {
         generator::{
             identity::SsaValueId,
             jvm::{
-                frame::{Entry, FrameSlot},
+                frame::{Entry, Position},
                 instruction::RegisterInstruction,
             },
         },
     };
 
-    fn frame(value: u32) -> JvmStackFrame<SymbolicValue> {
-        JvmStackFrame::with_inputs(
+    fn frame(value: u32) -> Frame<Value> {
+        Frame::for_method_entry(
             &"(I)V".parse().expect("valid descriptor"),
             1,
             0,
             None,
-            &[SymbolicValue::Value(SsaValueId::new(value))],
+            &[Value::Ssa(SsaValueId::new(value))],
         )
         .expect("frame fits descriptor")
     }
 
-    fn result_to(
-        target: Location,
-        outgoing_frame: JvmStackFrame<SymbolicValue>,
-    ) -> SymbolicJvmNode {
-        SymbolicJvmNode {
+    fn result_to(target: Location, outgoing_frame: Frame<Value>) -> Node {
+        Node {
             incoming_frame: frame(0),
             instruction: RegisterInstruction::Erased,
-            outgoing_edges: vec![SymbolicJvmEdge {
+            outgoing_edges: vec![Edge {
                 target,
                 transfer: ControlTransfer::Unconditional,
                 target_frame: outgoing_frame,
@@ -325,16 +314,16 @@ mod tests {
 
         state.replace_result(
             source,
-            SymbolicJvmNode {
+            Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
                 outgoing_edges: vec![
-                    SymbolicJvmEdge {
+                    Edge {
                         target,
                         transfer: ControlTransfer::Unconditional,
                         target_frame: frame(1),
                     },
-                    SymbolicJvmEdge {
+                    Edge {
                         target,
                         transfer: ControlTransfer::Unconditional,
                         target_frame: frame(2),
@@ -347,10 +336,10 @@ mod tests {
 
         assert_eq!(state.predecessors[&target], BTreeSet::from([source]));
         assert_eq!(
-            state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(SymbolicValue::Merged(FrameMergeSite {
+            state.queued_inputs[&target].local_slots(),
+            &[Entry::Value(Value::Merged(FrameMergeSite {
                 location: target,
-                slot: FrameSlot::Local(0),
+                slot: Position::Local(0),
             }))]
         );
     }
@@ -365,20 +354,20 @@ mod tests {
         state.replace_result(source, result_to(target, frame(1)));
         state.recompute_dirty();
         assert_eq!(
-            state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(SymbolicValue::Value(SsaValueId::new(1)))]
+            state.queued_inputs[&target].local_slots(),
+            &[Entry::Value(Value::Ssa(SsaValueId::new(1)))]
         );
 
         state.replace_result(source, result_to(target, frame(2)));
         state.recompute_dirty();
         assert_eq!(
-            state.queued_inputs[&target].local_variables(),
-            &[Entry::Value(SymbolicValue::Value(SsaValueId::new(2)))]
+            state.queued_inputs[&target].local_slots(),
+            &[Entry::Value(Value::Ssa(SsaValueId::new(2)))]
         );
 
         state.replace_result(
             source,
-            SymbolicJvmNode {
+            Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
                 outgoing_edges: Vec::new(),
@@ -409,7 +398,7 @@ mod tests {
 
         state.replace_result(
             source,
-            SymbolicJvmNode {
+            Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
                 outgoing_edges: Vec::new(),

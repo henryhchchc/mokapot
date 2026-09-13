@@ -7,6 +7,6 @@ mod stack_frame;
 mod tests;
 
 pub(crate) use entry::Entry;
-pub use error::ExecutionError;
+pub use error::JvmFrameError;
 pub(crate) use operations::StackOperations;
-pub(crate) use stack_frame::{DUAL_SLOT, FrameSlot, JvmStackFrame, SINGLE_SLOT};
+pub(crate) use stack_frame::{CATEGORY_1, CATEGORY_2, Frame, Position};

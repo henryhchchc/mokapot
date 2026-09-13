@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
+                frame::{CATEGORY_1, CATEGORY_2, Frame},
                 instruction::RegisterInstruction,
                 lifting::require_definition_id,
-                symbolic_execution::SymbolicValue,
+                symbolic_execution::Value,
             },
         },
     },
@@ -25,7 +25,7 @@ pub(super) const fn produces_value(instruction: &JVM) -> bool {
 pub(super) fn try_lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     #[allow(
         clippy::enum_glob_use,
@@ -34,28 +34,28 @@ pub(super) fn try_lift(
     use JVM::*;
 
     let instruction = match jvm_instruction {
-        ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local::<SINGLE_SLOT>(frame, u16::from(*idx))?,
-        LLoad(idx) | DLoad(idx) => load_local::<DUAL_SLOT>(frame, (*idx).into())?,
-        ILoad0 | FLoad0 | ALoad0 => load_local::<SINGLE_SLOT>(frame, 0)?,
-        ILoad1 | FLoad1 | ALoad1 => load_local::<SINGLE_SLOT>(frame, 1)?,
-        ILoad2 | FLoad2 | ALoad2 => load_local::<SINGLE_SLOT>(frame, 2)?,
-        ILoad3 | FLoad3 | ALoad3 => load_local::<SINGLE_SLOT>(frame, 3)?,
-        LLoad0 | DLoad0 => load_local::<DUAL_SLOT>(frame, 0)?,
-        LLoad1 | DLoad1 => load_local::<DUAL_SLOT>(frame, 1)?,
-        LLoad2 | DLoad2 => load_local::<DUAL_SLOT>(frame, 2)?,
-        LLoad3 | DLoad3 => load_local::<DUAL_SLOT>(frame, 3)?,
+        ILoad(idx) | FLoad(idx) | ALoad(idx) => load_local::<CATEGORY_1>(frame, u16::from(*idx))?,
+        LLoad(idx) | DLoad(idx) => load_local::<CATEGORY_2>(frame, (*idx).into())?,
+        ILoad0 | FLoad0 | ALoad0 => load_local::<CATEGORY_1>(frame, 0)?,
+        ILoad1 | FLoad1 | ALoad1 => load_local::<CATEGORY_1>(frame, 1)?,
+        ILoad2 | FLoad2 | ALoad2 => load_local::<CATEGORY_1>(frame, 2)?,
+        ILoad3 | FLoad3 | ALoad3 => load_local::<CATEGORY_1>(frame, 3)?,
+        LLoad0 | DLoad0 => load_local::<CATEGORY_2>(frame, 0)?,
+        LLoad1 | DLoad1 => load_local::<CATEGORY_2>(frame, 1)?,
+        LLoad2 | DLoad2 => load_local::<CATEGORY_2>(frame, 2)?,
+        LLoad3 | DLoad3 => load_local::<CATEGORY_2>(frame, 3)?,
         IStore(idx) | FStore(idx) | AStore(idx) => {
-            store_local::<SINGLE_SLOT>(frame, u16::from(*idx))?
+            store_local::<CATEGORY_1>(frame, u16::from(*idx))?
         }
-        LStore(idx) | DStore(idx) => store_local::<DUAL_SLOT>(frame, u16::from(*idx))?,
-        IStore0 | FStore0 | AStore0 => store_local::<SINGLE_SLOT>(frame, 0)?,
-        IStore1 | FStore1 | AStore1 => store_local::<SINGLE_SLOT>(frame, 1)?,
-        IStore2 | FStore2 | AStore2 => store_local::<SINGLE_SLOT>(frame, 2)?,
-        IStore3 | FStore3 | AStore3 => store_local::<SINGLE_SLOT>(frame, 3)?,
-        LStore0 | DStore0 => store_local::<DUAL_SLOT>(frame, 0)?,
-        LStore1 | DStore1 => store_local::<DUAL_SLOT>(frame, 1)?,
-        LStore2 | DStore2 => store_local::<DUAL_SLOT>(frame, 2)?,
-        LStore3 | DStore3 => store_local::<DUAL_SLOT>(frame, 3)?,
+        LStore(idx) | DStore(idx) => store_local::<CATEGORY_2>(frame, u16::from(*idx))?,
+        IStore0 | FStore0 | AStore0 => store_local::<CATEGORY_1>(frame, 0)?,
+        IStore1 | FStore1 | AStore1 => store_local::<CATEGORY_1>(frame, 1)?,
+        IStore2 | FStore2 | AStore2 => store_local::<CATEGORY_1>(frame, 2)?,
+        IStore3 | FStore3 | AStore3 => store_local::<CATEGORY_1>(frame, 3)?,
+        LStore0 | DStore0 => store_local::<CATEGORY_2>(frame, 0)?,
+        LStore1 | DStore1 => store_local::<CATEGORY_2>(frame, 1)?,
+        LStore2 | DStore2 => store_local::<CATEGORY_2>(frame, 2)?,
+        LStore3 | DStore3 => store_local::<CATEGORY_2>(frame, 3)?,
         IInc(idx, constant) => increment_local(frame, (*idx).into(), *constant, definition)?,
         Wide(WideInstruction::IInc(idx, constant)) => {
             increment_local(frame, *idx, *constant, definition)?
@@ -63,13 +63,13 @@ pub(super) fn try_lift(
         Wide(
             WideInstruction::ILoad(idx) | WideInstruction::FLoad(idx) | WideInstruction::ALoad(idx),
         ) => {
-            let value = frame.get_local::<SINGLE_SLOT>(*idx)?;
-            frame.push_value::<SINGLE_SLOT>(value)?;
+            let value = frame.get_local::<CATEGORY_1>(*idx)?;
+            frame.push_value::<CATEGORY_1>(value)?;
             RegisterInstruction::Erased
         }
         Wide(WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx)) => {
-            let value = frame.get_local::<DUAL_SLOT>(*idx)?;
-            frame.push_value::<DUAL_SLOT>(value)?;
+            let value = frame.get_local::<CATEGORY_2>(*idx)?;
+            frame.push_value::<CATEGORY_2>(value)?;
             RegisterInstruction::Erased
         }
         Wide(
@@ -77,13 +77,13 @@ pub(super) fn try_lift(
             | WideInstruction::FStore(idx)
             | WideInstruction::AStore(idx),
         ) => {
-            let value = frame.pop_value::<SINGLE_SLOT>()?;
-            frame.set_local::<SINGLE_SLOT>(*idx, value)?;
+            let value = frame.pop_value::<CATEGORY_1>()?;
+            frame.set_local::<CATEGORY_1>(*idx, value)?;
             RegisterInstruction::Erased
         }
         Wide(WideInstruction::LStore(idx) | WideInstruction::DStore(idx)) => {
-            let value = frame.pop_value::<DUAL_SLOT>()?;
-            frame.set_local::<DUAL_SLOT>(*idx, value)?;
+            let value = frame.pop_value::<CATEGORY_2>()?;
+            frame.set_local::<CATEGORY_2>(*idx, value)?;
             RegisterInstruction::Erased
         }
         _ => return Ok(None),
@@ -92,14 +92,14 @@ pub(super) fn try_lift(
 }
 
 fn increment_local(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     idx: u16,
     constant: i32,
     definition: Option<SsaValueId>,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let definition = require_definition_id(definition)?;
-    let base = frame.get_local::<SINGLE_SLOT>(idx)?;
-    frame.set_local::<SINGLE_SLOT>(idx, definition.into())?;
+    let base = frame.get_local::<CATEGORY_1>(idx)?;
+    frame.set_local::<CATEGORY_1>(idx, definition.into())?;
     let operation = MathOperation::Increment(base, constant);
     Ok(RegisterInstruction::Definition {
         value: definition,
@@ -109,14 +109,11 @@ fn increment_local(
 
 #[inline]
 fn load_local<const SLOT: bool>(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     idx: u16,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let value = frame.get_local::<SLOT>(idx)?;
-    if matches!(
-        value,
-        SymbolicValue::ReturnAddress(_) | SymbolicValue::Invalid
-    ) {
+    if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
         return Err(MokaIRBuildError::MalformedControlFlow);
     }
     frame.push_value::<SLOT>(value)?;
@@ -125,7 +122,7 @@ fn load_local<const SLOT: bool>(
 
 #[inline]
 fn store_local<const SLOT: bool>(
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
     idx: u16,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
     let value = frame.pop_value::<SLOT>()?;

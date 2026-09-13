@@ -5,10 +5,10 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
-                frame::{JvmStackFrame, SINGLE_SLOT},
+                frame::{CATEGORY_1, Frame},
                 instruction::RegisterInstruction,
                 lifting::require_definition_id,
-                symbolic_execution::SymbolicValue,
+                symbolic_execution::Value,
             },
         },
     },
@@ -32,14 +32,14 @@ pub(super) const fn produces_value(instruction: &JVM) -> bool {
 pub(super) fn try_lift(
     jvm_instruction: &JVM,
     definition: Option<SsaValueId>,
-    frame: &mut JvmStackFrame<SymbolicValue>,
+    frame: &mut Frame<Value>,
 ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
     let instruction = match jvm_instruction {
         JVM::InvokeVirtual(method_ref)
         | JVM::InvokeSpecial(method_ref)
         | JVM::InvokeInterface(method_ref, _) => {
-            let arguments = frame.pop_args(&method_ref.descriptor)?;
-            let object_ref = frame.pop_value::<SINGLE_SLOT>()?;
+            let arguments = frame.pop_arguments(&method_ref.descriptor)?;
+            let object_ref = frame.pop_value::<CATEGORY_1>()?;
             let expression = Expression::Call {
                 method: method_ref.clone(),
                 this: Some(object_ref),
@@ -48,7 +48,7 @@ pub(super) fn try_lift(
             match &method_ref.descriptor.return_type {
                 ReturnType::Some(return_type) => {
                     let definition = require_definition_id(definition)?;
-                    frame.typed_push(return_type, definition.into())?;
+                    frame.push_value_of_type(return_type, definition.into())?;
                     RegisterInstruction::Definition {
                         value: definition,
                         expr: expression,
@@ -58,7 +58,7 @@ pub(super) fn try_lift(
             }
         }
         JVM::InvokeStatic(method_ref) => {
-            let arguments = frame.pop_args(&method_ref.descriptor)?;
+            let arguments = frame.pop_arguments(&method_ref.descriptor)?;
             let expression = Expression::Call {
                 method: method_ref.clone(),
                 this: None,
@@ -67,7 +67,7 @@ pub(super) fn try_lift(
             match &method_ref.descriptor.return_type {
                 ReturnType::Some(return_type) => {
                     let definition = require_definition_id(definition)?;
-                    frame.typed_push(return_type, definition.into())?;
+                    frame.push_value_of_type(return_type, definition.into())?;
                     RegisterInstruction::Definition {
                         value: definition,
                         expr: expression,
@@ -81,7 +81,7 @@ pub(super) fn try_lift(
             bootstrap_method_index,
             name,
         } => {
-            let arguments = frame.pop_args(descriptor)?;
+            let arguments = frame.pop_arguments(descriptor)?;
             let expression = Expression::Closure {
                 bootstrap_method_index: *bootstrap_method_index,
                 name: name.to_owned(),
@@ -91,7 +91,7 @@ pub(super) fn try_lift(
             match &descriptor.return_type {
                 ReturnType::Some(return_type) => {
                     let definition = require_definition_id(definition)?;
-                    frame.typed_push(return_type, definition.into())?;
+                    frame.push_value_of_type(return_type, definition.into())?;
                     RegisterInstruction::Definition {
                         value: definition,
                         expr: expression,

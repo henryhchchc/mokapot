@@ -5,14 +5,14 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            frame::JvmStackFrame,
+            frame::Frame,
             instruction::RegisterInstruction,
             lifting::{
                 fallibility::FallibilityContext, lift_register_instruction,
                 successors::build_successors,
             },
             normalization::{Location, Normalizer},
-            symbolic_execution::fact::{SymbolicJvmCfg, SymbolicJvmNode, SymbolicValue},
+            symbolic_execution::fact::{Cfg, Node, Value},
             symbolic_execution::solver,
         },
     },
@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// Mutable state used only while performing symbolic execution.
-pub(crate) struct JvmSymbolicExecutor<'method> {
+pub(crate) struct Executor<'method> {
     pub(super) body: &'method MethodBody,
     fallibility: FallibilityContext,
     pub(super) normalizer: Normalizer,
@@ -34,19 +34,19 @@ pub(crate) struct JvmSymbolicExecutor<'method> {
     receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
     entry_location: Location,
-    initial_frame: JvmStackFrame<SymbolicValue>,
+    initial_frame: Frame<Value>,
 }
 
-impl<'method> JvmSymbolicExecutor<'method> {
+impl<'method> Executor<'method> {
     pub fn transfer(
         &mut self,
         location: Location,
-        incoming_frame: JvmStackFrame<SymbolicValue>,
-    ) -> Result<SymbolicJvmNode, MokaIRBuildError> {
+        incoming_frame: Frame<Value>,
+    ) -> Result<Node, MokaIRBuildError> {
         let (instruction, outgoing_edges) = match location {
             Location::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
-                let normal_frame = incoming_frame.same_frame();
+                let normal_frame = incoming_frame.clone();
                 let outgoing_edges = build_successors(
                     self,
                     location,
@@ -59,7 +59,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
             }
             Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
             Location::Bytecode { pc, .. } => {
-                let mut normal_frame = incoming_frame.same_frame();
+                let mut normal_frame = incoming_frame.clone();
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
@@ -81,7 +81,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
             }
         };
 
-        Ok(SymbolicJvmNode {
+        Ok(Node {
             incoming_frame,
             instruction,
             outgoing_edges,
@@ -112,13 +112,13 @@ impl<'method> JvmSymbolicExecutor<'method> {
         let frame_parameters = parameter_values
             .iter()
             .copied()
-            .map(SymbolicValue::Value)
+            .map(Value::Ssa)
             .collect::<Vec<_>>();
-        let initial_frame = JvmStackFrame::with_inputs(
+        let initial_frame = Frame::for_method_entry(
             &method.descriptor,
             body.max_locals,
             body.max_stack,
-            receiver_value.map(SymbolicValue::Value),
+            receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
         let entry_location = Location::entry(first_pc);
@@ -137,23 +137,21 @@ impl<'method> JvmSymbolicExecutor<'method> {
         Ok(analyzer)
     }
 
-    pub fn analyze(mut self) -> Result<SymbolicJvmCfg, MokaIRBuildError> {
+    pub fn analyze(mut self) -> Result<Cfg, MokaIRBuildError> {
         let nodes = self.solve_locations()?;
         let merge_identities = nodes
             .values()
-            .flat_map(|node| node.incoming_frame.values())
+            .flat_map(|node| node.incoming_frame.iter_values())
             .filter_map(|value| match value {
-                SymbolicValue::Merged(identity) => Some(*identity),
-                SymbolicValue::Value(_)
-                | SymbolicValue::ReturnAddress(_)
-                | SymbolicValue::Invalid => None,
+                Value::Merged(identity) => Some(identity.to_owned()),
+                Value::Ssa(_) | Value::ReturnAddress(_) | Value::Invalid => None,
             })
             .collect::<BTreeSet<_>>();
         let phi_values = merge_identities
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        Ok(SymbolicJvmCfg {
+        Ok(Cfg {
             entry_location: self.entry_location,
             initial_frame: self.initial_frame,
             nodes,
@@ -163,9 +161,7 @@ impl<'method> JvmSymbolicExecutor<'method> {
         })
     }
 
-    pub fn solve_locations(
-        &mut self,
-    ) -> Result<BTreeMap<Location, SymbolicJvmNode>, MokaIRBuildError> {
+    pub fn solve_locations(&mut self) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
         let entry_location = self.entry_location;
         let initial_frame = self.initial_frame.clone();
         solver::solve(self, entry_location, initial_frame)
