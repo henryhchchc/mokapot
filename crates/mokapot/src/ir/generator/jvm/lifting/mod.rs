@@ -7,6 +7,7 @@ mod control_flow;
 pub(super) mod fallibility;
 mod fields;
 mod locals;
+mod miscellaneous;
 mod numeric;
 mod operations;
 mod references;
@@ -40,7 +41,9 @@ pub(super) fn lift_register_instruction(
         .then(|| executor.definition_id_at(location))
         .transpose()?;
 
-    if let Some(instruction) = constants::try_lift(jvm_instruction, definition, frame)? {
+    if let Some(value) = definition
+        && let Some(instruction) = constants::try_lift(jvm_instruction, value, frame)?
+    {
         return Ok(instruction);
     }
     if let Some(instruction) = locals::try_lift(jvm_instruction, definition, frame)? {
@@ -64,6 +67,9 @@ pub(super) fn lift_register_instruction(
         return Ok(instruction);
     }
     if let Some(instruction) = calls::try_lift(jvm_instruction, definition, frame)? {
+        return Ok(instruction);
+    }
+    if let Some(instruction) = miscellaneous::try_lift(jvm_instruction) {
         return Ok(instruction);
     }
     references::try_lift(jvm_instruction, definition, frame)?
