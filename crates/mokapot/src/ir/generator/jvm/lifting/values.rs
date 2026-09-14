@@ -1,15 +1,30 @@
-use crate::ir::{
-    expression::MathOperation,
-    generator::{
-        error::MokaIRBuildError,
-        jvm::{
-            frame::CATEGORY_1, instruction::RegisterInstruction, lifting::LiftContext,
-            symbolic_execution::Value,
+use crate::{
+    ir::{
+        expression::{Expression, MathOperation},
+        generator::{
+            error::MokaIRBuildError,
+            jvm::{
+                frame::CATEGORY_1, instruction::RegisterInstruction, lifting::LiftContext,
+                symbolic_execution::Value,
+            },
         },
     },
+    jvm::{ConstantValue, references::ClassRef},
 };
 
 impl LiftContext<'_, '_, '_> {
+    pub(super) fn constant<const SLOT: bool>(
+        &mut self,
+        constant: ConstantValue,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.definition_id()?;
+        self.frame.push_value::<SLOT>(value.into())?;
+        Ok(RegisterInstruction::Definition {
+            value,
+            expr: Expression::Const(constant),
+        })
+    }
+
     pub(super) fn increment(
         &mut self,
         idx: u16,
@@ -50,5 +65,17 @@ impl LiftContext<'_, '_, '_> {
         let value = self.frame.pop_value::<SLOT>()?;
         self.frame.set_local::<SLOT>(idx, value)?;
         Ok(RegisterInstruction::Erased)
+    }
+
+    pub(super) fn new_object(
+        &mut self,
+        class: &ClassRef,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.definition_id()?;
+        self.frame.push_value::<CATEGORY_1>(value.into())?;
+        Ok(RegisterInstruction::Definition {
+            value,
+            expr: Expression::New(class.clone()),
+        })
     }
 }

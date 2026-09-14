@@ -2,15 +2,13 @@
 
 mod arrays;
 mod calls;
-mod constants;
 mod control_flow;
 pub(super) mod fallibility;
 mod fields;
-mod locals;
 mod numeric;
 mod operations;
-mod references;
 pub(super) mod successors;
+mod values;
 mod wide;
 
 use crate::{
@@ -244,6 +242,14 @@ impl Executor<'_> {
 }
 
 impl LiftContext<'_, '_, '_> {
+    fn monitor(
+        &mut self,
+        operation: impl FnOnce(Value) -> LockOperation<Value>,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let object_ref = self.frame.pop_value::<CATEGORY_1>()?;
+        Ok(RegisterInstruction::Effect(operation(object_ref).into()))
+    }
+
     fn stack_effect<F>(&mut self, effect: F) -> Result<RegisterInstruction, MokaIRBuildError>
     where
         F: FnOnce(&mut Frame<Value>) -> Result<(), JvmFrameError>,
