@@ -34,7 +34,7 @@ use crate::{
 
 pub(super) struct LiftContext<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
-    location: NodeAddress,
+    addr: NodeAddress,
     pc: ProgramCounter,
     frame: &'frame mut Frame<Value>,
 }
@@ -47,7 +47,7 @@ impl Executor<'_> {
     pub(super) fn lift_register_instruction(
         &mut self,
         jvm_instruction: &JVM,
-        location: NodeAddress,
+        addr: NodeAddress,
         frame: &mut Frame<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         #[allow(
@@ -56,12 +56,12 @@ impl Executor<'_> {
         )]
         use JVM::*;
 
-        let pc = location
+        let pc = addr
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         let mut cx = LiftContext {
             executor: self,
-            location,
+            addr,
             pc,
             frame,
         };
@@ -259,7 +259,7 @@ impl LiftContext<'_, '_, '_> {
     }
 
     fn definition_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
-        self.executor.definition_id_at(self.location)
+        self.executor.definition_id_at(self.addr)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, MokaIRBuildError>

@@ -31,23 +31,23 @@ pub(crate) struct Executor<'method> {
     value_id_allocator: ValueIdAllocator,
     receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
-    entry_location: NodeAddress,
+    entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
 }
 
 impl<'method> Executor<'method> {
-    pub fn execute_location(
+    pub fn execute_addr(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         incoming_frame: Frame<Value>,
     ) -> Result<Node, MokaIRBuildError> {
-        let (instruction, outgoing_edges) = match location {
+        let (instruction, outgoing_edges) = match addr {
             NodeAddress::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.clone();
                 let outgoing_edges = build_outgoing_edges(
                     self,
-                    location,
+                    addr,
                     &incoming_frame,
                     normal_frame,
                     &instruction,
@@ -66,10 +66,10 @@ impl<'method> Executor<'method> {
                 let can_throw_synchronously =
                     self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
-                    self.lift_register_instruction(&jvm_instruction, location, &mut normal_frame)?;
+                    self.lift_register_instruction(&jvm_instruction, addr, &mut normal_frame)?;
                 let outgoing_edges = build_outgoing_edges(
                     self,
-                    location,
+                    addr,
                     &incoming_frame,
                     normal_frame,
                     &instruction,
@@ -83,7 +83,7 @@ impl<'method> Executor<'method> {
             incoming_frame,
             instruction,
             outgoing_edges,
-            caught_exception_value: self.caught_exception_ids.get(&location).copied(),
+            caught_exception_value: self.caught_exception_ids.get(&addr).copied(),
         })
     }
 
@@ -119,7 +119,7 @@ impl<'method> Executor<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let entry_location = NodeAddress::entry(first_pc);
+        let entry_addr = NodeAddress::entry(first_pc);
         let executor = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
@@ -129,14 +129,14 @@ impl<'method> Executor<'method> {
             value_id_allocator,
             receiver_value,
             parameter_values,
-            entry_location,
+            entry_addr,
             initial_frame,
         };
         Ok(executor)
     }
 
     pub fn execute(mut self) -> Result<Cfg, MokaIRBuildError> {
-        let nodes = self.execute_reachable_locations()?;
+        let nodes = self.execute_reachable_addrs()?;
         let merge_identities = nodes
             .values()
             .flat_map(|node| node.incoming_frame.iter_values())
@@ -150,7 +150,7 @@ impl<'method> Executor<'method> {
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
         Ok(Cfg {
-            entry_location: self.entry_location,
+            entry_addr: self.entry_addr,
             initial_frame: self.initial_frame,
             nodes,
             phi_values,
@@ -159,45 +159,42 @@ impl<'method> Executor<'method> {
         })
     }
 
-    pub fn execute_reachable_locations(
+    pub fn execute_reachable_addrs(
         &mut self,
     ) -> Result<BTreeMap<NodeAddress, Node>, MokaIRBuildError> {
-        let entry_location = self.entry_location;
+        let entry_addr = self.entry_addr;
         let initial_frame = self.initial_frame.clone();
-        solver::execute_to_fixpoint(self, entry_location, initial_frame)
+        solver::execute_to_fixpoint(self, entry_addr, initial_frame)
     }
 
     pub fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub fn definition_id_at(
-        &mut self,
-        location: NodeAddress,
-    ) -> Result<SsaValueId, MokaIRBuildError> {
-        if !matches!(location, NodeAddress::Bytecode { .. }) {
+    pub fn definition_id_at(&mut self, addr: NodeAddress) -> Result<SsaValueId, MokaIRBuildError> {
+        if !matches!(addr, NodeAddress::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        if let Some(&id) = self.definition_ids.get(&location) {
+        if let Some(&id) = self.definition_ids.get(&addr) {
             return Ok(id);
         }
         let id = self.new_value_id()?;
-        self.definition_ids.insert(location, id);
+        self.definition_ids.insert(addr, id);
         Ok(id)
     }
 
     pub fn caught_exception_id_at(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
     ) -> Result<SsaValueId, MokaIRBuildError> {
-        if !matches!(location, NodeAddress::Handler { .. }) {
+        if !matches!(addr, NodeAddress::Handler { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        if let Some(&id) = self.caught_exception_ids.get(&location) {
+        if let Some(&id) = self.caught_exception_ids.get(&addr) {
             return Ok(id);
         }
         let id = self.new_value_id()?;
-        self.caught_exception_ids.insert(location, id);
+        self.caught_exception_ids.insert(addr, id);
         Ok(id)
     }
 
@@ -211,63 +208,59 @@ impl<'method> Executor<'method> {
             .ok_or(MokaIRBuildError::MalformedControlFlow)
     }
 
-    pub fn fallthrough_location(
-        &mut self,
-        location: NodeAddress,
-    ) -> Result<NodeAddress, MokaIRBuildError> {
-        let pc = location
+    pub fn fallthrough_addr(&mut self, addr: NodeAddress) -> Result<NodeAddress, MokaIRBuildError> {
+        let pc = addr
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        let context = location
+        let context = addr
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         self.subroutine_expander
-            .bytecode_location(self.next_program_counter(pc)?, context)
+            .bytecode_addr(self.next_program_counter(pc)?, context)
     }
 
-    pub fn bytecode_location_at(
+    pub fn bytecode_addr_at(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         target: ProgramCounter,
     ) -> Result<NodeAddress, MokaIRBuildError> {
-        let context = location
+        let context = addr
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.subroutine_expander.bytecode_location(target, context)
+        self.subroutine_expander.bytecode_addr(target, context)
     }
 
-    pub fn exception_handler_location(
+    pub fn exception_handler_addr(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         handler: ProgramCounter,
     ) -> Result<NodeAddress, MokaIRBuildError> {
-        let context = location
+        let context = addr
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        self.subroutine_expander.handler_location(handler, context)
+        self.subroutine_expander.handler_addr(handler, context)
     }
 
-    pub fn unwind_location(&mut self) -> Result<NodeAddress, MokaIRBuildError> {
-        self.subroutine_expander
-            .register_location(NodeAddress::Unwind)
+    pub fn unwind_addr(&mut self) -> Result<NodeAddress, MokaIRBuildError> {
+        self.subroutine_expander.register_addr(NodeAddress::Unwind)
     }
 
     pub fn enter_subroutine(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         target: ProgramCounter,
         continuation: ProgramCounter,
     ) -> Result<(NodeAddress, ReturnAddress), MokaIRBuildError> {
         self.subroutine_expander
-            .enter_subroutine(location, target, continuation)
+            .enter_subroutine(addr, target, continuation)
     }
 
     pub fn return_from(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         address: ReturnAddress,
     ) -> Result<NodeAddress, MokaIRBuildError> {
-        self.subroutine_expander.return_from(location, address)
+        self.subroutine_expander.return_from(addr, address)
     }
 }
 
@@ -311,7 +304,7 @@ mod tests {
             vec![],
         );
         let mut executor = Executor::for_method(&method).expect("valid method");
-        executor.execute_reachable_locations().expect("valid loop");
+        executor.execute_reachable_addrs().expect("valid loop");
 
         assert_eq!(executor.definition_ids.len(), 3);
         assert_eq!(executor.value_id_allocator.next_value_idx, 3);

@@ -38,38 +38,38 @@ struct Fingerprint {
 }
 
 impl State {
-    fn new(entry_location: NodeAddress, initial_frame: Frame<Value>) -> Self {
+    fn new(entry_addr: NodeAddress, initial_frame: Frame<Value>) -> Self {
         Self {
-            entry_input: (entry_location, initial_frame),
+            entry_input: (entry_addr, initial_frame),
             nodes: BTreeMap::new(),
             predecessors: BTreeMap::new(),
-            inputs_to_recompute: BTreeSet::from([entry_location]),
+            inputs_to_recompute: BTreeSet::from([entry_addr]),
             pending_executions: BTreeMap::new(),
         }
     }
 
     fn recompute_inputs(&mut self) {
-        while let Some(location) = self.inputs_to_recompute.pop_first() {
-            match self.recompute_input_frame(location) {
+        while let Some(addr) = self.inputs_to_recompute.pop_first() {
+            match self.recompute_input_frame(addr) {
                 Some(incoming_frame)
-                    if self.nodes.get(&location).map(|node| &node.incoming_frame)
+                    if self.nodes.get(&addr).map(|node| &node.incoming_frame)
                         != Some(&incoming_frame) =>
                 {
-                    self.pending_executions.insert(location, incoming_frame);
+                    self.pending_executions.insert(addr, incoming_frame);
                 }
-                None => self.remove_unreachable_node(location),
+                None => self.remove_unreachable_node(addr),
                 Some(_) => {
-                    self.pending_executions.remove(&location);
+                    self.pending_executions.remove(&addr);
                 }
             }
         }
     }
 
-    fn recompute_input_frame(&self, location: NodeAddress) -> Option<Frame<Value>> {
-        let entry_frame = (location == self.entry_input.0).then_some(&self.entry_input.1);
+    fn recompute_input_frame(&self, addr: NodeAddress) -> Option<Frame<Value>> {
+        let entry_frame = (addr == self.entry_input.0).then_some(&self.entry_input.1);
         let mut contributions = entry_frame.into_iter().chain(
             self.predecessors
-                .get(&location)
+                .get(&addr)
                 .into_iter()
                 .flatten()
                 .flat_map(|source| {
@@ -78,21 +78,21 @@ impl State {
                         .expect("predecessors must have retained nodes")
                         .outgoing_edges
                         .iter()
-                        .filter(move |edge| edge.target == location)
+                        .filter(move |edge| edge.target == addr)
                         .map(|edge| &edge.target_frame)
                 }),
         );
         contributions.next().cloned().map(|mut frame| {
             for contribution in contributions {
-                merge_input_frame_at(location, &mut frame, contribution.clone());
+                merge_input_frame_at(addr, &mut frame, contribution.clone());
             }
             frame
         })
     }
 
-    fn remove_unreachable_node(&mut self, location: NodeAddress) {
-        self.pending_executions.remove(&location);
-        let Some(node) = self.nodes.remove(&location) else {
+    fn remove_unreachable_node(&mut self, addr: NodeAddress) {
+        self.pending_executions.remove(&addr);
+        let Some(node) = self.nodes.remove(&addr) else {
             return;
         };
         for target in node
@@ -105,7 +105,7 @@ impl State {
                 .predecessors
                 .get_mut(&target)
                 .expect("an outgoing target has a predecessor");
-            predecessors.remove(&location);
+            predecessors.remove(&addr);
             if predecessors.is_empty() {
                 self.predecessors.remove(&target);
             }
@@ -114,11 +114,11 @@ impl State {
         self.remove_unreachable_nodes();
     }
 
-    fn replace_node(&mut self, location: NodeAddress, node: Node) {
+    fn replace_node(&mut self, addr: NodeAddress, node: Node) {
         let current_targets = edge_targets(&node.outgoing_edges);
         let previous_targets = self
             .nodes
-            .get(&location)
+            .get(&addr)
             .map_or_else(BTreeSet::new, |previous| {
                 edge_targets(&previous.outgoing_edges)
             });
@@ -128,33 +128,29 @@ impl State {
                 .predecessors
                 .get_mut(target)
                 .expect("an outgoing target has a predecessor");
-            predecessors.remove(&location);
+            predecessors.remove(&addr);
             if predecessors.is_empty() {
                 self.predecessors.remove(target);
             }
         }
         for &target in current_targets.difference(&previous_targets) {
-            self.predecessors
-                .entry(target)
-                .or_default()
-                .insert(location);
+            self.predecessors.entry(target).or_default().insert(addr);
         }
         self.inputs_to_recompute
             .extend(previous_targets.union(&current_targets).copied());
-        self.nodes.insert(location, node);
+        self.nodes.insert(addr, node);
         if targets_removed {
             self.remove_unreachable_nodes();
         }
     }
 
     fn remove_unreachable_nodes(&mut self) {
-        let reachable = self.reachable_locations();
-        self.nodes
-            .retain(|location, _| reachable.contains(location));
+        let reachable = self.reachable_addrs();
+        self.nodes.retain(|addr, _| reachable.contains(addr));
         self.pending_executions
-            .retain(|location, _| reachable.contains(location));
+            .retain(|addr, _| reachable.contains(addr));
         self.inputs_to_recompute
-            .retain(|location| reachable.contains(location));
+            .retain(|addr| reachable.contains(addr));
 
         let mut changed = BTreeSet::new();
         self.predecessors.retain(|target, sources| {
@@ -171,14 +167,14 @@ impl State {
         self.inputs_to_recompute.extend(changed);
     }
 
-    fn reachable_locations(&self) -> BTreeSet<NodeAddress> {
+    fn reachable_addrs(&self) -> BTreeSet<NodeAddress> {
         let mut reachable = BTreeSet::new();
         let mut pending = BTreeSet::from([self.entry_input.0]);
-        while let Some(location) = pending.pop_first() {
-            if !reachable.insert(location) {
+        while let Some(addr) = pending.pop_first() {
+            if !reachable.insert(addr) {
                 continue;
             }
-            if let Some(node) = self.nodes.get(&location) {
+            if let Some(node) = self.nodes.get(&addr) {
                 pending.extend(node.outgoing_edges.iter().map(|edge| edge.target));
             }
         }
@@ -191,13 +187,13 @@ impl State {
             nodes: self
                 .nodes
                 .iter()
-                .map(|(&location, node)| {
+                .map(|(&addr, node)| {
                     let outgoing = node
                         .outgoing_edges
                         .iter()
                         .map(|edge| (edge.target, edge.target_frame.clone()))
                         .collect();
-                    (location, (node.incoming_frame.clone(), outgoing))
+                    (addr, (node.incoming_frame.clone(), outgoing))
                 })
                 .collect(),
             inputs_to_recompute: self.inputs_to_recompute.clone(),
@@ -212,10 +208,10 @@ fn edge_targets(outgoing: &[Edge]) -> BTreeSet<NodeAddress> {
 
 pub(super) fn execute_to_fixpoint(
     executor: &mut Executor<'_>,
-    entry_location: NodeAddress,
+    entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
 ) -> Result<BTreeMap<NodeAddress, Node>, MokaIRBuildError> {
-    let mut state = State::new(entry_location, initial_frame);
+    let mut state = State::new(entry_addr, initial_frame);
 
     #[cfg(test)]
     let mut seen = HashSet::new();
@@ -232,18 +228,18 @@ pub(super) fn execute_to_fixpoint(
             "JVM symbolic execution entered a solver-state cycle"
         );
         state.recompute_inputs();
-        let Some((location, incoming_frame)) = state.pending_executions.pop_first() else {
+        let Some((addr, incoming_frame)) = state.pending_executions.pop_first() else {
             continue;
         };
-        let node = executor.execute_location(location, incoming_frame)?;
-        state.replace_node(location, node);
+        let node = executor.execute_addr(addr, incoming_frame)?;
+        state.replace_node(addr, node);
     }
 
     Ok(state.nodes)
 }
 
 pub(super) fn merge_input_frame_at(
-    location: NodeAddress,
+    addr: NodeAddress,
     frame: &mut Frame<Value>,
     contribution: Frame<Value>,
 ) -> bool {
@@ -251,7 +247,7 @@ pub(super) fn merge_input_frame_at(
         if *lhs == rhs {
             return false;
         }
-        let identity = FrameMergeSite { location, slot };
+        let identity = FrameMergeSite { addr, slot };
         let merged = match (*lhs, rhs) {
             (Value::Invalid | Value::ReturnAddress(_), _)
             | (_, Value::Invalid | Value::ReturnAddress(_)) => Value::Invalid,
@@ -313,24 +309,24 @@ mod tests {
 
     #[test]
     fn merge_identity_is_stable_for_a_location_and_slot() {
-        let location = NodeAddress::entry(0.into());
+        let addr = NodeAddress::entry(0.into());
         let mut merged = frame(1);
 
-        assert!(merge_input_frame_at(location, &mut merged, frame(2)));
+        assert!(merge_input_frame_at(addr, &mut merged, frame(2)));
         let expected = Value::Merged(FrameMergeSite {
-            location,
+            addr,
             slot: Position::Local(0),
         });
         assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
-        assert!(!merge_input_frame_at(location, &mut merged, frame(3)));
+        assert!(!merge_input_frame_at(addr, &mut merged, frame(3)));
         assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
     }
 
     #[test]
     fn frame_merge_is_permutation_independent() {
-        let location = NodeAddress::entry(0.into());
+        let addr = NodeAddress::entry(0.into());
         let expected = [Entry::Value(Value::Merged(FrameMergeSite {
-            location,
+            addr,
             slot: Position::Local(0),
         }))];
 
@@ -343,8 +339,8 @@ mod tests {
             [3, 2, 1],
         ] {
             let mut merged = frame(order[0]);
-            merge_input_frame_at(location, &mut merged, frame(order[1]));
-            merge_input_frame_at(location, &mut merged, frame(order[2]));
+            merge_input_frame_at(addr, &mut merged, frame(order[1]));
+            merge_input_frame_at(addr, &mut merged, frame(order[2]));
             assert_eq!(merged.local_slots(), expected);
         }
     }
@@ -363,14 +359,14 @@ mod tests {
             vec![],
         );
         let mut executor = Executor::for_method(&method).expect("valid method");
-        let nodes = executor.execute_reachable_locations().expect("valid loop");
+        let nodes = executor.execute_reachable_addrs().expect("valid loop");
 
         assert_eq!(
             nodes[&NodeAddress::entry(2.into())]
                 .incoming_frame
                 .operand_slots(),
             &[Entry::Value(Value::Merged(FrameMergeSite {
-                location: NodeAddress::entry(1.into()),
+                addr: NodeAddress::entry(1.into()),
                 slot: Position::Stack(0),
             }))]
         );
@@ -409,7 +405,7 @@ mod tests {
         assert_eq!(
             state.pending_executions[&target].local_slots(),
             &[Entry::Value(Value::Merged(FrameMergeSite {
-                location: target,
+                addr: target,
                 slot: Position::Local(0),
             }))]
         );

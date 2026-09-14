@@ -17,7 +17,7 @@ use crate::ir::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) struct FrameMergeSite {
-    pub location: NodeAddress,
+    pub addr: NodeAddress,
     pub slot: Position,
 }
 
@@ -51,7 +51,7 @@ pub(crate) struct Node {
 
 /// Reachable symbolic JVM nodes and their execution facts.
 pub(crate) struct Cfg {
-    pub entry_location: NodeAddress,
+    pub entry_addr: NodeAddress,
     /// The original frame entering the method.
     pub initial_frame: Frame<Value>,
     pub nodes: BTreeMap<NodeAddress, Node>,

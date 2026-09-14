@@ -26,9 +26,9 @@ pub(super) fn materialize_blocks(
     layout: &BlockLayout,
 ) -> Result<Vec<Block>, MokaIRBuildError> {
     let blocks = layout
-        .locations()
+        .addrs()
         .iter()
-        .map(|(&id, locations)| materialize_block(id, locations, &mut symbolic_nodes, layout))
+        .map(|(&id, addrs)| materialize_block(id, addrs, &mut symbolic_nodes, layout))
         .collect::<Result<Vec<_>, _>>()?;
     if symbolic_nodes.is_empty() {
         Ok(blocks)
@@ -39,41 +39,41 @@ pub(super) fn materialize_blocks(
 
 fn materialize_block(
     id: BlockId,
-    locations: &[NodeAddress],
+    addrs: &[NodeAddress],
     symbolic_nodes: &mut BTreeMap<NodeAddress, symbolic_execution::Node>,
     layout: &BlockLayout,
 ) -> Result<Block, MokaIRBuildError> {
     let mut entry_frame = None;
     let mut caught_exception = None;
-    let mut operations = Vec::with_capacity(locations.len());
+    let mut operations = Vec::with_capacity(addrs.len());
     let mut terminator = None;
     let mut terminator_source = None;
     let mut arms = Vec::new();
 
-    for (index, location) in locations.iter().copied().enumerate() {
+    for (index, addr) in addrs.iter().copied().enumerate() {
         let symbolic_execution::Node {
             incoming_frame,
             instruction,
             outgoing_edges,
             caught_exception_value: location_exception,
         } = symbolic_nodes
-            .remove(&location)
+            .remove(&addr)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         if index == 0 {
             entry_frame = Some(incoming_frame);
             caught_exception = location_exception;
         }
-        let is_last = index + 1 == locations.len();
+        let is_last = index + 1 == addrs.len();
         if is_last {
-            let end = materialize_block_end(location, instruction, outgoing_edges, layout)?;
+            let end = materialize_block_end(addr, instruction, outgoing_edges, layout)?;
             operations.extend(end.operation);
             terminator = Some(end.terminator);
             terminator_source = end.terminator_source;
             arms = end.arms;
         } else {
-            let next = locations[index + 1];
+            let next = addrs[index + 1];
             let operation =
-                materialize_internal_operation(location, instruction, &outgoing_edges, next)?;
+                materialize_internal_operation(addr, instruction, &outgoing_edges, next)?;
             operations.extend(operation);
         }
     }
@@ -90,7 +90,7 @@ fn materialize_block(
 }
 
 fn materialize_internal_operation(
-    location: NodeAddress,
+    addr: NodeAddress,
     instruction: RegisterInstruction,
     outgoing: &[symbolic_execution::Edge],
     next: NodeAddress,
@@ -122,8 +122,7 @@ fn materialize_internal_operation(
     };
     operation
         .map(|operation| {
-            location
-                .source_pc()
+            addr.source_pc()
                 .map(|pc| (pc, operation))
                 .ok_or(MokaIRBuildError::MalformedControlFlow)
         })
@@ -138,7 +137,7 @@ struct BlockEnd {
 }
 
 fn materialize_block_end(
-    location: NodeAddress,
+    addr: NodeAddress,
     instruction: RegisterInstruction,
     outgoing: Vec<symbolic_execution::Edge>,
     layout: &BlockLayout,
@@ -163,8 +162,7 @@ fn materialize_block_end(
     let (operation, terminator) = classify_block_end(instruction, has_normal_successor);
     let operation = operation
         .map(|operation| {
-            location
-                .source_pc()
+            addr.source_pc()
                 .map(|pc| (pc, operation))
                 .ok_or(MokaIRBuildError::MalformedControlFlow)
         })
@@ -173,7 +171,7 @@ fn materialize_block_end(
     Ok(BlockEnd {
         operation,
         terminator,
-        terminator_source: explicit_transfer.then(|| location.source_pc()).flatten(),
+        terminator_source: explicit_transfer.then(|| addr.source_pc()).flatten(),
         arms,
     })
 }

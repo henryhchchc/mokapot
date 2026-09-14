@@ -77,8 +77,7 @@ impl LiftContext<'_, '_, '_> {
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let next_pc = self.executor.next_program_counter(self.pc)?;
         let (target, return_address) =
-            self.executor
-                .enter_subroutine(self.location, target, next_pc)?;
+            self.executor.enter_subroutine(self.addr, target, next_pc)?;
         self.frame.push_value::<CATEGORY_1>(return_address.into())?;
         Ok(RegisterInstruction::Subroutine { target })
     }

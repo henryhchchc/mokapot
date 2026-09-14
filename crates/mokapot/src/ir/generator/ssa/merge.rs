@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn merge_plan_resolves_merge_identities() {
         let identity = FrameMergeSite {
-            location: NodeAddress::Unwind,
+            addr: NodeAddress::Unwind,
             slot: Position::Local(0),
         };
         let resolved = SsaValueId::new(12);

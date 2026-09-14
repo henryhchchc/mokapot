@@ -42,7 +42,7 @@ struct Activation {
 pub(crate) struct Expander {
     activations: Vec<Option<Activation>>,
     contexts_by_activation: BTreeMap<Activation, Context>,
-    expanded_locations: BTreeSet<NodeAddress>,
+    expanded_addrs: BTreeSet<NodeAddress>,
     return_pcs: BTreeMap<Context, ProgramCounter>,
 }
 
@@ -51,38 +51,35 @@ impl Expander {
         Self {
             activations: vec![None],
             contexts_by_activation: BTreeMap::new(),
-            expanded_locations: BTreeSet::from([NodeAddress::entry(entry)]),
+            expanded_addrs: BTreeSet::from([NodeAddress::entry(entry)]),
             return_pcs: BTreeMap::new(),
         }
     }
 
-    pub fn register_location(
-        &mut self,
-        location: NodeAddress,
-    ) -> Result<NodeAddress, MokaIRBuildError> {
-        self.expanded_locations.insert(location);
-        if self.expanded_locations.len() > EXPANDED_LOCATION_LIMIT {
+    pub fn register_addr(&mut self, addr: NodeAddress) -> Result<NodeAddress, MokaIRBuildError> {
+        self.expanded_addrs.insert(addr);
+        if self.expanded_addrs.len() > EXPANDED_LOCATION_LIMIT {
             return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
                 limit: EXPANDED_LOCATION_LIMIT,
             });
         }
-        Ok(location)
+        Ok(addr)
     }
 
-    pub fn bytecode_location(
+    pub fn bytecode_addr(
         &mut self,
         pc: ProgramCounter,
         context: Context,
     ) -> Result<NodeAddress, MokaIRBuildError> {
-        self.register_location(NodeAddress::Bytecode { pc, context })
+        self.register_addr(NodeAddress::Bytecode { pc, context })
     }
 
-    pub fn handler_location(
+    pub fn handler_addr(
         &mut self,
         handler_pc: ProgramCounter,
         context: Context,
     ) -> Result<NodeAddress, MokaIRBuildError> {
-        self.register_location(NodeAddress::Handler {
+        self.register_addr(NodeAddress::Handler {
             handler: handler_pc,
             context,
         })
@@ -90,14 +87,14 @@ impl Expander {
 
     pub fn enter_subroutine(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         target: ProgramCounter,
         continuation: ProgramCounter,
     ) -> Result<(NodeAddress, ReturnAddress), MokaIRBuildError> {
         let NodeAddress::Bytecode {
             pc: call_site,
             context: parent,
-        } = location
+        } = addr
         else {
             return Err(MokaIRBuildError::MalformedControlFlow);
         };
@@ -130,21 +127,18 @@ impl Expander {
             self.contexts_by_activation.insert(activation, context);
             context
         };
-        Ok((
-            self.bytecode_location(target, context)?,
-            ReturnAddress(context),
-        ))
+        Ok((self.bytecode_addr(target, context)?, ReturnAddress(context)))
     }
 
     pub fn return_from(
         &mut self,
-        location: NodeAddress,
+        addr: NodeAddress,
         address: ReturnAddress,
     ) -> Result<NodeAddress, MokaIRBuildError> {
         let NodeAddress::Bytecode {
             context: current,
             pc: return_pc,
-        } = location
+        } = addr
         else {
             return Err(MokaIRBuildError::MalformedControlFlow);
         };
@@ -163,7 +157,7 @@ impl Expander {
                     }
                     Some(_) => {}
                 }
-                return self.bytecode_location(activation.continuation, activation.parent);
+                return self.bytecode_addr(activation.continuation, activation.parent);
             }
             cursor = activation.parent;
         }

@@ -22,10 +22,10 @@ use crate::{
 
 fn build_exception_edges(
     executor: &mut Executor<'_>,
-    location: NodeAddress,
+    addr: NodeAddress,
     incoming_frame: &Frame<Value>,
 ) -> Result<Vec<Edge>, MokaIRBuildError> {
-    let pc = location
+    let pc = addr
         .source_pc()
         .ok_or(MokaIRBuildError::MalformedControlFlow)?;
     let handlers: Vec<_> = executor
@@ -38,7 +38,7 @@ fn build_exception_edges(
     let mut edges = Vec::with_capacity(handlers.len() + 1);
     let mut has_catch_all = false;
     for entry in handlers {
-        let handler = executor.exception_handler_location(location, entry.handler_pc)?;
+        let handler = executor.exception_handler_addr(addr, entry.handler_pc)?;
         let caught = Value::Ssa(executor.caught_exception_id_at(handler)?);
         edges.push(Edge {
             target: handler,
@@ -55,7 +55,7 @@ fn build_exception_edges(
     }
     if !has_catch_all {
         edges.push(Edge {
-            target: executor.unwind_location()?,
+            target: executor.unwind_addr()?,
             transfer: ControlTransfer::Unwind,
             target_frame: incoming_frame
                 .with_empty_operand_stack()
@@ -71,7 +71,7 @@ fn build_exception_edges(
 )]
 pub(crate) fn build_outgoing_edges(
     executor: &mut Executor<'_>,
-    location: NodeAddress,
+    addr: NodeAddress,
     incoming_frame: &Frame<Value>,
     normal_frame: Frame<Value>,
     instruction: &RegisterInstruction,
@@ -84,21 +84,21 @@ pub(crate) fn build_outgoing_edges(
             let NodeAddress::Handler {
                 handler: handler_pc,
                 ..
-            } = location
+            } = addr
             else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![Edge {
-                target: executor.bytecode_location_at(location, handler_pc)?,
+                target: executor.bytecode_addr_at(addr, handler_pc)?,
                 transfer: Unconditional,
                 target_frame: normal_frame,
             }]
         }
         RegisterInstruction::Return(_) if can_throw_synchronously => {
-            build_exception_edges(executor, location, incoming_frame)?
+            build_exception_edges(executor, addr, incoming_frame)?
         }
         RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
-        RegisterInstruction::Throw(_) => build_exception_edges(executor, location, incoming_frame)?,
+        RegisterInstruction::Throw(_) => build_exception_edges(executor, addr, incoming_frame)?,
         RegisterInstruction::Subroutine { target, .. } => {
             vec![Edge {
                 target: *target,
@@ -110,18 +110,18 @@ pub(crate) fn build_outgoing_edges(
             if can_throw_synchronously =>
         {
             let mut edges = vec![Edge {
-                target: executor.fallthrough_location(location)?,
+                target: executor.fallthrough_addr(addr)?,
                 transfer: Normal,
                 target_frame: normal_frame,
             }];
-            edges.extend(build_exception_edges(executor, location, incoming_frame)?);
+            edges.extend(build_exception_edges(executor, addr, incoming_frame)?);
             edges
         }
         RegisterInstruction::Erased
         | RegisterInstruction::Definition { .. }
         | RegisterInstruction::Effect(_) => {
             vec![Edge {
-                target: executor.fallthrough_location(location)?,
+                target: executor.fallthrough_addr(addr)?,
                 transfer: Unconditional,
                 target_frame: normal_frame,
             }]
@@ -130,7 +130,7 @@ pub(crate) fn build_outgoing_edges(
             condition: None,
             target,
         } => vec![Edge {
-            target: executor.bytecode_location_at(location, *target)?,
+            target: executor.bytecode_addr_at(addr, *target)?,
             transfer: Unconditional,
             target_frame: normal_frame,
         }],
@@ -141,12 +141,12 @@ pub(crate) fn build_outgoing_edges(
             let condition: BooleanVariable<_> = condition.clone().into();
             vec![
                 Edge {
-                    target: executor.bytecode_location_at(location, *target)?,
+                    target: executor.bytecode_addr_at(addr, *target)?,
                     transfer: Conditional(BranchGuard::of(condition.clone())),
                     target_frame: normal_frame.clone(),
                 },
                 Edge {
-                    target: executor.fallthrough_location(location)?,
+                    target: executor.fallthrough_addr(addr)?,
                     transfer: Conditional(BranchGuard::of(!condition)),
                     target_frame: normal_frame,
                 },
@@ -163,7 +163,7 @@ pub(crate) fn build_outgoing_edges(
                 let condition =
                     BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
                 edges.push(Edge {
-                    target: executor.bytecode_location_at(location, target)?,
+                    target: executor.bytecode_addr_at(addr, target)?,
                     transfer: Conditional(BranchGuard::of(condition)),
                     target_frame: normal_frame.clone(),
                 });
@@ -178,7 +178,7 @@ pub(crate) fn build_outgoing_edges(
                 })
                 .collect();
             edges.push(Edge {
-                target: executor.bytecode_location_at(location, *default)?,
+                target: executor.bytecode_addr_at(addr, *default)?,
                 transfer: Conditional(default_guard),
                 target_frame: normal_frame,
             });
@@ -189,7 +189,7 @@ pub(crate) fn build_outgoing_edges(
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![Edge {
-                target: executor.return_from(location, *address)?,
+                target: executor.return_from(addr, *address)?,
                 transfer: Unconditional,
                 target_frame: normal_frame,
             }]
