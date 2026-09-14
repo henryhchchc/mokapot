@@ -25,12 +25,12 @@ use crate::{
 
 /// Mutable state used only while performing symbolic execution.
 pub(crate) struct Executor<'method> {
-    pub(super) body: &'method MethodBody,
+    body: &'method MethodBody,
     fallibility: FallibilityContext,
-    pub(super) subroutine_expander: Expander,
-    pub(super) definition_ids: BTreeMap<Location, SsaValueId>,
-    pub(super) caught_exception_ids: BTreeMap<Location, SsaValueId>,
-    pub(super) value_id_allocator: ValueIdAllocator,
+    subroutine_expander: Expander,
+    definition_ids: BTreeMap<Location, SsaValueId>,
+    caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    value_id_allocator: ValueIdAllocator,
     receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
     entry_location: Location,
@@ -282,5 +282,51 @@ impl ValueIdAllocator {
             .checked_add(1)
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         Ok(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::generator::{jvm::subroutine_expansion::Location, tests::method},
+        jvm::code::Instruction as JvmInstruction,
+    };
+
+    #[test]
+    fn reprocessing_loop_allocates_identities_only_for_definitions() {
+        let method = method(
+            [
+                (0, JvmInstruction::IConst0),
+                (1, JvmInstruction::IStore0),
+                (2, JvmInstruction::ILoad0),
+                (3, JvmInstruction::IConst1),
+                (4, JvmInstruction::IAdd),
+                (5, JvmInstruction::IStore0),
+                (6, JvmInstruction::Goto(2.into())),
+            ],
+            "()V",
+            vec![],
+        );
+        let mut executor = Executor::for_method(&method).expect("valid method");
+        executor.execute_reachable_locations().expect("valid loop");
+
+        assert_eq!(executor.definition_ids.len(), 3);
+        assert_eq!(executor.value_id_allocator.next_value_idx, 3);
+
+        for k in [0, 3, 4] {
+            assert!(
+                executor
+                    .definition_ids
+                    .contains_key(&Location::entry(k.into()))
+            );
+        }
+        for k in [1, 2, 5, 6] {
+            assert!(
+                !executor
+                    .definition_ids
+                    .contains_key(&Location::entry(k.into()))
+            );
+        }
     }
 }

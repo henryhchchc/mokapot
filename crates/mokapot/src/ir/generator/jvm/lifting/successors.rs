@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn unwind_edges_erase_symbolic_values() {
-        let method = method([(0.into(), JvmInstruction::Nop)], "(I)V", vec![]);
+        let method = method([(0, JvmInstruction::Nop)], "(I)V", vec![]);
         let mut executor = Executor::for_method(&method).expect("valid method");
         let frame = Frame::for_method_entry(
             &method.descriptor,

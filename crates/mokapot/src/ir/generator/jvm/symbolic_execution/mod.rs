@@ -6,6 +6,3 @@ mod solver;
 
 pub(super) use executor::Executor;
 pub(crate) use fact::{Cfg, Edge, FrameMergeSite, Node, Value};
-
-#[cfg(test)]
-mod tests;

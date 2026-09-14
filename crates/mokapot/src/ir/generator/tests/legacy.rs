@@ -23,10 +23,10 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
 fn expands_a_basic_jsr_ret_pair_to_gotos() {
     let ir = build(&method(
         [
-            (0.into(), Instruction::Jsr(10.into())),
-            (3.into(), Instruction::Return),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::Ret(0)),
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
@@ -47,13 +47,13 @@ fn expands_a_basic_jsr_ret_pair_to_gotos() {
 fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
     let ir = build(&method(
         [
-            (0.into(), Instruction::Jsr(20.into())),
-            (3.into(), Instruction::Jsr(20.into())),
-            (6.into(), Instruction::Return),
-            (20.into(), Instruction::AStore0),
-            (21.into(), Instruction::IConst1),
-            (22.into(), Instruction::Pop),
-            (23.into(), Instruction::Ret(0)),
+            (0, Instruction::Jsr(20.into())),
+            (3, Instruction::Jsr(20.into())),
+            (6, Instruction::Return),
+            (20, Instruction::AStore0),
+            (21, Instruction::IConst1),
+            (22, Instruction::Pop),
+            (23, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
@@ -87,13 +87,13 @@ fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
 fn supports_nested_subroutines_and_returns_to_an_ancestor() {
     let ir = build(&method(
         [
-            (0.into(), Instruction::Jsr(20.into())),
-            (3.into(), Instruction::Return),
-            (20.into(), Instruction::AStore0),
-            (21.into(), Instruction::Jsr(30.into())),
-            (24.into(), Instruction::Ret(0)),
-            (30.into(), Instruction::AStore1),
-            (31.into(), Instruction::Ret(0)),
+            (0, Instruction::Jsr(20.into())),
+            (3, Instruction::Return),
+            (20, Instruction::AStore0),
+            (21, Instruction::Jsr(30.into())),
+            (24, Instruction::Ret(0)),
+            (30, Instruction::AStore1),
+            (31, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
@@ -111,10 +111,10 @@ fn supports_nested_subroutines_and_returns_to_an_ancestor() {
 fn expands_jsr_w_and_wide_ret() {
     let ir = method(
         [
-            (0.into(), Instruction::JsrW(10.into())),
-            (5.into(), Instruction::Return),
-            (10.into(), Instruction::Wide(WideInstruction::AStore(300))),
-            (11.into(), Instruction::Wide(WideInstruction::Ret(300))),
+            (0, Instruction::JsrW(10.into())),
+            (5, Instruction::Return),
+            (10, Instruction::Wide(WideInstruction::AStore(300))),
+            (11, Instruction::Wide(WideInstruction::Ret(300))),
         ],
         "()V",
         vec![],
@@ -137,19 +137,19 @@ fn expands_jsr_w_and_wide_ret() {
 fn gives_each_context_its_own_handler_entry_and_caught_value() {
     let ir = build(&method(
         [
-            (0.into(), Instruction::Jsr(20.into())),
-            (3.into(), Instruction::Jsr(20.into())),
-            (6.into(), Instruction::Return),
-            (20.into(), Instruction::AStore0),
-            (21.into(), Instruction::AConstNull),
+            (0, Instruction::Jsr(20.into())),
+            (3, Instruction::Jsr(20.into())),
+            (6, Instruction::Return),
+            (20, Instruction::AStore0),
+            (21, Instruction::AConstNull),
             (
-                22.into(),
+                22,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (23.into(), Instruction::Pop),
-            (24.into(), Instruction::Ret(0)),
-            (30.into(), Instruction::AStore1),
-            (31.into(), Instruction::Goto(24.into())),
+            (23, Instruction::Pop),
+            (24, Instruction::Ret(0)),
+            (30, Instruction::AStore1),
+            (31, Instruction::Goto(24.into())),
         ],
         "()V",
         vec![ExceptionTableEntry {
@@ -184,11 +184,11 @@ fn gives_each_context_its_own_handler_entry_and_caught_value() {
 fn rejects_recursive_and_root_level_legacy_returns() {
     let recursive = method(
         [
-            (0.into(), Instruction::Jsr(10.into())),
-            (3.into(), Instruction::Return),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::Jsr(10.into())),
-            (14.into(), Instruction::Ret(0)),
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Jsr(10.into())),
+            (14, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
@@ -198,7 +198,7 @@ fn rejects_recursive_and_root_level_legacy_returns() {
         Err(MokaIRBuildError::MalformedControlFlow)
     ));
 
-    let root_ret = method([(0.into(), Instruction::Ret(0))], "()V", vec![]);
+    let root_ret = method([(0, Instruction::Ret(0))], "()V", vec![]);
     assert!(matches!(
         build(&root_ret),
         Err(MokaIRBuildError::FrameError(_) | MokaIRBuildError::MalformedControlFlow)
@@ -206,13 +206,13 @@ fn rejects_recursive_and_root_level_legacy_returns() {
 
     let multiple_returns = method(
         [
-            (0.into(), Instruction::Jsr(10.into())),
-            (3.into(), Instruction::Return),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::IConst0),
-            (12.into(), Instruction::IfEq(20.into())),
-            (15.into(), Instruction::Ret(0)),
-            (20.into(), Instruction::Ret(0)),
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::IConst0),
+            (12, Instruction::IfEq(20.into())),
+            (15, Instruction::Ret(0)),
+            (20, Instruction::Ret(0)),
         ],
         "()V",
         vec![],

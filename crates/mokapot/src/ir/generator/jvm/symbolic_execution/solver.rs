@@ -270,15 +270,21 @@ pub(super) fn merge_input_frame_at(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{
-        control_flow::ControlTransfer,
-        generator::{
-            identity::SsaValueId,
-            jvm::{
-                frame::{Entry, Position},
-                instruction::RegisterInstruction,
+    use crate::{
+        ir::{
+            control_flow::ControlTransfer,
+            generator::{
+                identity::SsaValueId,
+                jvm::{
+                    frame::{Entry, Position},
+                    instruction::RegisterInstruction,
+                    subroutine_expansion::Location,
+                    symbolic_execution::executor::Executor,
+                },
+                tests::method,
             },
         },
+        jvm::code::Instruction as JvmInstruction,
     };
 
     fn frame(value: u32) -> Frame<Value> {
@@ -303,6 +309,71 @@ mod tests {
             }],
             caught_exception_value: None,
         }
+    }
+
+    #[test]
+    fn merge_identity_is_stable_for_a_location_and_slot() {
+        let location = Location::entry(0.into());
+        let mut merged = frame(1);
+
+        assert!(merge_input_frame_at(location, &mut merged, frame(2)));
+        let expected = Value::Merged(FrameMergeSite {
+            location,
+            slot: Position::Local(0),
+        });
+        assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
+        assert!(!merge_input_frame_at(location, &mut merged, frame(3)));
+        assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
+    }
+
+    #[test]
+    fn frame_merge_is_permutation_independent() {
+        let location = Location::entry(0.into());
+        let expected = [Entry::Value(Value::Merged(FrameMergeSite {
+            location,
+            slot: Position::Local(0),
+        }))];
+
+        for order in [
+            [1, 2, 3],
+            [1, 3, 2],
+            [2, 1, 3],
+            [2, 3, 1],
+            [3, 1, 2],
+            [3, 2, 1],
+        ] {
+            let mut merged = frame(order[0]);
+            merge_input_frame_at(location, &mut merged, frame(order[1]));
+            merge_input_frame_at(location, &mut merged, frame(order[2]));
+            assert_eq!(merged.local_slots(), expected);
+        }
+    }
+
+    #[test]
+    fn reprocessing_replaces_stale_predecessor_output() {
+        let method = method(
+            [
+                (0, JvmInstruction::IConst0),
+                (1, JvmInstruction::Nop),
+                (2, JvmInstruction::Pop),
+                (3, JvmInstruction::IConst1),
+                (4, JvmInstruction::Goto(1.into())),
+            ],
+            "()V",
+            vec![],
+        );
+        let mut executor = Executor::for_method(&method).expect("valid method");
+        let nodes = executor.execute_reachable_locations().expect("valid loop");
+
+        assert_eq!(
+            nodes[&Location::entry(2.into())]
+                .incoming_frame
+                .operand_slots(),
+            &[Entry::Value(Value::Merged(FrameMergeSite {
+                location: Location::entry(1.into()),
+                slot: Position::Stack(0),
+            }))]
+        );
     }
 
     #[test]

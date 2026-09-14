@@ -6,19 +6,19 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let exception: ClassRef = "java/lang/Exception".parse().unwrap();
     let method = method(
         [
-            (0.into(), Instruction::ALoad0),
+            (0, Instruction::ALoad0),
             (
-                1.into(),
+                1,
                 Instruction::CheckCast("java/lang/String".parse().unwrap()),
             ),
-            (2.into(), Instruction::Pop),
-            (3.into(), Instruction::Return),
-            (10.into(), Instruction::AStore1),
-            (11.into(), Instruction::Return),
-            (20.into(), Instruction::AStore1),
-            (21.into(), Instruction::Return),
-            (30.into(), Instruction::AStore1),
-            (31.into(), Instruction::Return),
+            (2, Instruction::Pop),
+            (3, Instruction::Return),
+            (10, Instruction::AStore1),
+            (11, Instruction::Return),
+            (20, Instruction::AStore1),
+            (21, Instruction::Return),
+            (30, Instruction::AStore1),
+            (31, Instruction::Return),
         ],
         "(Ljava/lang/Object;)V",
         vec![
@@ -66,11 +66,11 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
 fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     let method = method(
         [
-            (0.into(), Instruction::IConst0),
-            (1.into(), Instruction::Pop),
-            (2.into(), Instruction::Return),
-            (10.into(), Instruction::AStore0),
-            (11.into(), Instruction::Return),
+            (0, Instruction::IConst0),
+            (1, Instruction::Pop),
+            (2, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Return),
         ],
         "()V",
         vec![ExceptionTableEntry {
