@@ -25,17 +25,13 @@ use crate::{
             },
         },
     },
-    jvm::{
-        ConstantValue,
-        code::{Instruction as JVM, ProgramCounter},
-    },
+    jvm::{ConstantValue, code::Instruction as JVM},
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
 pub(super) struct LiftContext<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
     addr: NodeAddress,
-    pc: ProgramCounter,
     frame: &'frame mut Frame<Value>,
 }
 
@@ -56,13 +52,12 @@ impl Executor<'_> {
         )]
         use JVM::*;
 
-        let pc = addr
-            .source_pc()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        if !matches!(addr, NodeAddress::Bytecode { .. }) {
+            return Err(MokaIRBuildError::MalformedControlFlow);
+        }
         let mut cx = LiftContext {
             executor: self,
             addr,
-            pc,
             frame,
         };
 

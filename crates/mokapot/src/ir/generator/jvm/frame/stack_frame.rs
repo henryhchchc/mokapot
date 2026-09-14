@@ -234,14 +234,6 @@ impl<V: Clone> Frame<V> {
         }
     }
 
-    pub fn with_empty_operand_stack(&self) -> Self {
-        Self {
-            max_operand_stack: self.max_operand_stack,
-            local_slots: self.local_slots.clone(),
-            operand_slots: Vec::with_capacity(self.max_operand_stack.into()),
-        }
-    }
-
     pub fn local_slots(&self) -> &[Entry<V>] {
         &self.local_slots
     }

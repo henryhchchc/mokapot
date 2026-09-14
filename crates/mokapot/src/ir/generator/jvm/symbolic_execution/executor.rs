@@ -8,7 +8,7 @@ use crate::{
             NodeAddress,
             frame::Frame,
             instruction::RegisterInstruction,
-            lifting::{fallibility::FallibilityContext, successors::build_outgoing_edges},
+            lifting::fallibility::FallibilityContext,
             subroutine::{Expander, ReturnAddress},
             symbolic_execution::fact::{Cfg, Node, Value},
             symbolic_execution::solver,
@@ -45,8 +45,7 @@ impl<'method> Executor<'method> {
             NodeAddress::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.clone();
-                let outgoing_edges = build_outgoing_edges(
-                    self,
+                let outgoing_edges = self.build_outgoing_edges(
                     addr,
                     &incoming_frame,
                     normal_frame,
@@ -67,8 +66,7 @@ impl<'method> Executor<'method> {
                     self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
                     self.lift_register_instruction(&jvm_instruction, addr, &mut normal_frame)?;
-                let outgoing_edges = build_outgoing_edges(
-                    self,
+                let outgoing_edges = self.build_outgoing_edges(
                     addr,
                     &incoming_frame,
                     normal_frame,
@@ -167,7 +165,7 @@ impl<'method> Executor<'method> {
         solver::execute_to_fixpoint(self, entry_addr, initial_frame)
     }
 
-    pub fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+    fn new_value_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
         self.value_id_allocator.new_value_id()
     }
 
@@ -249,8 +247,11 @@ impl<'method> Executor<'method> {
         &mut self,
         addr: NodeAddress,
         target: ProgramCounter,
-        continuation: ProgramCounter,
     ) -> Result<(NodeAddress, ReturnAddress), MokaIRBuildError> {
+        let pc = addr
+            .source_pc()
+            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let continuation = self.next_program_counter(pc)?;
         self.subroutine_expander
             .enter_subroutine(addr, target, continuation)
     }
