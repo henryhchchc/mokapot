@@ -311,18 +311,12 @@ mod tests {
         assert_eq!(executor.value_id_allocator.next_value_idx, 3);
 
         for k in [0, 3, 4] {
-            assert!(
-                executor
-                    .definition_ids
-                    .contains_key(&NodeAddress::entry(k.into()))
-            );
+            let entry = NodeAddress::entry(k.into());
+            assert!(executor.definition_ids.contains_key(&entry));
         }
         for k in [1, 2, 5, 6] {
-            assert!(
-                !executor
-                    .definition_ids
-                    .contains_key(&NodeAddress::entry(k.into()))
-            );
+            let entry = NodeAddress::entry(k.into());
+            assert!(!executor.definition_ids.contains_key(&entry));
         }
     }
 }
