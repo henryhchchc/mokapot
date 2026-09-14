@@ -6,44 +6,44 @@ use crate::ir::{
     BlockId,
     control_flow::ControlTransfer,
     generator::{
-        error::MokaIRBuildError,
+        error::Error,
         identity::SsaValueId,
-        jvm::{
-            subroutine_expansion::Location,
-            symbolic_execution::{self, FrameMergeSite},
-        },
+        instruction_graph::{self, FrameMergeSite, NodeAddress},
     },
 };
 
-/// The partition of symbolic JVM nodes into semantic blocks.
+/// The partition of JVM instruction nodes into semantic blocks.
 pub(super) struct BlockLayout {
     entry: BlockId,
     bytecode_entry: BlockId,
-    location_to_block: BTreeMap<Location, BlockId>,
-    locations_by_block: BTreeMap<BlockId, Vec<Location>>,
+    addr_to_block: BTreeMap<NodeAddress, BlockId>,
+    addrs_by_block: BTreeMap<BlockId, Vec<NodeAddress>>,
 }
 
 impl BlockLayout {
-    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, MokaIRBuildError> {
-        let reachable = symbolic_cfg.nodes.keys().copied().collect::<Vec<_>>();
+    pub fn discover(instruction_graph: &instruction_graph::Graph) -> Result<Self, Error> {
+        let reachable = instruction_graph.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
 
-        let predecessors = predecessor_locations(&symbolic_cfg.nodes);
-        let leaders = discover_leaders(symbolic_cfg, &reachable, &predecessors)?;
+        let predecessors = predecessor_addrs(&instruction_graph.nodes);
+        let leaders = discover_leaders(instruction_graph, &reachable, &predecessors)?;
         let needs_entry_preheader = predecessors
-            .get(&symbolic_cfg.entry_location)
+            .get(&instruction_graph.entry_addr)
             .is_some_and(|sources| !sources.is_empty());
-        let (entry, bytecode_entry, block_ids) =
-            allocate_block_ids(&leaders, symbolic_cfg.entry_location, needs_entry_preheader)?;
-        let grouped = group_locations(&reachable, &block_ids)?;
+        let (entry, bytecode_entry, block_ids) = allocate_block_ids(
+            &leaders,
+            instruction_graph.entry_addr,
+            needs_entry_preheader,
+        )?;
+        let grouped = group_addrs(&reachable, &block_ids)?;
 
         Ok(Self {
             entry,
             bytecode_entry,
-            location_to_block: grouped.block_by_location,
-            locations_by_block: grouped.locations_by_block,
+            addr_to_block: grouped.block_by_addr,
+            addrs_by_block: grouped.addrs_by_block,
         })
     }
 
@@ -51,24 +51,24 @@ impl BlockLayout {
         self.entry
     }
 
-    pub const fn locations(&self) -> &BTreeMap<BlockId, Vec<Location>> {
-        &self.locations_by_block
+    pub const fn addrs(&self) -> &BTreeMap<BlockId, Vec<NodeAddress>> {
+        &self.addrs_by_block
     }
 
-    pub fn block_at(&self, location: Location) -> Option<BlockId> {
-        self.location_to_block.get(&location).copied()
+    pub fn block_at(&self, addr: NodeAddress) -> Option<BlockId> {
+        self.addr_to_block.get(&addr).copied()
     }
 
     pub fn phi_blocks(
         &self,
         phi_values: &BTreeMap<FrameMergeSite, SsaValueId>,
-    ) -> Result<BTreeMap<SsaValueId, BlockId>, MokaIRBuildError> {
+    ) -> Result<BTreeMap<SsaValueId, BlockId>, Error> {
         phi_values
             .iter()
             .map(|(identity, &value)| {
-                self.block_at(identity.location)
+                self.block_at(identity.addr)
                     .map(|block| (value, block))
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)
+                    .ok_or(Error::MalformedControlFlow)
             })
             .collect()
     }
@@ -82,11 +82,11 @@ impl BlockLayout {
     }
 }
 
-fn predecessor_locations(
-    locations: &BTreeMap<Location, symbolic_execution::Node>,
-) -> BTreeMap<Location, BTreeSet<Location>> {
-    let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
-    for (&source, facts) in locations {
+fn predecessor_addrs(
+    addrs: &BTreeMap<NodeAddress, instruction_graph::Node>,
+) -> BTreeMap<NodeAddress, BTreeSet<NodeAddress>> {
+    let mut predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>> = BTreeMap::new();
+    for (&source, facts) in addrs {
         for outgoing in &facts.outgoing_edges {
             predecessors
                 .entry(outgoing.target)
@@ -98,22 +98,22 @@ fn predecessor_locations(
 }
 
 fn discover_leaders(
-    symbolic_cfg: &symbolic_execution::Cfg,
-    reachable: &[Location],
-    predecessors: &BTreeMap<Location, BTreeSet<Location>>,
-) -> Result<BTreeSet<Location>, MokaIRBuildError> {
-    let mut leaders = BTreeSet::from([symbolic_cfg.entry_location]);
+    instruction_graph: &instruction_graph::Graph,
+    reachable: &[NodeAddress],
+    predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
+) -> Result<BTreeSet<NodeAddress>, Error> {
+    let mut leaders = BTreeSet::from([instruction_graph.entry_addr]);
     leaders.extend(
-        symbolic_cfg
+        instruction_graph
             .phi_values
             .keys()
-            .map(|identity| identity.location),
+            .map(|identity| identity.addr),
     );
     leaders.extend(
         reachable
             .iter()
             .copied()
-            .filter(|location| !matches!(location, Location::Bytecode { .. })),
+            .filter(|addr| !matches!(addr, NodeAddress::Bytecode { .. })),
     );
     leaders.extend(
         predecessors
@@ -122,14 +122,15 @@ fn discover_leaders(
             .map(|(target, _)| *target),
     );
 
-    for facts in symbolic_cfg.nodes.values() {
+    for facts in instruction_graph.nodes.values() {
+        // A location that ends its block hands every arm to a fresh block.
+        // Synchronously fallible operations qualify through their exceptional
+        // arms, which they always have.
         if facts.instruction.is_explicit_transfer()
             || facts.outgoing_edges.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
-                    ControlTransfer::Normal
-                        | ControlTransfer::Exception(_)
-                        | ControlTransfer::Unwind
+                    ControlTransfer::Exception(_) | ControlTransfer::Unwind
                 )
             })
         {
@@ -140,45 +141,44 @@ fn discover_leaders(
         let [current, next] = pair else {
             unreachable!()
         };
-        let facts = symbolic_cfg
+        let facts = instruction_graph
             .nodes
             .get(current)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
+        // Mirror `materialize_internal_operation`: only an ordinary,
+        // non-fallible operation is elided into its successor's block.
         let plain_fallthrough = !facts.instruction.is_explicit_transfer()
+            && !facts.can_throw_synchronously
             && facts.outgoing_edges.len() == 1
-            && facts.outgoing_edges[0].target == *next
-            && matches!(
-                facts.outgoing_edges[0].transfer,
-                ControlTransfer::Unconditional
-            );
+            && facts.outgoing_edges[0].target == *next;
         if !plain_fallthrough {
             leaders.insert(*next);
         }
     }
-    leaders.retain(|location| symbolic_cfg.nodes.contains_key(location));
+    leaders.retain(|addr| instruction_graph.nodes.contains_key(addr));
     Ok(leaders)
 }
 
 fn allocate_block_ids(
-    leaders: &BTreeSet<Location>,
-    entry_location: Location,
+    leaders: &BTreeSet<NodeAddress>,
+    entry_addr: NodeAddress,
     needs_entry_preheader: bool,
-) -> Result<(BlockId, BlockId, BTreeMap<Location, BlockId>), MokaIRBuildError> {
+) -> Result<(BlockId, BlockId, BTreeMap<NodeAddress, BlockId>), Error> {
     let block_offset = u32::from(needs_entry_preheader);
     let block_ids = leaders
         .iter()
         .enumerate()
-        .map(|(index, location)| {
+        .map(|(index, addr)| {
             u32::try_from(index)
                 .ok()
                 .and_then(|index| index.checked_add(block_offset))
-                .map(|index| (*location, BlockId::new(index)))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .map(|index| (*addr, BlockId::new(index)))
+                .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let bytecode_entry = *block_ids
-        .get(&entry_location)
-        .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        .get(&entry_addr)
+        .ok_or(Error::MalformedControlFlow)?;
     let entry = if needs_entry_preheader {
         BlockId::new(0)
     } else {
@@ -187,28 +187,28 @@ fn allocate_block_ids(
     Ok((entry, bytecode_entry, block_ids))
 }
 
-struct GroupedLocations {
-    block_by_location: BTreeMap<Location, BlockId>,
-    locations_by_block: BTreeMap<BlockId, Vec<Location>>,
+struct GroupedAddrs {
+    block_by_addr: BTreeMap<NodeAddress, BlockId>,
+    addrs_by_block: BTreeMap<BlockId, Vec<NodeAddress>>,
 }
 
-fn group_locations(
-    reachable: &[Location],
-    block_ids: &BTreeMap<Location, BlockId>,
-) -> Result<GroupedLocations, MokaIRBuildError> {
-    let mut block_by_location = BTreeMap::new();
-    let mut locations_by_block: BTreeMap<BlockId, Vec<Location>> = BTreeMap::new();
+fn group_addrs(
+    reachable: &[NodeAddress],
+    block_ids: &BTreeMap<NodeAddress, BlockId>,
+) -> Result<GroupedAddrs, Error> {
+    let mut block_by_addr = BTreeMap::new();
+    let mut addrs_by_block: BTreeMap<BlockId, Vec<NodeAddress>> = BTreeMap::new();
     let mut current_block = None;
-    for &location in reachable {
-        if let Some(id) = block_ids.get(&location) {
+    for &addr in reachable {
+        if let Some(id) = block_ids.get(&addr) {
             current_block = Some(*id);
         }
-        let id = current_block.ok_or(MokaIRBuildError::MalformedControlFlow)?;
-        block_by_location.insert(location, id);
-        locations_by_block.entry(id).or_default().push(location);
+        let id = current_block.ok_or(Error::MalformedControlFlow)?;
+        block_by_addr.insert(addr, id);
+        addrs_by_block.entry(id).or_default().push(addr);
     }
-    Ok(GroupedLocations {
-        block_by_location,
-        locations_by_block,
+    Ok(GroupedAddrs {
+        block_by_addr,
+        addrs_by_block,
     })
 }

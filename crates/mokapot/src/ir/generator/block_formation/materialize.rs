@@ -7,11 +7,8 @@ use crate::{
         BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
-            error::MokaIRBuildError,
-            jvm::{
-                frame::Frame, instruction::RegisterInstruction, subroutine_expansion::Location,
-                symbolic_execution,
-            },
+            error::Error,
+            instruction_graph::{self, NodeAddress, RegisterInstruction, frame::Frame},
         },
     },
     jvm::code::ProgramCounter,
@@ -23,67 +20,79 @@ use super::{
 };
 
 pub(super) fn materialize_blocks(
-    mut symbolic_nodes: BTreeMap<Location, symbolic_execution::Node>,
+    mut instruction_nodes: BTreeMap<NodeAddress, instruction_graph::Node>,
     layout: &BlockLayout,
-) -> Result<Vec<Block>, MokaIRBuildError> {
+) -> Result<Vec<Block>, Error> {
     let blocks = layout
-        .locations()
+        .addrs()
         .iter()
-        .map(|(&id, locations)| materialize_block(id, locations, &mut symbolic_nodes, layout))
+        .map(|(&id, addrs)| materialize_block(id, addrs, &mut instruction_nodes, layout))
         .collect::<Result<Vec<_>, _>>()?;
-    if symbolic_nodes.is_empty() {
+    if instruction_nodes.is_empty() {
         Ok(blocks)
     } else {
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     }
 }
 
 fn materialize_block(
     id: BlockId,
-    locations: &[Location],
-    symbolic_nodes: &mut BTreeMap<Location, symbolic_execution::Node>,
+    addrs: &[NodeAddress],
+    instruction_nodes: &mut BTreeMap<NodeAddress, instruction_graph::Node>,
     layout: &BlockLayout,
-) -> Result<Block, MokaIRBuildError> {
+) -> Result<Block, Error> {
     let mut entry_frame = None;
     let mut caught_exception = None;
-    let mut operations = Vec::with_capacity(locations.len());
+    let mut operations = Vec::with_capacity(addrs.len());
     let mut terminator = None;
     let mut terminator_source = None;
     let mut arms = Vec::new();
 
-    for (index, location) in locations.iter().copied().enumerate() {
-        let symbolic_execution::Node {
+    for (index, addr) in addrs.iter().copied().enumerate() {
+        let instruction_graph::Node {
             incoming_frame,
             instruction,
+            can_throw_synchronously,
             outgoing_edges,
             caught_exception_value: location_exception,
-        } = symbolic_nodes
-            .remove(&location)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        } = instruction_nodes
+            .remove(&addr)
+            .ok_or(Error::MalformedControlFlow)?;
         if index == 0 {
             entry_frame = Some(incoming_frame);
             caught_exception = location_exception;
         }
-        let is_last = index + 1 == locations.len();
+        let is_last = index + 1 == addrs.len();
         if is_last {
-            let end = materialize_block_end(location, instruction, outgoing_edges, layout)?;
+            let end = materialize_block_end(
+                addr,
+                instruction,
+                can_throw_synchronously,
+                outgoing_edges,
+                layout,
+            )?;
             operations.extend(end.operation);
             terminator = Some(end.terminator);
             terminator_source = end.terminator_source;
             arms = end.arms;
         } else {
-            let next = locations[index + 1];
-            let operation =
-                materialize_internal_operation(location, instruction, &outgoing_edges, next)?;
+            let next = addrs[index + 1];
+            let operation = materialize_internal_operation(
+                addr,
+                instruction,
+                can_throw_synchronously,
+                &outgoing_edges,
+                next,
+            )?;
             operations.extend(operation);
         }
     }
 
     Ok(Block {
         id,
-        entry_frame: entry_frame.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+        entry_frame: entry_frame.ok_or(Error::MalformedControlFlow)?,
         operations,
-        terminator: terminator.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+        terminator: terminator.ok_or(Error::MalformedControlFlow)?,
         terminator_source,
         arms,
         caught_exception,
@@ -91,21 +100,22 @@ fn materialize_block(
 }
 
 fn materialize_internal_operation(
-    location: Location,
+    addr: NodeAddress,
     instruction: RegisterInstruction,
-    outgoing: &[symbolic_execution::Edge],
-    next: Location,
-) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, MokaIRBuildError> {
+    can_throw_synchronously: bool,
+    outgoing: &[instruction_graph::Edge],
+    next: NodeAddress,
+) -> Result<Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>, Error> {
     if instruction.is_explicit_transfer()
+        || can_throw_synchronously
         || outgoing.len() != 1
         || outgoing[0].target != next
-        || !matches!(outgoing[0].transfer, ControlTransfer::Unconditional)
     {
-        return Err(MokaIRBuildError::MalformedControlFlow);
+        return Err(Error::MalformedControlFlow);
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: symbolic_execution::Value::Ssa(value),
+            value: instruction_graph::Value::Ssa(value),
             expr,
         }),
         RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
@@ -118,32 +128,32 @@ fn materialize_internal_operation(
         | RegisterInstruction::Throw(_)
         | RegisterInstruction::Subroutine { .. }
         | RegisterInstruction::SubroutineReturn(_) => {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
     };
     operation
         .map(|operation| {
-            location
-                .source_pc()
+            addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .transpose()
 }
 
 struct BlockEnd {
-    operation: Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>,
-    terminator: TerminatorKind<symbolic_execution::Value>,
+    operation: Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>,
+    terminator: TerminatorKind<instruction_graph::Value>,
     terminator_source: Option<ProgramCounter>,
     arms: Vec<Arm>,
 }
 
 fn materialize_block_end(
-    location: Location,
+    addr: NodeAddress,
     instruction: RegisterInstruction,
-    outgoing: Vec<symbolic_execution::Edge>,
+    can_throw_synchronously: bool,
+    outgoing: Vec<instruction_graph::Edge>,
     layout: &BlockLayout,
-) -> Result<BlockEnd, MokaIRBuildError> {
+) -> Result<BlockEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
     let arms = outgoing
         .into_iter()
@@ -155,26 +165,22 @@ fn materialize_block_end(
                     transfer: outgoing.transfer,
                     frame: outgoing.target_frame,
                 })
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let has_normal_successor = arms
-        .iter()
-        .any(|arm| matches!(arm.transfer, ControlTransfer::Normal));
-    let (operation, terminator) = classify_block_end(instruction, has_normal_successor);
+    let (operation, terminator) = classify_block_end(instruction, can_throw_synchronously);
     let operation = operation
         .map(|operation| {
-            location
-                .source_pc()
+            addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .transpose()?;
 
     Ok(BlockEnd {
         operation,
         terminator,
-        terminator_source: explicit_transfer.then(|| location.source_pc()).flatten(),
+        terminator_source: explicit_transfer.then(|| addr.source_pc()).flatten(),
         arms,
     })
 }
@@ -182,7 +188,7 @@ fn materialize_block_end(
 pub(super) fn insert_entry_preheader(
     mut blocks: Vec<Block>,
     layout: &BlockLayout,
-    initial_frame: Frame<symbolic_execution::Value>,
+    initial_frame: Frame<instruction_graph::Value>,
 ) -> Vec<Block> {
     if layout.has_entry_preheader() {
         let entry_block = Block {
@@ -203,12 +209,16 @@ pub(super) fn insert_entry_preheader(
     blocks
 }
 
+/// Converts a block-final instruction into its operation and terminator.
+///
+/// `is_fallible` reports whether the instruction can raise, which gives a
+/// value- or effect-producing operation a [`TerminatorKind::Fallible`] end.
 pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
-    has_normal_successor: bool,
+    is_fallible: bool,
 ) -> (
-    Option<OperationKind<symbolic_execution::Value>>,
-    TerminatorKind<symbolic_execution::Value>,
+    Option<OperationKind<instruction_graph::Value>>,
+    TerminatorKind<instruction_graph::Value>,
 ) {
     match instruction {
         RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
@@ -229,22 +239,20 @@ pub(super) fn classify_block_end(
         RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
         RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
-                value: symbolic_execution::Value::Ssa(value),
+                value: instruction_graph::Value::Ssa(value),
                 expr,
             }),
-            implicit_terminator(has_normal_successor),
+            implicit_terminator(is_fallible),
         ),
         RegisterInstruction::Effect(expr) => (
             Some(OperationKind::Effect { expr }),
-            implicit_terminator(has_normal_successor),
+            implicit_terminator(is_fallible),
         ),
     }
 }
 
-const fn implicit_terminator(
-    has_normal_successor: bool,
-) -> TerminatorKind<symbolic_execution::Value> {
-    if has_normal_successor {
+const fn implicit_terminator(is_fallible: bool) -> TerminatorKind<instruction_graph::Value> {
+    if is_fallible {
         TerminatorKind::Fallible
     } else {
         TerminatorKind::Goto

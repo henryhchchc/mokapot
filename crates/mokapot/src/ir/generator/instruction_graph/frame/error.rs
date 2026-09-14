@@ -12,6 +12,8 @@ pub enum JvmFrameError {
     UnavailableLocal,
     #[error("The slot layout does not match the requested JVM value category")]
     InvalidSlotLayout,
+    #[error("The stack frames have incompatible shapes")]
+    IncompatibleFrameShape,
     #[error("The number of parameter values does not match the method descriptor")]
     ParameterCountMismatch,
 }

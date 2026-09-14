@@ -1,4 +1,4 @@
-//! Forms semantic maximal blocks from symbolic JVM nodes and frame facts.
+//! Forms semantic maximal blocks from JVM instruction nodes and frame facts.
 
 mod layout;
 mod materialize;
@@ -10,7 +10,7 @@ mod tests;
 pub(super) use model::Graph;
 pub(crate) use model::{Arm, Block};
 
-use crate::ir::generator::{error::MokaIRBuildError, jvm::symbolic_execution};
+use crate::ir::generator::{error::Error, instruction_graph};
 
 use self::{
     layout::BlockLayout,
@@ -18,17 +18,17 @@ use self::{
 };
 
 /// Forms maximal semantic blocks from completed JVM frame facts.
-pub(super) fn form(symbolic_cfg: symbolic_execution::Cfg) -> Result<Graph, MokaIRBuildError> {
-    let layout = BlockLayout::discover(&symbolic_cfg)?;
-    let phi_blocks = layout.phi_blocks(&symbolic_cfg.phi_values)?;
-    let symbolic_execution::Cfg {
+pub(super) fn form(instruction_graph: instruction_graph::Graph) -> Result<Graph, Error> {
+    let layout = BlockLayout::discover(&instruction_graph)?;
+    let phi_blocks = layout.phi_blocks(&instruction_graph.phi_values)?;
+    let instruction_graph::Graph {
         initial_frame,
         nodes,
         phi_values,
         receiver_value,
         parameter_values,
         ..
-    } = symbolic_cfg;
+    } = instruction_graph;
     let blocks = materialize_blocks(nodes, &layout)?;
     let blocks = insert_entry_preheader(blocks, &layout, initial_frame);
 

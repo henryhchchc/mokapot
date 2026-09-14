@@ -1,14 +1,11 @@
 use std::collections::BTreeMap;
 
+use super::{NodeAddress, RegisterInstruction, ReturnAddress};
 use crate::ir::{
     control_flow::ControlTransfer,
     generator::{
         identity::SsaValueId,
-        jvm::{
-            frame::{Frame, Position},
-            instruction::RegisterInstruction,
-            subroutine_expansion::{Location, ReturnAddress},
-        },
+        instruction_graph::frame::{Frame, Position},
     },
 };
 
@@ -16,11 +13,11 @@ use crate::ir::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) struct FrameMergeSite {
-    pub location: Location,
+    pub addr: NodeAddress,
     pub slot: Position,
 }
 
-/// An abstract JVM frame value during symbolic execution.
+/// An abstract JVM frame value while constructing the instruction graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) enum Value {
@@ -33,27 +30,32 @@ pub(crate) enum Value {
     Invalid,
 }
 
-/// One outgoing edge and its exact symbolic frame.
+/// One outgoing edge and its exact JVM frame.
 pub(crate) struct Edge {
-    pub target: Location,
+    pub target: NodeAddress,
     pub transfer: ControlTransfer<Value>,
     pub target_frame: Frame<Value>,
 }
 
-/// Completed symbolic-execution facts for one reachable JVM location.
+/// Completed facts for one reachable JVM location.
 pub(crate) struct Node {
     pub incoming_frame: Frame<Value>,
     pub instruction: RegisterInstruction,
+    /// Whether executing `instruction` can raise a synchronous exception.
+    ///
+    /// Such a location always has exceptional outgoing edges and never
+    /// coalesces with the next location.
+    pub can_throw_synchronously: bool,
     pub outgoing_edges: Vec<Edge>,
     pub caught_exception_value: Option<SsaValueId>,
 }
 
-/// Reachable symbolic JVM nodes and their execution facts.
-pub(crate) struct Cfg {
-    pub entry_location: Location,
+/// A reachable register-form JVM instruction graph.
+pub(crate) struct Graph {
+    pub entry_addr: NodeAddress,
     /// The original frame entering the method.
     pub initial_frame: Frame<Value>,
-    pub nodes: BTreeMap<Location, Node>,
+    pub nodes: BTreeMap<NodeAddress, Node>,
     pub phi_values: BTreeMap<FrameMergeSite, SsaValueId>,
     pub receiver_value: Option<SsaValueId>,
     pub parameter_values: Vec<SsaValueId>,

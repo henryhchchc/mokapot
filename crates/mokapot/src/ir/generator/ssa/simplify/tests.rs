@@ -17,10 +17,8 @@ fn canonicalizes_trivial_phi_chains() {
     .unwrap();
 
     assert!(simplified.candidates.is_empty());
-    assert_eq!(
-        simplified.substitutions,
-        BTreeMap::from([(value(1), value(100)), (value(2), value(100))])
-    );
+    let expected = BTreeMap::from([(value(1), value(100)), (value(2), value(100))]);
+    assert_eq!(simplified.substitutions, expected);
     assert!(
         simplified
             .substitutions

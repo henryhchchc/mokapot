@@ -1,12 +1,12 @@
+//! Register-form instructions used by the instruction graph.
+
 use std::collections::BTreeMap;
 
+use super::{NodeAddress, Value};
 use crate::{
     ir::{
         expression::{Condition, Expression},
-        generator::{
-            identity::SsaValueId,
-            jvm::{subroutine_expansion::Location, symbolic_execution::Value},
-        },
+        generator::identity::SsaValueId,
     },
     jvm::code::ProgramCounter,
 };
@@ -33,7 +33,7 @@ pub(crate) enum RegisterInstruction {
     Return(Option<Value>),
     Throw(Value),
     Subroutine {
-        target: Location,
+        target: NodeAddress,
     },
     SubroutineReturn(Value),
 }
