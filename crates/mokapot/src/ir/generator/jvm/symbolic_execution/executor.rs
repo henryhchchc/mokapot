@@ -7,10 +7,7 @@ use crate::{
         jvm::{
             frame::Frame,
             instruction::RegisterInstruction,
-            lifting::{
-                fallibility::FallibilityContext, lift_register_instruction,
-                successors::build_outgoing_edges,
-            },
+            lifting::{fallibility::FallibilityContext, successors::build_outgoing_edges},
             subroutine_expansion::{Expander, Location, ReturnAddress},
             symbolic_execution::fact::{Cfg, Node, Value},
             symbolic_execution::solver,
@@ -68,7 +65,7 @@ impl<'method> Executor<'method> {
                 let can_throw_synchronously =
                     self.fallibility.is_synchronously_fallible(&jvm_instruction);
                 let instruction =
-                    lift_register_instruction(self, &jvm_instruction, location, &mut normal_frame)?;
+                    self.lift_register_instruction(&jvm_instruction, location, &mut normal_frame)?;
                 let outgoing_edges = build_outgoing_edges(
                     self,
                     location,
