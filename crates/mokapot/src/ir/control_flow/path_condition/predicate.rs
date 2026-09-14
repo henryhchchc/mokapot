@@ -72,20 +72,14 @@ where
     }
 }
 
-mod model {
-    use super::{ConstantValue, ValueId};
-
-    /// An operand or constant parameterized by the lifting operand representation.
-    #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
-    pub enum Value<OP = ValueId> {
-        /// A value produced by the IR.
-        Variable(OP),
-        /// A JVM constant embedded in the condition.
-        Constant(ConstantValue),
-    }
+/// An operand or constant parameterized by the lifting operand representation.
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
+pub enum Value<OP = ValueId> {
+    /// A value produced by the IR.
+    Variable(OP),
+    /// A JVM constant embedded in the condition.
+    Constant(ConstantValue),
 }
-
-pub use model::Value;
 
 impl<OP, OUT> TryMapValues<OUT> for Value<OP> {
     type Value = OP;
@@ -131,7 +125,7 @@ impl Predicate {
     }
 }
 
-impl<OP> From<OP> for model::Value<OP> {
+impl<OP> From<OP> for Value<OP> {
     fn from(value: OP) -> Self {
         Self::Variable(value)
     }

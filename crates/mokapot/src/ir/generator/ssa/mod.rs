@@ -7,7 +7,7 @@ mod simplify;
 
 use crate::ir::{
     BlockId,
-    generator::{block_formation, error::MokaIRBuildError, identity::SsaValueId},
+    generator::{block_formation, error::Error, identity::SsaValueId},
 };
 use merge::{MergePlan, collect_phi_candidates};
 pub(crate) use model::Block;
@@ -22,7 +22,7 @@ pub(super) struct Graph {
 }
 
 /// Collects and simplifies phis, then resolves frame operands into scalar blocks.
-pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, MokaIRBuildError> {
+pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, Error> {
     let block_formation::Graph {
         entry,
         blocks,
@@ -33,8 +33,7 @@ pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, MokaIRBu
     } = graph;
     let merge_plan = MergePlan::new(merge_values, phi_blocks);
     let candidates = collect_phi_candidates(&blocks, &merge_plan)?;
-    let simplified =
-        simplify_phis(candidates).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+    let simplified = simplify_phis(candidates).map_err(|_| Error::MalformedControlFlow)?;
     let blocks = finalization::finalize(blocks, &merge_plan, simplified)?;
     Ok(Graph {
         entry,

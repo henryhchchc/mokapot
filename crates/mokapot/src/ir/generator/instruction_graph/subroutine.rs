@@ -2,9 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::jvm::code::ProgramCounter;
-
-use crate::ir::generator::error::MokaIRBuildError;
+use super::NodeAddress;
+use crate::{ir::generator::error::Error, jvm::code::ProgramCounter};
 
 const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 
@@ -14,45 +13,7 @@ const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 pub(crate) struct Context(u32);
 
 impl Context {
-    const ROOT: Self = Self(0);
-}
-
-/// A private expanded control-flow location.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) enum Location {
-    Bytecode {
-        context: Context,
-        pc: ProgramCounter,
-    },
-    Handler {
-        handler_pc: ProgramCounter,
-        context: Context,
-    },
-    Unwind,
-}
-
-impl Location {
-    pub const fn entry(pc: ProgramCounter) -> Self {
-        Self::Bytecode {
-            context: Context::ROOT,
-            pc,
-        }
-    }
-
-    pub const fn source_pc(self) -> Option<ProgramCounter> {
-        match self {
-            Self::Bytecode { pc, .. } => Some(pc),
-            Self::Handler { .. } | Self::Unwind => None,
-        }
-    }
-
-    pub const fn context(self) -> Option<Context> {
-        match self {
-            Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),
-            Self::Unwind => None,
-        }
-    }
+    pub(super) const ROOT: Self = Self(0);
 }
 
 /// The exact call activation represented by a JVM `returnAddress` value.
@@ -79,61 +40,61 @@ struct Activation {
 pub(crate) struct Expander {
     activations: Vec<Option<Activation>>,
     contexts_by_activation: BTreeMap<Activation, Context>,
-    expanded_locations: BTreeSet<Location>,
+    expanded_addrs: BTreeSet<NodeAddress>,
     return_pcs: BTreeMap<Context, ProgramCounter>,
 }
 
 impl Expander {
-    pub fn new(entry: ProgramCounter) -> Self {
+    pub fn new(entry: NodeAddress) -> Self {
         Self {
             activations: vec![None],
             contexts_by_activation: BTreeMap::new(),
-            expanded_locations: BTreeSet::from([Location::entry(entry)]),
+            expanded_addrs: BTreeSet::from([entry]),
             return_pcs: BTreeMap::new(),
         }
     }
 
-    pub fn register_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
-        self.expanded_locations.insert(location);
-        if self.expanded_locations.len() > EXPANDED_LOCATION_LIMIT {
-            return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
+    pub fn register_addr(&mut self, addr: NodeAddress) -> Result<NodeAddress, Error> {
+        self.expanded_addrs.insert(addr);
+        if self.expanded_addrs.len() > EXPANDED_LOCATION_LIMIT {
+            return Err(Error::LegacySubroutineExpansionLimit {
                 limit: EXPANDED_LOCATION_LIMIT,
             });
         }
-        Ok(location)
+        Ok(addr)
     }
 
-    pub fn bytecode_location(
+    pub fn bytecode_addr(
         &mut self,
         pc: ProgramCounter,
         context: Context,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.register_location(Location::Bytecode { pc, context })
+    ) -> Result<NodeAddress, Error> {
+        self.register_addr(NodeAddress::Bytecode { pc, context })
     }
 
-    pub fn handler_location(
+    pub fn handler_addr(
         &mut self,
         handler_pc: ProgramCounter,
         context: Context,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.register_location(Location::Handler {
-            handler_pc,
+    ) -> Result<NodeAddress, Error> {
+        self.register_addr(NodeAddress::Handler {
+            handler: handler_pc,
             context,
         })
     }
 
     pub fn enter_subroutine(
         &mut self,
-        location: Location,
+        addr: NodeAddress,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
-        let Location::Bytecode {
+    ) -> Result<(NodeAddress, ReturnAddress), Error> {
+        let NodeAddress::Bytecode {
             pc: call_site,
             context: parent,
-        } = location
+        } = addr
         else {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         };
         let mut cursor = Some(parent);
         while let Some(context) = cursor {
@@ -141,7 +102,7 @@ impl Expander {
                 break;
             };
             if activation.target == target {
-                return Err(MokaIRBuildError::MalformedControlFlow);
+                return Err(Error::MalformedControlFlow);
             }
             cursor = Some(activation.parent);
         }
@@ -155,7 +116,7 @@ impl Expander {
             context
         } else {
             let index = u32::try_from(self.activations.len()).map_err(|_| {
-                MokaIRBuildError::LegacySubroutineExpansionLimit {
+                Error::LegacySubroutineExpansionLimit {
                     limit: EXPANDED_LOCATION_LIMIT,
                 }
             })?;
@@ -164,49 +125,46 @@ impl Expander {
             self.contexts_by_activation.insert(activation, context);
             context
         };
-        Ok((
-            self.bytecode_location(target, context)?,
-            ReturnAddress(context),
-        ))
+        Ok((self.bytecode_addr(target, context)?, ReturnAddress(context)))
     }
 
     pub fn return_from(
         &mut self,
-        location: Location,
+        addr: NodeAddress,
         address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError> {
-        let Location::Bytecode {
+    ) -> Result<NodeAddress, Error> {
+        let NodeAddress::Bytecode {
             context: current,
             pc: return_pc,
-        } = location
+        } = addr
         else {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         };
         let mut cursor = current;
         loop {
             let activation = self
                 .activation(cursor)?
-                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+                .ok_or(Error::MalformedControlFlow)?;
             if cursor == address.0 {
                 match self.return_pcs.get(&cursor).copied() {
                     Some(previous) if previous != return_pc => {
-                        return Err(MokaIRBuildError::MalformedControlFlow);
+                        return Err(Error::MalformedControlFlow);
                     }
                     None => {
                         self.return_pcs.insert(cursor, return_pc);
                     }
                     Some(_) => {}
                 }
-                return self.bytecode_location(activation.continuation, activation.parent);
+                return self.bytecode_addr(activation.continuation, activation.parent);
             }
             cursor = activation.parent;
         }
     }
 
-    fn activation(&self, context: Context) -> Result<Option<Activation>, MokaIRBuildError> {
+    fn activation(&self, context: Context) -> Result<Option<Activation>, Error> {
         self.activations
-            .get(usize::try_from(context.0).map_err(|_| MokaIRBuildError::MalformedControlFlow)?)
+            .get(usize::try_from(context.0).map_err(|_| Error::MalformedControlFlow)?)
             .copied()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
+            .ok_or(Error::MalformedControlFlow)
     }
 }

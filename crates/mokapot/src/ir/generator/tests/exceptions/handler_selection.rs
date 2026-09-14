@@ -49,7 +49,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         .collect::<Vec<_>>();
 
     assert_eq!(transfers.len(), 3);
-    assert!(matches!(transfers[0], ControlTransfer::Normal));
+    assert!(matches!(transfers[0], ControlTransfer::Unconditional));
     assert!(
         matches!(transfers[1], ControlTransfer::Exception(Some(caught)) if caught == &runtime_exception)
     );

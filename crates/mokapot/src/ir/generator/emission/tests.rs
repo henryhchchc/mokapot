@@ -12,7 +12,7 @@ fn allocation_rejects_duplicate_temporary_values() {
     );
     assert!(matches!(
         allocation.value(SsaValueId::new(0), ValueDefinition::This),
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     ));
 }
 
@@ -33,10 +33,10 @@ fn allocation_preserves_sparse_temporary_value_gaps() {
     );
     assert!(matches!(
         allocation.resolve(SsaValueId::new(2)),
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     ));
     assert!(matches!(
         allocation.resolve(SsaValueId::new(4)),
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     ));
 }

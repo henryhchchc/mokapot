@@ -2,33 +2,39 @@ use crate::{
     ir::{
         expression::ArrayOperation,
         generator::{
-            error::MokaIRBuildError,
-            jvm::{frame::CATEGORY_1, instruction::RegisterInstruction, lifting::LiftContext},
+            error::Error,
+            instruction_graph::{
+                RegisterInstruction,
+                frame::{ValueCategory, ValueCategory::Category1},
+                lifting::Context,
+            },
         },
     },
     types::field_type::FieldType,
 };
 
-impl LiftContext<'_, '_, '_> {
-    pub(super) fn array_read<const SLOT: bool>(
+impl Context<'_, '_, '_> {
+    pub(super) fn array_read(
         &mut self,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        category: ValueCategory,
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
-        let index = self.frame.pop_value::<CATEGORY_1>()?;
-        let array_ref = self.frame.pop_value::<CATEGORY_1>()?;
-        self.frame.push_value::<SLOT>(value.into())?;
+        let index = self.frame.stack.pop(Category1)?;
+        let array_ref = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), category)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: ArrayOperation::Read { array_ref, index }.into(),
         })
     }
 
-    pub(super) fn array_write<const SLOT: bool>(
+    pub(super) fn array_write(
         &mut self,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let value = self.frame.pop_value::<SLOT>()?;
-        let index = self.frame.pop_value::<CATEGORY_1>()?;
-        let array_ref = self.frame.pop_value::<CATEGORY_1>()?;
+        category: ValueCategory,
+    ) -> Result<RegisterInstruction, Error> {
+        let value = self.frame.stack.pop(category)?;
+        let index = self.frame.stack.pop(Category1)?;
+        let array_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(
             ArrayOperation::Write {
                 array_ref,
@@ -42,10 +48,10 @@ impl LiftContext<'_, '_, '_> {
     pub(super) fn new_array(
         &mut self,
         element_type: FieldType,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
-        let length = self.frame.pop_value::<CATEGORY_1>()?;
-        self.frame.push_value::<CATEGORY_1>(value.into())?;
+        let length = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         let expr = ArrayOperation::New {
             element_type,
             length,
@@ -58,12 +64,12 @@ impl LiftContext<'_, '_, '_> {
         &mut self,
         element_type: FieldType,
         dimension: u8,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let dimensions = (0..dimension)
-            .map(|_| self.frame.pop_value::<CATEGORY_1>())
+            .map(|_| self.frame.stack.pop(Category1))
             .collect::<Result<_, _>>()?;
-        self.frame.push_value::<CATEGORY_1>(value.into())?;
+        self.frame.stack.push(value.into(), Category1)?;
         let expr = ArrayOperation::NewMultiDim {
             element_type,
             dimensions,
@@ -72,10 +78,10 @@ impl LiftContext<'_, '_, '_> {
         Ok(RegisterInstruction::Definition { value, expr })
     }
 
-    pub(super) fn array_length(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn array_length(&mut self) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
-        let array_ref = self.frame.pop_value::<CATEGORY_1>()?;
-        self.frame.push_value::<CATEGORY_1>(value.into())?;
+        let array_ref = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: ArrayOperation::Length { array_ref }.into(),

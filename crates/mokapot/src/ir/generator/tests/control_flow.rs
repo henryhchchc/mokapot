@@ -78,7 +78,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     assert_eq!(ir.source_map().origins_of(fallible.id()).count(), 0);
     assert!(matches!(
         fallible.successors()[0].transfer(),
-        ControlTransfer::Normal
+        ControlTransfer::Unconditional
     ));
     let handler_types = fallible.successors()[1..]
         .iter()
@@ -118,7 +118,7 @@ fn normally_reachable_handler_still_starts_a_block() {
         .terminator()
         .successors()
         .iter()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Normal))
+        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
         .target();
     let handler = entry

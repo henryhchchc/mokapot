@@ -11,29 +11,28 @@ use crate::{
     jvm::references::ClassRef,
 };
 
-mod transfer {
-    use super::{BranchGuard, ClassRef, Condition, Hash, Value, ValueId};
-
-    /// The semantics of one control-flow successor arm.
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
-        /// An unconditional control transfer.
-        Unconditional,
-        /// The normal outcome of a fallible operation.
-        Normal,
-        /// A conditional transfer guarded by a conjunction of literals.
-        Conditional(BranchGuard<Condition<Value<OP>>>),
-        /// An exceptional outcome selected by this catch type.
-        ///
-        /// `None` denotes a catch-all exception-table entry. Arm order retains
-        /// JVM exception-handler precedence.
-        Exception(Option<ClassRef>),
-        /// An exceptional outcome that leaves the method.
-        Unwind,
-    }
+/// The semantics of one control-flow successor arm.
+///
+/// Exceptional arms begin a new block, so an operation that can raise never
+/// coalesces with the location its unguarded arm targets.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
+    /// An unguarded transfer that always reaches its target.
+    ///
+    /// Block formation elides this arm into the target's block only when the
+    /// source instruction cannot raise, so a fallible operation still ends its
+    /// block.
+    Unconditional,
+    /// A conditional transfer guarded by a conjunction of literals.
+    Conditional(BranchGuard<Condition<Value<OP>>>),
+    /// An exceptional outcome selected by this catch type.
+    ///
+    /// `None` denotes a catch-all exception-table entry. Arm order retains
+    /// JVM exception-handler precedence.
+    Exception(Option<ClassRef>),
+    /// An exceptional outcome that leaves the method.
+    Unwind,
 }
-
-pub use transfer::ControlTransfer;
 
 impl<OP, OUT> TryMapValues<OUT> for ControlTransfer<OP>
 where
@@ -49,7 +48,6 @@ where
     ) -> Result<ControlTransfer<OUT>, E> {
         Ok(match self {
             Self::Unconditional => ControlTransfer::Unconditional,
-            Self::Normal => ControlTransfer::Normal,
             Self::Exception(exception) => ControlTransfer::Exception(exception),
             Self::Unwind => ControlTransfer::Unwind,
             Self::Conditional(guard) => ControlTransfer::Conditional(

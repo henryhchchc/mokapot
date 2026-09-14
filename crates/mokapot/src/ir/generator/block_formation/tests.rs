@@ -5,10 +5,7 @@ use crate::{
         expression::Expression,
         generator::{
             identity::SsaValueId,
-            jvm::{
-                instruction::RegisterInstruction,
-                subroutine_expansion::{Location, ReturnAddress},
-            },
+            instruction_graph::{NodeAddress, RegisterInstruction, ReturnAddress},
         },
     },
     jvm::ConstantValue,
@@ -20,12 +17,12 @@ fn pseudo_and_legacy_instructions_become_semantic_gotos() {
         RegisterInstruction::HandlerEntry,
         RegisterInstruction::Erased,
         RegisterInstruction::Subroutine {
-            target: Location::Unwind,
+            target: NodeAddress::Unwind,
         },
         RegisterInstruction::SubroutineReturn(
-            crate::ir::generator::jvm::symbolic_execution::Value::ReturnAddress(
-                ReturnAddress::for_test(0),
-            ),
+            crate::ir::generator::instruction_graph::Value::ReturnAddress(ReturnAddress::for_test(
+                0,
+            )),
         ),
     ];
 
@@ -50,7 +47,7 @@ fn fallible_definition_becomes_an_operation_and_terminator() {
     assert!(matches!(
         operation,
         Some(OperationKind::Definition {
-            value: crate::ir::generator::jvm::symbolic_execution::Value::Ssa(actual),
+            value: crate::ir::generator::instruction_graph::Value::Ssa(actual),
             ..
         }) if actual == value
     ));

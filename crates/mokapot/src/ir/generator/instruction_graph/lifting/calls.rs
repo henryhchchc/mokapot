@@ -2,11 +2,12 @@ use crate::{
     ir::{
         expression::Expression,
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             identity::SsaValueId,
-            jvm::{
-                frame::CATEGORY_1, instruction::RegisterInstruction, lifting::LiftContext,
-                symbolic_execution::Value,
+            instruction_graph::{
+                RegisterInstruction, Value,
+                frame::ValueCategory::{self, Category1},
+                lifting::Context,
             },
         },
     },
@@ -14,16 +15,16 @@ use crate::{
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn invoke(
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
-        let args = self.frame.pop_arguments(&method.descriptor)?;
+        let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
-            .then(|| self.frame.pop_value::<CATEGORY_1>())
+            .then(|| self.frame.stack.pop(Category1))
             .transpose()?;
         let expr = Expression::Call {
             method: method.clone(),
@@ -38,10 +39,10 @@ impl LiftContext<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
-            captures: self.frame.pop_arguments(descriptor)?,
+            captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,
             name: name.to_owned(),
             closure_descriptor: descriptor.clone(),
@@ -54,11 +55,13 @@ impl LiftContext<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         definition: Option<SsaValueId>,
         expr: Expression<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
-                let value = definition.ok_or(MokaIRBuildError::MalformedControlFlow)?;
-                self.frame.push_value_of_type(return_type, value.into())?;
+                let value = definition.ok_or(Error::MalformedControlFlow)?;
+                self.frame
+                    .stack
+                    .push(value.into(), ValueCategory::of_field_type(return_type))?;
                 Ok(RegisterInstruction::Definition { value, expr })
             }
             ReturnType::Void => Ok(RegisterInstruction::Effect(expr)),

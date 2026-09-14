@@ -90,6 +90,6 @@ fn throw_has_only_ordered_exceptional_outcomes() {
     assert!(
         !transfers
             .iter()
-            .any(|transfer| matches!(transfer, ControlTransfer::Normal))
+            .any(|transfer| matches!(transfer, ControlTransfer::Unconditional))
     );
 }
