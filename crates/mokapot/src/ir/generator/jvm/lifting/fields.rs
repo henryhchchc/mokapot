@@ -4,66 +4,88 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::{CATEGORY_1, CATEGORY_2, Frame},
+                frame::{CATEGORY_1, CATEGORY_2},
                 instruction::RegisterInstruction,
-                subroutine_expansion::Location,
-                symbolic_execution::{Executor, Value},
+                lifting::LiftContext,
+                symbolic_execution::Value,
             },
         },
     },
-    jvm::code::Instruction as JVM,
+    jvm::references::FieldRef,
     types::field_type::{FieldType, PrimitiveType},
 };
 
-impl Executor<'_> {
-    pub(super) fn try_lift_fields(
+impl LiftContext<'_, '_, '_> {
+    pub(super) fn read_static(
         &mut self,
-        jvm_instruction: &JVM,
-        location: Location,
-        frame: &mut Frame<Value>,
-    ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
-        let instruction = match jvm_instruction {
-            JVM::GetStatic(field) => {
-                let value = self.definition_id_at(location)?;
-                frame.push_value_of_type(&field.field_type, value.into())?;
-                let field = field.clone();
-                let expr = FieldAccess::ReadStatic { field }.into();
-                RegisterInstruction::Definition { value, expr }
+        field: &FieldRef,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.definition_id()?;
+        self.frame
+            .push_value_of_type(&field.field_type, value.into())?;
+        Ok(RegisterInstruction::Definition {
+            value,
+            expr: FieldAccess::ReadStatic {
+                field: field.clone(),
             }
-            JVM::GetField(field) => {
-                let value = self.definition_id_at(location)?;
-                let object_ref = frame.pop_value::<CATEGORY_1>()?;
-                frame.push_value_of_type(&field.field_type, value.into())?;
-                let field = field.clone();
-                let expr = FieldAccess::ReadInstance { object_ref, field }.into();
-                RegisterInstruction::Definition { value, expr }
+            .into(),
+        })
+    }
+
+    pub(super) fn read_instance(
+        &mut self,
+        field: &FieldRef,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.definition_id()?;
+        let object_ref = self.frame.pop_value::<CATEGORY_1>()?;
+        self.frame
+            .push_value_of_type(&field.field_type, value.into())?;
+        Ok(RegisterInstruction::Definition {
+            value,
+            expr: FieldAccess::ReadInstance {
+                object_ref,
+                field: field.clone(),
             }
-            JVM::PutStatic(field) => {
-                use PrimitiveType::{Double, Long};
-                let value = match field.field_type {
-                    FieldType::Base(Double | Long) => frame.pop_value::<CATEGORY_2>(),
-                    _ => frame.pop_value::<CATEGORY_1>(),
-                }?;
-                let field = field.clone();
-                let field_op = FieldAccess::WriteStatic { field, value }.into();
-                RegisterInstruction::Effect(field_op)
+            .into(),
+        })
+    }
+
+    pub(super) fn write_static(
+        &mut self,
+        field: &FieldRef,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.pop_field_value(field)?;
+        Ok(RegisterInstruction::Effect(
+            FieldAccess::WriteStatic {
+                field: field.clone(),
+                value,
             }
-            JVM::PutField(field) => {
-                use PrimitiveType::{Double, Long};
-                let value = match field.field_type {
-                    FieldType::Base(Double | Long) => frame.pop_value::<CATEGORY_2>(),
-                    _ => frame.pop_value::<CATEGORY_1>(),
-                }?;
-                let field_op = FieldAccess::WriteInstance {
-                    object_ref: frame.pop_value::<CATEGORY_1>()?,
-                    field: field.clone(),
-                    value,
-                }
-                .into();
-                RegisterInstruction::Effect(field_op)
+            .into(),
+        ))
+    }
+
+    pub(super) fn write_instance(
+        &mut self,
+        field: &FieldRef,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let value = self.pop_field_value(field)?;
+        let object_ref = self.frame.pop_value::<CATEGORY_1>()?;
+        Ok(RegisterInstruction::Effect(
+            FieldAccess::WriteInstance {
+                object_ref,
+                field: field.clone(),
+                value,
             }
-            _ => return Ok(None),
-        };
-        Ok(Some(instruction))
+            .into(),
+        ))
+    }
+
+    fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, MokaIRBuildError> {
+        Ok(match field.field_type {
+            FieldType::Base(PrimitiveType::Double | PrimitiveType::Long) => {
+                self.frame.pop_value::<CATEGORY_2>()?
+            }
+            _ => self.frame.pop_value::<CATEGORY_1>()?,
+        })
     }
 }

@@ -1,131 +1,86 @@
-use crate::{
-    ir::{
-        expression::Condition,
-        generator::{
-            error::MokaIRBuildError,
-            jvm::{
-                frame::{CATEGORY_1, CATEGORY_2, Frame},
-                instruction::RegisterInstruction,
-                subroutine_expansion::Location,
-                symbolic_execution::{Executor, Value},
-            },
+use crate::ir::{
+    expression::Condition,
+    generator::{
+        error::MokaIRBuildError,
+        jvm::{
+            frame::CATEGORY_1, instruction::RegisterInstruction, lifting::LiftContext,
+            symbolic_execution::Value,
         },
     },
-    jvm::code::{Instruction as JVM, ProgramCounter, WideInstruction},
 };
+use crate::jvm::code::ProgramCounter;
 
-#[inline]
-pub(super) fn unary_branch(
-    frame: &mut Frame<Value>,
-    target: ProgramCounter,
-    condition: impl FnOnce(Value) -> Condition<Value>,
-) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let operand = frame.pop_value::<CATEGORY_1>()?;
-    Ok(RegisterInstruction::Jump {
-        condition: Some(condition(operand)),
-        target,
-    })
-}
-
-#[inline]
-pub(super) fn comparison_branch(
-    frame: &mut Frame<Value>,
-    target: ProgramCounter,
-    condition: impl FnOnce(Value, Value) -> Condition<Value>,
-) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let rhs = frame.pop_value::<CATEGORY_1>()?;
-    let lhs = frame.pop_value::<CATEGORY_1>()?;
-    Ok(RegisterInstruction::Jump {
-        condition: Some(condition(lhs, rhs)),
-        target,
-    })
-}
-
-impl Executor<'_> {
-    pub(super) fn try_lift_control_flow(
+impl LiftContext<'_, '_, '_> {
+    pub(super) fn unary_branch(
         &mut self,
-        jvm_instruction: &JVM,
-        location: Location,
-        pc: ProgramCounter,
-        frame: &mut Frame<Value>,
-    ) -> Result<Option<RegisterInstruction>, MokaIRBuildError> {
-        use JVM::{
-            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq,
-            IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
-            IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, LookupSwitch, Ret, Return, TableSwitch,
-            Wide,
-        };
+        target: ProgramCounter,
+        condition: impl FnOnce(Value) -> Condition<Value>,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let operand = self.frame.pop_value::<CATEGORY_1>()?;
+        Ok(RegisterInstruction::Jump {
+            condition: Some(condition(operand)),
+            target,
+        })
+    }
 
-        let instruction = match jvm_instruction {
-            IfEq(target) => unary_branch(frame, *target, Condition::IsZero)?,
-            IfNe(target) => unary_branch(frame, *target, Condition::IsNonZero)?,
-            IfLt(target) => unary_branch(frame, *target, Condition::IsNegative)?,
-            IfGe(target) => unary_branch(frame, *target, Condition::IsNonNegative)?,
-            IfGt(target) => unary_branch(frame, *target, Condition::IsPositive)?,
-            IfLe(target) => unary_branch(frame, *target, Condition::IsNonPositive)?,
-            IfNull(target) => unary_branch(frame, *target, Condition::IsNull)?,
-            IfNonNull(target) => unary_branch(frame, *target, Condition::IsNotNull)?,
-            IfICmpEq(target) | IfACmpEq(target) => {
-                comparison_branch(frame, *target, Condition::Equal)?
-            }
-            IfICmpNe(target) | IfACmpNe(target) => {
-                comparison_branch(frame, *target, Condition::NotEqual)?
-            }
-            IfICmpGe(target) => comparison_branch(frame, *target, Condition::GreaterThanOrEqual)?,
-            IfICmpLt(target) => comparison_branch(frame, *target, Condition::LessThan)?,
-            IfICmpGt(target) => comparison_branch(frame, *target, Condition::GreaterThan)?,
-            IfICmpLe(target) => comparison_branch(frame, *target, Condition::LessThanOrEqual)?,
-            Goto(target) | GotoW(target) => RegisterInstruction::Jump {
-                condition: None,
-                target: *target,
-            },
-            Jsr(target) | JsrW(target) => {
-                let next_pc = self.next_program_counter(pc)?;
-                let (target, return_address) = self.enter_subroutine(location, *target, next_pc)?;
-                frame.push_value::<CATEGORY_1>(return_address.into())?;
-                RegisterInstruction::Subroutine { target }
-            }
-            Ret(idx) => {
-                let local_index = (*idx).into();
-                let return_address = frame.get_local::<CATEGORY_1>(local_index)?;
-                RegisterInstruction::SubroutineReturn(return_address)
-            }
-            Wide(WideInstruction::Ret(idx)) => {
-                let return_address = frame.get_local::<CATEGORY_1>(*idx)?;
-                RegisterInstruction::SubroutineReturn(return_address)
-            }
-            TableSwitch {
-                range,
-                jump_targets,
-                default,
-            } => RegisterInstruction::Switch {
-                match_value: frame.pop_value::<CATEGORY_1>()?,
-                default: *default,
-                branches: range.clone().zip(jump_targets.clone()).collect(),
-            },
-            LookupSwitch {
-                default,
-                match_targets,
-            } => RegisterInstruction::Switch {
-                match_value: frame.pop_value::<CATEGORY_1>()?,
-                default: *default,
-                branches: match_targets.clone(),
-            },
-            IReturn | FReturn | AReturn => {
-                let value = frame.pop_value::<CATEGORY_1>()?;
-                RegisterInstruction::Return(Some(value))
-            }
-            LReturn | DReturn => {
-                let value = frame.pop_value::<CATEGORY_2>()?;
-                RegisterInstruction::Return(Some(value))
-            }
-            Return => RegisterInstruction::Return(None),
-            AThrow => {
-                let exception_ref = frame.pop_value::<CATEGORY_1>()?;
-                RegisterInstruction::Throw(exception_ref)
-            }
-            _ => return Ok(None),
-        };
-        Ok(Some(instruction))
+    pub(super) fn comparison_branch(
+        &mut self,
+        target: ProgramCounter,
+        condition: impl FnOnce(Value, Value) -> Condition<Value>,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let rhs = self.frame.pop_value::<CATEGORY_1>()?;
+        let lhs = self.frame.pop_value::<CATEGORY_1>()?;
+        Ok(RegisterInstruction::Jump {
+            condition: Some(condition(lhs, rhs)),
+            target,
+        })
+    }
+
+    pub(super) fn switch(
+        &mut self,
+        default: ProgramCounter,
+        branches: BTreeMap<i32, ProgramCounter>,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        Ok(RegisterInstruction::Switch {
+            match_value: self.frame.pop_value::<CATEGORY_1>()?,
+            branches,
+            default,
+        })
+    }
+
+    pub(super) fn return_value<const SLOT: bool>(
+        &mut self,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        Ok(RegisterInstruction::Return(Some(
+            self.frame.pop_value::<SLOT>()?,
+        )))
+    }
+
+    pub(super) fn throw(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
+        Ok(RegisterInstruction::Throw(
+            self.frame.pop_value::<CATEGORY_1>()?,
+        ))
+    }
+
+    pub(super) fn subroutine_return(
+        &self,
+        idx: u16,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        Ok(RegisterInstruction::SubroutineReturn(
+            self.frame.get_local::<CATEGORY_1>(idx)?,
+        ))
+    }
+
+    pub(super) fn subroutine_call(
+        &mut self,
+        target: ProgramCounter,
+    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+        let next_pc = self.executor.next_program_counter(self.pc)?;
+        let (target, return_address) =
+            self.executor
+                .enter_subroutine(self.location, target, next_pc)?;
+        self.frame.push_value::<CATEGORY_1>(return_address.into())?;
+        Ok(RegisterInstruction::Subroutine { target })
     }
 }
+use std::collections::BTreeMap;
