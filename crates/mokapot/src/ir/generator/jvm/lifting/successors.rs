@@ -10,9 +10,9 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
+                NodeAddress,
                 frame::{Entry, Frame},
                 instruction::RegisterInstruction,
-                subroutine_expansion::Location,
                 symbolic_execution::{Edge, Executor, Value},
             },
         },
@@ -22,7 +22,7 @@ use crate::{
 
 fn build_exception_edges(
     executor: &mut Executor<'_>,
-    location: Location,
+    location: NodeAddress,
     incoming_frame: &Frame<Value>,
 ) -> Result<Vec<Edge>, MokaIRBuildError> {
     let pc = location
@@ -71,7 +71,7 @@ fn build_exception_edges(
 )]
 pub(crate) fn build_outgoing_edges(
     executor: &mut Executor<'_>,
-    location: Location,
+    location: NodeAddress,
     incoming_frame: &Frame<Value>,
     normal_frame: Frame<Value>,
     instruction: &RegisterInstruction,
@@ -81,7 +81,11 @@ pub(crate) fn build_outgoing_edges(
 
     let edges = match instruction {
         RegisterInstruction::HandlerEntry => {
-            let Location::Handler { handler_pc, .. } = location else {
+            let NodeAddress::Handler {
+                handler: handler_pc,
+                ..
+            } = location
+            else {
                 return Err(MokaIRBuildError::MalformedControlFlow);
             };
             vec![Edge {
@@ -213,11 +217,11 @@ mod tests {
         )
         .expect("frame fits descriptor");
 
-        let edges = build_exception_edges(&mut executor, Location::entry(0.into()), &frame)
+        let edges = build_exception_edges(&mut executor, NodeAddress::entry(0.into()), &frame)
             .expect("valid exception edge");
 
         assert_eq!(edges.len(), 1);
-        assert_eq!(edges[0].target, Location::Unwind);
+        assert_eq!(edges[0].target, NodeAddress::Unwind);
         assert!(matches!(edges[0].transfer, ControlTransfer::Unwind));
         assert!(edges[0].target_frame.iter_values().next().is_none());
     }

@@ -9,7 +9,7 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            subroutine_expansion::Location,
+            NodeAddress,
             symbolic_execution::{self, FrameMergeSite},
         },
     },
@@ -19,8 +19,8 @@ use crate::ir::{
 pub(super) struct BlockLayout {
     entry: BlockId,
     bytecode_entry: BlockId,
-    location_to_block: BTreeMap<Location, BlockId>,
-    locations_by_block: BTreeMap<BlockId, Vec<Location>>,
+    location_to_block: BTreeMap<NodeAddress, BlockId>,
+    locations_by_block: BTreeMap<BlockId, Vec<NodeAddress>>,
 }
 
 impl BlockLayout {
@@ -51,11 +51,11 @@ impl BlockLayout {
         self.entry
     }
 
-    pub const fn locations(&self) -> &BTreeMap<BlockId, Vec<Location>> {
+    pub const fn locations(&self) -> &BTreeMap<BlockId, Vec<NodeAddress>> {
         &self.locations_by_block
     }
 
-    pub fn block_at(&self, location: Location) -> Option<BlockId> {
+    pub fn block_at(&self, location: NodeAddress) -> Option<BlockId> {
         self.location_to_block.get(&location).copied()
     }
 
@@ -83,9 +83,9 @@ impl BlockLayout {
 }
 
 fn predecessor_locations(
-    locations: &BTreeMap<Location, symbolic_execution::Node>,
-) -> BTreeMap<Location, BTreeSet<Location>> {
-    let mut predecessors: BTreeMap<Location, BTreeSet<Location>> = BTreeMap::new();
+    locations: &BTreeMap<NodeAddress, symbolic_execution::Node>,
+) -> BTreeMap<NodeAddress, BTreeSet<NodeAddress>> {
+    let mut predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>> = BTreeMap::new();
     for (&source, facts) in locations {
         for outgoing in &facts.outgoing_edges {
             predecessors
@@ -99,9 +99,9 @@ fn predecessor_locations(
 
 fn discover_leaders(
     symbolic_cfg: &symbolic_execution::Cfg,
-    reachable: &[Location],
-    predecessors: &BTreeMap<Location, BTreeSet<Location>>,
-) -> Result<BTreeSet<Location>, MokaIRBuildError> {
+    reachable: &[NodeAddress],
+    predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
+) -> Result<BTreeSet<NodeAddress>, MokaIRBuildError> {
     let mut leaders = BTreeSet::from([symbolic_cfg.entry_location]);
     leaders.extend(
         symbolic_cfg
@@ -113,7 +113,7 @@ fn discover_leaders(
         reachable
             .iter()
             .copied()
-            .filter(|location| !matches!(location, Location::Bytecode { .. })),
+            .filter(|location| !matches!(location, NodeAddress::Bytecode { .. })),
     );
     leaders.extend(
         predecessors
@@ -160,10 +160,10 @@ fn discover_leaders(
 }
 
 fn allocate_block_ids(
-    leaders: &BTreeSet<Location>,
-    entry_location: Location,
+    leaders: &BTreeSet<NodeAddress>,
+    entry_location: NodeAddress,
     needs_entry_preheader: bool,
-) -> Result<(BlockId, BlockId, BTreeMap<Location, BlockId>), MokaIRBuildError> {
+) -> Result<(BlockId, BlockId, BTreeMap<NodeAddress, BlockId>), MokaIRBuildError> {
     let block_offset = u32::from(needs_entry_preheader);
     let block_ids = leaders
         .iter()
@@ -188,16 +188,16 @@ fn allocate_block_ids(
 }
 
 struct GroupedLocations {
-    block_by_location: BTreeMap<Location, BlockId>,
-    locations_by_block: BTreeMap<BlockId, Vec<Location>>,
+    block_by_location: BTreeMap<NodeAddress, BlockId>,
+    locations_by_block: BTreeMap<BlockId, Vec<NodeAddress>>,
 }
 
 fn group_locations(
-    reachable: &[Location],
-    block_ids: &BTreeMap<Location, BlockId>,
+    reachable: &[NodeAddress],
+    block_ids: &BTreeMap<NodeAddress, BlockId>,
 ) -> Result<GroupedLocations, MokaIRBuildError> {
     let mut block_by_location = BTreeMap::new();
-    let mut locations_by_block: BTreeMap<BlockId, Vec<Location>> = BTreeMap::new();
+    let mut locations_by_block: BTreeMap<BlockId, Vec<NodeAddress>> = BTreeMap::new();
     let mut current_block = None;
     for &location in reachable {
         if let Some(id) = block_ids.get(&location) {

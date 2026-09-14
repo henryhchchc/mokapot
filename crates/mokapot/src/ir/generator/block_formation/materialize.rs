@@ -9,8 +9,7 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::Frame, instruction::RegisterInstruction, subroutine_expansion::Location,
-                symbolic_execution,
+                NodeAddress, frame::Frame, instruction::RegisterInstruction, symbolic_execution,
             },
         },
     },
@@ -23,7 +22,7 @@ use super::{
 };
 
 pub(super) fn materialize_blocks(
-    mut symbolic_nodes: BTreeMap<Location, symbolic_execution::Node>,
+    mut symbolic_nodes: BTreeMap<NodeAddress, symbolic_execution::Node>,
     layout: &BlockLayout,
 ) -> Result<Vec<Block>, MokaIRBuildError> {
     let blocks = layout
@@ -40,8 +39,8 @@ pub(super) fn materialize_blocks(
 
 fn materialize_block(
     id: BlockId,
-    locations: &[Location],
-    symbolic_nodes: &mut BTreeMap<Location, symbolic_execution::Node>,
+    locations: &[NodeAddress],
+    symbolic_nodes: &mut BTreeMap<NodeAddress, symbolic_execution::Node>,
     layout: &BlockLayout,
 ) -> Result<Block, MokaIRBuildError> {
     let mut entry_frame = None;
@@ -91,10 +90,10 @@ fn materialize_block(
 }
 
 fn materialize_internal_operation(
-    location: Location,
+    location: NodeAddress,
     instruction: RegisterInstruction,
     outgoing: &[symbolic_execution::Edge],
-    next: Location,
+    next: NodeAddress,
 ) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, MokaIRBuildError> {
     if instruction.is_explicit_transfer()
         || outgoing.len() != 1
@@ -139,7 +138,7 @@ struct BlockEnd {
 }
 
 fn materialize_block_end(
-    location: Location,
+    location: NodeAddress,
     instruction: RegisterInstruction,
     outgoing: Vec<symbolic_execution::Edge>,
     layout: &BlockLayout,

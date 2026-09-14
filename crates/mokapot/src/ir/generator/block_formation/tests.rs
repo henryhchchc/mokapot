@@ -5,10 +5,7 @@ use crate::{
         expression::Expression,
         generator::{
             identity::SsaValueId,
-            jvm::{
-                instruction::RegisterInstruction,
-                subroutine_expansion::{Location, ReturnAddress},
-            },
+            jvm::{NodeAddress, instruction::RegisterInstruction, subroutine::ReturnAddress},
         },
     },
     jvm::ConstantValue,
@@ -20,7 +17,7 @@ fn pseudo_and_legacy_instructions_become_semantic_gotos() {
         RegisterInstruction::HandlerEntry,
         RegisterInstruction::Erased,
         RegisterInstruction::Subroutine {
-            target: Location::Unwind,
+            target: NodeAddress::Unwind,
         },
         RegisterInstruction::SubroutineReturn(
             crate::ir::generator::jvm::symbolic_execution::Value::ReturnAddress(

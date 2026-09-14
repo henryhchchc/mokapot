@@ -5,7 +5,7 @@ use crate::{
         expression::{Condition, Expression},
         generator::{
             identity::SsaValueId,
-            jvm::{subroutine_expansion::Location, symbolic_execution::Value},
+            jvm::{NodeAddress, symbolic_execution::Value},
         },
     },
     jvm::code::ProgramCounter,
@@ -33,7 +33,7 @@ pub(crate) enum RegisterInstruction {
     Return(Option<Value>),
     Throw(Value),
     Subroutine {
-        target: Location,
+        target: NodeAddress,
     },
     SubroutineReturn(Value),
 }

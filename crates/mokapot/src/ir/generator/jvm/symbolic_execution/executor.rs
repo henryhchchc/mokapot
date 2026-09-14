@@ -5,10 +5,11 @@ use crate::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
+            NodeAddress,
             frame::Frame,
             instruction::RegisterInstruction,
             lifting::{fallibility::FallibilityContext, successors::build_outgoing_edges},
-            subroutine_expansion::{Expander, Location, ReturnAddress},
+            subroutine::{Expander, ReturnAddress},
             symbolic_execution::fact::{Cfg, Node, Value},
             symbolic_execution::solver,
         },
@@ -25,23 +26,23 @@ pub(crate) struct Executor<'method> {
     body: &'method MethodBody,
     fallibility: FallibilityContext,
     subroutine_expander: Expander,
-    definition_ids: BTreeMap<Location, SsaValueId>,
-    caught_exception_ids: BTreeMap<Location, SsaValueId>,
+    definition_ids: BTreeMap<NodeAddress, SsaValueId>,
+    caught_exception_ids: BTreeMap<NodeAddress, SsaValueId>,
     value_id_allocator: ValueIdAllocator,
     receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
-    entry_location: Location,
+    entry_location: NodeAddress,
     initial_frame: Frame<Value>,
 }
 
 impl<'method> Executor<'method> {
     pub fn execute_location(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         incoming_frame: Frame<Value>,
     ) -> Result<Node, MokaIRBuildError> {
         let (instruction, outgoing_edges) = match location {
-            Location::Handler { .. } => {
+            NodeAddress::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.clone();
                 let outgoing_edges = build_outgoing_edges(
@@ -54,8 +55,8 @@ impl<'method> Executor<'method> {
                 )?;
                 (instruction, outgoing_edges)
             }
-            Location::Unwind => (RegisterInstruction::Unwind, Vec::new()),
-            Location::Bytecode { pc, .. } => {
+            NodeAddress::Unwind => (RegisterInstruction::Unwind, Vec::new()),
+            NodeAddress::Bytecode { pc, .. } => {
                 let mut normal_frame = incoming_frame.clone();
                 let jvm_instruction = self
                     .body
@@ -118,7 +119,7 @@ impl<'method> Executor<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let entry_location = Location::entry(first_pc);
+        let entry_location = NodeAddress::entry(first_pc);
         let executor = Self {
             body,
             fallibility: FallibilityContext::for_method(method),
@@ -160,7 +161,7 @@ impl<'method> Executor<'method> {
 
     pub fn execute_reachable_locations(
         &mut self,
-    ) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
+    ) -> Result<BTreeMap<NodeAddress, Node>, MokaIRBuildError> {
         let entry_location = self.entry_location;
         let initial_frame = self.initial_frame.clone();
         solver::execute_to_fixpoint(self, entry_location, initial_frame)
@@ -170,8 +171,11 @@ impl<'method> Executor<'method> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub fn definition_id_at(&mut self, location: Location) -> Result<SsaValueId, MokaIRBuildError> {
-        if !matches!(location, Location::Bytecode { .. }) {
+    pub fn definition_id_at(
+        &mut self,
+        location: NodeAddress,
+    ) -> Result<SsaValueId, MokaIRBuildError> {
+        if !matches!(location, NodeAddress::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
         if let Some(&id) = self.definition_ids.get(&location) {
@@ -184,9 +188,9 @@ impl<'method> Executor<'method> {
 
     pub fn caught_exception_id_at(
         &mut self,
-        location: Location,
+        location: NodeAddress,
     ) -> Result<SsaValueId, MokaIRBuildError> {
-        if !matches!(location, Location::Handler { .. }) {
+        if !matches!(location, NodeAddress::Handler { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
         if let Some(&id) = self.caught_exception_ids.get(&location) {
@@ -209,8 +213,8 @@ impl<'method> Executor<'method> {
 
     pub fn fallthrough_location(
         &mut self,
-        location: Location,
-    ) -> Result<Location, MokaIRBuildError> {
+        location: NodeAddress,
+    ) -> Result<NodeAddress, MokaIRBuildError> {
         let pc = location
             .source_pc()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -223,9 +227,9 @@ impl<'method> Executor<'method> {
 
     pub fn bytecode_location_at(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         target: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError> {
+    ) -> Result<NodeAddress, MokaIRBuildError> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
@@ -234,34 +238,35 @@ impl<'method> Executor<'method> {
 
     pub fn exception_handler_location(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         handler: ProgramCounter,
-    ) -> Result<Location, MokaIRBuildError> {
+    ) -> Result<NodeAddress, MokaIRBuildError> {
         let context = location
             .context()
             .ok_or(MokaIRBuildError::MalformedControlFlow)?;
         self.subroutine_expander.handler_location(handler, context)
     }
 
-    pub fn unwind_location(&mut self) -> Result<Location, MokaIRBuildError> {
-        self.subroutine_expander.register_location(Location::Unwind)
+    pub fn unwind_location(&mut self) -> Result<NodeAddress, MokaIRBuildError> {
+        self.subroutine_expander
+            .register_location(NodeAddress::Unwind)
     }
 
     pub fn enter_subroutine(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
+    ) -> Result<(NodeAddress, ReturnAddress), MokaIRBuildError> {
         self.subroutine_expander
             .enter_subroutine(location, target, continuation)
     }
 
     pub fn return_from(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError> {
+    ) -> Result<NodeAddress, MokaIRBuildError> {
         self.subroutine_expander.return_from(location, address)
     }
 }
@@ -286,7 +291,7 @@ impl ValueIdAllocator {
 mod tests {
     use super::*;
     use crate::{
-        ir::generator::{jvm::subroutine_expansion::Location, tests::method},
+        ir::generator::{jvm::NodeAddress, tests::method},
         jvm::code::Instruction as JvmInstruction,
     };
 
@@ -315,14 +320,14 @@ mod tests {
             assert!(
                 executor
                     .definition_ids
-                    .contains_key(&Location::entry(k.into()))
+                    .contains_key(&NodeAddress::entry(k.into()))
             );
         }
         for k in [1, 2, 5, 6] {
             assert!(
                 !executor
                     .definition_ids
-                    .contains_key(&Location::entry(k.into()))
+                    .contains_key(&NodeAddress::entry(k.into()))
             );
         }
     }

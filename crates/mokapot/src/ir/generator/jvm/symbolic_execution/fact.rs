@@ -5,9 +5,10 @@ use crate::ir::{
     generator::{
         identity::SsaValueId,
         jvm::{
+            NodeAddress,
             frame::{Frame, Position},
             instruction::RegisterInstruction,
-            subroutine_expansion::{Location, ReturnAddress},
+            subroutine::ReturnAddress,
         },
     },
 };
@@ -16,7 +17,7 @@ use crate::ir::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) struct FrameMergeSite {
-    pub location: Location,
+    pub location: NodeAddress,
     pub slot: Position,
 }
 
@@ -35,7 +36,7 @@ pub(crate) enum Value {
 
 /// One outgoing edge and its exact symbolic frame.
 pub(crate) struct Edge {
-    pub target: Location,
+    pub target: NodeAddress,
     pub transfer: ControlTransfer<Value>,
     pub target_frame: Frame<Value>,
 }
@@ -50,10 +51,10 @@ pub(crate) struct Node {
 
 /// Reachable symbolic JVM nodes and their execution facts.
 pub(crate) struct Cfg {
-    pub entry_location: Location,
+    pub entry_location: NodeAddress,
     /// The original frame entering the method.
     pub initial_frame: Frame<Value>,
-    pub nodes: BTreeMap<Location, Node>,
+    pub nodes: BTreeMap<NodeAddress, Node>,
     pub phi_values: BTreeMap<FrameMergeSite, SsaValueId>,
     pub receiver_value: Option<SsaValueId>,
     pub parameter_values: Vec<SsaValueId>,

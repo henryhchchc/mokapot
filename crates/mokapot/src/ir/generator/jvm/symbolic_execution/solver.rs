@@ -15,30 +15,30 @@ use super::{
 };
 use crate::ir::generator::{
     error::MokaIRBuildError,
-    jvm::{frame::Frame, subroutine_expansion::Location},
+    jvm::{NodeAddress, frame::Frame},
 };
 
 struct State {
-    entry_input: (Location, Frame<Value>),
-    nodes: BTreeMap<Location, Node>,
-    predecessors: BTreeMap<Location, BTreeSet<Location>>,
-    inputs_to_recompute: BTreeSet<Location>,
-    pending_executions: BTreeMap<Location, Frame<Value>>,
+    entry_input: (NodeAddress, Frame<Value>),
+    nodes: BTreeMap<NodeAddress, Node>,
+    predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
+    inputs_to_recompute: BTreeSet<NodeAddress>,
+    pending_executions: BTreeMap<NodeAddress, Frame<Value>>,
 }
 
 #[cfg(test)]
-type NodeFingerprint = BTreeMap<Location, (Frame<Value>, Vec<(Location, Frame<Value>)>)>;
+type NodeFingerprint = BTreeMap<NodeAddress, (Frame<Value>, Vec<(NodeAddress, Frame<Value>)>)>;
 
 #[cfg(test)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Fingerprint {
     nodes: NodeFingerprint,
-    inputs_to_recompute: BTreeSet<Location>,
-    pending_executions: BTreeMap<Location, Frame<Value>>,
+    inputs_to_recompute: BTreeSet<NodeAddress>,
+    pending_executions: BTreeMap<NodeAddress, Frame<Value>>,
 }
 
 impl State {
-    fn new(entry_location: Location, initial_frame: Frame<Value>) -> Self {
+    fn new(entry_location: NodeAddress, initial_frame: Frame<Value>) -> Self {
         Self {
             entry_input: (entry_location, initial_frame),
             nodes: BTreeMap::new(),
@@ -65,7 +65,7 @@ impl State {
         }
     }
 
-    fn recompute_input_frame(&self, location: Location) -> Option<Frame<Value>> {
+    fn recompute_input_frame(&self, location: NodeAddress) -> Option<Frame<Value>> {
         let entry_frame = (location == self.entry_input.0).then_some(&self.entry_input.1);
         let mut contributions = entry_frame.into_iter().chain(
             self.predecessors
@@ -90,7 +90,7 @@ impl State {
         })
     }
 
-    fn remove_unreachable_node(&mut self, location: Location) {
+    fn remove_unreachable_node(&mut self, location: NodeAddress) {
         self.pending_executions.remove(&location);
         let Some(node) = self.nodes.remove(&location) else {
             return;
@@ -114,7 +114,7 @@ impl State {
         self.remove_unreachable_nodes();
     }
 
-    fn replace_node(&mut self, location: Location, node: Node) {
+    fn replace_node(&mut self, location: NodeAddress, node: Node) {
         let current_targets = edge_targets(&node.outgoing_edges);
         let previous_targets = self
             .nodes
@@ -171,7 +171,7 @@ impl State {
         self.inputs_to_recompute.extend(changed);
     }
 
-    fn reachable_locations(&self) -> BTreeSet<Location> {
+    fn reachable_locations(&self) -> BTreeSet<NodeAddress> {
         let mut reachable = BTreeSet::new();
         let mut pending = BTreeSet::from([self.entry_input.0]);
         while let Some(location) = pending.pop_first() {
@@ -206,15 +206,15 @@ impl State {
     }
 }
 
-fn edge_targets(outgoing: &[Edge]) -> BTreeSet<Location> {
+fn edge_targets(outgoing: &[Edge]) -> BTreeSet<NodeAddress> {
     outgoing.iter().map(|edge| edge.target).collect()
 }
 
 pub(super) fn execute_to_fixpoint(
     executor: &mut Executor<'_>,
-    entry_location: Location,
+    entry_location: NodeAddress,
     initial_frame: Frame<Value>,
-) -> Result<BTreeMap<Location, Node>, MokaIRBuildError> {
+) -> Result<BTreeMap<NodeAddress, Node>, MokaIRBuildError> {
     let mut state = State::new(entry_location, initial_frame);
 
     #[cfg(test)]
@@ -243,7 +243,7 @@ pub(super) fn execute_to_fixpoint(
 }
 
 pub(super) fn merge_input_frame_at(
-    location: Location,
+    location: NodeAddress,
     frame: &mut Frame<Value>,
     contribution: Frame<Value>,
 ) -> bool {
@@ -276,9 +276,9 @@ mod tests {
             generator::{
                 identity::SsaValueId,
                 jvm::{
+                    NodeAddress,
                     frame::{Entry, Position},
                     instruction::RegisterInstruction,
-                    subroutine_expansion::Location,
                     symbolic_execution::executor::Executor,
                 },
                 tests::method,
@@ -298,7 +298,7 @@ mod tests {
         .expect("frame fits descriptor")
     }
 
-    fn result_to(target: Location, outgoing_frame: Frame<Value>) -> Node {
+    fn result_to(target: NodeAddress, outgoing_frame: Frame<Value>) -> Node {
         Node {
             incoming_frame: frame(0),
             instruction: RegisterInstruction::Erased,
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn merge_identity_is_stable_for_a_location_and_slot() {
-        let location = Location::entry(0.into());
+        let location = NodeAddress::entry(0.into());
         let mut merged = frame(1);
 
         assert!(merge_input_frame_at(location, &mut merged, frame(2)));
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn frame_merge_is_permutation_independent() {
-        let location = Location::entry(0.into());
+        let location = NodeAddress::entry(0.into());
         let expected = [Entry::Value(Value::Merged(FrameMergeSite {
             location,
             slot: Position::Local(0),
@@ -366,11 +366,11 @@ mod tests {
         let nodes = executor.execute_reachable_locations().expect("valid loop");
 
         assert_eq!(
-            nodes[&Location::entry(2.into())]
+            nodes[&NodeAddress::entry(2.into())]
                 .incoming_frame
                 .operand_slots(),
             &[Entry::Value(Value::Merged(FrameMergeSite {
-                location: Location::entry(1.into()),
+                location: NodeAddress::entry(1.into()),
                 slot: Position::Stack(0),
             }))]
         );
@@ -378,8 +378,8 @@ mod tests {
 
     #[test]
     fn parallel_edges_from_one_predecessor_all_contribute() {
-        let source = Location::entry(0.into());
-        let target = Location::entry(1.into());
+        let source = NodeAddress::entry(0.into());
+        let target = NodeAddress::entry(1.into());
         let mut state = State::new(source, frame(0));
         state.recompute_inputs();
 
@@ -417,8 +417,8 @@ mod tests {
 
     #[test]
     fn replacing_an_edge_discards_its_superseded_frame() {
-        let source = Location::entry(0.into());
-        let target = Location::entry(1.into());
+        let source = NodeAddress::entry(0.into());
+        let target = NodeAddress::entry(1.into());
         let mut state = State::new(source, frame(0));
         state.recompute_inputs();
 
@@ -452,9 +452,9 @@ mod tests {
 
     #[test]
     fn removing_the_last_seed_edge_purges_a_detached_cycle() {
-        let source = Location::entry(0.into());
-        let first = Location::entry(1.into());
-        let second = Location::entry(2.into());
+        let source = NodeAddress::entry(0.into());
+        let first = NodeAddress::entry(1.into());
+        let second = NodeAddress::entry(2.into());
         let mut state = State::new(source, frame(0));
         state.recompute_inputs();
 

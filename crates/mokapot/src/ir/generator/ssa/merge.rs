@@ -179,7 +179,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            jvm::{frame::Position, subroutine_expansion::Location},
+            jvm::{NodeAddress, frame::Position},
         },
     };
 
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn merge_plan_resolves_merge_identities() {
         let identity = FrameMergeSite {
-            location: Location::Unwind,
+            location: NodeAddress::Unwind,
             slot: Position::Local(0),
         };
         let resolved = SsaValueId::new(12);

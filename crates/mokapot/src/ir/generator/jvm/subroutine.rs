@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ir::generator::jvm::NodeAddress;
 use crate::jvm::code::ProgramCounter;
 
 use crate::ir::generator::error::MokaIRBuildError;
@@ -14,45 +15,7 @@ const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 pub(crate) struct Context(u32);
 
 impl Context {
-    const ROOT: Self = Self(0);
-}
-
-/// A private expanded control-flow location.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) enum Location {
-    Bytecode {
-        context: Context,
-        pc: ProgramCounter,
-    },
-    Handler {
-        handler_pc: ProgramCounter,
-        context: Context,
-    },
-    Unwind,
-}
-
-impl Location {
-    pub const fn entry(pc: ProgramCounter) -> Self {
-        Self::Bytecode {
-            context: Context::ROOT,
-            pc,
-        }
-    }
-
-    pub const fn source_pc(self) -> Option<ProgramCounter> {
-        match self {
-            Self::Bytecode { pc, .. } => Some(pc),
-            Self::Handler { .. } | Self::Unwind => None,
-        }
-    }
-
-    pub const fn context(self) -> Option<Context> {
-        match self {
-            Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),
-            Self::Unwind => None,
-        }
-    }
+    pub(super) const ROOT: Self = Self(0);
 }
 
 /// The exact call activation represented by a JVM `returnAddress` value.
@@ -79,7 +42,7 @@ struct Activation {
 pub(crate) struct Expander {
     activations: Vec<Option<Activation>>,
     contexts_by_activation: BTreeMap<Activation, Context>,
-    expanded_locations: BTreeSet<Location>,
+    expanded_locations: BTreeSet<NodeAddress>,
     return_pcs: BTreeMap<Context, ProgramCounter>,
 }
 
@@ -88,12 +51,15 @@ impl Expander {
         Self {
             activations: vec![None],
             contexts_by_activation: BTreeMap::new(),
-            expanded_locations: BTreeSet::from([Location::entry(entry)]),
+            expanded_locations: BTreeSet::from([NodeAddress::entry(entry)]),
             return_pcs: BTreeMap::new(),
         }
     }
 
-    pub fn register_location(&mut self, location: Location) -> Result<Location, MokaIRBuildError> {
+    pub fn register_location(
+        &mut self,
+        location: NodeAddress,
+    ) -> Result<NodeAddress, MokaIRBuildError> {
         self.expanded_locations.insert(location);
         if self.expanded_locations.len() > EXPANDED_LOCATION_LIMIT {
             return Err(MokaIRBuildError::LegacySubroutineExpansionLimit {
@@ -107,28 +73,28 @@ impl Expander {
         &mut self,
         pc: ProgramCounter,
         context: Context,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.register_location(Location::Bytecode { pc, context })
+    ) -> Result<NodeAddress, MokaIRBuildError> {
+        self.register_location(NodeAddress::Bytecode { pc, context })
     }
 
     pub fn handler_location(
         &mut self,
         handler_pc: ProgramCounter,
         context: Context,
-    ) -> Result<Location, MokaIRBuildError> {
-        self.register_location(Location::Handler {
-            handler_pc,
+    ) -> Result<NodeAddress, MokaIRBuildError> {
+        self.register_location(NodeAddress::Handler {
+            handler: handler_pc,
             context,
         })
     }
 
     pub fn enter_subroutine(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         target: ProgramCounter,
         continuation: ProgramCounter,
-    ) -> Result<(Location, ReturnAddress), MokaIRBuildError> {
-        let Location::Bytecode {
+    ) -> Result<(NodeAddress, ReturnAddress), MokaIRBuildError> {
+        let NodeAddress::Bytecode {
             pc: call_site,
             context: parent,
         } = location
@@ -172,10 +138,10 @@ impl Expander {
 
     pub fn return_from(
         &mut self,
-        location: Location,
+        location: NodeAddress,
         address: ReturnAddress,
-    ) -> Result<Location, MokaIRBuildError> {
-        let Location::Bytecode {
+    ) -> Result<NodeAddress, MokaIRBuildError> {
+        let NodeAddress::Bytecode {
             context: current,
             pc: return_pc,
         } = location

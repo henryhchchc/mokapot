@@ -18,9 +18,9 @@ use crate::{
             error::MokaIRBuildError,
             identity::SsaValueId,
             jvm::{
+                NodeAddress,
                 frame::{CATEGORY_1, CATEGORY_2, Frame, JvmFrameError},
                 instruction::RegisterInstruction,
-                subroutine_expansion::Location,
                 symbolic_execution::{Executor, Value},
             },
         },
@@ -34,7 +34,7 @@ use crate::{
 
 pub(super) struct LiftContext<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
-    location: Location,
+    location: NodeAddress,
     pc: ProgramCounter,
     frame: &'frame mut Frame<Value>,
 }
@@ -47,7 +47,7 @@ impl Executor<'_> {
     pub(super) fn lift_register_instruction(
         &mut self,
         jvm_instruction: &JVM,
-        location: Location,
+        location: NodeAddress,
         frame: &mut Frame<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         #[allow(
