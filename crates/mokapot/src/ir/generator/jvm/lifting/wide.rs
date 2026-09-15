@@ -2,7 +2,7 @@ use crate::{
     ir::generator::{
         error::MokaIRBuildError,
         jvm::{
-            frame::{CATEGORY_1, CATEGORY_2},
+            frame::ValueCategory::{Category1, Category2},
             instruction::RegisterInstruction,
             lifting::LiftContext,
         },
@@ -18,15 +18,15 @@ impl LiftContext<'_, '_, '_> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)
-            | WideInstruction::ALoad(idx) => self.load_unchecked::<CATEGORY_1>(*idx),
+            | WideInstruction::ALoad(idx) => self.load_unchecked(*idx, Category1),
             WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx) => {
-                self.load_unchecked::<CATEGORY_2>(*idx)
+                self.load_unchecked(*idx, Category2)
             }
             WideInstruction::IStore(idx)
             | WideInstruction::FStore(idx)
-            | WideInstruction::AStore(idx) => self.store::<CATEGORY_1>(*idx),
+            | WideInstruction::AStore(idx) => self.store(*idx, Category1),
             WideInstruction::LStore(idx) | WideInstruction::DStore(idx) => {
-                self.store::<CATEGORY_2>(*idx)
+                self.store(*idx, Category2)
             }
             WideInstruction::IInc(idx, constant) => self.increment(*idx, *constant),
             WideInstruction::Ret(idx) => self.subroutine_return(*idx),

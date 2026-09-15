@@ -4,7 +4,7 @@ use crate::{
         generator::{
             error::MokaIRBuildError,
             jvm::{
-                frame::{CATEGORY_1, CATEGORY_2},
+                frame::ValueCategory::{self, Category1},
                 instruction::RegisterInstruction,
                 lifting::LiftContext,
                 symbolic_execution::Value,
@@ -12,7 +12,6 @@ use crate::{
         },
     },
     jvm::references::FieldRef,
-    types::field_type::{FieldType, PrimitiveType},
 };
 
 impl LiftContext<'_, '_, '_> {
@@ -21,8 +20,10 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        self.frame
-            .push_value_of_type(&field.field_type, value.into())?;
+        self.frame.operand_stack.push(
+            value.into(),
+            ValueCategory::of_field_type(&field.field_type),
+        )?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: FieldAccess::ReadStatic {
@@ -37,9 +38,11 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let object_ref = self.frame.pop_value::<CATEGORY_1>()?;
-        self.frame
-            .push_value_of_type(&field.field_type, value.into())?;
+        let object_ref = self.frame.operand_stack.pop(Category1)?;
+        self.frame.operand_stack.push(
+            value.into(),
+            ValueCategory::of_field_type(&field.field_type),
+        )?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: FieldAccess::ReadInstance {
@@ -69,7 +72,7 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.pop_field_value(field)?;
-        let object_ref = self.frame.pop_value::<CATEGORY_1>()?;
+        let object_ref = self.frame.operand_stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(
             FieldAccess::WriteInstance {
                 object_ref,
@@ -81,11 +84,9 @@ impl LiftContext<'_, '_, '_> {
     }
 
     fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, MokaIRBuildError> {
-        Ok(match field.field_type {
-            FieldType::Base(PrimitiveType::Double | PrimitiveType::Long) => {
-                self.frame.pop_value::<CATEGORY_2>()?
-            }
-            _ => self.frame.pop_value::<CATEGORY_1>()?,
-        })
+        Ok(self
+            .frame
+            .operand_stack
+            .pop(ValueCategory::of_field_type(&field.field_type))?)
     }
 }

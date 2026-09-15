@@ -11,7 +11,7 @@ use crate::{
             error::MokaIRBuildError,
             jvm::{
                 NodeAddress,
-                frame::{Entry, Frame},
+                frame::Frame,
                 instruction::RegisterInstruction,
                 symbolic_execution::{Edge, Executor, Value},
             },
@@ -44,7 +44,7 @@ impl Executor<'_> {
             edges.push(Edge {
                 target: handler,
                 transfer: ControlTransfer::Exception(entry.catch_type.clone()),
-                target_frame: incoming_frame.with_single_stack_entry(Entry::Value(caught)),
+                target_frame: incoming_frame.exception_handler_frame(caught)?,
             });
             has_catch_all = entry
                 .catch_type

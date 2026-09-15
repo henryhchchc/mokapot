@@ -48,9 +48,9 @@ impl State {
         }
     }
 
-    fn recompute_inputs(&mut self) {
+    fn recompute_inputs(&mut self) -> Result<(), MokaIRBuildError> {
         while let Some(addr) = self.inputs_to_recompute.pop_first() {
-            match self.recompute_input_frame(addr) {
+            match self.recompute_input_frame(addr)? {
                 Some(incoming_frame)
                     if self.nodes.get(&addr).map(|node| &node.incoming_frame)
                         != Some(&incoming_frame) =>
@@ -63,9 +63,13 @@ impl State {
                 }
             }
         }
+        Ok(())
     }
 
-    fn recompute_input_frame(&self, addr: NodeAddress) -> Option<Frame<Value>> {
+    fn recompute_input_frame(
+        &self,
+        addr: NodeAddress,
+    ) -> Result<Option<Frame<Value>>, MokaIRBuildError> {
         let entry_frame = (addr == self.entry_input.0).then_some(&self.entry_input.1);
         let mut contributions = entry_frame.into_iter().chain(
             self.predecessors
@@ -82,11 +86,11 @@ impl State {
                         .map(|edge| &edge.target_frame)
                 }),
         );
-        contributions.next().cloned().map(|mut frame| {
+        contributions.next().cloned().map_or(Ok(None), |mut frame| {
             for contribution in contributions {
-                merge_input_frame_at(addr, &mut frame, contribution.clone());
+                merge_input_frame_at(addr, &mut frame, contribution.clone())?;
             }
-            frame
+            Ok(Some(frame))
         })
     }
 
@@ -227,7 +231,7 @@ pub(super) fn execute_to_fixpoint(
             seen.insert(state.fingerprint()),
             "JVM symbolic execution entered a solver-state cycle"
         );
-        state.recompute_inputs();
+        state.recompute_inputs()?;
         let Some((addr, incoming_frame)) = state.pending_executions.pop_first() else {
             continue;
         };
@@ -242,25 +246,27 @@ pub(super) fn merge_input_frame_at(
     addr: NodeAddress,
     frame: &mut Frame<Value>,
     contribution: Frame<Value>,
-) -> bool {
-    frame.merge_from_with(contribution, |slot, lhs, rhs| {
-        if *lhs == rhs {
-            return false;
-        }
-        let identity = FrameMergeSite { addr, slot };
-        let merged = match (*lhs, rhs) {
-            (Value::Invalid | Value::ReturnAddress(_), _)
-            | (_, Value::Invalid | Value::ReturnAddress(_)) => Value::Invalid,
-            (Value::Merged(current), _) if current == identity => return false,
-            _ => Value::Merged(identity),
-        };
-        if *lhs == merged {
-            false
-        } else {
-            *lhs = merged;
-            true
-        }
-    })
+) -> Result<bool, MokaIRBuildError> {
+    frame
+        .merge_from_with(contribution, |slot, lhs, rhs| {
+            if *lhs == rhs {
+                return false;
+            }
+            let identity = FrameMergeSite { addr, slot };
+            let merged = match (*lhs, rhs) {
+                (Value::Invalid | Value::ReturnAddress(_), _)
+                | (_, Value::Invalid | Value::ReturnAddress(_)) => Value::Invalid,
+                (Value::Merged(current), _) if current == identity => return false,
+                _ => Value::Merged(identity),
+            };
+            if *lhs == merged {
+                false
+            } else {
+                *lhs = merged;
+                true
+            }
+        })
+        .map_err(MokaIRBuildError::FrameMergeError)
 }
 
 #[cfg(test)]
@@ -273,7 +279,7 @@ mod tests {
                 identity::SsaValueId,
                 jvm::{
                     NodeAddress,
-                    frame::{Entry, Position},
+                    frame::{Position, ValueCategory::Category1},
                     instruction::RegisterInstruction,
                     symbolic_execution::executor::Executor,
                 },
@@ -307,28 +313,35 @@ mod tests {
         }
     }
 
+    fn first_local(frame: &Frame<Value>) -> Value {
+        *frame
+            .local_variables
+            .get(0, Category1)
+            .expect("local exists")
+    }
+
     #[test]
     fn merge_identity_is_stable_for_a_location_and_slot() {
         let addr = NodeAddress::entry(0.into());
         let mut merged = frame(1);
 
-        assert!(merge_input_frame_at(addr, &mut merged, frame(2)));
+        assert!(merge_input_frame_at(addr, &mut merged, frame(2)).expect("compatible frames"));
         let expected = Value::Merged(FrameMergeSite {
             addr,
             slot: Position::Local(0),
         });
-        assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
-        assert!(!merge_input_frame_at(addr, &mut merged, frame(3)));
-        assert_eq!(merged.local_slots(), &[Entry::Value(expected)]);
+        assert_eq!(first_local(&merged), expected);
+        assert!(!merge_input_frame_at(addr, &mut merged, frame(3)).expect("compatible frames"));
+        assert_eq!(first_local(&merged), expected);
     }
 
     #[test]
     fn frame_merge_is_permutation_independent() {
         let addr = NodeAddress::entry(0.into());
-        let expected = [Entry::Value(Value::Merged(FrameMergeSite {
+        let expected = Value::Merged(FrameMergeSite {
             addr,
             slot: Position::Local(0),
-        }))];
+        });
 
         for order in [
             [1, 2, 3],
@@ -339,9 +352,9 @@ mod tests {
             [3, 2, 1],
         ] {
             let mut merged = frame(order[0]);
-            merge_input_frame_at(addr, &mut merged, frame(order[1]));
-            merge_input_frame_at(addr, &mut merged, frame(order[2]));
-            assert_eq!(merged.local_slots(), expected);
+            merge_input_frame_at(addr, &mut merged, frame(order[1])).expect("compatible frames");
+            merge_input_frame_at(addr, &mut merged, frame(order[2])).expect("compatible frames");
+            assert_eq!(first_local(&merged), expected);
         }
     }
 
@@ -361,14 +374,16 @@ mod tests {
         let mut executor = Executor::for_method(&method).expect("valid method");
         let nodes = executor.execute_reachable_addrs().expect("valid loop");
 
+        let mut incoming_frame = nodes[&NodeAddress::entry(2.into())].incoming_frame.clone();
         assert_eq!(
-            nodes[&NodeAddress::entry(2.into())]
-                .incoming_frame
-                .operand_slots(),
-            &[Entry::Value(Value::Merged(FrameMergeSite {
+            incoming_frame
+                .operand_stack
+                .pop(Category1)
+                .expect("stack value exists"),
+            Value::Merged(FrameMergeSite {
                 addr: NodeAddress::entry(1.into()),
                 slot: Position::Stack(0),
-            }))]
+            })
         );
     }
 
@@ -377,7 +392,7 @@ mod tests {
         let source = NodeAddress::entry(0.into());
         let target = NodeAddress::entry(1.into());
         let mut state = State::new(source, frame(0));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
 
         state.replace_node(
             source,
@@ -399,15 +414,15 @@ mod tests {
                 caught_exception_value: None,
             },
         );
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
 
         assert_eq!(state.predecessors[&target], BTreeSet::from([source]));
         assert_eq!(
-            state.pending_executions[&target].local_slots(),
-            &[Entry::Value(Value::Merged(FrameMergeSite {
+            first_local(&state.pending_executions[&target]),
+            Value::Merged(FrameMergeSite {
                 addr: target,
                 slot: Position::Local(0),
-            }))]
+            })
         );
     }
 
@@ -416,20 +431,20 @@ mod tests {
         let source = NodeAddress::entry(0.into());
         let target = NodeAddress::entry(1.into());
         let mut state = State::new(source, frame(0));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
 
         state.replace_node(source, result_to(target, frame(1)));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         assert_eq!(
-            state.pending_executions[&target].local_slots(),
-            &[Entry::Value(Value::Ssa(SsaValueId::new(1)))]
+            first_local(&state.pending_executions[&target]),
+            Value::Ssa(SsaValueId::new(1))
         );
 
         state.replace_node(source, result_to(target, frame(2)));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         assert_eq!(
-            state.pending_executions[&target].local_slots(),
-            &[Entry::Value(Value::Ssa(SsaValueId::new(2)))]
+            first_local(&state.pending_executions[&target]),
+            Value::Ssa(SsaValueId::new(2))
         );
 
         state.replace_node(
@@ -441,7 +456,7 @@ mod tests {
                 caught_exception_value: None,
             },
         );
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         assert!(!state.nodes.contains_key(&target));
         assert!(!state.pending_executions.contains_key(&target));
     }
@@ -452,14 +467,14 @@ mod tests {
         let first = NodeAddress::entry(1.into());
         let second = NodeAddress::entry(2.into());
         let mut state = State::new(source, frame(0));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
 
         state.replace_node(source, result_to(first, frame(1)));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         state.replace_node(first, result_to(second, frame(1)));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         state.replace_node(second, result_to(first, frame(1)));
-        state.recompute_inputs();
+        state.recompute_inputs().expect("compatible frames");
         assert!(state.nodes.contains_key(&first));
         assert!(state.nodes.contains_key(&second));
 

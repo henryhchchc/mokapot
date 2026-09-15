@@ -7,7 +7,7 @@ use crate::ir::{
         error::MokaIRBuildError,
         identity::SsaValueId,
         jvm::{
-            frame::{Entry, Frame},
+            frame::Frame,
             symbolic_execution::{self, FrameMergeSite},
         },
     },
@@ -141,32 +141,26 @@ fn paired_frame_values(
     source: &Frame<symbolic_execution::Value>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
-    if target.local_slots().len() != source.local_slots().len()
-        || target.operand_slots().len() != source.operand_slots().len()
-    {
-        return Err(MokaIRBuildError::MalformedControlFlow);
-    }
     target
-        .local_slots()
-        .iter()
-        .zip(source.local_slots())
-        .chain(target.operand_slots().iter().zip(source.operand_slots()))
+        .paired_slot_values(source)
+        .map_err(|_| MokaIRBuildError::MalformedControlFlow)?
+        .into_iter()
         .map(|(target, source)| match (target, source) {
             (
-                Entry::Value(symbolic_execution::Value::ReturnAddress(lhs)),
-                Entry::Value(symbolic_execution::Value::ReturnAddress(rhs)),
+                Some(symbolic_execution::Value::ReturnAddress(lhs)),
+                Some(symbolic_execution::Value::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Entry::Value(symbolic_execution::Value::ReturnAddress(_)), _)
-            | (_, Entry::Value(symbolic_execution::Value::ReturnAddress(_))) => {
+            (Some(symbolic_execution::Value::ReturnAddress(_)), _)
+            | (_, Some(symbolic_execution::Value::ReturnAddress(_))) => {
                 Err(MokaIRBuildError::MalformedControlFlow)
             }
-            (Entry::Value(result), Entry::Value(value)) => Ok((
+            (Some(result), Some(value)) => Ok((
                 Some(merge_plan.resolve(*result)?),
                 Some(merge_plan.resolve(*value)?),
             )),
-            (Entry::Value(result), _) => Ok((Some(merge_plan.resolve(*result)?), None)),
-            (_, Entry::Value(value)) => Ok((None, Some(merge_plan.resolve(*value)?))),
-            _ => Ok((None, None)),
+            (Some(result), None) => Ok((Some(merge_plan.resolve(*result)?), None)),
+            (None, Some(value)) => Ok((None, Some(merge_plan.resolve(*value)?))),
+            (None, None) => Ok((None, None)),
         })
         .collect::<Result<_, _>>()
 }
