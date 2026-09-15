@@ -1,26 +1,59 @@
+//! Constructs a reachable register-form graph from JVM instructions.
+
+mod address;
+mod builder;
+mod edges;
+mod fallibility;
+mod instruction;
+pub(super) mod jvm;
+pub(super) mod lifting;
+mod solver;
+mod subroutine;
+
 use std::collections::BTreeMap;
 
-use super::{NodeAddress, RegisterInstruction, ReturnAddress};
-use crate::ir::{
-    control_flow::ControlTransfer,
-    generator::{
-        identity::SsaValueId,
-        instruction_graph::frame::{Frame, Position},
+pub(super) use address::NodeAddress;
+pub(super) use instruction::RegisterInstruction;
+pub(super) use subroutine::ReturnAddress;
+
+use crate::{
+    ir::{
+        control_flow::ControlTransfer,
+        generator::{bytecode_analysis::jvm::Frame, error::Error, identity::SsaValueId},
     },
+    jvm::{Method, code::MethodBody},
 };
+
+pub(super) fn build_node_graph(method: &Method) -> Result<NodeGraph, Error> {
+    NodeGraphBuilder::for_method(method)?.build()
+}
+
+/// Mutable state used while constructing an instruction graph.
+struct NodeGraphBuilder<'method> {
+    body: &'method MethodBody,
+    fallibility: fallibility::Context,
+    subroutine_expander: subroutine::Expander,
+    definition_ids: BTreeMap<NodeAddress, SsaValueId>,
+    caught_exception_ids: BTreeMap<NodeAddress, SsaValueId>,
+    value_id_allocator: builder::ValueIdAllocator,
+    receiver_value: Option<SsaValueId>,
+    parameter_values: Vec<SsaValueId>,
+    entry_addr: NodeAddress,
+    initial_frame: Frame<Value>,
+}
 
 /// A stable identity for a frame value merged at a JVM location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) struct FrameMergeSite {
+pub(super) struct FrameMergeSite {
     pub addr: NodeAddress,
-    pub slot: Position,
+    pub slot: jvm::Position,
 }
 
 /// An abstract JVM frame value while constructing the instruction graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) enum Value {
+pub(super) enum Value {
     Ssa(#[from] SsaValueId),
     #[display("%return_address")]
     ReturnAddress(#[from] ReturnAddress),
@@ -31,14 +64,14 @@ pub(crate) enum Value {
 }
 
 /// One outgoing edge and its exact JVM frame.
-pub(crate) struct Edge {
+pub(super) struct Edge {
     pub target: NodeAddress,
     pub transfer: ControlTransfer<Value>,
     pub target_frame: Frame<Value>,
 }
 
 /// Completed facts for one reachable JVM location.
-pub(crate) struct Node {
+pub(super) struct Node {
     pub incoming_frame: Frame<Value>,
     pub instruction: RegisterInstruction,
     /// Whether executing `instruction` can raise a synchronous exception.
@@ -51,7 +84,7 @@ pub(crate) struct Node {
 }
 
 /// A reachable register-form JVM instruction graph.
-pub(crate) struct Graph {
+pub(super) struct NodeGraph {
     pub entry_addr: NodeAddress,
     /// The original frame entering the method.
     pub initial_frame: Frame<Value>,

@@ -8,7 +8,7 @@ mod value_category;
 #[cfg(test)]
 mod tests;
 
-pub use error::JvmFrameError;
+pub use error::Error as FrameError;
 pub(crate) use operand_stack::StackOperation;
 pub(crate) use value_category::ValueCategory;
 
@@ -45,7 +45,7 @@ impl<V> Frame<V> {
     pub fn paired_slot_values<'a>(
         &'a self,
         other: &'a Self,
-    ) -> Result<PairedSlotValues<'a, V>, JvmFrameError> {
+    ) -> Result<PairedSlotValues<'a, V>, FrameError> {
         self.ensure_compatible_shape(other)?;
         Ok(self
             .locals
@@ -59,7 +59,7 @@ impl<V> Frame<V> {
         &mut self,
         other: Self,
         mut merge_values: impl FnMut(Position, &mut V, V) -> bool,
-    ) -> Result<bool, JvmFrameError> {
+    ) -> Result<bool, FrameError> {
         self.ensure_compatible_shape(&other)?;
         let locals_changed = self
             .locals
@@ -72,9 +72,9 @@ impl<V> Frame<V> {
         Ok(locals_changed || stack_changed)
     }
 
-    fn ensure_compatible_shape(&self, other: &Self) -> Result<(), JvmFrameError> {
+    fn ensure_compatible_shape(&self, other: &Self) -> Result<(), FrameError> {
         if !self.locals.has_same_shape(&other.locals) || !self.stack.has_same_shape(&other.stack) {
-            return Err(JvmFrameError::IncompatibleFrameShape);
+            return Err(FrameError::IncompatibleFrameShape);
         }
         Ok(())
     }
@@ -87,7 +87,7 @@ impl<V: Clone> Frame<V> {
         max_operand_stack: u16,
         this_value: Option<V>,
         parameters: &[V],
-    ) -> Result<Self, JvmFrameError> {
+    ) -> Result<Self, FrameError> {
         let local_variables =
             LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
         let operand_stack = OperandStack::with_max_slots(max_operand_stack);
@@ -97,7 +97,7 @@ impl<V: Clone> Frame<V> {
         })
     }
 
-    pub fn exception_handler_frame(&self, caught: V) -> Result<Self, JvmFrameError> {
+    pub fn exception_handler_frame(&self, caught: V) -> Result<Self, FrameError> {
         let mut frame = Self {
             locals: self.locals.clone(),
             stack: OperandStack::with_max_slots(self.stack.max_slots()),

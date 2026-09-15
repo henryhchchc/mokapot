@@ -1,16 +1,16 @@
 use crate::ir::{
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::{
-        error::Error,
-        identity::SsaValueId,
-        instruction_graph::{
+        bytecode_analysis::{
             RegisterInstruction, Value,
-            frame::{
+            jvm::{
                 Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
             lifting::Context,
         },
+        error::Error,
+        identity::SsaValueId,
     },
 };
 

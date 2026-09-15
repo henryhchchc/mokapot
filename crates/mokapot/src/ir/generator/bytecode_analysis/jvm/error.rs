@@ -1,5 +1,5 @@
 #[derive(Debug, thiserror::Error)]
-pub enum JvmFrameError {
+pub enum Error {
     #[error("Trying to pop an empty stack")]
     StackUnderflow,
     #[error("The stack size exceeds the max stack size")]

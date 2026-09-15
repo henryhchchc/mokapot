@@ -10,7 +10,7 @@ mod tests;
 pub(super) use model::Graph;
 pub(crate) use model::{Arm, Block};
 
-use crate::ir::generator::{error::Error, instruction_graph};
+use crate::ir::generator::{bytecode_analysis, error::Error};
 
 use self::{
     layout::BlockLayout,
@@ -18,10 +18,10 @@ use self::{
 };
 
 /// Forms maximal semantic blocks from completed JVM frame facts.
-pub(super) fn form(instruction_graph: instruction_graph::Graph) -> Result<Graph, Error> {
+pub(super) fn form(instruction_graph: bytecode_analysis::NodeGraph) -> Result<Graph, Error> {
     let layout = BlockLayout::discover(&instruction_graph)?;
     let phi_blocks = layout.phi_blocks(&instruction_graph.phi_values)?;
-    let instruction_graph::Graph {
+    let bytecode_analysis::NodeGraph {
         initial_frame,
         nodes,
         phi_values,

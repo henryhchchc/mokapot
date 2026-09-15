@@ -8,17 +8,17 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{Builder, NodeAddress, RegisterInstruction, Value};
+use super::{NodeGraphBuilder, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
         generator::{
-            error::Error,
-            identity::SsaValueId,
-            instruction_graph::frame::{
+            bytecode_analysis::jvm::{
                 Frame, StackOperation, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
+            error::Error,
+            identity::SsaValueId,
         },
     },
     jvm::{ConstantValue, code::Instruction as JVM},
@@ -26,12 +26,12 @@ use crate::{
 };
 
 struct Context<'builder, 'frame, 'method> {
-    builder: &'builder mut Builder<'method>,
+    builder: &'builder mut NodeGraphBuilder<'method>,
     addr: NodeAddress,
     frame: &'frame mut Frame<Value>,
 }
 
-impl Builder<'_> {
+impl NodeGraphBuilder<'_> {
     #[expect(
         clippy::too_many_lines,
         reason = "the match is an exhaustive JVM instruction dispatch"

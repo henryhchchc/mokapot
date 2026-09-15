@@ -1,4 +1,5 @@
 use super::*;
+use crate::jvm::method;
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {

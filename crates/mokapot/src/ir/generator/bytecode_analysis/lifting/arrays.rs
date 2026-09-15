@@ -2,12 +2,12 @@ use crate::{
     ir::{
         expression::ArrayOperation,
         generator::{
-            error::Error,
-            instruction_graph::{
+            bytecode_analysis::{
                 RegisterInstruction,
-                frame::{ValueCategory, ValueCategory::Category1},
+                jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
+            error::Error,
         },
     },
     types::field_type::FieldType,

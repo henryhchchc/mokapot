@@ -1,9 +1,9 @@
-use crate::{
-    ir::generator::instruction_graph::frame::{
-        Frame, JvmFrameError, StackOperation,
-        ValueCategory::{self, Category1, Category2},
-    },
-    types::method_descriptor::MethodDescriptor,
+use crate::types::method_descriptor::MethodDescriptor;
+
+use super::{
+    Frame, StackOperation,
+    ValueCategory::{self, Category1, Category2},
+    error::Error,
 };
 use proptest::prelude::*;
 
@@ -15,7 +15,7 @@ fn frame(
     descriptor: &MethodDescriptor,
     max_locals: u16,
     max_stack: u16,
-) -> Result<Frame<TestValue>, JvmFrameError> {
+) -> Result<Frame<TestValue>, Error> {
     let this_value = (!is_static).then_some(TestValue(0));
     let parameter_offset = u32::from(!is_static);
     let parameters = descriptor
@@ -39,7 +39,7 @@ fn assert_stack(frame: &mut Frame<TestValue>, expected_top_first: &[(TestValue, 
     }
     assert!(matches!(
         frame.stack.pop(Category1),
-        Err(JvmFrameError::StackUnderflow)
+        Err(Error::StackUnderflow)
     ));
 }
 
@@ -49,7 +49,7 @@ fn method_entry_initializes_parameters_and_checks_local_capacity() {
 
     assert!(matches!(
         frame(false, &descriptor, 3, 0),
-        Err(JvmFrameError::LocalIndexOutOfBounds)
+        Err(Error::LocalIndexOutOfBounds)
     ));
 
     let frame = frame(false, &descriptor, 4, 0).expect("parameters fit");
@@ -66,7 +66,7 @@ fn merging_incompatible_frame_shapes_returns_an_error() {
 
     assert!(matches!(
         target.merge_from_with(source, |_, _, _| false),
-        Err(JvmFrameError::IncompatibleFrameShape)
+        Err(Error::IncompatibleFrameShape)
     ));
 }
 
@@ -77,7 +77,7 @@ fn local_access_checks_the_value_category() {
 
     assert!(matches!(
         frame.locals.get(0, Category1),
-        Err(JvmFrameError::InvalidSlotLayout)
+        Err(Error::InvalidSlotLayout)
     ));
     frame
         .locals
@@ -86,7 +86,7 @@ fn local_access_checks_the_value_category() {
     assert_eq!(frame.locals.get(0, Category1).unwrap(), &TestValue(1));
     assert!(matches!(
         frame.locals.get(0, Category2),
-        Err(JvmFrameError::InvalidSlotLayout)
+        Err(Error::InvalidSlotLayout)
     ));
 }
 
@@ -102,7 +102,7 @@ fn writing_an_upper_slot_invalidates_the_category_2_value() {
 
     assert!(matches!(
         frame.locals.get(0, Category2),
-        Err(JvmFrameError::UnavailableLocal)
+        Err(Error::UnavailableLocal)
     ));
     assert_eq!(frame.locals.get(1, Category1).unwrap(), &TestValue(1));
 }
@@ -308,7 +308,7 @@ fn invalid_stack_operations_leave_the_stack_unchanged() {
         }
         assert!(matches!(
             frame.stack.apply(case.operation),
-            Err(JvmFrameError::InvalidSlotLayout)
+            Err(Error::InvalidSlotLayout)
         ));
         assert_stack(&mut frame, case.expected_top_first);
     }
@@ -330,7 +330,7 @@ fn stack_operations_report_underflow() {
     ] {
         assert!(matches!(
             frame.stack.apply(operation),
-            Err(JvmFrameError::StackUnderflow)
+            Err(Error::StackUnderflow)
         ));
     }
 }
@@ -358,7 +358,7 @@ proptest! {
         frame.stack.push(value, Category2).unwrap();
         assert!(matches!(
             frame.stack.pop(Category1),
-            Err(JvmFrameError::InvalidSlotLayout)
+            Err(Error::InvalidSlotLayout)
         ));
         assert_eq!(frame.stack.pop(Category2).unwrap(), value);
     }
@@ -371,7 +371,7 @@ proptest! {
         }
         assert!(matches!(
             frame.stack.push(TestValue(u32::from(capacity)), Category1),
-            Err(JvmFrameError::StackOverflow)
+            Err(Error::StackOverflow)
         ));
     }
 }

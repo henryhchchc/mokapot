@@ -2,10 +2,8 @@ use std::iter::{once, repeat_n};
 
 use itertools::Itertools;
 
-use crate::{
-    ir::generator::instruction_graph::frame::{JvmFrameError, ValueCategory},
-    types::method_descriptor::MethodDescriptor,
-};
+use super::{ValueCategory, error::Error};
+use crate::types::method_descriptor::MethodDescriptor;
 
 use ValueCategory::{Category1, Category2};
 
@@ -88,30 +86,27 @@ impl<V> OperandStack<V> {
         }
     }
 
-    pub fn push(&mut self, value: V, category: ValueCategory) -> Result<(), JvmFrameError> {
+    pub fn push(&mut self, value: V, category: ValueCategory) -> Result<(), Error> {
         let slot_count = self.slot_count + category.slot_count();
         if slot_count > usize::from(self.max_slots) {
-            return Err(JvmFrameError::StackOverflow);
+            return Err(Error::StackOverflow);
         }
         self.values.push(StackItem { value, category });
         self.slot_count = slot_count;
         Ok(())
     }
 
-    pub fn pop(&mut self, expected: ValueCategory) -> Result<V, JvmFrameError> {
-        let top = self.values.last().ok_or(JvmFrameError::StackUnderflow)?;
+    pub fn pop(&mut self, expected: ValueCategory) -> Result<V, Error> {
+        let top = self.values.last().ok_or(Error::StackUnderflow)?;
         if top.category != expected {
-            return Err(JvmFrameError::InvalidSlotLayout);
+            return Err(Error::InvalidSlotLayout);
         }
         let value = self.values.pop().expect("stack was checked as non-empty");
         self.slot_count -= expected.slot_count();
         Ok(value.value)
     }
 
-    pub fn pop_arguments(
-        &mut self,
-        descriptor: &MethodDescriptor,
-    ) -> Result<Vec<V>, JvmFrameError> {
+    pub fn pop_arguments(&mut self, descriptor: &MethodDescriptor) -> Result<Vec<V>, Error> {
         let mut arguments: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -122,12 +117,12 @@ impl<V> OperandStack<V> {
         Ok(arguments)
     }
 
-    pub fn apply(&mut self, operation: StackOperation) -> Result<(), JvmFrameError>
+    pub fn apply(&mut self, operation: StackOperation) -> Result<(), Error>
     where
         V: Clone,
     {
         if self.slot_count < operation.consumed_slots() {
-            return Err(JvmFrameError::StackUnderflow);
+            return Err(Error::StackUnderflow);
         }
         let categories = self
             .values
@@ -136,7 +131,7 @@ impl<V> OperandStack<V> {
             .collect::<Vec<_>>();
         let (input_len, output_indices) = operation
             .matching_form(&categories)
-            .ok_or(JvmFrameError::InvalidSlotLayout)?;
+            .ok_or(Error::InvalidSlotLayout)?;
         let input_start = self.values.len() - input_len;
         let output_slots = output_indices
             .iter()
@@ -144,7 +139,7 @@ impl<V> OperandStack<V> {
             .sum::<usize>();
         let resulting_slots = self.slot_count - operation.consumed_slots() + output_slots;
         if resulting_slots > usize::from(self.max_slots) {
-            return Err(JvmFrameError::StackOverflow);
+            return Err(Error::StackOverflow);
         }
 
         let output = output_indices

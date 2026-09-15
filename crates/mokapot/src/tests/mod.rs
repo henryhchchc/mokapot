@@ -1,7 +1,12 @@
 use proptest::prelude::*;
 
 use crate::{
-    jvm::{Class, class, references::ClassRef},
+    jvm::{
+        Class, Method, class,
+        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
+        method::AccessFlags,
+        references::ClassRef,
+    },
     types::{
         binary_name::BinaryName,
         field_type::{FieldType, PrimitiveType},
@@ -72,6 +77,56 @@ impl Default for Class {
             record: None,
             other_attributes: Vec::default(),
         }
+    }
+}
+
+/// Builds a method named `test` and owned by `org/mokapot/Test` from its body.
+pub(crate) fn method<I, PC>(
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<ExceptionTableEntry>,
+    access_flags: AccessFlags,
+) -> Method
+where
+    I: IntoIterator<Item = (PC, Instruction)>,
+    PC: Into<ProgramCounter>,
+{
+    let instructions = instructions
+        .into_iter()
+        .map(|(pc, instruction)| (pc.into(), instruction))
+        .collect();
+    Method {
+        access_flags,
+        name: "test".to_owned(),
+        descriptor: descriptor.parse().expect("the descriptor must be valid"),
+        owner: "org/mokapot/Test"
+            .parse()
+            .expect("the owner must be a valid class reference"),
+        body: Some(MethodBody {
+            max_stack: 4,
+            max_locals: 4,
+            instructions,
+            exception_table,
+            line_number_table: None,
+            local_variable_table: None,
+            stack_map_table: None,
+            runtime_visible_type_annotations: vec![],
+            runtime_invisible_type_annotations: vec![],
+            other_attributes: vec![],
+        }),
+        exceptions: vec![],
+        runtime_visible_annotations: vec![],
+        runtime_invisible_annotations: vec![],
+        runtime_visible_type_annotations: vec![],
+        runtime_invisible_type_annotations: vec![],
+        runtime_visible_parameter_annotations: vec![],
+        runtime_invisible_parameter_annotations: vec![],
+        annotation_default: None,
+        parameters: vec![],
+        is_synthetic: false,
+        is_deprecated: false,
+        signature: None,
+        other_attributes: vec![],
     }
 }
 
