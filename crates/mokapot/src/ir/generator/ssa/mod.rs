@@ -9,7 +9,7 @@ use crate::ir::{
     BlockId,
     generator::{block_formation, error::Error, identity::SsaValueId},
 };
-use merge::{MergePlan, collect_phi_candidates};
+use merge::{MergeCatalog, collect_phi_candidates};
 pub(crate) use model::Block;
 use simplify::simplify_phis;
 
@@ -30,10 +30,10 @@ pub(super) fn construct(graph: block_formation::BlockGraph) -> Result<Graph, Err
         this_value,
         parameter_values,
     } = graph;
-    let merge_plan = MergePlan::new(merges);
-    let candidates = collect_phi_candidates(&blocks, &merge_plan)?;
+    let merge_catalog = MergeCatalog::new(merges, blocks.iter().map(|block| block.id))?;
+    let candidates = collect_phi_candidates(&blocks, &merge_catalog)?;
     let simplified = simplify_phis(candidates).map_err(|_| Error::MalformedControlFlow)?;
-    let blocks = finalization::finalize(blocks, &merge_plan, simplified)?;
+    let blocks = finalization::finalize(blocks, &merge_catalog, simplified)?;
     Ok(Graph {
         entry,
         blocks,

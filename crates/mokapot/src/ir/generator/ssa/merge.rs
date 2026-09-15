@@ -12,26 +12,44 @@ use crate::ir::{
 
 type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
-/// Provisional value and placement data for JVM frame merges.
-pub(super) struct MergePlan {
-    /// The value and block of every frame merge site.
-    merges: BTreeMap<FrameMergeSite, Merge>,
-    /// The block that computes each merge value, indexed so that phi collection
-    /// never scans `merges`.
+/// Validated bidirectional indexes for JVM frame merges.
+pub(super) struct MergeCatalog {
+    /// The provisional value for every frame merge site.
+    value_by_site: BTreeMap<FrameMergeSite, SsaValueId>,
+    /// The block that computes each provisional merge value.
     block_by_value: BTreeMap<SsaValueId, BlockId>,
 }
 
-impl MergePlan {
-    /// Plans the resolution of every frame merge.
-    pub fn new(merges: BTreeMap<FrameMergeSite, Merge>) -> Self {
-        let block_by_value = merges
-            .values()
-            .map(|merge| (merge.value, merge.block))
-            .collect();
-        Self {
-            merges,
-            block_by_value,
+impl MergeCatalog {
+    /// Indexes merges after checking that their values and placements are unambiguous.
+    pub fn new(
+        merges: BTreeMap<FrameMergeSite, Merge>,
+        known_blocks: impl IntoIterator<Item = BlockId>,
+    ) -> Result<Self, Error> {
+        let known_blocks =
+            known_blocks
+                .into_iter()
+                .try_fold(BTreeSet::new(), |mut known_blocks, block| {
+                    if !known_blocks.insert(block) {
+                        return Err(Error::MalformedControlFlow);
+                    }
+                    Ok(known_blocks)
+                })?;
+        let mut value_by_site = BTreeMap::new();
+        let mut block_by_value = BTreeMap::new();
+        for (site, Merge { value, block }) in merges {
+            if !known_blocks.contains(&block) {
+                return Err(Error::MalformedControlFlow);
+            }
+            value_by_site.insert(site, value);
+            if block_by_value.insert(value, block).is_some() {
+                return Err(Error::MalformedControlFlow);
+            }
         }
+        Ok(Self {
+            value_by_site,
+            block_by_value,
+        })
     }
 
     /// The block that computes the frame merge `value`, if it is one.
@@ -39,13 +57,20 @@ impl MergePlan {
         self.block_by_value.get(&value).copied()
     }
 
+    /// Iterates over every provisional merge value and its computing block.
+    fn placements(&self) -> impl Iterator<Item = (SsaValueId, BlockId)> + '_ {
+        self.block_by_value
+            .iter()
+            .map(|(&value, &block)| (value, block))
+    }
+
     pub fn resolve(&self, operand: bytecode_analysis::Value) -> Result<SsaValueId, Error> {
         match operand {
             bytecode_analysis::Value::Ssa(value) => Ok(value),
             bytecode_analysis::Value::Merged(identity) => self
-                .merges
+                .value_by_site
                 .get(&identity)
-                .map(|merge| merge.value)
+                .copied()
                 .ok_or(Error::MalformedControlFlow),
             bytecode_analysis::Value::ReturnAddress(_) | bytecode_analysis::Value::Invalid => {
                 Err(Error::MalformedControlFlow)
@@ -56,7 +81,7 @@ impl MergePlan {
 
 pub(super) fn collect_phi_candidates(
     blocks: &[block_formation::Block],
-    merge_plan: &MergePlan,
+    merge_catalog: &MergeCatalog,
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, Error> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
@@ -70,7 +95,7 @@ pub(super) fn collect_phi_candidates(
         }
     }
     let mut phis_by_block = BTreeMap::<BlockId, Vec<SsaValueId>>::new();
-    for (&value, &block) in &merge_plan.block_by_value {
+    for (value, block) in merge_catalog.placements() {
         phis_by_block.entry(block).or_default().push(value);
     }
 
@@ -83,11 +108,11 @@ pub(super) fn collect_phi_candidates(
             .len();
         let mut inputs = BTreeMap::<SsaValueId, BTreeMap<BlockId, SsaValueId>>::new();
         for (predecessor, frame) in incoming {
-            for (result, value) in paired_frame_values(&target.entry_frame, frame, merge_plan)? {
+            for (result, value) in paired_frame_values(&target.entry_frame, frame, merge_catalog)? {
                 let (Some(result), Some(value)) = (result, value) else {
                     continue;
                 };
-                if merge_plan.block_for(result) != Some(target.id) {
+                if merge_catalog.block_for(result) != Some(target.id) {
                     continue;
                 }
                 match inputs.entry(result).or_default().entry(predecessor) {
@@ -114,11 +139,10 @@ pub(super) fn collect_phi_candidates(
     }
 
     loop {
-        let unavailable = merge_plan
-            .block_by_value
-            .keys()
+        let unavailable = merge_catalog
+            .placements()
+            .map(|(value, _)| value)
             .filter(|result| !candidates.contains_key(result))
-            .copied()
             .collect::<BTreeSet<_>>();
         let invalid = candidates
             .iter()
@@ -138,7 +162,7 @@ pub(super) fn collect_phi_candidates(
 fn paired_frame_values(
     target: &Frame<bytecode_analysis::Value>,
     source: &Frame<bytecode_analysis::Value>,
-    merge_plan: &MergePlan,
+    merge_catalog: &MergeCatalog,
 ) -> Result<Vec<PairedFrameValue>, Error> {
     target
         .paired_slot_values(source)
@@ -154,11 +178,11 @@ fn paired_frame_values(
                 Err(Error::MalformedControlFlow)
             }
             (Some(result), Some(value)) => Ok((
-                Some(merge_plan.resolve(*result)?),
-                Some(merge_plan.resolve(*value)?),
+                Some(merge_catalog.resolve(*result)?),
+                Some(merge_catalog.resolve(*value)?),
             )),
-            (Some(result), None) => Ok((Some(merge_plan.resolve(*result)?), None)),
-            (None, Some(value)) => Ok((None, Some(merge_plan.resolve(*value)?))),
+            (Some(result), None) => Ok((Some(merge_catalog.resolve(*result)?), None)),
+            (None, Some(value)) => Ok((None, Some(merge_catalog.resolve(*value)?))),
             (None, None) => Ok((None, None)),
         })
         .collect::<Result<_, _>>()
@@ -230,38 +254,132 @@ mod tests {
             },
         ];
 
-        let merge_plan = MergePlan::new(BTreeMap::from([(
-            site,
-            Merge {
-                value: result,
-                block: target,
-            },
-        )]));
-        let candidates =
-            collect_phi_candidates(&blocks, &merge_plan).expect("preheader provides the phi input");
+        let merge_catalog = MergeCatalog::new(
+            BTreeMap::from([(
+                site,
+                Merge {
+                    value: result,
+                    block: target,
+                },
+            )]),
+            [preheader, target],
+        )
+        .expect("valid merge catalog");
+        let candidates = collect_phi_candidates(&blocks, &merge_catalog)
+            .expect("preheader provides the phi input");
 
         assert_eq!(candidates[&result], vec![(preheader, incoming)]);
     }
 
     #[test]
-    fn merge_plan_resolves_merge_identities() {
+    fn merge_catalog_resolves_merge_identities_and_looks_up_placements() {
         let identity = FrameMergeSite {
             addr: NodeAddress::Unwind,
             slot: Position::Local(0),
         };
         let resolved = SsaValueId::new(12);
 
-        let merge_plan = MergePlan::new(BTreeMap::from([(
-            identity,
-            Merge {
-                value: resolved,
-                block: BlockId::new(0),
-            },
-        )]));
-        let actual = merge_plan
+        let block = BlockId::new(0);
+        let merge_catalog = MergeCatalog::new(
+            BTreeMap::from([(
+                identity,
+                Merge {
+                    value: resolved,
+                    block,
+                },
+            )]),
+            [block],
+        )
+        .expect("valid merge catalog");
+        let actual = merge_catalog
             .resolve(bytecode_analysis::Value::Merged(identity))
             .expect("known merge identity resolves");
 
         assert_eq!(actual, resolved);
+        assert_eq!(merge_catalog.block_for(resolved), Some(block));
+    }
+
+    #[test]
+    fn merge_catalog_rejects_duplicate_provisional_values() {
+        let value = SsaValueId::new(12);
+        let block = BlockId::new(0);
+        let merges = BTreeMap::from([
+            (
+                FrameMergeSite {
+                    addr: NodeAddress::entry(0.into()),
+                    slot: Position::Local(0),
+                },
+                Merge { value, block },
+            ),
+            (
+                FrameMergeSite {
+                    addr: NodeAddress::Unwind,
+                    slot: Position::Local(0),
+                },
+                Merge { value, block },
+            ),
+        ]);
+
+        assert!(matches!(
+            MergeCatalog::new(merges, [block]),
+            Err(Error::MalformedControlFlow)
+        ));
+    }
+
+    #[test]
+    fn merge_catalog_rejects_missing_placement() {
+        let merges = BTreeMap::from([(
+            FrameMergeSite {
+                addr: NodeAddress::Unwind,
+                slot: Position::Local(0),
+            },
+            Merge {
+                value: SsaValueId::new(12),
+                block: BlockId::new(1),
+            },
+        )]);
+
+        assert!(matches!(
+            MergeCatalog::new(merges, [BlockId::new(0)]),
+            Err(Error::MalformedControlFlow)
+        ));
+    }
+
+    #[test]
+    fn merge_catalog_rejects_duplicate_blocks() {
+        let block = BlockId::new(0);
+
+        assert!(matches!(
+            MergeCatalog::new(BTreeMap::new(), [block, block]),
+            Err(Error::MalformedControlFlow)
+        ));
+    }
+
+    #[test]
+    fn resolving_unknown_merge_site_is_malformed() {
+        let known = FrameMergeSite {
+            addr: NodeAddress::Unwind,
+            slot: Position::Local(0),
+        };
+        let unknown = FrameMergeSite {
+            addr: NodeAddress::entry(0.into()),
+            slot: Position::Local(0),
+        };
+        let merge_catalog = MergeCatalog::new(
+            BTreeMap::from([(
+                known,
+                Merge {
+                    value: SsaValueId::new(12),
+                    block: BlockId::new(0),
+                },
+            )]),
+            [BlockId::new(0)],
+        )
+        .expect("valid merge catalog");
+
+        assert!(matches!(
+            merge_catalog.resolve(bytecode_analysis::Value::Merged(unknown)),
+            Err(Error::MalformedControlFlow)
+        ));
     }
 }

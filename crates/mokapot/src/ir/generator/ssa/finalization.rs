@@ -9,7 +9,7 @@ use crate::ir::{
         error::Error,
         identity::SsaValueId,
         ssa::{
-            merge::MergePlan,
+            merge::MergeCatalog,
             model::{Phi, Successor},
             simplify::SimplifiedPhis,
         },
@@ -20,7 +20,7 @@ type PhiCandidate = (SsaValueId, Vec<(BlockId, SsaValueId)>);
 
 pub(super) fn finalize(
     blocks: Vec<block_formation::Block>,
-    merge_plan: &MergePlan,
+    merge_catalog: &MergeCatalog,
     simplified: SimplifiedPhis,
 ) -> Result<Vec<model::Block>, Error> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
@@ -33,7 +33,7 @@ pub(super) fn finalize(
     };
     let mut phis_by_block = BTreeMap::<BlockId, Vec<PhiCandidate>>::new();
     for (value, inputs) in simplified.candidates {
-        let block = merge_plan
+        let block = merge_catalog
             .block_for(value)
             .ok_or(Error::MalformedControlFlow)?;
         phis_by_block
@@ -47,7 +47,7 @@ pub(super) fn finalize(
         finalized.push(finalize_block(
             block,
             phis_by_block.remove(&id).unwrap_or_default(),
-            merge_plan,
+            merge_catalog,
             &canonical,
         )?);
     }
@@ -60,7 +60,7 @@ pub(super) fn finalize(
 fn finalize_block(
     block: block_formation::Block,
     phis: Vec<PhiCandidate>,
-    merge_plan: &MergePlan,
+    merge_catalog: &MergeCatalog,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
 ) -> Result<model::Block, Error> {
     let block_formation::Block {
@@ -71,7 +71,7 @@ fn finalize_block(
         caught_exception,
     } = block;
     let (terminator, terminator_source, arms) = end.into_parts();
-    let resolve = |operand| merge_plan.resolve(operand).map(canonical);
+    let resolve = |operand| merge_catalog.resolve(operand).map(canonical);
     let caught_exception = caught_exception.map(canonical);
     let phis = phis
         .into_iter()
