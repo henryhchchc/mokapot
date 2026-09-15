@@ -1,14 +1,14 @@
-use crate::ir::generator::instruction_graph::frame::JvmFrameError;
+use crate::ir::generator::bytecode_analysis::jvm::FrameError;
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]
-    FrameError(#[from] JvmFrameError),
+    FrameError(#[from] FrameError),
     /// An error that occurs when merging two stack frames.
     #[error("Error when merging two stack frames: {0}")]
-    FrameMergeError(JvmFrameError),
+    FrameMergeError(FrameError),
     /// An error that occurs when a method does not have a body.
     #[error("The method does not have a body")]
     NoMethodBody,

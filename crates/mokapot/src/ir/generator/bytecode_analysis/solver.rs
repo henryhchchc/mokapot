@@ -9,11 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 use std::collections::HashSet;
 
-use super::{
-    Builder, NodeAddress,
-    model::{Edge, FrameMergeSite, Node, Value},
-};
-use crate::ir::generator::{error::Error, instruction_graph::frame::Frame};
+use super::{NodeGraphBuilder, Edge, FrameMergeSite, Node, NodeAddress, Value};
+use crate::ir::generator::{bytecode_analysis::jvm::Frame, error::Error};
 
 struct State {
     entry_input: (NodeAddress, Frame<Value>),
@@ -205,7 +202,7 @@ fn edge_targets(outgoing: &[Edge]) -> BTreeSet<NodeAddress> {
 }
 
 pub(super) fn build_to_fixpoint(
-    builder: &mut Builder<'_>,
+    builder: &mut NodeGraphBuilder<'_>,
     entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
 ) -> Result<BTreeMap<NodeAddress, Node>, Error> {
@@ -270,11 +267,11 @@ mod tests {
         ir::{
             control_flow::ControlTransfer,
             generator::{
-                identity::SsaValueId,
-                instruction_graph::{
+                bytecode_analysis::{
                     RegisterInstruction,
-                    frame::{Position, ValueCategory::Category1},
+                    jvm::{Position, ValueCategory::Category1},
                 },
+                identity::SsaValueId,
                 tests::method,
             },
         },
@@ -361,7 +358,7 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut builder = Builder::for_method(&method).expect("valid method");
+        let mut builder = NodeGraphBuilder::for_method(&method).expect("valid method");
         let nodes = builder.build_reachable_nodes().expect("valid loop");
 
         let mut incoming_frame = nodes[&NodeAddress::entry(2.into())].incoming_frame.clone();

@@ -53,19 +53,18 @@ pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Err
         )?);
     }
 
-    Ok(MokaIRMethod {
-        access_flags: method.access_flags,
-        name: method.name.clone(),
-        descriptor: method.descriptor.clone(),
-        owner: method.owner.clone(),
-        entry_block: ssa.entry,
+    let method = MokaIRMethod::new(
+        method,
+        ssa.entry,
         blocks,
         source_map,
         this_value,
         parameter_values,
         caught_exceptions,
-        value_definitions: allocation.definitions,
-    })
+        allocation.definitions,
+    );
+
+    Ok(method)
 }
 
 struct BlockInstructions {

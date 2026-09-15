@@ -4,8 +4,8 @@ use crate::{
         OperationKind, TerminatorKind,
         expression::Expression,
         generator::{
+            bytecode_analysis::{NodeAddress, RegisterInstruction, ReturnAddress},
             identity::SsaValueId,
-            instruction_graph::{NodeAddress, RegisterInstruction, ReturnAddress},
         },
     },
     jvm::ConstantValue,
@@ -20,7 +20,7 @@ fn pseudo_and_legacy_instructions_become_semantic_gotos() {
             target: NodeAddress::Unwind,
         },
         RegisterInstruction::SubroutineReturn(
-            crate::ir::generator::instruction_graph::Value::ReturnAddress(ReturnAddress::for_test(
+            crate::ir::generator::bytecode_analysis::Value::ReturnAddress(ReturnAddress::for_test(
                 0,
             )),
         ),
@@ -47,7 +47,7 @@ fn fallible_definition_becomes_an_operation_and_terminator() {
     assert!(matches!(
         operation,
         Some(OperationKind::Definition {
-            value: crate::ir::generator::instruction_graph::Value::Ssa(actual),
+            value: crate::ir::generator::bytecode_analysis::Value::Ssa(actual),
             ..
         }) if actual == value
     ));

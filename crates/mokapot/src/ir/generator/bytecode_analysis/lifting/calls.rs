@@ -2,13 +2,13 @@ use crate::{
     ir::{
         expression::Expression,
         generator::{
-            error::Error,
-            identity::SsaValueId,
-            instruction_graph::{
+            bytecode_analysis::{
                 RegisterInstruction, Value,
-                frame::ValueCategory::{self, Category1},
+                jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
+            error::Error,
+            identity::SsaValueId,
         },
     },
     jvm::references::MethodRef,

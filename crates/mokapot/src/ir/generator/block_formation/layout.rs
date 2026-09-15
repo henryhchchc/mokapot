@@ -6,9 +6,9 @@ use crate::ir::{
     BlockId,
     control_flow::ControlTransfer,
     generator::{
+        bytecode_analysis::{self, FrameMergeSite, NodeAddress},
         error::Error,
         identity::SsaValueId,
-        instruction_graph::{self, FrameMergeSite, NodeAddress},
     },
 };
 
@@ -21,7 +21,7 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(instruction_graph: &instruction_graph::Graph) -> Result<Self, Error> {
+    pub fn discover(instruction_graph: &bytecode_analysis::NodeGraph) -> Result<Self, Error> {
         let reachable = instruction_graph.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(Error::MalformedControlFlow);
@@ -83,7 +83,7 @@ impl BlockLayout {
 }
 
 fn predecessor_addrs(
-    addrs: &BTreeMap<NodeAddress, instruction_graph::Node>,
+    addrs: &BTreeMap<NodeAddress, bytecode_analysis::Node>,
 ) -> BTreeMap<NodeAddress, BTreeSet<NodeAddress>> {
     let mut predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>> = BTreeMap::new();
     for (&source, facts) in addrs {
@@ -98,7 +98,7 @@ fn predecessor_addrs(
 }
 
 fn discover_leaders(
-    instruction_graph: &instruction_graph::Graph,
+    instruction_graph: &bytecode_analysis::NodeGraph,
     reachable: &[NodeAddress],
     predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
 ) -> Result<BTreeSet<NodeAddress>, Error> {

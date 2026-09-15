@@ -4,9 +4,9 @@ use crate::ir::{
     BlockId,
     generator::{
         block_formation,
+        bytecode_analysis::{self, FrameMergeSite, jvm::Frame},
         error::Error,
         identity::SsaValueId,
-        instruction_graph::{self, FrameMergeSite, frame::Frame},
     },
 };
 
@@ -33,15 +33,15 @@ impl MergePlan {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub fn resolve(&self, operand: instruction_graph::Value) -> Result<SsaValueId, Error> {
+    pub fn resolve(&self, operand: bytecode_analysis::Value) -> Result<SsaValueId, Error> {
         match operand {
-            instruction_graph::Value::Ssa(value) => Ok(value),
-            instruction_graph::Value::Merged(identity) => self
+            bytecode_analysis::Value::Ssa(value) => Ok(value),
+            bytecode_analysis::Value::Merged(identity) => self
                 .merge_values
                 .get(&identity)
                 .copied()
                 .ok_or(Error::MalformedControlFlow),
-            instruction_graph::Value::ReturnAddress(_) | instruction_graph::Value::Invalid => {
+            bytecode_analysis::Value::ReturnAddress(_) | bytecode_analysis::Value::Invalid => {
                 Err(Error::MalformedControlFlow)
             }
         }
@@ -54,7 +54,7 @@ pub(super) fn collect_phi_candidates(
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, Error> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
-        BTreeMap::<BlockId, Vec<(BlockId, &Frame<instruction_graph::Value>)>>::new();
+        BTreeMap::<BlockId, Vec<(BlockId, &Frame<bytecode_analysis::Value>)>>::new();
     for source in blocks {
         for arm in &source.arms {
             incoming_by_target
@@ -130,8 +130,8 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &Frame<instruction_graph::Value>,
-    source: &Frame<instruction_graph::Value>,
+    target: &Frame<bytecode_analysis::Value>,
+    source: &Frame<bytecode_analysis::Value>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, Error> {
     target
@@ -140,11 +140,11 @@ fn paired_frame_values(
         .into_iter()
         .map(|(target, source)| match (target, source) {
             (
-                Some(instruction_graph::Value::ReturnAddress(lhs)),
-                Some(instruction_graph::Value::ReturnAddress(rhs)),
+                Some(bytecode_analysis::Value::ReturnAddress(lhs)),
+                Some(bytecode_analysis::Value::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Some(instruction_graph::Value::ReturnAddress(_)), _)
-            | (_, Some(instruction_graph::Value::ReturnAddress(_))) => {
+            (Some(bytecode_analysis::Value::ReturnAddress(_)), _)
+            | (_, Some(bytecode_analysis::Value::ReturnAddress(_))) => {
                 Err(Error::MalformedControlFlow)
             }
             (Some(result), Some(value)) => Ok((
@@ -166,7 +166,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            instruction_graph::{NodeAddress, frame::Position},
+            bytecode_analysis::{NodeAddress, jvm::Position},
         },
     };
 
@@ -182,7 +182,7 @@ mod tests {
             1,
             0,
             None,
-            &[instruction_graph::Value::Ssa(result)],
+            &[bytecode_analysis::Value::Ssa(result)],
         )
         .expect("frame fits descriptor");
         let preheader_frame = Frame::for_method_entry(
@@ -190,7 +190,7 @@ mod tests {
             1,
             0,
             None,
-            &[instruction_graph::Value::Ssa(incoming)],
+            &[bytecode_analysis::Value::Ssa(incoming)],
         )
         .expect("frame fits descriptor");
         let blocks = vec![
@@ -235,7 +235,7 @@ mod tests {
 
         let merge_plan = MergePlan::new(BTreeMap::from([(identity, resolved)]), BTreeMap::new());
         let actual = merge_plan
-            .resolve(instruction_graph::Value::Merged(identity))
+            .resolve(bytecode_analysis::Value::Merged(identity))
             .expect("known merge identity resolves");
 
         assert_eq!(actual, resolved);

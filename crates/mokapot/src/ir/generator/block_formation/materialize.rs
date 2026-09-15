@@ -7,8 +7,8 @@ use crate::{
         BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
+            bytecode_analysis::{self, NodeAddress, RegisterInstruction, jvm::Frame},
             error::Error,
-            instruction_graph::{self, NodeAddress, RegisterInstruction, frame::Frame},
         },
     },
     jvm::code::ProgramCounter,
@@ -20,7 +20,7 @@ use super::{
 };
 
 pub(super) fn materialize_blocks(
-    mut instruction_nodes: BTreeMap<NodeAddress, instruction_graph::Node>,
+    mut instruction_nodes: BTreeMap<NodeAddress, bytecode_analysis::Node>,
     layout: &BlockLayout,
 ) -> Result<Vec<Block>, Error> {
     let blocks = layout
@@ -38,7 +38,7 @@ pub(super) fn materialize_blocks(
 fn materialize_block(
     id: BlockId,
     addrs: &[NodeAddress],
-    instruction_nodes: &mut BTreeMap<NodeAddress, instruction_graph::Node>,
+    instruction_nodes: &mut BTreeMap<NodeAddress, bytecode_analysis::Node>,
     layout: &BlockLayout,
 ) -> Result<Block, Error> {
     let mut entry_frame = None;
@@ -49,7 +49,7 @@ fn materialize_block(
     let mut arms = Vec::new();
 
     for (index, addr) in addrs.iter().copied().enumerate() {
-        let instruction_graph::Node {
+        let bytecode_analysis::Node {
             incoming_frame,
             instruction,
             can_throw_synchronously,
@@ -103,9 +103,9 @@ fn materialize_internal_operation(
     addr: NodeAddress,
     instruction: RegisterInstruction,
     can_throw_synchronously: bool,
-    outgoing: &[instruction_graph::Edge],
+    outgoing: &[bytecode_analysis::Edge],
     next: NodeAddress,
-) -> Result<Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>, Error> {
+) -> Result<Option<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>, Error> {
     if instruction.is_explicit_transfer()
         || can_throw_synchronously
         || outgoing.len() != 1
@@ -115,7 +115,7 @@ fn materialize_internal_operation(
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: instruction_graph::Value::Ssa(value),
+            value: bytecode_analysis::Value::Ssa(value),
             expr,
         }),
         RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
@@ -141,8 +141,8 @@ fn materialize_internal_operation(
 }
 
 struct BlockEnd {
-    operation: Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>,
-    terminator: TerminatorKind<instruction_graph::Value>,
+    operation: Option<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>,
+    terminator: TerminatorKind<bytecode_analysis::Value>,
     terminator_source: Option<ProgramCounter>,
     arms: Vec<Arm>,
 }
@@ -151,7 +151,7 @@ fn materialize_block_end(
     addr: NodeAddress,
     instruction: RegisterInstruction,
     can_throw_synchronously: bool,
-    outgoing: Vec<instruction_graph::Edge>,
+    outgoing: Vec<bytecode_analysis::Edge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
@@ -188,7 +188,7 @@ fn materialize_block_end(
 pub(super) fn insert_entry_preheader(
     mut blocks: Vec<Block>,
     layout: &BlockLayout,
-    initial_frame: Frame<instruction_graph::Value>,
+    initial_frame: Frame<bytecode_analysis::Value>,
 ) -> Vec<Block> {
     if layout.has_entry_preheader() {
         let entry_block = Block {
@@ -217,8 +217,8 @@ pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
     is_fallible: bool,
 ) -> (
-    Option<OperationKind<instruction_graph::Value>>,
-    TerminatorKind<instruction_graph::Value>,
+    Option<OperationKind<bytecode_analysis::Value>>,
+    TerminatorKind<bytecode_analysis::Value>,
 ) {
     match instruction {
         RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
@@ -239,7 +239,7 @@ pub(super) fn classify_block_end(
         RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
         RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
-                value: instruction_graph::Value::Ssa(value),
+                value: bytecode_analysis::Value::Ssa(value),
                 expr,
             }),
             implicit_terminator(is_fallible),
@@ -251,7 +251,7 @@ pub(super) fn classify_block_end(
     }
 }
 
-const fn implicit_terminator(is_fallible: bool) -> TerminatorKind<instruction_graph::Value> {
+const fn implicit_terminator(is_fallible: bool) -> TerminatorKind<bytecode_analysis::Value> {
     if is_fallible {
         TerminatorKind::Fallible
     } else {
