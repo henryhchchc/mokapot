@@ -37,8 +37,9 @@ impl MokaIRMethod {
     ///
     /// # Errors
     ///
-    /// Returns [`MokaIRBuildError`] when the method has no body or its reachable
-    /// control flow cannot be represented as valid Moka IR.
+    /// Returns [`MokaIRBuildError`] when the method has no body, its reachable
+    /// bytecode is invalid or unsupported, legacy-subroutine expansion exceeds
+    /// its safety limit, or an internal construction invariant is violated.
     pub fn from_method(method: &JvmMethod) -> Result<Self, MokaIRBuildError> {
         generator::generate(method)
     }

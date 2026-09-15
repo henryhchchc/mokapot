@@ -3,7 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::NodeAddress;
-use crate::{ir::generator::error::Error, jvm::code::ProgramCounter};
+use crate::{
+    ir::generator::error::{Error, MalformedBytecode, UnsupportedLegacySubroutine},
+    jvm::code::ProgramCounter,
+};
 
 const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 
@@ -94,7 +97,9 @@ impl Expander {
             context: parent,
         } = addr
         else {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a legacy subroutine call has no bytecode instruction",
+            ));
         };
         let mut cursor = Some(parent);
         while let Some(context) = cursor {
@@ -102,7 +107,10 @@ impl Expander {
                 break;
             };
             if activation.target == target {
-                return Err(Error::MalformedControlFlow);
+                return Err(Error::UnsupportedLegacySubroutine {
+                    pc: call_site,
+                    kind: UnsupportedLegacySubroutine::RecursiveEntry,
+                });
             }
             cursor = Some(activation.parent);
         }
@@ -138,17 +146,22 @@ impl Expander {
             pc: return_pc,
         } = addr
         else {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a legacy subroutine return has no bytecode instruction",
+            ));
         };
         let mut cursor = current;
         loop {
-            let activation = self
-                .activation(cursor)?
-                .ok_or(Error::MalformedControlFlow)?;
+            let activation = self.activation(cursor)?.ok_or_else(|| {
+                Error::malformed(Some(return_pc), MalformedBytecode::InvalidSubroutineReturn)
+            })?;
             if cursor == address.0 {
                 match self.return_pcs.get(&cursor).copied() {
                     Some(previous) if previous != return_pc => {
-                        return Err(Error::MalformedControlFlow);
+                        return Err(Error::UnsupportedLegacySubroutine {
+                            pc: return_pc,
+                            kind: UnsupportedLegacySubroutine::AmbiguousReturn,
+                        });
                     }
                     None => {
                         self.return_pcs.insert(cursor, return_pc);
@@ -162,9 +175,11 @@ impl Expander {
     }
 
     fn activation(&self, context: Context) -> Result<Option<Activation>, Error> {
+        let index = usize::try_from(context.0)
+            .map_err(|_| Error::internal("a subroutine context index cannot be addressed"))?;
         self.activations
-            .get(usize::try_from(context.0).map_err(|_| Error::MalformedControlFlow)?)
+            .get(index)
             .copied()
-            .ok_or(Error::MalformedControlFlow)
+            .ok_or_else(|| Error::internal("a subroutine context has no activation slot"))
     }
 }

@@ -12,7 +12,10 @@ fn allocation_rejects_duplicate_temporary_values() {
     );
     assert!(matches!(
         allocation.value(SsaValueId::new(0), ValueDefinition::This),
-        Err(Error::MalformedControlFlow)
+        Err(Error::InternalInvariant {
+            message: "a temporary value identity has multiple definitions",
+            ..
+        })
     ));
 }
 
@@ -33,10 +36,16 @@ fn allocation_preserves_sparse_temporary_value_gaps() {
     );
     assert!(matches!(
         allocation.resolve(SsaValueId::new(2)),
-        Err(Error::MalformedControlFlow)
+        Err(Error::InternalInvariant {
+            message: "a temporary value has no emitted definition",
+            ..
+        })
     ));
     assert!(matches!(
         allocation.resolve(SsaValueId::new(4)),
-        Err(Error::MalformedControlFlow)
+        Err(Error::InternalInvariant {
+            message: "a temporary value has no emitted definition",
+            ..
+        })
     ));
 }

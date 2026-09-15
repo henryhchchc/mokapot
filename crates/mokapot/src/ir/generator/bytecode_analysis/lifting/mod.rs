@@ -49,7 +49,9 @@ impl Executor<'_> {
         use JVM::*;
 
         if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a JVM instruction is attached to a synthetic node",
+            ));
         }
         let mut cx = Context {
             executor: self,

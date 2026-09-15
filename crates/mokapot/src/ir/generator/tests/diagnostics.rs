@@ -1,0 +1,113 @@
+use super::*;
+use crate::ir::{MalformedBytecode, MokaIRFrameError};
+
+#[test]
+fn reports_empty_code_at_the_method_boundary() {
+    let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: None,
+            kind: MalformedBytecode::MissingEntry,
+        })
+    ));
+}
+
+#[test]
+fn reports_a_missing_jump_target_at_that_target() {
+    let method = method([(0, Instruction::Goto(10.into()))], "()V", vec![]);
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::MissingInstruction,
+        }) if pc == 10.into()
+    ));
+}
+
+#[test]
+fn reports_frame_sources_at_the_executed_instruction() {
+    let method = method([(3, Instruction::IReturn)], "()I", vec![]);
+
+    let error = build(&method).expect_err("the empty operand stack cannot return a value");
+    assert!(matches!(
+        error,
+        MokaIRBuildError::InvalidFrame {
+            pc: Some(pc),
+            source: MokaIRFrameError::StackUnderflow,
+        } if pc == 3.into()
+    ));
+}
+
+#[test]
+fn reports_a_missing_fallthrough_at_the_source_instruction() {
+    let method = method([(4, Instruction::Nop)], "()V", vec![]);
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::MissingFallthrough,
+        }) if pc == 4.into()
+    ));
+}
+
+#[test]
+fn reports_method_entry_frame_initialization_failures() {
+    let mut method = method([(0, Instruction::Return)], "(I)V", vec![]);
+    method.body.as_mut().expect("method has a body").max_locals = 0;
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::InvalidFrame {
+            pc: None,
+            source: MokaIRFrameError::LocalIndexOutOfBounds,
+        })
+    ));
+}
+
+#[test]
+fn reports_an_invalid_legacy_return_operand() {
+    let method = method(
+        [
+            (0, Instruction::IConst0),
+            (1, Instruction::IStore0),
+            (2, Instruction::Ret(0)),
+        ],
+        "()V",
+        vec![],
+    );
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::InvalidSubroutineReturn,
+        }) if pc == 2.into()
+    ));
+}
+
+#[test]
+fn reports_a_return_address_used_as_an_ordinary_value() {
+    let method = method(
+        [
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::ALoad0),
+            (12, Instruction::Ret(0)),
+        ],
+        "()V",
+        vec![],
+    );
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::InvalidFrameValue,
+        }) if pc == 11.into()
+    ));
+}

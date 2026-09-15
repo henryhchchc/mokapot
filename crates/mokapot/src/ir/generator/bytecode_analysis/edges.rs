@@ -10,7 +10,10 @@ use crate::{
             path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
-        generator::{bytecode_analysis::jvm::Frame, error::Error},
+        generator::{
+            bytecode_analysis::jvm::Frame,
+            error::{Error, MalformedBytecode},
+        },
     },
     jvm::{ConstantValue, code::ProgramCounter},
 };
@@ -21,7 +24,9 @@ impl Executor<'_> {
         addr: NodeAddress,
         incoming_frame: &Frame<Value>,
     ) -> Result<Vec<Edge>, Error> {
-        let pc = addr.source_pc().ok_or(Error::MalformedControlFlow)?;
+        let pc = addr
+            .source_pc()
+            .ok_or_else(|| Error::internal("exceptional control flow has no source instruction"))?;
         let handlers: Vec<_> = self
             .body()
             .exception_table
@@ -93,7 +98,9 @@ impl Executor<'_> {
             ..
         } = addr
         else {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "handler-entry control flow does not originate at a handler",
+            ));
         };
         Ok(vec![Edge {
             target: self.bytecode_addr_at(addr, handler_pc)?,
@@ -210,7 +217,13 @@ impl Executor<'_> {
             } => self.build_switch_edges(addr, normal_frame, *match_value, branches, *default)?,
             RegisterInstruction::SubroutineReturn(value) => {
                 let Value::ReturnAddress(address) = value else {
-                    return Err(Error::MalformedControlFlow);
+                    let pc = addr.source_pc().ok_or_else(|| {
+                        Error::internal("a subroutine return has no source instruction")
+                    })?;
+                    return Err(Error::malformed(
+                        Some(pc),
+                        MalformedBytecode::InvalidSubroutineReturn,
+                    ));
                 };
                 vec![Edge {
                     target: self.return_from(addr, *address)?,

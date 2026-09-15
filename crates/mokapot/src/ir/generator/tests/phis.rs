@@ -55,7 +55,10 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 
     assert!(matches!(
         build(&method),
-        Err(MokaIRBuildError::FrameError(_))
+        Err(MokaIRBuildError::InvalidFrame {
+            pc: Some(pc),
+            ..
+        }) if pc == 6.into()
     ));
 }
 

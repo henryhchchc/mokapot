@@ -21,7 +21,8 @@ mod error;
 mod identity;
 mod ssa;
 
-pub use error::Error as MokaIRBuildError;
+pub use bytecode_analysis::jvm::FrameError as MokaIRFrameError;
+pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedLegacySubroutine};
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 

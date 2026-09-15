@@ -45,7 +45,7 @@ pub(super) fn finalize(
     if phis_by_block.is_empty() {
         Ok(finalized)
     } else {
-        Err(Error::MalformedControlFlow)
+        Err(Error::internal("a retained phi targets no scalar block"))
     }
 }
 

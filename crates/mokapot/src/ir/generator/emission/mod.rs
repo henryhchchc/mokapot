@@ -27,7 +27,8 @@ pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Err
         .into_iter()
         .enumerate()
         .map(|(index, value)| {
-            let index = u16::try_from(index).map_err(|_| Error::MalformedControlFlow)?;
+            let index = u16::try_from(index)
+                .map_err(|_| Error::internal("the method parameter index cannot be represented"))?;
             allocation.value(value, ValueDefinition::Parameter(index))
         })
         .collect::<Result<_, _>>()?;
@@ -188,7 +189,7 @@ impl Allocation {
         self.next_instruction = self
             .next_instruction
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the instruction identity space is exhausted"))?;
         Ok(id)
     }
 
@@ -197,7 +198,7 @@ impl Allocation {
         self.next_edge = self
             .next_edge
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the edge identity space is exhausted"))?;
         Ok(id)
     }
 
@@ -209,20 +210,18 @@ impl Allocation {
         let value_index = u32::try_from(self.definitions.len())
             .ok()
             .filter(|index| *index < u32::MAX)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the value identity space is exhausted"))?;
         let temporary = ssa_index(temporary)?;
         let required_len = temporary
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
-        let additional = required_len.saturating_sub(self.values.len());
-        self.values
-            .try_reserve(additional)
-            .map_err(|_| Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the temporary value index cannot be addressed"))?;
         if self.values.len() < required_len {
             self.values.resize(required_len, None);
         }
         if self.values[temporary].is_some() {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a temporary value identity has multiple definitions",
+            ));
         }
         let value = ValueId::new(value_index);
         self.values[temporary] = Some(value);
@@ -234,10 +233,11 @@ impl Allocation {
         self.values
             .get(ssa_index(value)?)
             .and_then(|value| *value)
-            .ok_or(Error::MalformedControlFlow)
+            .ok_or_else(|| Error::internal("a temporary value has no emitted definition"))
     }
 }
 
 fn ssa_index(value: SsaValueId) -> Result<usize, Error> {
-    usize::try_from(value.index()).map_err(|_| Error::MalformedControlFlow)
+    usize::try_from(value.index())
+        .map_err(|_| Error::internal("a temporary value index cannot be addressed"))
 }

@@ -46,6 +46,15 @@ impl NodeAddress {
         }
     }
 
+    /// Returns the nearest source instruction for diagnostics.
+    pub const fn diagnostic_pc(self) -> Option<ProgramCounter> {
+        match self {
+            Self::Bytecode { pc, .. } => Some(pc),
+            Self::Handler { handler, .. } => Some(handler),
+            Self::Unwind => None,
+        }
+    }
+
     pub const fn context(self) -> Option<Context> {
         match self {
             Self::Bytecode { context, .. } | Self::Handler { context, .. } => Some(context),

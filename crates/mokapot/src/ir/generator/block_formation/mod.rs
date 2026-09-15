@@ -195,7 +195,9 @@ impl BlockEnd {
             }
             TerminatorKind::Unwind => self.arms.is_empty(),
         };
-        valid.then_some(()).ok_or(Error::MalformedControlFlow)
+        valid
+            .then_some(())
+            .ok_or_else(|| Error::internal("a terminator has incompatible control-flow arms"))
     }
 }
 

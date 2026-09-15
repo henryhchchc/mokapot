@@ -7,7 +7,7 @@ use crate::{
                 jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
-            error::Error,
+            error::{Error, MalformedBytecode},
         },
     },
     jvm::{ConstantValue, references::ClassRef},
@@ -44,7 +44,13 @@ impl Context<'_, '_, '_> {
     ) -> Result<RegisterInstruction, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
-            return Err(Error::MalformedControlFlow);
+            let pc = self.addr.source_pc().ok_or_else(|| {
+                Error::internal("a local-variable load has no source instruction")
+            })?;
+            return Err(Error::malformed(
+                Some(pc),
+                MalformedBytecode::InvalidFrameValue,
+            ));
         }
         self.frame.stack.push(value, category)?;
         Ok(RegisterInstruction::Erased)

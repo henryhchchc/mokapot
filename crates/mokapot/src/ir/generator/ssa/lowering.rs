@@ -7,7 +7,7 @@ use crate::ir::{
     generator::{
         block_formation::{self, FrameMerge},
         bytecode_analysis::{self, FrameMergeSite, jvm::Frame},
-        error::Error,
+        error::{Error, MalformedBytecode},
         identity::SsaValueId,
         ssa::model::{PhiCandidate, ScalarBlock, Successor},
     },
@@ -43,15 +43,20 @@ impl MergeCatalog {
                 .into_iter()
                 .try_fold(BTreeSet::new(), |mut known_blocks, block| {
                     if !known_blocks.insert(block) {
-                        return Err(Error::MalformedControlFlow);
+                        return Err(Error::internal("a scalar block identity is duplicated"));
                     }
                     Ok(known_blocks)
                 })?;
         let mut value_by_site = BTreeMap::new();
         let mut block_by_value = BTreeMap::new();
         for (site, FrameMerge { value, block }) in merges {
-            if !known_blocks.contains(&block) || block_by_value.insert(value, block).is_some() {
-                return Err(Error::MalformedControlFlow);
+            if !known_blocks.contains(&block) {
+                return Err(Error::internal("a frame merge targets no scalar block"));
+            }
+            if block_by_value.insert(value, block).is_some() {
+                return Err(Error::internal(
+                    "a frame-merge value identity is duplicated",
+                ));
             }
             value_by_site.insert(site, value);
         }
@@ -74,13 +79,14 @@ impl MergeCatalog {
     fn resolve(&self, operand: bytecode_analysis::Value) -> Result<SsaValueId, Error> {
         match operand {
             bytecode_analysis::Value::Ssa(value) => Ok(value),
-            bytecode_analysis::Value::Merged(site) => self
-                .value_by_site
-                .get(&site)
-                .copied()
-                .ok_or(Error::MalformedControlFlow),
+            bytecode_analysis::Value::Merged(site) => {
+                self.value_by_site.get(&site).copied().ok_or_else(|| {
+                    Error::internal("a frame-merge operand has no catalog entry")
+                        .at_instruction_if_present(site.addr.diagnostic_pc())
+                })
+            }
             bytecode_analysis::Value::ReturnAddress(_) | bytecode_analysis::Value::Invalid => {
-                Err(Error::MalformedControlFlow)
+                Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue))
             }
         }
     }
@@ -131,9 +137,12 @@ fn lower_block(
             operation
                 .try_map_values(&resolve)
                 .map(|operation| (source, operation))
+                .map_err(|error| error.at_instruction(source))
         })
         .collect::<Result<_, _>>()?;
-    let terminator = terminator.try_map_values(&resolve)?;
+    let terminator = terminator
+        .try_map_values(&resolve)
+        .map_err(|error| error.at_instruction_if_present(terminator_source))?;
     let successors = arms
         .into_iter()
         .map(|arm| {
@@ -199,7 +208,9 @@ fn collect_phi_candidates(
                     }
                     btree_map::Entry::Occupied(entry) if *entry.get() == value => {}
                     btree_map::Entry::Occupied(_) => {
-                        return Err(Error::MalformedControlFlow);
+                        return Err(Error::internal(
+                            "parallel control-flow inputs disagree on a phi value",
+                        ));
                     }
                 }
             }
@@ -219,7 +230,9 @@ fn collect_phi_candidates(
         }
     }
     if !incoming_by_target.is_empty() || !phis_by_block.is_empty() {
-        return Err(Error::MalformedControlFlow);
+        return Err(Error::internal(
+            "a control-flow input or phi targets no scalar block",
+        ));
     }
 
     loop {
@@ -255,7 +268,7 @@ fn paired_frame_values(
 ) -> Result<Vec<PairedFrameValue>, Error> {
     target
         .paired_slot_values(source)
-        .map_err(|_| Error::MalformedControlFlow)?
+        .map_err(|_| Error::internal("incoming block frames have incompatible shapes"))?
         .into_iter()
         .map(|(target, source)| match (target, source) {
             (
@@ -267,7 +280,7 @@ fn paired_frame_values(
             }),
             (Some(bytecode_analysis::Value::ReturnAddress(_)), _)
             | (_, Some(bytecode_analysis::Value::ReturnAddress(_))) => {
-                Err(Error::MalformedControlFlow)
+                Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue))
             }
             (Some(result), Some(value)) => Ok(PairedFrameValue {
                 result: Some(merge_catalog.resolve(*result)?),
@@ -463,7 +476,13 @@ mod tests {
             parameter_values: Vec::new(),
         };
 
-        assert!(matches!(lower(graph), Err(Error::MalformedControlFlow)));
+        assert!(matches!(
+            lower(graph),
+            Err(Error::InternalInvariant {
+                message: "parallel control-flow inputs disagree on a phi value",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -573,7 +592,10 @@ mod tests {
 
         assert!(matches!(
             MergeCatalog::new(merges, [block]),
-            Err(Error::MalformedControlFlow)
+            Err(Error::InternalInvariant {
+                message: "a frame-merge value identity is duplicated",
+                ..
+            })
         ));
     }
 
@@ -589,7 +611,10 @@ mod tests {
 
         assert!(matches!(
             MergeCatalog::new(merges, [BlockId::new(0)]),
-            Err(Error::MalformedControlFlow)
+            Err(Error::InternalInvariant {
+                message: "a frame merge targets no scalar block",
+                ..
+            })
         ));
     }
 
@@ -599,7 +624,10 @@ mod tests {
 
         assert!(matches!(
             MergeCatalog::new(BTreeMap::new(), [block, block]),
-            Err(Error::MalformedControlFlow)
+            Err(Error::InternalInvariant {
+                message: "a scalar block identity is duplicated",
+                ..
+            })
         ));
     }
 
@@ -610,7 +638,10 @@ mod tests {
 
         assert!(matches!(
             catalog.resolve(bytecode_analysis::Value::Merged(merge_site())),
-            Err(Error::MalformedControlFlow)
+            Err(Error::InternalInvariant {
+                pc: Some(pc),
+                message: "a frame-merge operand has no catalog entry",
+            }) if pc == 0.into()
         ));
     }
 }

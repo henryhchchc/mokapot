@@ -58,7 +58,8 @@ impl Context<'_, '_, '_> {
     ) -> Result<RegisterInstruction, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
-                let value = definition.ok_or(Error::MalformedControlFlow)?;
+                let value = definition
+                    .ok_or_else(|| Error::internal("a non-void call has no result identity"))?;
                 self.frame
                     .stack
                     .push(value.into(), ValueCategory::of_field_type(return_type))?;

@@ -29,7 +29,8 @@ pub(super) fn construct(graph: block_formation::BlockGraph) -> Result<Graph, Err
         this_value,
         parameter_values,
     } = lowering::lower(graph)?;
-    let simplified = simplify_phis(phi_candidates).map_err(|_| Error::MalformedControlFlow)?;
+    let simplified = simplify_phis(phi_candidates)
+        .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
     let blocks = finalization::finalize(blocks, simplified)?;
     Ok(Graph {
         entry,

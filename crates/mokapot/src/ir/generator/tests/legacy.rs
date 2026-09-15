@@ -195,13 +195,19 @@ fn rejects_recursive_and_root_level_legacy_returns() {
     );
     assert!(matches!(
         build(&recursive),
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(MokaIRBuildError::UnsupportedLegacySubroutine {
+            pc,
+            kind: UnsupportedLegacySubroutine::RecursiveEntry,
+        }) if pc == 11.into()
     ));
 
     let root_ret = method([(0, Instruction::Ret(0))], "()V", vec![]);
     assert!(matches!(
         build(&root_ret),
-        Err(MokaIRBuildError::FrameError(_) | MokaIRBuildError::MalformedControlFlow)
+        Err(MokaIRBuildError::InvalidFrame {
+            pc: Some(pc),
+            ..
+        }) if pc == 0.into()
     ));
 
     let multiple_returns = method(
@@ -219,6 +225,9 @@ fn rejects_recursive_and_root_level_legacy_returns() {
     );
     assert!(matches!(
         build(&multiple_returns),
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(MokaIRBuildError::UnsupportedLegacySubroutine {
+            kind: UnsupportedLegacySubroutine::AmbiguousReturn,
+            ..
+        })
     ));
 }

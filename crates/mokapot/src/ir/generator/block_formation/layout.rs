@@ -136,7 +136,7 @@ impl<'graph> Facts<'graph> {
         phi_values: &'graph BTreeMap<FrameMergeSite, SsaValueId>,
     ) -> Result<Self, Error> {
         if nodes.is_empty() {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal("the instruction graph is empty"));
         }
         let addresses = nodes.keys().copied().collect();
         let mut predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>> = BTreeMap::new();
@@ -147,8 +147,10 @@ impl<'graph> Facts<'graph> {
         }
         // The walks follow edge targets, which need not be leaders, so a target
         // the graph does not hold is malformed and would panic later.
-        if !predecessors.keys().all(|addr| nodes.contains_key(addr)) {
-            return Err(Error::MalformedControlFlow);
+        if predecessors.keys().any(|addr| !nodes.contains_key(addr)) {
+            return Err(Error::internal(
+                "an instruction edge targets a missing node",
+            ));
         }
         Ok(Self {
             nodes,
@@ -234,8 +236,8 @@ impl<'graph> Facts<'graph> {
             }
             previous = Some(addr);
         }
-        if !leaders.iter().all(|addr| self.nodes.contains_key(addr)) {
-            return Err(Error::MalformedControlFlow);
+        if leaders.iter().any(|addr| !self.nodes.contains_key(addr)) {
+            return Err(Error::internal("a block leader has no instruction node"));
         }
         Ok(leaders)
     }
@@ -265,7 +267,7 @@ fn allocate_block_ids(
                 .ok()
                 .and_then(|index| index.checked_add(block_offset))
                 .map(|index| (*addr, BlockId::new(index)))
-                .ok_or(Error::MalformedControlFlow)
+                .ok_or_else(|| Error::internal("the block identity space is exhausted"))
         })
         .collect()
 }
@@ -282,11 +284,14 @@ fn partition(
 ) -> Result<Vec<LayoutBlock>, Error> {
     let mut blocks = (0..block_count).map(|_| Vec::new()).collect::<Vec<_>>();
     for (addr, node) in nodes {
-        let block = block_of.get(&addr).ok_or(Error::MalformedControlFlow)?;
-        let index = usize::try_from(block.index()).map_err(|_| Error::MalformedControlFlow)?;
+        let block = block_of
+            .get(&addr)
+            .ok_or_else(|| Error::internal("an instruction node has no owning block"))?;
+        let index = usize::try_from(block.index())
+            .map_err(|_| Error::internal("an allocated block identity cannot be addressed"))?;
         blocks
             .get_mut(index)
-            .ok_or(Error::MalformedControlFlow)?
+            .ok_or_else(|| Error::internal("an allocated block identity is out of range"))?
             .push((addr, node));
     }
     Ok(blocks.into_iter().map(LayoutBlock::Nodes).collect())

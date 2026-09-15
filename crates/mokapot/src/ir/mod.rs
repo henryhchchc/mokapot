@@ -55,7 +55,9 @@ mod terminator;
 
 pub use basic_block::BasicBlock;
 pub use data_flow::{DefUseChain, UseSite};
-pub use generator::MokaIRBuildError;
+pub use generator::{
+    MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedLegacySubroutine,
+};
 pub use identity::{BlockId, EdgeId, InstructionId, ValueId};
 pub use method::MokaIRMethod;
 pub use operation::{Operation, OperationKind};

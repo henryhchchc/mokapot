@@ -5,7 +5,11 @@ use super::{
     subroutine::{self, ReturnAddress},
 };
 use crate::{
-    ir::generator::{bytecode_analysis::jvm::Frame, error::Error, identity::SsaValueId},
+    ir::generator::{
+        bytecode_analysis::jvm::Frame,
+        error::{Error, MalformedBytecode},
+        identity::SsaValueId,
+    },
     jvm::{
         Method,
         code::{MethodBody, ProgramCounter},
@@ -15,6 +19,15 @@ use crate::{
 
 impl<'method> Executor<'method> {
     pub fn execute(
+        &mut self,
+        addr: NodeAddress,
+        incoming_frame: Frame<Value>,
+    ) -> Result<Node, Error> {
+        self.execute_at(addr, incoming_frame)
+            .map_err(|error| error.at_instruction_if_present(addr.diagnostic_pc()))
+    }
+
+    fn execute_at(
         &mut self,
         addr: NodeAddress,
         incoming_frame: Frame<Value>,
@@ -38,7 +51,9 @@ impl<'method> Executor<'method> {
                 let jvm_instruction = self
                     .body
                     .instruction_at(pc)
-                    .ok_or(Error::MalformedControlFlow)?
+                    .ok_or_else(|| {
+                        Error::malformed(Some(pc), MalformedBytecode::MissingInstruction)
+                    })?
                     .clone();
                 let can_throw_synchronously =
                     self.fallibility.is_synchronously_fallible(&jvm_instruction);
@@ -72,7 +87,7 @@ impl<'method> Executor<'method> {
             let (first_pc, _) = body
                 .instructions
                 .entry_point()
-                .ok_or(Error::MalformedControlFlow)?;
+                .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
             NodeAddress::entry(first_pc)
         };
         let mut value_id_allocator = ValueIdAllocator::default();
@@ -148,7 +163,9 @@ impl<'method> Executor<'method> {
 
     pub fn definition_id_at(&mut self, addr: NodeAddress) -> Result<SsaValueId, Error> {
         if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "an ordinary value definition has no bytecode instruction",
+            ));
         }
         if let Some(&id) = self.definition_ids.get(&addr) {
             return Ok(id);
@@ -160,7 +177,9 @@ impl<'method> Executor<'method> {
 
     pub fn caught_exception_id_at(&mut self, addr: NodeAddress) -> Result<SsaValueId, Error> {
         if !matches!(addr, NodeAddress::Handler { .. }) {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a caught-exception definition is not a handler entry",
+            ));
         }
         if let Some(&id) = self.caught_exception_ids.get(&addr) {
             return Ok(id);
@@ -174,12 +193,16 @@ impl<'method> Executor<'method> {
         self.body
             .instructions
             .next_pc_of(&pc)
-            .ok_or(Error::MalformedControlFlow)
+            .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
     }
 
     pub fn fallthrough_addr(&mut self, addr: NodeAddress) -> Result<NodeAddress, Error> {
-        let pc = addr.source_pc().ok_or(Error::MalformedControlFlow)?;
-        let context = addr.context().ok_or(Error::MalformedControlFlow)?;
+        let pc = addr
+            .source_pc()
+            .ok_or_else(|| Error::internal("a fallthrough has no source instruction"))?;
+        let context = addr
+            .context()
+            .ok_or_else(|| Error::internal_at(pc, "a bytecode instruction has no context"))?;
         self.subroutine_expander
             .bytecode_addr(self.next_program_counter(pc)?, context)
     }
@@ -189,7 +212,9 @@ impl<'method> Executor<'method> {
         addr: NodeAddress,
         target: ProgramCounter,
     ) -> Result<NodeAddress, Error> {
-        let context = addr.context().ok_or(Error::MalformedControlFlow)?;
+        let context = addr
+            .context()
+            .ok_or_else(|| Error::internal("a control-flow source has no context"))?;
         self.subroutine_expander.bytecode_addr(target, context)
     }
 
@@ -198,7 +223,9 @@ impl<'method> Executor<'method> {
         addr: NodeAddress,
         handler: ProgramCounter,
     ) -> Result<NodeAddress, Error> {
-        let context = addr.context().ok_or(Error::MalformedControlFlow)?;
+        let context = addr
+            .context()
+            .ok_or_else(|| Error::internal("an exception source has no context"))?;
         self.subroutine_expander.handler_addr(handler, context)
     }
 
@@ -211,7 +238,9 @@ impl<'method> Executor<'method> {
         addr: NodeAddress,
         target: ProgramCounter,
     ) -> Result<(NodeAddress, ReturnAddress), Error> {
-        let pc = addr.source_pc().ok_or(Error::MalformedControlFlow)?;
+        let pc = addr
+            .source_pc()
+            .ok_or_else(|| Error::internal("a subroutine call has no source instruction"))?;
         let continuation = self.next_program_counter(pc)?;
         self.subroutine_expander
             .enter_subroutine(addr, target, continuation)
@@ -237,7 +266,7 @@ impl ValueIdAllocator {
         self.next_value_idx = self
             .next_value_idx
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the scalar value identity space is exhausted"))?;
         Ok(id)
     }
 }

@@ -33,7 +33,10 @@ pub(super) fn materialize_blocks(layout: BlockLayout) -> Result<Vec<Block>, Erro
         .into_iter()
         .enumerate()
         .map(|(index, block)| {
-            let id = BlockId::new(u32::try_from(index).map_err(|_| Error::MalformedControlFlow)?);
+            let id = BlockId::new(
+                u32::try_from(index)
+                    .map_err(|_| Error::internal("the block identity space is exhausted"))?,
+            );
             match block {
                 LayoutBlock::EntryPreheader { frame, target } => entry_preheader(id, frame, target),
                 LayoutBlock::Nodes(nodes) => materialize_block(id, nodes, &block_by_addr),
@@ -121,9 +124,10 @@ fn materialize_block(
 
     Ok(Block {
         id,
-        entry_frame: entry_frame.ok_or(Error::MalformedControlFlow)?,
+        entry_frame: entry_frame
+            .ok_or_else(|| Error::internal("a formed block has no entry frame"))?,
         operations,
-        end: end.ok_or(Error::MalformedControlFlow)?,
+        end: end.ok_or_else(|| Error::internal("a formed block has no terminator"))?,
         caught_exception,
     })
 }
@@ -135,11 +139,16 @@ fn caught_exception_at(
     if !addr.is_handler() {
         return Ok(None);
     }
-    match incoming_frame.handler_exception()? {
+    let exception = incoming_frame
+        .handler_exception()
+        .map_err(|_| Error::internal("a handler entry frame lacks exactly one exception"))?;
+    match exception {
         bytecode_analysis::Value::Ssa(value) => Ok(Some(*value)),
         bytecode_analysis::Value::ReturnAddress(_)
         | bytecode_analysis::Value::Merged(_)
-        | bytecode_analysis::Value::Invalid => Err(Error::MalformedControlFlow),
+        | bytecode_analysis::Value::Invalid => Err(Error::internal(
+            "a handler entry frame has no synthesized exception identity",
+        )),
     }
 }
 
@@ -156,7 +165,7 @@ fn materialize_internal_operation(
         .map(|operation| {
             addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(Error::MalformedControlFlow)
+                .ok_or_else(|| Error::internal("an operation has no source instruction"))
         })
         .transpose()
 }
@@ -185,7 +194,7 @@ fn materialize_block_end(
                     transfer: outgoing.transfer,
                     frame: outgoing.target_frame,
                 })
-                .ok_or(Error::MalformedControlFlow)
+                .ok_or_else(|| Error::internal("a control-flow edge targets no formed block"))
         })
         .collect::<Result<Vec<_>, _>>()?;
     let (operation, terminator) = classify_block_end(instruction, has_exceptional_exit);
@@ -193,7 +202,7 @@ fn materialize_block_end(
         .map(|operation| {
             addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(Error::MalformedControlFlow)
+                .ok_or_else(|| Error::internal("an operation has no source instruction"))
         })
         .transpose()?;
 

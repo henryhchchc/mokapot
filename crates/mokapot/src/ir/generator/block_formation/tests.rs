@@ -8,6 +8,7 @@ use crate::{
             bytecode_analysis::{
                 self, Edge, Node, NodeAddress, RegisterInstruction, ReturnAddress, jvm::Frame,
             },
+            error::Error,
             identity::SsaValueId,
         },
     },
@@ -129,7 +130,13 @@ fn block_end_rejects_mismatched_terminator_and_arm_shapes() {
             None,
             vec![arm(ControlTransfer::Exception(None))],
         )
-        .is_err()
+        .is_err_and(|error| matches!(
+            error,
+            Error::InternalInvariant {
+                message: "a terminator has incompatible control-flow arms",
+                ..
+            }
+        ))
     );
     assert!(
         BlockEnd::new(

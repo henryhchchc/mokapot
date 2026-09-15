@@ -257,7 +257,7 @@ pub(super) fn merge_input_frame_at(
                 true
             }
         })
-        .map_err(Error::FrameMergeError)
+        .map_err(|source| Error::from(source).at_instruction_if_present(addr.diagnostic_pc()))
 }
 
 #[cfg(test)]
@@ -341,6 +341,23 @@ mod tests {
             merge_input_frame_at(addr, &mut merged, frame(order[2])).expect("compatible frames");
             assert_eq!(first_local(&merged), expected);
         }
+    }
+
+    #[test]
+    fn incompatible_merge_reports_its_location_and_source() {
+        let addr = NodeAddress::entry(7.into());
+        let mut local_frame = frame(1);
+        let empty_frame =
+            Frame::for_method_entry(&"()V".parse().expect("valid descriptor"), 0, 0, None, &[])
+                .expect("frame fits descriptor");
+
+        assert!(matches!(
+            merge_input_frame_at(addr, &mut local_frame, empty_frame),
+            Err(Error::InvalidFrame {
+                pc: Some(pc),
+                source: crate::ir::generator::bytecode_analysis::jvm::FrameError::IncompatibleFrameShape,
+            }) if pc == 7.into()
+        ));
     }
 
     #[test]
