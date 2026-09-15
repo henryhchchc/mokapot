@@ -52,7 +52,7 @@ pub(crate) struct LocalVariables<V> {
 }
 
 impl<V> LocalVariables<V> {
-    fn invalidate_value_overlapping(&mut self, index: usize) {
+    fn invalidate_overlapping_category_2(&mut self, index: usize) {
         if index > 0
             && matches!(self.slots[index], LocalSlot::Reserved)
             && matches!(
@@ -99,7 +99,7 @@ impl<V> LocalVariables<V> {
         }
 
         for overwritten in index..end {
-            self.invalidate_value_overlapping(overwritten);
+            self.invalidate_overlapping_category_2(overwritten);
         }
 
         self.slots[index] = LocalSlot::Value(LocalValue { value, category });

@@ -26,8 +26,8 @@ pub use error::Error as MokaIRBuildError;
 use crate::{ir::MokaIRMethod, jvm::Method};
 
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let instruction_graph = bytecode_analysis::build_node_graph(method)?;
-    let block_graph = block_formation::form(instruction_graph)?;
+    let node_graph = bytecode_analysis::build_node_graph(method)?;
+    let block_graph = block_formation::form(node_graph)?;
     let ssa_graph = ssa::construct(block_graph)?;
     emission::emit(method, ssa_graph)
 }

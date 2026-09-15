@@ -22,8 +22,8 @@ pub(super) struct Graph {
 }
 
 /// Collects and simplifies phis, then resolves frame operands into scalar blocks.
-pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, Error> {
-    let block_formation::Graph {
+pub(super) fn construct(graph: block_formation::BlockGraph) -> Result<Graph, Error> {
+    let block_formation::BlockGraph {
         entry,
         blocks,
         phi_blocks,

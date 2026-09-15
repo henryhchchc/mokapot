@@ -78,7 +78,7 @@ pub(super) struct Node {
 }
 
 impl Node {
-    pub fn has_exceptional_exit(&self) -> bool {
+    pub(super) fn has_exceptional_exit(&self) -> bool {
         self.outgoing_edges.iter().any(|edge| {
             use ControlTransfer::{Exception, Unwind};
             matches!(edge.transfer, Exception(_) | Unwind)

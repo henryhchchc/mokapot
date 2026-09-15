@@ -9,15 +9,13 @@ use crate::{
         generator::{
             bytecode_analysis::{self, NodeAddress, RegisterInstruction, jvm::Frame},
             error::Error,
+            identity::SsaValueId,
         },
     },
     jvm::code::ProgramCounter,
 };
 
-use super::{
-    layout::BlockLayout,
-    model::{Arm, Block},
-};
+use super::{Arm, Block, layout::BlockLayout};
 
 pub(super) fn materialize_blocks(
     mut instruction_nodes: BTreeMap<NodeAddress, bytecode_analysis::Node>,
@@ -59,17 +57,7 @@ fn materialize_block(
             outgoing_edges,
         } = node;
         if index == 0 {
-            caught_exception = match addr {
-                NodeAddress::Handler { .. } => match incoming_frame.handler_exception()? {
-                    bytecode_analysis::Value::Ssa(value) => Some(*value),
-                    bytecode_analysis::Value::ReturnAddress(_)
-                    | bytecode_analysis::Value::Merged(_)
-                    | bytecode_analysis::Value::Invalid => {
-                        return Err(Error::MalformedControlFlow);
-                    }
-                },
-                NodeAddress::Bytecode { .. } | NodeAddress::Unwind => None,
-            };
+            caught_exception = caught_exception_at(addr, &incoming_frame)?;
             entry_frame = Some(incoming_frame);
         }
         let is_last = index + 1 == addrs.len();
@@ -109,15 +97,30 @@ fn materialize_block(
     })
 }
 
+fn caught_exception_at(
+    addr: NodeAddress,
+    incoming_frame: &Frame<bytecode_analysis::Value>,
+) -> Result<Option<SsaValueId>, Error> {
+    if !matches!(addr, NodeAddress::Handler { .. }) {
+        return Ok(None);
+    }
+    match incoming_frame.handler_exception()? {
+        bytecode_analysis::Value::Ssa(value) => Ok(Some(*value)),
+        bytecode_analysis::Value::ReturnAddress(_)
+        | bytecode_analysis::Value::Merged(_)
+        | bytecode_analysis::Value::Invalid => Err(Error::MalformedControlFlow),
+    }
+}
+
 fn materialize_internal_operation(
     addr: NodeAddress,
     instruction: RegisterInstruction,
-    can_throw_synchronously: bool,
+    has_exceptional_exit: bool,
     outgoing: &[bytecode_analysis::Edge],
     next: NodeAddress,
 ) -> Result<Option<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>, Error> {
     if instruction.is_explicit_transfer()
-        || can_throw_synchronously
+        || has_exceptional_exit
         || outgoing.len() != 1
         || outgoing[0].target != next
     {
@@ -160,7 +163,7 @@ struct BlockEnd {
 fn materialize_block_end(
     addr: NodeAddress,
     instruction: RegisterInstruction,
-    can_throw_synchronously: bool,
+    has_exceptional_exit: bool,
     outgoing: Vec<bytecode_analysis::Edge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, Error> {
@@ -178,7 +181,7 @@ fn materialize_block_end(
                 .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (operation, terminator) = classify_block_end(instruction, can_throw_synchronously);
+    let (operation, terminator) = classify_block_end(instruction, has_exceptional_exit);
     let operation = operation
         .map(|operation| {
             addr.source_pc()

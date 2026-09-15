@@ -6,7 +6,7 @@ use crate::ir::{
     BlockId,
     control_flow::ControlTransfer,
     generator::{
-        bytecode_analysis::{self, FrameMergeSite, NodeAddress},
+        bytecode_analysis::{self, FrameMergeSite, NodeAddress, NodeGraph},
         error::Error,
         identity::SsaValueId,
     },
@@ -21,22 +21,19 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(instruction_graph: &bytecode_analysis::NodeGraph) -> Result<Self, Error> {
-        let reachable = instruction_graph.nodes.keys().copied().collect::<Vec<_>>();
+    pub fn discover(node_graph: &NodeGraph) -> Result<Self, Error> {
+        let reachable = node_graph.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(Error::MalformedControlFlow);
         }
 
-        let predecessors = predecessor_addrs(&instruction_graph.nodes);
-        let leaders = discover_leaders(instruction_graph, &reachable, &predecessors)?;
+        let predecessors = predecessor_addrs(&node_graph.nodes);
+        let leaders = discover_leaders(node_graph, &reachable, &predecessors)?;
         let needs_entry_preheader = predecessors
-            .get(&instruction_graph.entry_addr)
+            .get(&node_graph.entry_addr)
             .is_some_and(|sources| !sources.is_empty());
-        let (entry, bytecode_entry, block_ids) = allocate_block_ids(
-            &leaders,
-            instruction_graph.entry_addr,
-            needs_entry_preheader,
-        )?;
+        let (entry, bytecode_entry, block_ids) =
+            allocate_block_ids(&leaders, node_graph.entry_addr, needs_entry_preheader)?;
         let grouped = group_addrs(&reachable, &block_ids)?;
 
         Ok(Self {
@@ -98,17 +95,12 @@ fn predecessor_addrs(
 }
 
 fn discover_leaders(
-    instruction_graph: &bytecode_analysis::NodeGraph,
+    node_graph: &NodeGraph,
     reachable: &[NodeAddress],
     predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
 ) -> Result<BTreeSet<NodeAddress>, Error> {
-    let mut leaders = BTreeSet::from([instruction_graph.entry_addr]);
-    leaders.extend(
-        instruction_graph
-            .phi_values
-            .keys()
-            .map(|identity| identity.addr),
-    );
+    let mut leaders = BTreeSet::from([node_graph.entry_addr]);
+    leaders.extend(node_graph.phi_values.keys().map(|identity| identity.addr));
     leaders.extend(
         reachable
             .iter()
@@ -122,7 +114,7 @@ fn discover_leaders(
             .map(|(target, _)| *target),
     );
 
-    for facts in instruction_graph.nodes.values() {
+    for facts in node_graph.nodes.values() {
         // A location that ends its block hands every arm to a fresh block.
         // Synchronously fallible operations qualify through their exceptional
         // arms, which they always have.
@@ -141,7 +133,7 @@ fn discover_leaders(
         let [current, next] = pair else {
             unreachable!()
         };
-        let facts = instruction_graph
+        let facts = node_graph
             .nodes
             .get(current)
             .ok_or(Error::MalformedControlFlow)?;
@@ -155,7 +147,7 @@ fn discover_leaders(
             leaders.insert(*next);
         }
     }
-    leaders.retain(|addr| instruction_graph.nodes.contains_key(addr));
+    leaders.retain(|addr| node_graph.nodes.contains_key(addr));
     Ok(leaders)
 }
 
