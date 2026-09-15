@@ -128,6 +128,7 @@ impl MokaIRMethod {
             .copied()
     }
 
+    #[expect(clippy::too_many_arguments, reason = "TODO")]
     pub(crate) fn new(
         method: &jvm::Method,
         entry_block: BlockId,
