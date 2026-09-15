@@ -82,12 +82,19 @@ impl MokaIRMethod {
     /// Returns all reachable blocks in deterministic source order.
     ///
     /// Each block exposes entry phis, ordered operations, and one terminator.
+    /// Identities are dense and ascending here, so the block at index `i` has
+    /// identity index `i`.
     #[must_use]
     pub fn blocks(&self) -> impl ExactSizeIterator<Item = &BasicBlock> {
         self.blocks.iter()
     }
 
     /// Looks up a block by its method-local identity.
+    ///
+    /// Resolution treats the identity as a position, sound only because
+    /// [`MokaIRMethod::blocks`] stores identities densely and ascendingly; a
+    /// sparse scheme would silently reject blocks. Identities outside the block
+    /// range yield `None`.
     #[must_use]
     pub fn block(&self, id: BlockId) -> Option<&BasicBlock> {
         self.blocks.get(usize::try_from(id.index()).ok()?)

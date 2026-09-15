@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map};
 use crate::ir::{
     BlockId,
     generator::{
-        block_formation,
+        block_formation::{self, Merge},
         bytecode_analysis::{self, FrameMergeSite, jvm::Frame},
         error::Error,
         identity::SsaValueId,
@@ -14,32 +14,38 @@ type PairedFrameValue = (Option<SsaValueId>, Option<SsaValueId>);
 
 /// Provisional value and placement data for JVM frame merges.
 pub(super) struct MergePlan {
-    merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
-    phi_blocks: BTreeMap<SsaValueId, BlockId>,
+    /// The value and block of every frame merge site.
+    merges: BTreeMap<FrameMergeSite, Merge>,
+    /// The block that computes each merge value, indexed so that phi collection
+    /// never scans `merges`.
+    block_by_value: BTreeMap<SsaValueId, BlockId>,
 }
 
 impl MergePlan {
-    pub const fn new(
-        merge_values: BTreeMap<FrameMergeSite, SsaValueId>,
-        phi_blocks: BTreeMap<SsaValueId, BlockId>,
-    ) -> Self {
+    /// Plans the resolution of every frame merge.
+    pub fn new(merges: BTreeMap<FrameMergeSite, Merge>) -> Self {
+        let block_by_value = merges
+            .values()
+            .map(|merge| (merge.value, merge.block))
+            .collect();
         Self {
-            merge_values,
-            phi_blocks,
+            merges,
+            block_by_value,
         }
     }
 
+    /// The block that computes the frame merge `value`, if it is one.
     pub fn block_for(&self, value: SsaValueId) -> Option<BlockId> {
-        self.phi_blocks.get(&value).copied()
+        self.block_by_value.get(&value).copied()
     }
 
     pub fn resolve(&self, operand: bytecode_analysis::Value) -> Result<SsaValueId, Error> {
         match operand {
             bytecode_analysis::Value::Ssa(value) => Ok(value),
             bytecode_analysis::Value::Merged(identity) => self
-                .merge_values
+                .merges
                 .get(&identity)
-                .copied()
+                .map(|merge| merge.value)
                 .ok_or(Error::MalformedControlFlow),
             bytecode_analysis::Value::ReturnAddress(_) | bytecode_analysis::Value::Invalid => {
                 Err(Error::MalformedControlFlow)
@@ -64,7 +70,7 @@ pub(super) fn collect_phi_candidates(
         }
     }
     let mut phis_by_block = BTreeMap::<BlockId, Vec<SsaValueId>>::new();
-    for (&value, &block) in &merge_plan.phi_blocks {
+    for (&value, &block) in &merge_plan.block_by_value {
         phis_by_block.entry(block).or_default().push(value);
     }
 
@@ -81,7 +87,7 @@ pub(super) fn collect_phi_candidates(
                 let (Some(result), Some(value)) = (result, value) else {
                     continue;
                 };
-                if merge_plan.phi_blocks.get(&result) != Some(&target.id) {
+                if merge_plan.block_for(result) != Some(target.id) {
                     continue;
                 }
                 match inputs.entry(result).or_default().entry(predecessor) {
@@ -109,7 +115,7 @@ pub(super) fn collect_phi_candidates(
 
     loop {
         let unavailable = merge_plan
-            .phi_blocks
+            .block_by_value
             .keys()
             .filter(|result| !candidates.contains_key(result))
             .copied()
@@ -173,6 +179,10 @@ mod tests {
     #[test]
     fn synthetic_preheader_contributes_an_ordinary_phi_input() {
         let descriptor = "(I)V".parse().expect("valid descriptor");
+        let site = FrameMergeSite {
+            addr: NodeAddress::entry(0.into()),
+            slot: Position::Local(0),
+        };
         let result = SsaValueId::new(10);
         let incoming = SsaValueId::new(11);
         let target = BlockId::new(4);
@@ -218,7 +228,13 @@ mod tests {
             },
         ];
 
-        let merge_plan = MergePlan::new(BTreeMap::new(), BTreeMap::from([(result, target)]));
+        let merge_plan = MergePlan::new(BTreeMap::from([(
+            site,
+            Merge {
+                value: result,
+                block: target,
+            },
+        )]));
         let candidates =
             collect_phi_candidates(&blocks, &merge_plan).expect("preheader provides the phi input");
 
@@ -233,7 +249,13 @@ mod tests {
         };
         let resolved = SsaValueId::new(12);
 
-        let merge_plan = MergePlan::new(BTreeMap::from([(identity, resolved)]), BTreeMap::new());
+        let merge_plan = MergePlan::new(BTreeMap::from([(
+            identity,
+            Merge {
+                value: resolved,
+                block: BlockId::new(0),
+            },
+        )]));
         let actual = merge_plan
             .resolve(bytecode_analysis::Value::Merged(identity))
             .expect("known merge identity resolves");

@@ -52,10 +52,8 @@ impl Context<'_, '_, '_> {
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value.into(), Category2)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: operation(base, shift_amount).into(),
-        })
+        let expr = operation(base, shift_amount).into();
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 
     pub(super) fn compare_long(&mut self) -> Result<RegisterInstruction, Error> {
@@ -63,10 +61,8 @@ impl Context<'_, '_, '_> {
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value.into(), Category1)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: MathOperation::LongComparison(lhs, rhs).into(),
-        })
+        let expr = MathOperation::LongComparison(lhs, rhs).into();
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 
     pub(super) fn compare_float(
@@ -78,9 +74,7 @@ impl Context<'_, '_, '_> {
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;
         self.frame.stack.push(value.into(), Category1)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into(),
-        })
+        let expr = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into();
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 }

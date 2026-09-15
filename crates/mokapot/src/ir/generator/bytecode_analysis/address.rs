@@ -52,4 +52,12 @@ impl NodeAddress {
             Self::Unwind => None,
         }
     }
+
+    /// Whether this address is a synthetic landing pad for a handler.
+    ///
+    /// A handler entry begins its own block: it introduces the caught exception
+    /// of the frame it is entered with before running the guarded bytecode.
+    pub(crate) const fn is_handler(self) -> bool {
+        matches!(self, Self::Handler { .. })
+    }
 }

@@ -101,10 +101,8 @@ fn finalize_block(
                  transfer,
                  frame: _,
              }| {
-                Ok(Successor {
-                    target,
-                    transfer: transfer.try_map_values(&resolve)?,
-                })
+                let transfer = transfer.try_map_values(&resolve)?;
+                Ok(Successor { target, transfer })
             },
         )
         .collect::<Result<_, Error>>()?;

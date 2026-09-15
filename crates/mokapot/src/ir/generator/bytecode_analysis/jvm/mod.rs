@@ -102,10 +102,9 @@ impl<V: Clone> Frame<V> {
     }
 
     pub fn exception_handler_frame(&self, caught: V) -> Result<Self, FrameError> {
-        let mut frame = Self {
-            locals: self.locals.clone(),
-            stack: OperandStack::with_max_slots(self.stack.max_slots()),
-        };
+        let locals = self.locals.clone();
+        let stack = OperandStack::with_max_slots(self.stack.max_slots());
+        let mut frame = Self { locals, stack };
         frame.stack.push(caught, ValueCategory::Category1)?;
         Ok(frame)
     }

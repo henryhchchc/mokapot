@@ -22,10 +22,8 @@ impl Context<'_, '_, '_> {
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value.into(), category)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: ArrayOperation::Read { array_ref, index }.into(),
-        })
+        let expr = ArrayOperation::Read { array_ref, index }.into();
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 
     pub(super) fn array_write(
@@ -82,9 +80,7 @@ impl Context<'_, '_, '_> {
         let value = self.definition_id()?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value.into(), Category1)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: ArrayOperation::Length { array_ref }.into(),
-        })
+        let expr = ArrayOperation::Length { array_ref }.into();
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 }

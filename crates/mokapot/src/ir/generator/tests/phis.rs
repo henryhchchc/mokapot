@@ -160,6 +160,36 @@ fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
 }
 
 #[test]
+fn entry_preheader_takes_block_identity_zero() {
+    let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
+    let ir = build(&method).unwrap();
+    let entry = ir.entry_block();
+
+    assert_eq!(entry.index(), 0);
+    assert!(std::ptr::eq(
+        ir.block(entry).unwrap(),
+        ir.blocks().next().unwrap()
+    ));
+    let preheader = ir.block(entry).unwrap();
+    assert!(preheader.operations().is_empty());
+    let [arm] = preheader.terminator().successors() else {
+        panic!("the preheader must have exactly one successor")
+    };
+    assert!(matches!(arm.transfer(), ControlTransfer::Unconditional));
+
+    // The preheader's target is the bytecode entry, which keeps the loop's
+    // `goto 0` as its own terminator.
+    let header = ir.block(arm.target()).unwrap();
+    assert_ne!(header.id(), entry);
+    assert_eq!(
+        ir.source_map()
+            .origins_of(header.terminator().id())
+            .collect::<Vec<_>>(),
+        [ProgramCounter::from(0)]
+    );
+}
+
+#[test]
 fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     let method = method(
         [

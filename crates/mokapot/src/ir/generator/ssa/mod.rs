@@ -26,12 +26,11 @@ pub(super) fn construct(graph: block_formation::BlockGraph) -> Result<Graph, Err
     let block_formation::BlockGraph {
         entry,
         blocks,
-        phi_blocks,
-        merge_values,
+        merges,
         this_value,
         parameter_values,
     } = graph;
-    let merge_plan = MergePlan::new(merge_values, phi_blocks);
+    let merge_plan = MergePlan::new(merges);
     let candidates = collect_phi_candidates(&blocks, &merge_plan)?;
     let simplified = simplify_phis(candidates).map_err(|_| Error::MalformedControlFlow)?;
     let blocks = finalization::finalize(blocks, &merge_plan, simplified)?;

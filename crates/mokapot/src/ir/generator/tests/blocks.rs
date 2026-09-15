@@ -1,5 +1,38 @@
 use super::*;
+use crate::ir::BlockId;
 use std::iter::once;
+
+/// Builds a method whose control flow needs a conditional branch and an
+/// exception handler, and therefore several blocks.
+fn branch_and_handler_method() -> Method {
+    method(
+        [
+            (0, Instruction::ALoad0),
+            (1, Instruction::IfNull(9.into())),
+            (2, Instruction::AConstNull),
+            (
+                3,
+                Instruction::CheckCast("java/lang/String".parse().unwrap()),
+            ),
+            (4, Instruction::Pop),
+            (9, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Return),
+        ],
+        "(Ljava/lang/Object;)V",
+        vec![ExceptionTableEntry {
+            covered_pc: 3.into()..4.into(),
+            handler_pc: 10.into(),
+            catch_type: Some("java/lang/RuntimeException".parse().unwrap()),
+        }],
+    )
+}
+
+fn block_shape(ir: &MokaIRMethod) -> Vec<(BlockId, &TerminatorKind)> {
+    ir.blocks()
+        .map(|block| (block.id(), block.terminator().kind()))
+        .collect()
+}
 
 #[test]
 fn straight_line_instructions_coalesce_into_one_block() {
@@ -126,4 +159,90 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
     assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
     assert_eq!(ir.source_map().instructions_at(2.into()).count(), 0);
     assert_eq!(ir.source_map().origins_of(synthetic.id()).count(), 0);
+}
+
+#[test]
+fn block_identities_are_dense_and_ascending() {
+    let ir = build(&branch_and_handler_method()).unwrap();
+
+    assert!(ir.blocks().len() > 2);
+    for (position, block) in ir.blocks().enumerate() {
+        assert_eq!(block.id().index(), u32::try_from(position).unwrap());
+        assert!(std::ptr::eq(ir.block(block.id()).unwrap(), block));
+    }
+}
+
+#[test]
+fn block_lookup_by_identity_is_total_within_range() {
+    let methods = [
+        method(
+            [(0, Instruction::IConst0), (1, Instruction::IReturn)],
+            "()I",
+            vec![],
+        ),
+        branch_and_handler_method(),
+        method([(0, Instruction::Goto(0.into()))], "()V", vec![]),
+    ];
+
+    for method in &methods {
+        let ir = build(method).unwrap();
+        let past_the_end = u32::try_from(ir.blocks().len()).unwrap();
+
+        assert!(ir.block(BlockId::new(0)).is_some());
+        assert!(ir.block(BlockId::new(past_the_end)).is_none());
+        assert!(ir.block(BlockId::new(u32::MAX)).is_none());
+    }
+}
+
+#[test]
+fn rebuild_is_deterministic_and_operations_follow_source_order() {
+    let method = branch_and_handler_method();
+    let first = build(&method).unwrap();
+    let second = build(&method).unwrap();
+
+    assert_eq!(block_shape(&first), block_shape(&second));
+
+    for block in first.blocks() {
+        let pcs = block
+            .operations()
+            .iter()
+            .filter_map(|operation| first.source_map().origins_of(operation.id()).next())
+            .collect::<Vec<_>>();
+
+        assert_eq!(pcs.len(), block.operations().len());
+        assert!(pcs.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+}
+
+#[test]
+fn every_source_program_counter_belongs_to_exactly_one_block() {
+    let ir = build(&branch_and_handler_method()).unwrap();
+    let source_map = ir.source_map();
+    let owner = ir
+        .blocks()
+        .flat_map(|block| {
+            block
+                .operations()
+                .iter()
+                .map(Operation::id)
+                .chain(once(block.terminator().id()))
+                .map(move |id| (id, block.id()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut blocks_by_pc = BTreeMap::<ProgramCounter, BTreeSet<BlockId>>::new();
+
+    for (id, block) in &owner {
+        for pc in source_map.origins_of(*id) {
+            blocks_by_pc.entry(pc).or_default().insert(*block);
+            assert!(
+                source_map
+                    .instructions_at(pc)
+                    .all(|reported| owner.get(&reported) == Some(block)),
+                "{pc} mixes blocks {block} and another block"
+            );
+        }
+    }
+
+    assert!(blocks_by_pc.len() > 2);
+    assert!(blocks_by_pc.values().all(|blocks| blocks.len() == 1));
 }

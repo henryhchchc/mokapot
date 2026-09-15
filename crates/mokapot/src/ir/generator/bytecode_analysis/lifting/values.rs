@@ -21,10 +21,8 @@ impl Context<'_, '_, '_> {
     ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), category)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: Expression::Const(constant),
-        })
+        let expr = Expression::Const(constant);
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 
     pub(super) fn increment(
@@ -75,9 +73,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), Category1)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: Expression::New(class.clone()),
-        })
+        let expr = Expression::New(class.clone());
+        Ok(RegisterInstruction::Definition { value, expr })
     }
 }

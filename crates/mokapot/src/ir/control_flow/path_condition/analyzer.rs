@@ -80,10 +80,8 @@ impl<P> PathConditionFact<P> {
     where
         P: Hash + Eq + Clone,
     {
-        Self {
-            inner: inner.reduce_with_budget(budget),
-            budget,
-        }
+        let inner = inner.reduce_with_budget(budget);
+        Self { inner, budget }
     }
 
     pub(crate) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self

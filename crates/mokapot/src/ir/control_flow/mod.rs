@@ -111,6 +111,9 @@ impl<'method> ControlFlowGraph<'method> {
     }
 
     /// Returns the blocks in deterministic source order.
+    ///
+    /// Identities are dense and ascending here, so a block identity doubles as
+    /// a position in this sequence.
     #[must_use]
     pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'method BasicBlock)> {
         self.blocks.iter().map(|block| (block.id(), block))
@@ -141,6 +144,10 @@ impl<'method> ControlFlowGraph<'method> {
     }
 
     /// Returns all outgoing arms from `source`.
+    ///
+    /// The identity is resolved as a position, which relies on the dense,
+    /// ascending identities that [`ControlFlowGraph::nodes`] reports; an
+    /// identity outside this graph yields no arms.
     pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'method>> {
         self.blocks
             .get(usize::try_from(source.index()).unwrap_or(usize::MAX))

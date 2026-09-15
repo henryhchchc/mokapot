@@ -84,6 +84,17 @@ impl Node {
             matches!(edge.transfer, Exception(_) | Unwind)
         })
     }
+
+    /// Whether this node is elided into the block of `next`.
+    ///
+    /// Blocks are maximal, so only an ordinary operation that neither transfers
+    /// control nor can raise, and whose single edge is the fallthrough to
+    /// `next`, shares its block with `next`.
+    pub(super) fn elides_into(&self, next: NodeAddress) -> bool {
+        !self.instruction.is_explicit_transfer()
+            && !self.has_exceptional_exit()
+            && matches!(self.outgoing_edges.as_slice(), [edge] if edge.target == next)
+    }
 }
 
 /// A reachable register-form JVM instruction graph.

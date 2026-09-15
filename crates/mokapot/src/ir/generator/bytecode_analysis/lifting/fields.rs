@@ -48,12 +48,9 @@ impl Context<'_, '_, '_> {
 
     pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
         let value = self.pop_field_value(field)?;
+        let field = field.clone();
         Ok(RegisterInstruction::Effect(
-            FieldAccess::WriteStatic {
-                field: field.clone(),
-                value,
-            }
-            .into(),
+            FieldAccess::WriteStatic { field, value }.into(),
         ))
     }
 

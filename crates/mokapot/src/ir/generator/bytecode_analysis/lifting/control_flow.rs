@@ -18,10 +18,8 @@ impl Context<'_, '_, '_> {
         condition: impl FnOnce(Value) -> Condition<Value>,
     ) -> Result<RegisterInstruction, Error> {
         let operand = self.frame.stack.pop(Category1)?;
-        Ok(RegisterInstruction::Jump {
-            condition: Some(condition(operand)),
-            target,
-        })
+        let condition = Some(condition(operand));
+        Ok(RegisterInstruction::Jump { condition, target })
     }
 
     pub(super) fn comparison_branch(
@@ -31,10 +29,8 @@ impl Context<'_, '_, '_> {
     ) -> Result<RegisterInstruction, Error> {
         let rhs = self.frame.stack.pop(Category1)?;
         let lhs = self.frame.stack.pop(Category1)?;
-        Ok(RegisterInstruction::Jump {
-            condition: Some(condition(lhs, rhs)),
-            target,
-        })
+        let condition = Some(condition(lhs, rhs));
+        Ok(RegisterInstruction::Jump { condition, target })
     }
 
     pub(super) fn switch(

@@ -127,10 +127,8 @@ fn materialize_block(
                     .inputs
                     .into_iter()
                     .map(|(predecessor, value)| {
-                        Ok(PhiInput {
-                            predecessor,
-                            value: allocation.resolve(value)?,
-                        })
+                        let value = allocation.resolve(value)?;
+                        Ok(PhiInput { predecessor, value })
                     })
                     .collect::<Result<_, Error>>()?,
             })
@@ -142,10 +140,8 @@ fn materialize_block(
         .zip(ids.operations)
         .map(|((pc, kind), id)| {
             source_map.insert(pc, id);
-            Ok(Operation {
-                id,
-                kind: kind.try_map_values(|value| allocation.resolve(value))?,
-            })
+            let kind = kind.try_map_values(|value| allocation.resolve(value))?;
+            Ok(Operation { id, kind })
         })
         .collect::<Result<_, Error>>()?;
     let successors = block

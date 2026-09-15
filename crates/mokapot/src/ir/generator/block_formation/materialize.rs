@@ -7,7 +7,7 @@ use crate::{
         BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
-            bytecode_analysis::{self, NodeAddress, RegisterInstruction, jvm::Frame},
+            bytecode_analysis::{self, Node, NodeAddress, RegisterInstruction, jvm::Frame},
             error::Error,
             identity::SsaValueId,
         },
@@ -15,43 +15,80 @@ use crate::{
     jvm::code::ProgramCounter,
 };
 
-use super::{Arm, Block, layout::BlockLayout};
+use super::{
+    Arm, Block,
+    layout::{BlockLayout, LayoutBlock},
+};
 
-pub(super) fn materialize_blocks(
-    mut instruction_nodes: BTreeMap<NodeAddress, bytecode_analysis::Node>,
-    layout: &BlockLayout,
-) -> Result<Vec<Block>, Error> {
-    let blocks = layout
-        .addrs()
-        .iter()
-        .map(|(&id, addrs)| materialize_block(id, addrs, &mut instruction_nodes, layout))
-        .collect::<Result<Vec<_>, _>>()?;
-    if instruction_nodes.is_empty() {
-        Ok(blocks)
-    } else {
-        Err(Error::MalformedControlFlow)
+/// Materializes the blocks of `layout` in ascending block id order.
+///
+/// The layout owns its nodes, so each is materialized exactly once.
+pub(super) fn materialize_blocks(layout: BlockLayout) -> Result<Vec<Block>, Error> {
+    let BlockLayout {
+        blocks,
+        block_by_addr,
+        ..
+    } = layout;
+    blocks
+        .into_iter()
+        .enumerate()
+        .map(|(index, block)| {
+            let id = BlockId::new(u32::try_from(index).map_err(|_| Error::MalformedControlFlow)?);
+            match block {
+                LayoutBlock::EntryPreheader { frame, target } => {
+                    Ok(entry_preheader(id, frame, target))
+                }
+                LayoutBlock::Nodes(nodes) => materialize_block(id, nodes, &block_by_addr),
+            }
+        })
+        .collect()
+}
+
+/// Materializes the synthetic entry preheader.
+///
+/// The preheader has no operation of its own: it enters the method frame and
+/// hands it to the bytecode entry block.
+fn entry_preheader(id: BlockId, frame: Frame<bytecode_analysis::Value>, target: BlockId) -> Block {
+    Block {
+        id,
+        entry_frame: frame.clone(),
+        operations: Vec::new(),
+        terminator: TerminatorKind::Goto,
+        terminator_source: None,
+        arms: vec![Arm {
+            target,
+            transfer: ControlTransfer::Unconditional,
+            frame,
+        }],
+        caught_exception: None,
     }
 }
 
 fn materialize_block(
     id: BlockId,
-    addrs: &[NodeAddress],
-    instruction_nodes: &mut BTreeMap<NodeAddress, bytecode_analysis::Node>,
-    layout: &BlockLayout,
+    nodes: Vec<(NodeAddress, Node)>,
+    block_by_addr: &BTreeMap<NodeAddress, BlockId>,
 ) -> Result<Block, Error> {
     let mut entry_frame = None;
     let mut caught_exception = None;
-    let mut operations = Vec::with_capacity(addrs.len());
+    let mut operations = Vec::with_capacity(nodes.len());
     let mut terminator = None;
     let mut terminator_source = None;
     let mut arms = Vec::new();
 
-    for (index, addr) in addrs.iter().copied().enumerate() {
-        let node = instruction_nodes
-            .remove(&addr)
-            .ok_or(Error::MalformedControlFlow)?;
+    let mut nodes = nodes.into_iter().enumerate().peekable();
+    while let Some((index, (addr, node))) = nodes.next() {
+        let next = nodes.peek().map(|(_, (next, _))| *next);
         let has_exceptional_exit = node.has_exceptional_exit();
-        let bytecode_analysis::Node {
+        if let Some(next) = next {
+            // Layout cut a block here only if a node does not elide into its
+            // successor, so only the last node of a block may fail this.
+            debug_assert!(
+                node.elides_into(next),
+                "a block interior elides into the node after it"
+            );
+        }
+        let Node {
             incoming_frame,
             instruction,
             outgoing_edges,
@@ -60,29 +97,22 @@ fn materialize_block(
             caught_exception = caught_exception_at(addr, &incoming_frame)?;
             entry_frame = Some(incoming_frame);
         }
-        let is_last = index + 1 == addrs.len();
-        if is_last {
+        if next.is_none() {
             let end = materialize_block_end(
                 addr,
                 instruction,
                 has_exceptional_exit,
                 outgoing_edges,
-                layout,
+                block_by_addr,
             )?;
-            operations.extend(end.operation);
+            if let Some(operation) = end.operation {
+                operations.push(operation);
+            }
             terminator = Some(end.terminator);
             terminator_source = end.terminator_source;
             arms = end.arms;
-        } else {
-            let next = addrs[index + 1];
-            let operation = materialize_internal_operation(
-                addr,
-                instruction,
-                has_exceptional_exit,
-                &outgoing_edges,
-                next,
-            )?;
-            operations.extend(operation);
+        } else if let Some(operation) = materialize_internal_operation(addr, instruction)? {
+            operations.push(operation);
         }
     }
 
@@ -101,7 +131,7 @@ fn caught_exception_at(
     addr: NodeAddress,
     incoming_frame: &Frame<bytecode_analysis::Value>,
 ) -> Result<Option<SsaValueId>, Error> {
-    if !matches!(addr, NodeAddress::Handler { .. }) {
+    if !addr.is_handler() {
         return Ok(None);
     }
     match incoming_frame.handler_exception()? {
@@ -112,38 +142,15 @@ fn caught_exception_at(
     }
 }
 
+/// Converts a node that is elided into the next node of its block.
+///
+/// Layout elides only an ordinary, non-fallible operation, so its end is a
+/// plain fallthrough.
 fn materialize_internal_operation(
     addr: NodeAddress,
     instruction: RegisterInstruction,
-    has_exceptional_exit: bool,
-    outgoing: &[bytecode_analysis::Edge],
-    next: NodeAddress,
 ) -> Result<Option<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>, Error> {
-    if instruction.is_explicit_transfer()
-        || has_exceptional_exit
-        || outgoing.len() != 1
-        || outgoing[0].target != next
-    {
-        return Err(Error::MalformedControlFlow);
-    }
-    let operation = match instruction {
-        RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: bytecode_analysis::Value::Ssa(value),
-            expr,
-        }),
-        RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
-        RegisterInstruction::Erased => None,
-        RegisterInstruction::HandlerEntry
-        | RegisterInstruction::Unwind
-        | RegisterInstruction::Jump { .. }
-        | RegisterInstruction::Switch { .. }
-        | RegisterInstruction::Return(_)
-        | RegisterInstruction::Throw(_)
-        | RegisterInstruction::Subroutine { .. }
-        | RegisterInstruction::SubroutineReturn(_) => {
-            return Err(Error::MalformedControlFlow);
-        }
-    };
+    let (operation, _) = classify_block_end(instruction, false);
     operation
         .map(|operation| {
             addr.source_pc()
@@ -165,15 +172,15 @@ fn materialize_block_end(
     instruction: RegisterInstruction,
     has_exceptional_exit: bool,
     outgoing: Vec<bytecode_analysis::Edge>,
-    layout: &BlockLayout,
+    block_by_addr: &BTreeMap<NodeAddress, BlockId>,
 ) -> Result<BlockEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
     let arms = outgoing
         .into_iter()
         .map(|outgoing| {
-            layout
-                .block_at(outgoing.target)
-                .map(|target| Arm {
+            block_by_addr
+                .get(&outgoing.target)
+                .map(|&target| Arm {
                     target,
                     transfer: outgoing.transfer,
                     frame: outgoing.target_frame,
@@ -196,30 +203,6 @@ fn materialize_block_end(
         terminator_source: explicit_transfer.then(|| addr.source_pc()).flatten(),
         arms,
     })
-}
-
-pub(super) fn insert_entry_preheader(
-    mut blocks: Vec<Block>,
-    layout: &BlockLayout,
-    initial_frame: Frame<bytecode_analysis::Value>,
-) -> Vec<Block> {
-    if layout.has_entry_preheader() {
-        let entry_block = Block {
-            id: layout.entry(),
-            entry_frame: initial_frame.clone(),
-            operations: Vec::new(),
-            terminator: TerminatorKind::Goto,
-            terminator_source: None,
-            arms: vec![Arm {
-                target: layout.bytecode_entry(),
-                transfer: ControlTransfer::Unconditional,
-                frame: initial_frame,
-            }],
-            caught_exception: None,
-        };
-        blocks.insert(0, entry_block);
-    }
-    blocks
 }
 
 /// Converts a block-final instruction into its operation and terminator.
