@@ -21,7 +21,7 @@ impl LiftContext<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        self.frame.operand_stack.push(value.into(), category)?;
+        self.frame.stack.push(value.into(), category)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: Expression::Const(constant),
@@ -34,10 +34,8 @@ impl LiftContext<'_, '_, '_> {
         constant: i32,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let base = *self.frame.local_variables.get(idx, Category1)?;
-        self.frame
-            .local_variables
-            .set(idx, value.into(), Category1)?;
+        let base = *self.frame.locals.get(idx, Category1)?;
+        self.frame.locals.set(idx, value.into(), Category1)?;
         let expr = MathOperation::Increment(base, constant).into();
         Ok(RegisterInstruction::Definition { value, expr })
     }
@@ -47,11 +45,11 @@ impl LiftContext<'_, '_, '_> {
         idx: u16,
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let value = *self.frame.local_variables.get(idx, category)?;
+        let value = *self.frame.locals.get(idx, category)?;
         if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        self.frame.operand_stack.push(value, category)?;
+        self.frame.stack.push(value, category)?;
         Ok(RegisterInstruction::Erased)
     }
 
@@ -60,8 +58,8 @@ impl LiftContext<'_, '_, '_> {
         idx: u16,
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let value = *self.frame.local_variables.get(idx, category)?;
-        self.frame.operand_stack.push(value, category)?;
+        let value = *self.frame.locals.get(idx, category)?;
+        self.frame.stack.push(value, category)?;
         Ok(RegisterInstruction::Erased)
     }
 
@@ -70,8 +68,8 @@ impl LiftContext<'_, '_, '_> {
         idx: u16,
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let value = self.frame.operand_stack.pop(category)?;
-        self.frame.local_variables.set(idx, value, category)?;
+        let value = self.frame.stack.pop(category)?;
+        self.frame.locals.set(idx, value, category)?;
         Ok(RegisterInstruction::Erased)
     }
 
@@ -80,7 +78,7 @@ impl LiftContext<'_, '_, '_> {
         class: &ClassRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: Expression::New(class.clone()),

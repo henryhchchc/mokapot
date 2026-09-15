@@ -20,7 +20,7 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        self.frame.operand_stack.push(
+        self.frame.stack.push(
             value.into(),
             ValueCategory::of_field_type(&field.field_type),
         )?;
@@ -38,8 +38,8 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let object_ref = self.frame.operand_stack.pop(Category1)?;
-        self.frame.operand_stack.push(
+        let object_ref = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(
             value.into(),
             ValueCategory::of_field_type(&field.field_type),
         )?;
@@ -72,7 +72,7 @@ impl LiftContext<'_, '_, '_> {
         field: &FieldRef,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.pop_field_value(field)?;
-        let object_ref = self.frame.operand_stack.pop(Category1)?;
+        let object_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(
             FieldAccess::WriteInstance {
                 object_ref,
@@ -86,7 +86,7 @@ impl LiftContext<'_, '_, '_> {
     fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, MokaIRBuildError> {
         Ok(self
             .frame
-            .operand_stack
+            .stack
             .pop(ValueCategory::of_field_type(&field.field_type))?)
     }
 }

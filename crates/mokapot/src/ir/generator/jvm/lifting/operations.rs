@@ -19,8 +19,8 @@ pub(super) fn lift_conversion(
     operand_category: ValueCategory,
     result_category: ValueCategory,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let operand = frame.operand_stack.pop(operand_category)?;
-    frame.operand_stack.push(value.into(), result_category)?;
+    let operand = frame.stack.pop(operand_category)?;
+    frame.stack.push(value.into(), result_category)?;
     let expr = conversion(operand).into();
     Ok(RegisterInstruction::Definition { value, expr })
 }
@@ -32,9 +32,9 @@ pub(super) fn lift_binary_math(
     math: impl FnOnce(Value, Value) -> MathOperation<Value>,
     category: ValueCategory,
 ) -> Result<RegisterInstruction, MokaIRBuildError> {
-    let rhs = frame.operand_stack.pop(category)?;
-    let lhs = frame.operand_stack.pop(category)?;
-    frame.operand_stack.push(value.into(), category)?;
+    let rhs = frame.stack.pop(category)?;
+    let lhs = frame.stack.pop(category)?;
+    frame.stack.push(value.into(), category)?;
 
     let expr = math(lhs, rhs).into();
     Ok(RegisterInstruction::Definition { value, expr })

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 
 use crate::ir::{
     BlockId,
@@ -91,12 +91,11 @@ pub(super) fn collect_phi_candidates(
                     continue;
                 }
                 match inputs.entry(result).or_default().entry(predecessor) {
-                    std::collections::btree_map::Entry::Vacant(entry) => {
+                    btree_map::Entry::Vacant(entry) => {
                         entry.insert(value);
                     }
-                    std::collections::btree_map::Entry::Occupied(entry)
-                        if *entry.get() == value => {}
-                    std::collections::btree_map::Entry::Occupied(_) => {
+                    btree_map::Entry::Occupied(entry) if *entry.get() == value => {}
+                    btree_map::Entry::Occupied(_) => {
                         return Err(MokaIRBuildError::MalformedControlFlow);
                     }
                 }

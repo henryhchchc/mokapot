@@ -33,12 +33,12 @@ fn frame(
 fn assert_stack(frame: &mut Frame<TestValue>, expected_top_first: &[(TestValue, ValueCategory)]) {
     for (expected_value, category) in expected_top_first {
         assert_eq!(
-            frame.operand_stack.pop(*category).expect("stack value"),
+            frame.stack.pop(*category).expect("stack value"),
             *expected_value
         );
     }
     assert!(matches!(
-        frame.operand_stack.pop(Category1),
+        frame.stack.pop(Category1),
         Err(JvmFrameError::StackUnderflow)
     ));
 }
@@ -53,18 +53,9 @@ fn method_entry_initializes_parameters_and_checks_local_capacity() {
     ));
 
     let frame = frame(false, &descriptor, 4, 0).expect("parameters fit");
-    assert_eq!(
-        frame.local_variables.get(0, Category1).unwrap(),
-        &TestValue(0)
-    );
-    assert_eq!(
-        frame.local_variables.get(1, Category1).unwrap(),
-        &TestValue(1)
-    );
-    assert_eq!(
-        frame.local_variables.get(2, Category2).unwrap(),
-        &TestValue(2)
-    );
+    assert_eq!(frame.locals.get(0, Category1).unwrap(), &TestValue(0));
+    assert_eq!(frame.locals.get(1, Category1).unwrap(), &TestValue(1));
+    assert_eq!(frame.locals.get(2, Category2).unwrap(), &TestValue(2));
 }
 
 #[test]
@@ -85,19 +76,16 @@ fn local_access_checks_the_value_category() {
     let mut frame = frame(true, &descriptor, 2, 0).expect("parameters fit");
 
     assert!(matches!(
-        frame.local_variables.get(0, Category1),
+        frame.locals.get(0, Category1),
         Err(JvmFrameError::InvalidSlotLayout)
     ));
     frame
-        .local_variables
+        .locals
         .set(0, TestValue(1), Category1)
         .expect("local exists");
-    assert_eq!(
-        frame.local_variables.get(0, Category1).unwrap(),
-        &TestValue(1)
-    );
+    assert_eq!(frame.locals.get(0, Category1).unwrap(), &TestValue(1));
     assert!(matches!(
-        frame.local_variables.get(0, Category2),
+        frame.locals.get(0, Category2),
         Err(JvmFrameError::InvalidSlotLayout)
     ));
 }
@@ -108,18 +96,15 @@ fn writing_an_upper_slot_invalidates_the_category_2_value() {
     let mut frame = frame(true, &descriptor, 2, 0).expect("parameters fit");
 
     frame
-        .local_variables
+        .locals
         .set(1, TestValue(1), Category1)
         .expect("local exists");
 
     assert!(matches!(
-        frame.local_variables.get(0, Category2),
+        frame.locals.get(0, Category2),
         Err(JvmFrameError::UnavailableLocal)
     ));
-    assert_eq!(
-        frame.local_variables.get(1, Category1).unwrap(),
-        &TestValue(1)
-    );
+    assert_eq!(frame.locals.get(1, Category1).unwrap(), &TestValue(1));
 }
 
 type StackContents = &'static [(TestValue, ValueCategory)];
@@ -289,9 +274,9 @@ fn stack_operations_implement_every_legal_jvm_form() {
     for case in LEGAL_STACK_OPERATION_CASES {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, 8).unwrap();
         for (value, category) in case.input_bottom_first {
-            frame.operand_stack.push(*value, *category).unwrap();
+            frame.stack.push(*value, *category).unwrap();
         }
-        frame.operand_stack.apply(case.operation).unwrap();
+        frame.stack.apply(case.operation).unwrap();
         assert_stack(&mut frame, case.expected_top_first);
     }
 }
@@ -319,10 +304,10 @@ fn invalid_stack_operations_leave_the_stack_unchanged() {
     for case in cases {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, 4).unwrap();
         for (value, category) in case.input_bottom_first {
-            frame.operand_stack.push(*value, *category).unwrap();
+            frame.stack.push(*value, *category).unwrap();
         }
         assert!(matches!(
-            frame.operand_stack.apply(case.operation),
+            frame.stack.apply(case.operation),
             Err(JvmFrameError::InvalidSlotLayout)
         ));
         assert_stack(&mut frame, case.expected_top_first);
@@ -344,7 +329,7 @@ fn stack_operations_report_underflow() {
         StackOperation::Swap,
     ] {
         assert!(matches!(
-            frame.operand_stack.apply(operation),
+            frame.stack.apply(operation),
             Err(JvmFrameError::StackUnderflow)
         ));
     }
@@ -359,33 +344,33 @@ proptest! {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, capacity.try_into().unwrap()).unwrap();
         for (index, value) in values.iter().enumerate() {
             let category = if index % 2 == 0 { Category2 } else { Category1 };
-            frame.operand_stack.push(*value, category).unwrap();
+            frame.stack.push(*value, category).unwrap();
         }
         for (index, value) in values.iter().enumerate().rev() {
             let category = if index % 2 == 0 { Category2 } else { Category1 };
-            assert_eq!(frame.operand_stack.pop(category).unwrap(), *value);
+            assert_eq!(frame.stack.pop(category).unwrap(), *value);
         }
     }
 
     #[test]
     fn failed_pop_does_not_consume_a_value(value in any::<TestValue>()) {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, 2).unwrap();
-        frame.operand_stack.push(value, Category2).unwrap();
+        frame.stack.push(value, Category2).unwrap();
         assert!(matches!(
-            frame.operand_stack.pop(Category1),
+            frame.stack.pop(Category1),
             Err(JvmFrameError::InvalidSlotLayout)
         ));
-        assert_eq!(frame.operand_stack.pop(Category2).unwrap(), value);
+        assert_eq!(frame.stack.pop(Category2).unwrap(), value);
     }
 
     #[test]
     fn pushes_cannot_exceed_max_stack(capacity in 0u16..10) {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, capacity).unwrap();
         for value in 0..capacity {
-            frame.operand_stack.push(TestValue(u32::from(value)), Category1).unwrap();
+            frame.stack.push(TestValue(u32::from(value)), Category1).unwrap();
         }
         assert!(matches!(
-            frame.operand_stack.push(TestValue(u32::from(capacity)), Category1),
+            frame.stack.push(TestValue(u32::from(capacity)), Category1),
             Err(JvmFrameError::StackOverflow)
         ));
     }

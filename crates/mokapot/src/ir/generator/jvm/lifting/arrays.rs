@@ -19,9 +19,9 @@ impl LiftContext<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let index = self.frame.operand_stack.pop(Category1)?;
-        let array_ref = self.frame.operand_stack.pop(Category1)?;
-        self.frame.operand_stack.push(value.into(), category)?;
+        let index = self.frame.stack.pop(Category1)?;
+        let array_ref = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), category)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: ArrayOperation::Read { array_ref, index }.into(),
@@ -32,9 +32,9 @@ impl LiftContext<'_, '_, '_> {
         &mut self,
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let value = self.frame.operand_stack.pop(category)?;
-        let index = self.frame.operand_stack.pop(Category1)?;
-        let array_ref = self.frame.operand_stack.pop(Category1)?;
+        let value = self.frame.stack.pop(category)?;
+        let index = self.frame.stack.pop(Category1)?;
+        let array_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(
             ArrayOperation::Write {
                 array_ref,
@@ -50,8 +50,8 @@ impl LiftContext<'_, '_, '_> {
         element_type: FieldType,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let length = self.frame.operand_stack.pop(Category1)?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        let length = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         let expr = ArrayOperation::New {
             element_type,
             length,
@@ -67,9 +67,9 @@ impl LiftContext<'_, '_, '_> {
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
         let dimensions = (0..dimension)
-            .map(|_| self.frame.operand_stack.pop(Category1))
+            .map(|_| self.frame.stack.pop(Category1))
             .collect::<Result<_, _>>()?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         let expr = ArrayOperation::NewMultiDim {
             element_type,
             dimensions,
@@ -80,8 +80,8 @@ impl LiftContext<'_, '_, '_> {
 
     pub(super) fn array_length(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let array_ref = self.frame.operand_stack.pop(Category1)?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        let array_ref = self.frame.stack.pop(Category1)?;
+        self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: ArrayOperation::Length { array_ref }.into(),

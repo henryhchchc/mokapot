@@ -67,7 +67,7 @@ impl StackOperation {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct StackValue<V> {
+struct StackItem<V> {
     value: V,
     category: ValueCategory,
 }
@@ -76,7 +76,7 @@ struct StackValue<V> {
 pub(crate) struct OperandStack<V> {
     max_slots: u16,
     slot_count: usize,
-    values: Vec<StackValue<V>>,
+    values: Vec<StackItem<V>>,
 }
 
 impl<V> OperandStack<V> {
@@ -93,7 +93,7 @@ impl<V> OperandStack<V> {
         if slot_count > usize::from(self.max_slots) {
             return Err(JvmFrameError::StackOverflow);
         }
-        self.values.push(StackValue { value, category });
+        self.values.push(StackItem { value, category });
         self.slot_count = slot_count;
         Ok(())
     }
@@ -193,12 +193,12 @@ impl<V> OperandStack<V> {
     }
 
     pub(super) fn values(&self) -> impl Iterator<Item = &V> {
-        self.values.iter().map(|value| &value.value)
+        self.values.iter().map(|it| &it.value)
     }
 
     pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&V>> {
-        self.values.iter().flat_map(|value| {
-            repeat_n(None, value.category.slot_count() - 1).chain(once(Some(&value.value)))
+        self.values.iter().flat_map(|it| {
+            repeat_n(None, it.category.slot_count() - 1).chain(once(Some(&it.value)))
         })
     }
 }

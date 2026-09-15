@@ -18,7 +18,7 @@ impl LiftContext<'_, '_, '_> {
         target: ProgramCounter,
         condition: impl FnOnce(Value) -> Condition<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let operand = self.frame.operand_stack.pop(Category1)?;
+        let operand = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Jump {
             condition: Some(condition(operand)),
             target,
@@ -30,8 +30,8 @@ impl LiftContext<'_, '_, '_> {
         target: ProgramCounter,
         condition: impl FnOnce(Value, Value) -> Condition<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let rhs = self.frame.operand_stack.pop(Category1)?;
-        let lhs = self.frame.operand_stack.pop(Category1)?;
+        let rhs = self.frame.stack.pop(Category1)?;
+        let lhs = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Jump {
             condition: Some(condition(lhs, rhs)),
             target,
@@ -44,7 +44,7 @@ impl LiftContext<'_, '_, '_> {
         branches: BTreeMap<i32, ProgramCounter>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         Ok(RegisterInstruction::Switch {
-            match_value: self.frame.operand_stack.pop(Category1)?,
+            match_value: self.frame.stack.pop(Category1)?,
             branches,
             default,
         })
@@ -55,14 +55,12 @@ impl LiftContext<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         Ok(RegisterInstruction::Return(Some(
-            self.frame.operand_stack.pop(category)?,
+            self.frame.stack.pop(category)?,
         )))
     }
 
     pub(super) fn throw(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
-        Ok(RegisterInstruction::Throw(
-            self.frame.operand_stack.pop(Category1)?,
-        ))
+        Ok(RegisterInstruction::Throw(self.frame.stack.pop(Category1)?))
     }
 
     pub(super) fn subroutine_return(
@@ -70,7 +68,7 @@ impl LiftContext<'_, '_, '_> {
         idx: u16,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         Ok(RegisterInstruction::SubroutineReturn(
-            *self.frame.local_variables.get(idx, Category1)?,
+            *self.frame.locals.get(idx, Category1)?,
         ))
     }
 
@@ -79,9 +77,7 @@ impl LiftContext<'_, '_, '_> {
         target: ProgramCounter,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let (target, return_address) = self.executor.enter_subroutine(self.addr, target)?;
-        self.frame
-            .operand_stack
-            .push(return_address.into(), Category1)?;
+        self.frame.stack.push(return_address.into(), Category1)?;
         Ok(RegisterInstruction::Subroutine { target })
     }
 }

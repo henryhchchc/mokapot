@@ -23,9 +23,9 @@ impl LiftContext<'_, '_, '_> {
         has_receiver: bool,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
-        let args = self.frame.operand_stack.pop_arguments(&method.descriptor)?;
+        let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
-            .then(|| self.frame.operand_stack.pop(Category1))
+            .then(|| self.frame.stack.pop(Category1))
             .transpose()?;
         let expr = Expression::Call {
             method: method.clone(),
@@ -43,7 +43,7 @@ impl LiftContext<'_, '_, '_> {
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
-            captures: self.frame.operand_stack.pop_arguments(descriptor)?,
+            captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,
             name: name.to_owned(),
             closure_descriptor: descriptor.clone(),
@@ -61,7 +61,7 @@ impl LiftContext<'_, '_, '_> {
             ReturnType::Some(return_type) => {
                 let value = definition.ok_or(MokaIRBuildError::MalformedControlFlow)?;
                 self.frame
-                    .operand_stack
+                    .stack
                     .push(value.into(), ValueCategory::of_field_type(return_type))?;
                 Ok(RegisterInstruction::Definition { value, expr })
             }

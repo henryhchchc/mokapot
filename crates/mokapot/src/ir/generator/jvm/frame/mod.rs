@@ -25,21 +25,19 @@ type PairedSlotValues<'a, V> = Vec<(Option<&'a V>, Option<&'a V>)>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Frame<V> {
-    pub local_variables: LocalVariables<V>,
-    pub operand_stack: OperandStack<V>,
+    pub locals: LocalVariables<V>,
+    pub stack: OperandStack<V>,
 }
 
 impl<V> Frame<V> {
     pub fn into_unwind_frame(mut self) -> Self {
-        self.local_variables.clear_for_unwind();
-        self.operand_stack.clear();
+        self.locals.clear_for_unwind();
+        self.stack.clear();
         self
     }
 
     pub fn iter_values(&self) -> impl Iterator<Item = &V> {
-        self.local_variables
-            .values()
-            .chain(self.operand_stack.values())
+        self.locals.values().chain(self.stack.values())
     }
 
     pub fn paired_slot_values<'a>(
@@ -48,15 +46,10 @@ impl<V> Frame<V> {
     ) -> Result<PairedSlotValues<'a, V>, JvmFrameError> {
         self.ensure_compatible_shape(other)?;
         Ok(self
-            .local_variables
+            .locals
             .slot_values()
-            .chain(self.operand_stack.slot_values())
-            .zip(
-                other
-                    .local_variables
-                    .slot_values()
-                    .chain(other.operand_stack.slot_values()),
-            )
+            .chain(self.stack.slot_values())
+            .zip(other.locals.slot_values().chain(other.stack.slot_values()))
             .collect())
     }
 
@@ -67,22 +60,18 @@ impl<V> Frame<V> {
     ) -> Result<bool, JvmFrameError> {
         self.ensure_compatible_shape(&other)?;
         let locals_changed = self
-            .local_variables
-            .merge_from_with(other.local_variables, |index, lhs, rhs| {
+            .locals
+            .merge_from_with(other.locals, |index, lhs, rhs| {
                 merge_values(Position::Local(index), lhs, rhs)
             });
-        let stack_changed = self
-            .operand_stack
-            .merge_from_with(other.operand_stack, |index, lhs, rhs| {
-                merge_values(Position::Stack(index), lhs, rhs)
-            });
+        let stack_changed = self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
+            merge_values(Position::Stack(index), lhs, rhs)
+        });
         Ok(locals_changed || stack_changed)
     }
 
     fn ensure_compatible_shape(&self, other: &Self) -> Result<(), JvmFrameError> {
-        if !self.local_variables.has_same_shape(&other.local_variables)
-            || !self.operand_stack.has_same_shape(&other.operand_stack)
-        {
+        if !self.locals.has_same_shape(&other.locals) || !self.stack.has_same_shape(&other.stack) {
             return Err(JvmFrameError::IncompatibleFrameShape);
         }
         Ok(())
@@ -97,20 +86,21 @@ impl<V: Clone> Frame<V> {
         this_value: Option<V>,
         parameters: &[V],
     ) -> Result<Self, JvmFrameError> {
+        let local_variables =
+            LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
+        let operand_stack = OperandStack::with_max_slots(max_operand_stack);
         Ok(Self {
-            local_variables: LocalVariables::for_method_entry(
-                descriptor, max_locals, this_value, parameters,
-            )?,
-            operand_stack: OperandStack::with_max_slots(max_operand_stack),
+            locals: local_variables,
+            stack: operand_stack,
         })
     }
 
     pub fn exception_handler_frame(&self, caught: V) -> Result<Self, JvmFrameError> {
         let mut frame = Self {
-            local_variables: self.local_variables.clone(),
-            operand_stack: OperandStack::with_max_slots(self.operand_stack.max_slots()),
+            locals: self.locals.clone(),
+            stack: OperandStack::with_max_slots(self.stack.max_slots()),
         };
-        frame.operand_stack.push(caught, ValueCategory::Category1)?;
+        frame.stack.push(caught, ValueCategory::Category1)?;
         Ok(frame)
     }
 }

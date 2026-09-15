@@ -246,7 +246,7 @@ impl LiftContext<'_, '_, '_> {
         &mut self,
         operation: impl FnOnce(Value) -> LockOperation<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        let object_ref = self.frame.operand_stack.pop(Category1)?;
+        let object_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(operation(object_ref).into()))
     }
 
@@ -254,7 +254,7 @@ impl LiftContext<'_, '_, '_> {
         &mut self,
         operation: StackOperation,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
-        self.frame.operand_stack.apply(operation)?;
+        self.frame.stack.apply(operation)?;
         Ok(RegisterInstruction::Erased)
     }
 
@@ -276,8 +276,8 @@ impl LiftContext<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         self.with_def(|value, frame| {
-            let operand = frame.operand_stack.pop(category)?;
-            frame.operand_stack.push(value.into(), category)?;
+            let operand = frame.stack.pop(category)?;
+            frame.stack.push(value.into(), category)?;
             let expr = operation(operand).into();
             Ok(RegisterInstruction::Definition { value, expr })
         })

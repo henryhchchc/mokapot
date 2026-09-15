@@ -20,9 +20,9 @@ impl LiftContext<'_, '_, '_> {
         operation: impl FnOnce(Value, Value) -> MathOperation<Value>,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let shift_amount = self.frame.operand_stack.pop(Category1)?;
-        let base = self.frame.operand_stack.pop(Category2)?;
-        self.frame.operand_stack.push(value.into(), Category2)?;
+        let shift_amount = self.frame.stack.pop(Category1)?;
+        let base = self.frame.stack.pop(Category2)?;
+        self.frame.stack.push(value.into(), Category2)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: operation(base, shift_amount).into(),
@@ -31,9 +31,9 @@ impl LiftContext<'_, '_, '_> {
 
     pub(super) fn compare_long(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let rhs = self.frame.operand_stack.pop(Category2)?;
-        let lhs = self.frame.operand_stack.pop(Category2)?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        let rhs = self.frame.stack.pop(Category2)?;
+        let lhs = self.frame.stack.pop(Category2)?;
+        self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: MathOperation::LongComparison(lhs, rhs).into(),
@@ -46,9 +46,9 @@ impl LiftContext<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<RegisterInstruction, MokaIRBuildError> {
         let value = self.definition_id()?;
-        let rhs = self.frame.operand_stack.pop(category)?;
-        let lhs = self.frame.operand_stack.pop(category)?;
-        self.frame.operand_stack.push(value.into(), Category1)?;
+        let rhs = self.frame.stack.pop(category)?;
+        let lhs = self.frame.stack.pop(category)?;
+        self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {
             value,
             expr: MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into(),

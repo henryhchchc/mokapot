@@ -314,10 +314,7 @@ mod tests {
     }
 
     fn first_local(frame: &Frame<Value>) -> Value {
-        *frame
-            .local_variables
-            .get(0, Category1)
-            .expect("local exists")
+        *frame.locals.get(0, Category1).expect("local exists")
     }
 
     #[test]
@@ -377,7 +374,7 @@ mod tests {
         let mut incoming_frame = nodes[&NodeAddress::entry(2.into())].incoming_frame.clone();
         assert_eq!(
             incoming_frame
-                .operand_stack
+                .stack
                 .pop(Category1)
                 .expect("stack value exists"),
             Value::Merged(FrameMergeSite {
