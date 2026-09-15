@@ -1,30 +1,24 @@
 use crate::{
     ir::{
-        BlockId, OperationKind, TerminatorKind, control_flow::ControlTransfer,
-        generator::identity::SsaValueId,
+        BlockId, OperationKind, TerminatorKind, ValueId,
+        generator::bytecode_analysis::scalar::Successor,
     },
     jvm::code::ProgramCounter,
 };
 
-/// One outgoing arm from an SSA block.
-pub(crate) struct Successor {
-    pub target: BlockId,
-    pub transfer: ControlTransfer<SsaValueId>,
-}
-
 /// A scalar SSA block ready for final IR emission.
-pub(crate) struct Block {
-    pub id: BlockId,
-    pub caught_exception: Option<SsaValueId>,
-    pub phis: Vec<Phi>,
-    pub operations: Vec<(ProgramCounter, OperationKind<SsaValueId>)>,
-    pub terminator: TerminatorKind<SsaValueId>,
-    pub terminator_source: Option<ProgramCounter>,
-    pub successors: Vec<Successor>,
+pub(in crate::ir::generator) struct Block {
+    pub(in crate::ir::generator) id: BlockId,
+    pub(in crate::ir::generator) caught_exception: Option<ValueId>,
+    pub(in crate::ir::generator) phis: Vec<Phi>,
+    pub(in crate::ir::generator) operations: Vec<(ProgramCounter, OperationKind)>,
+    pub(in crate::ir::generator) terminator: TerminatorKind,
+    pub(in crate::ir::generator) terminator_source: Option<ProgramCounter>,
+    pub(in crate::ir::generator) successors: Vec<Successor>,
 }
 
 /// A retained SSA phi and its predecessor-indexed inputs.
-pub(crate) struct Phi {
-    pub value: SsaValueId,
-    pub inputs: Vec<(BlockId, SsaValueId)>,
+pub(in crate::ir::generator) struct Phi {
+    pub(in crate::ir::generator) value: ValueId,
+    pub(in crate::ir::generator) inputs: Vec<(BlockId, ValueId)>,
 }

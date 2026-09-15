@@ -1,22 +1,17 @@
 //! Assigns final identities and assembles completed public `MokaIR`.
 
-#[cfg(test)]
-mod tests;
-
-use std::collections::BTreeMap;
-
-use crate::ir::TryMapValues;
 use crate::{
     ir::{
         BasicBlock, EdgeId, InstructionId, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{error::Error, identity::SsaValueId, ssa},
+        generator::{error::Error, remap::RemapValues, ssa},
+        method::{InstructionLocation, MokaIRMethodParts},
     },
     jvm::Method,
 };
 
 /// Emits final identities, blocks, and provenance from scalar SSA blocks.
-pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Error> {
+pub(super) fn emit(method: &Method, ssa: ssa::SsaGraph) -> Result<MokaIRMethod, Error> {
     let mut allocation = Allocation::default();
     let this_value = ssa
         .this_value
@@ -27,18 +22,15 @@ pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Err
         .into_iter()
         .enumerate()
         .map(|(index, value)| {
-            let index = u16::try_from(index).map_err(|_| Error::MalformedControlFlow)?;
+            let index = u16::try_from(index)
+                .map_err(|_| Error::internal("the method parameter index cannot be represented"))?;
             allocation.value(value, ValueDefinition::Parameter(index))
         })
         .collect::<Result<_, _>>()?;
 
-    let mut caught_exceptions = BTreeMap::new();
     let mut block_ids = Vec::with_capacity(ssa.blocks.len());
     for block in &ssa.blocks {
         let ids = allocation.allocate_block(block)?;
-        if let Some(value) = ids.caught_exception {
-            caught_exceptions.insert(block.id, value);
-        }
         block_ids.push(ids);
     }
 
@@ -55,13 +47,15 @@ pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Err
 
     let method = MokaIRMethod::new(
         method,
-        ssa.entry,
-        blocks,
-        source_map,
-        this_value,
-        parameter_values,
-        caught_exceptions,
-        allocation.definitions,
+        MokaIRMethodParts {
+            entry_block: ssa.entry,
+            blocks,
+            source_map,
+            this_value,
+            parameter_values,
+            value_definitions: allocation.definitions,
+            instruction_locations: allocation.instruction_locations,
+        },
     );
 
     Ok(method)
@@ -83,8 +77,12 @@ impl Allocation {
         let phis = block
             .phis
             .iter()
-            .map(|phi| {
-                let id = self.instruction()?;
+            .enumerate()
+            .map(|(index, phi)| {
+                let id = self.instruction(InstructionLocation::Phi {
+                    block: block.id,
+                    index,
+                })?;
                 self.value(phi.value, ValueDefinition::Instruction(id))?;
                 Ok(id)
             })
@@ -92,8 +90,12 @@ impl Allocation {
         let operations = block
             .operations
             .iter()
-            .map(|(_, kind)| {
-                let id = self.instruction()?;
+            .enumerate()
+            .map(|(index, (_, kind))| {
+                let id = self.instruction(InstructionLocation::Operation {
+                    block: block.id,
+                    index,
+                })?;
                 if let Some(value) = kind.def() {
                     self.value(value, ValueDefinition::Instruction(id))?;
                 }
@@ -104,7 +106,7 @@ impl Allocation {
             caught_exception,
             phis,
             operations,
-            terminator: self.instruction()?,
+            terminator: self.instruction(InstructionLocation::Terminator { block: block.id })?,
         })
     }
 }
@@ -127,10 +129,8 @@ fn materialize_block(
                     .inputs
                     .into_iter()
                     .map(|(predecessor, value)| {
-                        Ok(PhiInput {
-                            predecessor,
-                            value: allocation.resolve(value)?,
-                        })
+                        let value = allocation.resolve(value)?;
+                        Ok(PhiInput { predecessor, value })
                     })
                     .collect::<Result<_, Error>>()?,
             })
@@ -140,39 +140,39 @@ fn materialize_block(
         .operations
         .into_iter()
         .zip(ids.operations)
-        .map(|((pc, kind), id)| {
+        .map(|((pc, mut kind), id)| {
             source_map.insert(pc, id);
-            Ok(Operation {
-                id,
-                kind: kind.try_map_values(|value| allocation.resolve(value))?,
-            })
+            kind.try_remap_values(&mut |value| allocation.resolve(value))?;
+            Ok(Operation { id, kind })
         })
         .collect::<Result<_, Error>>()?;
     let successors = block
         .successors
         .into_iter()
-        .map(|successor| {
+        .map(|mut successor| {
+            successor
+                .transfer
+                .try_remap_values(&mut |value| allocation.resolve(value))?;
             Ok(Successor {
                 id: allocation.edge()?,
                 target: successor.target,
-                transfer: successor
-                    .transfer
-                    .try_map_values(|value| allocation.resolve(value))?,
+                transfer: successor.transfer,
             })
         })
         .collect::<Result<_, Error>>()?;
     if let Some(pc) = block.terminator_source {
         source_map.insert(pc, ids.terminator);
     }
+    let mut terminator = block.terminator;
+    terminator.try_remap_values(&mut |value| allocation.resolve(value))?;
     Ok(BasicBlock {
         id: block.id,
+        caught_exception: ids.caught_exception,
         phis,
         operations,
         terminator: Terminator {
             id: ids.terminator,
-            kind: block
-                .terminator
-                .try_map_values(|value| allocation.resolve(value))?,
+            kind: terminator,
             successors,
         },
     })
@@ -184,15 +184,17 @@ struct Allocation {
     next_edge: u32,
     values: Vec<Option<ValueId>>,
     definitions: Vec<ValueDefinition>,
+    instruction_locations: Vec<InstructionLocation>,
 }
 
 impl Allocation {
-    fn instruction(&mut self) -> Result<InstructionId, Error> {
+    fn instruction(&mut self, location: InstructionLocation) -> Result<InstructionId, Error> {
         let id = InstructionId::new(self.next_instruction);
         self.next_instruction = self
             .next_instruction
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the instruction identity space is exhausted"))?;
+        self.instruction_locations.push(location);
         Ok(id)
     }
 
@@ -201,47 +203,42 @@ impl Allocation {
         self.next_edge = self
             .next_edge
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the edge identity space is exhausted"))?;
         Ok(id)
     }
 
-    fn value(
-        &mut self,
-        temporary: SsaValueId,
-        definition: ValueDefinition,
-    ) -> Result<ValueId, Error> {
-        let value_index = u32::try_from(self.definitions.len())
+    fn value(&mut self, temporary: ValueId, definition: ValueDefinition) -> Result<ValueId, Error> {
+        let emitted_index = u32::try_from(self.definitions.len())
             .ok()
             .filter(|index| *index < u32::MAX)
-            .ok_or(Error::MalformedControlFlow)?;
-        let temporary = ssa_index(temporary)?;
+            .ok_or_else(|| Error::internal("the value identity space is exhausted"))?;
+        let temporary = value_index(temporary)?;
         let required_len = temporary
             .checked_add(1)
-            .ok_or(Error::MalformedControlFlow)?;
-        let additional = required_len.saturating_sub(self.values.len());
-        self.values
-            .try_reserve(additional)
-            .map_err(|_| Error::MalformedControlFlow)?;
+            .ok_or_else(|| Error::internal("the temporary value index cannot be addressed"))?;
         if self.values.len() < required_len {
             self.values.resize(required_len, None);
         }
         if self.values[temporary].is_some() {
-            return Err(Error::MalformedControlFlow);
+            return Err(Error::internal(
+                "a temporary value identity has multiple definitions",
+            ));
         }
-        let value = ValueId::new(value_index);
+        let value = ValueId::new(emitted_index);
         self.values[temporary] = Some(value);
         self.definitions.push(definition);
         Ok(value)
     }
 
-    fn resolve(&self, value: SsaValueId) -> Result<ValueId, Error> {
+    fn resolve(&self, value: ValueId) -> Result<ValueId, Error> {
         self.values
-            .get(ssa_index(value)?)
+            .get(value_index(value)?)
             .and_then(|value| *value)
-            .ok_or(Error::MalformedControlFlow)
+            .ok_or_else(|| Error::internal("a temporary value has no emitted definition"))
     }
 }
 
-fn ssa_index(value: SsaValueId) -> Result<usize, Error> {
-    usize::try_from(value.index()).map_err(|_| Error::MalformedControlFlow)
+fn value_index(value: ValueId) -> Result<usize, Error> {
+    usize::try_from(value.index())
+        .map_err(|_| Error::internal("a temporary value index cannot be addressed"))
 }

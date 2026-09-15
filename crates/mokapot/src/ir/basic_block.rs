@@ -1,4 +1,4 @@
-use super::{BlockId, Operation, Phi, Terminator};
+use super::{BlockId, Operation, Phi, Terminator, ValueId};
 
 /// A maximal reachable basic block in completed `MokaIR`.
 ///
@@ -7,6 +7,7 @@ use super::{BlockId, Operation, Phi, Terminator};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
     pub(super) id: BlockId,
+    pub(super) caught_exception: Option<ValueId>,
     pub(super) phis: Vec<Phi>,
     pub(super) operations: Vec<Operation>,
     pub(super) terminator: Terminator,
@@ -17,6 +18,11 @@ impl BasicBlock {
     #[must_use]
     pub const fn id(&self) -> BlockId {
         self.id
+    }
+    /// Returns the caught exception introduced at this synthetic handler entry.
+    #[must_use]
+    pub const fn caught_exception(&self) -> Option<ValueId> {
+        self.caught_exception
     }
     /// Returns the phi nodes evaluated at block entry.
     #[must_use]

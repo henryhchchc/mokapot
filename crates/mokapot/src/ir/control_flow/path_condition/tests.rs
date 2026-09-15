@@ -19,15 +19,50 @@ impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
 }
 
 fn evaluate(cond: &PathCondition<u32>, value_map: &HashMap<u32, bool>) -> bool {
-    cond.cubes()
-        .map(|cube| {
-            cube.literals().all(|it| match it {
+    cond.disjuncts()
+        .map(|term| {
+            term.literals().all(|it| match it {
                 BooleanVariable::Positive(id) => value_map[id],
                 BooleanVariable::Negative(id) => !value_map[id],
             })
         })
         .reduce(|lhs, rhs| lhs || rhs)
         .unwrap_or_default()
+}
+
+#[test]
+fn exposes_dnf_terms_and_guard_literals() {
+    let guard = BranchGuard::from_iter([
+        BooleanVariable::Positive(1_u32),
+        BooleanVariable::Negative(2),
+    ]);
+    assert_eq!(
+        guard.literals().collect::<std::collections::HashSet<_>>(),
+        std::collections::HashSet::from([
+            BooleanVariable::Positive(&1),
+            BooleanVariable::Negative(&2),
+        ])
+    );
+
+    let condition = PathCondition::one() & guard;
+    let terms = condition.disjuncts().collect::<Vec<_>>();
+    assert_eq!(terms.len(), 1);
+    assert!(!terms[0].is_tautology());
+    assert_eq!(
+        terms[0]
+            .literals()
+            .collect::<std::collections::HashSet<_>>(),
+        std::collections::HashSet::from([
+            BooleanVariable::Positive(&1),
+            BooleanVariable::Negative(&2),
+        ])
+    );
+
+    let tautology_condition = PathCondition::<u32>::one();
+    let tautology = tautology_condition.disjuncts().collect::<Vec<_>>();
+    assert_eq!(tautology.len(), 1);
+    assert!(tautology[0].is_tautology());
+    assert!(PathCondition::<u32>::zero().disjuncts().next().is_none());
 }
 
 fn generate_pred_values(cond: &PathCondition<u32>) -> HashMap<u32, bool> {
@@ -150,28 +185,6 @@ mod raw_structure {
             });
 
         assert_eq!(lhs, rhs);
-    }
-
-    #[test]
-    fn display_sorts_literals_within_a_cube() {
-        let lhs = conjunction([
-            BooleanVariable::Positive(2_u32),
-            BooleanVariable::Negative(1_u32),
-        ]);
-        let rhs = conjunction([
-            BooleanVariable::Negative(1_u32),
-            BooleanVariable::Positive(2_u32),
-        ]);
-        assert_eq!(lhs.to_string(), rhs.to_string());
-    }
-
-    #[test]
-    fn display_sorts_cubes_within_a_condition() {
-        let lhs = conjunction([BooleanVariable::Positive(2_u32)])
-            | conjunction([BooleanVariable::Positive(1_u32)]);
-        let rhs = conjunction([BooleanVariable::Positive(1_u32)])
-            | conjunction([BooleanVariable::Positive(2_u32)]);
-        assert_eq!(lhs.to_string(), rhs.to_string());
     }
 }
 

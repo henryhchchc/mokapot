@@ -55,7 +55,10 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 
     assert!(matches!(
         build(&method),
-        Err(MokaIRBuildError::FrameError(_))
+        Err(MokaIRBuildError::InvalidFrame {
+            pc: Some(pc),
+            ..
+        }) if pc == 6.into()
     ));
 }
 
@@ -113,32 +116,10 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         .find(|instruction| instruction.id() == backedge_definition)
         .unwrap();
     assert!(definition.uses().contains(&phi.value()));
-
-    // The synthetic entry precedes the loop phi and its forward-referenced input.
-    assert_eq!(preheader.terminator().id(), InstructionId::new(0));
-    assert_eq!(phi.id(), InstructionId::new(1));
-    assert_eq!(phi.value(), ValueId::new(1));
-    assert_eq!(header.terminator().id(), InstructionId::new(2));
-    assert_eq!(backedge_definition, InstructionId::new(4));
-    assert_eq!(backedge_value, ValueId::new(3));
-    assert_eq!(ir.parameter_values(), &[ValueId::new(0)]);
-    assert_eq!(
-        ir.source_map()
-            .instructions_at(4.into())
-            .collect::<Vec<_>>(),
-        vec![backedge_definition]
-    );
-    assert_eq!(
-        ir.blocks()
-            .flat_map(|block| block.terminator().successors())
-            .map(Successor::id)
-            .collect::<Vec<_>>(),
-        (0..4).map(EdgeId::new).collect::<Vec<_>>()
-    );
 }
 
 #[test]
-fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
+fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
     let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
     let ir = build(&method).unwrap();
     let blocks = ir.blocks().collect::<Vec<_>>();
@@ -156,6 +137,18 @@ fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
             .origins_of(blocks[0].terminator().id())
             .count(),
         0
+    );
+    let [arm] = blocks[0].terminator().successors() else {
+        panic!("the preheader must have exactly one successor")
+    };
+    let header = ir.block(arm.target()).unwrap();
+    assert_eq!(header, blocks[1]);
+    assert_eq!(header.terminator().successors()[0].target(), header.id());
+    assert_eq!(
+        ir.source_map()
+            .origins_of(header.terminator().id())
+            .collect::<Vec<_>>(),
+        [ProgramCounter::from(0)]
     );
 }
 

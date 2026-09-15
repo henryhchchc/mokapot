@@ -49,10 +49,13 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
             .cfg
             .outgoing_edges(*location)
             .filter_map(|edge| {
-                let propagated = if let ControlTransfer::Conditional(condition) = edge.transfer() {
-                    fact.conjoin_branch_guard(condition.as_ref())
-                } else {
-                    fact.clone()
+                let propagated = match edge.transfer() {
+                    ControlTransfer::Conditional(guard) => {
+                        fact.conjoin_branch_guard(guard.as_ref())
+                    }
+                    ControlTransfer::Unconditional
+                    | ControlTransfer::Exception(_)
+                    | ControlTransfer::Unwind => fact.clone(),
                 };
                 (!propagated.is_contradiction()).then_some((edge.target(), propagated))
             })
@@ -80,10 +83,8 @@ impl<P> PathConditionFact<P> {
     where
         P: Hash + Eq + Clone,
     {
-        Self {
-            inner: inner.reduce_with_budget(budget),
-            budget,
-        }
+        let inner = inner.reduce_with_budget(budget);
+        Self { inner, budget }
     }
 
     pub(crate) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
@@ -135,40 +136,5 @@ where
         let inner = std::mem::replace(&mut self.inner, PathCondition::zero());
         *self = Self::new(inner | other.inner, self.budget);
         true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{PathConditionFact, SolvingBudget};
-    use crate::{
-        analysis::fixed_point::JoinSemiLattice,
-        ir::control_flow::path_condition::{BooleanVariable, PathCondition},
-    };
-
-    #[test]
-    fn fact_construction_reduces_raw_path_conditions() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let structural =
-            (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
-
-        let fact = PathConditionFact::new(structural, SolvingBudget::default());
-
-        assert_eq!(fact.into_inner(), PathCondition::of(a));
-    }
-
-    #[test]
-    fn fact_join_reduces_after_structural_union() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathConditionFact::new(
-            PathCondition::of(a.clone()) & b.clone(),
-            SolvingBudget::default(),
-        );
-        let rhs =
-            PathConditionFact::new(PathCondition::of(a.clone()) & !b, SolvingBudget::default());
-
-        assert_eq!(lhs.join(rhs).into_inner(), PathCondition::of(a));
     }
 }

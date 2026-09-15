@@ -25,7 +25,8 @@ impl SourceMap {
     /// Returns every IR node directly related to a JVM instruction location.
     ///
     /// The iterator is empty when lifting erased the instruction without
-    /// producing a semantic IR node.
+    /// producing a semantic IR node. Resolve yielded identities with
+    /// [`MokaIRMethod::instruction`](super::MokaIRMethod::instruction).
     pub fn instructions_at(&self, pc: ProgramCounter) -> impl Iterator<Item = InstructionId> + '_ {
         self.by_pc
             .get(&pc)

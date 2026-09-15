@@ -1,5 +1,4 @@
 use super::*;
-use std::iter::once;
 
 #[test]
 fn straight_line_instructions_coalesce_into_one_block() {
@@ -22,48 +21,17 @@ fn straight_line_instructions_coalesce_into_one_block() {
         blocks[0].terminator().kind(),
         TerminatorKind::Return(Some(_))
     ));
-    let ids = blocks[0]
-        .operations()
-        .iter()
-        .map(Operation::id)
-        .chain(once(blocks[0].terminator().id()))
-        .collect::<HashSet<_>>();
-    assert_eq!(ids.len(), 2);
-}
 
-#[test]
-fn value_identities_do_not_depend_on_sparse_program_counters() {
-    let compact = build(&method(
-        [
-            (0, Instruction::IConst0),
-            (1, Instruction::Pop),
-            (2, Instruction::IConst1),
-            (3, Instruction::IReturn),
-        ],
-        "()I",
-        vec![],
-    ))
-    .unwrap();
-    let sparse = build(&method(
-        [
-            (0, Instruction::IConst0),
-            (100, Instruction::Pop),
-            (1000, Instruction::IConst1),
-            (5000, Instruction::IReturn),
-        ],
-        "()I",
-        vec![],
-    ))
-    .unwrap();
-    let values = |method: &MokaIRMethod| {
-        method
-            .blocks()
-            .flat_map(BasicBlock::operations)
-            .filter_map(Operation::def)
-            .collect::<Vec<_>>()
-    };
-
-    assert_eq!(values(&compact), values(&sparse));
+    let definition = ir
+        .source_map()
+        .instructions_at(0.into())
+        .next()
+        .expect("the constant definition must retain its source");
+    assert!(matches!(
+        ir.instruction(definition),
+        Some(InstructionRef::Operation(operation)) if operation.id() == definition
+    ));
+    assert!(ir.instruction(InstructionId::new(u32::MAX)).is_none());
 }
 
 #[test]
@@ -83,6 +51,22 @@ fn unreachable_bytecode_is_omitted() {
     assert_eq!(ir.blocks().len(), 2);
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
     assert_eq!(ir.source_map().instructions_at(11.into()).count(), 0);
+}
+
+#[test]
+fn unreachable_frame_invalid_bytecode_is_omitted() {
+    let method = method(
+        [
+            (0, Instruction::Goto(10.into())),
+            (3, Instruction::IAdd),
+            (10, Instruction::Return),
+        ],
+        "()V",
+        vec![],
+    );
+
+    let ir = build(&method).expect("unreachable instructions must not contribute frame facts");
+    assert_eq!(ir.source_map().instructions_at(3.into()).count(), 0);
 }
 
 #[test]

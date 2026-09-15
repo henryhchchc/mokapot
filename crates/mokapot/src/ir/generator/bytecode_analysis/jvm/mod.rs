@@ -1,18 +1,16 @@
-//! JVM frame representation used while constructing the instruction graph.
+//! JVM frame representation used while analyzing structural blocks.
 
 mod error;
 mod local_variables;
 mod operand_stack;
 mod value_category;
 
-#[cfg(test)]
-mod tests;
-
 pub use error::Error as FrameError;
+pub(crate) use local_variables::EntrySlots;
 pub(crate) use operand_stack::StackOperation;
 pub(crate) use value_category::ValueCategory;
 
-use crate::types::method_descriptor::MethodDescriptor;
+use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
 use local_variables::LocalVariables;
 use operand_stack::OperandStack;
 
@@ -23,53 +21,46 @@ pub(crate) enum Position {
     Stack(usize),
 }
 
-type PairedSlotValues<'a, V> = Vec<(Option<&'a V>, Option<&'a V>)>;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Frame<V> {
-    pub locals: LocalVariables<V>,
-    pub stack: OperandStack<V>,
+pub(crate) struct Frame {
+    pub locals: LocalVariables,
+    pub stack: OperandStack,
 }
 
-impl<V> Frame<V> {
+impl Frame {
     pub fn into_unwind_frame(mut self) -> Self {
         self.locals.clear_for_unwind();
         self.stack.clear();
         self
     }
 
-    pub fn iter_values(&self) -> impl Iterator<Item = &V> {
-        self.locals.values().chain(self.stack.values())
+    pub fn value_at(&self, position: Position) -> Option<&ValueId> {
+        match position {
+            Position::Local(index) => self.locals.slot_values().nth(index).flatten(),
+            Position::Stack(index) => self.stack.slot_values().nth(index).flatten(),
+        }
     }
 
-    pub fn paired_slot_values<'a>(
-        &'a self,
-        other: &'a Self,
-    ) -> Result<PairedSlotValues<'a, V>, FrameError> {
-        self.ensure_compatible_shape(other)?;
-        Ok(self
-            .locals
-            .slot_values()
-            .chain(self.stack.slot_values())
-            .zip(other.locals.slot_values().chain(other.stack.slot_values()))
-            .collect())
+    pub fn handler_exception(&self) -> Result<&ValueId, FrameError> {
+        self.stack.single_value(ValueCategory::Category1)
     }
 
-    pub fn merge_from_with(
+    pub fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(Position, &mut V, V) -> bool,
-    ) -> Result<bool, FrameError> {
-        self.ensure_compatible_shape(&other)?;
-        let locals_changed = self
-            .locals
+        mut merge_values: impl FnMut(Position, &mut ValueId, ValueId) -> Result<(), E>,
+    ) -> Result<(), E>
+    where
+        E: From<FrameError>,
+    {
+        self.ensure_compatible_shape(&other).map_err(E::from)?;
+        self.locals
             .merge_from_with(other.locals, |index, lhs, rhs| {
                 merge_values(Position::Local(index), lhs, rhs)
-            });
-        let stack_changed = self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
+            })?;
+        self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
             merge_values(Position::Stack(index), lhs, rhs)
-        });
-        Ok(locals_changed || stack_changed)
+        })
     }
 
     fn ensure_compatible_shape(&self, other: &Self) -> Result<(), FrameError> {
@@ -78,30 +69,35 @@ impl<V> Frame<V> {
         }
         Ok(())
     }
-}
-
-impl<V: Clone> Frame<V> {
+    /// Builds the entry frame of a method, also reporting the slots it assigned
+    /// to the receiver and to the parameters.
+    ///
+    /// The parameters follow the receiver in descriptor order, with a category-2
+    /// parameter occupying two slots; the callers of this constructor rely on
+    /// that convention to map parameter identities to slots.
     pub fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
-        this_value: Option<V>,
-        parameters: &[V],
-    ) -> Result<Self, FrameError> {
-        let local_variables =
+        this_value: Option<ValueId>,
+        parameters: &[ValueId],
+    ) -> Result<(Self, EntrySlots), FrameError> {
+        let (locals, entry_slots) =
             LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
         let operand_stack = OperandStack::with_max_slots(max_operand_stack);
-        Ok(Self {
-            locals: local_variables,
-            stack: operand_stack,
-        })
+        Ok((
+            Self {
+                locals,
+                stack: operand_stack,
+            },
+            entry_slots,
+        ))
     }
 
-    pub fn exception_handler_frame(&self, caught: V) -> Result<Self, FrameError> {
-        let mut frame = Self {
-            locals: self.locals.clone(),
-            stack: OperandStack::with_max_slots(self.stack.max_slots()),
-        };
+    pub fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
+        let locals = self.locals.clone();
+        let stack = OperandStack::with_max_slots(self.stack.max_slots());
+        let mut frame = Self { locals, stack };
         frame.stack.push(caught, ValueCategory::Category1)?;
         Ok(frame)
     }

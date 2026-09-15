@@ -100,3 +100,61 @@ fn exceptional_state_excludes_the_fallible_result() {
             .all(|caught| ir.definition_of(caught).is_some())
     );
 }
+
+#[test]
+fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
+    let runtime_exception: crate::jvm::references::ClassRef =
+        "java/lang/RuntimeException".parse().unwrap();
+    let method = method(
+        [
+            (0, Instruction::AConstNull),
+            (
+                1,
+                Instruction::CheckCast("java/lang/String".parse().unwrap()),
+            ),
+            (2, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Return),
+        ],
+        "()V",
+        vec![
+            ExceptionTableEntry {
+                covered_pc: 1.into()..2.into(),
+                handler_pc: 10.into(),
+                catch_type: Some(runtime_exception.clone()),
+            },
+            ExceptionTableEntry {
+                covered_pc: 1.into()..2.into(),
+                handler_pc: 10.into(),
+                catch_type: None,
+            },
+        ],
+    );
+    let ir = build(&method).unwrap();
+    let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
+    let exceptional = fallible
+        .terminator()
+        .successors()
+        .iter()
+        .filter(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
+        .collect::<Vec<_>>();
+
+    assert_eq!(exceptional.len(), 2);
+    assert_eq!(exceptional[0].target(), exceptional[1].target());
+    assert!(matches!(
+        exceptional[0].transfer(),
+        ControlTransfer::Exception(Some(caught)) if caught == &runtime_exception
+    ));
+    assert!(matches!(
+        exceptional[1].transfer(),
+        ControlTransfer::Exception(None)
+    ));
+    let handler = ir.block(exceptional[0].target()).unwrap();
+    assert!(handler.caught_exception().is_some());
+    assert_eq!(
+        ir.blocks()
+            .filter(|block| block.caught_exception().is_some())
+            .count(),
+        1
+    );
+}

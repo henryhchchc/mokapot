@@ -1,57 +1,57 @@
 use std::collections::HashSet;
 
-use crate::ir::{TryMapValues, ValueId};
+use crate::ir::ValueId;
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
-pub enum Operation<OP = ValueId> {
+pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display("{_0} + {_1}")]
-    Add(OP, OP),
+    Add(ValueId, ValueId),
     /// Subtracts the second argument from the first (i.e., `lhs - rhs`).
     #[display("{_0} - {_1}")]
-    Subtract(OP, OP),
+    Subtract(ValueId, ValueId),
     /// Multiplies the two arguments (i.e., `lhs * rhs`).
     #[display("{_0} * {_1}")]
-    Multiply(OP, OP),
+    Multiply(ValueId, ValueId),
     /// Divides the first argument by the second (i.e., `lhs / rhs`).
     #[display("{_0} / {_1}")]
-    Divide(OP, OP),
+    Divide(ValueId, ValueId),
     /// Computes the remainder of the first argument divided by the second (i.e., `lhs mod rhs`).
     #[display("{_0} mod {_1}")]
-    Remainder(OP, OP),
+    Remainder(ValueId, ValueId),
     /// Negates the argument (i.e., `-arg`).
     #[display("-{_0}")]
-    Negate(OP),
+    Negate(ValueId),
     /// Increments the argument by a constant (i.e., `arg + N`).
     #[display("{_0} + {_1}")]
-    Increment(OP, i32),
+    Increment(ValueId, i32),
     /// Shifts the first argument left by the second (i.e., `lhs << rhs`).
     #[display("{_0} << {_1}")]
-    ShiftLeft(OP, OP),
+    ShiftLeft(ValueId, ValueId),
     /// Shifts the first argument right by the second (i.e., `lhs >> rhs`).
     #[display("{_0} >> {_1}")]
-    ShiftRight(OP, OP),
+    ShiftRight(ValueId, ValueId),
     /// Shifts the first argument right by the second, filling the leftmost bits with zeros (i.e., `lhs >>> rhs`).
     #[display("{_0} >>> {_1}")]
-    LogicalShiftRight(OP, OP),
+    LogicalShiftRight(ValueId, ValueId),
     /// Computes the bitwise AND of the two arguments (i.e., `lhs & rhs`).
     #[display("{_0} & {_1}")]
-    BitwiseAnd(OP, OP),
+    BitwiseAnd(ValueId, ValueId),
     /// Computes the bitwise OR of the two arguments (i.e., `lhs | rhs`).
     #[display("{_0} | {_1}")]
-    BitwiseOr(OP, OP),
+    BitwiseOr(ValueId, ValueId),
     /// Computes the bitwise XOR of the two arguments (i.e., `lhs ^ rhs`).
     #[display("{_0} ^ {_1}")]
-    BitwiseXor(OP, OP),
+    BitwiseXor(ValueId, ValueId),
     /// Compares the two arguments as longs (i.e., `lhs lcmp rhs`).
     #[display("cmp({_0}, {_1})")]
-    LongComparison(OP, OP),
+    LongComparison(ValueId, ValueId),
     /// Compares the two arguments as floating point numbers (i.e., `lhs fcmp rhs`).
     #[display("cmp({_0}, {_1}) with {_2}")]
-    FloatingPointComparison(OP, OP, NaNTreatment),
+    FloatingPointComparison(ValueId, ValueId, NaNTreatment),
 }
-impl Operation<ValueId> {
+impl Operation {
     /// Returns the values used by the expression.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
@@ -71,38 +71,6 @@ impl Operation<ValueId> {
             | Self::FloatingPointComparison(a, b, _) => HashSet::from([*a, *b]),
             Self::Negate(a) | Self::Increment(a, _) => HashSet::from([*a]),
         }
-    }
-}
-
-impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
-    type Value = OP;
-    type Mapped = Operation<OUT>;
-
-    fn try_map_values<E>(
-        self,
-        mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<Operation<OUT>, E> {
-        Ok(match self {
-            Self::Add(lhs, rhs) => Operation::Add(remap(lhs)?, remap(rhs)?),
-            Self::Subtract(lhs, rhs) => Operation::Subtract(remap(lhs)?, remap(rhs)?),
-            Self::Multiply(lhs, rhs) => Operation::Multiply(remap(lhs)?, remap(rhs)?),
-            Self::Divide(lhs, rhs) => Operation::Divide(remap(lhs)?, remap(rhs)?),
-            Self::Remainder(lhs, rhs) => Operation::Remainder(remap(lhs)?, remap(rhs)?),
-            Self::Negate(operand) => Operation::Negate(remap(operand)?),
-            Self::Increment(operand, amount) => Operation::Increment(remap(operand)?, amount),
-            Self::ShiftLeft(lhs, rhs) => Operation::ShiftLeft(remap(lhs)?, remap(rhs)?),
-            Self::ShiftRight(lhs, rhs) => Operation::ShiftRight(remap(lhs)?, remap(rhs)?),
-            Self::LogicalShiftRight(lhs, rhs) => {
-                Operation::LogicalShiftRight(remap(lhs)?, remap(rhs)?)
-            }
-            Self::BitwiseAnd(lhs, rhs) => Operation::BitwiseAnd(remap(lhs)?, remap(rhs)?),
-            Self::BitwiseOr(lhs, rhs) => Operation::BitwiseOr(remap(lhs)?, remap(rhs)?),
-            Self::BitwiseXor(lhs, rhs) => Operation::BitwiseXor(remap(lhs)?, remap(rhs)?),
-            Self::LongComparison(lhs, rhs) => Operation::LongComparison(remap(lhs)?, remap(rhs)?),
-            Self::FloatingPointComparison(lhs, rhs, treatment) => {
-                Operation::FloatingPointComparison(remap(lhs)?, remap(rhs)?, treatment)
-            }
-        })
     }
 }
 
