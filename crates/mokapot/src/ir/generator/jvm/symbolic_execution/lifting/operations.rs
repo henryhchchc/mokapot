@@ -8,7 +8,7 @@ use crate::ir::{
                 Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
-            symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
+            symbolic_execution::{RegisterInstruction, Value, lifting::Context},
         },
     },
 };
@@ -42,7 +42,7 @@ pub(super) fn lift_binary_math(
     Ok(RegisterInstruction::Definition { value, expr })
 }
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn shift_long(
         &mut self,
         operation: impl FnOnce(Value, Value) -> MathOperation<Value>,

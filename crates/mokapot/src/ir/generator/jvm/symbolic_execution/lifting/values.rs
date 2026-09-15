@@ -5,14 +5,14 @@ use crate::{
             error::MokaIRBuildError,
             jvm::{
                 frame::{ValueCategory, ValueCategory::Category1},
-                symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
+                symbolic_execution::{RegisterInstruction, Value, lifting::Context},
             },
         },
     },
     jvm::{ConstantValue, references::ClassRef},
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn constant(
         &mut self,
         constant: ConstantValue,

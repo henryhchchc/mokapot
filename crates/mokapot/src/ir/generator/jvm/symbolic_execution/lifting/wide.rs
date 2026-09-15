@@ -3,13 +3,13 @@ use crate::{
         error::MokaIRBuildError,
         jvm::{
             frame::ValueCategory::{Category1, Category2},
-            symbolic_execution::{RegisterInstruction, lifting::LiftContext},
+            symbolic_execution::{RegisterInstruction, lifting::Context},
         },
     },
     jvm::code::WideInstruction,
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,

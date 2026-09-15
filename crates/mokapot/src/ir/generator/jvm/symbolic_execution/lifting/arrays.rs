@@ -5,14 +5,14 @@ use crate::{
             error::MokaIRBuildError,
             jvm::{
                 frame::{ValueCategory, ValueCategory::Category1},
-                symbolic_execution::{RegisterInstruction, lifting::LiftContext},
+                symbolic_execution::{RegisterInstruction, lifting::Context},
             },
         },
     },
     types::field_type::FieldType,
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn array_read(
         &mut self,
         category: ValueCategory,

@@ -4,13 +4,13 @@ use crate::ir::{
         error::MokaIRBuildError,
         jvm::{
             frame::{ValueCategory, ValueCategory::Category1},
-            symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
+            symbolic_execution::{RegisterInstruction, Value, lifting::Context},
         },
     },
 };
 use crate::jvm::code::ProgramCounter;
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn unary_branch(
         &mut self,
         target: ProgramCounter,

@@ -25,7 +25,7 @@ use crate::{
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
-pub(super) struct LiftContext<'executor, 'frame, 'method> {
+struct Context<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
     addr: NodeAddress,
     frame: &'frame mut Frame<Value>,
@@ -51,7 +51,7 @@ impl Executor<'_> {
         if !matches!(addr, NodeAddress::Bytecode { .. }) {
             return Err(MokaIRBuildError::MalformedControlFlow);
         }
-        let mut cx = LiftContext {
+        let mut cx = Context {
             executor: self,
             addr,
             frame,
@@ -234,7 +234,7 @@ impl Executor<'_> {
     }
 }
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     fn monitor(
         &mut self,
         operation: impl FnOnce(Value) -> LockOperation<Value>,

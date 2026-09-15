@@ -5,14 +5,14 @@ use crate::{
             error::MokaIRBuildError,
             jvm::{
                 frame::ValueCategory::{self, Category1},
-                symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
+                symbolic_execution::{RegisterInstruction, Value, lifting::Context},
             },
         },
     },
     jvm::references::FieldRef,
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn read_static(
         &mut self,
         field: &FieldRef,

@@ -6,7 +6,7 @@ use crate::{
             identity::SsaValueId,
             jvm::{
                 frame::ValueCategory::{self, Category1},
-                symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
+                symbolic_execution::{RegisterInstruction, Value, lifting::Context},
             },
         },
     },
@@ -14,7 +14,7 @@ use crate::{
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
 
-impl LiftContext<'_, '_, '_> {
+impl Context<'_, '_, '_> {
     pub(super) fn invoke(
         &mut self,
         method: &MethodRef,
