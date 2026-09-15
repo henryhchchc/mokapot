@@ -4,9 +4,10 @@ use crate::{
         generator::{
             error::Error,
             identity::SsaValueId,
-            jvm::{
+            instruction_graph::{
+                RegisterInstruction, Value,
                 frame::ValueCategory::{self, Category1},
-                symbolic_execution::{RegisterInstruction, Value, lifting::Context},
+                lifting::Context,
             },
         },
     },

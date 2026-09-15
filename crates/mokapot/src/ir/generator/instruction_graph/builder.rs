@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Executor, NodeAddress, RegisterInstruction,
-    fact::{Cfg, Node, Value},
-    fallibility, solver,
+    Builder, NodeAddress, RegisterInstruction, fallibility,
+    model::{Graph, Node, Value},
+    solver,
     subroutine::{self, ReturnAddress},
 };
 use crate::{
-    ir::generator::{error::Error, identity::SsaValueId, jvm::frame::Frame},
+    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::frame::Frame},
     jvm::{
         Method,
         code::{MethodBody, ProgramCounter},
@@ -15,8 +15,8 @@ use crate::{
     },
 };
 
-impl<'method> Executor<'method> {
-    pub fn execute_addr(
+impl<'method> Builder<'method> {
+    pub fn build_node(
         &mut self,
         addr: NodeAddress,
         incoming_frame: Frame<Value>,
@@ -100,7 +100,7 @@ impl<'method> Executor<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let executor = Self {
+        let builder = Self {
             body,
             fallibility: fallibility::Context::for_method(method),
             subroutine_expander: subroutine::Expander::new(entry_addr),
@@ -112,11 +112,11 @@ impl<'method> Executor<'method> {
             entry_addr,
             initial_frame,
         };
-        Ok(executor)
+        Ok(builder)
     }
 
-    pub fn execute(mut self) -> Result<Cfg, Error> {
-        let nodes = self.execute_reachable_addrs()?;
+    pub fn build(mut self) -> Result<Graph, Error> {
+        let nodes = self.build_reachable_nodes()?;
         let merge_identities = nodes
             .values()
             .flat_map(|node| node.incoming_frame.iter_values())
@@ -129,7 +129,7 @@ impl<'method> Executor<'method> {
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        Ok(Cfg {
+        Ok(Graph {
             entry_addr: self.entry_addr,
             initial_frame: self.initial_frame,
             nodes,
@@ -139,10 +139,10 @@ impl<'method> Executor<'method> {
         })
     }
 
-    pub fn execute_reachable_addrs(&mut self) -> Result<BTreeMap<NodeAddress, Node>, Error> {
+    pub fn build_reachable_nodes(&mut self) -> Result<BTreeMap<NodeAddress, Node>, Error> {
         let entry_addr = self.entry_addr;
         let initial_frame = self.initial_frame.clone();
-        solver::execute_to_fixpoint(self, entry_addr, initial_frame)
+        solver::build_to_fixpoint(self, entry_addr, initial_frame)
     }
 
     fn new_value_id(&mut self) -> Result<SsaValueId, Error> {
@@ -265,19 +265,19 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut executor = Executor::for_method(&method).expect("valid method");
-        executor.execute_reachable_addrs().expect("valid loop");
+        let mut builder = Builder::for_method(&method).expect("valid method");
+        builder.build_reachable_nodes().expect("valid loop");
 
-        assert_eq!(executor.definition_ids.len(), 3);
-        assert_eq!(executor.value_id_allocator.next_value_idx, 3);
+        assert_eq!(builder.definition_ids.len(), 3);
+        assert_eq!(builder.value_id_allocator.next_value_idx, 3);
 
         for k in [0, 3, 4] {
             let entry = NodeAddress::entry(k.into());
-            assert!(executor.definition_ids.contains_key(&entry));
+            assert!(builder.definition_ids.contains_key(&entry));
         }
         for k in [1, 2, 5, 6] {
             let entry = NodeAddress::entry(k.into());
-            assert!(!executor.definition_ids.contains_key(&entry));
+            assert!(!builder.definition_ids.contains_key(&entry));
         }
     }
 }

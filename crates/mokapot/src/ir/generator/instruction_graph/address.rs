@@ -1,9 +1,9 @@
-//! Addresses in the context-expanded symbolic control-flow graph.
+//! Addresses in the context-expanded instruction graph.
 
 use super::subroutine::Context;
 use crate::jvm::code::ProgramCounter;
 
-/// A node address in the context-expanded symbolic control-flow graph.
+/// A node address in the context-expanded instruction graph.
 ///
 /// Unlike a [`ProgramCounter`], a location also identifies the legacy
 /// `jsr`/`ret` activation in which a node executes. Synthetic exception and

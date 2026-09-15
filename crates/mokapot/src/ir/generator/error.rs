@@ -1,4 +1,4 @@
-use crate::ir::generator::jvm::frame::JvmFrameError;
+use crate::ir::generator::instruction_graph::frame::JvmFrameError;
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]

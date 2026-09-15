@@ -1,4 +1,4 @@
-//! JVM instruction fallibility classification.
+//! Classifies the fallibility of JVM instructions.
 
 use crate::jvm::{ConstantValue, Method, code::Instruction, method};
 

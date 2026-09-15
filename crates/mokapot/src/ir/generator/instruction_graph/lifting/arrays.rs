@@ -3,9 +3,10 @@ use crate::{
         expression::ArrayOperation,
         generator::{
             error::Error,
-            jvm::{
+            instruction_graph::{
+                RegisterInstruction,
                 frame::{ValueCategory, ValueCategory::Category1},
-                symbolic_execution::{RegisterInstruction, lifting::Context},
+                lifting::Context,
             },
         },
     },

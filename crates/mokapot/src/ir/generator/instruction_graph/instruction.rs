@@ -1,3 +1,5 @@
+//! Register-form instructions used by the instruction graph.
+
 use std::collections::BTreeMap;
 
 use super::{NodeAddress, Value};

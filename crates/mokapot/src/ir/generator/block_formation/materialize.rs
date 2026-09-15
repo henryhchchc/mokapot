@@ -8,10 +8,7 @@ use crate::{
         control_flow::ControlTransfer,
         generator::{
             error::Error,
-            jvm::{
-                frame::Frame,
-                symbolic_execution::{self, NodeAddress, RegisterInstruction},
-            },
+            instruction_graph::{self, NodeAddress, RegisterInstruction, frame::Frame},
         },
     },
     jvm::code::ProgramCounter,
@@ -23,15 +20,15 @@ use super::{
 };
 
 pub(super) fn materialize_blocks(
-    mut symbolic_nodes: BTreeMap<NodeAddress, symbolic_execution::Node>,
+    mut instruction_nodes: BTreeMap<NodeAddress, instruction_graph::Node>,
     layout: &BlockLayout,
 ) -> Result<Vec<Block>, Error> {
     let blocks = layout
         .addrs()
         .iter()
-        .map(|(&id, addrs)| materialize_block(id, addrs, &mut symbolic_nodes, layout))
+        .map(|(&id, addrs)| materialize_block(id, addrs, &mut instruction_nodes, layout))
         .collect::<Result<Vec<_>, _>>()?;
-    if symbolic_nodes.is_empty() {
+    if instruction_nodes.is_empty() {
         Ok(blocks)
     } else {
         Err(Error::MalformedControlFlow)
@@ -41,7 +38,7 @@ pub(super) fn materialize_blocks(
 fn materialize_block(
     id: BlockId,
     addrs: &[NodeAddress],
-    symbolic_nodes: &mut BTreeMap<NodeAddress, symbolic_execution::Node>,
+    instruction_nodes: &mut BTreeMap<NodeAddress, instruction_graph::Node>,
     layout: &BlockLayout,
 ) -> Result<Block, Error> {
     let mut entry_frame = None;
@@ -52,12 +49,12 @@ fn materialize_block(
     let mut arms = Vec::new();
 
     for (index, addr) in addrs.iter().copied().enumerate() {
-        let symbolic_execution::Node {
+        let instruction_graph::Node {
             incoming_frame,
             instruction,
             outgoing_edges,
             caught_exception_value: location_exception,
-        } = symbolic_nodes
+        } = instruction_nodes
             .remove(&addr)
             .ok_or(Error::MalformedControlFlow)?;
         if index == 0 {
@@ -93,9 +90,9 @@ fn materialize_block(
 fn materialize_internal_operation(
     addr: NodeAddress,
     instruction: RegisterInstruction,
-    outgoing: &[symbolic_execution::Edge],
+    outgoing: &[instruction_graph::Edge],
     next: NodeAddress,
-) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, Error> {
+) -> Result<Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>, Error> {
     if instruction.is_explicit_transfer()
         || outgoing.len() != 1
         || outgoing[0].target != next
@@ -105,7 +102,7 @@ fn materialize_internal_operation(
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
-            value: symbolic_execution::Value::Ssa(value),
+            value: instruction_graph::Value::Ssa(value),
             expr,
         }),
         RegisterInstruction::Effect(expr) => Some(OperationKind::Effect { expr }),
@@ -131,8 +128,8 @@ fn materialize_internal_operation(
 }
 
 struct BlockEnd {
-    operation: Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>,
-    terminator: TerminatorKind<symbolic_execution::Value>,
+    operation: Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>,
+    terminator: TerminatorKind<instruction_graph::Value>,
     terminator_source: Option<ProgramCounter>,
     arms: Vec<Arm>,
 }
@@ -140,7 +137,7 @@ struct BlockEnd {
 fn materialize_block_end(
     addr: NodeAddress,
     instruction: RegisterInstruction,
-    outgoing: Vec<symbolic_execution::Edge>,
+    outgoing: Vec<instruction_graph::Edge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
@@ -180,7 +177,7 @@ fn materialize_block_end(
 pub(super) fn insert_entry_preheader(
     mut blocks: Vec<Block>,
     layout: &BlockLayout,
-    initial_frame: Frame<symbolic_execution::Value>,
+    initial_frame: Frame<instruction_graph::Value>,
 ) -> Vec<Block> {
     if layout.has_entry_preheader() {
         let entry_block = Block {
@@ -205,8 +202,8 @@ pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
     has_normal_successor: bool,
 ) -> (
-    Option<OperationKind<symbolic_execution::Value>>,
-    TerminatorKind<symbolic_execution::Value>,
+    Option<OperationKind<instruction_graph::Value>>,
+    TerminatorKind<instruction_graph::Value>,
 ) {
     match instruction {
         RegisterInstruction::Unwind => (None, TerminatorKind::Unwind),
@@ -227,7 +224,7 @@ pub(super) fn classify_block_end(
         RegisterInstruction::Throw(value) => (None, TerminatorKind::Throw(value)),
         RegisterInstruction::Definition { value, expr } => (
             Some(OperationKind::Definition {
-                value: symbolic_execution::Value::Ssa(value),
+                value: instruction_graph::Value::Ssa(value),
                 expr,
             }),
             implicit_terminator(has_normal_successor),
@@ -241,7 +238,7 @@ pub(super) fn classify_block_end(
 
 const fn implicit_terminator(
     has_normal_successor: bool,
-) -> TerminatorKind<symbolic_execution::Value> {
+) -> TerminatorKind<instruction_graph::Value> {
     if has_normal_successor {
         TerminatorKind::Fallible
     } else {

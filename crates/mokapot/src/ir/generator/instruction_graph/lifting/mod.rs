@@ -1,4 +1,4 @@
-//! Lifts stack-based JVM instructions into register-based instructions.
+//! Lifts stack-based JVM instructions into register-form instructions.
 
 mod arrays;
 mod calls;
@@ -8,14 +8,14 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{Executor, NodeAddress, RegisterInstruction, Value};
+use super::{Builder, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
         generator::{
             error::Error,
             identity::SsaValueId,
-            jvm::frame::{
+            instruction_graph::frame::{
                 Frame, StackOperation, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
@@ -25,13 +25,13 @@ use crate::{
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
-struct Context<'executor, 'frame, 'method> {
-    executor: &'executor mut Executor<'method>,
+struct Context<'builder, 'frame, 'method> {
+    builder: &'builder mut Builder<'method>,
     addr: NodeAddress,
     frame: &'frame mut Frame<Value>,
 }
 
-impl Executor<'_> {
+impl Builder<'_> {
     #[expect(
         clippy::too_many_lines,
         reason = "the match is an exhaustive JVM instruction dispatch"
@@ -52,7 +52,7 @@ impl Executor<'_> {
             return Err(Error::MalformedControlFlow);
         }
         let mut cx = Context {
-            executor: self,
+            builder: self,
             addr,
             frame,
         };
@@ -249,7 +249,7 @@ impl Context<'_, '_, '_> {
     }
 
     fn definition_id(&mut self) -> Result<SsaValueId, Error> {
-        self.executor.definition_id_at(self.addr)
+        self.builder.definition_id_at(self.addr)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>

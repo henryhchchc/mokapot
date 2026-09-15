@@ -1,4 +1,4 @@
-/// A symbolic definition identity shared by frame analysis and SSA construction.
+/// A provisional definition identity shared by instruction-graph and SSA construction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[display("%ssa{_0}")]

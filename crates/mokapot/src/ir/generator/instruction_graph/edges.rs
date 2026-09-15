@@ -1,6 +1,6 @@
-//! Symbolic JVM edge construction.
+//! JVM instruction-graph edge construction.
 
-use super::{Edge, Executor, NodeAddress, RegisterInstruction, Value};
+use super::{Builder, Edge, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         control_flow::{
@@ -8,12 +8,12 @@ use crate::{
             path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
-        generator::{error::Error, jvm::frame::Frame},
+        generator::{error::Error, instruction_graph::frame::Frame},
     },
     jvm::ConstantValue,
 };
 
-impl Executor<'_> {
+impl Builder<'_> {
     fn build_exception_edges(
         &mut self,
         addr: NodeAddress,
@@ -196,9 +196,9 @@ mod tests {
     use crate::jvm::code::Instruction as JvmInstruction;
 
     #[test]
-    fn unwind_edges_erase_symbolic_values() {
+    fn unwind_edges_erase_frame_values() {
         let method = method([(0, JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut executor = Executor::for_method(&method).expect("valid method");
+        let mut builder = Builder::for_method(&method).expect("valid method");
         let frame = Frame::for_method_entry(
             &method.descriptor,
             1,
@@ -208,7 +208,7 @@ mod tests {
         )
         .expect("frame fits descriptor");
 
-        let edges = executor
+        let edges = builder
             .build_exception_edges(NodeAddress::entry(0.into()), &frame)
             .expect("valid exception edge");
 

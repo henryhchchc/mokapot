@@ -1,5 +1,5 @@
 use crate::{
-    ir::generator::jvm::frame::{JvmFrameError, ValueCategory},
+    ir::generator::instruction_graph::frame::{JvmFrameError, ValueCategory},
     types::method_descriptor::MethodDescriptor,
 };
 

@@ -3,12 +3,13 @@ use crate::ir::{
     generator::{
         error::Error,
         identity::SsaValueId,
-        jvm::{
+        instruction_graph::{
+            RegisterInstruction, Value,
             frame::{
                 Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
-            symbolic_execution::{RegisterInstruction, Value, lifting::Context},
+            lifting::Context,
         },
     },
 };

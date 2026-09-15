@@ -6,10 +6,7 @@ use crate::ir::{
         block_formation,
         error::Error,
         identity::SsaValueId,
-        jvm::{
-            frame::Frame,
-            symbolic_execution::{self, FrameMergeSite},
-        },
+        instruction_graph::{self, FrameMergeSite, frame::Frame},
     },
 };
 
@@ -36,15 +33,15 @@ impl MergePlan {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub fn resolve(&self, operand: symbolic_execution::Value) -> Result<SsaValueId, Error> {
+    pub fn resolve(&self, operand: instruction_graph::Value) -> Result<SsaValueId, Error> {
         match operand {
-            symbolic_execution::Value::Ssa(value) => Ok(value),
-            symbolic_execution::Value::Merged(identity) => self
+            instruction_graph::Value::Ssa(value) => Ok(value),
+            instruction_graph::Value::Merged(identity) => self
                 .merge_values
                 .get(&identity)
                 .copied()
                 .ok_or(Error::MalformedControlFlow),
-            symbolic_execution::Value::ReturnAddress(_) | symbolic_execution::Value::Invalid => {
+            instruction_graph::Value::ReturnAddress(_) | instruction_graph::Value::Invalid => {
                 Err(Error::MalformedControlFlow)
             }
         }
@@ -57,7 +54,7 @@ pub(super) fn collect_phi_candidates(
 ) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, Error> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
-        BTreeMap::<BlockId, Vec<(BlockId, &Frame<symbolic_execution::Value>)>>::new();
+        BTreeMap::<BlockId, Vec<(BlockId, &Frame<instruction_graph::Value>)>>::new();
     for source in blocks {
         for arm in &source.arms {
             incoming_by_target
@@ -133,8 +130,8 @@ pub(super) fn collect_phi_candidates(
 }
 
 fn paired_frame_values(
-    target: &Frame<symbolic_execution::Value>,
-    source: &Frame<symbolic_execution::Value>,
+    target: &Frame<instruction_graph::Value>,
+    source: &Frame<instruction_graph::Value>,
     merge_plan: &MergePlan,
 ) -> Result<Vec<PairedFrameValue>, Error> {
     target
@@ -143,11 +140,11 @@ fn paired_frame_values(
         .into_iter()
         .map(|(target, source)| match (target, source) {
             (
-                Some(symbolic_execution::Value::ReturnAddress(lhs)),
-                Some(symbolic_execution::Value::ReturnAddress(rhs)),
+                Some(instruction_graph::Value::ReturnAddress(lhs)),
+                Some(instruction_graph::Value::ReturnAddress(rhs)),
             ) if lhs == rhs => Ok((None, None)),
-            (Some(symbolic_execution::Value::ReturnAddress(_)), _)
-            | (_, Some(symbolic_execution::Value::ReturnAddress(_))) => {
+            (Some(instruction_graph::Value::ReturnAddress(_)), _)
+            | (_, Some(instruction_graph::Value::ReturnAddress(_))) => {
                 Err(Error::MalformedControlFlow)
             }
             (Some(result), Some(value)) => Ok((
@@ -169,7 +166,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            jvm::{frame::Position, symbolic_execution::NodeAddress},
+            instruction_graph::{NodeAddress, frame::Position},
         },
     };
 
@@ -185,7 +182,7 @@ mod tests {
             1,
             0,
             None,
-            &[symbolic_execution::Value::Ssa(result)],
+            &[instruction_graph::Value::Ssa(result)],
         )
         .expect("frame fits descriptor");
         let preheader_frame = Frame::for_method_entry(
@@ -193,7 +190,7 @@ mod tests {
             1,
             0,
             None,
-            &[symbolic_execution::Value::Ssa(incoming)],
+            &[instruction_graph::Value::Ssa(incoming)],
         )
         .expect("frame fits descriptor");
         let blocks = vec![
@@ -238,7 +235,7 @@ mod tests {
 
         let merge_plan = MergePlan::new(BTreeMap::from([(identity, resolved)]), BTreeMap::new());
         let actual = merge_plan
-            .resolve(symbolic_execution::Value::Merged(identity))
+            .resolve(instruction_graph::Value::Merged(identity))
             .expect("known merge identity resolves");
 
         assert_eq!(actual, resolved);

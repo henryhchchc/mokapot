@@ -1,3 +1,5 @@
+//! JVM frame representation used while constructing the instruction graph.
+
 mod error;
 mod local_variables;
 mod operand_stack;

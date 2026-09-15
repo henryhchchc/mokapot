@@ -4,10 +4,7 @@ use crate::{
         control_flow::ControlTransfer,
         generator::{
             identity::SsaValueId,
-            jvm::{
-                frame::Frame,
-                symbolic_execution::{self, FrameMergeSite},
-            },
+            instruction_graph::{self, FrameMergeSite, frame::Frame},
         },
     },
     jvm::code::ProgramCounter,
@@ -28,17 +25,17 @@ pub(crate) struct Graph {
 #[derive(Debug)]
 pub(crate) struct Arm {
     pub target: BlockId,
-    pub transfer: ControlTransfer<symbolic_execution::Value>,
-    pub frame: Frame<symbolic_execution::Value>,
+    pub transfer: ControlTransfer<instruction_graph::Value>,
+    pub frame: Frame<instruction_graph::Value>,
 }
 
-/// A maximal JVM block with exact symbolic operands and outgoing frames.
+/// A maximal JVM block with exact register operands and outgoing frames.
 #[derive(Debug)]
 pub(crate) struct Block {
     pub id: BlockId,
-    pub entry_frame: Frame<symbolic_execution::Value>,
-    pub operations: Vec<(ProgramCounter, OperationKind<symbolic_execution::Value>)>,
-    pub terminator: TerminatorKind<symbolic_execution::Value>,
+    pub entry_frame: Frame<instruction_graph::Value>,
+    pub operations: Vec<(ProgramCounter, OperationKind<instruction_graph::Value>)>,
+    pub terminator: TerminatorKind<instruction_graph::Value>,
     pub terminator_source: Option<ProgramCounter>,
     pub arms: Vec<Arm>,
     pub caught_exception: Option<SsaValueId>,

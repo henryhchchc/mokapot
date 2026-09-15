@@ -1,5 +1,5 @@
 use crate::{
-    ir::generator::jvm::frame::{
+    ir::generator::instruction_graph::frame::{
         Frame, JvmFrameError, StackOperation,
         ValueCategory::{self, Category1, Category2},
     },

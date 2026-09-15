@@ -1,9 +1,10 @@
 use crate::{
     ir::generator::{
         error::Error,
-        jvm::{
+        instruction_graph::{
+            RegisterInstruction,
             frame::ValueCategory::{Category1, Category2},
-            symbolic_execution::{RegisterInstruction, lifting::Context},
+            lifting::Context,
         },
     },
     jvm::code::WideInstruction,

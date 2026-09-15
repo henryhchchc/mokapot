@@ -3,9 +3,10 @@ use crate::{
         expression::FieldAccess,
         generator::{
             error::Error,
-            jvm::{
+            instruction_graph::{
+                RegisterInstruction, Value,
                 frame::ValueCategory::{self, Category1},
-                symbolic_execution::{RegisterInstruction, Value, lifting::Context},
+                lifting::Context,
             },
         },
     },

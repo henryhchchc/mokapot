@@ -1,8 +1,8 @@
-//! Fixed-point execution of symbolic JVM frames.
+//! Fixed-point propagation of JVM frames through the instruction graph.
 //!
 //! Each source node's retained edges are the authoritative frame contributions.
 //! Replacing them updates a predecessor index before destination frames are
-//! recomputed, so obsolete symbolic values never leak into the result.
+//! recomputed, so obsolete frame values never leak into the result.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,10 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
-    Executor, NodeAddress,
-    fact::{Edge, FrameMergeSite, Node, Value},
+    Builder, NodeAddress,
+    model::{Edge, FrameMergeSite, Node, Value},
 };
-use crate::ir::generator::{error::Error, jvm::frame::Frame};
+use crate::ir::generator::{error::Error, instruction_graph::frame::Frame};
 
 struct State {
     entry_input: (NodeAddress, Frame<Value>),
@@ -204,8 +204,8 @@ fn edge_targets(outgoing: &[Edge]) -> BTreeSet<NodeAddress> {
     outgoing.iter().map(|edge| edge.target).collect()
 }
 
-pub(super) fn execute_to_fixpoint(
-    executor: &mut Executor<'_>,
+pub(super) fn build_to_fixpoint(
+    builder: &mut Builder<'_>,
     entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
 ) -> Result<BTreeMap<NodeAddress, Node>, Error> {
@@ -215,7 +215,7 @@ pub(super) fn execute_to_fixpoint(
     let mut seen = HashSet::new();
 
     // Subroutine expansion bounds the set of locations, while definition and
-    // merge identities are interned by location. This bounds the symbolic frames
+    // merge identities are interned by location. This bounds the abstract frames
     // the solver can encounter, but replacement is not monotone; the test-only
     // fingerprint catches a repeated state if execution changes ever introduce
     // an oscillation.
@@ -223,13 +223,13 @@ pub(super) fn execute_to_fixpoint(
         #[cfg(test)]
         assert!(
             seen.insert(state.fingerprint()),
-            "JVM symbolic execution entered a solver-state cycle"
+            "JVM instruction-graph construction entered a solver-state cycle"
         );
         state.recompute_inputs()?;
         let Some((addr, incoming_frame)) = state.pending_executions.pop_first() else {
             continue;
         };
-        let node = executor.execute_addr(addr, incoming_frame)?;
+        let node = builder.build_node(addr, incoming_frame)?;
         state.replace_node(addr, node);
     }
 
@@ -271,9 +271,9 @@ mod tests {
             control_flow::ControlTransfer,
             generator::{
                 identity::SsaValueId,
-                jvm::{
+                instruction_graph::{
+                    RegisterInstruction,
                     frame::{Position, ValueCategory::Category1},
-                    symbolic_execution::RegisterInstruction,
                 },
                 tests::method,
             },
@@ -360,8 +360,8 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut executor = Executor::for_method(&method).expect("valid method");
-        let nodes = executor.execute_reachable_addrs().expect("valid loop");
+        let mut builder = Builder::for_method(&method).expect("valid method");
+        let nodes = builder.build_reachable_nodes().expect("valid loop");
 
         let mut incoming_frame = nodes[&NodeAddress::entry(2.into())].incoming_frame.clone();
         assert_eq!(

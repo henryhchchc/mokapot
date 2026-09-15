@@ -8,11 +8,11 @@ use crate::ir::{
     generator::{
         error::Error,
         identity::SsaValueId,
-        jvm::symbolic_execution::{self, FrameMergeSite, NodeAddress},
+        instruction_graph::{self, FrameMergeSite, NodeAddress},
     },
 };
 
-/// The partition of symbolic JVM nodes into semantic blocks.
+/// The partition of JVM instruction nodes into semantic blocks.
 pub(super) struct BlockLayout {
     entry: BlockId,
     bytecode_entry: BlockId,
@@ -21,19 +21,22 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, Error> {
-        let reachable = symbolic_cfg.nodes.keys().copied().collect::<Vec<_>>();
+    pub fn discover(instruction_graph: &instruction_graph::Graph) -> Result<Self, Error> {
+        let reachable = instruction_graph.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
             return Err(Error::MalformedControlFlow);
         }
 
-        let predecessors = predecessor_addrs(&symbolic_cfg.nodes);
-        let leaders = discover_leaders(symbolic_cfg, &reachable, &predecessors)?;
+        let predecessors = predecessor_addrs(&instruction_graph.nodes);
+        let leaders = discover_leaders(instruction_graph, &reachable, &predecessors)?;
         let needs_entry_preheader = predecessors
-            .get(&symbolic_cfg.entry_addr)
+            .get(&instruction_graph.entry_addr)
             .is_some_and(|sources| !sources.is_empty());
-        let (entry, bytecode_entry, block_ids) =
-            allocate_block_ids(&leaders, symbolic_cfg.entry_addr, needs_entry_preheader)?;
+        let (entry, bytecode_entry, block_ids) = allocate_block_ids(
+            &leaders,
+            instruction_graph.entry_addr,
+            needs_entry_preheader,
+        )?;
         let grouped = group_addrs(&reachable, &block_ids)?;
 
         Ok(Self {
@@ -80,7 +83,7 @@ impl BlockLayout {
 }
 
 fn predecessor_addrs(
-    addrs: &BTreeMap<NodeAddress, symbolic_execution::Node>,
+    addrs: &BTreeMap<NodeAddress, instruction_graph::Node>,
 ) -> BTreeMap<NodeAddress, BTreeSet<NodeAddress>> {
     let mut predecessors: BTreeMap<NodeAddress, BTreeSet<NodeAddress>> = BTreeMap::new();
     for (&source, facts) in addrs {
@@ -95,12 +98,17 @@ fn predecessor_addrs(
 }
 
 fn discover_leaders(
-    symbolic_cfg: &symbolic_execution::Cfg,
+    instruction_graph: &instruction_graph::Graph,
     reachable: &[NodeAddress],
     predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
 ) -> Result<BTreeSet<NodeAddress>, Error> {
-    let mut leaders = BTreeSet::from([symbolic_cfg.entry_addr]);
-    leaders.extend(symbolic_cfg.phi_values.keys().map(|identity| identity.addr));
+    let mut leaders = BTreeSet::from([instruction_graph.entry_addr]);
+    leaders.extend(
+        instruction_graph
+            .phi_values
+            .keys()
+            .map(|identity| identity.addr),
+    );
     leaders.extend(
         reachable
             .iter()
@@ -114,7 +122,7 @@ fn discover_leaders(
             .map(|(target, _)| *target),
     );
 
-    for facts in symbolic_cfg.nodes.values() {
+    for facts in instruction_graph.nodes.values() {
         if facts.instruction.is_explicit_transfer()
             || facts.outgoing_edges.iter().any(|outgoing| {
                 matches!(
@@ -132,7 +140,7 @@ fn discover_leaders(
         let [current, next] = pair else {
             unreachable!()
         };
-        let facts = symbolic_cfg
+        let facts = instruction_graph
             .nodes
             .get(current)
             .ok_or(Error::MalformedControlFlow)?;
@@ -147,7 +155,7 @@ fn discover_leaders(
             leaders.insert(*next);
         }
     }
-    leaders.retain(|addr| symbolic_cfg.nodes.contains_key(addr));
+    leaders.retain(|addr| instruction_graph.nodes.contains_key(addr));
     Ok(leaders)
 }
 
