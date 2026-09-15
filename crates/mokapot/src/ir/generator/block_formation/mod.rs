@@ -42,7 +42,7 @@ pub(super) fn form(node_graph: NodeGraph) -> Result<BlockGraph, Error> {
         .iter()
         .map(|(&site, &block)| {
             let value = phi_values[&site];
-            (site, Merge { value, block })
+            (site, FrameMerge { value, block })
         })
         .collect();
     let entry = layout.entry;
@@ -67,9 +67,9 @@ pub(super) fn form(node_graph: NodeGraph) -> Result<BlockGraph, Error> {
 /// A frame merge site resolved to the value that stands for it and the block
 /// that computes it.
 #[derive(Debug)]
-pub(crate) struct Merge {
-    pub value: SsaValueId,
-    pub block: BlockId,
+pub(super) struct FrameMerge {
+    pub(super) value: SsaValueId,
+    pub(super) block: BlockId,
 }
 
 /// Block-level JVM graph consumed by SSA construction.
@@ -80,7 +80,7 @@ pub(super) struct BlockGraph {
     ///
     /// A site, its value, and the block that computes it are one relation, so
     /// it is carried once rather than recomposed.
-    pub merges: BTreeMap<FrameMergeSite, Merge>,
+    pub merges: BTreeMap<FrameMergeSite, FrameMerge>,
     pub this_value: Option<SsaValueId>,
     pub parameter_values: Vec<SsaValueId>,
 }
@@ -122,7 +122,7 @@ impl BlockEnd {
         &self.arms
     }
 
-    /// Separates the validated terminator data for SSA finalization.
+    /// Separates the validated terminator data for scalar lowering.
     pub(crate) fn into_parts(
         self,
     ) -> (

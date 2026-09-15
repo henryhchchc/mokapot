@@ -7,8 +7,8 @@
 //! 2. [`block_formation`] consumes that graph, groups its locations and edge
 //!    frames into maximal JVM blocks, and classifies their scalar operations and
 //!    explicit terminators.
-//! 3. [`ssa`] collects and simplifies predecessor-indexed phis, then materializes
-//!    scalar operands directly into semantic blocks.
+//! 3. [`ssa`] lowers the frame-rich block graph once, then simplifies and
+//!    materializes predecessor-indexed scalar phis.
 //! 4. [`emission`] assigns public identities and emits the completed [`MokaIRMethod`].
 //!
 //! The [`bytecode_analysis::lifting`] module contains the JVM opcode semantics

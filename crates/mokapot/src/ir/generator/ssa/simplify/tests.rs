@@ -1,4 +1,5 @@
 use super::*;
+use crate::ir::BlockId;
 
 fn value(index: u32) -> SsaValueId {
     SsaValueId::new(index)
@@ -8,11 +9,18 @@ fn block(index: u32) -> BlockId {
     BlockId::new(index)
 }
 
+fn candidate(placement: u32, inputs: Vec<(BlockId, SsaValueId)>) -> PhiCandidate {
+    PhiCandidate {
+        placement: block(placement),
+        inputs,
+    }
+}
+
 #[test]
 fn canonicalizes_trivial_phi_chains() {
     let simplified = simplify_phis(BTreeMap::from([
-        (value(1), vec![(block(0), value(100))]),
-        (value(2), vec![(block(1), value(1))]),
+        (value(1), candidate(3, vec![(block(0), value(100))])),
+        (value(2), candidate(4, vec![(block(1), value(1))])),
     ]))
     .unwrap();
 
@@ -31,7 +39,7 @@ fn canonicalizes_trivial_phi_chains() {
 fn ignores_self_inputs_when_simplifying() {
     let simplified = simplify_phis(BTreeMap::from([(
         value(1),
-        vec![(block(0), value(100)), (block(1), value(1))],
+        candidate(2, vec![(block(0), value(100)), (block(1), value(1))]),
     )]))
     .unwrap();
 
@@ -42,8 +50,14 @@ fn ignores_self_inputs_when_simplifying() {
 #[test]
 fn collapses_mutually_recursive_trivial_phis() {
     let simplified = simplify_phis(BTreeMap::from([
-        (value(1), vec![(block(0), value(100)), (block(1), value(2))]),
-        (value(2), vec![(block(0), value(100)), (block(1), value(1))]),
+        (
+            value(1),
+            candidate(2, vec![(block(0), value(100)), (block(1), value(2))]),
+        ),
+        (
+            value(2),
+            candidate(3, vec![(block(0), value(100)), (block(1), value(1))]),
+        ),
     ]))
     .unwrap();
 
@@ -55,8 +69,8 @@ fn collapses_mutually_recursive_trivial_phis() {
 #[test]
 fn rejects_a_closed_reachable_cycle() {
     let error = simplify_phis(BTreeMap::from([
-        (value(1), vec![(block(0), value(2))]),
-        (value(2), vec![(block(1), value(1))]),
+        (value(1), candidate(2, vec![(block(0), value(2))])),
+        (value(2), candidate(3, vec![(block(1), value(1))])),
     ]))
     .unwrap_err();
 
@@ -71,8 +85,14 @@ fn rejects_a_closed_reachable_cycle() {
 #[test]
 fn retains_a_cycle_with_distinct_external_values() {
     let candidates = BTreeMap::from([
-        (value(1), vec![(block(0), value(100)), (block(1), value(2))]),
-        (value(2), vec![(block(0), value(101)), (block(1), value(1))]),
+        (
+            value(1),
+            candidate(2, vec![(block(0), value(100)), (block(1), value(2))]),
+        ),
+        (
+            value(2),
+            candidate(3, vec![(block(0), value(101)), (block(1), value(1))]),
+        ),
     ]);
     let simplified = simplify_phis(candidates.clone()).unwrap();
 
@@ -83,21 +103,24 @@ fn retains_a_cycle_with_distinct_external_values() {
 #[test]
 fn rewrites_inputs_of_retained_candidates_to_canonical_values() {
     let simplified = simplify_phis(BTreeMap::from([
-        (value(1), vec![(block(0), value(100))]),
+        (value(1), candidate(3, vec![(block(0), value(100))])),
         (
             value(2),
-            vec![
-                (block(0), value(1)),
-                (block(1), value(101)),
-                (block(2), value(2)),
-            ],
+            candidate(
+                4,
+                vec![
+                    (block(0), value(1)),
+                    (block(1), value(101)),
+                    (block(2), value(2)),
+                ],
+            ),
         ),
     ]))
     .unwrap();
 
     assert_eq!(simplified.substitutions[&value(1)], value(100));
     assert_eq!(
-        simplified.candidates[&value(2)],
+        simplified.candidates[&value(2)].inputs,
         [
             (block(0), value(100)),
             (block(1), value(101)),
