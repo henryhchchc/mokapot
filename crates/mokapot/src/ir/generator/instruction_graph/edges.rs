@@ -1,5 +1,7 @@
 //! JVM instruction-graph edge construction.
 
+use std::collections::BTreeMap;
+
 use super::{Builder, Edge, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
@@ -10,7 +12,7 @@ use crate::{
         expression::Condition,
         generator::{error::Error, instruction_graph::frame::Frame},
     },
-    jvm::ConstantValue,
+    jvm::{ConstantValue, code::ProgramCounter},
 };
 
 impl Builder<'_> {
@@ -55,10 +57,90 @@ impl Builder<'_> {
         Ok(edges)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "all control-flow forms are classified together"
-    )]
+    /// Builds the taken edge and its negated fallthrough edge for a conditional
+    /// jump.
+    fn build_conditional_jump_edges(
+        &mut self,
+        addr: NodeAddress,
+        normal_frame: Frame<Value>,
+        condition: &Condition<Value>,
+        target: ProgramCounter,
+    ) -> Result<Vec<Edge>, Error> {
+        let condition: BooleanVariable<_> = condition.clone().into();
+        Ok(vec![
+            Edge {
+                target: self.bytecode_addr_at(addr, target)?,
+                transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
+                target_frame: normal_frame.clone(),
+            },
+            Edge {
+                target: self.fallthrough_addr(addr)?,
+                transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
+                target_frame: normal_frame,
+            },
+        ])
+    }
+
+    /// Builds the single unconditional edge from a handler entry to its guarded
+    /// bytecode address.
+    fn build_handler_entry_edges(
+        &mut self,
+        addr: NodeAddress,
+        normal_frame: Frame<Value>,
+    ) -> Result<Vec<Edge>, Error> {
+        let NodeAddress::Handler {
+            handler: handler_pc,
+            ..
+        } = addr
+        else {
+            return Err(Error::MalformedControlFlow);
+        };
+        Ok(vec![Edge {
+            target: self.bytecode_addr_at(addr, handler_pc)?,
+            transfer: ControlTransfer::Unconditional,
+            target_frame: normal_frame,
+        }])
+    }
+
+    /// Builds one guarded edge per switch arm, plus a default edge guarded by
+    /// the negation of every arm condition.
+    fn build_switch_edges(
+        &mut self,
+        addr: NodeAddress,
+        normal_frame: Frame<Value>,
+        match_value: Value,
+        branches: &BTreeMap<i32, ProgramCounter>,
+        default: ProgramCounter,
+    ) -> Result<Vec<Edge>, Error> {
+        let mut edges = Vec::with_capacity(branches.len() + 1);
+        for (&case, &target) in branches {
+            let value = PathValue::Constant(ConstantValue::Integer(case));
+            let condition = BooleanVariable::Positive(Condition::Equal(match_value.into(), value));
+            let switch_arm = Edge {
+                target: self.bytecode_addr_at(addr, target)?,
+                transfer: ControlTransfer::Conditional(BranchGuard::of(condition)),
+                target_frame: normal_frame.clone(),
+            };
+            edges.push(switch_arm);
+        }
+        let default_arm = {
+            let default_guard = branches
+                .keys()
+                .map(|case| {
+                    let case_value = PathValue::Constant(ConstantValue::Integer(*case));
+                    BooleanVariable::Negative(Condition::Equal(match_value.into(), case_value))
+                })
+                .collect();
+            Edge {
+                target: self.bytecode_addr_at(addr, default)?,
+                transfer: ControlTransfer::Conditional(default_guard),
+                target_frame: normal_frame,
+            }
+        };
+        edges.push(default_arm);
+        Ok(edges)
+    }
+
     pub(crate) fn build_outgoing_edges(
         &mut self,
         addr: NodeAddress,
@@ -67,22 +149,11 @@ impl Builder<'_> {
         instruction: &RegisterInstruction,
         can_throw_synchronously: bool,
     ) -> Result<Vec<Edge>, Error> {
-        use ControlTransfer::{Conditional, Normal, Unconditional};
+        use ControlTransfer::{Normal, Unconditional};
 
         let edges = match instruction {
             RegisterInstruction::HandlerEntry => {
-                let NodeAddress::Handler {
-                    handler: handler_pc,
-                    ..
-                } = addr
-                else {
-                    return Err(Error::MalformedControlFlow);
-                };
-                vec![Edge {
-                    target: self.bytecode_addr_at(addr, handler_pc)?,
-                    transfer: Unconditional,
-                    target_frame: normal_frame,
-                }]
+                self.build_handler_entry_edges(addr, normal_frame)?
             }
             RegisterInstruction::Return(_) if can_throw_synchronously => {
                 self.build_exception_edges(addr, incoming_frame)?
@@ -90,11 +161,12 @@ impl Builder<'_> {
             RegisterInstruction::Unwind | RegisterInstruction::Return(_) => Vec::new(),
             RegisterInstruction::Throw(_) => self.build_exception_edges(addr, incoming_frame)?,
             RegisterInstruction::Subroutine { target, .. } => {
-                vec![Edge {
+                let edge = Edge {
                     target: *target,
                     transfer: Unconditional,
                     target_frame: normal_frame,
-                }]
+                };
+                vec![edge]
             }
             RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_)
                 if can_throw_synchronously =>
@@ -127,53 +199,12 @@ impl Builder<'_> {
             RegisterInstruction::Jump {
                 condition: Some(condition),
                 target,
-            } => {
-                let condition: BooleanVariable<_> = condition.clone().into();
-                vec![
-                    Edge {
-                        target: self.bytecode_addr_at(addr, *target)?,
-                        transfer: Conditional(BranchGuard::of(condition.clone())),
-                        target_frame: normal_frame.clone(),
-                    },
-                    Edge {
-                        target: self.fallthrough_addr(addr)?,
-                        transfer: Conditional(BranchGuard::of(!condition)),
-                        target_frame: normal_frame,
-                    },
-                ]
-            }
+            } => self.build_conditional_jump_edges(addr, normal_frame, condition, *target)?,
             RegisterInstruction::Switch {
                 default,
                 branches,
                 match_value,
-            } => {
-                let mut edges = Vec::with_capacity(branches.len() + 1);
-                for (&case, &target) in branches {
-                    let value = PathValue::Constant(ConstantValue::Integer(case));
-                    let condition =
-                        BooleanVariable::Positive(Condition::Equal((*match_value).into(), value));
-                    edges.push(Edge {
-                        target: self.bytecode_addr_at(addr, target)?,
-                        transfer: Conditional(BranchGuard::of(condition)),
-                        target_frame: normal_frame.clone(),
-                    });
-                }
-                let default_guard = branches
-                    .keys()
-                    .map(|case| {
-                        BooleanVariable::Negative(Condition::Equal(
-                            (*match_value).into(),
-                            PathValue::Constant(ConstantValue::Integer(*case)),
-                        ))
-                    })
-                    .collect();
-                edges.push(Edge {
-                    target: self.bytecode_addr_at(addr, *default)?,
-                    transfer: Conditional(default_guard),
-                    target_frame: normal_frame,
-                });
-                edges
-            }
+            } => self.build_switch_edges(addr, normal_frame, *match_value, branches, *default)?,
             RegisterInstruction::SubroutineReturn(value) => {
                 let Value::ReturnAddress(address) = value else {
                     return Err(Error::MalformedControlFlow);

@@ -13,17 +13,17 @@ mod subroutine;
 
 use std::collections::BTreeMap;
 
-pub(crate) use address::NodeAddress;
-pub(crate) use instruction::RegisterInstruction;
-pub(crate) use model::{Edge, FrameMergeSite, Graph, Node, Value};
-pub(crate) use subroutine::ReturnAddress;
+pub(super) use address::NodeAddress;
+pub(super) use instruction::RegisterInstruction;
+pub(super) use model::{Edge, FrameMergeSite, Graph, Node, Value};
+pub(super) use subroutine::ReturnAddress;
 
 use crate::{
-    ir::generator::{identity::SsaValueId, instruction_graph::frame::Frame},
+    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::frame::Frame},
     jvm::{Method, code::MethodBody},
 };
 
-pub(super) fn build(method: &Method) -> Result<Graph, crate::ir::generator::error::Error> {
+pub(super) fn build(method: &Method) -> Result<Graph, Error> {
     Builder::for_method(method)?.build()
 }
 
