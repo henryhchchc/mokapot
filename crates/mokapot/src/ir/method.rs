@@ -5,7 +5,7 @@ use super::{
     control_flow::ControlFlowGraph, generator,
 };
 use crate::{
-    jvm::{Method as JvmMethod, method, references::ClassRef},
+    jvm::{self, Method as JvmMethod, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -15,17 +15,17 @@ use crate::{
 /// method. Its block terminators are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
-    pub(super) access_flags: method::AccessFlags,
-    pub(super) name: String,
-    pub(super) descriptor: MethodDescriptor,
-    pub(super) owner: ClassRef,
-    pub(super) entry_block: BlockId,
-    pub(super) blocks: Vec<BasicBlock>,
-    pub(super) source_map: SourceMap,
-    pub(super) this_value: Option<ValueId>,
-    pub(super) parameter_values: Vec<ValueId>,
-    pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
-    pub(super) value_definitions: Vec<ValueDefinition>,
+    access_flags: method::AccessFlags,
+    name: String,
+    descriptor: MethodDescriptor,
+    owner: ClassRef,
+    entry_block: BlockId,
+    blocks: Vec<BasicBlock>,
+    source_map: SourceMap,
+    this_value: Option<ValueId>,
+    parameter_values: Vec<ValueId>,
+    caught_exceptions: BTreeMap<BlockId, ValueId>,
+    value_definitions: Vec<ValueDefinition>,
 }
 
 impl MokaIRMethod {
@@ -126,6 +126,31 @@ impl MokaIRMethod {
         self.value_definitions
             .get(usize::try_from(value.index()).ok()?)
             .copied()
+    }
+
+    pub(crate) fn new(
+        method: &jvm::Method,
+        entry_block: BlockId,
+        blocks: Vec<BasicBlock>,
+        source_map: SourceMap,
+        this_value: Option<ValueId>,
+        parameter_values: Vec<ValueId>,
+        caught_exceptions: BTreeMap<BlockId, ValueId>,
+        value_definitions: Vec<ValueDefinition>,
+    ) -> Self {
+        Self {
+            access_flags: method.access_flags,
+            name: method.name.clone(),
+            descriptor: method.descriptor.clone(),
+            owner: method.owner.clone(),
+            entry_block,
+            blocks,
+            source_map,
+            this_value,
+            parameter_values,
+            caught_exceptions,
+            value_definitions,
+        }
     }
 
     pub(crate) fn value_definitions(
