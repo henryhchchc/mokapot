@@ -28,7 +28,7 @@ pub(super) fn build(method: &Method) -> Result<Graph, Error> {
 }
 
 /// Mutable state used while constructing an instruction graph.
-pub(super) struct Builder<'method> {
+struct Builder<'method> {
     body: &'method MethodBody,
     fallibility: fallibility::Context,
     subroutine_expander: subroutine::Expander,
