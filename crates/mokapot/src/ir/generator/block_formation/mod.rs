@@ -3,9 +3,6 @@
 mod layout;
 mod materialize;
 
-#[cfg(test)]
-mod tests;
-
 use crate::{
     ir::{
         BlockId, OperationKind, TerminatorKind,

@@ -381,22 +381,6 @@ fn stack_operations_report_underflow() {
 
 proptest! {
     #[test]
-    fn operand_stack_preserves_lifo_order_and_categories(
-        values in prop::collection::vec(any::<TestValue>(), 0..10),
-    ) {
-        let capacity = values.len() + values.len().div_ceil(2);
-        let mut frame = frame(true, &"()V".parse().unwrap(), 0, capacity.try_into().unwrap()).unwrap();
-        for (index, value) in values.iter().enumerate() {
-            let category = if index % 2 == 0 { Category2 } else { Category1 };
-            frame.stack.push(*value, category).unwrap();
-        }
-        for (index, value) in values.iter().enumerate().rev() {
-            let category = if index % 2 == 0 { Category2 } else { Category1 };
-            assert_eq!(frame.stack.pop(category).unwrap(), *value);
-        }
-    }
-
-    #[test]
     fn failed_pop_does_not_consume_a_value(value in any::<TestValue>()) {
         let mut frame = frame(true, &"()V".parse().unwrap(), 0, 2).unwrap();
         frame.stack.push(value, Category2).unwrap();

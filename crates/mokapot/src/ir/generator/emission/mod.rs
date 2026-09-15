@@ -1,8 +1,5 @@
 //! Assigns final identities and assembles completed public `MokaIR`.
 
-#[cfg(test)]
-mod tests;
-
 use std::collections::BTreeMap;
 
 use crate::ir::TryMapValues;

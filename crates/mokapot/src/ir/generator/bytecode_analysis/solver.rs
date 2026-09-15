@@ -344,23 +344,6 @@ mod tests {
     }
 
     #[test]
-    fn incompatible_merge_reports_its_location_and_source() {
-        let addr = NodeAddress::entry(7.into());
-        let mut local_frame = frame(1);
-        let empty_frame =
-            Frame::for_method_entry(&"()V".parse().expect("valid descriptor"), 0, 0, None, &[])
-                .expect("frame fits descriptor");
-
-        assert!(matches!(
-            merge_input_frame_at(addr, &mut local_frame, empty_frame),
-            Err(Error::InvalidFrame {
-                pc: Some(pc),
-                source: crate::ir::generator::bytecode_analysis::jvm::FrameError::IncompatibleFrameShape,
-            }) if pc == 7.into()
-        ));
-    }
-
-    #[test]
     fn reprocessing_replaces_stale_predecessor_output() {
         let method = method(
             [

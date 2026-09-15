@@ -24,13 +24,6 @@ impl Context {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(crate) struct ReturnAddress(Context);
 
-#[cfg(test)]
-impl ReturnAddress {
-    pub const fn for_test(context: u32) -> Self {
-        Self(Context(context))
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Activation {
     parent: Context,

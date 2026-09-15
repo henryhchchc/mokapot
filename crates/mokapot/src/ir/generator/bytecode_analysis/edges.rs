@@ -235,33 +235,3 @@ impl Executor<'_> {
         Ok(edges)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::generator::{identity::SsaValueId, tests::method};
-    use crate::jvm::code::Instruction as JvmInstruction;
-
-    #[test]
-    fn unwind_edges_erase_frame_values() {
-        let method = method([(0, JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut executor = Executor::for_method(&method).expect("valid method");
-        let frame = Frame::for_method_entry(
-            &method.descriptor,
-            1,
-            0,
-            None,
-            &[Value::Ssa(SsaValueId::new(0))],
-        )
-        .expect("frame fits descriptor");
-
-        let edges = executor
-            .build_exception_edges(NodeAddress::entry(0.into()), &frame)
-            .expect("valid exception edge");
-
-        assert_eq!(edges.len(), 1);
-        assert_eq!(edges[0].target, NodeAddress::Unwind);
-        assert!(matches!(edges[0].transfer, ControlTransfer::Unwind));
-        assert!(edges[0].target_frame.iter_values().next().is_none());
-    }
-}

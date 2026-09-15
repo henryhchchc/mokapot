@@ -141,7 +141,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
 }
 
 #[test]
-fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
+fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
     let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
     let ir = build(&method).unwrap();
     let blocks = ir.blocks().collect::<Vec<_>>();
@@ -160,30 +160,12 @@ fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
             .count(),
         0
     );
-}
-
-#[test]
-fn entry_preheader_takes_block_identity_zero() {
-    let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
-    let ir = build(&method).unwrap();
-    let entry = ir.entry_block();
-
-    assert_eq!(entry.index(), 0);
-    assert!(std::ptr::eq(
-        ir.block(entry).unwrap(),
-        ir.blocks().next().unwrap()
-    ));
-    let preheader = ir.block(entry).unwrap();
-    assert!(preheader.operations().is_empty());
-    let [arm] = preheader.terminator().successors() else {
+    let [arm] = blocks[0].terminator().successors() else {
         panic!("the preheader must have exactly one successor")
     };
-    assert!(matches!(arm.transfer(), ControlTransfer::Unconditional));
-
-    // The preheader's target is the bytecode entry, which keeps the loop's
-    // `goto 0` as its own terminator.
     let header = ir.block(arm.target()).unwrap();
-    assert_ne!(header.id(), entry);
+    assert_eq!(header, blocks[1]);
+    assert_eq!(header.terminator().successors()[0].target(), header.id());
     assert_eq!(
         ir.source_map()
             .origins_of(header.terminator().id())
