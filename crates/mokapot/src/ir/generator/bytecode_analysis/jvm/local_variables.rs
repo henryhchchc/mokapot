@@ -52,6 +52,25 @@ pub(crate) struct LocalVariables<V> {
 }
 
 impl<V> LocalVariables<V> {
+    fn invalidate_value_overlapping(&mut self, index: usize) {
+        if index > 0
+            && matches!(self.slots[index], LocalSlot::Reserved)
+            && matches!(
+                &self.slots[index - 1],
+                LocalSlot::Value(previous) if previous.category == ValueCategory::Category2
+            )
+        {
+            self.slots[index - 1] = LocalSlot::Unavailable;
+        }
+        if matches!(
+            &self.slots[index],
+            LocalSlot::Value(previous) if previous.category == ValueCategory::Category2
+        ) && matches!(self.slots.get(index + 1), Some(LocalSlot::Reserved))
+        {
+            self.slots[index + 1] = LocalSlot::Unavailable;
+        }
+    }
+
     pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&V, Error> {
         let index = usize::from(index);
         let value = match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
@@ -79,14 +98,8 @@ impl<V> LocalVariables<V> {
             return Err(Error::LocalIndexOutOfBounds);
         }
 
-        if index > 0
-            && matches!(self.slots[index], LocalSlot::Reserved)
-            && matches!(
-                &self.slots[index - 1],
-                LocalSlot::Value(previous) if previous.category == ValueCategory::Category2
-            )
-        {
-            self.slots[index - 1] = LocalSlot::Unavailable;
+        for overwritten in index..end {
+            self.invalidate_value_overlapping(overwritten);
         }
 
         self.slots[index] = LocalSlot::Value(LocalValue { value, category });

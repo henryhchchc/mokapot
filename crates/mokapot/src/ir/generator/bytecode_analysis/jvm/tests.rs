@@ -107,6 +107,37 @@ fn writing_an_upper_slot_invalidates_the_category_2_value() {
     assert_eq!(frame.locals.get(1, Category1).unwrap(), &TestValue(1));
 }
 
+#[test]
+fn replacing_a_category_2_value_clears_its_upper_slot() {
+    let descriptor = "(J)V".parse().expect("valid descriptor");
+    let mut frame = frame(true, &descriptor, 2, 0).expect("parameters fit");
+
+    frame
+        .locals
+        .set(0, TestValue(1), Category1)
+        .expect("local exists");
+
+    assert_eq!(frame.locals.get(0, Category1).unwrap(), &TestValue(1));
+    assert!(matches!(
+        frame.locals.get(1, Category1),
+        Err(Error::UnavailableLocal)
+    ));
+}
+
+#[test]
+fn category_2_write_invalidates_every_overlapped_value() {
+    let mut frame = frame(true, &"()V".parse().unwrap(), 3, 0).expect("valid frame");
+    frame.locals.set(1, TestValue(1), Category2).unwrap();
+
+    frame.locals.set(0, TestValue(2), Category2).unwrap();
+
+    assert_eq!(frame.locals.get(0, Category2).unwrap(), &TestValue(2));
+    assert!(matches!(
+        frame.locals.get(2, Category1),
+        Err(Error::UnavailableLocal)
+    ));
+}
+
 type StackContents = &'static [(TestValue, ValueCategory)];
 
 struct StackOperationCase {

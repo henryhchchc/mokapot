@@ -42,6 +42,10 @@ impl<V> Frame<V> {
         self.locals.values().chain(self.stack.values())
     }
 
+    pub fn handler_exception(&self) -> Result<&V, FrameError> {
+        self.stack.single_value(ValueCategory::Category1)
+    }
+
     pub fn paired_slot_values<'a>(
         &'a self,
         other: &'a Self,

@@ -49,25 +49,35 @@ fn materialize_block(
     let mut arms = Vec::new();
 
     for (index, addr) in addrs.iter().copied().enumerate() {
+        let node = instruction_nodes
+            .remove(&addr)
+            .ok_or(Error::MalformedControlFlow)?;
+        let has_exceptional_exit = node.has_exceptional_exit();
         let bytecode_analysis::Node {
             incoming_frame,
             instruction,
-            can_throw_synchronously,
             outgoing_edges,
-            caught_exception_value: location_exception,
-        } = instruction_nodes
-            .remove(&addr)
-            .ok_or(Error::MalformedControlFlow)?;
+        } = node;
         if index == 0 {
+            caught_exception = match addr {
+                NodeAddress::Handler { .. } => match incoming_frame.handler_exception()? {
+                    bytecode_analysis::Value::Ssa(value) => Some(*value),
+                    bytecode_analysis::Value::ReturnAddress(_)
+                    | bytecode_analysis::Value::Merged(_)
+                    | bytecode_analysis::Value::Invalid => {
+                        return Err(Error::MalformedControlFlow);
+                    }
+                },
+                NodeAddress::Bytecode { .. } | NodeAddress::Unwind => None,
+            };
             entry_frame = Some(incoming_frame);
-            caught_exception = location_exception;
         }
         let is_last = index + 1 == addrs.len();
         if is_last {
             let end = materialize_block_end(
                 addr,
                 instruction,
-                can_throw_synchronously,
+                has_exceptional_exit,
                 outgoing_edges,
                 layout,
             )?;
@@ -80,7 +90,7 @@ fn materialize_block(
             let operation = materialize_internal_operation(
                 addr,
                 instruction,
-                can_throw_synchronously,
+                has_exceptional_exit,
                 &outgoing_edges,
                 next,
             )?;

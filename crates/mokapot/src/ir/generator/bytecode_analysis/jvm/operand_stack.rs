@@ -191,6 +191,16 @@ impl<V> OperandStack<V> {
         self.values.iter().map(|it| &it.value)
     }
 
+    pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&V, Error> {
+        let [value] = self.values.as_slice() else {
+            return Err(Error::InvalidSlotLayout);
+        };
+        if value.category != expected {
+            return Err(Error::InvalidSlotLayout);
+        }
+        Ok(&value.value)
+    }
+
     pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&V>> {
         self.values.iter().flat_map(|it| {
             repeat_n(None, it.category.slot_count() - 1).chain(once(Some(&it.value)))

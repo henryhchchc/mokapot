@@ -172,8 +172,8 @@ impl Executor<'_> {
                 if can_throw_synchronously =>
             {
                 // The did-not-throw outcome. It is unguarded like an ordinary
-                // fallthrough, but `Node::can_throw_synchronously` keeps block
-                // formation from eliding it.
+                // fallthrough; the exceptional edges keep block formation from
+                // eliding it.
                 let mut edges = vec![Edge {
                     target: self.fallthrough_addr(addr)?,
                     transfer: Unconditional,

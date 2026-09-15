@@ -293,13 +293,11 @@ mod tests {
         Node {
             incoming_frame: frame(0),
             instruction: RegisterInstruction::Erased,
-            can_throw_synchronously: false,
             outgoing_edges: vec![Edge {
                 target,
                 transfer: ControlTransfer::Unconditional,
                 target_frame: outgoing_frame,
             }],
-            caught_exception_value: None,
         }
     }
 
@@ -386,7 +384,6 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                can_throw_synchronously: false,
                 outgoing_edges: vec![
                     Edge {
                         target,
@@ -399,7 +396,6 @@ mod tests {
                         target_frame: frame(2),
                     },
                 ],
-                caught_exception_value: None,
             },
         );
         state.recompute_inputs().expect("compatible frames");
@@ -440,9 +436,7 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                can_throw_synchronously: false,
                 outgoing_edges: Vec::new(),
-                caught_exception_value: None,
             },
         );
         state.recompute_inputs().expect("compatible frames");
@@ -472,9 +466,7 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
-                can_throw_synchronously: false,
                 outgoing_edges: Vec::new(),
-                caught_exception_value: None,
             },
         );
 

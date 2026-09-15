@@ -148,7 +148,7 @@ fn discover_leaders(
         // Mirror `materialize_internal_operation`: only an ordinary,
         // non-fallible operation is elided into its successor's block.
         let plain_fallthrough = !facts.instruction.is_explicit_transfer()
-            && !facts.can_throw_synchronously
+            && !facts.has_exceptional_exit()
             && facts.outgoing_edges.len() == 1
             && facts.outgoing_edges[0].target == *next;
         if !plain_fallthrough {
