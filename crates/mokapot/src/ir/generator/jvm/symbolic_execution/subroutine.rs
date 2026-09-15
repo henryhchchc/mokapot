@@ -2,10 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::generator::jvm::NodeAddress;
-use crate::jvm::code::ProgramCounter;
-
-use crate::ir::generator::error::MokaIRBuildError;
+use super::NodeAddress;
+use crate::{ir::generator::error::MokaIRBuildError, jvm::code::ProgramCounter};
 
 const EXPANDED_LOCATION_LIMIT: usize = 1_048_576;
 

@@ -3,8 +3,7 @@ use crate::{
         error::MokaIRBuildError,
         jvm::{
             frame::ValueCategory::{Category1, Category2},
-            instruction::RegisterInstruction,
-            lifting::LiftContext,
+            symbolic_execution::{RegisterInstruction, lifting::LiftContext},
         },
     },
     jvm::code::WideInstruction,

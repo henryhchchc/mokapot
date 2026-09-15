@@ -11,8 +11,8 @@
 //!    scalar operands directly into semantic blocks.
 //! 4. [`emission`] assigns public identities and emits the completed [`MokaIRMethod`].
 //!
-//! The [`jvm::lifting`] module contains the JVM opcode semantics used by symbolic
-//! execution.
+//! The [`jvm::symbolic_execution::lifting`] module contains the JVM opcode
+//! semantics used by symbolic execution.
 
 mod block_formation;
 mod emission;

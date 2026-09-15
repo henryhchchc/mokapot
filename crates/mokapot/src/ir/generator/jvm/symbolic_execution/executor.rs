@@ -1,19 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::{
+    NodeAddress, RegisterInstruction,
+    fact::{Cfg, Node, Value},
+    fallibility::FallibilityContext,
+    solver,
+    subroutine::{Expander, ReturnAddress},
+};
 use crate::{
-    ir::generator::{
-        error::MokaIRBuildError,
-        identity::SsaValueId,
-        jvm::{
-            NodeAddress,
-            frame::Frame,
-            instruction::RegisterInstruction,
-            lifting::fallibility::FallibilityContext,
-            subroutine::{Expander, ReturnAddress},
-            symbolic_execution::fact::{Cfg, Node, Value},
-            symbolic_execution::solver,
-        },
-    },
+    ir::generator::{error::MokaIRBuildError, identity::SsaValueId, jvm::frame::Frame},
     jvm::{
         Method,
         code::{MethodBody, ProgramCounter},
@@ -284,10 +279,7 @@ impl ValueIdAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        ir::generator::{jvm::NodeAddress, tests::method},
-        jvm::code::Instruction as JvmInstruction,
-    };
+    use crate::{ir::generator::tests::method, jvm::code::Instruction as JvmInstruction};
 
     #[test]
     fn reprocessing_loop_allocates_identities_only_for_definitions() {

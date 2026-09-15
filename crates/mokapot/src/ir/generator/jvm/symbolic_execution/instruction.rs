@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 
+use super::{NodeAddress, Value};
 use crate::{
     ir::{
         expression::{Condition, Expression},
-        generator::{
-            identity::SsaValueId,
-            jvm::{NodeAddress, symbolic_execution::Value},
-        },
+        generator::identity::SsaValueId,
     },
     jvm::code::ProgramCounter,
 };

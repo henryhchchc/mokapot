@@ -8,10 +8,7 @@ use crate::ir::{
     generator::{
         error::MokaIRBuildError,
         identity::SsaValueId,
-        jvm::{
-            NodeAddress,
-            symbolic_execution::{self, FrameMergeSite},
-        },
+        jvm::symbolic_execution::{self, FrameMergeSite, NodeAddress},
     },
 };
 

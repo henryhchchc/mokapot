@@ -3,28 +3,21 @@
 mod arrays;
 mod calls;
 mod control_flow;
-pub(super) mod fallibility;
 mod fields;
-mod numeric;
 mod operations;
-pub(super) mod successors;
 mod values;
 mod wide;
 
+use super::{Executor, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
         generator::{
             error::MokaIRBuildError,
             identity::SsaValueId,
-            jvm::{
-                NodeAddress,
-                frame::{
-                    Frame, StackOperation, ValueCategory,
-                    ValueCategory::{Category1, Category2},
-                },
-                instruction::RegisterInstruction,
-                symbolic_execution::{Executor, Value},
+            jvm::frame::{
+                Frame, StackOperation, ValueCategory,
+                ValueCategory::{Category1, Category2},
             },
         },
     },

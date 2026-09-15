@@ -5,8 +5,7 @@ use crate::{
             error::MokaIRBuildError,
             jvm::{
                 frame::{ValueCategory, ValueCategory::Category1},
-                instruction::RegisterInstruction,
-                lifting::LiftContext,
+                symbolic_execution::{RegisterInstruction, lifting::LiftContext},
             },
         },
     },

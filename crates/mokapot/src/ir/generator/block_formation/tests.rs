@@ -5,7 +5,7 @@ use crate::{
         expression::Expression,
         generator::{
             identity::SsaValueId,
-            jvm::{NodeAddress, instruction::RegisterInstruction, subroutine::ReturnAddress},
+            jvm::symbolic_execution::{NodeAddress, RegisterInstruction, ReturnAddress},
         },
     },
     jvm::ConstantValue,

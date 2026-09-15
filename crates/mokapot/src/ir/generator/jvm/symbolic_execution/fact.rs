@@ -1,15 +1,11 @@
 use std::collections::BTreeMap;
 
+use super::{NodeAddress, RegisterInstruction, ReturnAddress};
 use crate::ir::{
     control_flow::ControlTransfer,
     generator::{
         identity::SsaValueId,
-        jvm::{
-            NodeAddress,
-            frame::{Frame, Position},
-            instruction::RegisterInstruction,
-            subroutine::ReturnAddress,
-        },
+        jvm::frame::{Frame, Position},
     },
 };
 

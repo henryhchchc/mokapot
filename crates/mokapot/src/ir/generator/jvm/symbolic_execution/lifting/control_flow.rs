@@ -4,9 +4,7 @@ use crate::ir::{
         error::MokaIRBuildError,
         jvm::{
             frame::{ValueCategory, ValueCategory::Category1},
-            instruction::RegisterInstruction,
-            lifting::LiftContext,
-            symbolic_execution::Value,
+            symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
         },
     },
 };

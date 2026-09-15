@@ -1,5 +1,6 @@
 //! Symbolic JVM edge construction.
 
+use super::{Edge, Executor, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         control_flow::{
@@ -7,15 +8,7 @@ use crate::{
             path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
-        generator::{
-            error::MokaIRBuildError,
-            jvm::{
-                NodeAddress,
-                frame::Frame,
-                instruction::RegisterInstruction,
-                symbolic_execution::{Edge, Executor, Value},
-            },
-        },
+        generator::{error::MokaIRBuildError, jvm::frame::Frame},
     },
     jvm::ConstantValue,
 };

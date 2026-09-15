@@ -1,18 +1,46 @@
 use crate::ir::{
-    expression::{MathOperation, NaNTreatment},
+    expression::{Conversion, MathOperation, NaNTreatment},
     generator::{
         error::MokaIRBuildError,
+        identity::SsaValueId,
         jvm::{
             frame::{
-                ValueCategory,
+                Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
-            instruction::RegisterInstruction,
-            lifting::LiftContext,
-            symbolic_execution::Value,
+            symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
         },
     },
 };
+
+#[inline]
+pub(super) fn lift_conversion(
+    frame: &mut Frame<Value>,
+    value: SsaValueId,
+    conversion: impl FnOnce(Value) -> Conversion<Value>,
+    operand_category: ValueCategory,
+    result_category: ValueCategory,
+) -> Result<RegisterInstruction, MokaIRBuildError> {
+    let operand = frame.stack.pop(operand_category)?;
+    frame.stack.push(value.into(), result_category)?;
+    let expr = conversion(operand).into();
+    Ok(RegisterInstruction::Definition { value, expr })
+}
+
+#[inline]
+pub(super) fn lift_binary_math(
+    frame: &mut Frame<Value>,
+    value: SsaValueId,
+    math: impl FnOnce(Value, Value) -> MathOperation<Value>,
+    category: ValueCategory,
+) -> Result<RegisterInstruction, MokaIRBuildError> {
+    let rhs = frame.stack.pop(category)?;
+    let lhs = frame.stack.pop(category)?;
+    frame.stack.push(value.into(), category)?;
+
+    let expr = math(lhs, rhs).into();
+    Ok(RegisterInstruction::Definition { value, expr })
+}
 
 impl LiftContext<'_, '_, '_> {
     pub(super) fn shift_long(

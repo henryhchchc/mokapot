@@ -6,9 +6,7 @@ use crate::{
             identity::SsaValueId,
             jvm::{
                 frame::ValueCategory::{self, Category1},
-                instruction::RegisterInstruction,
-                lifting::LiftContext,
-                symbolic_execution::Value,
+                symbolic_execution::{RegisterInstruction, Value, lifting::LiftContext},
             },
         },
     },

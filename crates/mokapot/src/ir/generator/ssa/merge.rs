@@ -172,7 +172,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            jvm::{NodeAddress, frame::Position},
+            jvm::{frame::Position, symbolic_execution::NodeAddress},
         },
     };
 

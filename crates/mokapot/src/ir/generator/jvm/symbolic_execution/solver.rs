@@ -10,13 +10,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
+    NodeAddress,
     executor::Executor,
     fact::{Edge, FrameMergeSite, Node, Value},
 };
-use crate::ir::generator::{
-    error::MokaIRBuildError,
-    jvm::{NodeAddress, frame::Frame},
-};
+use crate::ir::generator::{error::MokaIRBuildError, jvm::frame::Frame};
 
 struct State {
     entry_input: (NodeAddress, Frame<Value>),
@@ -278,10 +276,8 @@ mod tests {
             generator::{
                 identity::SsaValueId,
                 jvm::{
-                    NodeAddress,
                     frame::{Position, ValueCategory::Category1},
-                    instruction::RegisterInstruction,
-                    symbolic_execution::executor::Executor,
+                    symbolic_execution::RegisterInstruction,
                 },
                 tests::method,
             },

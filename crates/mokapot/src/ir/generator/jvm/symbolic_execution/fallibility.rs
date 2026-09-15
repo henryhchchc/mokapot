@@ -123,15 +123,10 @@ mod tests {
 
     #[test]
     fn classifies_resolution_and_allocation_failures() {
-        assert!(
-            ORDINARY.is_synchronously_fallible(&Instruction::Ldc(ConstantValue::Class(
-                "java/lang/String".parse().unwrap()
-            )))
-        );
-        assert!(
-            ORDINARY
-                .is_synchronously_fallible(&Instruction::New("java/lang/Object".parse().unwrap()))
-        );
+        let ldc = Instruction::Ldc(ConstantValue::Class("java/lang/String".parse().unwrap()));
+        assert!(ORDINARY.is_synchronously_fallible(&ldc));
+        let new_obj = Instruction::New("java/lang/Object".parse().unwrap());
+        assert!(ORDINARY.is_synchronously_fallible(&new_obj));
     }
 
     #[test]
@@ -145,16 +140,10 @@ mod tests {
             Instruction::Return,
         ];
 
-        assert!(
-            returns
-                .iter()
-                .all(|instruction| FALLIBLE_RETURN.is_synchronously_fallible(instruction))
-        );
-        assert!(
-            returns
-                .iter()
-                .all(|instruction| !ORDINARY.is_synchronously_fallible(instruction))
-        );
+        let failable_in_fr = |instruction| FALLIBLE_RETURN.is_synchronously_fallible(instruction);
+        assert!(returns.iter().all(failable_in_fr));
+        let not_failable_ord = |instruction| !ORDINARY.is_synchronously_fallible(instruction);
+        assert!(returns.iter().all(not_failable_ord));
     }
 
     #[test]
