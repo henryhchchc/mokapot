@@ -1,5 +1,8 @@
 //! Module for the expressions in Moka IR.
 use std::collections::HashSet;
+use std::fmt;
+
+use itertools::Itertools;
 
 use super::{TryMapValues, ValueId};
 use crate::{
@@ -27,103 +30,90 @@ pub use lock::Operation as LockOperation;
 pub use math::NaNTreatment;
 pub use math::Operation as MathOperation;
 
-mod model {
-    use std::fmt;
+/// An expression parameterized by the lifting operand representation.
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]
+pub enum Expression<OP = ValueId> {
+    /// A constant value.
+    Const(ConstantValue),
+    /// A function call
+    /// Corresponds to the following JVM instructions:
+    /// - `invokestatic`
+    /// - `invokevirtual`
+    /// - `invokespecial`
+    /// - `invokeinterface`
+    Call {
+        /// The method being called.
+        method: MethodRef,
+        /// [`Some`] argument for the `this` object if the method is an instance method.
+        /// [`None`] if the method is `static` or `native`.
+        this: Option<OP>,
+        /// A list of arguments.
+        args: Vec<OP>,
+    },
+    /// A call to a bootstrap method to create a closure.
+    /// Corresponds to the following JVM instructions:
+    /// - `invokedynamic`
+    Closure {
+        /// The name of the closure.
+        name: String,
+        /// The arguments captured by the closure.
+        captures: Vec<OP>,
+        /// The index of the bootstrap method.
+        bootstrap_method_index: u16,
+        /// The descriptor of the closure generation.
+        closure_descriptor: MethodDescriptor,
+    },
+    /// A mathematical operation.
+    Math(#[from] MathOperation<OP>),
+    /// A field access.
+    Field(#[from] FieldAccess<OP>),
+    /// An array operation.
+    Array(#[from] ArrayOperation<OP>),
+    /// A type conversion.
+    Conversion(#[from] Conversion<OP>),
+    /// An operation on a monitor.
+    Synchronization(#[from] LockOperation<OP>),
+    /// Creates a new object.
+    New(ClassRef),
+}
 
-    use itertools::Itertools;
-
-    use super::{
-        ArrayOperation, ClassRef, ConstantValue, Conversion, FieldAccess, LockOperation,
-        MathOperation, MethodDescriptor, MethodRef, ValueId,
-    };
-
-    /// An expression parameterized by the lifting operand representation.
-    #[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]
-    pub enum Expression<OP = ValueId> {
-        /// A constant value.
-        Const(ConstantValue),
-        /// A function call
-        /// Corresponds to the following JVM instructions:
-        /// - `invokestatic`
-        /// - `invokevirtual`
-        /// - `invokespecial`
-        /// - `invokeinterface`
-        Call {
-            /// The method being called.
-            method: MethodRef,
-            /// [`Some`] argument for the `this` object if the method is an instance method.
-            /// [`None`] if the method is `static` or `native`.
-            this: Option<OP>,
-            /// A list of arguments.
-            args: Vec<OP>,
-        },
-        /// A call to a bootstrap method to create a closure.
-        /// Corresponds to the following JVM instructions:
-        /// - `invokedynamic`
-        Closure {
-            /// The name of the closure.
-            name: String,
-            /// The arguments captured by the closure.
-            captures: Vec<OP>,
-            /// The index of the bootstrap method.
-            bootstrap_method_index: u16,
-            /// The descriptor of the closure generation.
-            closure_descriptor: MethodDescriptor,
-        },
-        /// A mathematical operation.
-        Math(#[from] MathOperation<OP>),
-        /// A field access.
-        Field(#[from] FieldAccess<OP>),
-        /// An array operation.
-        Array(#[from] ArrayOperation<OP>),
-        /// A type conversion.
-        Conversion(#[from] Conversion<OP>),
-        /// An operation on a monitor.
-        Synchronization(#[from] LockOperation<OP>),
-        /// Creates a new object.
-        New(ClassRef),
-    }
-
-    impl<OP: fmt::Display> fmt::Display for Expression<OP> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::Const(value) => value.fmt(f),
-                Self::Call { method, this, args } => write!(
-                    f,
-                    "call {} {}{}::{}({})",
-                    method.descriptor.return_type,
-                    this.as_ref()
-                        .map(|value| format!("{value}@"))
-                        .unwrap_or_default(),
-                    method.owner,
-                    method.name,
-                    args.iter().format(", "),
-                ),
-                Self::Closure {
-                    name,
-                    captures,
-                    bootstrap_method_index,
-                    closure_descriptor,
-                } => write!(
-                    f,
-                    "closure {} {}#{}({})",
-                    closure_descriptor.return_type,
-                    name,
-                    bootstrap_method_index,
-                    captures.iter().format(", "),
-                ),
-                Self::Math(operation) => operation.fmt(f),
-                Self::Field(access) => access.fmt(f),
-                Self::Array(operation) => operation.fmt(f),
-                Self::Conversion(operation) => operation.fmt(f),
-                Self::Synchronization(operation) => operation.fmt(f),
-                Self::New(class) => write!(f, "new {class}"),
-            }
+impl<OP: fmt::Display> fmt::Display for Expression<OP> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Const(value) => value.fmt(f),
+            Self::Call { method, this, args } => write!(
+                f,
+                "call {} {}{}::{}({})",
+                method.descriptor.return_type,
+                this.as_ref()
+                    .map(|value| format!("{value}@"))
+                    .unwrap_or_default(),
+                method.owner,
+                method.name,
+                args.iter().format(", "),
+            ),
+            Self::Closure {
+                name,
+                captures,
+                bootstrap_method_index,
+                closure_descriptor,
+            } => write!(
+                f,
+                "closure {} {}#{}({})",
+                closure_descriptor.return_type,
+                name,
+                bootstrap_method_index,
+                captures.iter().format(", "),
+            ),
+            Self::Math(operation) => operation.fmt(f),
+            Self::Field(access) => access.fmt(f),
+            Self::Array(operation) => operation.fmt(f),
+            Self::Conversion(operation) => operation.fmt(f),
+            Self::Synchronization(operation) => operation.fmt(f),
+            Self::New(class) => write!(f, "new {class}"),
         }
     }
 }
-
-pub use model::Expression;
 
 impl<OP, OUT> TryMapValues<OUT> for Expression<OP> {
     type Value = OP;

@@ -11,29 +11,23 @@ use crate::{
     jvm::references::ClassRef,
 };
 
-mod transfer {
-    use super::{BranchGuard, ClassRef, Condition, Hash, Value, ValueId};
-
-    /// The semantics of one control-flow successor arm.
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
-        /// An unconditional control transfer.
-        Unconditional,
-        /// The normal outcome of a fallible operation.
-        Normal,
-        /// A conditional transfer guarded by a conjunction of literals.
-        Conditional(BranchGuard<Condition<Value<OP>>>),
-        /// An exceptional outcome selected by this catch type.
-        ///
-        /// `None` denotes a catch-all exception-table entry. Arm order retains
-        /// JVM exception-handler precedence.
-        Exception(Option<ClassRef>),
-        /// An exceptional outcome that leaves the method.
-        Unwind,
-    }
+/// The semantics of one control-flow successor arm.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
+    /// An unconditional control transfer.
+    Unconditional,
+    /// The normal outcome of a fallible operation.
+    Normal,
+    /// A conditional transfer guarded by a conjunction of literals.
+    Conditional(BranchGuard<Condition<Value<OP>>>),
+    /// An exceptional outcome selected by this catch type.
+    ///
+    /// `None` denotes a catch-all exception-table entry. Arm order retains
+    /// JVM exception-handler precedence.
+    Exception(Option<ClassRef>),
+    /// An exceptional outcome that leaves the method.
+    Unwind,
 }
-
-pub use transfer::ControlTransfer;
 
 impl<OP, OUT> TryMapValues<OUT> for ControlTransfer<OP>
 where
