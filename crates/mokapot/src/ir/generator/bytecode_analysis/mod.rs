@@ -19,17 +19,17 @@ pub(super) use subroutine::ReturnAddress;
 use crate::{
     ir::{
         control_flow::ControlTransfer,
-        generator::{error::Error, identity::SsaValueId, instruction_graph::jvm::Frame},
+        generator::{bytecode_analysis::jvm::Frame, error::Error, identity::SsaValueId},
     },
     jvm::{Method, code::MethodBody},
 };
 
-pub(super) fn build(method: &Method) -> Result<Graph, Error> {
-    Builder::for_method(method)?.build()
+pub(super) fn build_node_graph(method: &Method) -> Result<NodeGraph, Error> {
+    NodeGraphBuilder::for_method(method)?.build()
 }
 
 /// Mutable state used while constructing an instruction graph.
-struct Builder<'method> {
+struct NodeGraphBuilder<'method> {
     body: &'method MethodBody,
     fallibility: fallibility::Context,
     subroutine_expander: subroutine::Expander,
@@ -84,7 +84,7 @@ pub(super) struct Node {
 }
 
 /// A reachable register-form JVM instruction graph.
-pub(super) struct Graph {
+pub(super) struct NodeGraph {
     pub entry_addr: NodeAddress,
     /// The original frame entering the method.
     pub initial_frame: Frame<Value>,

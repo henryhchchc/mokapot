@@ -1,11 +1,11 @@
 use crate::{
     ir::generator::{
-        error::Error,
-        instruction_graph::{
+        bytecode_analysis::{
             RegisterInstruction,
             jvm::ValueCategory::{Category1, Category2},
             lifting::Context,
         },
+        error::Error,
     },
     jvm::code::WideInstruction,
 };

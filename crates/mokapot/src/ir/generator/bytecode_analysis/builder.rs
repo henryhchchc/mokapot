@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Builder, Graph, Node, NodeAddress, RegisterInstruction, Value, fallibility, solver,
+    Node, NodeAddress, NodeGraph, NodeGraphBuilder, RegisterInstruction, Value, fallibility,
+    solver,
     subroutine::{self, ReturnAddress},
 };
 use crate::{
-    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::jvm::Frame},
+    ir::generator::{bytecode_analysis::jvm::Frame, error::Error, identity::SsaValueId},
     jvm::{
         Method,
         code::{MethodBody, ProgramCounter},
@@ -13,7 +14,7 @@ use crate::{
     },
 };
 
-impl<'method> Builder<'method> {
+impl<'method> NodeGraphBuilder<'method> {
     pub fn build_node(
         &mut self,
         addr: NodeAddress,
@@ -114,7 +115,7 @@ impl<'method> Builder<'method> {
         Ok(builder)
     }
 
-    pub fn build(mut self) -> Result<Graph, Error> {
+    pub fn build(mut self) -> Result<NodeGraph, Error> {
         let nodes = self.build_reachable_nodes()?;
         let merge_identities = nodes
             .values()
@@ -128,7 +129,7 @@ impl<'method> Builder<'method> {
             .into_iter()
             .map(|identity| self.new_value_id().map(|value| (identity, value)))
             .collect::<Result<_, _>>()?;
-        Ok(Graph {
+        Ok(NodeGraph {
             entry_addr: self.entry_addr,
             initial_frame: self.initial_frame,
             nodes,
@@ -264,7 +265,7 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut builder = Builder::for_method(&method).expect("valid method");
+        let mut builder = NodeGraphBuilder::for_method(&method).expect("valid method");
         builder.build_reachable_nodes().expect("valid loop");
 
         assert_eq!(builder.definition_ids.len(), 3);

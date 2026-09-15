@@ -2,12 +2,12 @@ use crate::{
     ir::{
         expression::{Expression, MathOperation},
         generator::{
-            error::Error,
-            instruction_graph::{
+            bytecode_analysis::{
                 RegisterInstruction, Value,
                 jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
+            error::Error,
         },
     },
     jvm::{ConstantValue, references::ClassRef},

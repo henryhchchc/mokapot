@@ -2,12 +2,12 @@ use crate::{
     ir::{
         expression::FieldAccess,
         generator::{
-            error::Error,
-            instruction_graph::{
+            bytecode_analysis::{
                 RegisterInstruction, Value,
                 jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
+            error::Error,
         },
     },
     jvm::references::FieldRef,

@@ -1,12 +1,12 @@
 use crate::ir::{
     expression::Condition,
     generator::{
-        error::Error,
-        instruction_graph::{
+        bytecode_analysis::{
             RegisterInstruction, Value,
             jvm::{ValueCategory, ValueCategory::Category1},
             lifting::Context,
         },
+        error::Error,
     },
 };
 use crate::jvm::code::ProgramCounter;

@@ -1,9 +1,7 @@
 use crate::ir::{
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::{
-        error::Error,
-        identity::SsaValueId,
-        instruction_graph::{
+        bytecode_analysis::{
             RegisterInstruction, Value,
             jvm::{
                 Frame, ValueCategory,
@@ -11,6 +9,8 @@ use crate::ir::{
             },
             lifting::Context,
         },
+        error::Error,
+        identity::SsaValueId,
     },
 };
 
