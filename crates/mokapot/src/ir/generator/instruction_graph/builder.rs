@@ -1,9 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Builder, NodeAddress, RegisterInstruction, fallibility,
-    model::{Graph, Node, Value},
-    solver,
+    Builder, Graph, Node, NodeAddress, RegisterInstruction, Value, fallibility, solver,
     subroutine::{self, ReturnAddress},
 };
 use crate::{

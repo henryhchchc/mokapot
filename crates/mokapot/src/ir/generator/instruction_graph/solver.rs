@@ -9,10 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 use std::collections::HashSet;
 
-use super::{
-    Builder, NodeAddress,
-    model::{Edge, FrameMergeSite, Node, Value},
-};
+use super::{Builder, Edge, FrameMergeSite, Node, NodeAddress, Value};
 use crate::ir::generator::{error::Error, instruction_graph::jvm::Frame};
 
 struct State {
