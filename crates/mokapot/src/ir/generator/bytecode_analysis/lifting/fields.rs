@@ -1,9 +1,10 @@
+use super::definition_operation;
 use crate::{
     ir::{
+        OperationKind, ValueId,
         expression::FieldAccess,
         generator::{
             bytecode_analysis::{
-                RegisterInstruction, Value,
                 jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
@@ -14,66 +15,67 @@ use crate::{
 };
 
 impl Context<'_, '_, '_> {
-    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
+    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
-        self.frame.stack.push(
-            value.into(),
-            ValueCategory::of_field_type(&field.field_type),
-        )?;
-        Ok(RegisterInstruction::Definition {
+        self.frame
+            .stack
+            .push(value, ValueCategory::of_field_type(&field.field_type))?;
+        Ok(Some(definition_operation(
             value,
-            expr: FieldAccess::ReadStatic {
+            FieldAccess::ReadStatic {
                 field: field.clone(),
             }
             .into(),
-        })
+        )))
     }
 
-    pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
+    pub(super) fn read_instance(
+        &mut self,
+        field: &FieldRef,
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         let object_ref = self.frame.stack.pop(Category1)?;
-        self.frame.stack.push(
-            value.into(),
-            ValueCategory::of_field_type(&field.field_type),
-        )?;
-        Ok(RegisterInstruction::Definition {
+        self.frame
+            .stack
+            .push(value, ValueCategory::of_field_type(&field.field_type))?;
+        Ok(Some(definition_operation(
             value,
-            expr: FieldAccess::ReadInstance {
+            FieldAccess::ReadInstance {
                 object_ref,
                 field: field.clone(),
             }
             .into(),
-        })
+        )))
     }
 
-    pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
+    pub(super) fn write_static(
+        &mut self,
+        field: &FieldRef,
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.pop_field_value(field)?;
-        Ok(RegisterInstruction::Effect(
-            FieldAccess::WriteStatic {
-                field: field.clone(),
-                value,
-            }
-            .into(),
-        ))
+        let field = field.clone();
+        Ok(Some(OperationKind::Effect {
+            expr: FieldAccess::WriteStatic { field, value }.into(),
+        }))
     }
 
     pub(super) fn write_instance(
         &mut self,
         field: &FieldRef,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(RegisterInstruction::Effect(
-            FieldAccess::WriteInstance {
+        Ok(Some(OperationKind::Effect {
+            expr: FieldAccess::WriteInstance {
                 object_ref,
                 field: field.clone(),
                 value,
             }
             .into(),
-        ))
+        }))
     }
 
-    fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, Error> {
+    fn pop_field_value(&mut self, field: &FieldRef) -> Result<ValueId, Error> {
         Ok(self
             .frame
             .stack

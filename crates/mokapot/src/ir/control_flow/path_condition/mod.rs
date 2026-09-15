@@ -31,7 +31,7 @@ use cover::Cover;
 pub use branch_guard::BranchGuard;
 pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
-pub use predicate::Value;
+pub use predicate::PathValue;
 
 pub(super) fn analyze(
     cfg: ControlFlowGraph<'_>,
@@ -49,6 +49,27 @@ pub(super) fn analyze(
 #[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     cover: Cover<P>,
+}
+
+/// A borrowed conjunction in a [`PathCondition`] disjunctive normal form.
+///
+/// A condition is the disjunction of its [`PathCondition::disjuncts`].
+#[derive(Debug, Clone, Copy)]
+pub struct PathConditionTerm<'a, P>(&'a cube::Cube<P>);
+
+impl<P> PathConditionTerm<'_, P> {
+    /// Iterates over this term's literals.
+    ///
+    /// The iteration order is unspecified.
+    pub fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
+        self.0.literals()
+    }
+
+    /// Returns whether this term is the tautological conjunction `⊤`.
+    #[must_use]
+    pub fn is_tautology(&self) -> bool {
+        self.0.is_tautology()
+    }
 }
 
 impl<P> PartialEq for PathCondition<P>
@@ -109,6 +130,14 @@ impl<P> PathCondition<P> {
         self.cover.predicates().collect()
     }
 
+    /// Iterates over the conjunctions that this condition disjoins.
+    ///
+    /// The iteration order is unspecified. A contradictory condition has no
+    /// disjuncts, while a tautological condition has one tautological disjunct.
+    pub fn disjuncts(&self) -> impl Iterator<Item = PathConditionTerm<'_, P>> {
+        self.cover.cubes().map(PathConditionTerm)
+    }
+
     /// Returns whether this condition is `⊥`.
     #[must_use]
     pub fn is_contradiction(&self) -> bool {
@@ -143,11 +172,6 @@ impl<P> PathCondition<P> {
         P: Hash + Eq + Clone,
     {
         Self::with_cover(Cover::from_branch_guards(branch_guards))
-    }
-
-    #[cfg(test)]
-    fn cubes(&self) -> impl Iterator<Item = &cube::Cube<P>> {
-        self.cover.cubes()
     }
 }
 

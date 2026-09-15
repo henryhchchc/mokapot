@@ -1,7 +1,7 @@
 use mokapot::{
     ir::{
-        DefUseChain, InstructionId, MokaIRMethod, OperationKind, TerminatorKind, UseSite,
-        ValueDefinition, expression::Expression,
+        DefUseChain, InstructionId, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
+        UseSite, ValueDefinition, expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
@@ -29,17 +29,17 @@ fn get_test_method() -> Method {
 }
 
 fn operation(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Operation> {
-    method
-        .blocks()
-        .flat_map(|block| block.operations())
-        .find(|instruction| instruction.id() == id)
+    match method.instruction(id) {
+        Some(InstructionRef::Operation(operation)) => Some(operation),
+        Some(InstructionRef::Phi(_) | InstructionRef::Terminator(_)) | None => None,
+    }
 }
 
 fn terminator(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Terminator> {
-    method
-        .blocks()
-        .map(mokapot::ir::BasicBlock::terminator)
-        .find(|terminator| terminator.id() == id)
+    match method.instruction(id) {
+        Some(InstructionRef::Terminator(terminator)) => Some(terminator),
+        Some(InstructionRef::Phi(_) | InstructionRef::Operation(_)) | None => None,
+    }
 }
 
 #[test]

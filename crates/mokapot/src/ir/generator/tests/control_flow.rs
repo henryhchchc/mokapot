@@ -1,4 +1,14 @@
 use super::*;
+use crate::{
+    ir::{
+        control_flow::{
+            ControlTransfer,
+            path_condition::{BooleanVariable, BranchGuard, PathValue},
+        },
+        expression::Predicate,
+    },
+    jvm::ConstantValue,
+};
 
 #[test]
 fn switch_retains_parallel_successor_arms() {
@@ -38,6 +48,120 @@ fn switch_retains_parallel_successor_arms() {
             .all(|pair| pair[0].target() == pair[1].target())
     );
     assert_eq!(ir.control_flow_graph().edges().count(), 3);
+}
+
+#[test]
+fn branch_preserves_taken_then_fallthrough_guards() {
+    let method = method(
+        [
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(5.into())),
+            (2, Instruction::Return),
+            (5, Instruction::Return),
+        ],
+        "(I)V",
+        vec![],
+    );
+    let ir = build(&method).unwrap();
+    let branch = ir.block(ir.entry_block()).unwrap().terminator();
+    let match_value = ir.parameter_values()[0];
+
+    assert_eq!(branch.kind(), &TerminatorKind::Branch);
+    assert_eq!(branch.successors().len(), 2);
+    assert_eq!(
+        branch.successors()[0].transfer(),
+        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+            Predicate::IsZero(PathValue::Variable(match_value)),
+        )))
+    );
+    assert_eq!(
+        branch.successors()[1].transfer(),
+        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Negative(
+            Predicate::IsZero(PathValue::Variable(match_value)),
+        )))
+    );
+    assert_eq!(
+        ir.source_map().origins_of(branch.id()).collect::<Vec<_>>(),
+        [ProgramCounter::from(1)]
+    );
+}
+
+#[test]
+fn comparison_branch_preserves_operand_order() {
+    let method = method(
+        [
+            (0, Instruction::ILoad0),
+            (1, Instruction::ILoad1),
+            (2, Instruction::IfICmpLt(6.into())),
+            (5, Instruction::Return),
+            (6, Instruction::Return),
+        ],
+        "(II)V",
+        vec![],
+    );
+    let ir = build(&method).unwrap();
+    let branch = ir.block(ir.entry_block()).unwrap().terminator();
+    let parameters = ir.parameter_values();
+
+    assert_eq!(
+        branch.successors()[0].transfer(),
+        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+            Predicate::LessThan(
+                PathValue::Variable(parameters[0]),
+                PathValue::Variable(parameters[1]),
+            ),
+        )))
+    );
+}
+
+#[test]
+fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
+    let method = method(
+        [
+            (0, Instruction::ILoad0),
+            (
+                1,
+                Instruction::TableSwitch {
+                    range: 3..=4,
+                    jump_targets: vec![10.into(), 10.into()],
+                    default: 10.into(),
+                },
+            ),
+            (10, Instruction::Return),
+        ],
+        "(I)V",
+        vec![],
+    );
+    let ir = build(&method).unwrap();
+    let switch = ir.block(ir.entry_block()).unwrap().terminator();
+    let match_value = ir.parameter_values()[0];
+    let case_guard = |case| {
+        ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+            Predicate::Equal(
+                PathValue::Variable(match_value),
+                PathValue::Constant(ConstantValue::Integer(case)),
+            ),
+        )))
+    };
+
+    assert_eq!(switch.kind(), &TerminatorKind::Switch { match_value });
+    assert_eq!(switch.successors().len(), 3);
+    assert!(
+        switch
+            .successors()
+            .windows(2)
+            .all(|pair| pair[0].target() == pair[1].target())
+    );
+    assert_eq!(switch.successors()[0].transfer(), &case_guard(3));
+    assert_eq!(switch.successors()[1].transfer(), &case_guard(4));
+    assert!(matches!(
+        switch.successors()[2].transfer(),
+        ControlTransfer::Conditional(guard) if guard.predicate_count() == 2
+    ));
+    assert_eq!(
+        ir.source_map().origins_of(switch.id()).collect::<Vec<_>>(),
+        [ProgramCounter::from(1)]
+    );
 }
 
 #[test]

@@ -1,32 +1,27 @@
 use crate::{
-    ir::{
-        self, TryMapValues, ValueId,
-        expression::{Condition, Predicate},
-    },
+    ir::{ValueId, expression::Predicate},
     jvm::ConstantValue,
 };
 
 use super::BooleanVariable;
 
-impl<T> BooleanVariable<Condition<T>> {
-    /// Rewrites equivalent conditions into a single literal vocabulary.
+impl BooleanVariable<Predicate> {
     fn canonicalize(self) -> Self {
         match self {
-            Self::Positive(condition) => canonicalize_condition(condition),
-            Self::Negative(condition) => !canonicalize_condition(condition),
+            Self::Positive(predicate) => canonicalize_predicate(predicate),
+            Self::Negative(predicate) => !canonicalize_predicate(predicate),
         }
     }
 }
 
-/// Rewrites branch conditions into canonical positive/negative literals.
-fn canonicalize_condition<T>(condition: Condition<T>) -> BooleanVariable<Condition<T>> {
+fn canonicalize_predicate(predicate: Predicate) -> BooleanVariable<Predicate> {
     use BooleanVariable::{Negative, Positive};
-    use Condition::{
+    use Predicate::{
         Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
         IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
     };
 
-    match condition {
+    match predicate {
         Equal(lhs, rhs) => Positive(Equal(lhs, rhs)),
         NotEqual(lhs, rhs) => Negative(Equal(lhs, rhs)),
         LessThan(lhs, rhs) => Positive(LessThan(lhs, rhs)),
@@ -44,61 +39,36 @@ fn canonicalize_condition<T>(condition: Condition<T>) -> BooleanVariable<Conditi
     }
 }
 
-impl<T, V> From<ir::expression::Condition<T>> for BooleanVariable<ir::expression::Condition<V>>
-where
-    V: From<T>,
-{
-    fn from(value: ir::expression::Condition<T>) -> Self {
-        #[allow(clippy::enum_glob_use)]
-        use Condition::*;
-
-        let condition = match value {
-            Equal(lhs, rhs) => Equal(lhs.into(), rhs.into()),
-            NotEqual(lhs, rhs) => NotEqual(lhs.into(), rhs.into()),
-            LessThan(lhs, rhs) => LessThan(lhs.into(), rhs.into()),
-            LessThanOrEqual(lhs, rhs) => LessThanOrEqual(lhs.into(), rhs.into()),
-            GreaterThan(lhs, rhs) => GreaterThan(lhs.into(), rhs.into()),
-            GreaterThanOrEqual(lhs, rhs) => GreaterThanOrEqual(lhs.into(), rhs.into()),
-            IsNull(value) => IsNull(value.into()),
-            IsNotNull(value) => IsNotNull(value.into()),
-            IsZero(value) => IsZero(value.into()),
-            IsNonZero(value) => IsNonZero(value.into()),
-            IsPositive(value) => IsPositive(value.into()),
-            IsNegative(value) => IsNegative(value.into()),
-            IsNonNegative(value) => IsNonNegative(value.into()),
-            IsNonPositive(value) => IsNonPositive(value.into()),
-        };
-        BooleanVariable::Positive(condition).canonicalize()
+impl From<Predicate> for BooleanVariable<Predicate> {
+    fn from(predicate: Predicate) -> Self {
+        BooleanVariable::Positive(predicate).canonicalize()
     }
 }
 
-/// An operand or constant parameterized by the lifting operand representation.
+/// An SSA value or constant in a path predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
-pub enum Value<OP = ValueId> {
+pub enum PathValue {
     /// A value produced by the IR.
-    Variable(OP),
+    Variable(ValueId),
     /// A JVM constant embedded in the condition.
     Constant(ConstantValue),
 }
 
-impl<OP, OUT> TryMapValues<OUT> for Value<OP> {
-    type Value = OP;
-    type Mapped = Value<OUT>;
+impl From<ValueId> for PathValue {
+    fn from(value: ValueId) -> Self {
+        Self::Variable(value)
+    }
+}
 
-    fn try_map_values<E>(
-        self,
-        mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<Value<OUT>, E> {
-        match self {
-            Self::Variable(value) => remap(value).map(Value::Variable),
-            Self::Constant(value) => Ok(Value::Constant(value)),
-        }
+impl From<ConstantValue> for PathValue {
+    fn from(value: ConstantValue) -> Self {
+        Self::Constant(value)
     }
 }
 
 impl Predicate {
     pub(crate) fn uses(&self) -> std::collections::HashSet<ValueId> {
-        use Condition::{
+        use Predicate::{
             Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
             IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
         };
@@ -117,52 +87,10 @@ impl Predicate {
         values
             .into_iter()
             .filter_map(|value| match value {
-                Value::Variable(value) => Some(value),
-                Value::Constant(_) => None,
+                PathValue::Variable(value) => Some(value),
+                PathValue::Constant(_) => None,
             })
             .copied()
             .collect()
-    }
-}
-
-impl<OP> From<OP> for Value<OP> {
-    fn from(value: OP) -> Self {
-        Self::Variable(value)
-    }
-}
-
-impl From<ConstantValue> for Value {
-    fn from(value: ConstantValue) -> Self {
-        Self::Constant(value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn canonicalizes_complements() {
-        let not_equal: BooleanVariable<Condition<u8>> = Condition::NotEqual(1, 2).into();
-        assert_eq!(not_equal, BooleanVariable::Negative(Condition::Equal(1, 2)));
-
-        let non_zero: BooleanVariable<Condition<u8>> = Condition::IsNonZero(3).into();
-        assert_eq!(non_zero, BooleanVariable::Negative(Condition::IsZero(3)));
-    }
-
-    #[test]
-    fn canonicalizes_order_directions() {
-        let greater_than: BooleanVariable<Condition<u8>> = Condition::GreaterThan(1, 2).into();
-        assert_eq!(
-            greater_than,
-            BooleanVariable::Positive(Condition::LessThan(2, 1))
-        );
-
-        let less_than_or_equal: BooleanVariable<Condition<u8>> =
-            Condition::LessThanOrEqual(1, 2).into();
-        assert_eq!(
-            less_than_or_equal,
-            BooleanVariable::Negative(Condition::LessThan(2, 1))
-        );
     }
 }

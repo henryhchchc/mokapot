@@ -2,58 +2,60 @@
 
 mod arrays;
 mod calls;
-mod control_flow;
 mod fields;
 mod operations;
 mod values;
 mod wide;
 
-use super::{NodeGraphBuilder, NodeAddress, RegisterInstruction, Value};
+use super::Executor;
 use crate::{
     ir::{
-        expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
+        OperationKind, ValueId,
+        expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
         generator::{
             bytecode_analysis::jvm::{
                 Frame, StackOperation, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
             error::Error,
-            identity::SsaValueId,
         },
     },
     jvm::{ConstantValue, code::Instruction as JVM},
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
-struct Context<'builder, 'frame, 'method> {
-    builder: &'builder mut NodeGraphBuilder<'method>,
-    addr: NodeAddress,
-    frame: &'frame mut Frame<Value>,
+/// Builds the definition operation produced by a lifted expression.
+///
+const fn definition_operation(value: ValueId, expr: Expression) -> OperationKind {
+    OperationKind::Definition { value, expr }
 }
 
-impl NodeGraphBuilder<'_> {
+struct Context<'executor, 'frame, 'method> {
+    executor: &'executor mut Executor<'method>,
+    pc: crate::jvm::code::ProgramCounter,
+    frame: &'frame mut Frame,
+}
+
+impl Executor<'_> {
     #[expect(
         clippy::too_many_lines,
         reason = "the match is an exhaustive JVM instruction dispatch"
     )]
-    pub(super) fn lift_register_instruction(
+    pub(super) fn lift_instruction(
         &mut self,
         jvm_instruction: &JVM,
-        addr: NodeAddress,
-        frame: &mut Frame<Value>,
-    ) -> Result<RegisterInstruction, Error> {
+        pc: crate::jvm::code::ProgramCounter,
+        frame: &mut Frame,
+    ) -> Result<Option<OperationKind>, Error> {
         #[allow(
             clippy::enum_glob_use,
             reason = "this match exhaustively dispatches the JVM instruction enum"
         )]
         use JVM::*;
 
-        if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(Error::MalformedControlFlow);
-        }
         let mut cx = Context {
-            builder: self,
-            addr,
+            executor: self,
+            pc,
             frame,
         };
 
@@ -168,41 +170,6 @@ impl NodeGraphBuilder<'_> {
             FCmpG => cx.compare_float(NaNTreatment::IsLargest, Category1),
             DCmpL => cx.compare_float(NaNTreatment::IsSmallest, Category2),
             DCmpG => cx.compare_float(NaNTreatment::IsLargest, Category2),
-            IfEq(target) => cx.unary_branch(*target, Condition::IsZero),
-            IfNe(target) => cx.unary_branch(*target, Condition::IsNonZero),
-            IfLt(target) => cx.unary_branch(*target, Condition::IsNegative),
-            IfGe(target) => cx.unary_branch(*target, Condition::IsNonNegative),
-            IfGt(target) => cx.unary_branch(*target, Condition::IsPositive),
-            IfLe(target) => cx.unary_branch(*target, Condition::IsNonPositive),
-            IfNull(target) => cx.unary_branch(*target, Condition::IsNull),
-            IfNonNull(target) => cx.unary_branch(*target, Condition::IsNotNull),
-            IfICmpEq(target) | IfACmpEq(target) => cx.comparison_branch(*target, Condition::Equal),
-            IfICmpNe(target) | IfACmpNe(target) => {
-                cx.comparison_branch(*target, Condition::NotEqual)
-            }
-            IfICmpGe(target) => cx.comparison_branch(*target, Condition::GreaterThanOrEqual),
-            IfICmpLt(target) => cx.comparison_branch(*target, Condition::LessThan),
-            IfICmpGt(target) => cx.comparison_branch(*target, Condition::GreaterThan),
-            IfICmpLe(target) => cx.comparison_branch(*target, Condition::LessThanOrEqual),
-            Goto(target) | GotoW(target) => Ok(RegisterInstruction::Jump {
-                condition: None,
-                target: *target,
-            }),
-            Jsr(target) | JsrW(target) => cx.subroutine_call(*target),
-            Ret(idx) => cx.subroutine_return((*idx).into()),
-            TableSwitch {
-                range,
-                jump_targets,
-                default,
-            } => cx.switch(*default, range.clone().zip(jump_targets.clone()).collect()),
-            LookupSwitch {
-                default,
-                match_targets,
-            } => cx.switch(*default, match_targets.clone()),
-            IReturn | FReturn | AReturn => cx.return_value(Category1),
-            LReturn | DReturn => cx.return_value(Category2),
-            Return => Ok(RegisterInstruction::Return(None)),
-            AThrow => cx.throw(),
             GetStatic(field) => cx.read_static(field),
             GetField(field) => cx.read_instance(field),
             PutStatic(field) => cx.write_static(field),
@@ -216,7 +183,7 @@ impl NodeGraphBuilder<'_> {
                 name,
                 descriptor,
             } => cx.invoke_dynamic(descriptor, *bootstrap_method_index, name),
-            Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(RegisterInstruction::Erased),
+            Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
             New(class) => cx.new_object(class),
             CheckCast(target) => cx.conversion(
                 |value| Conversion::CheckCast(value, target.clone()),
@@ -230,6 +197,11 @@ impl NodeGraphBuilder<'_> {
             ),
             MonitorEnter => cx.monitor(LockOperation::Acquire),
             MonitorExit => cx.monitor(LockOperation::Release),
+            // All the remainders are control flow instructions
+            _ => Err(Error::internal_at(
+                pc,
+                "a control-transfer instruction reached non-control lifting",
+            )),
         }
     }
 }
@@ -237,24 +209,25 @@ impl NodeGraphBuilder<'_> {
 impl Context<'_, '_, '_> {
     fn monitor(
         &mut self,
-        operation: impl FnOnce(Value) -> LockOperation<Value>,
-    ) -> Result<RegisterInstruction, Error> {
+        operation: impl FnOnce(ValueId) -> LockOperation,
+    ) -> Result<Option<OperationKind>, Error> {
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(RegisterInstruction::Effect(operation(object_ref).into()))
+        let expr = operation(object_ref).into();
+        Ok(Some(OperationKind::Effect { expr }))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<RegisterInstruction, Error> {
+    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<OperationKind>, Error> {
         self.frame.stack.apply(operation)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(None)
     }
 
-    fn definition_id(&mut self) -> Result<SsaValueId, Error> {
-        self.builder.definition_id_at(self.addr)
+    fn definition_id(&mut self) -> Result<ValueId, Error> {
+        self.executor.definition_id_at(self.pc)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>
     where
-        L: FnOnce(SsaValueId, &mut Frame<Value>) -> Result<T, Error>,
+        L: FnOnce(ValueId, &mut Frame) -> Result<T, Error>,
     {
         let value = self.definition_id()?;
         lift(value, self.frame)
@@ -262,22 +235,22 @@ impl Context<'_, '_, '_> {
 
     fn unary(
         &mut self,
-        operation: impl FnOnce(Value) -> MathOperation<Value>,
+        operation: impl FnOnce(ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             let operand = frame.stack.pop(category)?;
-            frame.stack.push(value.into(), category)?;
+            frame.stack.push(value, category)?;
             let expr = operation(operand).into();
-            Ok(RegisterInstruction::Definition { value, expr })
+            Ok(Some(definition_operation(value, expr)))
         })
     }
 
     fn binary(
         &mut self,
-        operation: impl FnOnce(Value, Value) -> MathOperation<Value>,
+        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             operations::lift_binary_math(frame, value, operation, category)
         })
@@ -285,10 +258,10 @@ impl Context<'_, '_, '_> {
 
     fn conversion(
         &mut self,
-        conversion: impl FnOnce(Value) -> Conversion<Value>,
+        conversion: impl FnOnce(ValueId) -> Conversion,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })
@@ -297,7 +270,7 @@ impl Context<'_, '_, '_> {
     fn definition_id_for_return(
         &mut self,
         return_type: &ReturnType,
-    ) -> Result<Option<SsaValueId>, Error> {
+    ) -> Result<Option<ValueId>, Error> {
         match return_type {
             ReturnType::Some(_) => self.definition_id().map(Some),
             ReturnType::Void => Ok(None),

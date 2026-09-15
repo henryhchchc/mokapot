@@ -1,41 +1,37 @@
-//! Collects, simplifies, and materializes scalar SSA in semantic blocks.
+//! Simplifies scalar phis and materializes them in semantic SSA blocks.
 
 mod finalization;
-mod merge;
 mod model;
 mod simplify;
 
 use crate::ir::{
-    BlockId,
-    generator::{block_formation, error::Error, identity::SsaValueId},
+    BlockId, ValueId,
+    generator::{bytecode_analysis::scalar::ScalarGraph, error::Error},
 };
-use merge::{MergePlan, collect_phi_candidates};
-pub(crate) use model::Block;
+pub(in crate::ir::generator) use model::Block;
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.
-pub(super) struct Graph {
-    pub entry: BlockId,
-    pub blocks: Vec<Block>,
-    pub this_value: Option<SsaValueId>,
-    pub parameter_values: Vec<SsaValueId>,
+pub(in crate::ir::generator) struct SsaGraph {
+    pub(in crate::ir::generator) entry: BlockId,
+    pub(in crate::ir::generator) blocks: Vec<Block>,
+    pub(in crate::ir::generator) this_value: Option<ValueId>,
+    pub(in crate::ir::generator) parameter_values: Vec<ValueId>,
 }
 
-/// Collects and simplifies phis, then resolves frame operands into scalar blocks.
-pub(super) fn construct(graph: block_formation::Graph) -> Result<Graph, Error> {
-    let block_formation::Graph {
+/// Simplifies and materializes scalar phis into final SSA blocks.
+pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
+    let ScalarGraph {
         entry,
         blocks,
-        phi_blocks,
-        merge_values,
+        phi_candidates,
         this_value,
         parameter_values,
     } = graph;
-    let merge_plan = MergePlan::new(merge_values, phi_blocks);
-    let candidates = collect_phi_candidates(&blocks, &merge_plan)?;
-    let simplified = simplify_phis(candidates).map_err(|_| Error::MalformedControlFlow)?;
-    let blocks = finalization::finalize(blocks, &merge_plan, simplified)?;
-    Ok(Graph {
+    let simplified = simplify_phis(phi_candidates)
+        .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
+    let blocks = finalization::finalize(blocks, simplified)?;
+    Ok(SsaGraph {
         entry,
         blocks,
         this_value,

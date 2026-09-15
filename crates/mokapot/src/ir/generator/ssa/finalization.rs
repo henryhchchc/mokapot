@@ -1,26 +1,19 @@
-//! Resolves formed JVM blocks into scalar SSA blocks.
-use std::collections::BTreeMap;
+//! Applies scalar substitutions and materializes retained phi nodes.
+use std::{collections::BTreeMap, convert::Infallible};
 
 use super::model;
 use crate::ir::{
-    BlockId, TryMapValues,
+    BlockId, ValueId,
     generator::{
-        block_formation,
+        bytecode_analysis::scalar::{PhiCandidate, ScalarBlock, Successor},
         error::Error,
-        identity::SsaValueId,
-        ssa::{
-            merge::MergePlan,
-            model::{Phi, Successor},
-            simplify::SimplifiedPhis,
-        },
+        remap::RemapValues,
+        ssa::{model::Phi, simplify::SimplifiedPhis},
     },
 };
 
-type PhiCandidate = (SsaValueId, Vec<(BlockId, SsaValueId)>);
-
 pub(super) fn finalize(
-    blocks: Vec<block_formation::Block>,
-    merge_plan: &MergePlan,
+    blocks: Vec<ScalarBlock>,
     simplified: SimplifiedPhis,
 ) -> Result<Vec<model::Block>, Error> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
@@ -31,15 +24,12 @@ pub(super) fn finalize(
             .copied()
             .unwrap_or(value)
     };
-    let mut phis_by_block = BTreeMap::<BlockId, Vec<PhiCandidate>>::new();
-    for (value, inputs) in simplified.candidates {
-        let block = merge_plan
-            .block_for(value)
-            .ok_or(Error::MalformedControlFlow)?;
+    let mut phis_by_block = BTreeMap::<BlockId, Vec<Phi>>::new();
+    for (value, PhiCandidate { placement, inputs }) in simplified.candidates {
         phis_by_block
-            .entry(block)
+            .entry(placement)
             .or_default()
-            .push((value, inputs));
+            .push(Phi { value, inputs });
     }
     let mut finalized = Vec::with_capacity(blocks.len());
     for block in blocks {
@@ -47,38 +37,36 @@ pub(super) fn finalize(
         finalized.push(finalize_block(
             block,
             phis_by_block.remove(&id).unwrap_or_default(),
-            merge_plan,
             &canonical,
-        )?);
+        ));
     }
     if phis_by_block.is_empty() {
         Ok(finalized)
     } else {
-        Err(Error::MalformedControlFlow)
+        Err(Error::internal("a retained phi targets no scalar block"))
     }
 }
+
 fn finalize_block(
-    block: block_formation::Block,
-    phis: Vec<PhiCandidate>,
-    merge_plan: &MergePlan,
-    canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> Result<model::Block, Error> {
-    let block_formation::Block {
+    block: ScalarBlock,
+    phis: Vec<Phi>,
+    canonical: &impl Fn(ValueId) -> ValueId,
+) -> model::Block {
+    let ScalarBlock {
         id,
-        entry_frame: _,
+        caught_exception,
         operations,
         terminator,
         terminator_source,
-        arms,
-        caught_exception,
+        successors,
     } = block;
-    let resolve = |operand| merge_plan.resolve(operand).map(canonical);
     let caught_exception = caught_exception.map(canonical);
     let phis = phis
         .into_iter()
-        .map(|(value, inputs)| Phi {
-            value: canonical(value),
-            inputs: inputs
+        .map(|phi| Phi {
+            value: canonical(phi.value),
+            inputs: phi
+                .inputs
                 .into_iter()
                 .map(|(predecessor, value)| (predecessor, canonical(value)))
                 .collect(),
@@ -86,29 +74,17 @@ fn finalize_block(
         .collect();
     let operations = operations
         .into_iter()
-        .map(|(source, operation)| {
-            operation
-                .try_map_values(&resolve)
-                .map(|operation| (source, operation))
-        })
-        .collect::<Result<_, _>>()?;
-    let terminator = terminator.try_map_values(&resolve)?;
-    let successors = arms
+        .map(|(source, operation)| (source, apply_substitutions(operation, canonical)))
+        .collect();
+    let terminator = apply_substitutions(terminator, canonical);
+    let successors = successors
         .into_iter()
-        .map(
-            |block_formation::Arm {
-                 target,
-                 transfer,
-                 frame: _,
-             }| {
-                Ok(Successor {
-                    target,
-                    transfer: transfer.try_map_values(&resolve)?,
-                })
-            },
-        )
-        .collect::<Result<_, Error>>()?;
-    Ok(model::Block {
+        .map(|successor| Successor {
+            target: successor.target,
+            transfer: apply_substitutions(successor.transfer, canonical),
+        })
+        .collect();
+    model::Block {
         id,
         caught_exception,
         phis,
@@ -116,5 +92,12 @@ fn finalize_block(
         terminator,
         terminator_source,
         successors,
-    })
+    }
+}
+
+fn apply_substitutions<T: RemapValues>(mut value: T, canonical: &impl Fn(ValueId) -> ValueId) -> T {
+    match value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value))) {
+        Ok(()) => value,
+        Err(never) => match never {},
+    }
 }

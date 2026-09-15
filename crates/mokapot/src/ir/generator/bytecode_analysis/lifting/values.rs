@@ -1,9 +1,10 @@
+use super::definition_operation;
 use crate::{
     ir::{
+        OperationKind,
         expression::{Expression, MathOperation},
         generator::{
             bytecode_analysis::{
-                RegisterInstruction, Value,
                 jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
@@ -18,66 +19,49 @@ impl Context<'_, '_, '_> {
         &mut self,
         constant: ConstantValue,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
-        self.frame.stack.push(value.into(), category)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: Expression::Const(constant),
-        })
+        self.frame.stack.push(value, category)?;
+        let expr = Expression::Const(constant);
+        Ok(Some(definition_operation(value, expr)))
     }
 
     pub(super) fn increment(
         &mut self,
         idx: u16,
         constant: i32,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         let base = *self.frame.locals.get(idx, Category1)?;
-        self.frame.locals.set(idx, value.into(), Category1)?;
+        self.frame.locals.set(idx, value, Category1)?;
         let expr = MathOperation::Increment(base, constant).into();
-        Ok(RegisterInstruction::Definition { value, expr })
+        Ok(Some(definition_operation(value, expr)))
     }
 
     pub(super) fn load(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
-        let value = *self.frame.locals.get(idx, category)?;
-        if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
-            return Err(Error::MalformedControlFlow);
-        }
-        self.frame.stack.push(value, category)?;
-        Ok(RegisterInstruction::Erased)
-    }
-
-    pub(super) fn load_unchecked(
-        &mut self,
-        idx: u16,
-        category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         self.frame.stack.push(value, category)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(None)
     }
 
     pub(super) fn store(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.frame.stack.pop(category)?;
         self.frame.locals.set(idx, value, category)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(None)
     }
 
-    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<RegisterInstruction, Error> {
+    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
-        self.frame.stack.push(value.into(), Category1)?;
-        Ok(RegisterInstruction::Definition {
-            value,
-            expr: Expression::New(class.clone()),
-        })
+        self.frame.stack.push(value, Category1)?;
+        let expr = Expression::New(class.clone());
+        Ok(Some(definition_operation(value, expr)))
     }
 }

@@ -1,66 +1,63 @@
 use std::collections::HashSet;
 
-use crate::{
-    ir::{TryMapValues, ValueId},
-    types::reference_type::ReferenceType,
-};
+use crate::{ir::ValueId, types::reference_type::ReferenceType};
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP = ValueId> {
+pub enum Operation {
     /// Converts an `int` to a `long`.
     #[display("{_0} as long")]
-    Int2Long(OP),
+    Int2Long(ValueId),
     /// Converts an `int` to a `float`.
     #[display("{_0} as float")]
-    Int2Float(OP),
+    Int2Float(ValueId),
     /// Converts an `int` to a `double`.
     #[display("{_0} as double")]
-    Int2Double(OP),
+    Int2Double(ValueId),
     /// Converts a `long` to an `int`.
     #[display("{_0} as int")]
-    Long2Int(OP),
+    Long2Int(ValueId),
     /// Converts a `long` to a `float`.
     #[display("{_0} as float")]
-    Long2Float(OP),
+    Long2Float(ValueId),
     /// Converts a `long` to a `double`.
     #[display("{_0} as double")]
-    Long2Double(OP),
+    Long2Double(ValueId),
     /// Converts a `float` to an `int`.
     #[display("{_0} as int")]
-    Float2Int(OP),
+    Float2Int(ValueId),
     /// Converts a `float` to a `long`.
     #[display("{_0} as long")]
-    Float2Long(OP),
+    Float2Long(ValueId),
     /// Converts a `float` to a `double`.
     #[display("{_0} as double")]
-    Float2Double(OP),
+    Float2Double(ValueId),
     /// Converts a `double` to an `int`.
     #[display("{_0} as int")]
-    Double2Int(OP),
+    Double2Int(ValueId),
     /// Converts a `double` to a `long`.
     #[display("{_0} as long")]
-    Double2Long(OP),
+    Double2Long(ValueId),
     /// Converts a `double` to a `float`.
     #[display("{_0} as float")]
-    Double2Float(OP),
+    Double2Float(ValueId),
     /// Converts an `int` to a `byte`.
     #[display("{_0} as byte")]
-    Int2Byte(OP),
+    Int2Byte(ValueId),
     /// Converts an `int` to a `char`.
     #[display("{_0} as char")]
-    Int2Char(OP),
+    Int2Char(ValueId),
     /// Converts an `int` to a `short`.
     #[display("{_0} as short")]
-    Int2Short(OP),
+    Int2Short(ValueId),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
     #[display("{_0} as {_1}")]
-    CheckCast(OP, ReferenceType),
+    CheckCast(ValueId, ReferenceType),
     /// Checks whether an object is an instance of a given type.
     #[display("{_0} is {_1}")]
-    InstanceOf(OP, ReferenceType),
+    InstanceOf(ValueId, ReferenceType),
 }
-impl Operation<ValueId> {
+impl Operation {
     /// Returns the values used by the expression.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
@@ -83,36 +80,6 @@ impl Operation<ValueId> {
             | Self::CheckCast(arg, _)
             | Self::InstanceOf(arg, _) => HashSet::from([*arg]),
         }
-    }
-}
-
-impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
-    type Value = OP;
-    type Mapped = Operation<OUT>;
-
-    fn try_map_values<E>(
-        self,
-        mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<Operation<OUT>, E> {
-        Ok(match self {
-            Self::Int2Long(value) => Operation::Int2Long(remap(value)?),
-            Self::Int2Float(value) => Operation::Int2Float(remap(value)?),
-            Self::Int2Double(value) => Operation::Int2Double(remap(value)?),
-            Self::Long2Int(value) => Operation::Long2Int(remap(value)?),
-            Self::Long2Float(value) => Operation::Long2Float(remap(value)?),
-            Self::Long2Double(value) => Operation::Long2Double(remap(value)?),
-            Self::Float2Int(value) => Operation::Float2Int(remap(value)?),
-            Self::Float2Long(value) => Operation::Float2Long(remap(value)?),
-            Self::Float2Double(value) => Operation::Float2Double(remap(value)?),
-            Self::Double2Int(value) => Operation::Double2Int(remap(value)?),
-            Self::Double2Long(value) => Operation::Double2Long(remap(value)?),
-            Self::Double2Float(value) => Operation::Double2Float(remap(value)?),
-            Self::Int2Byte(value) => Operation::Int2Byte(remap(value)?),
-            Self::Int2Char(value) => Operation::Int2Char(remap(value)?),
-            Self::Int2Short(value) => Operation::Int2Short(remap(value)?),
-            Self::CheckCast(value, target) => Operation::CheckCast(remap(value)?, target),
-            Self::InstanceOf(value, target) => Operation::InstanceOf(remap(value)?, target),
-        })
     }
 }
 

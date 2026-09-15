@@ -36,7 +36,7 @@ impl UseSite {
 /// Phi uses remain predecessor-sensitive through [`UseSite::PhiInput`].
 #[derive(Debug)]
 pub struct DefUseChain {
-    defs: HashMap<ValueId, ValueDefinition>,
+    defs: Vec<ValueDefinition>,
     uses: HashMap<ValueId, BTreeSet<UseSite>>,
 }
 
@@ -44,7 +44,10 @@ impl DefUseChain {
     /// Creates a new def-use index from a method.
     #[must_use]
     pub fn new(method: &MokaIRMethod) -> Self {
-        let defs = method.value_definitions().collect::<HashMap<_, _>>();
+        let defs = method
+            .value_definitions()
+            .map(|(_, definition)| definition)
+            .collect();
         let mut uses: HashMap<ValueId, BTreeSet<UseSite>> = HashMap::new();
 
         for block in method.blocks() {
@@ -78,7 +81,7 @@ impl DefUseChain {
     /// Returns the definition of a value.
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
-        self.defs.get(&value).copied()
+        self.defs.get(usize::try_from(value.index()).ok()?).copied()
     }
 
     /// Iterates over the locations where a value is used in deterministic order.

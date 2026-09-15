@@ -1,14 +1,17 @@
 //! Classifies the fallibility of JVM instructions.
 
-use crate::jvm::{ConstantValue, Method, code::Instruction, method};
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{ConstantValue, Method, code::Instruction, method},
+};
 
-/// Method-level context needed to classify instruction fallibility.
+/// Method-level state needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Context {
+pub(super) struct Fallibility {
     return_can_throw: bool,
 }
 
-impl Context {
+impl Fallibility {
     pub fn for_method(method: &Method) -> Self {
         // Exact structured-locking analysis is path- and alias-sensitive, so
         // explicit monitor use conservatively makes every method exit fallible.
@@ -91,6 +94,21 @@ impl Context {
     }
 }
 
+/// Whether loading `value` with `ldc`, `ldc_w`, or `ldc2_w` can fail
+/// synchronously.
+///
+/// Numeric constants are read straight out of the run-time constant pool, and
+/// `Null` never reaches it (`aconst_null` pushes it instead), so neither can
+/// fail.
+#[doc = see_jvm_spec!(6, 5)]
+///
+/// Every other entry must be resolved before use, and
+/// resolution can fail: class, method handle, and method type references may
+/// throw any `LinkageError`, while a dynamically-computed constant additionally
+/// invokes its bootstrap method, which may throw any `Throwable`. String
+/// constants need no resolution, but the virtual machine must still materialize
+/// the interned instance, so they are conservatively treated as fallible too.
+#[doc = see_jvm_spec!(5, 4, 3)]
 const fn constant_resolution_is_fallible(value: &ConstantValue) -> bool {
     !matches!(
         value,
@@ -100,57 +118,4 @@ const fn constant_resolution_is_fallible(value: &ConstantValue) -> bool {
             | ConstantValue::Long(_)
             | ConstantValue::Double(_)
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const ORDINARY: Context = Context {
-        return_can_throw: false,
-    };
-    const FALLIBLE_RETURN: Context = Context {
-        return_can_throw: true,
-    };
-
-    #[test]
-    fn classifies_direct_runtime_failures() {
-        assert!(ORDINARY.is_synchronously_fallible(&Instruction::IALoad));
-        assert!(ORDINARY.is_synchronously_fallible(&Instruction::IDiv));
-        assert!(ORDINARY.is_synchronously_fallible(&Instruction::ArrayLength));
-        assert!(ORDINARY.is_synchronously_fallible(&Instruction::MonitorExit));
-    }
-
-    #[test]
-    fn classifies_resolution_and_allocation_failures() {
-        let ldc = Instruction::Ldc(ConstantValue::Class("java/lang/String".parse().unwrap()));
-        assert!(ORDINARY.is_synchronously_fallible(&ldc));
-        let new_obj = Instruction::New("java/lang/Object".parse().unwrap());
-        assert!(ORDINARY.is_synchronously_fallible(&new_obj));
-    }
-
-    #[test]
-    fn classifies_returns_from_method_context() {
-        let returns = [
-            Instruction::IReturn,
-            Instruction::LReturn,
-            Instruction::FReturn,
-            Instruction::DReturn,
-            Instruction::AReturn,
-            Instruction::Return,
-        ];
-
-        let failable_in_fr = |instruction| FALLIBLE_RETURN.is_synchronously_fallible(instruction);
-        assert!(returns.iter().all(failable_in_fr));
-        let not_failable_ord = |instruction| !ORDINARY.is_synchronously_fallible(instruction);
-        assert!(returns.iter().all(not_failable_ord));
-    }
-
-    #[test]
-    fn excludes_non_throwing_operations_and_primitive_constants() {
-        assert!(!ORDINARY.is_synchronously_fallible(&Instruction::IAdd));
-        assert!(!ORDINARY.is_synchronously_fallible(&Instruction::FDiv));
-        assert!(!ORDINARY.is_synchronously_fallible(&Instruction::ILoad0));
-        assert!(!ORDINARY.is_synchronously_fallible(&Instruction::Ldc(ConstantValue::Integer(1))));
-    }
 }
