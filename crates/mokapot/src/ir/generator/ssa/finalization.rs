@@ -67,11 +67,10 @@ fn finalize_block(
         id,
         entry_frame: _,
         operations,
-        terminator,
-        terminator_source,
-        arms,
+        end,
         caught_exception,
     } = block;
+    let (terminator, terminator_source, arms) = end.into_parts();
     let resolve = |operand| merge_plan.resolve(operand).map(canonical);
     let caught_exception = caught_exception.map(canonical);
     let phis = phis

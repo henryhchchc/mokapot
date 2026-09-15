@@ -62,7 +62,7 @@ pub(super) fn collect_phi_candidates(
     let mut incoming_by_target =
         BTreeMap::<BlockId, Vec<(BlockId, &Frame<bytecode_analysis::Value>)>>::new();
     for source in blocks {
-        for arm in &source.arms {
+        for arm in source.end.arms() {
             incoming_by_target
                 .entry(arm.target)
                 .or_default()
@@ -208,22 +208,24 @@ mod tests {
                 id: preheader,
                 entry_frame: preheader_frame.clone(),
                 operations: Vec::new(),
-                terminator: TerminatorKind::Goto,
-                terminator_source: None,
-                arms: vec![block_formation::Arm {
-                    target,
-                    transfer: ControlTransfer::Unconditional,
-                    frame: preheader_frame,
-                }],
+                end: block_formation::BlockEnd::new(
+                    TerminatorKind::Goto,
+                    None,
+                    vec![block_formation::Arm {
+                        target,
+                        transfer: ControlTransfer::Unconditional,
+                        frame: preheader_frame,
+                    }],
+                )
+                .expect("valid preheader end"),
                 caught_exception: None,
             },
             block_formation::Block {
                 id: target,
                 entry_frame: target_frame,
                 operations: Vec::new(),
-                terminator: TerminatorKind::Goto,
-                terminator_source: None,
-                arms: Vec::new(),
+                end: block_formation::BlockEnd::new(TerminatorKind::Unwind, None, Vec::new())
+                    .expect("valid unwind end"),
                 caught_exception: None,
             },
         ];

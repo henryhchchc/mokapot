@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    Arm, Block,
+    Arm, Block, BlockEnd,
     layout::{BlockLayout, LayoutBlock},
 };
 
@@ -35,9 +35,7 @@ pub(super) fn materialize_blocks(layout: BlockLayout) -> Result<Vec<Block>, Erro
         .map(|(index, block)| {
             let id = BlockId::new(u32::try_from(index).map_err(|_| Error::MalformedControlFlow)?);
             match block {
-                LayoutBlock::EntryPreheader { frame, target } => {
-                    Ok(entry_preheader(id, frame, target))
-                }
+                LayoutBlock::EntryPreheader { frame, target } => entry_preheader(id, frame, target),
                 LayoutBlock::Nodes(nodes) => materialize_block(id, nodes, &block_by_addr),
             }
         })
@@ -48,20 +46,26 @@ pub(super) fn materialize_blocks(layout: BlockLayout) -> Result<Vec<Block>, Erro
 ///
 /// The preheader has no operation of its own: it enters the method frame and
 /// hands it to the bytecode entry block.
-fn entry_preheader(id: BlockId, frame: Frame<bytecode_analysis::Value>, target: BlockId) -> Block {
-    Block {
+fn entry_preheader(
+    id: BlockId,
+    frame: Frame<bytecode_analysis::Value>,
+    target: BlockId,
+) -> Result<Block, Error> {
+    Ok(Block {
         id,
         entry_frame: frame.clone(),
         operations: Vec::new(),
-        terminator: TerminatorKind::Goto,
-        terminator_source: None,
-        arms: vec![Arm {
-            target,
-            transfer: ControlTransfer::Unconditional,
-            frame,
-        }],
+        end: BlockEnd::new(
+            TerminatorKind::Goto,
+            None,
+            vec![Arm {
+                target,
+                transfer: ControlTransfer::Unconditional,
+                frame,
+            }],
+        )?,
         caught_exception: None,
-    }
+    })
 }
 
 fn materialize_block(
@@ -72,9 +76,7 @@ fn materialize_block(
     let mut entry_frame = None;
     let mut caught_exception = None;
     let mut operations = Vec::with_capacity(nodes.len());
-    let mut terminator = None;
-    let mut terminator_source = None;
-    let mut arms = Vec::new();
+    let mut end = None;
 
     let mut nodes = nodes.into_iter().enumerate().peekable();
     while let Some((index, (addr, node))) = nodes.next() {
@@ -98,19 +100,20 @@ fn materialize_block(
             entry_frame = Some(incoming_frame);
         }
         if next.is_none() {
-            let end = materialize_block_end(
+            let MaterializedEnd {
+                operation,
+                end: block_end,
+            } = materialize_block_end(
                 addr,
                 instruction,
                 has_exceptional_exit,
                 outgoing_edges,
                 block_by_addr,
             )?;
-            if let Some(operation) = end.operation {
+            if let Some(operation) = operation {
                 operations.push(operation);
             }
-            terminator = Some(end.terminator);
-            terminator_source = end.terminator_source;
-            arms = end.arms;
+            end = Some(block_end);
         } else if let Some(operation) = materialize_internal_operation(addr, instruction)? {
             operations.push(operation);
         }
@@ -120,9 +123,7 @@ fn materialize_block(
         id,
         entry_frame: entry_frame.ok_or(Error::MalformedControlFlow)?,
         operations,
-        terminator: terminator.ok_or(Error::MalformedControlFlow)?,
-        terminator_source,
-        arms,
+        end: end.ok_or(Error::MalformedControlFlow)?,
         caught_exception,
     })
 }
@@ -160,11 +161,10 @@ fn materialize_internal_operation(
         .transpose()
 }
 
-struct BlockEnd {
+/// The semantic contents contributed by a block-final instruction.
+struct MaterializedEnd {
     operation: Option<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>,
-    terminator: TerminatorKind<bytecode_analysis::Value>,
-    terminator_source: Option<ProgramCounter>,
-    arms: Vec<Arm>,
+    end: BlockEnd,
 }
 
 fn materialize_block_end(
@@ -173,7 +173,7 @@ fn materialize_block_end(
     has_exceptional_exit: bool,
     outgoing: Vec<bytecode_analysis::Edge>,
     block_by_addr: &BTreeMap<NodeAddress, BlockId>,
-) -> Result<BlockEnd, Error> {
+) -> Result<MaterializedEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
     let arms = outgoing
         .into_iter()
@@ -197,11 +197,13 @@ fn materialize_block_end(
         })
         .transpose()?;
 
-    Ok(BlockEnd {
+    Ok(MaterializedEnd {
         operation,
-        terminator,
-        terminator_source: explicit_transfer.then(|| addr.source_pc()).flatten(),
-        arms,
+        end: BlockEnd::new(
+            terminator,
+            explicit_transfer.then(|| addr.source_pc()).flatten(),
+            arms,
+        )?,
     })
 }
 

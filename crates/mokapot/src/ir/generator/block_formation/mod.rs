@@ -93,14 +93,118 @@ pub(crate) struct Arm {
     pub frame: Frame<bytecode_analysis::Value>,
 }
 
+/// The control-flow end of a formed JVM block.
+///
+/// A terminator's kind, source location, and ordered arms are one semantic
+/// unit. Constructing this type validates the arm shape before SSA consumes
+/// it, while retaining parallel arms and JVM handler precedence.
+#[derive(Debug)]
+pub(crate) struct BlockEnd {
+    kind: TerminatorKind<bytecode_analysis::Value>,
+    source: Option<ProgramCounter>,
+    arms: Vec<Arm>,
+}
+
+impl BlockEnd {
+    /// Creates a block end after checking that its terminator can own its arms.
+    pub(crate) fn new(
+        kind: TerminatorKind<bytecode_analysis::Value>,
+        source: Option<ProgramCounter>,
+        arms: Vec<Arm>,
+    ) -> Result<Self, Error> {
+        let end = Self { kind, source, arms };
+        end.validate()?;
+        Ok(end)
+    }
+
+    /// Borrows the ordered outgoing arms.
+    pub(crate) fn arms(&self) -> &[Arm] {
+        &self.arms
+    }
+
+    /// Separates the validated terminator data for SSA finalization.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        TerminatorKind<bytecode_analysis::Value>,
+        Option<ProgramCounter>,
+        Vec<Arm>,
+    ) {
+        (self.kind, self.source, self.arms)
+    }
+
+    /// Checks the control-transfer shapes emitted by bytecode analysis.
+    ///
+    /// The checks intentionally constrain transfer kinds and placement, not
+    /// targets or arm multiplicity: switch arms may be parallel, and
+    /// exceptional arms retain their source order.
+    fn validate(&self) -> Result<(), Error> {
+        use ControlTransfer::{Conditional, Exception, Unconditional, Unwind};
+
+        let exceptional_arms = |arms: &[Arm]| {
+            arms.iter()
+                .position(|arm| matches!(arm.transfer, Unwind))
+                .is_none_or(|unwind| unwind + 1 == arms.len())
+                && arms
+                    .iter()
+                    .all(|arm| matches!(arm.transfer, Exception(_) | Unwind))
+        };
+        let valid = match &self.kind {
+            TerminatorKind::Goto => {
+                matches!(
+                    self.arms.as_slice(),
+                    [Arm {
+                        transfer: Unconditional,
+                        ..
+                    }]
+                )
+            }
+            TerminatorKind::Branch => {
+                matches!(
+                    self.arms.as_slice(),
+                    [
+                        Arm {
+                            transfer: Conditional(_),
+                            ..
+                        },
+                        Arm {
+                            transfer: Conditional(_),
+                            ..
+                        }
+                    ]
+                )
+            }
+            TerminatorKind::Switch { .. } => {
+                !self.arms.is_empty()
+                    && self
+                        .arms
+                        .iter()
+                        .all(|arm| matches!(arm.transfer, Conditional(_)))
+            }
+            TerminatorKind::Return(_) => exceptional_arms(&self.arms),
+            TerminatorKind::Throw(_) => !self.arms.is_empty() && exceptional_arms(&self.arms),
+            TerminatorKind::Fallible => {
+                matches!(
+                    self.arms.first(),
+                    Some(Arm {
+                        transfer: Unconditional,
+                        ..
+                    })
+                ) && self.arms.len() > 1
+                    && exceptional_arms(&self.arms[1..])
+            }
+            TerminatorKind::Unwind => self.arms.is_empty(),
+        };
+        valid.then_some(()).ok_or(Error::MalformedControlFlow)
+    }
+}
+
 /// A maximal JVM block with exact register operands and outgoing frames.
 #[derive(Debug)]
 pub(crate) struct Block {
     pub id: BlockId,
     pub entry_frame: Frame<bytecode_analysis::Value>,
     pub operations: Vec<(ProgramCounter, OperationKind<bytecode_analysis::Value>)>,
-    pub terminator: TerminatorKind<bytecode_analysis::Value>,
-    pub terminator_source: Option<ProgramCounter>,
-    pub arms: Vec<Arm>,
+    pub end: BlockEnd,
     pub caught_exception: Option<SsaValueId>,
 }

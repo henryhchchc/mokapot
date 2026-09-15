@@ -1,7 +1,7 @@
-use super::materialize::classify_block_end;
+use super::{Arm, BlockEnd, materialize::classify_block_end};
 use crate::{
     ir::{
-        OperationKind, TerminatorKind,
+        BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         expression::Expression,
         generator::{
@@ -112,5 +112,47 @@ fn only_an_ordinary_fallthrough_elides_into_its_successor() {
             vec![edge(next), edge(elsewhere)]
         )
         .elides_into(next)
+    );
+}
+
+#[test]
+fn block_end_rejects_mismatched_terminator_and_arm_shapes() {
+    let arm = |transfer| Arm {
+        target: BlockId::new(0),
+        transfer,
+        frame: entry_frame(),
+    };
+
+    assert!(
+        BlockEnd::new(
+            TerminatorKind::Goto,
+            None,
+            vec![arm(ControlTransfer::Exception(None))],
+        )
+        .is_err()
+    );
+    assert!(
+        BlockEnd::new(
+            TerminatorKind::Fallible,
+            None,
+            vec![arm(ControlTransfer::Unconditional)],
+        )
+        .is_err()
+    );
+    assert!(
+        BlockEnd::new(
+            TerminatorKind::Return(None),
+            None,
+            vec![arm(ControlTransfer::Unconditional)],
+        )
+        .is_err()
+    );
+    assert!(
+        BlockEnd::new(
+            TerminatorKind::Throw(bytecode_analysis::Value::Ssa(SsaValueId::new(0))),
+            None,
+            Vec::new(),
+        )
+        .is_err()
     );
 }
