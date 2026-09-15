@@ -13,7 +13,7 @@ use super::{
     Builder, NodeAddress,
     model::{Edge, FrameMergeSite, Node, Value},
 };
-use crate::ir::generator::{error::Error, instruction_graph::frame::Frame};
+use crate::ir::generator::{error::Error, instruction_graph::jvm::Frame};
 
 struct State {
     entry_input: (NodeAddress, Frame<Value>),
@@ -273,7 +273,7 @@ mod tests {
                 identity::SsaValueId,
                 instruction_graph::{
                     RegisterInstruction,
-                    frame::{Position, ValueCategory::Category1},
+                    jvm::{Position, ValueCategory::Category1},
                 },
                 tests::method,
             },

@@ -5,7 +5,7 @@ use crate::{
             error::Error,
             instruction_graph::{
                 RegisterInstruction,
-                frame::{ValueCategory, ValueCategory::Category1},
+                jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
         },

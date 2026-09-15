@@ -6,7 +6,7 @@ use crate::ir::{
         block_formation,
         error::Error,
         identity::SsaValueId,
-        instruction_graph::{self, FrameMergeSite, frame::Frame},
+        instruction_graph::{self, FrameMergeSite, jvm::Frame},
     },
 };
 
@@ -166,7 +166,7 @@ mod tests {
         control_flow::ControlTransfer,
         generator::{
             block_formation,
-            instruction_graph::{NodeAddress, frame::Position},
+            instruction_graph::{NodeAddress, jvm::Position},
         },
     };
 

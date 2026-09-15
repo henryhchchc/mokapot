@@ -7,7 +7,7 @@ use super::{
     subroutine::{self, ReturnAddress},
 };
 use crate::{
-    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::frame::Frame},
+    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::jvm::Frame},
     jvm::{
         Method,
         code::{MethodBody, ProgramCounter},

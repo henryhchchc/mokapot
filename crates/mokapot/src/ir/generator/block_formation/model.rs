@@ -4,7 +4,7 @@ use crate::{
         control_flow::ControlTransfer,
         generator::{
             identity::SsaValueId,
-            instruction_graph::{self, FrameMergeSite, frame::Frame},
+            instruction_graph::{self, FrameMergeSite, jvm::Frame},
         },
     },
     jvm::code::ProgramCounter,

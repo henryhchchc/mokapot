@@ -4,8 +4,8 @@ mod address;
 mod builder;
 mod edges;
 mod fallibility;
-pub(super) mod frame;
 mod instruction;
+pub(super) mod jvm;
 pub(super) mod lifting;
 mod model;
 mod solver;
@@ -19,7 +19,7 @@ pub(super) use model::{Edge, FrameMergeSite, Graph, Node, Value};
 pub(super) use subroutine::ReturnAddress;
 
 use crate::{
-    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::frame::Frame},
+    ir::generator::{error::Error, identity::SsaValueId, instruction_graph::jvm::Frame},
     jvm::{Method, code::MethodBody},
 };
 

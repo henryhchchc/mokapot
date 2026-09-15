@@ -3,7 +3,7 @@ use crate::{
         error::Error,
         instruction_graph::{
             RegisterInstruction,
-            frame::ValueCategory::{Category1, Category2},
+            jvm::ValueCategory::{Category1, Category2},
             lifting::Context,
         },
     },

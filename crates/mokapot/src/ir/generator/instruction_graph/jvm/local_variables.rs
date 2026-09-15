@@ -1,7 +1,5 @@
-use crate::{
-    ir::generator::instruction_graph::frame::{JvmFrameError, ValueCategory},
-    types::method_descriptor::MethodDescriptor,
-};
+use super::{ValueCategory, error::Error};
+use crate::types::method_descriptor::MethodDescriptor;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct LocalValue<V> {
@@ -54,40 +52,31 @@ pub(crate) struct LocalVariables<V> {
 }
 
 impl<V> LocalVariables<V> {
-    pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&V, JvmFrameError> {
+    pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&V, Error> {
         let index = usize::from(index);
-        let value = match self
-            .slots
-            .get(index)
-            .ok_or(JvmFrameError::LocalIndexOutOfBounds)?
-        {
+        let value = match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
             LocalSlot::Value(value) if value.category == expected => &value.value,
             LocalSlot::Value(_) | LocalSlot::Reserved => {
-                return Err(JvmFrameError::InvalidSlotLayout);
+                return Err(Error::InvalidSlotLayout);
             }
-            LocalSlot::Unavailable => return Err(JvmFrameError::UnavailableLocal),
-            LocalSlot::Unset => return Err(JvmFrameError::UninitializedLocal),
+            LocalSlot::Unavailable => return Err(Error::UnavailableLocal),
+            LocalSlot::Unset => return Err(Error::UninitializedLocal),
         };
         if expected == ValueCategory::Category2
             && !matches!(self.slots.get(index + 1), Some(LocalSlot::Reserved))
         {
-            return Err(JvmFrameError::InvalidSlotLayout);
+            return Err(Error::InvalidSlotLayout);
         }
         Ok(value)
     }
 
-    pub fn set(
-        &mut self,
-        index: u16,
-        value: V,
-        category: ValueCategory,
-    ) -> Result<(), JvmFrameError> {
+    pub fn set(&mut self, index: u16, value: V, category: ValueCategory) -> Result<(), Error> {
         let index = usize::from(index);
         let end = index
             .checked_add(category.slot_count())
-            .ok_or(JvmFrameError::LocalIndexOutOfBounds)?;
+            .ok_or(Error::LocalIndexOutOfBounds)?;
         if end > self.slots.len() {
-            return Err(JvmFrameError::LocalIndexOutOfBounds);
+            return Err(Error::LocalIndexOutOfBounds);
         }
 
         if index > 0
@@ -112,12 +101,12 @@ impl<V> LocalVariables<V> {
         max_slots: u16,
         this_value: Option<V>,
         parameters: &[V],
-    ) -> Result<Self, JvmFrameError>
+    ) -> Result<Self, Error>
     where
         V: Clone,
     {
         if parameters.len() != descriptor.parameters_types.len() {
-            return Err(JvmFrameError::ParameterCountMismatch);
+            return Err(Error::ParameterCountMismatch);
         }
         let mut locals = Self {
             slots: vec![LocalSlot::Unset; max_slots.into()].into_boxed_slice(),

@@ -10,7 +10,7 @@ use crate::{
             path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
-        generator::{error::Error, instruction_graph::frame::Frame},
+        generator::{error::Error, instruction_graph::jvm::Frame},
     },
     jvm::{ConstantValue, code::ProgramCounter},
 };

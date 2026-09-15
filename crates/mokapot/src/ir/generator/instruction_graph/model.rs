@@ -5,7 +5,7 @@ use crate::ir::{
     control_flow::ControlTransfer,
     generator::{
         identity::SsaValueId,
-        instruction_graph::frame::{Frame, Position},
+        instruction_graph::jvm::{Frame, Position},
     },
 };
 

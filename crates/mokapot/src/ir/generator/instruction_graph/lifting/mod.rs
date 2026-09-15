@@ -15,7 +15,7 @@ use crate::{
         generator::{
             error::Error,
             identity::SsaValueId,
-            instruction_graph::frame::{
+            instruction_graph::jvm::{
                 Frame, StackOperation, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },

@@ -6,7 +6,7 @@ use crate::{
             identity::SsaValueId,
             instruction_graph::{
                 RegisterInstruction, Value,
-                frame::ValueCategory::{self, Category1},
+                jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
         },

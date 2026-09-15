@@ -8,7 +8,7 @@ use crate::{
         control_flow::ControlTransfer,
         generator::{
             error::Error,
-            instruction_graph::{self, NodeAddress, RegisterInstruction, frame::Frame},
+            instruction_graph::{self, NodeAddress, RegisterInstruction, jvm::Frame},
         },
     },
     jvm::code::ProgramCounter,

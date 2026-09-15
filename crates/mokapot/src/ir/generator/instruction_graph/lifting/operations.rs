@@ -5,7 +5,7 @@ use crate::ir::{
         identity::SsaValueId,
         instruction_graph::{
             RegisterInstruction, Value,
-            frame::{
+            jvm::{
                 Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
             },
