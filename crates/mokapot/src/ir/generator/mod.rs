@@ -21,7 +21,7 @@ mod identity;
 mod jvm;
 mod ssa;
 
-pub use error::MokaIRBuildError;
+pub use error::Error as MokaIRBuildError;
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 

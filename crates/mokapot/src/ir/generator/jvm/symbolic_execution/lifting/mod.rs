@@ -13,7 +13,7 @@ use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             identity::SsaValueId,
             jvm::frame::{
                 Frame, StackOperation, ValueCategory,
@@ -41,7 +41,7 @@ impl Executor<'_> {
         jvm_instruction: &JVM,
         addr: NodeAddress,
         frame: &mut Frame<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         #[allow(
             clippy::enum_glob_use,
             reason = "this match exhaustively dispatches the JVM instruction enum"
@@ -49,7 +49,7 @@ impl Executor<'_> {
         use JVM::*;
 
         if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
         let mut cx = Context {
             executor: self,
@@ -238,26 +238,23 @@ impl Context<'_, '_, '_> {
     fn monitor(
         &mut self,
         operation: impl FnOnce(Value) -> LockOperation<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(operation(object_ref).into()))
     }
 
-    fn stack_effect(
-        &mut self,
-        operation: StackOperation,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    fn stack_effect(&mut self, operation: StackOperation) -> Result<RegisterInstruction, Error> {
         self.frame.stack.apply(operation)?;
         Ok(RegisterInstruction::Erased)
     }
 
-    fn definition_id(&mut self) -> Result<SsaValueId, MokaIRBuildError> {
+    fn definition_id(&mut self) -> Result<SsaValueId, Error> {
         self.executor.definition_id_at(self.addr)
     }
 
-    fn with_def<T, L>(&mut self, lift: L) -> Result<T, MokaIRBuildError>
+    fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>
     where
-        L: FnOnce(SsaValueId, &mut Frame<Value>) -> Result<T, MokaIRBuildError>,
+        L: FnOnce(SsaValueId, &mut Frame<Value>) -> Result<T, Error>,
     {
         let value = self.definition_id()?;
         lift(value, self.frame)
@@ -267,7 +264,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         operation: impl FnOnce(Value) -> MathOperation<Value>,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         self.with_def(|value, frame| {
             let operand = frame.stack.pop(category)?;
             frame.stack.push(value.into(), category)?;
@@ -280,7 +277,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         operation: impl FnOnce(Value, Value) -> MathOperation<Value>,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         self.with_def(|value, frame| {
             operations::lift_binary_math(frame, value, operation, category)
         })
@@ -291,7 +288,7 @@ impl Context<'_, '_, '_> {
         conversion: impl FnOnce(Value) -> Conversion<Value>,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })
@@ -300,7 +297,7 @@ impl Context<'_, '_, '_> {
     fn definition_id_for_return(
         &mut self,
         return_type: &ReturnType,
-    ) -> Result<Option<SsaValueId>, MokaIRBuildError> {
+    ) -> Result<Option<SsaValueId>, Error> {
         match return_type {
             ReturnType::Some(_) => self.definition_id().map(Some),
             ReturnType::Void => Ok(None),

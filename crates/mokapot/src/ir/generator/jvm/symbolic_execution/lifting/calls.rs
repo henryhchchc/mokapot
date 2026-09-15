@@ -2,7 +2,7 @@ use crate::{
     ir::{
         expression::Expression,
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             identity::SsaValueId,
             jvm::{
                 frame::ValueCategory::{self, Category1},
@@ -19,7 +19,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -38,7 +38,7 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -54,10 +54,10 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         definition: Option<SsaValueId>,
         expr: Expression<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
-                let value = definition.ok_or(MokaIRBuildError::MalformedControlFlow)?;
+                let value = definition.ok_or(Error::MalformedControlFlow)?;
                 self.frame
                     .stack
                     .push(value.into(), ValueCategory::of_field_type(return_type))?;

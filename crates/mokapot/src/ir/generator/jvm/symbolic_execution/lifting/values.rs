@@ -2,7 +2,7 @@ use crate::{
     ir::{
         expression::{Expression, MathOperation},
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             jvm::{
                 frame::{ValueCategory, ValueCategory::Category1},
                 symbolic_execution::{RegisterInstruction, Value, lifting::Context},
@@ -17,7 +17,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         constant: ConstantValue,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), category)?;
         Ok(RegisterInstruction::Definition {
@@ -30,7 +30,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         idx: u16,
         constant: i32,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value.into(), Category1)?;
@@ -42,10 +42,10 @@ impl Context<'_, '_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
         self.frame.stack.push(value, category)?;
         Ok(RegisterInstruction::Erased)
@@ -55,7 +55,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         self.frame.stack.push(value, category)?;
         Ok(RegisterInstruction::Erased)
@@ -65,16 +65,13 @@ impl Context<'_, '_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.frame.stack.pop(category)?;
         self.frame.locals.set(idx, value, category)?;
         Ok(RegisterInstruction::Erased)
     }
 
-    pub(super) fn new_object(
-        &mut self,
-        class: &ClassRef,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), Category1)?;
         Ok(RegisterInstruction::Definition {

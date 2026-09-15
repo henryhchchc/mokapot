@@ -4,7 +4,7 @@ use crate::ir::{
     BlockId,
     generator::{
         block_formation,
-        error::MokaIRBuildError,
+        error::Error,
         identity::SsaValueId,
         jvm::{
             frame::Frame,
@@ -36,19 +36,16 @@ impl MergePlan {
         self.phi_blocks.get(&value).copied()
     }
 
-    pub fn resolve(
-        &self,
-        operand: symbolic_execution::Value,
-    ) -> Result<SsaValueId, MokaIRBuildError> {
+    pub fn resolve(&self, operand: symbolic_execution::Value) -> Result<SsaValueId, Error> {
         match operand {
             symbolic_execution::Value::Ssa(value) => Ok(value),
             symbolic_execution::Value::Merged(identity) => self
                 .merge_values
                 .get(&identity)
                 .copied()
-                .ok_or(MokaIRBuildError::MalformedControlFlow),
+                .ok_or(Error::MalformedControlFlow),
             symbolic_execution::Value::ReturnAddress(_) | symbolic_execution::Value::Invalid => {
-                Err(MokaIRBuildError::MalformedControlFlow)
+                Err(Error::MalformedControlFlow)
             }
         }
     }
@@ -57,7 +54,7 @@ impl MergePlan {
 pub(super) fn collect_phi_candidates(
     blocks: &[block_formation::Block],
     merge_plan: &MergePlan,
-) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, MokaIRBuildError> {
+) -> Result<BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>>, Error> {
     let mut candidates: BTreeMap<SsaValueId, Vec<(BlockId, SsaValueId)>> = BTreeMap::new();
     let mut incoming_by_target =
         BTreeMap::<BlockId, Vec<(BlockId, &Frame<symbolic_execution::Value>)>>::new();
@@ -96,7 +93,7 @@ pub(super) fn collect_phi_candidates(
                     }
                     btree_map::Entry::Occupied(entry) if *entry.get() == value => {}
                     btree_map::Entry::Occupied(_) => {
-                        return Err(MokaIRBuildError::MalformedControlFlow);
+                        return Err(Error::MalformedControlFlow);
                     }
                 }
             }
@@ -110,7 +107,7 @@ pub(super) fn collect_phi_candidates(
         }
     }
     if !incoming_by_target.is_empty() || !phis_by_block.is_empty() {
-        return Err(MokaIRBuildError::MalformedControlFlow);
+        return Err(Error::MalformedControlFlow);
     }
 
     loop {
@@ -139,10 +136,10 @@ fn paired_frame_values(
     target: &Frame<symbolic_execution::Value>,
     source: &Frame<symbolic_execution::Value>,
     merge_plan: &MergePlan,
-) -> Result<Vec<PairedFrameValue>, MokaIRBuildError> {
+) -> Result<Vec<PairedFrameValue>, Error> {
     target
         .paired_slot_values(source)
-        .map_err(|_| MokaIRBuildError::MalformedControlFlow)?
+        .map_err(|_| Error::MalformedControlFlow)?
         .into_iter()
         .map(|(target, source)| match (target, source) {
             (
@@ -151,7 +148,7 @@ fn paired_frame_values(
             ) if lhs == rhs => Ok((None, None)),
             (Some(symbolic_execution::Value::ReturnAddress(_)), _)
             | (_, Some(symbolic_execution::Value::ReturnAddress(_))) => {
-                Err(MokaIRBuildError::MalformedControlFlow)
+                Err(Error::MalformedControlFlow)
             }
             (Some(result), Some(value)) => Ok((
                 Some(merge_plan.resolve(*result)?),

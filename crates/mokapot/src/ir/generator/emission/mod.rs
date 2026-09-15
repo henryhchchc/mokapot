@@ -10,13 +10,13 @@ use crate::{
     ir::{
         BasicBlock, EdgeId, InstructionId, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{error::MokaIRBuildError, identity::SsaValueId, ssa},
+        generator::{error::Error, identity::SsaValueId, ssa},
     },
     jvm::Method,
 };
 
 /// Emits final identities, blocks, and provenance from scalar SSA blocks.
-pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Error> {
     let mut allocation = Allocation::default();
     let this_value = ssa
         .this_value
@@ -27,7 +27,7 @@ pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Mok
         .into_iter()
         .enumerate()
         .map(|(index, value)| {
-            let index = u16::try_from(index).map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+            let index = u16::try_from(index).map_err(|_| Error::MalformedControlFlow)?;
             allocation.value(value, ValueDefinition::Parameter(index))
         })
         .collect::<Result<_, _>>()?;
@@ -76,10 +76,7 @@ struct BlockInstructions {
 }
 
 impl Allocation {
-    fn allocate_block(
-        &mut self,
-        block: &ssa::Block,
-    ) -> Result<BlockInstructions, MokaIRBuildError> {
+    fn allocate_block(&mut self, block: &ssa::Block) -> Result<BlockInstructions, Error> {
         let caught_exception = block
             .caught_exception
             .map(|value| self.value(value, ValueDefinition::CaughtException(block.id)))
@@ -92,7 +89,7 @@ impl Allocation {
                 self.value(phi.value, ValueDefinition::Instruction(id))?;
                 Ok(id)
             })
-            .collect::<Result<_, MokaIRBuildError>>()?;
+            .collect::<Result<_, Error>>()?;
         let operations = block
             .operations
             .iter()
@@ -103,7 +100,7 @@ impl Allocation {
                 }
                 Ok(id)
             })
-            .collect::<Result<_, MokaIRBuildError>>()?;
+            .collect::<Result<_, Error>>()?;
         Ok(BlockInstructions {
             caught_exception,
             phis,
@@ -118,7 +115,7 @@ fn materialize_block(
     ids: BlockInstructions,
     allocation: &mut Allocation,
     source_map: &mut SourceMap,
-) -> Result<BasicBlock, MokaIRBuildError> {
+) -> Result<BasicBlock, Error> {
     let phis = block
         .phis
         .into_iter()
@@ -136,10 +133,10 @@ fn materialize_block(
                             value: allocation.resolve(value)?,
                         })
                     })
-                    .collect::<Result<_, MokaIRBuildError>>()?,
+                    .collect::<Result<_, Error>>()?,
             })
         })
-        .collect::<Result<_, MokaIRBuildError>>()?;
+        .collect::<Result<_, Error>>()?;
     let operations = block
         .operations
         .into_iter()
@@ -151,7 +148,7 @@ fn materialize_block(
                 kind: kind.try_map_values(|value| allocation.resolve(value))?,
             })
         })
-        .collect::<Result<_, MokaIRBuildError>>()?;
+        .collect::<Result<_, Error>>()?;
     let successors = block
         .successors
         .into_iter()
@@ -164,7 +161,7 @@ fn materialize_block(
                     .try_map_values(|value| allocation.resolve(value))?,
             })
         })
-        .collect::<Result<_, MokaIRBuildError>>()?;
+        .collect::<Result<_, Error>>()?;
     if let Some(pc) = block.terminator_source {
         source_map.insert(pc, ids.terminator);
     }
@@ -191,21 +188,21 @@ struct Allocation {
 }
 
 impl Allocation {
-    fn instruction(&mut self) -> Result<InstructionId, MokaIRBuildError> {
+    fn instruction(&mut self) -> Result<InstructionId, Error> {
         let id = InstructionId::new(self.next_instruction);
         self.next_instruction = self
             .next_instruction
             .checked_add(1)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         Ok(id)
     }
 
-    fn edge(&mut self) -> Result<EdgeId, MokaIRBuildError> {
+    fn edge(&mut self) -> Result<EdgeId, Error> {
         let id = EdgeId::new(self.next_edge);
         self.next_edge = self
             .next_edge
             .checked_add(1)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         Ok(id)
     }
 
@@ -213,24 +210,24 @@ impl Allocation {
         &mut self,
         temporary: SsaValueId,
         definition: ValueDefinition,
-    ) -> Result<ValueId, MokaIRBuildError> {
+    ) -> Result<ValueId, Error> {
         let value_index = u32::try_from(self.definitions.len())
             .ok()
             .filter(|index| *index < u32::MAX)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         let temporary = ssa_index(temporary)?;
         let required_len = temporary
             .checked_add(1)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         let additional = required_len.saturating_sub(self.values.len());
         self.values
             .try_reserve(additional)
-            .map_err(|_| MokaIRBuildError::MalformedControlFlow)?;
+            .map_err(|_| Error::MalformedControlFlow)?;
         if self.values.len() < required_len {
             self.values.resize(required_len, None);
         }
         if self.values[temporary].is_some() {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
         let value = ValueId::new(value_index);
         self.values[temporary] = Some(value);
@@ -238,14 +235,14 @@ impl Allocation {
         Ok(value)
     }
 
-    fn resolve(&self, value: SsaValueId) -> Result<ValueId, MokaIRBuildError> {
+    fn resolve(&self, value: SsaValueId) -> Result<ValueId, Error> {
         self.values
             .get(ssa_index(value)?)
             .and_then(|value| *value)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)
+            .ok_or(Error::MalformedControlFlow)
     }
 }
 
-fn ssa_index(value: SsaValueId) -> Result<usize, MokaIRBuildError> {
-    usize::try_from(value.index()).map_err(|_| MokaIRBuildError::MalformedControlFlow)
+fn ssa_index(value: SsaValueId) -> Result<usize, Error> {
+    usize::try_from(value.index()).map_err(|_| Error::MalformedControlFlow)
 }

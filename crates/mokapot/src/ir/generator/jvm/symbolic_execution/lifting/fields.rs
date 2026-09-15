@@ -2,7 +2,7 @@ use crate::{
     ir::{
         expression::FieldAccess,
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             jvm::{
                 frame::ValueCategory::{self, Category1},
                 symbolic_execution::{RegisterInstruction, Value, lifting::Context},
@@ -13,10 +13,7 @@ use crate::{
 };
 
 impl Context<'_, '_, '_> {
-    pub(super) fn read_static(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(
             value.into(),
@@ -31,10 +28,7 @@ impl Context<'_, '_, '_> {
         })
     }
 
-    pub(super) fn read_instance(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(
@@ -51,10 +45,7 @@ impl Context<'_, '_, '_> {
         })
     }
 
-    pub(super) fn write_static(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<RegisterInstruction, Error> {
         let value = self.pop_field_value(field)?;
         Ok(RegisterInstruction::Effect(
             FieldAccess::WriteStatic {
@@ -68,7 +59,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn write_instance(
         &mut self,
         field: &FieldRef,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Effect(
@@ -81,7 +72,7 @@ impl Context<'_, '_, '_> {
         ))
     }
 
-    fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, MokaIRBuildError> {
+    fn pop_field_value(&mut self, field: &FieldRef) -> Result<Value, Error> {
         Ok(self
             .frame
             .stack

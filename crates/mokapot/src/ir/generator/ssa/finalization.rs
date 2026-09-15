@@ -6,7 +6,7 @@ use crate::ir::{
     BlockId, TryMapValues,
     generator::{
         block_formation,
-        error::MokaIRBuildError,
+        error::Error,
         identity::SsaValueId,
         ssa::{
             merge::MergePlan,
@@ -22,7 +22,7 @@ pub(super) fn finalize(
     blocks: Vec<block_formation::Block>,
     merge_plan: &MergePlan,
     simplified: SimplifiedPhis,
-) -> Result<Vec<model::Block>, MokaIRBuildError> {
+) -> Result<Vec<model::Block>, Error> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
     let canonical = |value| {
         simplified
@@ -35,7 +35,7 @@ pub(super) fn finalize(
     for (value, inputs) in simplified.candidates {
         let block = merge_plan
             .block_for(value)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         phis_by_block
             .entry(block)
             .or_default()
@@ -54,7 +54,7 @@ pub(super) fn finalize(
     if phis_by_block.is_empty() {
         Ok(finalized)
     } else {
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     }
 }
 fn finalize_block(
@@ -62,7 +62,7 @@ fn finalize_block(
     phis: Vec<PhiCandidate>,
     merge_plan: &MergePlan,
     canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> Result<model::Block, MokaIRBuildError> {
+) -> Result<model::Block, Error> {
     let block_formation::Block {
         id,
         entry_frame: _,
@@ -107,7 +107,7 @@ fn finalize_block(
                 })
             },
         )
-        .collect::<Result<_, MokaIRBuildError>>()?;
+        .collect::<Result<_, Error>>()?;
     Ok(model::Block {
         id,
         caught_exception,

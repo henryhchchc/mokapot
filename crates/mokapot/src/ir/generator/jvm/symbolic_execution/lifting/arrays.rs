@@ -2,7 +2,7 @@ use crate::{
     ir::{
         expression::ArrayOperation,
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             jvm::{
                 frame::{ValueCategory, ValueCategory::Category1},
                 symbolic_execution::{RegisterInstruction, lifting::Context},
@@ -16,7 +16,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn array_read(
         &mut self,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -30,7 +30,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn array_write(
         &mut self,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.frame.stack.pop(category)?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -47,7 +47,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn new_array(
         &mut self,
         element_type: FieldType,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value.into(), Category1)?;
@@ -63,7 +63,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         element_type: FieldType,
         dimension: u8,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let dimensions = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
@@ -77,7 +77,7 @@ impl Context<'_, '_, '_> {
         Ok(RegisterInstruction::Definition { value, expr })
     }
 
-    pub(super) fn array_length(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn array_length(&mut self) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value.into(), Category1)?;

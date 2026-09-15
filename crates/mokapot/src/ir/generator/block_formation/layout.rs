@@ -6,7 +6,7 @@ use crate::ir::{
     BlockId,
     control_flow::ControlTransfer,
     generator::{
-        error::MokaIRBuildError,
+        error::Error,
         identity::SsaValueId,
         jvm::symbolic_execution::{self, FrameMergeSite, NodeAddress},
     },
@@ -21,10 +21,10 @@ pub(super) struct BlockLayout {
 }
 
 impl BlockLayout {
-    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, MokaIRBuildError> {
+    pub fn discover(symbolic_cfg: &symbolic_execution::Cfg) -> Result<Self, Error> {
         let reachable = symbolic_cfg.nodes.keys().copied().collect::<Vec<_>>();
         if reachable.is_empty() {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
 
         let predecessors = predecessor_addrs(&symbolic_cfg.nodes);
@@ -59,13 +59,13 @@ impl BlockLayout {
     pub fn phi_blocks(
         &self,
         phi_values: &BTreeMap<FrameMergeSite, SsaValueId>,
-    ) -> Result<BTreeMap<SsaValueId, BlockId>, MokaIRBuildError> {
+    ) -> Result<BTreeMap<SsaValueId, BlockId>, Error> {
         phi_values
             .iter()
             .map(|(identity, &value)| {
                 self.block_at(identity.addr)
                     .map(|block| (value, block))
-                    .ok_or(MokaIRBuildError::MalformedControlFlow)
+                    .ok_or(Error::MalformedControlFlow)
             })
             .collect()
     }
@@ -98,7 +98,7 @@ fn discover_leaders(
     symbolic_cfg: &symbolic_execution::Cfg,
     reachable: &[NodeAddress],
     predecessors: &BTreeMap<NodeAddress, BTreeSet<NodeAddress>>,
-) -> Result<BTreeSet<NodeAddress>, MokaIRBuildError> {
+) -> Result<BTreeSet<NodeAddress>, Error> {
     let mut leaders = BTreeSet::from([symbolic_cfg.entry_addr]);
     leaders.extend(symbolic_cfg.phi_values.keys().map(|identity| identity.addr));
     leaders.extend(
@@ -135,7 +135,7 @@ fn discover_leaders(
         let facts = symbolic_cfg
             .nodes
             .get(current)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         let plain_fallthrough = !facts.instruction.is_explicit_transfer()
             && facts.outgoing_edges.len() == 1
             && facts.outgoing_edges[0].target == *next
@@ -155,7 +155,7 @@ fn allocate_block_ids(
     leaders: &BTreeSet<NodeAddress>,
     entry_addr: NodeAddress,
     needs_entry_preheader: bool,
-) -> Result<(BlockId, BlockId, BTreeMap<NodeAddress, BlockId>), MokaIRBuildError> {
+) -> Result<(BlockId, BlockId, BTreeMap<NodeAddress, BlockId>), Error> {
     let block_offset = u32::from(needs_entry_preheader);
     let block_ids = leaders
         .iter()
@@ -165,12 +165,12 @@ fn allocate_block_ids(
                 .ok()
                 .and_then(|index| index.checked_add(block_offset))
                 .map(|index| (*addr, BlockId::new(index)))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let bytecode_entry = *block_ids
         .get(&entry_addr)
-        .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        .ok_or(Error::MalformedControlFlow)?;
     let entry = if needs_entry_preheader {
         BlockId::new(0)
     } else {
@@ -187,7 +187,7 @@ struct GroupedAddrs {
 fn group_addrs(
     reachable: &[NodeAddress],
     block_ids: &BTreeMap<NodeAddress, BlockId>,
-) -> Result<GroupedAddrs, MokaIRBuildError> {
+) -> Result<GroupedAddrs, Error> {
     let mut block_by_addr = BTreeMap::new();
     let mut addrs_by_block: BTreeMap<BlockId, Vec<NodeAddress>> = BTreeMap::new();
     let mut current_block = None;
@@ -195,7 +195,7 @@ fn group_addrs(
         if let Some(id) = block_ids.get(&addr) {
             current_block = Some(*id);
         }
-        let id = current_block.ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let id = current_block.ok_or(Error::MalformedControlFlow)?;
         block_by_addr.insert(addr, id);
         addrs_by_block.entry(id).or_default().push(addr);
     }

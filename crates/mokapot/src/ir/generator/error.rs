@@ -2,7 +2,7 @@ use crate::ir::generator::jvm::frame::JvmFrameError;
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, thiserror::Error)]
-pub enum MokaIRBuildError {
+pub enum Error {
     /// An error that occurs when executing bytecode on a JVM frame.
     #[error("Error when executing bytecode on a JVM frame: {0}")]
     FrameError(#[from] JvmFrameError),

@@ -10,7 +10,7 @@ mod tests;
 pub(super) use model::Graph;
 pub(crate) use model::{Arm, Block};
 
-use crate::ir::generator::{error::MokaIRBuildError, jvm::symbolic_execution};
+use crate::ir::generator::{error::Error, jvm::symbolic_execution};
 
 use self::{
     layout::BlockLayout,
@@ -18,7 +18,7 @@ use self::{
 };
 
 /// Forms maximal semantic blocks from completed JVM frame facts.
-pub(super) fn form(symbolic_cfg: symbolic_execution::Cfg) -> Result<Graph, MokaIRBuildError> {
+pub(super) fn form(symbolic_cfg: symbolic_execution::Cfg) -> Result<Graph, Error> {
     let layout = BlockLayout::discover(&symbolic_cfg)?;
     let phi_blocks = layout.phi_blocks(&symbolic_cfg.phi_values)?;
     let symbolic_execution::Cfg {

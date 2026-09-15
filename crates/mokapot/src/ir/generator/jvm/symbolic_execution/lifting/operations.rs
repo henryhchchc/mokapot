@@ -1,7 +1,7 @@
 use crate::ir::{
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::{
-        error::MokaIRBuildError,
+        error::Error,
         identity::SsaValueId,
         jvm::{
             frame::{
@@ -20,7 +20,7 @@ pub(super) fn lift_conversion(
     conversion: impl FnOnce(Value) -> Conversion<Value>,
     operand_category: ValueCategory,
     result_category: ValueCategory,
-) -> Result<RegisterInstruction, MokaIRBuildError> {
+) -> Result<RegisterInstruction, Error> {
     let operand = frame.stack.pop(operand_category)?;
     frame.stack.push(value.into(), result_category)?;
     let expr = conversion(operand).into();
@@ -33,7 +33,7 @@ pub(super) fn lift_binary_math(
     value: SsaValueId,
     math: impl FnOnce(Value, Value) -> MathOperation<Value>,
     category: ValueCategory,
-) -> Result<RegisterInstruction, MokaIRBuildError> {
+) -> Result<RegisterInstruction, Error> {
     let rhs = frame.stack.pop(category)?;
     let lhs = frame.stack.pop(category)?;
     frame.stack.push(value.into(), category)?;
@@ -46,7 +46,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn shift_long(
         &mut self,
         operation: impl FnOnce(Value, Value) -> MathOperation<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
@@ -57,7 +57,7 @@ impl Context<'_, '_, '_> {
         })
     }
 
-    pub(super) fn compare_long(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn compare_long(&mut self) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
@@ -72,7 +72,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         nan_treatment: NaNTreatment,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;

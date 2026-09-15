@@ -8,7 +8,7 @@ use crate::{
             path_condition::{BooleanVariable, BranchGuard, Value as PathValue},
         },
         expression::Condition,
-        generator::{error::MokaIRBuildError, jvm::frame::Frame},
+        generator::{error::Error, jvm::frame::Frame},
     },
     jvm::ConstantValue,
 };
@@ -18,10 +18,8 @@ impl Executor<'_> {
         &mut self,
         addr: NodeAddress,
         incoming_frame: &Frame<Value>,
-    ) -> Result<Vec<Edge>, MokaIRBuildError> {
-        let pc = addr
-            .source_pc()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+    ) -> Result<Vec<Edge>, Error> {
+        let pc = addr.source_pc().ok_or(Error::MalformedControlFlow)?;
         let handlers: Vec<_> = self
             .body()
             .exception_table
@@ -68,7 +66,7 @@ impl Executor<'_> {
         normal_frame: Frame<Value>,
         instruction: &RegisterInstruction,
         can_throw_synchronously: bool,
-    ) -> Result<Vec<Edge>, MokaIRBuildError> {
+    ) -> Result<Vec<Edge>, Error> {
         use ControlTransfer::{Conditional, Normal, Unconditional};
 
         let edges = match instruction {
@@ -78,7 +76,7 @@ impl Executor<'_> {
                     ..
                 } = addr
                 else {
-                    return Err(MokaIRBuildError::MalformedControlFlow);
+                    return Err(Error::MalformedControlFlow);
                 };
                 vec![Edge {
                     target: self.bytecode_addr_at(addr, handler_pc)?,
@@ -178,7 +176,7 @@ impl Executor<'_> {
             }
             RegisterInstruction::SubroutineReturn(value) => {
                 let Value::ReturnAddress(address) = value else {
-                    return Err(MokaIRBuildError::MalformedControlFlow);
+                    return Err(Error::MalformedControlFlow);
                 };
                 vec![Edge {
                     target: self.return_from(addr, *address)?,

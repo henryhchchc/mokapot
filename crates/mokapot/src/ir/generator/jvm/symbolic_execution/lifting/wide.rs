@@ -1,6 +1,6 @@
 use crate::{
     ir::generator::{
-        error::MokaIRBuildError,
+        error::Error,
         jvm::{
             frame::ValueCategory::{Category1, Category2},
             symbolic_execution::{RegisterInstruction, lifting::Context},
@@ -13,7 +13,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)

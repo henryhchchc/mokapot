@@ -13,7 +13,7 @@ use super::{
     Executor, NodeAddress,
     fact::{Edge, FrameMergeSite, Node, Value},
 };
-use crate::ir::generator::{error::MokaIRBuildError, jvm::frame::Frame};
+use crate::ir::generator::{error::Error, jvm::frame::Frame};
 
 struct State {
     entry_input: (NodeAddress, Frame<Value>),
@@ -45,7 +45,7 @@ impl State {
         }
     }
 
-    fn recompute_inputs(&mut self) -> Result<(), MokaIRBuildError> {
+    fn recompute_inputs(&mut self) -> Result<(), Error> {
         while let Some(addr) = self.inputs_to_recompute.pop_first() {
             match self.recompute_input_frame(addr)? {
                 Some(incoming_frame)
@@ -63,10 +63,7 @@ impl State {
         Ok(())
     }
 
-    fn recompute_input_frame(
-        &self,
-        addr: NodeAddress,
-    ) -> Result<Option<Frame<Value>>, MokaIRBuildError> {
+    fn recompute_input_frame(&self, addr: NodeAddress) -> Result<Option<Frame<Value>>, Error> {
         let entry_frame = (addr == self.entry_input.0).then_some(&self.entry_input.1);
         let mut contributions = entry_frame.into_iter().chain(
             self.predecessors
@@ -211,7 +208,7 @@ pub(super) fn execute_to_fixpoint(
     executor: &mut Executor<'_>,
     entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
-) -> Result<BTreeMap<NodeAddress, Node>, MokaIRBuildError> {
+) -> Result<BTreeMap<NodeAddress, Node>, Error> {
     let mut state = State::new(entry_addr, initial_frame);
 
     #[cfg(test)]
@@ -243,7 +240,7 @@ pub(super) fn merge_input_frame_at(
     addr: NodeAddress,
     frame: &mut Frame<Value>,
     contribution: Frame<Value>,
-) -> Result<bool, MokaIRBuildError> {
+) -> Result<bool, Error> {
     frame
         .merge_from_with(contribution, |slot, lhs, rhs| {
             if *lhs == rhs {
@@ -263,7 +260,7 @@ pub(super) fn merge_input_frame_at(
                 true
             }
         })
-        .map_err(MokaIRBuildError::FrameMergeError)
+        .map_err(Error::FrameMergeError)
 }
 
 #[cfg(test)]

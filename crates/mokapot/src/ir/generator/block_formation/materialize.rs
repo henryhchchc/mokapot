@@ -7,7 +7,7 @@ use crate::{
         BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
-            error::MokaIRBuildError,
+            error::Error,
             jvm::{
                 frame::Frame,
                 symbolic_execution::{self, NodeAddress, RegisterInstruction},
@@ -25,7 +25,7 @@ use super::{
 pub(super) fn materialize_blocks(
     mut symbolic_nodes: BTreeMap<NodeAddress, symbolic_execution::Node>,
     layout: &BlockLayout,
-) -> Result<Vec<Block>, MokaIRBuildError> {
+) -> Result<Vec<Block>, Error> {
     let blocks = layout
         .addrs()
         .iter()
@@ -34,7 +34,7 @@ pub(super) fn materialize_blocks(
     if symbolic_nodes.is_empty() {
         Ok(blocks)
     } else {
-        Err(MokaIRBuildError::MalformedControlFlow)
+        Err(Error::MalformedControlFlow)
     }
 }
 
@@ -43,7 +43,7 @@ fn materialize_block(
     addrs: &[NodeAddress],
     symbolic_nodes: &mut BTreeMap<NodeAddress, symbolic_execution::Node>,
     layout: &BlockLayout,
-) -> Result<Block, MokaIRBuildError> {
+) -> Result<Block, Error> {
     let mut entry_frame = None;
     let mut caught_exception = None;
     let mut operations = Vec::with_capacity(addrs.len());
@@ -59,7 +59,7 @@ fn materialize_block(
             caught_exception_value: location_exception,
         } = symbolic_nodes
             .remove(&addr)
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            .ok_or(Error::MalformedControlFlow)?;
         if index == 0 {
             entry_frame = Some(incoming_frame);
             caught_exception = location_exception;
@@ -81,9 +81,9 @@ fn materialize_block(
 
     Ok(Block {
         id,
-        entry_frame: entry_frame.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+        entry_frame: entry_frame.ok_or(Error::MalformedControlFlow)?,
         operations,
-        terminator: terminator.ok_or(MokaIRBuildError::MalformedControlFlow)?,
+        terminator: terminator.ok_or(Error::MalformedControlFlow)?,
         terminator_source,
         arms,
         caught_exception,
@@ -95,13 +95,13 @@ fn materialize_internal_operation(
     instruction: RegisterInstruction,
     outgoing: &[symbolic_execution::Edge],
     next: NodeAddress,
-) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, MokaIRBuildError> {
+) -> Result<Option<(ProgramCounter, OperationKind<symbolic_execution::Value>)>, Error> {
     if instruction.is_explicit_transfer()
         || outgoing.len() != 1
         || outgoing[0].target != next
         || !matches!(outgoing[0].transfer, ControlTransfer::Unconditional)
     {
-        return Err(MokaIRBuildError::MalformedControlFlow);
+        return Err(Error::MalformedControlFlow);
     }
     let operation = match instruction {
         RegisterInstruction::Definition { value, expr } => Some(OperationKind::Definition {
@@ -118,14 +118,14 @@ fn materialize_internal_operation(
         | RegisterInstruction::Throw(_)
         | RegisterInstruction::Subroutine { .. }
         | RegisterInstruction::SubroutineReturn(_) => {
-            return Err(MokaIRBuildError::MalformedControlFlow);
+            return Err(Error::MalformedControlFlow);
         }
     };
     operation
         .map(|operation| {
             addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .transpose()
 }
@@ -142,7 +142,7 @@ fn materialize_block_end(
     instruction: RegisterInstruction,
     outgoing: Vec<symbolic_execution::Edge>,
     layout: &BlockLayout,
-) -> Result<BlockEnd, MokaIRBuildError> {
+) -> Result<BlockEnd, Error> {
     let explicit_transfer = instruction.is_explicit_transfer();
     let arms = outgoing
         .into_iter()
@@ -154,7 +154,7 @@ fn materialize_block_end(
                     transfer: outgoing.transfer,
                     frame: outgoing.target_frame,
                 })
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<Vec<_>, _>>()?;
     let has_normal_successor = arms
@@ -165,7 +165,7 @@ fn materialize_block_end(
         .map(|operation| {
             addr.source_pc()
                 .map(|pc| (pc, operation))
-                .ok_or(MokaIRBuildError::MalformedControlFlow)
+                .ok_or(Error::MalformedControlFlow)
         })
         .transpose()?;
 

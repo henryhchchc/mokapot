@@ -1,7 +1,7 @@
 use crate::ir::{
     expression::Condition,
     generator::{
-        error::MokaIRBuildError,
+        error::Error,
         jvm::{
             frame::{ValueCategory, ValueCategory::Category1},
             symbolic_execution::{RegisterInstruction, Value, lifting::Context},
@@ -15,7 +15,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         target: ProgramCounter,
         condition: impl FnOnce(Value) -> Condition<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let operand = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Jump {
             condition: Some(condition(operand)),
@@ -27,7 +27,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         target: ProgramCounter,
         condition: impl FnOnce(Value, Value) -> Condition<Value>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let rhs = self.frame.stack.pop(Category1)?;
         let lhs = self.frame.stack.pop(Category1)?;
         Ok(RegisterInstruction::Jump {
@@ -40,7 +40,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         default: ProgramCounter,
         branches: BTreeMap<i32, ProgramCounter>,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         Ok(RegisterInstruction::Switch {
             match_value: self.frame.stack.pop(Category1)?,
             branches,
@@ -51,20 +51,17 @@ impl Context<'_, '_, '_> {
     pub(super) fn return_value(
         &mut self,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         Ok(RegisterInstruction::Return(Some(
             self.frame.stack.pop(category)?,
         )))
     }
 
-    pub(super) fn throw(&mut self) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn throw(&mut self) -> Result<RegisterInstruction, Error> {
         Ok(RegisterInstruction::Throw(self.frame.stack.pop(Category1)?))
     }
 
-    pub(super) fn subroutine_return(
-        &self,
-        idx: u16,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    pub(super) fn subroutine_return(&self, idx: u16) -> Result<RegisterInstruction, Error> {
         Ok(RegisterInstruction::SubroutineReturn(
             *self.frame.locals.get(idx, Category1)?,
         ))
@@ -73,7 +70,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn subroutine_call(
         &mut self,
         target: ProgramCounter,
-    ) -> Result<RegisterInstruction, MokaIRBuildError> {
+    ) -> Result<RegisterInstruction, Error> {
         let (target, return_address) = self.executor.enter_subroutine(self.addr, target)?;
         self.frame.stack.push(return_address.into(), Category1)?;
         Ok(RegisterInstruction::Subroutine { target })
