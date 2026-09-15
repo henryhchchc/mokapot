@@ -1,6 +1,9 @@
 //! Classifies the fallibility of JVM instructions.
 
-use crate::jvm::{ConstantValue, Method, code::Instruction, method};
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{ConstantValue, Method, code::Instruction, method},
+};
 
 /// Method-level context needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
@@ -91,6 +94,21 @@ impl Context {
     }
 }
 
+/// Whether loading `value` with `ldc`, `ldc_w`, or `ldc2_w` can fail
+/// synchronously.
+///
+/// Numeric constants are read straight out of the run-time constant pool, and
+/// `Null` never reaches it (`aconst_null` pushes it instead), so neither can
+/// fail.
+#[doc = see_jvm_spec!(6, 5)]
+///
+/// Every other entry must be resolved before use, and
+/// resolution can fail: class, method handle, and method type references may
+/// throw any `LinkageError`, while a dynamically-computed constant additionally
+/// invokes its bootstrap method, which may throw any `Throwable`. String
+/// constants need no resolution, but the virtual machine must still materialize
+/// the interned instance, so they are conservatively treated as fallible too.
+#[doc = see_jvm_spec!(5, 4, 3)]
 const fn constant_resolution_is_fallible(value: &ConstantValue) -> bool {
     !matches!(
         value,

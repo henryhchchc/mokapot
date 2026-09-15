@@ -1,8 +1,8 @@
 //! Constructs a reachable register-form graph from JVM instructions.
 
 mod address;
-mod builder;
 mod edges;
+mod execution;
 mod fallibility;
 mod instruction;
 pub(super) mod jvm;
@@ -25,17 +25,17 @@ use crate::{
 };
 
 pub(super) fn build_node_graph(method: &Method) -> Result<NodeGraph, Error> {
-    NodeGraphBuilder::for_method(method)?.build()
+    Executor::for_method(method)?.build_node_graph()
 }
 
-/// Mutable state used while constructing an instruction graph.
-struct NodeGraphBuilder<'method> {
+/// Symbolic executor that builds a [`NodeGraph`] from JVM instructions.
+struct Executor<'method> {
     body: &'method MethodBody,
     fallibility: fallibility::Context,
     subroutine_expander: subroutine::Expander,
     definition_ids: BTreeMap<NodeAddress, SsaValueId>,
     caught_exception_ids: BTreeMap<NodeAddress, SsaValueId>,
-    value_id_allocator: builder::ValueIdAllocator,
+    value_id_allocator: execution::ValueIdAllocator,
     receiver_value: Option<SsaValueId>,
     parameter_values: Vec<SsaValueId>,
     entry_addr: NodeAddress,

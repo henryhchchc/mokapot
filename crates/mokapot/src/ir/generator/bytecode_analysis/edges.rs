@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{Edge, NodeAddress, NodeGraphBuilder, RegisterInstruction, Value};
+use super::{Edge, Executor, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         control_flow::{
@@ -15,7 +15,7 @@ use crate::{
     jvm::{ConstantValue, code::ProgramCounter},
 };
 
-impl NodeGraphBuilder<'_> {
+impl Executor<'_> {
     fn build_exception_edges(
         &mut self,
         addr: NodeAddress,
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn unwind_edges_erase_frame_values() {
         let method = method([(0, JvmInstruction::Nop)], "(I)V", vec![]);
-        let mut builder = NodeGraphBuilder::for_method(&method).expect("valid method");
+        let mut executor = Executor::for_method(&method).expect("valid method");
         let frame = Frame::for_method_entry(
             &method.descriptor,
             1,
@@ -242,7 +242,7 @@ mod tests {
         )
         .expect("frame fits descriptor");
 
-        let edges = builder
+        let edges = executor
             .build_exception_edges(NodeAddress::entry(0.into()), &frame)
             .expect("valid exception edge");
 

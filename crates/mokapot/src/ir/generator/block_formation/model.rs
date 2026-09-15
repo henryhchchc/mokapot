@@ -3,8 +3,8 @@ use crate::{
         BlockId, OperationKind, TerminatorKind,
         control_flow::ControlTransfer,
         generator::{
-            identity::SsaValueId,
             bytecode_analysis::{self, FrameMergeSite, jvm::Frame},
+            identity::SsaValueId,
         },
     },
     jvm::code::ProgramCounter,

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 use std::collections::HashSet;
 
-use super::{NodeGraphBuilder, Edge, FrameMergeSite, Node, NodeAddress, Value};
+use super::{Edge, Executor, FrameMergeSite, Node, NodeAddress, Value};
 use crate::ir::generator::{bytecode_analysis::jvm::Frame, error::Error};
 
 struct State {
@@ -202,7 +202,7 @@ fn edge_targets(outgoing: &[Edge]) -> BTreeSet<NodeAddress> {
 }
 
 pub(super) fn build_to_fixpoint(
-    builder: &mut NodeGraphBuilder<'_>,
+    executor: &mut Executor<'_>,
     entry_addr: NodeAddress,
     initial_frame: Frame<Value>,
 ) -> Result<BTreeMap<NodeAddress, Node>, Error> {
@@ -226,7 +226,7 @@ pub(super) fn build_to_fixpoint(
         let Some((addr, incoming_frame)) = state.pending_executions.pop_first() else {
             continue;
         };
-        let node = builder.build_node(addr, incoming_frame)?;
+        let node = executor.execute(addr, incoming_frame)?;
         state.replace_node(addr, node);
     }
 
@@ -358,8 +358,8 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut builder = NodeGraphBuilder::for_method(&method).expect("valid method");
-        let nodes = builder.build_reachable_nodes().expect("valid loop");
+        let mut executor = Executor::for_method(&method).expect("valid method");
+        let nodes = executor.build_reachable_nodes().expect("valid loop");
 
         let mut incoming_frame = nodes[&NodeAddress::entry(2.into())].incoming_frame.clone();
         assert_eq!(

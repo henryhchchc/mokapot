@@ -8,7 +8,7 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{NodeGraphBuilder, NodeAddress, RegisterInstruction, Value};
+use super::{Executor, NodeAddress, RegisterInstruction, Value};
 use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
@@ -25,13 +25,13 @@ use crate::{
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
-struct Context<'builder, 'frame, 'method> {
-    builder: &'builder mut NodeGraphBuilder<'method>,
+struct Context<'executor, 'frame, 'method> {
+    executor: &'executor mut Executor<'method>,
     addr: NodeAddress,
     frame: &'frame mut Frame<Value>,
 }
 
-impl NodeGraphBuilder<'_> {
+impl Executor<'_> {
     #[expect(
         clippy::too_many_lines,
         reason = "the match is an exhaustive JVM instruction dispatch"
@@ -52,7 +52,7 @@ impl NodeGraphBuilder<'_> {
             return Err(Error::MalformedControlFlow);
         }
         let mut cx = Context {
-            builder: self,
+            executor: self,
             addr,
             frame,
         };
@@ -249,7 +249,7 @@ impl Context<'_, '_, '_> {
     }
 
     fn definition_id(&mut self) -> Result<SsaValueId, Error> {
-        self.builder.definition_id_at(self.addr)
+        self.executor.definition_id_at(self.addr)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>

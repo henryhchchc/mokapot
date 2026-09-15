@@ -72,7 +72,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         target: ProgramCounter,
     ) -> Result<RegisterInstruction, Error> {
-        let (target, return_address) = self.builder.enter_subroutine(self.addr, target)?;
+        let (target, return_address) = self.executor.enter_subroutine(self.addr, target)?;
         self.frame.stack.push(return_address.into(), Category1)?;
         Ok(RegisterInstruction::Subroutine { target })
     }

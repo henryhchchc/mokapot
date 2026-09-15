@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Node, NodeAddress, NodeGraph, NodeGraphBuilder, RegisterInstruction, Value, fallibility,
-    solver,
+    Executor, Node, NodeAddress, NodeGraph, RegisterInstruction, Value, fallibility, solver,
     subroutine::{self, ReturnAddress},
 };
 use crate::{
@@ -14,8 +13,8 @@ use crate::{
     },
 };
 
-impl<'method> NodeGraphBuilder<'method> {
-    pub fn build_node(
+impl<'method> Executor<'method> {
+    pub fn execute(
         &mut self,
         addr: NodeAddress,
         incoming_frame: Frame<Value>,
@@ -100,7 +99,7 @@ impl<'method> NodeGraphBuilder<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let builder = Self {
+        let executor = Self {
             body,
             fallibility: fallibility::Context::for_method(method),
             subroutine_expander: subroutine::Expander::new(entry_addr),
@@ -112,10 +111,10 @@ impl<'method> NodeGraphBuilder<'method> {
             entry_addr,
             initial_frame,
         };
-        Ok(builder)
+        Ok(executor)
     }
 
-    pub fn build(mut self) -> Result<NodeGraph, Error> {
+    pub fn build_node_graph(mut self) -> Result<NodeGraph, Error> {
         let nodes = self.build_reachable_nodes()?;
         let merge_identities = nodes
             .values()
@@ -265,19 +264,19 @@ mod tests {
             "()V",
             vec![],
         );
-        let mut builder = NodeGraphBuilder::for_method(&method).expect("valid method");
-        builder.build_reachable_nodes().expect("valid loop");
+        let mut executor = Executor::for_method(&method).expect("valid method");
+        executor.build_reachable_nodes().expect("valid loop");
 
-        assert_eq!(builder.definition_ids.len(), 3);
-        assert_eq!(builder.value_id_allocator.next_value_idx, 3);
+        assert_eq!(executor.definition_ids.len(), 3);
+        assert_eq!(executor.value_id_allocator.next_value_idx, 3);
 
         for k in [0, 3, 4] {
             let entry = NodeAddress::entry(k.into());
-            assert!(builder.definition_ids.contains_key(&entry));
+            assert!(executor.definition_ids.contains_key(&entry));
         }
         for k in [1, 2, 5, 6] {
             let entry = NodeAddress::entry(k.into());
-            assert!(!builder.definition_ids.contains_key(&entry));
+            assert!(!executor.definition_ids.contains_key(&entry));
         }
     }
 }
