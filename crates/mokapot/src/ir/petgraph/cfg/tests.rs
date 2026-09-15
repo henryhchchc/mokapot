@@ -71,7 +71,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                 Successor {
                     id: EdgeId::new(0),
                     target: BlockId::new(1),
-                    transfer: ControlTransfer::Normal,
+                    transfer: ControlTransfer::Unconditional,
                 },
                 Successor {
                     id: EdgeId::new(1),
@@ -112,7 +112,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
         edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
         3
     );
-    assert!(matches!(edges[0].weight(), ControlTransfer::Normal));
+    assert!(matches!(edges[0].weight(), ControlTransfer::Unconditional));
     assert!(matches!(
         edges[1].weight(),
         ControlTransfer::Exception(Some(_))

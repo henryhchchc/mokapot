@@ -52,6 +52,7 @@ fn materialize_block(
         let instruction_graph::Node {
             incoming_frame,
             instruction,
+            can_throw_synchronously,
             outgoing_edges,
             caught_exception_value: location_exception,
         } = instruction_nodes
@@ -63,15 +64,26 @@ fn materialize_block(
         }
         let is_last = index + 1 == addrs.len();
         if is_last {
-            let end = materialize_block_end(addr, instruction, outgoing_edges, layout)?;
+            let end = materialize_block_end(
+                addr,
+                instruction,
+                can_throw_synchronously,
+                outgoing_edges,
+                layout,
+            )?;
             operations.extend(end.operation);
             terminator = Some(end.terminator);
             terminator_source = end.terminator_source;
             arms = end.arms;
         } else {
             let next = addrs[index + 1];
-            let operation =
-                materialize_internal_operation(addr, instruction, &outgoing_edges, next)?;
+            let operation = materialize_internal_operation(
+                addr,
+                instruction,
+                can_throw_synchronously,
+                &outgoing_edges,
+                next,
+            )?;
             operations.extend(operation);
         }
     }
@@ -90,13 +102,14 @@ fn materialize_block(
 fn materialize_internal_operation(
     addr: NodeAddress,
     instruction: RegisterInstruction,
+    can_throw_synchronously: bool,
     outgoing: &[instruction_graph::Edge],
     next: NodeAddress,
 ) -> Result<Option<(ProgramCounter, OperationKind<instruction_graph::Value>)>, Error> {
     if instruction.is_explicit_transfer()
+        || can_throw_synchronously
         || outgoing.len() != 1
         || outgoing[0].target != next
-        || !matches!(outgoing[0].transfer, ControlTransfer::Unconditional)
     {
         return Err(Error::MalformedControlFlow);
     }
@@ -137,6 +150,7 @@ struct BlockEnd {
 fn materialize_block_end(
     addr: NodeAddress,
     instruction: RegisterInstruction,
+    can_throw_synchronously: bool,
     outgoing: Vec<instruction_graph::Edge>,
     layout: &BlockLayout,
 ) -> Result<BlockEnd, Error> {
@@ -154,10 +168,7 @@ fn materialize_block_end(
                 .ok_or(Error::MalformedControlFlow)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let has_normal_successor = arms
-        .iter()
-        .any(|arm| matches!(arm.transfer, ControlTransfer::Normal));
-    let (operation, terminator) = classify_block_end(instruction, has_normal_successor);
+    let (operation, terminator) = classify_block_end(instruction, can_throw_synchronously);
     let operation = operation
         .map(|operation| {
             addr.source_pc()
@@ -198,9 +209,13 @@ pub(super) fn insert_entry_preheader(
     blocks
 }
 
+/// Converts a block-final instruction into its operation and terminator.
+///
+/// `is_fallible` reports whether the instruction can raise, which gives a
+/// value- or effect-producing operation a [`TerminatorKind::Fallible`] end.
 pub(super) fn classify_block_end(
     instruction: RegisterInstruction,
-    has_normal_successor: bool,
+    is_fallible: bool,
 ) -> (
     Option<OperationKind<instruction_graph::Value>>,
     TerminatorKind<instruction_graph::Value>,
@@ -227,19 +242,17 @@ pub(super) fn classify_block_end(
                 value: instruction_graph::Value::Ssa(value),
                 expr,
             }),
-            implicit_terminator(has_normal_successor),
+            implicit_terminator(is_fallible),
         ),
         RegisterInstruction::Effect(expr) => (
             Some(OperationKind::Effect { expr }),
-            implicit_terminator(has_normal_successor),
+            implicit_terminator(is_fallible),
         ),
     }
 }
 
-const fn implicit_terminator(
-    has_normal_successor: bool,
-) -> TerminatorKind<instruction_graph::Value> {
-    if has_normal_successor {
+const fn implicit_terminator(is_fallible: bool) -> TerminatorKind<instruction_graph::Value> {
+    if is_fallible {
         TerminatorKind::Fallible
     } else {
         TerminatorKind::Goto

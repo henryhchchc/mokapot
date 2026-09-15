@@ -21,7 +21,7 @@ impl<'method> Builder<'method> {
         addr: NodeAddress,
         incoming_frame: Frame<Value>,
     ) -> Result<Node, Error> {
-        let (instruction, outgoing_edges) = match addr {
+        let (instruction, can_throw_synchronously, outgoing_edges) = match addr {
             NodeAddress::Handler { .. } => {
                 let instruction = RegisterInstruction::HandlerEntry;
                 let normal_frame = incoming_frame.clone();
@@ -32,9 +32,9 @@ impl<'method> Builder<'method> {
                     &instruction,
                     false,
                 )?;
-                (instruction, outgoing_edges)
+                (instruction, false, outgoing_edges)
             }
-            NodeAddress::Unwind => (RegisterInstruction::Unwind, Vec::new()),
+            NodeAddress::Unwind => (RegisterInstruction::Unwind, false, Vec::new()),
             NodeAddress::Bytecode { pc, .. } => {
                 let mut normal_frame = incoming_frame.clone();
                 let jvm_instruction = self
@@ -53,13 +53,14 @@ impl<'method> Builder<'method> {
                     &instruction,
                     can_throw_synchronously,
                 )?;
-                (instruction, outgoing_edges)
+                (instruction, can_throw_synchronously, outgoing_edges)
             }
         };
 
         Ok(Node {
             incoming_frame,
             instruction,
+            can_throw_synchronously,
             outgoing_edges,
             caught_exception_value: self.caught_exception_ids.get(&addr).copied(),
         })

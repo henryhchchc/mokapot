@@ -35,7 +35,7 @@ fn synchronized_return_has_only_exceptional_successors() {
     assert!(
         successors
             .iter()
-            .all(|successor| !matches!(successor.transfer(), ControlTransfer::Normal))
+            .all(|successor| !matches!(successor.transfer(), ControlTransfer::Unconditional))
     );
     assert!(ir.caught_exception(successors[0].target()).is_some());
     assert_eq!(

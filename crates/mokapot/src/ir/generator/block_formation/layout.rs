@@ -123,13 +123,14 @@ fn discover_leaders(
     );
 
     for facts in instruction_graph.nodes.values() {
+        // A location that ends its block hands every arm to a fresh block.
+        // Synchronously fallible operations qualify through their exceptional
+        // arms, which they always have.
         if facts.instruction.is_explicit_transfer()
             || facts.outgoing_edges.iter().any(|outgoing| {
                 matches!(
                     outgoing.transfer,
-                    ControlTransfer::Normal
-                        | ControlTransfer::Exception(_)
-                        | ControlTransfer::Unwind
+                    ControlTransfer::Exception(_) | ControlTransfer::Unwind
                 )
             })
         {
@@ -144,13 +145,12 @@ fn discover_leaders(
             .nodes
             .get(current)
             .ok_or(Error::MalformedControlFlow)?;
+        // Mirror `materialize_internal_operation`: only an ordinary,
+        // non-fallible operation is elided into its successor's block.
         let plain_fallthrough = !facts.instruction.is_explicit_transfer()
+            && !facts.can_throw_synchronously
             && facts.outgoing_edges.len() == 1
-            && facts.outgoing_edges[0].target == *next
-            && matches!(
-                facts.outgoing_edges[0].transfer,
-                ControlTransfer::Unconditional
-            );
+            && facts.outgoing_edges[0].target == *next;
         if !plain_fallthrough {
             leaders.insert(*next);
         }

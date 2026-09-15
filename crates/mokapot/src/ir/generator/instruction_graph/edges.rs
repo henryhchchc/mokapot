@@ -149,7 +149,7 @@ impl Builder<'_> {
         instruction: &RegisterInstruction,
         can_throw_synchronously: bool,
     ) -> Result<Vec<Edge>, Error> {
-        use ControlTransfer::{Normal, Unconditional};
+        use ControlTransfer::Unconditional;
 
         let edges = match instruction {
             RegisterInstruction::HandlerEntry => {
@@ -171,9 +171,12 @@ impl Builder<'_> {
             RegisterInstruction::Definition { .. } | RegisterInstruction::Effect(_)
                 if can_throw_synchronously =>
             {
+                // The did-not-throw outcome. It is unguarded like an ordinary
+                // fallthrough, but `Node::can_throw_synchronously` keeps block
+                // formation from eliding it.
                 let mut edges = vec![Edge {
                     target: self.fallthrough_addr(addr)?,
-                    transfer: Normal,
+                    transfer: Unconditional,
                     target_frame: normal_frame,
                 }];
                 edges.extend(self.build_exception_edges(addr, incoming_frame)?);

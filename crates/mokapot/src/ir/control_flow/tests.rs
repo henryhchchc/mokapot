@@ -90,7 +90,7 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
                 Successor {
                     id: EdgeId::new(2),
                     target: BlockId::new(2),
-                    transfer: ControlTransfer::Normal,
+                    transfer: ControlTransfer::Unconditional,
                 },
                 Successor {
                     id: EdgeId::new(3),

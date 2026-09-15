@@ -296,6 +296,7 @@ mod tests {
         Node {
             incoming_frame: frame(0),
             instruction: RegisterInstruction::Erased,
+            can_throw_synchronously: false,
             outgoing_edges: vec![Edge {
                 target,
                 transfer: ControlTransfer::Unconditional,
@@ -388,6 +389,7 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
+                can_throw_synchronously: false,
                 outgoing_edges: vec![
                     Edge {
                         target,
@@ -441,6 +443,7 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
+                can_throw_synchronously: false,
                 outgoing_edges: Vec::new(),
                 caught_exception_value: None,
             },
@@ -472,6 +475,7 @@ mod tests {
             Node {
                 incoming_frame: frame(0),
                 instruction: RegisterInstruction::Erased,
+                can_throw_synchronously: false,
                 outgoing_edges: Vec::new(),
                 caught_exception_value: None,
             },

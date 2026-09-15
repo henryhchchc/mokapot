@@ -41,6 +41,11 @@ pub(crate) struct Edge {
 pub(crate) struct Node {
     pub incoming_frame: Frame<Value>,
     pub instruction: RegisterInstruction,
+    /// Whether executing `instruction` can raise a synchronous exception.
+    ///
+    /// Such a location always has exceptional outgoing edges and never
+    /// coalesces with the next location.
+    pub can_throw_synchronously: bool,
     pub outgoing_edges: Vec<Edge>,
     pub caught_exception_value: Option<SsaValueId>,
 }
