@@ -4,11 +4,11 @@ use crate::jvm::{ConstantValue, Method, code::Instruction, method};
 
 /// Method-level context needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct FallibilityContext {
+pub(crate) struct Context {
     return_can_throw: bool,
 }
 
-impl FallibilityContext {
+impl Context {
     pub fn for_method(method: &Method) -> Self {
         // Exact structured-locking analysis is path- and alias-sensitive, so
         // explicit monitor use conservatively makes every method exit fallible.
@@ -106,10 +106,10 @@ const fn constant_resolution_is_fallible(value: &ConstantValue) -> bool {
 mod tests {
     use super::*;
 
-    const ORDINARY: FallibilityContext = FallibilityContext {
+    const ORDINARY: Context = Context {
         return_can_throw: false,
     };
-    const FALLIBLE_RETURN: FallibilityContext = FallibilityContext {
+    const FALLIBLE_RETURN: Context = Context {
         return_can_throw: true,
     };
 

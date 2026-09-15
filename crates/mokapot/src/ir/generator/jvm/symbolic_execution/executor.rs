@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    NodeAddress, RegisterInstruction,
+    Executor, NodeAddress, RegisterInstruction,
     fact::{Cfg, Node, Value},
-    fallibility::FallibilityContext,
-    solver,
-    subroutine::{Expander, ReturnAddress},
+    fallibility, solver,
+    subroutine::{self, ReturnAddress},
 };
 use crate::{
     ir::generator::{error::MokaIRBuildError, identity::SsaValueId, jvm::frame::Frame},
@@ -15,20 +14,6 @@ use crate::{
         method,
     },
 };
-
-/// Mutable state used only while performing symbolic execution.
-pub(crate) struct Executor<'method> {
-    body: &'method MethodBody,
-    fallibility: FallibilityContext,
-    subroutine_expander: Expander,
-    definition_ids: BTreeMap<NodeAddress, SsaValueId>,
-    caught_exception_ids: BTreeMap<NodeAddress, SsaValueId>,
-    value_id_allocator: ValueIdAllocator,
-    receiver_value: Option<SsaValueId>,
-    parameter_values: Vec<SsaValueId>,
-    entry_addr: NodeAddress,
-    initial_frame: Frame<Value>,
-}
 
 impl<'method> Executor<'method> {
     pub fn execute_addr(
@@ -86,10 +71,13 @@ impl<'method> Executor<'method> {
 
     pub fn for_method(method: &'method Method) -> Result<Self, MokaIRBuildError> {
         let body = method.body.as_ref().ok_or(MokaIRBuildError::NoMethodBody)?;
-        let (first_pc, _) = body
-            .instructions
-            .entry_point()
-            .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+        let entry_addr = {
+            let (first_pc, _) = body
+                .instructions
+                .entry_point()
+                .ok_or(MokaIRBuildError::MalformedControlFlow)?;
+            NodeAddress::entry(first_pc)
+        };
         let mut value_id_allocator = ValueIdAllocator::default();
         let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
             .then(|| value_id_allocator.new_value_id())
@@ -112,11 +100,10 @@ impl<'method> Executor<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let entry_addr = NodeAddress::entry(first_pc);
         let executor = Self {
             body,
-            fallibility: FallibilityContext::for_method(method),
-            subroutine_expander: Expander::new(first_pc),
+            fallibility: fallibility::Context::for_method(method),
+            subroutine_expander: subroutine::Expander::new(entry_addr),
             definition_ids: BTreeMap::new(),
             caught_exception_ids: BTreeMap::new(),
             value_id_allocator,
@@ -262,7 +249,7 @@ impl<'method> Executor<'method> {
 
 #[derive(Debug, Default)]
 pub(super) struct ValueIdAllocator {
-    pub(super) next_value_idx: u32,
+    next_value_idx: u32,
 }
 
 impl ValueIdAllocator {

@@ -10,8 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::collections::HashSet;
 
 use super::{
-    NodeAddress,
-    executor::Executor,
+    Executor, NodeAddress,
     fact::{Edge, FrameMergeSite, Node, Value},
 };
 use crate::ir::generator::{error::MokaIRBuildError, jvm::frame::Frame};

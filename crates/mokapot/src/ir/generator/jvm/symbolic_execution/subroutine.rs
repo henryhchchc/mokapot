@@ -45,11 +45,11 @@ pub(crate) struct Expander {
 }
 
 impl Expander {
-    pub fn new(entry: ProgramCounter) -> Self {
+    pub fn new(entry: NodeAddress) -> Self {
         Self {
             activations: vec![None],
             contexts_by_activation: BTreeMap::new(),
-            expanded_addrs: BTreeSet::from([NodeAddress::entry(entry)]),
+            expanded_addrs: BTreeSet::from([entry]),
             return_pcs: BTreeMap::new(),
         }
     }
