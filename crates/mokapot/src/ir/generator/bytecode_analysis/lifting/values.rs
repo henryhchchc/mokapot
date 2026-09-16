@@ -56,16 +56,6 @@ impl Context<'_, '_, '_> {
         Ok(None)
     }
 
-    pub(super) fn load_unchecked(
-        &mut self,
-        idx: u16,
-        category: ValueCategory,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
-        let value = *self.frame.locals.get(idx, category)?;
-        self.frame.stack.push(value, category)?;
-        Ok(None)
-    }
-
     pub(super) fn store(
         &mut self,
         idx: u16,

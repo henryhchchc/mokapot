@@ -1,5 +1,8 @@
 use super::*;
-use crate::ir::{MalformedBytecode, MokaIRFrameError};
+use crate::{
+    ir::{MalformedBytecode, MokaIRFrameError},
+    jvm::code::WideInstruction,
+};
 
 #[test]
 fn reports_empty_code_at_the_method_boundary() {
@@ -126,5 +129,29 @@ fn reports_a_return_address_used_as_an_ordinary_value() {
             pc: Some(pc),
             kind: MalformedBytecode::InvalidFrameValue,
         }) if pc == 11.into()
+    ));
+}
+
+#[test]
+fn reports_a_wide_return_address_used_as_an_ordinary_value() {
+    let mut method = method(
+        [
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::Wide(WideInstruction::AStore(300))),
+            (14, Instruction::Wide(WideInstruction::ALoad(300))),
+            (18, Instruction::Wide(WideInstruction::Ret(300))),
+        ],
+        "()V",
+        vec![],
+    );
+    method.body.as_mut().expect("method has a body").max_locals = 301;
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::InvalidFrameValue,
+        }) if pc == 14.into()
     ));
 }

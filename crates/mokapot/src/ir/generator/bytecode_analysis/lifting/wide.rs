@@ -21,10 +21,8 @@ impl Context<'_, '_, '_> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)
-            | WideInstruction::ALoad(idx) => self.load_unchecked(*idx, Category1),
-            WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx) => {
-                self.load_unchecked(*idx, Category2)
-            }
+            | WideInstruction::ALoad(idx) => self.load(*idx, Category1),
+            WideInstruction::LLoad(idx) | WideInstruction::DLoad(idx) => self.load(*idx, Category2),
             WideInstruction::IStore(idx)
             | WideInstruction::FStore(idx)
             | WideInstruction::AStore(idx) => self.store(*idx, Category1),
