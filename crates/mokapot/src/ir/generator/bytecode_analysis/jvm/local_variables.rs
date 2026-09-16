@@ -51,6 +51,19 @@ pub(crate) struct LocalVariables<V> {
     slots: Box<[LocalSlot<V>]>,
 }
 
+/// Slots assigned to the method-entry values in a fresh local-variable table.
+///
+/// This is the observable form of the convention that parameters follow the
+/// receiver in descriptor order, with a category-2 parameter occupying two
+/// slots.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EntrySlots {
+    /// The slot holding the receiver, if the method is an instance method.
+    pub(crate) this: Option<u16>,
+    /// The slot holding each parameter, in descriptor order.
+    pub(crate) parameters: Vec<u16>,
+}
+
 impl<V> LocalVariables<V> {
     fn invalidate_overlapping_category_2(&mut self, index: usize) {
         if index > 0
@@ -109,12 +122,14 @@ impl<V> LocalVariables<V> {
         Ok(())
     }
 
+    /// Builds the locals of a method entry frame, also reporting the slot each
+    /// entry value was assigned.
     pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_slots: u16,
         this_value: Option<V>,
         parameters: &[V],
-    ) -> Result<Self, Error>
+    ) -> Result<(Self, EntrySlots), Error>
     where
         V: Clone,
     {
@@ -125,17 +140,29 @@ impl<V> LocalVariables<V> {
             slots: vec![LocalSlot::Unset; max_slots.into()].into_boxed_slice(),
         };
         let mut index = 0;
-        if let Some(this_value) = this_value {
+        let this = if let Some(this_value) = this_value {
             locals.set(index, this_value, ValueCategory::Category1)?;
+            let slot = index;
             index += 1;
-        }
+            Some(slot)
+        } else {
+            None
+        };
+        let mut parameter_slots = Vec::with_capacity(parameters.len());
         for (value_type, value) in descriptor.parameters_types.iter().zip(parameters) {
             let category = ValueCategory::of_field_type(value_type);
             locals.set(index, value.clone(), category)?;
+            parameter_slots.push(index);
             index += u16::try_from(category.slot_count())
                 .expect("JVM categories occupy at most two slots");
         }
-        Ok(locals)
+        Ok((
+            locals,
+            EntrySlots {
+                this,
+                parameters: parameter_slots,
+            },
+        ))
     }
 
     pub(super) fn clear_for_unwind(&mut self) {

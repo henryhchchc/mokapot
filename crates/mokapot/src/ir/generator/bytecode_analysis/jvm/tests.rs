@@ -28,6 +28,7 @@ fn frame(
         })
         .collect::<Vec<_>>();
     Frame::for_method_entry(descriptor, max_locals, max_stack, this_value, &parameters)
+        .map(|(frame, _)| frame)
 }
 
 fn assert_stack(frame: &mut Frame<TestValue>, expected_top_first: &[(TestValue, ValueCategory)]) {

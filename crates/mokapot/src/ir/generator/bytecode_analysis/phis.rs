@@ -170,7 +170,8 @@ mod tests {
     fn frame_with_local(value: Option<FrameValue>) -> super::super::model::Frame {
         let descriptor: MethodDescriptor = "()V".parse().expect("valid descriptor");
         let mut frame = super::super::jvm::Frame::for_method_entry(&descriptor, 1, 0, None, &[])
-            .expect("valid frame");
+            .expect("valid frame")
+            .0;
         if let Some(value) = value {
             frame
                 .locals

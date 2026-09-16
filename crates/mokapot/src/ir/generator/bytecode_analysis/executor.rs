@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::{Executor, FrameValue};
 use crate::{
     ir::generator::{
-        bytecode_analysis::jvm::Frame,
+        bytecode_analysis::jvm::{EntrySlots, Frame, Position},
         error::{Error, MalformedBytecode},
         identity::SsaValueId,
     },
@@ -32,13 +32,19 @@ impl<'method> Executor<'method> {
             .copied()
             .map(FrameValue::Ordinary)
             .collect::<Vec<_>>();
-        let initial_frame = Frame::for_method_entry(
+        let (initial_frame, entry_slots) = Frame::for_method_entry(
             &method.descriptor,
             body.max_locals,
             body.max_stack,
             receiver_value.map(FrameValue::Ordinary),
             &frame_parameters,
         )?;
+        Self::debug_assert_entry_frame(
+            &initial_frame,
+            &entry_slots,
+            receiver_value,
+            &parameter_values,
+        );
         Ok(Self {
             body,
             definition_ids: BTreeMap::new(),
@@ -47,6 +53,36 @@ impl<'method> Executor<'method> {
             parameter_values,
             initial_frame,
         })
+    }
+
+    /// Checks the entry-frame convention: parameters follow `this` in descriptor
+    /// order, with a category-2 parameter occupying two slots, so the identity
+    /// allocated to a parameter is the value held in that parameter's slot.
+    fn debug_assert_entry_frame(
+        frame: &Frame<FrameValue>,
+        entry_slots: &EntrySlots,
+        receiver_value: Option<SsaValueId>,
+        parameter_values: &[SsaValueId],
+    ) {
+        debug_assert_eq!(
+            entry_slots.parameters.len(),
+            parameter_values.len(),
+            "every allocated parameter has an entry slot"
+        );
+        debug_assert_eq!(
+            entry_slots
+                .this
+                .and_then(|slot| frame.value_at(Position::Local(slot.into())).copied()),
+            receiver_value.map(FrameValue::Ordinary),
+            "the receiver identity must occupy its entry slot"
+        );
+        for (&slot, &value) in entry_slots.parameters.iter().zip(parameter_values) {
+            debug_assert_eq!(
+                frame.value_at(Position::Local(slot.into())).copied(),
+                Some(FrameValue::Ordinary(value)),
+                "a parameter identity must occupy its entry slot"
+            );
+        }
     }
 
     pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, Error> {

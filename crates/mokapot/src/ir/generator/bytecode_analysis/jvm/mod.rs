@@ -9,6 +9,7 @@ mod value_category;
 mod tests;
 
 pub use error::Error as FrameError;
+pub(crate) use local_variables::EntrySlots;
 pub(crate) use operand_stack::StackOperation;
 pub(crate) use value_category::ValueCategory;
 
@@ -74,20 +75,29 @@ impl<V> Frame<V> {
 }
 
 impl<V: Clone> Frame<V> {
+    /// Builds the entry frame of a method, also reporting the slots it assigned
+    /// to the receiver and to the parameters.
+    ///
+    /// The parameters follow the receiver in descriptor order, with a category-2
+    /// parameter occupying two slots; the callers of this constructor rely on
+    /// that convention to map parameter identities to slots.
     pub fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
         this_value: Option<V>,
         parameters: &[V],
-    ) -> Result<Self, FrameError> {
-        let local_variables =
+    ) -> Result<(Self, EntrySlots), FrameError> {
+        let (locals, entry_slots) =
             LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
         let operand_stack = OperandStack::with_max_slots(max_operand_stack);
-        Ok(Self {
-            locals: local_variables,
-            stack: operand_stack,
-        })
+        Ok((
+            Self {
+                locals,
+                stack: operand_stack,
+            },
+            entry_slots,
+        ))
     }
 
     pub fn exception_handler_frame(&self, caught: V) -> Result<Self, FrameError> {
