@@ -8,30 +8,31 @@ use crate::ir::{
     BlockId,
     generator::{error::Error, identity::SsaValueId},
 };
-pub(crate) use model::Block;
-pub(crate) use model::{PhiCandidate, ScalarBlock, Successor};
+pub(in crate::ir::generator) use model::Block;
+pub(in crate::ir::generator) use model::{PhiCandidate, ScalarBlock, Successor};
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.
-pub(super) struct Graph {
-    pub entry: BlockId,
-    pub blocks: Vec<Block>,
-    pub this_value: Option<SsaValueId>,
-    pub parameter_values: Vec<SsaValueId>,
+pub(in crate::ir::generator) struct SsaGraph {
+    pub(in crate::ir::generator) entry: BlockId,
+    pub(in crate::ir::generator) blocks: Vec<Block>,
+    pub(in crate::ir::generator) this_value: Option<SsaValueId>,
+    pub(in crate::ir::generator) parameter_values: Vec<SsaValueId>,
 }
 
 /// Frame-free scalar blocks and provisional phis produced by bytecode analysis.
-pub(super) struct UnfinalizedGraph {
-    pub entry: BlockId,
-    pub blocks: Vec<ScalarBlock>,
-    pub phi_candidates: std::collections::BTreeMap<SsaValueId, PhiCandidate>,
-    pub this_value: Option<SsaValueId>,
-    pub parameter_values: Vec<SsaValueId>,
+pub(in crate::ir::generator) struct ScalarGraph {
+    pub(in crate::ir::generator) entry: BlockId,
+    pub(in crate::ir::generator) blocks: Vec<ScalarBlock>,
+    pub(in crate::ir::generator) phi_candidates:
+        std::collections::BTreeMap<SsaValueId, PhiCandidate>,
+    pub(in crate::ir::generator) this_value: Option<SsaValueId>,
+    pub(in crate::ir::generator) parameter_values: Vec<SsaValueId>,
 }
 
-/// Lowers frame operands, simplifies scalar phis, and finalizes SSA blocks.
-pub(super) fn construct(graph: UnfinalizedGraph) -> Result<Graph, Error> {
-    let UnfinalizedGraph {
+/// Simplifies and materializes scalar phis into final SSA blocks.
+pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
+    let ScalarGraph {
         entry,
         blocks,
         phi_candidates,
@@ -41,7 +42,7 @@ pub(super) fn construct(graph: UnfinalizedGraph) -> Result<Graph, Error> {
     let simplified = simplify_phis(phi_candidates)
         .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
     let blocks = finalization::finalize(blocks, simplified)?;
-    Ok(Graph {
+    Ok(SsaGraph {
         entry,
         blocks,
         this_value,

@@ -5,13 +5,13 @@ use crate::{
     jvm::{ConstantValue, Method, code::Instruction, method},
 };
 
-/// Method-level context needed to classify instruction fallibility.
+/// Method-level state needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Context {
+pub(super) struct Fallibility {
     return_can_throw: bool,
 }
 
-impl Context {
+impl Fallibility {
     pub fn for_method(method: &Method) -> Self {
         // Exact structured-locking analysis is path- and alias-sensitive, so
         // explicit monitor use conservatively makes every method exit fallible.

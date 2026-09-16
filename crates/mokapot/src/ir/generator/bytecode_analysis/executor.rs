@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use super::{Executor, Value};
+use super::{Executor, FrameValue};
 use crate::{
     ir::generator::{
         bytecode_analysis::jvm::Frame,
@@ -30,13 +30,13 @@ impl<'method> Executor<'method> {
         let frame_parameters = parameter_values
             .iter()
             .copied()
-            .map(Value::Ssa)
+            .map(FrameValue::Ordinary)
             .collect::<Vec<_>>();
         let initial_frame = Frame::for_method_entry(
             &method.descriptor,
             body.max_locals,
             body.max_stack,
-            receiver_value.map(Value::Ssa),
+            receiver_value.map(FrameValue::Ordinary),
             &frame_parameters,
         )?;
         Ok(Self {

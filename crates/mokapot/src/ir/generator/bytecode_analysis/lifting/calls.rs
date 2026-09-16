@@ -3,7 +3,7 @@ use crate::{
         expression::Expression,
         generator::{
             bytecode_analysis::{
-                RegisterInstruction, Value,
+                FrameValue, LiftedEffect,
                 jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
@@ -20,7 +20,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -39,7 +39,7 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -54,8 +54,8 @@ impl Context<'_, '_, '_> {
         &mut self,
         descriptor: &MethodDescriptor,
         definition: Option<SsaValueId>,
-        expr: Expression<Value>,
-    ) -> Result<RegisterInstruction, Error> {
+        expr: Expression<FrameValue>,
+    ) -> Result<LiftedEffect, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
                 let value = definition
@@ -63,9 +63,9 @@ impl Context<'_, '_, '_> {
                 self.frame
                     .stack
                     .push(value.into(), ValueCategory::of_field_type(return_type))?;
-                Ok(RegisterInstruction::Definition { value, expr })
+                Ok(LiftedEffect::Definition { value, expr })
             }
-            ReturnType::Void => Ok(RegisterInstruction::Effect(expr)),
+            ReturnType::Void => Ok(LiftedEffect::Effect(expr)),
         }
     }
 }

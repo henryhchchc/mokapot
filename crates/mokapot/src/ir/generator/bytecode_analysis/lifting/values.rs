@@ -3,7 +3,7 @@ use crate::{
         expression::{Expression, MathOperation},
         generator::{
             bytecode_analysis::{
-                RegisterInstruction, Value,
+                FrameValue, LiftedEffect,
                 jvm::{ValueCategory, ValueCategory::Category1},
                 lifting::Context,
             },
@@ -18,32 +18,28 @@ impl Context<'_, '_, '_> {
         &mut self,
         constant: ConstantValue,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), category)?;
         let expr = Expression::Const(constant);
-        Ok(RegisterInstruction::Definition { value, expr })
+        Ok(LiftedEffect::Definition { value, expr })
     }
 
-    pub(super) fn increment(
-        &mut self,
-        idx: u16,
-        constant: i32,
-    ) -> Result<RegisterInstruction, Error> {
+    pub(super) fn increment(&mut self, idx: u16, constant: i32) -> Result<LiftedEffect, Error> {
         let value = self.definition_id()?;
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value.into(), Category1)?;
         let expr = MathOperation::Increment(base, constant).into();
-        Ok(RegisterInstruction::Definition { value, expr })
+        Ok(LiftedEffect::Definition { value, expr })
     }
 
     pub(super) fn load(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let value = *self.frame.locals.get(idx, category)?;
-        if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
+        if matches!(value, FrameValue::ReturnAddress(_) | FrameValue::Invalid) {
             let pc = self.pc;
             return Err(Error::malformed(
                 Some(pc),
@@ -51,33 +47,33 @@ impl Context<'_, '_, '_> {
             ));
         }
         self.frame.stack.push(value, category)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(LiftedEffect::Erased)
     }
 
     pub(super) fn load_unchecked(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         self.frame.stack.push(value, category)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(LiftedEffect::Erased)
     }
 
     pub(super) fn store(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         let value = self.frame.stack.pop(category)?;
         self.frame.locals.set(idx, value, category)?;
-        Ok(RegisterInstruction::Erased)
+        Ok(LiftedEffect::Erased)
     }
 
-    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<RegisterInstruction, Error> {
+    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<LiftedEffect, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value.into(), Category1)?;
         let expr = Expression::New(class.clone());
-        Ok(RegisterInstruction::Definition { value, expr })
+        Ok(LiftedEffect::Definition { value, expr })
     }
 }

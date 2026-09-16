@@ -1,33 +1,14 @@
-//! Register-form instructions used while lifting structural blocks.
+//! Register-form effects produced while lifting non-control bytecode.
 
-use super::Value;
-use crate::{
-    ir::{
-        expression::{Condition, Expression},
-        generator::identity::SsaValueId,
-    },
-    jvm::code::ProgramCounter,
-};
+use super::FrameValue;
+use crate::ir::{expression::Expression, generator::identity::SsaValueId};
 
 #[derive(Debug)]
-pub(crate) enum RegisterInstruction {
+pub(in crate::ir::generator) enum LiftedEffect {
     Erased,
     Definition {
         value: SsaValueId,
-        expr: Expression<Value>,
+        expr: Expression<FrameValue>,
     },
-    Effect(Expression<Value>),
-    Jump {
-        condition: Option<Condition<Value>>,
-    },
-    Switch {
-        match_value: Value,
-    },
-    Return(Option<Value>),
-    Throw(Value),
-    Subroutine {
-        value: SsaValueId,
-        continuation: ProgramCounter,
-    },
-    SubroutineReturn(Value),
+    Effect(Expression<FrameValue>),
 }

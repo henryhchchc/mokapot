@@ -1,7 +1,7 @@
 use crate::{
     ir::generator::{
         bytecode_analysis::{
-            RegisterInstruction,
+            LiftedEffect,
             jvm::ValueCategory::{Category1, Category2},
             lifting::Context,
         },
@@ -14,7 +14,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,
-    ) -> Result<RegisterInstruction, Error> {
+    ) -> Result<LiftedEffect, Error> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)
@@ -29,7 +29,10 @@ impl Context<'_, '_, '_> {
                 self.store(*idx, Category2)
             }
             WideInstruction::IInc(idx, constant) => self.increment(*idx, *constant),
-            WideInstruction::Ret(idx) => self.subroutine_return(*idx),
+            WideInstruction::Ret(_) => Err(Error::internal_at(
+                self.pc,
+                "a wide ret reached non-control lifting",
+            )),
         }
     }
 }

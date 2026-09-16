@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Emits final identities, blocks, and provenance from scalar SSA blocks.
-pub(super) fn emit(method: &Method, ssa: ssa::Graph) -> Result<MokaIRMethod, Error> {
+pub(super) fn emit(method: &Method, ssa: ssa::SsaGraph) -> Result<MokaIRMethod, Error> {
     let mut allocation = Allocation::default();
     let this_value = ssa
         .this_value
