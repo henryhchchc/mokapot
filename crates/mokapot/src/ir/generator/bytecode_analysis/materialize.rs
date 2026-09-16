@@ -35,8 +35,11 @@ impl Analyzer<'_, '_> {
             .enumerate()
             .map(|(index, &location)| scalar_block_id(index + offset).map(|id| (location, id)))
             .collect::<Result<BTreeMap<_, _>, _>>()?;
+        let entry_block = *block_ids_by_location
+            .get(&entry_location)
+            .ok_or_else(|| Error::internal("the entry location has no scalar block"))?;
         let preheader = has_preheader.then(|| BlockId::new(0));
-        let entry = preheader.unwrap_or(block_ids_by_location[&entry_location]);
+        let entry = preheader.unwrap_or(entry_block);
 
         let preheader_block = preheader.map(|id| {
             Ok(ScalarBlock {
@@ -46,7 +49,7 @@ impl Analyzer<'_, '_> {
                 terminator: TerminatorKind::Goto,
                 terminator_source: None,
                 successors: vec![Successor {
-                    target: block_ids_by_location[&entry_location],
+                    target: entry_block,
                     transfer: ControlTransfer::Unconditional,
                 }],
             })
@@ -59,7 +62,9 @@ impl Analyzer<'_, '_> {
                 .ok_or_else(|| Error::internal("a reachable location was not executed"))?;
             materialize_block(
                 analyzed,
-                block_ids_by_location[location],
+                *block_ids_by_location
+                    .get(location)
+                    .ok_or_else(|| Error::internal("an executed location has no scalar block"))?,
                 &block_ids_by_location,
             )
         });
@@ -131,7 +136,9 @@ fn materialize_block(
         .successors
         .into_iter()
         .map(|successor| {
-            let target = block_ids_by_location[&successor.target];
+            let target = *block_ids_by_location
+                .get(&successor.target)
+                .ok_or_else(|| Error::internal("a successor target has no scalar block"))?;
             let transfer = successor
                 .transfer
                 .try_map_values(FrameValue::into_ordinary_ssa_value_id)?;
