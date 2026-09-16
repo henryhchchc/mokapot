@@ -1,4 +1,4 @@
-//! Collects, simplifies, and materializes scalar SSA in semantic blocks.
+//! Simplifies scalar phis and materializes them in semantic SSA blocks.
 
 mod finalization;
 mod model;
@@ -6,26 +6,15 @@ mod simplify;
 
 use crate::ir::{
     BlockId,
-    generator::{error::Error, identity::SsaValueId},
+    generator::{bytecode_analysis::scalar::ScalarGraph, error::Error, identity::SsaValueId},
 };
 pub(in crate::ir::generator) use model::Block;
-pub(in crate::ir::generator) use model::{PhiCandidate, ScalarBlock, Successor};
 use simplify::simplify_phis;
 
 /// Scalar blocks consumed by final identity allocation and emission.
 pub(in crate::ir::generator) struct SsaGraph {
     pub(in crate::ir::generator) entry: BlockId,
     pub(in crate::ir::generator) blocks: Vec<Block>,
-    pub(in crate::ir::generator) this_value: Option<SsaValueId>,
-    pub(in crate::ir::generator) parameter_values: Vec<SsaValueId>,
-}
-
-/// Frame-free scalar blocks and provisional phis produced by bytecode analysis.
-pub(in crate::ir::generator) struct ScalarGraph {
-    pub(in crate::ir::generator) entry: BlockId,
-    pub(in crate::ir::generator) blocks: Vec<ScalarBlock>,
-    pub(in crate::ir::generator) phi_candidates:
-        std::collections::BTreeMap<SsaValueId, PhiCandidate>,
     pub(in crate::ir::generator) this_value: Option<SsaValueId>,
     pub(in crate::ir::generator) parameter_values: Vec<SsaValueId>,
 }

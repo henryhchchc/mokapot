@@ -5,12 +5,10 @@ use super::model;
 use crate::ir::{
     BlockId, TryMapValues,
     generator::{
+        bytecode_analysis::scalar::{PhiCandidate, ScalarBlock, Successor},
         error::Error,
         identity::SsaValueId,
-        ssa::{
-            model::{Phi, PhiCandidate, ScalarBlock},
-            simplify::SimplifiedPhis,
-        },
+        ssa::{model::Phi, simplify::SimplifiedPhis},
     },
 };
 
@@ -81,7 +79,7 @@ fn finalize_block(
     let terminator = apply_substitutions(terminator, canonical);
     let successors = successors
         .into_iter()
-        .map(|successor| model::Successor {
+        .map(|successor| Successor {
             target: successor.target,
             transfer: apply_substitutions(successor.transfer, canonical),
         })

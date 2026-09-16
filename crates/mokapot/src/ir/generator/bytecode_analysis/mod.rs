@@ -9,6 +9,7 @@ pub(super) mod lifting;
 mod materialize;
 mod model;
 mod phis;
+pub(super) mod scalar;
 
 use std::collections::BTreeMap;
 
@@ -26,7 +27,7 @@ use crate::{
 pub(super) fn analyze(
     method: &Method,
     cfg: &super::bytecode_cfg::BytecodeCfg,
-) -> Result<super::ssa::ScalarGraph, Error> {
+) -> Result<scalar::ScalarGraph, Error> {
     analyzer::analyze(method, cfg)
 }
 

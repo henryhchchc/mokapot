@@ -8,15 +8,12 @@ use super::{
     FrameValue,
     analyzer::Analyzer,
     model::{AnalyzedBlock, Location, PhiDefinition, Predecessor},
+    scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor},
 };
 use crate::ir::{
     BlockId, TerminatorKind, TryMapValues,
     control_flow::ControlTransfer,
-    generator::{
-        error::Error,
-        identity::SsaValueId,
-        ssa::{PhiCandidate, ScalarBlock, ScalarGraph, Successor},
-    },
+    generator::{error::Error, identity::SsaValueId},
 };
 
 impl Analyzer<'_, '_> {

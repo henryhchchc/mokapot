@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::generator::{identity::SsaValueId, ssa::model::PhiCandidate};
+use crate::ir::generator::{bytecode_analysis::scalar::PhiCandidate, identity::SsaValueId};
 
 /// The result of simplifying a set of provisional phi nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     Executor,
     model::{Location, LocationState, PhiDefinition, PhiSite, Predecessor},
+    scalar::ScalarGraph,
 };
 use crate::{
     ir::generator::{
         bytecode_cfg::{BytecodeCfg, HandlerId},
         error::Error,
         identity::SsaValueId,
-        ssa::ScalarGraph,
     },
     jvm::{Method, code::ProgramCounter},
 };

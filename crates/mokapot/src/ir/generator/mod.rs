@@ -4,7 +4,8 @@
 //!
 //! 1. [`bytecode_cfg`] partitions all decoded bytecode into a structural CFG.
 //! 2. [`bytecode_analysis`] analyzes reachable structural blocks, lifts their
-//!    instructions, and constructs explicit predecessor-indexed phis.
+//!    instructions, constructs explicit predecessor-indexed phis, and owns the
+//!    scalar-graph contract consumed by [`ssa`].
 //! 3. [`ssa`] simplifies scalar phis and materializes them in SSA blocks.
 //! 4. [`emission`] assigns public identities and emits the completed [`MokaIRMethod`].
 //!
