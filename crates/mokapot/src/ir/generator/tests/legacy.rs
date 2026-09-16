@@ -1,12 +1,22 @@
 use super::*;
-use crate::jvm::code::WideInstruction;
+use crate::{
+    ir::{
+        BlockId,
+        control_flow::{
+            ControlTransfer,
+            path_condition::{BooleanVariable, BranchGuard, PathValue},
+        },
+        expression::{Condition, Expression},
+    },
+    jvm::code::WideInstruction,
+};
 
 fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
     let id = method
         .source_map()
         .instructions_at(pc)
         .next()
-        .expect("the source PC must survive subroutine expansion");
+        .expect("the source PC must survive lowering");
     method
         .blocks()
         .find(|block| {
@@ -19,8 +29,63 @@ fn block_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &BasicBlock {
         .expect("the mapped instruction must belong to a block")
 }
 
+fn terminator_with_origin(method: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
+    method
+        .source_map()
+        .instructions_at(pc)
+        .find_map(|id| {
+            method
+                .blocks()
+                .map(BasicBlock::terminator)
+                .find(|terminator| terminator.id() == id)
+        })
+        .expect("the source PC must map to a terminator")
+}
+
+fn subroutine_target(call: &Terminator) -> BlockId {
+    let [successor] = call.successors() else {
+        panic!("a jsr must have exactly one subroutine-call arm");
+    };
+    match successor.transfer() {
+        ControlTransfer::SubroutineCall { .. } => successor.target(),
+        transfer => panic!("expected a subroutine-call arm, got {transfer:?}"),
+    }
+}
+
+fn terminator_block(method: &MokaIRMethod, terminator: &Terminator) -> BlockId {
+    method
+        .blocks()
+        .find(|block| block.terminator().id() == terminator.id())
+        .map(BasicBlock::id)
+        .expect("an emitted terminator must belong to a block")
+}
+
+fn return_address_at(
+    method: &MokaIRMethod,
+    pc: ProgramCounter,
+    continuation: ProgramCounter,
+) -> ValueId {
+    method
+        .source_map()
+        .instructions_at(pc)
+        .find_map(|id| {
+            method
+                .blocks()
+                .flat_map(BasicBlock::operations)
+                .find(|operation| operation.id() == id)
+        })
+        .and_then(|operation| match operation.kind() {
+            OperationKind::Definition {
+                value,
+                expr: Expression::ReturnAddress(actual_continuation),
+            } if *actual_continuation == continuation => Some(*value),
+            _ => None,
+        })
+        .expect("a jsr must define its return-address token")
+}
+
 #[test]
-fn expands_a_basic_jsr_ret_pair_to_gotos() {
+fn retains_a_jsr_ret_pair_as_public_subroutine_control_flow() {
     let ir = build(&method(
         [
             (0, Instruction::Jsr(10.into())),
@@ -33,18 +98,38 @@ fn expands_a_basic_jsr_ret_pair_to_gotos() {
     ))
     .unwrap();
 
-    let call = block_with_origin(&ir, 0.into()).terminator();
-    let ret = block_with_origin(&ir, 11.into()).terminator();
-    assert_eq!(call.kind(), &TerminatorKind::Goto);
-    assert_eq!(ret.kind(), &TerminatorKind::Goto);
+    let call = terminator_with_origin(&ir, 0.into());
+    let token = return_address_at(&ir, 0.into(), 3.into());
+    assert_eq!(call.kind(), &TerminatorKind::SubroutineCall);
+    assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
+    assert!(
+        matches!(call.successors(), [successor] if matches!(successor.transfer(), ControlTransfer::SubroutineCall { continuation } if *continuation == 3.into()))
+    );
+
+    let ret = terminator_with_origin(&ir, 11.into());
     assert_eq!(
-        ret.successors()[0].target(),
-        block_with_origin(&ir, 3.into()).id()
+        ret.kind(),
+        &TerminatorKind::SubroutineReturn { address: token }
+    );
+    let [successor] = ret.successors() else {
+        panic!("a single caller must produce one return arm");
+    };
+    assert_eq!(subroutine_target(call), terminator_block(&ir, ret));
+    assert_eq!(successor.target(), block_with_origin(&ir, 3.into()).id());
+    assert_eq!(
+        successor.transfer(),
+        &ControlTransfer::SubroutineReturn {
+            continuation: 3.into(),
+            guard: BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
+                PathValue::Variable(token),
+                PathValue::ReturnAddress(3.into()),
+            ))),
+        }
     );
 }
 
 #[test]
-fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
+fn shares_one_subroutine_body_and_dispatches_each_continuation_by_token() {
     let ir = build(&method(
         [
             (0, Instruction::Jsr(20.into())),
@@ -60,56 +145,88 @@ fn clones_a_shared_subroutine_per_call_context_with_shared_provenance() {
     ))
     .unwrap();
 
-    assert_eq!(ir.source_map().instructions_at(21.into()).count(), 2);
-    assert_eq!(ir.source_map().instructions_at(23.into()).count(), 2);
-    let continuations = ir
-        .source_map()
-        .instructions_at(23.into())
-        .map(|id| {
-            ir.blocks()
-                .find(|block| block.terminator().id() == id)
-                .unwrap()
-                .terminator()
-                .successors()[0]
-                .target()
+    assert_eq!(ir.source_map().instructions_at(21.into()).count(), 1);
+    assert_eq!(ir.source_map().instructions_at(23.into()).count(), 1);
+    assert_eq!(ir.source_map().instructions_at(20.into()).count(), 0);
+    let first_subroutine_target = subroutine_target(terminator_with_origin(&ir, 0.into()));
+    let second_subroutine_target = subroutine_target(terminator_with_origin(&ir, 3.into()));
+    assert_eq!(first_subroutine_target, second_subroutine_target);
+    assert!(matches!(
+        ir.block(first_subroutine_target)
+            .expect("a subroutine-call target must be emitted")
+            .terminator()
+            .kind(),
+        TerminatorKind::SubroutineReturn { .. }
+    ));
+    let ret = terminator_with_origin(&ir, 23.into());
+    let TerminatorKind::SubroutineReturn { address } = ret.kind() else {
+        panic!("ret must materialize as a subroutine return");
+    };
+    let continuations = ret
+        .successors()
+        .iter()
+        .map(|successor| match successor.transfer() {
+            ControlTransfer::SubroutineReturn {
+                continuation,
+                guard,
+            } => {
+                assert_eq!(
+                    guard,
+                    &BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
+                        PathValue::Variable(*address),
+                        PathValue::ReturnAddress(*continuation),
+                    )))
+                );
+                (*continuation, successor.target())
+            }
+            transfer => panic!("expected a subroutine return arm, got {transfer:?}"),
         })
-        .collect::<HashSet<_>>();
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(
         continuations,
-        HashSet::from([
-            block_with_origin(&ir, 3.into()).id(),
-            block_with_origin(&ir, 6.into()).id(),
+        BTreeMap::from([
+            (3.into(), block_with_origin(&ir, 3.into()).id()),
+            (6.into(), block_with_origin(&ir, 6.into()).id())
         ])
     );
 }
 
 #[test]
-fn supports_nested_subroutines_and_returns_to_an_ancestor() {
-    let ir = build(&method(
+fn accepts_recursive_and_multiple_return_subroutines() {
+    let recursive = method(
         [
-            (0, Instruction::Jsr(20.into())),
+            (0, Instruction::Jsr(10.into())),
             (3, Instruction::Return),
-            (20, Instruction::AStore0),
-            (21, Instruction::Jsr(30.into())),
-            (24, Instruction::Ret(0)),
-            (30, Instruction::AStore1),
-            (31, Instruction::Ret(0)),
+            (10, Instruction::AStore0),
+            (11, Instruction::Jsr(10.into())),
+            (14, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
-    ))
-    .unwrap();
-
-    assert_eq!(
-        block_with_origin(&ir, 31.into()).terminator().successors()[0].target(),
-        block_with_origin(&ir, 3.into()).id()
     );
-    assert_eq!(ir.source_map().instructions_at(24.into()).count(), 0);
+    assert!(build(&recursive).is_ok());
+
+    let multiple_returns = method(
+        [
+            (0, Instruction::Jsr(10.into())),
+            (3, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::IConst0),
+            (12, Instruction::IfEq(20.into())),
+            (15, Instruction::Ret(0)),
+            (20, Instruction::Ret(0)),
+        ],
+        "()V",
+        vec![],
+    );
+    let ir = build(&multiple_returns).expect("multiple ret sites must share the same activation");
+    assert_eq!(ir.source_map().instructions_at(15.into()).count(), 1);
+    assert_eq!(ir.source_map().instructions_at(20.into()).count(), 1);
 }
 
 #[test]
-fn expands_jsr_w_and_wide_ret() {
-    let ir = method(
+fn supports_jsr_w_and_wide_ret() {
+    let mut method = method(
         [
             (0, Instruction::JsrW(10.into())),
             (5, Instruction::Return),
@@ -119,22 +236,23 @@ fn expands_jsr_w_and_wide_ret() {
         "()V",
         vec![],
     );
-    let mut ir = ir;
-    ir.body.as_mut().unwrap().max_locals = 301;
-    let ir = build(&ir).unwrap();
+    method.body.as_mut().unwrap().max_locals = 301;
+    let ir = build(&method).unwrap();
 
+    assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
+    let token = return_address_at(&ir, 0.into(), 5.into());
     assert_eq!(
-        block_with_origin(&ir, 0.into()).terminator().kind(),
-        &TerminatorKind::Goto
+        terminator_with_origin(&ir, 0.into()).kind(),
+        &TerminatorKind::SubroutineCall
     );
-    assert_eq!(
-        block_with_origin(&ir, 11.into()).terminator().kind(),
-        &TerminatorKind::Goto
-    );
+    assert!(matches!(
+        terminator_with_origin(&ir, 11.into()).kind(),
+        TerminatorKind::SubroutineReturn { address } if *address == token
+    ));
 }
 
 #[test]
-fn gives_each_context_its_own_handler_entry_and_caught_value() {
+fn shares_handler_entry_and_source_provenance_across_subroutine_callers() {
     let ir = build(&method(
         [
             (0, Instruction::Jsr(20.into())),
@@ -167,67 +285,29 @@ fn gives_each_context_its_own_handler_entry_and_caught_value() {
                 .map(|value| (block.id(), value))
         })
         .collect::<Vec<_>>();
-    assert_eq!(handler_values.len(), 2);
-    assert_ne!(handler_values[0].1, handler_values[1].1);
-    assert!(handler_values.iter().all(|&(block, value)| {
-        ir.definition_of(value) == Some(ValueDefinition::CaughtException(block))
-            && ir
-                .source_map()
-                .origins_of(ir.block(block).unwrap().terminator().id())
-                .count()
-                == 0
-    }));
-    assert_eq!(ir.source_map().instructions_at(31.into()).count(), 2);
+    assert_eq!(handler_values.len(), 1);
+    assert_eq!(
+        ir.definition_of(handler_values[0].1),
+        Some(ValueDefinition::CaughtException(handler_values[0].0))
+    );
+    assert_eq!(ir.source_map().instructions_at(31.into()).count(), 1);
 }
 
 #[test]
-fn rejects_recursive_and_root_level_legacy_returns() {
-    let recursive = method(
-        [
-            (0, Instruction::Jsr(10.into())),
-            (3, Instruction::Return),
-            (10, Instruction::AStore0),
-            (11, Instruction::Jsr(10.into())),
-            (14, Instruction::Ret(0)),
-        ],
-        "()V",
-        vec![],
-    );
-    assert!(matches!(
-        build(&recursive),
-        Err(MokaIRBuildError::UnsupportedLegacySubroutine {
-            pc,
-            kind: UnsupportedLegacySubroutine::RecursiveEntry,
-        }) if pc == 11.into()
-    ));
-
+fn rejects_root_and_scalar_legacy_returns() {
     let root_ret = method([(0, Instruction::Ret(0))], "()V", vec![]);
-    assert!(matches!(
-        build(&root_ret),
-        Err(MokaIRBuildError::InvalidFrame {
-            pc: Some(pc),
-            ..
-        }) if pc == 0.into()
-    ));
+    assert!(build(&root_ret).is_err());
 
-    let multiple_returns = method(
+    let scalar_ret = method(
         [
-            (0, Instruction::Jsr(10.into())),
-            (3, Instruction::Return),
-            (10, Instruction::AStore0),
-            (11, Instruction::IConst0),
-            (12, Instruction::IfEq(20.into())),
-            (15, Instruction::Ret(0)),
-            (20, Instruction::Ret(0)),
+            (0, Instruction::IConst0),
+            (1, Instruction::IStore0),
+            (2, Instruction::Ret(0)),
         ],
         "()V",
         vec![],
     );
-    assert!(matches!(
-        build(&multiple_returns),
-        Err(MokaIRBuildError::UnsupportedLegacySubroutine {
-            kind: UnsupportedLegacySubroutine::AmbiguousReturn,
-            ..
-        })
-    ));
+    assert!(
+        matches!(build(&scalar_ret), Err(MokaIRBuildError::MalformedBytecode { pc: Some(pc), kind: crate::ir::MalformedBytecode::InvalidSubroutineReturn }) if pc == 2.into())
+    );
 }

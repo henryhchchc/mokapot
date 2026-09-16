@@ -28,6 +28,23 @@ fn reports_a_missing_jump_target_at_that_target() {
 }
 
 #[test]
+fn rejects_a_missing_structural_target_even_when_its_source_is_unreachable() {
+    let method = method(
+        [(0, Instruction::Return), (1, Instruction::Goto(10.into()))],
+        "()V",
+        vec![],
+    );
+
+    assert!(matches!(
+        build(&method),
+        Err(MokaIRBuildError::MalformedBytecode {
+            pc: Some(pc),
+            kind: MalformedBytecode::MissingInstruction,
+        }) if pc == 10.into()
+    ));
+}
+
+#[test]
 fn reports_frame_sources_at_the_executed_instruction() {
     let method = method([(3, Instruction::IReturn)], "()I", vec![]);
 

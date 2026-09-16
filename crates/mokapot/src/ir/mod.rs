@@ -11,6 +11,9 @@
 //! operations remain ordered but define no value. Potentially throwing
 //! operations have distinct normal and exceptional successor arms, and each
 //! reachable handler context has a distinct caught-exception value.
+//! Legacy `jsr`/`ret` control flow remains explicit: subroutine-call arms carry
+//! their continuation, while return arms are guarded by exact return-address
+//! tokens.
 //!
 //! [`SourceMap`] records sparse, bidirectional JVM provenance. There is no
 //! bytecode-to-IR bijection: erased stack operations may have no IR node, while
@@ -55,9 +58,7 @@ mod terminator;
 
 pub use basic_block::BasicBlock;
 pub use data_flow::{DefUseChain, UseSite};
-pub use generator::{
-    MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedLegacySubroutine,
-};
+pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError};
 pub use identity::{BlockId, EdgeId, InstructionId, ValueId};
 pub use method::MokaIRMethod;
 pub use operation::{Operation, OperationKind};

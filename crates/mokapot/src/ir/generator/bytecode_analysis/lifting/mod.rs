@@ -8,7 +8,7 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{Executor, NodeAddress, RegisterInstruction, Value};
+use super::{Executor, RegisterInstruction, Value};
 use crate::{
     ir::{
         expression::{Condition, Conversion, LockOperation, MathOperation, NaNTreatment},
@@ -27,7 +27,7 @@ use crate::{
 
 struct Context<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
-    addr: NodeAddress,
+    pc: crate::jvm::code::ProgramCounter,
     frame: &'frame mut Frame<Value>,
 }
 
@@ -39,8 +39,9 @@ impl Executor<'_> {
     pub(super) fn lift_register_instruction(
         &mut self,
         jvm_instruction: &JVM,
-        addr: NodeAddress,
+        pc: crate::jvm::code::ProgramCounter,
         frame: &mut Frame<Value>,
+        jsr_continuation: Option<crate::jvm::code::ProgramCounter>,
     ) -> Result<RegisterInstruction, Error> {
         #[allow(
             clippy::enum_glob_use,
@@ -48,14 +49,9 @@ impl Executor<'_> {
         )]
         use JVM::*;
 
-        if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(Error::internal(
-                "a JVM instruction is attached to a synthetic node",
-            ));
-        }
         let mut cx = Context {
             executor: self,
-            addr,
+            pc,
             frame,
         };
 
@@ -186,11 +182,12 @@ impl Executor<'_> {
             IfICmpLt(target) => cx.comparison_branch(*target, Condition::LessThan),
             IfICmpGt(target) => cx.comparison_branch(*target, Condition::GreaterThan),
             IfICmpLe(target) => cx.comparison_branch(*target, Condition::LessThanOrEqual),
-            Goto(target) | GotoW(target) => Ok(RegisterInstruction::Jump {
-                condition: None,
-                target: *target,
-            }),
-            Jsr(target) | JsrW(target) => cx.subroutine_call(*target),
+            Goto(_) | GotoW(_) => Ok(RegisterInstruction::Jump { condition: None }),
+            Jsr(_) | JsrW(_) => {
+                cx.subroutine_call(jsr_continuation.ok_or_else(|| {
+                    Error::internal_at(pc, "a jsr has no structural continuation")
+                })?)
+            }
             Ret(idx) => cx.subroutine_return((*idx).into()),
             TableSwitch {
                 range,
@@ -251,7 +248,7 @@ impl Context<'_, '_, '_> {
     }
 
     fn definition_id(&mut self) -> Result<SsaValueId, Error> {
-        self.executor.definition_id_at(self.addr)
+        self.executor.definition_id_at(self.pc)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>

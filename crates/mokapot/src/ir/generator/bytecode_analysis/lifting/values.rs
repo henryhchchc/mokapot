@@ -44,9 +44,7 @@ impl Context<'_, '_, '_> {
     ) -> Result<RegisterInstruction, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         if matches!(value, Value::ReturnAddress(_) | Value::Invalid) {
-            let pc = self.addr.source_pc().ok_or_else(|| {
-                Error::internal("a local-variable load has no source instruction")
-            })?;
+            let pc = self.pc;
             return Err(Error::malformed(
                 Some(pc),
                 MalformedBytecode::InvalidFrameValue,

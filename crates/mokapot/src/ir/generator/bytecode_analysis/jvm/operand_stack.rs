@@ -187,10 +187,6 @@ impl<V> OperandStack<V> {
             })
     }
 
-    pub(super) fn values(&self) -> impl Iterator<Item = &V> {
-        self.values.iter().map(|it| &it.value)
-    }
-
     pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&V, Error> {
         let [value] = self.values.as_slice() else {
             return Err(Error::InvalidSlotLayout);

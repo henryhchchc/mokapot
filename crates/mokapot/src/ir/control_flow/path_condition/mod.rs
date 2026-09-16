@@ -31,7 +31,10 @@ use cover::Cover;
 pub use branch_guard::BranchGuard;
 pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
-pub use predicate::Value;
+pub use predicate::PathValue;
+
+/// Backward-compatible name for a path-predicate operand.
+pub type Value<OP = crate::ir::ValueId> = PathValue<OP>;
 
 pub(super) fn analyze(
     cfg: ControlFlowGraph<'_>,

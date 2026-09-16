@@ -3,7 +3,7 @@ use crate::{
         self, TryMapValues, ValueId,
         expression::{Condition, Predicate},
     },
-    jvm::ConstantValue,
+    jvm::{ConstantValue, code::ProgramCounter},
 };
 
 use super::BooleanVariable;
@@ -72,26 +72,29 @@ where
     }
 }
 
-/// An operand or constant parameterized by the lifting operand representation.
+/// An operand, constant, or legacy return-address token in a path predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
-pub enum Value<OP = ValueId> {
+pub enum PathValue<OP = ValueId> {
     /// A value produced by the IR.
     Variable(OP),
     /// A JVM constant embedded in the condition.
     Constant(ConstantValue),
+    /// A legacy subroutine return-address token.
+    ReturnAddress(ProgramCounter),
 }
 
-impl<OP, OUT> TryMapValues<OUT> for Value<OP> {
+impl<OP, OUT> TryMapValues<OUT> for PathValue<OP> {
     type Value = OP;
-    type Mapped = Value<OUT>;
+    type Mapped = PathValue<OUT>;
 
     fn try_map_values<E>(
         self,
         mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<Value<OUT>, E> {
+    ) -> Result<PathValue<OUT>, E> {
         match self {
-            Self::Variable(value) => remap(value).map(Value::Variable),
-            Self::Constant(value) => Ok(Value::Constant(value)),
+            Self::Variable(value) => remap(value).map(PathValue::Variable),
+            Self::Constant(value) => Ok(PathValue::Constant(value)),
+            Self::ReturnAddress(continuation) => Ok(PathValue::ReturnAddress(continuation)),
         }
     }
 }
@@ -117,21 +120,21 @@ impl Predicate {
         values
             .into_iter()
             .filter_map(|value| match value {
-                Value::Variable(value) => Some(value),
-                Value::Constant(_) => None,
+                PathValue::Variable(value) => Some(value),
+                PathValue::Constant(_) | PathValue::ReturnAddress(_) => None,
             })
             .copied()
             .collect()
     }
 }
 
-impl<OP> From<OP> for Value<OP> {
+impl<OP> From<OP> for PathValue<OP> {
     fn from(value: OP) -> Self {
         Self::Variable(value)
     }
 }
 
-impl From<ConstantValue> for Value {
+impl From<ConstantValue> for PathValue {
     fn from(value: ConstantValue) -> Self {
         Self::Constant(value)
     }
@@ -163,6 +166,25 @@ mod tests {
         assert_eq!(
             less_than_or_equal,
             BooleanVariable::Negative(Condition::LessThan(2, 1))
+        );
+    }
+
+    #[test]
+    fn maps_only_ssa_variables() {
+        let continuation = ProgramCounter::from(0x12);
+        assert_eq!(
+            PathValue::<u8>::ReturnAddress(continuation)
+                .try_map_values(|_| Err::<u16, _>("unreachable")),
+            Ok(PathValue::ReturnAddress(continuation))
+        );
+        assert_eq!(
+            PathValue::<u8>::Constant(ConstantValue::Integer(3))
+                .try_map_values(|_| Err::<u16, _>("unreachable")),
+            Ok(PathValue::Constant(ConstantValue::Integer(3)))
+        );
+        assert_eq!(
+            PathValue::Variable(2_u8).try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
+            Ok(PathValue::Variable(12_u16))
         );
     }
 }

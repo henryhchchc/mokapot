@@ -4,11 +4,11 @@ pub mod path_condition;
 
 use std::{collections::HashMap, hash::Hash};
 
-use self::path_condition::{BranchGuard, PathCondition, SolvingBudget, Value};
+use self::path_condition::{BranchGuard, PathCondition, PathValue, SolvingBudget};
 use super::{BasicBlock, BlockId, EdgeId, TryMapValues, ValueId};
 use crate::{
     ir::expression::{Condition, Predicate},
-    jvm::references::ClassRef,
+    jvm::{code::ProgramCounter, references::ClassRef},
 };
 
 /// The semantics of one control-flow successor arm.
@@ -19,12 +19,28 @@ use crate::{
 pub enum ControlTransfer<OP: Eq + Hash = ValueId> {
     /// An unguarded transfer that always reaches its target.
     ///
-    /// Block formation elides this arm into the target's block only when the
-    /// source instruction cannot raise, so a fallible operation still ends its
-    /// block.
+    /// Structural CFG construction elides this arm into the target's block
+    /// only when the source instruction cannot raise, so a fallible operation
+    /// still ends its block.
     Unconditional,
     /// A conditional transfer guarded by a conjunction of literals.
-    Conditional(BranchGuard<Condition<Value<OP>>>),
+    Conditional(BranchGuard<Condition<PathValue<OP>>>),
+    /// Enters a legacy bytecode subroutine.
+    ///
+    /// `continuation` identifies the return-address token created by the
+    /// corresponding `jsr` or `jsr_w` instruction.
+    SubroutineCall {
+        /// The instruction to resume after the subroutine returns.
+        continuation: ProgramCounter,
+    },
+    /// Returns from a legacy bytecode subroutine when `guard` matches its
+    /// return-address token.
+    SubroutineReturn {
+        /// The continuation selected by this return arm.
+        continuation: ProgramCounter,
+        /// The exact return-address-token guard for this arm.
+        guard: BranchGuard<Condition<PathValue<OP>>>,
+    },
     /// An exceptional outcome selected by this catch type.
     ///
     /// `None` denotes a catch-all exception-table entry. Arm order retains
@@ -48,6 +64,16 @@ where
     ) -> Result<ControlTransfer<OUT>, E> {
         Ok(match self {
             Self::Unconditional => ControlTransfer::Unconditional,
+            Self::SubroutineCall { continuation } => {
+                ControlTransfer::SubroutineCall { continuation }
+            }
+            Self::SubroutineReturn {
+                continuation,
+                guard,
+            } => ControlTransfer::SubroutineReturn {
+                continuation,
+                guard: guard.try_map_values(|value| value.try_map_values(&mut remap))?,
+            },
             Self::Exception(exception) => ControlTransfer::Exception(exception),
             Self::Unwind => ControlTransfer::Unwind,
             Self::Conditional(guard) => ControlTransfer::Conditional(
@@ -189,9 +215,12 @@ mod tests;
 mod mapping_tests {
     use super::{
         ControlTransfer, TryMapValues,
-        path_condition::{BooleanVariable, BranchGuard, Value},
+        path_condition::{BooleanVariable, BranchGuard, PathValue, Value},
     };
-    use crate::{ir::expression::Condition, jvm::ConstantValue};
+    use crate::{
+        ir::expression::Condition,
+        jvm::{ConstantValue, code::ProgramCounter},
+    };
 
     #[test]
     fn maps_guard_variables_without_changing_constants_or_polarity() {
@@ -242,6 +271,34 @@ mod mapping_tests {
             ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
                 Condition::IsNull(Value::Variable(0_u16)),
             )))
+        );
+    }
+
+    #[test]
+    fn maps_subroutine_return_guards_but_not_continuations() {
+        let continuation = ProgramCounter::from(0x12);
+        let transfer = ControlTransfer::SubroutineReturn {
+            continuation,
+            guard: BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
+                PathValue::Variable(1_u8),
+                PathValue::ReturnAddress(continuation),
+            ))),
+        };
+
+        assert_eq!(
+            transfer.try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
+            Ok(ControlTransfer::SubroutineReturn {
+                continuation,
+                guard: BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
+                    PathValue::Variable(11_u16),
+                    PathValue::ReturnAddress(continuation),
+                ))),
+            })
+        );
+        assert_eq!(
+            ControlTransfer::<u8>::SubroutineCall { continuation }
+                .try_map_values(|_| Err::<u16, _>("unreachable")),
+            Ok(ControlTransfer::SubroutineCall { continuation })
         );
     }
 }

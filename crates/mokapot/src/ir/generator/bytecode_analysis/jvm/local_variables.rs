@@ -163,10 +163,6 @@ impl<V> LocalVariables<V> {
         self.slots.len() == other.slots.len()
     }
 
-    pub(super) fn values(&self) -> impl Iterator<Item = &V> {
-        self.slots.iter().filter_map(LocalSlot::value)
-    }
-
     pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&V>> {
         self.slots.iter().map(LocalSlot::value)
     }

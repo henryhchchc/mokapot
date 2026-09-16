@@ -1,95 +1,22 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use super::{
-    Executor, Node, NodeAddress, NodeGraph, RegisterInstruction, Value, fallibility, solver,
-    subroutine::{self, ReturnAddress},
-};
+use super::{Executor, Value};
 use crate::{
     ir::generator::{
         bytecode_analysis::jvm::Frame,
         error::{Error, MalformedBytecode},
         identity::SsaValueId,
     },
-    jvm::{
-        Method,
-        code::{MethodBody, ProgramCounter},
-        method,
-    },
+    jvm::{Method, method},
 };
 
 impl<'method> Executor<'method> {
-    pub fn execute(
-        &mut self,
-        addr: NodeAddress,
-        incoming_frame: Frame<Value>,
-    ) -> Result<Node, Error> {
-        self.execute_at(addr, incoming_frame)
-            .map_err(|error| error.at_instruction_if_present(addr.diagnostic_pc()))
-    }
-
-    fn execute_at(
-        &mut self,
-        addr: NodeAddress,
-        incoming_frame: Frame<Value>,
-    ) -> Result<Node, Error> {
-        let (instruction, outgoing_edges) = match addr {
-            NodeAddress::Handler { .. } => {
-                let instruction = RegisterInstruction::HandlerEntry;
-                let normal_frame = incoming_frame.clone();
-                let outgoing_edges = self.build_outgoing_edges(
-                    addr,
-                    &incoming_frame,
-                    normal_frame,
-                    &instruction,
-                    false,
-                )?;
-                (instruction, outgoing_edges)
-            }
-            NodeAddress::Unwind => (RegisterInstruction::Unwind, Vec::new()),
-            NodeAddress::Bytecode { pc, .. } => {
-                let mut normal_frame = incoming_frame.clone();
-                let jvm_instruction = self
-                    .body
-                    .instruction_at(pc)
-                    .ok_or_else(|| {
-                        Error::malformed(Some(pc), MalformedBytecode::MissingInstruction)
-                    })?
-                    .clone();
-                let can_throw_synchronously =
-                    self.fallibility.is_synchronously_fallible(&jvm_instruction);
-                let instruction =
-                    self.lift_register_instruction(&jvm_instruction, addr, &mut normal_frame)?;
-                let outgoing_edges = self.build_outgoing_edges(
-                    addr,
-                    &incoming_frame,
-                    normal_frame,
-                    &instruction,
-                    can_throw_synchronously,
-                )?;
-                (instruction, outgoing_edges)
-            }
-        };
-
-        Ok(Node {
-            incoming_frame,
-            instruction,
-            outgoing_edges,
-        })
-    }
-
-    pub const fn body(&self) -> &MethodBody {
-        self.body
-    }
-
-    pub fn for_method(method: &'method Method) -> Result<Self, Error> {
+    pub(super) fn for_method(method: &'method Method) -> Result<Self, Error> {
         let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
-        let entry_addr = {
-            let (first_pc, _) = body
-                .instructions
-                .entry_point()
-                .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
-            NodeAddress::entry(first_pc)
-        };
+        body.instructions
+            .entry_point()
+            .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
+
         let mut value_id_allocator = ValueIdAllocator::default();
         let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
             .then(|| value_id_allocator.new_value_id())
@@ -112,146 +39,30 @@ impl<'method> Executor<'method> {
             receiver_value.map(Value::Ssa),
             &frame_parameters,
         )?;
-        let executor = Self {
+        Ok(Self {
             body,
-            fallibility: fallibility::Context::for_method(method),
-            subroutine_expander: subroutine::Expander::new(entry_addr),
             definition_ids: BTreeMap::new(),
-            caught_exception_ids: BTreeMap::new(),
             value_id_allocator,
             receiver_value,
             parameter_values,
-            entry_addr,
             initial_frame,
-        };
-        Ok(executor)
-    }
-
-    pub fn build_node_graph(mut self) -> Result<NodeGraph, Error> {
-        let nodes = self.build_reachable_nodes()?;
-        let merge_identities = nodes
-            .values()
-            .flat_map(|node| node.incoming_frame.iter_values())
-            .filter_map(|value| match value {
-                Value::Merged(identity) => Some(identity.to_owned()),
-                Value::Ssa(_) | Value::ReturnAddress(_) | Value::Invalid => None,
-            })
-            .collect::<BTreeSet<_>>();
-        let phi_values = merge_identities
-            .into_iter()
-            .map(|identity| self.new_value_id().map(|value| (identity, value)))
-            .collect::<Result<_, _>>()?;
-        Ok(NodeGraph {
-            entry_addr: self.entry_addr,
-            initial_frame: self.initial_frame,
-            nodes,
-            phi_values,
-            receiver_value: self.receiver_value,
-            parameter_values: self.parameter_values,
         })
     }
 
-    pub fn build_reachable_nodes(&mut self) -> Result<BTreeMap<NodeAddress, Node>, Error> {
-        let entry_addr = self.entry_addr;
-        let initial_frame = self.initial_frame.clone();
-        solver::build_to_fixpoint(self, entry_addr, initial_frame)
-    }
-
-    fn new_value_id(&mut self) -> Result<SsaValueId, Error> {
+    pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, Error> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub fn definition_id_at(&mut self, addr: NodeAddress) -> Result<SsaValueId, Error> {
-        if !matches!(addr, NodeAddress::Bytecode { .. }) {
-            return Err(Error::internal(
-                "an ordinary value definition has no bytecode instruction",
-            ));
-        }
-        if let Some(&id) = self.definition_ids.get(&addr) {
+    pub(super) fn definition_id_at(
+        &mut self,
+        pc: crate::jvm::code::ProgramCounter,
+    ) -> Result<SsaValueId, Error> {
+        if let Some(&id) = self.definition_ids.get(&pc) {
             return Ok(id);
         }
         let id = self.new_value_id()?;
-        self.definition_ids.insert(addr, id);
+        self.definition_ids.insert(pc, id);
         Ok(id)
-    }
-
-    pub fn caught_exception_id_at(&mut self, addr: NodeAddress) -> Result<SsaValueId, Error> {
-        if !matches!(addr, NodeAddress::Handler { .. }) {
-            return Err(Error::internal(
-                "a caught-exception definition is not a handler entry",
-            ));
-        }
-        if let Some(&id) = self.caught_exception_ids.get(&addr) {
-            return Ok(id);
-        }
-        let id = self.new_value_id()?;
-        self.caught_exception_ids.insert(addr, id);
-        Ok(id)
-    }
-
-    pub fn next_program_counter(&self, pc: ProgramCounter) -> Result<ProgramCounter, Error> {
-        self.body
-            .instructions
-            .next_pc_of(&pc)
-            .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
-    }
-
-    pub fn fallthrough_addr(&mut self, addr: NodeAddress) -> Result<NodeAddress, Error> {
-        let pc = addr
-            .source_pc()
-            .ok_or_else(|| Error::internal("a fallthrough has no source instruction"))?;
-        let context = addr
-            .context()
-            .ok_or_else(|| Error::internal_at(pc, "a bytecode instruction has no context"))?;
-        self.subroutine_expander
-            .bytecode_addr(self.next_program_counter(pc)?, context)
-    }
-
-    pub fn bytecode_addr_at(
-        &mut self,
-        addr: NodeAddress,
-        target: ProgramCounter,
-    ) -> Result<NodeAddress, Error> {
-        let context = addr
-            .context()
-            .ok_or_else(|| Error::internal("a control-flow source has no context"))?;
-        self.subroutine_expander.bytecode_addr(target, context)
-    }
-
-    pub fn exception_handler_addr(
-        &mut self,
-        addr: NodeAddress,
-        handler: ProgramCounter,
-    ) -> Result<NodeAddress, Error> {
-        let context = addr
-            .context()
-            .ok_or_else(|| Error::internal("an exception source has no context"))?;
-        self.subroutine_expander.handler_addr(handler, context)
-    }
-
-    pub fn unwind_addr(&mut self) -> Result<NodeAddress, Error> {
-        self.subroutine_expander.register_addr(NodeAddress::Unwind)
-    }
-
-    pub fn enter_subroutine(
-        &mut self,
-        addr: NodeAddress,
-        target: ProgramCounter,
-    ) -> Result<(NodeAddress, ReturnAddress), Error> {
-        let pc = addr
-            .source_pc()
-            .ok_or_else(|| Error::internal("a subroutine call has no source instruction"))?;
-        let continuation = self.next_program_counter(pc)?;
-        self.subroutine_expander
-            .enter_subroutine(addr, target, continuation)
-    }
-
-    pub fn return_from(
-        &mut self,
-        addr: NodeAddress,
-        address: ReturnAddress,
-    ) -> Result<NodeAddress, Error> {
-        self.subroutine_expander.return_from(addr, address)
     }
 }
 
@@ -261,49 +72,12 @@ pub(super) struct ValueIdAllocator {
 }
 
 impl ValueIdAllocator {
-    fn new_value_id(&mut self) -> Result<SsaValueId, Error> {
+    pub(super) fn new_value_id(&mut self) -> Result<SsaValueId, Error> {
         let id = SsaValueId::new(self.next_value_idx);
         self.next_value_idx = self
             .next_value_idx
             .checked_add(1)
             .ok_or_else(|| Error::internal("the scalar value identity space is exhausted"))?;
         Ok(id)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{ir::generator::tests::method, jvm::code::Instruction as JvmInstruction};
-
-    #[test]
-    fn reprocessing_loop_allocates_identities_only_for_definitions() {
-        let method = method(
-            [
-                (0, JvmInstruction::IConst0),
-                (1, JvmInstruction::IStore0),
-                (2, JvmInstruction::ILoad0),
-                (3, JvmInstruction::IConst1),
-                (4, JvmInstruction::IAdd),
-                (5, JvmInstruction::IStore0),
-                (6, JvmInstruction::Goto(2.into())),
-            ],
-            "()V",
-            vec![],
-        );
-        let mut executor = Executor::for_method(&method).expect("valid method");
-        executor.build_reachable_nodes().expect("valid loop");
-
-        assert_eq!(executor.definition_ids.len(), 3);
-        assert_eq!(executor.value_id_allocator.next_value_idx, 3);
-
-        for k in [0, 3, 4] {
-            let entry = NodeAddress::entry(k.into());
-            assert!(executor.definition_ids.contains_key(&entry));
-        }
-        for k in [1, 2, 5, 6] {
-            let entry = NodeAddress::entry(k.into());
-            assert!(!executor.definition_ids.contains_key(&entry));
-        }
     }
 }

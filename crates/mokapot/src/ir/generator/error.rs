@@ -1,14 +1,14 @@
 use crate::{ir::generator::bytecode_analysis::jvm::FrameError, jvm::code::ProgramCounter};
 
-/// Why reachable JVM bytecode cannot be converted to Moka IR.
+/// Why JVM bytecode cannot be converted to Moka IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
 #[non_exhaustive]
 pub enum MalformedBytecode {
     /// The code attribute contains no entry instruction.
     #[display("the code attribute has no entry instruction")]
     MissingEntry,
-    /// A reachable control-flow target has no instruction.
-    #[display("a reachable control-flow target has no instruction")]
+    /// A control-flow target has no instruction.
+    #[display("a control-flow target has no instruction")]
     MissingInstruction,
     /// An instruction that must fall through has no following instruction.
     #[display("an instruction has no required fallthrough")]
@@ -19,18 +19,12 @@ pub enum MalformedBytecode {
     /// An ordinary value operation observed a legacy or unavailable frame value.
     #[display("an instruction uses an unavailable frame value")]
     InvalidFrameValue,
-}
-
-/// A legacy `jsr`/`ret` control-flow form the generator cannot represent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
-#[non_exhaustive]
-pub enum UnsupportedLegacySubroutine {
-    /// A subroutine recursively enters the same target.
-    #[display("recursive subroutine entry")]
-    RecursiveEntry,
-    /// One activation returns from more than one `ret` instruction.
-    #[display("one activation returns from multiple instructions")]
-    AmbiguousReturn,
+    /// An exception-table range is empty, reversed, or not instruction-aligned.
+    #[display("an exception-table range is invalid")]
+    InvalidExceptionRange,
+    /// A `tableswitch` range and jump table have different cardinalities.
+    #[display("a tableswitch range does not match its jump table")]
+    InvalidTableSwitch,
 }
 
 /// An error that occurs when generating Moka IR.
@@ -49,27 +43,13 @@ pub enum Error {
     /// The method does not have a code body.
     #[error("the method does not have a body")]
     NoMethodBody,
-    /// Reachable JVM bytecode is malformed.
+    /// JVM bytecode structure is malformed.
     #[error("malformed JVM bytecode{location}: {kind}", location = display_location(*pc))]
     MalformedBytecode {
         /// The relevant bytecode location, when one exists.
         pc: Option<ProgramCounter>,
         /// The invalid bytecode condition.
         kind: MalformedBytecode,
-    },
-    /// Reachable legacy subroutine control flow is not representable.
-    #[error("unsupported legacy subroutine at instruction {pc}: {kind}")]
-    UnsupportedLegacySubroutine {
-        /// The legacy instruction that exposed the unsupported form.
-        pc: ProgramCounter,
-        /// The unsupported subroutine pattern.
-        kind: UnsupportedLegacySubroutine,
-    },
-    /// Legacy subroutine expansion reached its deterministic safety limit.
-    #[error("legacy subroutine expansion exceeded the {limit}-location budget")]
-    LegacySubroutineExpansionLimit {
-        /// The maximum number of expanded locations.
-        limit: usize,
     },
     /// Private construction phases disagreed about an intermediate invariant.
     ///
@@ -144,7 +124,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "malformed JVM bytecode at instruction #000A: a reachable control-flow target has no instruction"
+            "malformed JVM bytecode at instruction #000A: a control-flow target has no instruction"
         );
     }
 }

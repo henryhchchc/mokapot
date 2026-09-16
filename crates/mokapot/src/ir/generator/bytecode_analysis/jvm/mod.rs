@@ -1,4 +1,4 @@
-//! JVM frame representation used while constructing the instruction graph.
+//! JVM frame representation used while analyzing structural blocks.
 
 mod error;
 mod local_variables;
@@ -23,8 +23,6 @@ pub(crate) enum Position {
     Stack(usize),
 }
 
-type PairedSlotValues<'a, V> = Vec<(Option<&'a V>, Option<&'a V>)>;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Frame<V> {
     pub locals: LocalVariables<V>,
@@ -38,25 +36,15 @@ impl<V> Frame<V> {
         self
     }
 
-    pub fn iter_values(&self) -> impl Iterator<Item = &V> {
-        self.locals.values().chain(self.stack.values())
+    pub fn value_at(&self, position: Position) -> Option<&V> {
+        match position {
+            Position::Local(index) => self.locals.slot_values().nth(index).flatten(),
+            Position::Stack(index) => self.stack.slot_values().nth(index).flatten(),
+        }
     }
 
     pub fn handler_exception(&self) -> Result<&V, FrameError> {
         self.stack.single_value(ValueCategory::Category1)
-    }
-
-    pub fn paired_slot_values<'a>(
-        &'a self,
-        other: &'a Self,
-    ) -> Result<PairedSlotValues<'a, V>, FrameError> {
-        self.ensure_compatible_shape(other)?;
-        Ok(self
-            .locals
-            .slot_values()
-            .chain(self.stack.slot_values())
-            .zip(other.locals.slot_values().chain(other.stack.slot_values()))
-            .collect())
     }
 
     pub fn merge_from_with(

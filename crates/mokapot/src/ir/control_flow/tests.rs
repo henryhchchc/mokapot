@@ -1,8 +1,10 @@
 use super::*;
 use crate::ir::{
     BasicBlock, EdgeId, InstructionId, Successor, Terminator, TerminatorKind,
-    control_flow::path_condition::BooleanVariable, expression::Condition,
+    control_flow::path_condition::{BooleanVariable, PathValue},
+    expression::Condition,
 };
+use crate::jvm::code::ProgramCounter;
 
 fn block(id: u32, successors: Vec<Successor>) -> BasicBlock {
     BasicBlock {
@@ -117,4 +119,52 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
     assert_eq!(conditions[&BlockId::new(1)], conditions[&BlockId::new(3)]);
     assert_eq!(conditions[&BlockId::new(1)], conditions[&BlockId::new(4)]);
     assert_ne!(conditions[&BlockId::new(1)], conditions[&BlockId::new(5)]);
+}
+
+#[test]
+fn subroutine_returns_conjoin_their_token_guards() {
+    let continuation = ProgramCounter::from(0x10);
+    let token_match = Condition::Equal(
+        PathValue::Variable(crate::ir::ValueId::new(0)),
+        PathValue::ReturnAddress(continuation),
+    );
+    let positive: BooleanVariable<Predicate> = token_match.clone().into();
+    let blocks = vec![
+        block(
+            0,
+            vec![Successor {
+                id: EdgeId::new(0),
+                target: BlockId::new(1),
+                transfer: ControlTransfer::Conditional(BranchGuard::of(positive.clone())),
+            }],
+        ),
+        block(
+            1,
+            vec![
+                Successor {
+                    id: EdgeId::new(1),
+                    target: BlockId::new(2),
+                    transfer: ControlTransfer::SubroutineReturn {
+                        continuation,
+                        guard: BranchGuard::of(positive),
+                    },
+                },
+                Successor {
+                    id: EdgeId::new(2),
+                    target: BlockId::new(3),
+                    transfer: ControlTransfer::SubroutineReturn {
+                        continuation: ProgramCounter::from(0x20),
+                        guard: BranchGuard::of(BooleanVariable::Negative(token_match)),
+                    },
+                },
+            ],
+        ),
+        block(2, vec![]),
+        block(3, vec![]),
+    ];
+
+    let conditions = ControlFlowGraph::new(&blocks, BlockId::new(0)).path_conditions();
+
+    assert!(conditions.contains_key(&BlockId::new(2)));
+    assert!(!conditions.contains_key(&BlockId::new(3)));
 }

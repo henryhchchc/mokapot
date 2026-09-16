@@ -46,7 +46,7 @@ Each block contains, in order:
 3. exactly one `Terminator`.
 
 The terminator's ordered `Successor` arms are the authoritative control-flow edges.
-Each arm has a target block and a `ControlTransfer`: unconditional, conditional, exception-table, or unwind.
+Each arm has a target block and a `ControlTransfer`: unconditional, conditional, subroutine call or return, exception-table, or unwind.
 Separate arms remain separate even when they have the same source and target.
 
 ```rust,no_run
@@ -150,8 +150,10 @@ Each reachable handler context starts with a synthetic handler-entry block and a
 Query it with `MokaIRMethod::caught_exception`.
 Synthetic handler entries and unwind nodes do not claim source provenance.
 
-Legacy `jsr` and `ret` subroutines are expanded context-sensitively during lifting.
-Completed MokaIR contains only ordinary control flow; one JVM program counter can therefore correspond to several IR nodes.
+Legacy `jsr` and `ret` subroutines remain explicit in completed MokaIR.
+A `jsr` produces an `Expression::ReturnAddress` token and ends with a `TerminatorKind::SubroutineCall`; its outgoing `ControlTransfer::SubroutineCall` records the continuation.
+A `ret` ends with `TerminatorKind::SubroutineReturn`, whose address operand is matched by one guarded `ControlTransfer::SubroutineReturn` arm per reachable continuation.
+Return-address tokens are distinct from integer constants, so these guards preserve exact legacy control flow even when several call sites share one subroutine body.
 
 ## Source provenance and coverage
 

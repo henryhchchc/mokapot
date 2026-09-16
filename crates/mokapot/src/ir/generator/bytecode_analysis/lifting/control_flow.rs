@@ -14,23 +14,23 @@ use crate::jvm::code::ProgramCounter;
 impl Context<'_, '_, '_> {
     pub(super) fn unary_branch(
         &mut self,
-        target: ProgramCounter,
+        _target: ProgramCounter,
         condition: impl FnOnce(Value) -> Condition<Value>,
     ) -> Result<RegisterInstruction, Error> {
         let operand = self.frame.stack.pop(Category1)?;
         let condition = Some(condition(operand));
-        Ok(RegisterInstruction::Jump { condition, target })
+        Ok(RegisterInstruction::Jump { condition })
     }
 
     pub(super) fn comparison_branch(
         &mut self,
-        target: ProgramCounter,
+        _target: ProgramCounter,
         condition: impl FnOnce(Value, Value) -> Condition<Value>,
     ) -> Result<RegisterInstruction, Error> {
         let rhs = self.frame.stack.pop(Category1)?;
         let lhs = self.frame.stack.pop(Category1)?;
         let condition = Some(condition(lhs, rhs));
-        Ok(RegisterInstruction::Jump { condition, target })
+        Ok(RegisterInstruction::Jump { condition })
     }
 
     pub(super) fn switch(
@@ -38,10 +38,9 @@ impl Context<'_, '_, '_> {
         default: ProgramCounter,
         branches: BTreeMap<i32, ProgramCounter>,
     ) -> Result<RegisterInstruction, Error> {
+        let _ = (default, branches);
         Ok(RegisterInstruction::Switch {
             match_value: self.frame.stack.pop(Category1)?,
-            branches,
-            default,
         })
     }
 
@@ -66,11 +65,16 @@ impl Context<'_, '_, '_> {
 
     pub(super) fn subroutine_call(
         &mut self,
-        target: ProgramCounter,
+        continuation: ProgramCounter,
     ) -> Result<RegisterInstruction, Error> {
-        let (target, return_address) = self.executor.enter_subroutine(self.addr, target)?;
-        self.frame.stack.push(return_address.into(), Category1)?;
-        Ok(RegisterInstruction::Subroutine { target })
+        let value = self.definition_id()?;
+        self.frame
+            .stack
+            .push(Value::ReturnAddress(value), Category1)?;
+        Ok(RegisterInstruction::Subroutine {
+            value,
+            continuation,
+        })
     }
 }
 use std::collections::BTreeMap;
