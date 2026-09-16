@@ -3,7 +3,6 @@
 mod analyzer;
 mod block_execution;
 mod executor;
-mod instruction;
 pub(super) mod jvm;
 pub(super) mod lifting;
 mod materialize;
@@ -12,8 +11,6 @@ mod phis;
 pub(super) mod scalar;
 
 use std::collections::BTreeMap;
-
-pub(super) use instruction::LiftedEffect;
 
 use crate::{
     ir::generator::{

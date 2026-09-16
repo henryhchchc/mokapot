@@ -65,7 +65,7 @@ fn merging_incompatible_frame_shapes_returns_an_error() {
     let source = frame(true, &descriptor, 0, 2).expect("valid frame");
 
     assert!(matches!(
-        target.merge_from_with(source, |_, _, _| false),
+        target.merge_from_with(source, |_, _, _| Ok(())),
         Err(Error::IncompatibleFrameShape)
     ));
 }

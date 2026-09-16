@@ -170,21 +170,18 @@ impl<V> OperandStack<V> {
                 .eq(other.values.iter().map(|value| value.category))
     }
 
-    pub(super) fn merge_from_with(
+    pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(usize, &mut V, V) -> bool,
-    ) -> bool {
+        mut merge_values: impl FnMut(usize, &mut V, V) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut slot = 0;
-        self.values
-            .iter_mut()
-            .zip(other.values)
-            .fold(false, |changed, (lhs, rhs)| {
-                slot += lhs.category.slot_count() - 1;
-                let value_changed = merge_values(slot, &mut lhs.value, rhs.value);
-                slot += 1;
-                value_changed || changed
-            })
+        for (lhs, rhs) in self.values.iter_mut().zip(other.values) {
+            slot += lhs.category.slot_count() - 1;
+            merge_values(slot, &mut lhs.value, rhs.value)?;
+            slot += 1;
+        }
+        Ok(())
     }
 
     pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&V, Error> {

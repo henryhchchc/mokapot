@@ -1,11 +1,14 @@
 use crate::{
-    ir::generator::{
-        bytecode_analysis::{
-            LiftedEffect,
-            jvm::ValueCategory::{Category1, Category2},
-            lifting::Context,
+    ir::{
+        OperationKind,
+        generator::{
+            bytecode_analysis::{
+                FrameValue,
+                jvm::ValueCategory::{Category1, Category2},
+                lifting::Context,
+            },
+            error::Error,
         },
-        error::Error,
     },
     jvm::code::WideInstruction,
 };
@@ -14,7 +17,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)

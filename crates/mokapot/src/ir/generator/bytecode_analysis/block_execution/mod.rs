@@ -5,7 +5,7 @@ mod terminator;
 use std::collections::BTreeMap;
 
 use super::{
-    FrameValue, LiftedEffect,
+    FrameValue,
     analyzer::Analyzer,
     model::{AnalyzedBlock, AnalyzedSuccessor, Frame, Location},
 };
@@ -14,7 +14,7 @@ use crate::{
         bytecode_cfg::{self, StructuralBlockId, StructuralTerminator},
         error::{Error, MalformedBytecode},
     },
-    ir::{OperationKind, TerminatorKind, control_flow::ControlTransfer},
+    ir::{TerminatorKind, control_flow::ControlTransfer},
 };
 
 impl Analyzer<'_, '_> {
@@ -95,11 +95,11 @@ impl Analyzer<'_, '_> {
                 .instruction_at(pc)
                 .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingInstruction))?
                 .clone();
-            let lifted = self
+            let operation = self
                 .executor
                 .lift_instruction(&instruction, pc, &mut frame)
                 .map_err(|error| error.at_instruction(pc))?;
-            if let Some(operation) = operation_of(lifted) {
+            if let Some(operation) = operation {
                 operations.push((pc, operation));
             }
         }
@@ -172,16 +172,5 @@ impl Analyzer<'_, '_> {
             }
         }
         Ok(outputs)
-    }
-}
-
-fn operation_of(instruction: LiftedEffect) -> Option<OperationKind<FrameValue>> {
-    match instruction {
-        LiftedEffect::Definition { value, expr } => Some(OperationKind::Definition {
-            value: FrameValue::Ordinary(value),
-            expr,
-        }),
-        LiftedEffect::Effect(expr) => Some(OperationKind::Effect { expr }),
-        LiftedEffect::Erased => None,
     }
 }

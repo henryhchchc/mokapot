@@ -7,10 +7,11 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{Executor, FrameValue, LiftedEffect};
+use super::{Executor, FrameValue};
 use crate::{
     ir::{
-        expression::{Conversion, LockOperation, MathOperation, NaNTreatment},
+        OperationKind,
+        expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
         generator::{
             bytecode_analysis::jvm::{
                 Frame, StackOperation, ValueCategory,
@@ -23,6 +24,20 @@ use crate::{
     jvm::{ConstantValue, code::Instruction as JVM},
     types::{field_type::FieldType, method_descriptor::ReturnType},
 };
+
+/// Builds the definition operation produced by a lifted expression.
+///
+/// This is the only place a lifted identity is wrapped as an ordinary frame
+/// value: materialization rejects the return-address and invalid variants.
+const fn definition_operation(
+    value: SsaValueId,
+    expr: Expression<FrameValue>,
+) -> OperationKind<FrameValue> {
+    OperationKind::Definition {
+        value: FrameValue::Ordinary(value),
+        expr,
+    }
+}
 
 struct Context<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
@@ -40,7 +55,7 @@ impl Executor<'_> {
         jvm_instruction: &JVM,
         pc: crate::jvm::code::ProgramCounter,
         frame: &mut Frame<FrameValue>,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         #[allow(
             clippy::enum_glob_use,
             reason = "this match exhaustively dispatches the JVM instruction enum"
@@ -177,7 +192,7 @@ impl Executor<'_> {
                 name,
                 descriptor,
             } => cx.invoke_dynamic(descriptor, *bootstrap_method_index, name),
-            Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(LiftedEffect::Erased),
+            Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
             New(class) => cx.new_object(class),
             CheckCast(target) => cx.conversion(
                 |value| Conversion::CheckCast(value, target.clone()),
@@ -204,14 +219,18 @@ impl Context<'_, '_, '_> {
     fn monitor(
         &mut self,
         operation: impl FnOnce(FrameValue) -> LockOperation<FrameValue>,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(LiftedEffect::Effect(operation(object_ref).into()))
+        let expr = operation(object_ref).into();
+        Ok(Some(OperationKind::Effect { expr }))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<LiftedEffect, Error> {
+    fn stack_effect(
+        &mut self,
+        operation: StackOperation,
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         self.frame.stack.apply(operation)?;
-        Ok(LiftedEffect::Erased)
+        Ok(None)
     }
 
     fn definition_id(&mut self) -> Result<SsaValueId, Error> {
@@ -230,12 +249,12 @@ impl Context<'_, '_, '_> {
         &mut self,
         operation: impl FnOnce(FrameValue) -> MathOperation<FrameValue>,
         category: ValueCategory,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         self.with_def(|value, frame| {
             let operand = frame.stack.pop(category)?;
             frame.stack.push(value.into(), category)?;
             let expr = operation(operand).into();
-            Ok(LiftedEffect::Definition { value, expr })
+            Ok(Some(definition_operation(value, expr)))
         })
     }
 
@@ -243,7 +262,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         operation: impl FnOnce(FrameValue, FrameValue) -> MathOperation<FrameValue>,
         category: ValueCategory,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         self.with_def(|value, frame| {
             operations::lift_binary_math(frame, value, operation, category)
         })
@@ -254,7 +273,7 @@ impl Context<'_, '_, '_> {
         conversion: impl FnOnce(FrameValue) -> Conversion<FrameValue>,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })

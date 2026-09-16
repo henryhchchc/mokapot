@@ -47,21 +47,22 @@ impl<V> Frame<V> {
         self.stack.single_value(ValueCategory::Category1)
     }
 
-    pub fn merge_from_with(
+    pub fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(Position, &mut V, V) -> bool,
-    ) -> Result<bool, FrameError> {
-        self.ensure_compatible_shape(&other)?;
-        let locals_changed = self
-            .locals
+        mut merge_values: impl FnMut(Position, &mut V, V) -> Result<(), E>,
+    ) -> Result<(), E>
+    where
+        E: From<FrameError>,
+    {
+        self.ensure_compatible_shape(&other).map_err(E::from)?;
+        self.locals
             .merge_from_with(other.locals, |index, lhs, rhs| {
                 merge_values(Position::Local(index), lhs, rhs)
-            });
-        let stack_changed = self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
+            })?;
+        self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
             merge_values(Position::Stack(index), lhs, rhs)
-        });
-        Ok(locals_changed || stack_changed)
+        })
     }
 
     fn ensure_compatible_shape(&self, other: &Self) -> Result<(), FrameError> {

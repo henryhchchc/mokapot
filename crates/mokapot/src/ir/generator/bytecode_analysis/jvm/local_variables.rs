@@ -23,24 +23,24 @@ impl<V> LocalSlot<V> {
         }
     }
 
-    fn merge_from_with(
+    fn merge_from_with<E>(
         &mut self,
         other: Self,
-        join_values: impl FnOnce(&mut V, V) -> bool,
-    ) -> bool {
+        join_values: impl FnOnce(&mut V, V) -> Result<(), E>,
+    ) -> Result<(), E> {
         use LocalSlot::{Reserved, Unavailable, Unset, Value};
         match (self, other) {
             (Value(lhs), Value(rhs)) if lhs.category == rhs.category => {
                 join_values(&mut lhs.value, rhs.value)
             }
-            (Reserved, Reserved) | (Unset, Unset | Value(_)) | (Unavailable, _) => false,
+            (Reserved, Reserved) | (Unset, Unset | Value(_)) | (Unavailable, _) => Ok(()),
             (slot @ Value(_), Unset) => {
                 *slot = Unset;
-                true
+                Ok(())
             }
             (slot, Reserved | Unavailable | Value(_)) | (slot @ Reserved, _) => {
                 *slot = Unavailable;
-                true
+                Ok(())
             }
         }
     }
@@ -146,17 +146,15 @@ impl<V> LocalVariables<V> {
         }
     }
 
-    pub(super) fn merge_from_with(
+    pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(usize, &mut V, V) -> bool,
-    ) -> bool {
-        self.slots.iter_mut().zip(other.slots).enumerate().fold(
-            false,
-            |changed, (index, (lhs, rhs))| {
-                lhs.merge_from_with(rhs, |lhs, rhs| merge_values(index, lhs, rhs)) || changed
-            },
-        )
+        mut merge_values: impl FnMut(usize, &mut V, V) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for (index, (lhs, rhs)) in self.slots.iter_mut().zip(other.slots).enumerate() {
+            lhs.merge_from_with(rhs, |lhs, rhs| merge_values(index, lhs, rhs))?;
+        }
+        Ok(())
     }
 
     pub(super) fn has_same_shape(&self, other: &Self) -> bool {

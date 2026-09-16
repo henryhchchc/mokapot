@@ -1,9 +1,11 @@
+use super::definition_operation;
 use crate::{
     ir::{
+        OperationKind,
         expression::Expression,
         generator::{
             bytecode_analysis::{
-                FrameValue, LiftedEffect,
+                FrameValue,
                 jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
@@ -20,7 +22,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -39,7 +41,7 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -55,7 +57,7 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         definition: Option<SsaValueId>,
         expr: Expression<FrameValue>,
-    ) -> Result<LiftedEffect, Error> {
+    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
                 let value = definition
@@ -63,9 +65,9 @@ impl Context<'_, '_, '_> {
                 self.frame
                     .stack
                     .push(value.into(), ValueCategory::of_field_type(return_type))?;
-                Ok(LiftedEffect::Definition { value, expr })
+                Ok(Some(definition_operation(value, expr)))
             }
-            ReturnType::Void => Ok(LiftedEffect::Effect(expr)),
+            ReturnType::Void => Ok(Some(OperationKind::Effect { expr })),
         }
     }
 }

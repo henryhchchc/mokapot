@@ -29,24 +29,18 @@ impl Analyzer<'_, '_> {
         for contribution in frames {
             let existing_phis = &self.phi_definitions;
             let allocator = &mut self.executor.value_id_allocator;
-            let mut merge_error = None;
             merged
                 .merge_from_with(contribution, |position, lhs, rhs| {
-                    let site = PhiSite { location, position };
-                    match merge_value(site, lhs, rhs, existing_phis, &mut active_phis, allocator) {
-                        Ok(changed) => changed,
-                        Err(error) => {
-                            merge_error = Some(error);
-                            false
-                        }
-                    }
+                    merge_value(
+                        PhiSite { location, position },
+                        lhs,
+                        rhs,
+                        existing_phis,
+                        &mut active_phis,
+                        allocator,
+                    )
                 })
-                .map_err(|source| {
-                    Error::from(source).at_instruction_if_present(self.pc(location))
-                })?;
-            if let Some(error) = merge_error {
-                return Err(error.at_instruction_if_present(self.pc(location)));
-            }
+                .map_err(|error| error.at_instruction_if_present(self.pc(location)))?;
         }
 
         let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
@@ -90,20 +84,18 @@ fn merge_value(
     existing_phis: &BTreeMap<PhiSite, PhiDefinition>,
     active_phis: &mut BTreeMap<PhiSite, (SsaValueId, PhiKind)>,
     allocator: &mut ValueIdAllocator,
-) -> Result<bool, Error> {
+) -> Result<(), Error> {
     if *lhs == rhs {
-        return Ok(false);
+        return Ok(());
     }
     let Some(kind) = PhiKind::of(*lhs).filter(|kind| Some(*kind) == PhiKind::of(rhs)) else {
-        let changed = *lhs != FrameValue::Invalid;
         *lhs = FrameValue::Invalid;
-        return Ok(changed);
+        return Ok(());
     };
     let result = if let Some(&(result, active_kind)) = active_phis.get(&site) {
         if active_kind != kind {
-            let changed = *lhs != FrameValue::Invalid;
             *lhs = FrameValue::Invalid;
-            return Ok(changed);
+            return Ok(());
         }
         result
     } else {
@@ -118,10 +110,8 @@ fn merge_value(
         result
     };
 
-    let merged = kind.frame_value(result);
-    let frame_changed = *lhs != merged;
-    *lhs = merged;
-    Ok(frame_changed)
+    *lhs = kind.frame_value(result);
+    Ok(())
 }
 
 fn phi_inputs(
