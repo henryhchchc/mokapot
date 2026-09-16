@@ -40,15 +40,14 @@ impl Analyzer<'_, '_> {
         pc: ProgramCounter,
     ) -> Result<LoweredTerminator, Error> {
         let result = match &block.terminator {
-            StructuralTerminator::Fallthrough { target } => (
-                if block.exceptional_successors.is_empty() {
+            StructuralTerminator::Fallthrough { target } => {
+                let terminator_kind = if block.exceptional_successors.is_empty() {
                     TerminatorKind::Goto
                 } else {
                     TerminatorKind::Fallible
-                },
-                vec![unconditional(*target, frame)],
-                None,
-            ),
+                };
+                (terminator_kind, vec![unconditional(*target, frame)], None)
+            }
             StructuralTerminator::Goto { target } => (
                 TerminatorKind::Goto,
                 vec![unconditional(*target, frame)],
@@ -78,11 +77,10 @@ impl Analyzer<'_, '_> {
                 };
                 (TerminatorKind::Return(value), Vec::new(), None)
             }
-            StructuralTerminator::Throw => (
-                TerminatorKind::Throw(frame.stack.pop(Category1)?),
-                Vec::new(),
-                None,
-            ),
+            StructuralTerminator::Throw => {
+                let throw = TerminatorKind::Throw(frame.stack.pop(Category1)?);
+                (throw, Vec::new(), None)
+            }
         };
         Ok(result)
     }
@@ -231,7 +229,7 @@ fn pop_condition(
 ) -> Result<Condition<FrameValue>, Error> {
     if predicate.operand_count() == 1 {
         let operand = frame.stack.pop(Category1)?;
-        return Ok(match predicate {
+        let condition = match predicate {
             BranchPredicate::IsZero => Condition::IsZero(operand),
             BranchPredicate::IsNonZero => Condition::IsNonZero(operand),
             BranchPredicate::IsNegative => Condition::IsNegative(operand),
@@ -241,7 +239,8 @@ fn pop_condition(
             BranchPredicate::IsNull => Condition::IsNull(operand),
             BranchPredicate::IsNotNull => Condition::IsNotNull(operand),
             _ => unreachable!("operand count classifies every branch predicate"),
-        });
+        };
+        return Ok(condition);
     }
 
     let rhs = frame.stack.pop(Category1)?;
