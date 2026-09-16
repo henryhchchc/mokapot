@@ -33,11 +33,11 @@ fn partitions_unreachable_bytecode_after_control_transfers() {
         vec![4.into()],
     ];
     assert_eq!(insn_pcs, expected);
-    assert_eq!(cfg.entry_block(), blocks[0].id);
+    assert_eq!(cfg.entry_block(), StructuralBlockId::from_index(0));
     assert_eq!(
         blocks[0].terminator,
         StructuralTerminator::Goto {
-            target: blocks[2].id
+            target: StructuralBlockId::from_index(2)
         }
     );
 }
@@ -72,7 +72,7 @@ fn keeps_fallible_boundaries_and_synthetic_exception_targets() {
     assert_eq!(
         fallible.terminator,
         StructuralTerminator::Fallthrough {
-            target: cfg.block_at_pc(2.into()).unwrap().id,
+            target: cfg.block_id_at_pc(2.into()).unwrap(),
         }
     );
     assert_eq!(
@@ -82,7 +82,7 @@ fn keeps_fallible_boundaries_and_synthetic_exception_targets() {
             ExceptionalTarget::Unwind
         ]
     );
-    assert_eq!(handler.target, cfg.block_at_pc(10.into()).unwrap().id);
+    assert_eq!(handler.target, cfg.block_id_at_pc(10.into()).unwrap());
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn retains_switch_case_labels_and_parallel_targets() {
 
     let cfg = build(&method).unwrap();
     let switch = cfg.blocks().next().unwrap();
-    let target_at = |pc: u16| cfg.block_at_pc(pc.into()).unwrap().id;
+    let target_at = |pc: u16| cfg.block_id_at_pc(pc.into()).unwrap();
 
     assert_eq!(
         switch.terminator,
@@ -256,15 +256,15 @@ fn represents_jsr_continuation_and_resolves_ret_candidate() {
     let ret = cfg.block_at_pc(4.into()).unwrap();
 
     let expected_jsr_term = StructuralTerminator::Jsr {
-        target: cfg.block_at_pc(4.into()).unwrap().id,
-        continuation: cfg.block_at_pc(1.into()).unwrap().id,
+        target: cfg.block_id_at_pc(4.into()).unwrap(),
+        continuation: cfg.block_id_at_pc(1.into()).unwrap(),
     };
     assert_eq!(jsr.terminator, expected_jsr_term);
     assert_eq!(
         ret.terminator,
         StructuralTerminator::Ret {
             local: 0,
-            continuations: BTreeMap::from([(1.into(), cfg.block_at_pc(1.into()).unwrap().id)]),
+            continuations: BTreeMap::from([(1.into(), cfg.block_id_at_pc(1.into()).unwrap())]),
         }
     );
 }
@@ -292,8 +292,8 @@ fn shared_subroutine_ret_collects_every_call_continuation() {
     assert_eq!(
         ret_continuations(&cfg, 20),
         &BTreeMap::from([
-            (3.into(), cfg.block_at_pc(3.into()).unwrap().id),
-            (6.into(), cfg.block_at_pc(6.into()).unwrap().id),
+            (3.into(), cfg.block_id_at_pc(3.into()).unwrap()),
+            (6.into(), cfg.block_id_at_pc(6.into()).unwrap()),
         ])
     );
 }
@@ -312,11 +312,11 @@ fn disjoint_subroutines_keep_their_ret_candidates_separate() {
     let cfg = build(&method).unwrap();
     assert_eq!(
         ret_continuations(&cfg, 20),
-        &BTreeMap::from([(3.into(), cfg.block_at_pc(3.into()).unwrap().id)])
+        &BTreeMap::from([(3.into(), cfg.block_id_at_pc(3.into()).unwrap())])
     );
     assert_eq!(
         ret_continuations(&cfg, 30),
-        &BTreeMap::from([(6.into(), cfg.block_at_pc(6.into()).unwrap().id)])
+        &BTreeMap::from([(6.into(), cfg.block_id_at_pc(6.into()).unwrap())])
     );
 }
 
@@ -334,11 +334,11 @@ fn outer_subroutine_traversal_follows_nested_call_continuation() {
     let cfg = build(&method).unwrap();
     assert_eq!(
         ret_continuations(&cfg, 13),
-        &BTreeMap::from([(3.into(), cfg.block_at_pc(3.into()).unwrap().id)])
+        &BTreeMap::from([(3.into(), cfg.block_id_at_pc(3.into()).unwrap())])
     );
     assert_eq!(
         ret_continuations(&cfg, 20),
-        &BTreeMap::from([(13.into(), cfg.block_at_pc(13.into()).unwrap().id)])
+        &BTreeMap::from([(13.into(), cfg.block_id_at_pc(13.into()).unwrap())])
     );
 }
 
@@ -355,7 +355,7 @@ fn unreachable_jsr_still_resolves_its_ret_candidate() {
     let cfg = build(&method).unwrap();
     assert_eq!(
         ret_continuations(&cfg, 10),
-        &BTreeMap::from([(4.into(), cfg.block_at_pc(4.into()).unwrap().id)])
+        &BTreeMap::from([(4.into(), cfg.block_id_at_pc(4.into()).unwrap())])
     );
 }
 
@@ -380,7 +380,7 @@ fn subroutine_traversal_reaches_ret_through_exception_handler() {
     let method = method(instructions, "()V", exception_table);
 
     let cfg = build(&method).unwrap();
-    let expected = BTreeMap::from([(3.into(), cfg.block_at_pc(3.into()).unwrap().id)]);
+    let expected = BTreeMap::from([(3.into(), cfg.block_id_at_pc(3.into()).unwrap())]);
     assert_eq!(ret_continuations(&cfg, 13), &expected);
     assert_eq!(ret_continuations(&cfg, 20), &expected);
 }

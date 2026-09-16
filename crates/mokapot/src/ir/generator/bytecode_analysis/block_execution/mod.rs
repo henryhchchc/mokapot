@@ -79,8 +79,7 @@ impl Analyzer<'_, '_> {
         let block = self
             .cfg
             .block(id)
-            .ok_or_else(|| Error::internal("a bytecode location has no structural block"))?
-            .clone();
+            .ok_or_else(|| Error::internal("a bytecode location has no structural block"))?;
         let final_pc = *block
             .instruction_pcs
             .last()
@@ -98,15 +97,13 @@ impl Analyzer<'_, '_> {
                     continue;
                 }
             }
-            let instruction = self
-                .executor
-                .body
-                .instruction_at(pc)
-                .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingInstruction))?
-                .clone();
+            let instruction =
+                self.executor.body.instruction_at(pc).ok_or_else(|| {
+                    Error::malformed(Some(pc), MalformedBytecode::MissingInstruction)
+                })?;
             let operation = self
                 .executor
-                .lift_instruction(&instruction, pc, &mut frame)
+                .lift_instruction(instruction, pc, &mut frame)
                 .map_err(|error| error.at_instruction(pc))?;
             if let Some(operation) = operation {
                 operations.push((pc, operation));
@@ -114,7 +111,7 @@ impl Analyzer<'_, '_> {
         }
 
         let (terminator, mut successors, terminator_operation) = self
-            .lower_terminator(&block, &mut frame, final_pc)
+            .lower_terminator(block, &mut frame, final_pc)
             .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
@@ -144,13 +141,7 @@ impl Analyzer<'_, '_> {
                     .cfg
                     .handler(id)
                     .ok_or_else(|| Error::internal("an exception edge has no handler entry"))?;
-                let caught = if let Some(&value) = self.caught_exceptions.get(&id) {
-                    value
-                } else {
-                    let value = self.executor.new_value_id()?;
-                    self.caught_exceptions.insert(id, value);
-                    value
-                };
+                let caught = self.caught_exception(id)?;
                 Ok(AnalyzedSuccessor {
                     target: Location::Handler(id),
                     transfer: ControlTransfer::Exception(handler.catch_type.clone()),

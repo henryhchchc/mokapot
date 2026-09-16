@@ -141,8 +141,6 @@ pub(in crate::ir::generator) enum StructuralTerminator {
 /// invalidate that assumption.
 #[derive(Debug, Clone)]
 pub(in crate::ir::generator) struct Block {
-    /// Its dense identity.
-    pub id: StructuralBlockId,
     /// The first decoded instruction in the block.
     pub start_pc: ProgramCounter,
     /// Every raw bytecode PC belonging to the block, in bytecode order.
@@ -177,8 +175,11 @@ impl BytecodeCfg {
     }
 
     /// Looks up a bytecode block by its dense identity.
+    ///
+    /// Blocks are stored in identity order and identities are never reordered or
+    /// removed, so the lookup is positional: `id.index()` is the block's index.
     pub(in crate::ir::generator) fn block(&self, id: StructuralBlockId) -> Option<&Block> {
-        self.blocks.get(id.index()).filter(|block| block.id == id)
+        self.blocks.get(id.index())
     }
 
     /// Looks up a bytecode block by its first instruction PC.
@@ -187,7 +188,22 @@ impl BytecodeCfg {
         self.blocks.iter().find(|block| block.start_pc == pc)
     }
 
+    /// Looks up the dense identity of the block starting at `pc`.
+    ///
+    /// An identity is the block's position, so this is the start PC's position
+    /// among block starts.
+    #[cfg(test)]
+    pub(super) fn block_id_at_pc(&self, pc: ProgramCounter) -> Option<StructuralBlockId> {
+        self.blocks
+            .iter()
+            .position(|block| block.start_pc == pc)
+            .map(StructuralBlockId::from_index)
+    }
+
     /// Looks up a synthetic handler entry by its dense identity.
+    ///
+    /// Entries are stored in identity order, so the lookup is positional:
+    /// `id.index()` is the entry's index.
     pub(in crate::ir::generator) fn handler(&self, id: HandlerId) -> Option<&HandlerEntry> {
         self.handlers.get(id.index())
     }

@@ -24,6 +24,23 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) caught_exceptions: BTreeMap<HandlerId, SsaValueId>,
 }
 
+impl Analyzer<'_, '_> {
+    /// Interns the identity of the value caught by `handler`.
+    ///
+    /// Every exceptional arm into one handler-entry location must carry the
+    /// *same* value: distinct values would merge into a phi at stack position 0
+    /// in the handler's entry frame, and `execute_handler` requires that frame
+    /// to hold a single stack value.
+    pub(super) fn caught_exception(&mut self, handler: HandlerId) -> Result<SsaValueId, Error> {
+        if let Some(&value) = self.caught_exceptions.get(&handler) {
+            return Ok(value);
+        }
+        let value = self.executor.new_value_id()?;
+        self.caught_exceptions.insert(handler, value);
+        Ok(value)
+    }
+}
+
 pub(super) fn analyze(method: &Method, cfg: &BytecodeCfg) -> Result<ScalarGraph, Error> {
     Analyzer::new(method, cfg)?.run()
 }

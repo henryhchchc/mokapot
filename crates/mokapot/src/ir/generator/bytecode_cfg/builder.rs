@@ -40,25 +40,9 @@ impl<'method> Builder<'method> {
         self.validate_handler_targets()?;
 
         let leaders = self.collect_leaders(entry_pc)?;
-        let (mut blocks, block_by_start_pc) = self.partition(&leaders)?;
+        let (groups, block_by_start_pc) = self.partition(&leaders)?;
         let handlers = self.build_handlers(&block_by_start_pc)?;
-
-        for block in &mut blocks {
-            let final_pc = *block
-                .instruction_pcs
-                .last()
-                .expect("a structural block is never empty");
-            let instruction = self
-                .body
-                .instruction_at(final_pc)
-                .expect("a structural block PC comes from decoded bytecode");
-            let flow = InstructionFlow::classify(self.body, final_pc, instruction)?;
-            block.terminator =
-                flow.resolve(|target| Self::block_id_at_pc(&block_by_start_pc, target))?;
-            if self.fallibility.is_synchronously_fallible(instruction) {
-                block.exceptional_successors = self.exceptional_successors(final_pc);
-            }
-        }
+        let mut blocks = self.build_blocks(groups, &block_by_start_pc)?;
         Self::resolve_ret_continuations(&mut blocks, &handlers)?;
 
         let entry = Self::block_id_at_pc(&block_by_start_pc, entry_pc)?;
@@ -87,8 +71,7 @@ impl<'method> Builder<'method> {
             BTreeMap::<StructuralBlockId, BTreeMap<ProgramCounter, StructuralBlockId>>::new();
 
         for (subroutine_entry, continuation) in calls {
-            let continuation_pc = blocks
-                .get(continuation.index())
+            let continuation_pc = Self::block_at(blocks, continuation)
                 .ok_or_else(|| Error::internal("a jsr continuation has no structural block"))?
                 .start_pc;
             let mut pending = BTreeSet::from([subroutine_entry]);
@@ -97,7 +80,7 @@ impl<'method> Builder<'method> {
                 if !visited.insert(id) {
                     continue;
                 }
-                let block = blocks.get(id.index()).ok_or_else(|| {
+                let block = Self::block_at(blocks, id).ok_or_else(|| {
                     Error::internal("a subroutine traversal reached no structural block")
                 })?;
                 for target in &block.exceptional_successors {
@@ -286,33 +269,71 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(Some(target), MalformedBytecode::MissingInstruction))
     }
 
+    /// Assigns every block start PC its dense identity and groups the decoded
+    /// instruction PCs under it.
+    ///
+    /// No block is built here: terminators resolve through
+    /// `block_by_start_pc`, so they can only be derived once every start PC has
+    /// an identity.
     fn partition(
         &self,
         leaders: &BTreeSet<ProgramCounter>,
-    ) -> Result<(Vec<Block>, BTreeMap<ProgramCounter, StructuralBlockId>), Error> {
-        let mut blocks = Vec::with_capacity(leaders.len());
+    ) -> Result<(Vec<BlockGroup>, BTreeMap<ProgramCounter, StructuralBlockId>), Error> {
+        let mut groups: Vec<BlockGroup> = Vec::with_capacity(leaders.len());
         let mut block_by_start_pc = BTreeMap::new();
         for (&pc, _) in self.body.instructions.iter() {
             if leaders.contains(&pc) {
-                let id = StructuralBlockId::from_index(blocks.len());
-                blocks.push(Block {
-                    id,
+                let id = StructuralBlockId::from_index(groups.len());
+                groups.push(BlockGroup {
                     start_pc: pc,
-                    instruction_pcs: Vec::new(),
-                    // Filled after every block start has an identity.
-                    terminator: StructuralTerminator::Return {
-                        operand: super::model::ReturnOperand::Void,
-                    },
-                    exceptional_successors: Vec::new(),
+                    instruction_pcs: vec![pc],
                 });
                 block_by_start_pc.insert(pc, id);
+            } else {
+                let group = groups
+                    .last_mut()
+                    .ok_or_else(|| Error::internal_at(pc, "decoded bytecode has no entry block"))?;
+                group.instruction_pcs.push(pc);
             }
-            let block = blocks
-                .last_mut()
-                .ok_or_else(|| Error::internal_at(pc, "decoded bytecode has no entry block"))?;
-            block.instruction_pcs.push(pc);
         }
-        Ok((blocks, block_by_start_pc))
+        Ok((groups, block_by_start_pc))
+    }
+
+    /// Builds every block together with its terminator and exceptional
+    /// successors, which follow from the block's final instruction alone.
+    fn build_blocks(
+        &self,
+        groups: Vec<BlockGroup>,
+        block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
+    ) -> Result<Vec<Block>, Error> {
+        groups
+            .into_iter()
+            .map(|group| {
+                let final_pc = *group
+                    .instruction_pcs
+                    .last()
+                    .expect("a structural block is never empty");
+                let instruction = self
+                    .body
+                    .instruction_at(final_pc)
+                    .expect("a structural block PC comes from decoded bytecode");
+                let flow = InstructionFlow::classify(self.body, final_pc, instruction)?;
+                let terminator =
+                    flow.resolve(|target| Self::block_id_at_pc(block_by_start_pc, target))?;
+                let exceptional_successors =
+                    if self.fallibility.is_synchronously_fallible(instruction) {
+                        self.exceptional_successors(final_pc)
+                    } else {
+                        Vec::new()
+                    };
+                Ok(Block {
+                    start_pc: group.start_pc,
+                    instruction_pcs: group.instruction_pcs,
+                    terminator,
+                    exceptional_successors,
+                })
+            })
+            .collect()
     }
 
     fn build_handlers(
@@ -330,6 +351,11 @@ impl<'method> Builder<'method> {
                 })
             })
             .collect()
+    }
+
+    /// Looks up a block by its dense identity, which is its position.
+    fn block_at(blocks: &[Block], id: StructuralBlockId) -> Option<&Block> {
+        blocks.get(id.index())
     }
 
     fn block_id_at_pc(
@@ -363,6 +389,13 @@ impl<'method> Builder<'method> {
         }
         successors
     }
+}
+
+/// The decoded instruction PCs of one structural block, before its identity is
+/// resolved.
+struct BlockGroup {
+    start_pc: ProgramCounter,
+    instruction_pcs: Vec<ProgramCounter>,
 }
 
 fn catches_everything(entry: &ExceptionTableEntry) -> bool {
