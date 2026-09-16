@@ -59,10 +59,16 @@ pub(super) struct AnalyzedBlock {
     pub(super) successors: Vec<AnalyzedSuccessor>,
 }
 
+/// Analysis state for one location.
+///
+/// A location's successor targets are a pure function of the location, so the
+/// predecessors that contribute to it are fixed once it is reached: the
+/// analyzer only ever adds entries to `contributions`, never removes them.
+/// Therefore `contributions` is non-empty if and only if `entry_frame` and
+/// `execution` are both set; a state is either unreached or fully analyzed.
 #[derive(Debug, Default)]
 pub(super) struct LocationState {
     pub(super) contributions: BTreeMap<Predecessor, Frame>,
     pub(super) entry_frame: Option<Frame>,
     pub(super) execution: Option<AnalyzedBlock>,
-    pub(super) outgoing_frames: BTreeMap<Location, Frame>,
 }

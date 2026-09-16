@@ -33,6 +33,12 @@ type LoweredTerminator = (
 );
 
 impl Analyzer<'_, '_> {
+    /// Lowers the structural terminator of `block`, appending its successors.
+    ///
+    /// The returned successors' target set is a pure function of `block`:
+    /// `frame` only supplies operand values, so a mismatching frame can turn
+    /// the lowering into an error but never change the targets (see
+    /// `Analyzer::execute`).
     pub(super) fn lower_terminator(
         &mut self,
         block: &bytecode_cfg::Block,

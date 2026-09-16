@@ -133,6 +133,12 @@ pub(in crate::ir::generator) enum StructuralTerminator {
 }
 
 /// A maximal bytecode block ending at an ordinary transfer or fallible instruction.
+///
+/// Its successor targets are fixed by construction: `terminator` and
+/// `exceptional_successors` are derived from decoded bytecode alone, never from
+/// an execution frame. Block analysis relies on this to keep the predecessors
+/// of a location monotone; a terminator with frame-dependent targets would
+/// invalidate that assumption.
 #[derive(Debug, Clone)]
 pub(in crate::ir::generator) struct Block {
     /// Its dense identity.

@@ -39,6 +39,11 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
         })
     }
 
+    /// Analyzes every reachable location to a fixed point.
+    ///
+    /// The worklist rests on the invariant documented on [`LocationState`]: a
+    /// location's successor targets never change, so its predecessor set only
+    /// grows and neither an entry frame nor an execution can be revoked.
     fn run(mut self) -> Result<ScalarGraph, Error> {
         let entry = Location::Bytecode(self.cfg.entry_block());
         self.locations
@@ -56,38 +61,14 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 .and_then(|state| state.entry_frame.clone())
                 .ok_or_else(|| Error::internal("a pending block has no entry frame"))?;
             let block = self.execute(location, input)?;
-            let new_outputs = Self::coalesce_output_frames(&block.successors)?;
-            let old_outputs = {
-                let state = self.locations.entry(location).or_default();
-                state.execution = Some(block);
-                std::mem::replace(&mut state.outgoing_frames, new_outputs.clone())
-            };
-
-            let affected = old_outputs
-                .keys()
-                .chain(new_outputs.keys())
-                .copied()
-                .collect::<BTreeSet<_>>();
-            for target in affected {
-                let inputs_are_empty = {
-                    let state = self.locations.entry(target).or_default();
-                    if let Some(frame) = new_outputs.get(&target) {
-                        state
-                            .contributions
-                            .insert(Predecessor::Location(location), frame.clone());
-                    } else {
-                        state.contributions.remove(&Predecessor::Location(location));
-                    }
-                    state.contributions.is_empty()
-                };
-                if inputs_are_empty {
-                    self.locations
-                        .get_mut(&target)
-                        .expect("the target state was just created")
-                        .entry_frame = None;
-                    continue;
-                }
-
+            let outputs = Self::coalesce_output_frames(&block.successors)?;
+            self.locations.entry(location).or_default().execution = Some(block);
+            for (target, frame) in outputs {
+                self.locations
+                    .entry(target)
+                    .or_default()
+                    .contributions
+                    .insert(Predecessor::Location(location), frame);
                 if self.recompute_entry(target)? {
                     pending.insert(target);
                 }

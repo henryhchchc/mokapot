@@ -18,6 +18,15 @@ use crate::{
 };
 
 impl Analyzer<'_, '_> {
+    /// Executes one location, producing its analyzed block.
+    ///
+    /// Precondition: a location's successor *target set* is a pure function of
+    /// the location. The targets come only from a structural block's terminator
+    /// and exception table, never from `input`: the frames differ between
+    /// executions of one location, the targets never do. `Analyzer::run` relies
+    /// on this to treat predecessor sets as monotonically growing, so a
+    /// terminator whose targets depend on the frame (e.g. resolving `ret`
+    /// continuations from it) must revisit that worklist.
     pub(super) fn execute(
         &mut self,
         location: Location,
@@ -158,6 +167,10 @@ impl Analyzer<'_, '_> {
         }
     }
 
+    /// Coalesces the frames of coincident successors into one output per target.
+    ///
+    /// The key set is the location's successor target set, which the analyzer
+    /// assumes to be static (see `Analyzer::execute`).
     pub(super) fn coalesce_output_frames(
         successors: &[AnalyzedSuccessor],
     ) -> Result<BTreeMap<Location, Frame>, Error> {
