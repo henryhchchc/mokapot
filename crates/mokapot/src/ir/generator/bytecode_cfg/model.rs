@@ -79,10 +79,15 @@ impl HandlerId {
 }
 
 /// The target of an exceptional structural control-flow edge.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::ir::generator) enum ExceptionalTarget {
     /// A synthetic entry that installs the caught exception before its block.
-    Handler(HandlerId),
+    Handler {
+        /// The handler entry selected by this exception-table arm.
+        id: HandlerId,
+        /// The exception type selected by this arm, or `None` for catch-all.
+        catch_type: Option<ClassRef>,
+    },
     /// The synthetic exit for an exception that escapes the method.
     Unwind,
 }
@@ -92,8 +97,6 @@ pub(in crate::ir::generator) enum ExceptionalTarget {
 pub(in crate::ir::generator) struct HandlerEntry {
     /// The handler's bytecode entry PC.
     pub handler_pc: ProgramCounter,
-    /// The exception type selected by this table entry, or `None` for catch-all.
-    pub catch_type: Option<ClassRef>,
     /// The decoded bytecode entered after materializing the caught exception.
     pub target: StructuralBlockId,
 }
@@ -155,39 +158,12 @@ impl BytecodeCfg {
         self.entry
     }
 
-    /// Returns all bytecode blocks in dense ID order.
-    ///
-    /// This is intentionally test-only: production consumers address blocks by
-    /// identity or start PC, rather than depending on storage order.
-    #[cfg(test)]
-    pub(super) fn blocks(&self) -> impl ExactSizeIterator<Item = &Block> {
-        self.blocks.iter()
-    }
-
     /// Looks up a bytecode block by its dense identity.
     ///
     /// Blocks are stored in identity order and identities are never reordered or
     /// removed, so the lookup is positional: `id.index()` is the block's index.
     pub(in crate::ir::generator) fn block(&self, id: StructuralBlockId) -> Option<&Block> {
         self.blocks.get(id.index())
-    }
-
-    /// Looks up a bytecode block by its first instruction PC.
-    #[cfg(test)]
-    pub(super) fn block_at_pc(&self, pc: ProgramCounter) -> Option<&Block> {
-        self.blocks.iter().find(|block| block.start_pc == pc)
-    }
-
-    /// Looks up the dense identity of the block starting at `pc`.
-    ///
-    /// An identity is the block's position, so this is the start PC's position
-    /// among block starts.
-    #[cfg(test)]
-    pub(super) fn block_id_at_pc(&self, pc: ProgramCounter) -> Option<StructuralBlockId> {
-        self.blocks
-            .iter()
-            .position(|block| block.start_pc == pc)
-            .map(StructuralBlockId::from_index)
     }
 
     /// Looks up a synthetic handler entry by its dense identity.

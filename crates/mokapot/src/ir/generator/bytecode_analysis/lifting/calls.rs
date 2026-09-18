@@ -1,16 +1,14 @@
 use super::definition_operation;
 use crate::{
     ir::{
-        OperationKind,
+        OperationKind, ValueId,
         expression::Expression,
         generator::{
             bytecode_analysis::{
-                FrameValue,
                 jvm::ValueCategory::{self, Category1},
                 lifting::Context,
             },
             error::Error,
-            identity::SsaValueId,
         },
     },
     jvm::references::MethodRef,
@@ -22,7 +20,7 @@ impl Context<'_, '_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -41,7 +39,7 @@ impl Context<'_, '_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -55,16 +53,16 @@ impl Context<'_, '_, '_> {
     fn finish_call(
         &mut self,
         descriptor: &MethodDescriptor,
-        definition: Option<SsaValueId>,
-        expr: Expression<FrameValue>,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+        definition: Option<ValueId>,
+        expr: Expression,
+    ) -> Result<Option<OperationKind>, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
                 let value = definition
                     .ok_or_else(|| Error::internal("a non-void call has no result identity"))?;
                 self.frame
                     .stack
-                    .push(value.into(), ValueCategory::of_field_type(return_type))?;
+                    .push(value, ValueCategory::of_field_type(return_type))?;
                 Ok(Some(definition_operation(value, expr)))
             }
             ReturnType::Void => Ok(Some(OperationKind::Effect { expr })),

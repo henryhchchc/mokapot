@@ -6,8 +6,9 @@ use crate::{
     jvm::code::{Instruction, MethodBody, ProgramCounter},
 };
 
-/// The PC-level control flow of one decoded instruction.
-pub(super) enum InstructionFlow<'instruction> {
+/// The validated PC-level control flow of one decoded instruction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum PcFlow {
     Fallthrough {
         target: ProgramCounter,
     },
@@ -19,13 +20,8 @@ pub(super) enum InstructionFlow<'instruction> {
         taken: ProgramCounter,
         fallthrough: ProgramCounter,
     },
-    TableSwitch {
-        range: std::ops::RangeInclusive<i32>,
-        jump_targets: &'instruction [ProgramCounter],
-        default: ProgramCounter,
-    },
-    LookupSwitch {
-        match_targets: &'instruction BTreeMap<i32, ProgramCounter>,
+    Switch {
+        cases: BTreeMap<i32, ProgramCounter>,
         default: ProgramCounter,
     },
     Return {
@@ -34,15 +30,15 @@ pub(super) enum InstructionFlow<'instruction> {
     Throw,
 }
 
-impl<'instruction> InstructionFlow<'instruction> {
+impl PcFlow {
     /// Classifies one instruction without losing its concrete PCs.
     ///
-    /// This match is deliberately exhaustive so adding a JVM instruction
-    /// requires deciding its structural control-flow behavior here.
+    /// Instructions without structural control-flow behavior use the final
+    /// fallthrough case.
     pub(super) fn classify(
         body: &MethodBody,
         pc: ProgramCounter,
-        instruction: &'instruction Instruction,
+        instruction: &Instruction,
     ) -> Result<Self, Error> {
         let fallthrough = || {
             body.instructions
@@ -97,9 +93,8 @@ impl<'instruction> InstructionFlow<'instruction> {
                 for target in jump_targets.iter().copied().chain([*default]) {
                     validate_target(target)?;
                 }
-                Self::TableSwitch {
-                    range: range.clone(),
-                    jump_targets,
+                Self::Switch {
+                    cases: range.clone().zip(jump_targets.iter().copied()).collect(),
                     default: *default,
                 }
             }
@@ -110,8 +105,8 @@ impl<'instruction> InstructionFlow<'instruction> {
                 for target in match_targets.values().copied().chain([*default]) {
                     validate_target(target)?;
                 }
-                Self::LookupSwitch {
-                    match_targets,
+                Self::Switch {
+                    cases: match_targets.clone(),
                     default: *default,
                 }
             }
@@ -152,23 +147,8 @@ impl<'instruction> InstructionFlow<'instruction> {
                 taken: block_at(*taken)?,
                 fallthrough: block_at(*fallthrough)?,
             },
-            Self::TableSwitch {
-                range,
-                jump_targets,
-                default,
-            } => StructuralTerminator::Switch {
-                cases: range
-                    .clone()
-                    .zip(*jump_targets)
-                    .map(|(case, &target)| block_at(target).map(|block| (case, block)))
-                    .collect::<Result<_, _>>()?,
-                default: block_at(*default)?,
-            },
-            Self::LookupSwitch {
-                match_targets,
-                default,
-            } => StructuralTerminator::Switch {
-                cases: match_targets
+            Self::Switch { cases, default } => StructuralTerminator::Switch {
+                cases: cases
                     .iter()
                     .map(|(&case, &target)| block_at(target).map(|block| (case, block)))
                     .collect::<Result<_, _>>()?,

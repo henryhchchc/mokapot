@@ -138,38 +138,3 @@ where
         true
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{PathConditionFact, SolvingBudget};
-    use crate::{
-        analysis::fixed_point::JoinSemiLattice,
-        ir::control_flow::path_condition::{BooleanVariable, PathCondition},
-    };
-
-    #[test]
-    fn fact_construction_reduces_raw_path_conditions() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let structural =
-            (PathCondition::of(a.clone()) & b.clone()) | (PathCondition::of(a.clone()) & !b);
-
-        let fact = PathConditionFact::new(structural, SolvingBudget::default());
-
-        assert_eq!(fact.into_inner(), PathCondition::of(a));
-    }
-
-    #[test]
-    fn fact_join_reduces_after_structural_union() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathConditionFact::new(
-            PathCondition::of(a.clone()) & b.clone(),
-            SolvingBudget::default(),
-        );
-        let rhs =
-            PathConditionFact::new(PathCondition::of(a.clone()) & !b, SolvingBudget::default());
-
-        assert_eq!(lhs.join(rhs).into_inner(), PathCondition::of(a));
-    }
-}

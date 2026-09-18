@@ -13,10 +13,9 @@ pub(super) mod scalar;
 use std::collections::BTreeMap;
 
 use crate::{
-    ir::generator::{
-        bytecode_analysis::jvm::Frame,
-        error::{Error, MalformedBytecode},
-        identity::SsaValueId,
+    ir::{
+        ValueId,
+        generator::{bytecode_analysis::jvm::Frame, error::Error},
     },
     jvm::{Method, code::MethodBody},
 };
@@ -31,34 +30,9 @@ pub(super) fn analyze(
 /// Symbolic executor used by block-level bytecode analysis.
 struct Executor<'method> {
     body: &'method MethodBody,
-    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, SsaValueId>,
+    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
     value_id_allocator: executor::ValueIdAllocator,
-    receiver_value: Option<SsaValueId>,
-    parameter_values: Vec<SsaValueId>,
-    initial_frame: Frame<FrameValue>,
-}
-
-/// An abstract JVM frame value while analyzing structural blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) enum FrameValue {
-    Ordinary(SsaValueId),
-    #[display("%invalid")]
-    Invalid,
-}
-
-impl FrameValue {
-    /// Extracts the temporary ID from a well-formed scalar frame value.
-    pub(super) const fn into_ssa_value_id(self) -> Result<SsaValueId, Error> {
-        match self {
-            Self::Ordinary(value) => Ok(value),
-            Self::Invalid => Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue)),
-        }
-    }
-}
-
-impl From<SsaValueId> for FrameValue {
-    fn from(value: SsaValueId) -> Self {
-        Self::Ordinary(value)
-    }
+    receiver_value: Option<ValueId>,
+    parameter_values: Vec<ValueId>,
+    initial_frame: Frame,
 }

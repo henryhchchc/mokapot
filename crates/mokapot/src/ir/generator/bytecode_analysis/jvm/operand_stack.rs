@@ -3,7 +3,7 @@ use std::iter::{once, repeat_n};
 use itertools::Itertools;
 
 use super::{ValueCategory, error::Error};
-use crate::types::method_descriptor::MethodDescriptor;
+use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
 
 use ValueCategory::{Category1, Category2};
 
@@ -65,19 +65,19 @@ impl StackOperation {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct StackItem<V> {
-    value: V,
+struct StackItem {
+    value: ValueId,
     category: ValueCategory,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct OperandStack<V> {
+pub(crate) struct OperandStack {
     max_slots: u16,
     slot_count: usize,
-    values: Vec<StackItem<V>>,
+    values: Vec<StackItem>,
 }
 
-impl<V> OperandStack<V> {
+impl OperandStack {
     pub(super) fn with_max_slots(max_slots: u16) -> Self {
         Self {
             max_slots,
@@ -86,7 +86,7 @@ impl<V> OperandStack<V> {
         }
     }
 
-    pub fn push(&mut self, value: V, category: ValueCategory) -> Result<(), Error> {
+    pub fn push(&mut self, value: ValueId, category: ValueCategory) -> Result<(), Error> {
         let slot_count = self.slot_count + category.slot_count();
         if slot_count > usize::from(self.max_slots) {
             return Err(Error::StackOverflow);
@@ -96,7 +96,7 @@ impl<V> OperandStack<V> {
         Ok(())
     }
 
-    pub fn pop(&mut self, expected: ValueCategory) -> Result<V, Error> {
+    pub fn pop(&mut self, expected: ValueCategory) -> Result<ValueId, Error> {
         let top = self.values.last().ok_or(Error::StackUnderflow)?;
         if top.category != expected {
             return Err(Error::InvalidSlotLayout);
@@ -106,7 +106,7 @@ impl<V> OperandStack<V> {
         Ok(value.value)
     }
 
-    pub fn pop_arguments(&mut self, descriptor: &MethodDescriptor) -> Result<Vec<V>, Error> {
+    pub fn pop_arguments(&mut self, descriptor: &MethodDescriptor) -> Result<Vec<ValueId>, Error> {
         let mut arguments: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -117,10 +117,7 @@ impl<V> OperandStack<V> {
         Ok(arguments)
     }
 
-    pub fn apply(&mut self, operation: StackOperation) -> Result<(), Error>
-    where
-        V: Clone,
-    {
+    pub fn apply(&mut self, operation: StackOperation) -> Result<(), Error> {
         if self.slot_count < operation.consumed_slots() {
             return Err(Error::StackUnderflow);
         }
@@ -173,7 +170,7 @@ impl<V> OperandStack<V> {
     pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(usize, &mut V, V) -> Result<(), E>,
+        mut merge_values: impl FnMut(usize, &mut ValueId, ValueId) -> Result<(), E>,
     ) -> Result<(), E> {
         let mut slot = 0;
         for (lhs, rhs) in self.values.iter_mut().zip(other.values) {
@@ -184,7 +181,7 @@ impl<V> OperandStack<V> {
         Ok(())
     }
 
-    pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&V, Error> {
+    pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&ValueId, Error> {
         let [value] = self.values.as_slice() else {
             return Err(Error::InvalidSlotLayout);
         };
@@ -194,7 +191,7 @@ impl<V> OperandStack<V> {
         Ok(&value.value)
     }
 
-    pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&V>> {
+    pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&ValueId>> {
         self.values.iter().flat_map(|it| {
             repeat_n(None, it.category.slot_count() - 1).chain(once(Some(&it.value)))
         })

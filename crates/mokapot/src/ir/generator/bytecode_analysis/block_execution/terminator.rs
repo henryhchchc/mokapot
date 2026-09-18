@@ -3,10 +3,9 @@
 use std::collections::BTreeMap;
 
 use super::super::{
-    FrameValue,
     analyzer::Analyzer,
     jvm::ValueCategory::{Category1, Category2},
-    model::{AnalyzedSuccessor, Frame, Location},
+    model::{AnalyzedEdge, Frame, Location},
 };
 use crate::ir::{
     OperationKind, TerminatorKind,
@@ -14,7 +13,7 @@ use crate::ir::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
     },
-    expression::Condition,
+    expression::Predicate,
     generator::{
         bytecode_cfg::{
             self, BranchPredicate, ReturnOperand, StructuralBlockId, StructuralTerminator,
@@ -23,11 +22,7 @@ use crate::ir::{
     },
 };
 
-type LoweredTerminator = (
-    TerminatorKind<FrameValue>,
-    Vec<AnalyzedSuccessor>,
-    Option<OperationKind<FrameValue>>,
-);
+type LoweredTerminator = (TerminatorKind, Vec<AnalyzedEdge>, Option<OperationKind>);
 
 impl Analyzer<'_, '_> {
     /// Lowers the structural terminator of `block`, appending its successors.
@@ -47,13 +42,11 @@ impl Analyzer<'_, '_> {
                 } else {
                     TerminatorKind::Fallible
                 };
-                (terminator_kind, vec![unconditional(*target, frame)], None)
+                (terminator_kind, vec![unconditional(*target)], None)
             }
-            StructuralTerminator::Goto { target } => (
-                TerminatorKind::Goto,
-                vec![unconditional(*target, frame)],
-                None,
-            ),
+            StructuralTerminator::Goto { target } => {
+                (TerminatorKind::Goto, vec![unconditional(*target)], None)
+            }
             StructuralTerminator::Branch {
                 predicate,
                 taken,
@@ -89,15 +82,13 @@ fn lower_branch(
     Ok((
         TerminatorKind::Branch,
         vec![
-            AnalyzedSuccessor {
+            AnalyzedEdge {
                 target: Location::Bytecode(taken),
                 transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-                frame: frame.clone(),
             },
-            AnalyzedSuccessor {
+            AnalyzedEdge {
                 target: Location::Bytecode(fallthrough),
                 transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
-                frame: frame.clone(),
             },
         ],
         None,
@@ -112,71 +103,65 @@ fn lower_switch(
     let match_value = frame.stack.pop(Category1)?;
     let mut successors = cases
         .iter()
-        .map(|(&case, &target)| AnalyzedSuccessor {
+        .map(|(&case, &target)| AnalyzedEdge {
             target: Location::Bytecode(target),
             transfer: ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-                Condition::Equal(
+                Predicate::Equal(
                     match_value.into(),
                     PathValue::Constant(crate::jvm::ConstantValue::Integer(case)),
                 ),
             ))),
-            frame: frame.clone(),
         })
         .collect::<Vec<_>>();
     let default_guard = cases
         .keys()
         .map(|case| {
-            BooleanVariable::Negative(Condition::Equal(
+            BooleanVariable::Negative(Predicate::Equal(
                 match_value.into(),
                 PathValue::Constant(crate::jvm::ConstantValue::Integer(*case)),
             ))
         })
         .collect();
-    successors.push(AnalyzedSuccessor {
+    successors.push(AnalyzedEdge {
         target: Location::Bytecode(default),
         transfer: ControlTransfer::Conditional(default_guard),
-        frame: frame.clone(),
     });
     Ok((TerminatorKind::Switch { match_value }, successors, None))
 }
 
-fn pop_condition(
-    frame: &mut Frame,
-    predicate: BranchPredicate,
-) -> Result<Condition<FrameValue>, Error> {
+fn pop_condition(frame: &mut Frame, predicate: BranchPredicate) -> Result<Predicate, Error> {
     if predicate.operand_count() == 1 {
-        let operand = frame.stack.pop(Category1)?;
+        let operand = frame.stack.pop(Category1)?.into();
         let condition = match predicate {
-            BranchPredicate::IsZero => Condition::IsZero(operand),
-            BranchPredicate::IsNonZero => Condition::IsNonZero(operand),
-            BranchPredicate::IsNegative => Condition::IsNegative(operand),
-            BranchPredicate::IsNonNegative => Condition::IsNonNegative(operand),
-            BranchPredicate::IsPositive => Condition::IsPositive(operand),
-            BranchPredicate::IsNonPositive => Condition::IsNonPositive(operand),
-            BranchPredicate::IsNull => Condition::IsNull(operand),
-            BranchPredicate::IsNotNull => Condition::IsNotNull(operand),
+            BranchPredicate::IsZero => Predicate::IsZero(operand),
+            BranchPredicate::IsNonZero => Predicate::IsNonZero(operand),
+            BranchPredicate::IsNegative => Predicate::IsNegative(operand),
+            BranchPredicate::IsNonNegative => Predicate::IsNonNegative(operand),
+            BranchPredicate::IsPositive => Predicate::IsPositive(operand),
+            BranchPredicate::IsNonPositive => Predicate::IsNonPositive(operand),
+            BranchPredicate::IsNull => Predicate::IsNull(operand),
+            BranchPredicate::IsNotNull => Predicate::IsNotNull(operand),
             _ => unreachable!("operand count classifies every branch predicate"),
         };
         return Ok(condition);
     }
 
-    let rhs = frame.stack.pop(Category1)?;
-    let lhs = frame.stack.pop(Category1)?;
+    let rhs = frame.stack.pop(Category1)?.into();
+    let lhs = frame.stack.pop(Category1)?.into();
     Ok(match predicate {
-        BranchPredicate::Equal => Condition::Equal(lhs, rhs),
-        BranchPredicate::NotEqual => Condition::NotEqual(lhs, rhs),
-        BranchPredicate::LessThan => Condition::LessThan(lhs, rhs),
-        BranchPredicate::GreaterThanOrEqual => Condition::GreaterThanOrEqual(lhs, rhs),
-        BranchPredicate::GreaterThan => Condition::GreaterThan(lhs, rhs),
-        BranchPredicate::LessThanOrEqual => Condition::LessThanOrEqual(lhs, rhs),
+        BranchPredicate::Equal => Predicate::Equal(lhs, rhs),
+        BranchPredicate::NotEqual => Predicate::NotEqual(lhs, rhs),
+        BranchPredicate::LessThan => Predicate::LessThan(lhs, rhs),
+        BranchPredicate::GreaterThanOrEqual => Predicate::GreaterThanOrEqual(lhs, rhs),
+        BranchPredicate::GreaterThan => Predicate::GreaterThan(lhs, rhs),
+        BranchPredicate::LessThanOrEqual => Predicate::LessThanOrEqual(lhs, rhs),
         _ => unreachable!("operand count classifies every branch predicate"),
     })
 }
 
-fn unconditional(target: StructuralBlockId, frame: &Frame) -> AnalyzedSuccessor {
-    AnalyzedSuccessor {
+const fn unconditional(target: StructuralBlockId) -> AnalyzedEdge {
+    AnalyzedEdge {
         target: Location::Bytecode(target),
         transfer: ControlTransfer::Unconditional,
-        frame: frame.clone(),
     }
 }

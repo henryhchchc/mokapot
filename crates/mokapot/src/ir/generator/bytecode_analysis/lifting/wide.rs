@@ -3,7 +3,6 @@ use crate::{
         OperationKind,
         generator::{
             bytecode_analysis::{
-                FrameValue,
                 jvm::ValueCategory::{Category1, Category2},
                 lifting::Context,
             },
@@ -17,7 +16,7 @@ impl Context<'_, '_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)

@@ -7,10 +7,10 @@ mod operations;
 mod values;
 mod wide;
 
-use super::{Executor, FrameValue};
+use super::Executor;
 use crate::{
     ir::{
-        OperationKind,
+        OperationKind, ValueId,
         expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
         generator::{
             bytecode_analysis::jvm::{
@@ -18,7 +18,6 @@ use crate::{
                 ValueCategory::{Category1, Category2},
             },
             error::Error,
-            identity::SsaValueId,
         },
     },
     jvm::{ConstantValue, code::Instruction as JVM},
@@ -27,22 +26,14 @@ use crate::{
 
 /// Builds the definition operation produced by a lifted expression.
 ///
-/// This is the only place a lifted identity is wrapped as an ordinary frame
-/// value; materialization rejects invalid frame values.
-const fn definition_operation(
-    value: SsaValueId,
-    expr: Expression<FrameValue>,
-) -> OperationKind<FrameValue> {
-    OperationKind::Definition {
-        value: FrameValue::Ordinary(value),
-        expr,
-    }
+const fn definition_operation(value: ValueId, expr: Expression) -> OperationKind {
+    OperationKind::Definition { value, expr }
 }
 
 struct Context<'executor, 'frame, 'method> {
     executor: &'executor mut Executor<'method>,
     pc: crate::jvm::code::ProgramCounter,
-    frame: &'frame mut Frame<FrameValue>,
+    frame: &'frame mut Frame,
 }
 
 impl Executor<'_> {
@@ -54,8 +45,8 @@ impl Executor<'_> {
         &mut self,
         jvm_instruction: &JVM,
         pc: crate::jvm::code::ProgramCounter,
-        frame: &mut Frame<FrameValue>,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+        frame: &mut Frame,
+    ) -> Result<Option<OperationKind>, Error> {
         #[allow(
             clippy::enum_glob_use,
             reason = "this match exhaustively dispatches the JVM instruction enum"
@@ -218,28 +209,25 @@ impl Executor<'_> {
 impl Context<'_, '_, '_> {
     fn monitor(
         &mut self,
-        operation: impl FnOnce(FrameValue) -> LockOperation<FrameValue>,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+        operation: impl FnOnce(ValueId) -> LockOperation,
+    ) -> Result<Option<OperationKind>, Error> {
         let object_ref = self.frame.stack.pop(Category1)?;
         let expr = operation(object_ref).into();
         Ok(Some(OperationKind::Effect { expr }))
     }
 
-    fn stack_effect(
-        &mut self,
-        operation: StackOperation,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<OperationKind>, Error> {
         self.frame.stack.apply(operation)?;
         Ok(None)
     }
 
-    fn definition_id(&mut self) -> Result<SsaValueId, Error> {
+    fn definition_id(&mut self) -> Result<ValueId, Error> {
         self.executor.definition_id_at(self.pc)
     }
 
     fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>
     where
-        L: FnOnce(SsaValueId, &mut Frame<FrameValue>) -> Result<T, Error>,
+        L: FnOnce(ValueId, &mut Frame) -> Result<T, Error>,
     {
         let value = self.definition_id()?;
         lift(value, self.frame)
@@ -247,12 +235,12 @@ impl Context<'_, '_, '_> {
 
     fn unary(
         &mut self,
-        operation: impl FnOnce(FrameValue) -> MathOperation<FrameValue>,
+        operation: impl FnOnce(ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             let operand = frame.stack.pop(category)?;
-            frame.stack.push(value.into(), category)?;
+            frame.stack.push(value, category)?;
             let expr = operation(operand).into();
             Ok(Some(definition_operation(value, expr)))
         })
@@ -260,9 +248,9 @@ impl Context<'_, '_, '_> {
 
     fn binary(
         &mut self,
-        operation: impl FnOnce(FrameValue, FrameValue) -> MathOperation<FrameValue>,
+        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             operations::lift_binary_math(frame, value, operation, category)
         })
@@ -270,10 +258,10 @@ impl Context<'_, '_, '_> {
 
     fn conversion(
         &mut self,
-        conversion: impl FnOnce(FrameValue) -> Conversion<FrameValue>,
+        conversion: impl FnOnce(ValueId) -> Conversion,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })
@@ -282,7 +270,7 @@ impl Context<'_, '_, '_> {
     fn definition_id_for_return(
         &mut self,
         return_type: &ReturnType,
-    ) -> Result<Option<SsaValueId>, Error> {
+    ) -> Result<Option<ValueId>, Error> {
         match return_type {
             ReturnType::Some(_) => self.definition_id().map(Some),
             ReturnType::Void => Ok(None),

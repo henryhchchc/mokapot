@@ -2,12 +2,11 @@
 
 mod terminator;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 
 use super::{
-    FrameValue,
     analyzer::Analyzer,
-    model::{AnalyzedBlock, AnalyzedSuccessor, Frame, Location},
+    model::{AnalyzedBlock, AnalyzedEdge, Frame, Location},
 };
 use crate::{
     ir::generator::{
@@ -38,7 +37,8 @@ impl Analyzer<'_, '_> {
                 operations: Vec::new(),
                 terminator: TerminatorKind::Unwind,
                 terminator_source: None,
-                successors: Vec::new(),
+                edges: Vec::new(),
+                output_frames: BTreeMap::default(),
             }),
         }
     }
@@ -52,20 +52,18 @@ impl Analyzer<'_, '_> {
             .cfg
             .handler(id)
             .ok_or_else(|| Error::internal("a handler location has no structural entry"))?;
-        let caught = input
-            .handler_exception()
-            .map_err(Error::from)
-            .and_then(|value| value.into_ssa_value_id())?;
+        let caught = *input.handler_exception().map_err(Error::from)?;
+        let target = Location::Bytecode(handler.target);
         Ok(AnalyzedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
-            successors: vec![AnalyzedSuccessor {
-                target: Location::Bytecode(handler.target),
+            edges: vec![AnalyzedEdge {
+                target,
                 transfer: ControlTransfer::Unconditional,
-                frame: input,
             }],
+            output_frames: [(target, input)].into_iter().collect(),
         })
     }
 
@@ -108,7 +106,7 @@ impl Analyzer<'_, '_> {
             }
         }
 
-        let (terminator, mut successors, terminator_operation) =
+        let (terminator, mut edges, terminator_operation) =
             Self::lower_terminator(block, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
@@ -116,63 +114,52 @@ impl Analyzer<'_, '_> {
         }
         let exceptional_input = exceptional_input
             .ok_or_else(|| Error::internal("a structural bytecode block has no final input"))?;
+        let mut output_frames = BTreeMap::new();
+        for edge in &edges {
+            output_frames
+                .entry(edge.target)
+                .or_insert_with(|| frame.clone());
+        }
         for target in &block.exceptional_successors {
-            successors.push(self.exception_successor(*target, &exceptional_input)?);
+            edges.push(self.exception_edge(target, &exceptional_input, &mut output_frames)?);
         }
         Ok(AnalyzedBlock {
             caught_exception: None,
             operations,
             terminator,
             terminator_source: explicit_terminator.then_some(final_pc),
-            successors,
+            edges,
+            output_frames,
         })
     }
 
-    fn exception_successor(
+    fn exception_edge(
         &mut self,
-        target: bytecode_cfg::ExceptionalTarget,
+        target: &bytecode_cfg::ExceptionalTarget,
         input: &Frame,
-    ) -> Result<AnalyzedSuccessor, Error> {
+        output_frames: &mut BTreeMap<Location, Frame>,
+    ) -> Result<AnalyzedEdge, Error> {
         match target {
-            bytecode_cfg::ExceptionalTarget::Handler(id) => {
-                let handler = self
-                    .cfg
-                    .handler(id)
-                    .ok_or_else(|| Error::internal("an exception edge has no handler entry"))?;
-                let caught = self.caught_exception(id)?;
-                Ok(AnalyzedSuccessor {
-                    target: Location::Handler(id),
-                    transfer: ControlTransfer::Exception(handler.catch_type.clone()),
-                    frame: input
-                        .clone()
-                        .exception_handler_frame(FrameValue::Ordinary(caught))?,
+            bytecode_cfg::ExceptionalTarget::Handler { id, catch_type } => {
+                let location = Location::Handler(*id);
+                let caught = self.caught_exception(*id)?;
+                if let Entry::Vacant(output) = output_frames.entry(location) {
+                    output.insert(input.clone().exception_handler_frame(caught)?);
+                }
+                Ok(AnalyzedEdge {
+                    target: location,
+                    transfer: ControlTransfer::Exception(catch_type.clone()),
                 })
             }
-            bytecode_cfg::ExceptionalTarget::Unwind => Ok(AnalyzedSuccessor {
-                target: Location::Unwind,
-                transfer: ControlTransfer::Unwind,
-                frame: input.clone().into_unwind_frame(),
-            }),
-        }
-    }
-
-    /// Coalesces the frames of coincident successors into one output per target.
-    ///
-    /// The key set is the location's successor target set, which the analyzer
-    /// assumes to be static (see `Analyzer::execute`).
-    pub(super) fn coalesce_output_frames(
-        successors: &[AnalyzedSuccessor],
-    ) -> Result<BTreeMap<Location, Frame>, Error> {
-        let mut outputs = BTreeMap::new();
-        for successor in successors {
-            if let Some(existing) = outputs.insert(successor.target, successor.frame.clone())
-                && existing != successor.frame
-            {
-                return Err(Error::internal(
-                    "parallel edges from one block carry different JVM frames",
-                ));
+            bytecode_cfg::ExceptionalTarget::Unwind => {
+                output_frames
+                    .entry(Location::Unwind)
+                    .or_insert_with(|| input.clone().into_unwind_frame());
+                Ok(AnalyzedEdge {
+                    target: Location::Unwind,
+                    transfer: ControlTransfer::Unwind,
+                })
             }
         }
-        Ok(outputs)
     }
 }

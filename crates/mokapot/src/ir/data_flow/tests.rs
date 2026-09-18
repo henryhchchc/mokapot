@@ -136,3 +136,17 @@ fn records_an_unused_caught_exception_definition() {
     );
     assert_eq!(chain.uses_of(caught).count(), 0);
 }
+
+#[test]
+fn returns_none_for_a_value_outside_the_method_dense_identity_range() {
+    let method = method(
+        [(0, Instruction::Return)],
+        "()V",
+        vec![],
+        AccessFlags::PUBLIC | AccessFlags::STATIC,
+    );
+    let ir = MokaIRMethod::from_method(&method).unwrap();
+    let chain = DefUseChain::new(&ir);
+
+    assert_eq!(chain.definition_of(ValueId::new(u32::MAX)), None);
+}

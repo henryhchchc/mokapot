@@ -5,8 +5,8 @@ mod model;
 mod simplify;
 
 use crate::ir::{
-    BlockId,
-    generator::{bytecode_analysis::scalar::ScalarGraph, error::Error, identity::SsaValueId},
+    BlockId, ValueId,
+    generator::{bytecode_analysis::scalar::ScalarGraph, error::Error},
 };
 pub(in crate::ir::generator) use model::Block;
 use simplify::simplify_phis;
@@ -15,8 +15,8 @@ use simplify::simplify_phis;
 pub(in crate::ir::generator) struct SsaGraph {
     pub(in crate::ir::generator) entry: BlockId,
     pub(in crate::ir::generator) blocks: Vec<Block>,
-    pub(in crate::ir::generator) this_value: Option<SsaValueId>,
-    pub(in crate::ir::generator) parameter_values: Vec<SsaValueId>,
+    pub(in crate::ir::generator) this_value: Option<ValueId>,
+    pub(in crate::ir::generator) parameter_values: Vec<ValueId>,
 }
 
 /// Simplifies and materializes scalar phis into final SSA blocks.

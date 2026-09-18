@@ -16,7 +16,7 @@ mod bytecode_analysis;
 mod bytecode_cfg;
 mod emission;
 mod error;
-mod identity;
+mod remap;
 mod ssa;
 
 pub use bytecode_analysis::jvm::FrameError as MokaIRFrameError;

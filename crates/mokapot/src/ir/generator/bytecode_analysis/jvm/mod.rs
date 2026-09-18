@@ -5,15 +5,12 @@ mod local_variables;
 mod operand_stack;
 mod value_category;
 
-#[cfg(test)]
-mod tests;
-
 pub use error::Error as FrameError;
 pub(crate) use local_variables::EntrySlots;
 pub(crate) use operand_stack::StackOperation;
 pub(crate) use value_category::ValueCategory;
 
-use crate::types::method_descriptor::MethodDescriptor;
+use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
 use local_variables::LocalVariables;
 use operand_stack::OperandStack;
 
@@ -25,33 +22,33 @@ pub(crate) enum Position {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Frame<V> {
-    pub locals: LocalVariables<V>,
-    pub stack: OperandStack<V>,
+pub(crate) struct Frame {
+    pub locals: LocalVariables,
+    pub stack: OperandStack,
 }
 
-impl<V> Frame<V> {
+impl Frame {
     pub fn into_unwind_frame(mut self) -> Self {
         self.locals.clear_for_unwind();
         self.stack.clear();
         self
     }
 
-    pub fn value_at(&self, position: Position) -> Option<&V> {
+    pub fn value_at(&self, position: Position) -> Option<&ValueId> {
         match position {
             Position::Local(index) => self.locals.slot_values().nth(index).flatten(),
             Position::Stack(index) => self.stack.slot_values().nth(index).flatten(),
         }
     }
 
-    pub fn handler_exception(&self) -> Result<&V, FrameError> {
+    pub fn handler_exception(&self) -> Result<&ValueId, FrameError> {
         self.stack.single_value(ValueCategory::Category1)
     }
 
     pub fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(Position, &mut V, V) -> Result<(), E>,
+        mut merge_values: impl FnMut(Position, &mut ValueId, ValueId) -> Result<(), E>,
     ) -> Result<(), E>
     where
         E: From<FrameError>,
@@ -72,9 +69,6 @@ impl<V> Frame<V> {
         }
         Ok(())
     }
-}
-
-impl<V: Clone> Frame<V> {
     /// Builds the entry frame of a method, also reporting the slots it assigned
     /// to the receiver and to the parameters.
     ///
@@ -85,8 +79,8 @@ impl<V: Clone> Frame<V> {
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
-        this_value: Option<V>,
-        parameters: &[V],
+        this_value: Option<ValueId>,
+        parameters: &[ValueId],
     ) -> Result<(Self, EntrySlots), FrameError> {
         let (locals, entry_slots) =
             LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
@@ -100,7 +94,7 @@ impl<V: Clone> Frame<V> {
         ))
     }
 
-    pub fn exception_handler_frame(&self, caught: V) -> Result<Self, FrameError> {
+    pub fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
         let locals = self.locals.clone();
         let stack = OperandStack::with_max_slots(self.stack.max_slots());
         let mut frame = Self { locals, stack };

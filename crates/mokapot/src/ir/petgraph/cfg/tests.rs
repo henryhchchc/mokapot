@@ -13,6 +13,7 @@ fn dense_nodes_and_parallel_edges_are_preserved() {
     let target = BlockId::new(1);
     let source = BasicBlock {
         id: BlockId::new(0),
+        caught_exception: None,
         phis: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -31,6 +32,7 @@ fn dense_nodes_and_parallel_edges_are_preserved() {
     };
     let exit = BasicBlock {
         id: target,
+        caught_exception: None,
         phis: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -62,6 +64,7 @@ fn dense_nodes_and_parallel_edges_are_preserved() {
 fn exceptional_edge_kinds_and_identities_are_preserved() {
     let source = BasicBlock {
         id: BlockId::new(0),
+        caught_exception: None,
         phis: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -91,6 +94,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
     let exits = (1..=3)
         .map(|id| BasicBlock {
             id: BlockId::new(id),
+            caught_exception: None,
             phis: vec![],
             operations: vec![],
             terminator: Terminator {

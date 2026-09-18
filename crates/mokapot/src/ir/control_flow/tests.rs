@@ -1,12 +1,13 @@
 use super::*;
 use crate::ir::{
     BasicBlock, EdgeId, InstructionId, Successor, Terminator, TerminatorKind,
-    control_flow::path_condition::BooleanVariable, expression::Condition,
+    control_flow::path_condition::BooleanVariable, expression::Predicate,
 };
 
 fn block(id: u32, successors: Vec<Successor>) -> BasicBlock {
     BasicBlock {
         id: BlockId::new(id),
+        caught_exception: None,
         phis: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -25,7 +26,7 @@ fn block(id: u32, successors: Vec<Successor>) -> BasicBlock {
 
 #[test]
 fn path_conditions_prune_contradictory_arms_at_block_locations() {
-    let condition = Condition::IsZero(crate::ir::ValueId::new(0));
+    let condition = Predicate::IsZero(crate::ir::ValueId::new(0).into());
     let positive: BooleanVariable<Predicate> = condition.into();
     let negative = !positive.clone();
     let blocks = vec![
@@ -65,7 +66,7 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
 
 #[test]
 fn exceptional_outcomes_preserve_the_incoming_path_condition() {
-    let condition = Condition::IsZero(crate::ir::ValueId::new(0));
+    let condition = Predicate::IsZero(crate::ir::ValueId::new(0).into());
     let positive: BooleanVariable<Predicate> = condition.into();
     let negative = !positive.clone();
     let blocks = vec![

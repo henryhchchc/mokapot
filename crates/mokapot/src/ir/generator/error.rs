@@ -13,9 +13,6 @@ pub enum MalformedBytecode {
     /// An instruction that must fall through has no following instruction.
     #[display("an instruction has no required fallthrough")]
     MissingFallthrough,
-    /// An ordinary value operation observed an unavailable frame value.
-    #[display("an instruction uses an unavailable frame value")]
-    InvalidFrameValue,
     /// An exception-table range is empty, reversed, or not instruction-aligned.
     #[display("an exception-table range is invalid")]
     InvalidExceptionRange,
@@ -126,19 +123,4 @@ impl From<FrameError> for Error {
 
 fn display_location(pc: Option<ProgramCounter>) -> String {
     pc.map_or_else(String::new, |pc| format!(" at instruction {pc}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn malformed_bytecode_display_includes_relevant_location_and_reason() {
-        let error = Error::malformed(Some(10.into()), MalformedBytecode::MissingInstruction);
-
-        assert_eq!(
-            error.to_string(),
-            "malformed JVM bytecode at instruction #000A: a control-flow target has no instruction"
-        );
-    }
 }

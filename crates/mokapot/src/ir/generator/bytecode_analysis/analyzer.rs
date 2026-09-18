@@ -8,10 +8,12 @@ use super::{
     scalar::ScalarGraph,
 };
 use crate::{
-    ir::generator::{
-        bytecode_cfg::{BytecodeCfg, HandlerId},
-        error::Error,
-        identity::SsaValueId,
+    ir::{
+        ValueId,
+        generator::{
+            bytecode_cfg::{BytecodeCfg, HandlerId},
+            error::Error,
+        },
     },
     jvm::{Method, code::ProgramCounter},
 };
@@ -21,7 +23,7 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) executor: Executor<'method>,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
-    pub(super) caught_exceptions: BTreeMap<HandlerId, SsaValueId>,
+    pub(super) caught_exceptions: BTreeMap<HandlerId, ValueId>,
 }
 
 impl Analyzer<'_, '_> {
@@ -31,7 +33,7 @@ impl Analyzer<'_, '_> {
     /// *same* value: distinct values would merge into a phi at stack position 0
     /// in the handler's entry frame, and `execute_handler` requires that frame
     /// to hold a single stack value.
-    pub(super) fn caught_exception(&mut self, handler: HandlerId) -> Result<SsaValueId, Error> {
+    pub(super) fn caught_exception(&mut self, handler: HandlerId) -> Result<ValueId, Error> {
         if let Some(&value) = self.caught_exceptions.get(&handler) {
             return Ok(value);
         }
@@ -77,8 +79,8 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 .get(&location)
                 .and_then(|state| state.entry_frame.clone())
                 .ok_or_else(|| Error::internal("a pending block has no entry frame"))?;
-            let block = self.execute(location, input)?;
-            let outputs = Self::coalesce_output_frames(&block.successors)?;
+            let mut block = self.execute(location, input)?;
+            let outputs = std::mem::take(&mut block.output_frames);
             self.locations.entry(location).or_default().execution = Some(block);
             for (target, frame) in outputs {
                 self.locations

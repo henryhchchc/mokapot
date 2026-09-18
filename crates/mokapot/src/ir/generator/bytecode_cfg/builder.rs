@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     fallibility::Fallibility,
-    instruction_flow::InstructionFlow,
+    instruction_flow::PcFlow,
     model::{Block, BytecodeCfg, ExceptionalTarget, HandlerEntry, HandlerId, StructuralBlockId},
 };
 use crate::{
@@ -35,11 +35,12 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
         self.validate_instructions()?;
         self.validate_handler_targets()?;
+        let flows = self.classify_instructions()?;
 
-        let leaders = self.collect_leaders(entry_pc)?;
+        let leaders = self.collect_leaders(entry_pc, &flows)?;
         let (groups, block_by_start_pc) = self.partition(&leaders)?;
-        let handlers = self.build_handlers(&block_by_start_pc)?;
-        let blocks = self.build_blocks(groups, &block_by_start_pc)?;
+        let (handlers, handler_by_pc) = self.build_handlers(&block_by_start_pc)?;
+        let blocks = self.build_blocks(groups, &block_by_start_pc, &handler_by_pc, &flows)?;
 
         let entry = Self::block_id_at_pc(&block_by_start_pc, entry_pc)?;
         Ok(BytecodeCfg {
@@ -49,7 +50,21 @@ impl<'method> Builder<'method> {
         })
     }
 
-    fn collect_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
+    fn classify_instructions(&self) -> Result<BTreeMap<ProgramCounter, PcFlow>, Error> {
+        self.body
+            .instructions
+            .iter()
+            .map(|(&pc, instruction)| {
+                PcFlow::classify(self.body, pc, instruction).map(|flow| (pc, flow))
+            })
+            .collect()
+    }
+
+    fn collect_leaders(
+        &self,
+        entry_pc: ProgramCounter,
+        flows: &BTreeMap<ProgramCounter, PcFlow>,
+    ) -> Result<BTreeSet<ProgramCounter>, Error> {
         let mut leaders = BTreeSet::from([entry_pc]);
         leaders.extend(
             self.body
@@ -59,43 +74,32 @@ impl<'method> Builder<'method> {
         );
 
         for (&pc, instruction) in self.body.instructions.iter() {
-            let flow = InstructionFlow::classify(self.body, pc, instruction)?;
+            let flow = flows
+                .get(&pc)
+                .ok_or_else(|| Error::internal_at(pc, "a decoded instruction has no flow"))?;
             match flow {
-                InstructionFlow::Fallthrough { target } => {
+                PcFlow::Fallthrough { target } => {
                     if self.fallibility.is_synchronously_fallible(instruction) {
-                        leaders.insert(target);
+                        leaders.insert(*target);
                     }
                 }
-                InstructionFlow::Goto { target } => {
-                    leaders.insert(target);
+                PcFlow::Goto { target } => {
+                    leaders.insert(*target);
                     self.insert_instruction_after(&mut leaders, pc);
                 }
-                InstructionFlow::Branch {
+                PcFlow::Branch {
                     taken, fallthrough, ..
                 } => {
-                    leaders.insert(taken);
-                    leaders.insert(fallthrough);
+                    leaders.insert(*taken);
+                    leaders.insert(*fallthrough);
                 }
-                InstructionFlow::TableSwitch {
-                    jump_targets,
-                    default,
-                    ..
-                } => {
-                    for target in jump_targets.iter().copied().chain([default]) {
+                PcFlow::Switch { cases, default } => {
+                    for target in cases.values().copied().chain([*default]) {
                         leaders.insert(target);
                     }
                     self.insert_instruction_after(&mut leaders, pc);
                 }
-                InstructionFlow::LookupSwitch {
-                    match_targets,
-                    default,
-                } => {
-                    for target in match_targets.values().copied().chain([default]) {
-                        leaders.insert(target);
-                    }
-                    self.insert_instruction_after(&mut leaders, pc);
-                }
-                InstructionFlow::Return { .. } | InstructionFlow::Throw => {
+                PcFlow::Return { .. } | PcFlow::Throw => {
                     self.insert_instruction_after(&mut leaders, pc);
                 }
             }
@@ -217,6 +221,8 @@ impl<'method> Builder<'method> {
         &self,
         groups: Vec<BlockGroup>,
         block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
+        handler_by_pc: &BTreeMap<ProgramCounter, HandlerId>,
+        flows: &BTreeMap<ProgramCounter, PcFlow>,
     ) -> Result<Vec<Block>, Error> {
         groups
             .into_iter()
@@ -229,12 +235,14 @@ impl<'method> Builder<'method> {
                     .body
                     .instruction_at(final_pc)
                     .expect("a structural block PC comes from decoded bytecode");
-                let flow = InstructionFlow::classify(self.body, final_pc, instruction)?;
+                let flow = flows.get(&final_pc).ok_or_else(|| {
+                    Error::internal_at(final_pc, "a decoded instruction has no flow")
+                })?;
                 let terminator =
                     flow.resolve(|target| Self::block_id_at_pc(block_by_start_pc, target))?;
                 let exceptional_successors =
                     if self.fallibility.is_synchronously_fallible(instruction) {
-                        self.exceptional_successors(final_pc)
+                        self.exceptional_successors(final_pc, handler_by_pc)?
                     } else {
                         Vec::new()
                     };
@@ -251,18 +259,21 @@ impl<'method> Builder<'method> {
     fn build_handlers(
         &self,
         block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
-    ) -> Result<Vec<HandlerEntry>, Error> {
-        self.body
-            .exception_table
-            .iter()
-            .map(|entry| {
-                Ok(HandlerEntry {
-                    handler_pc: entry.handler_pc,
-                    catch_type: entry.catch_type.clone(),
-                    target: Self::block_id_at_pc(block_by_start_pc, entry.handler_pc)?,
-                })
-            })
-            .collect()
+    ) -> Result<(Vec<HandlerEntry>, BTreeMap<ProgramCounter, HandlerId>), Error> {
+        let mut handlers = Vec::new();
+        let mut handler_by_pc = BTreeMap::new();
+        for entry in &self.body.exception_table {
+            if handler_by_pc.contains_key(&entry.handler_pc) {
+                continue;
+            }
+            let id = HandlerId::from_index(handlers.len());
+            handlers.push(HandlerEntry {
+                handler_pc: entry.handler_pc,
+                target: Self::block_id_at_pc(block_by_start_pc, entry.handler_pc)?,
+            });
+            handler_by_pc.insert(entry.handler_pc, id);
+        }
+        Ok((handlers, handler_by_pc))
     }
 
     fn block_id_at_pc(
@@ -275,17 +286,29 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(Some(target), MalformedBytecode::MissingInstruction))
     }
 
-    fn exceptional_successors(&self, pc: ProgramCounter) -> Vec<ExceptionalTarget> {
+    fn exceptional_successors(
+        &self,
+        pc: ProgramCounter,
+        handler_by_pc: &BTreeMap<ProgramCounter, HandlerId>,
+    ) -> Result<Vec<ExceptionalTarget>, Error> {
         let mut successors = Vec::new();
         let mut has_catch_all = false;
-        for (index, entry) in self
+        for entry in self
             .body
             .exception_table
             .iter()
-            .enumerate()
-            .filter(|(_, entry)| entry.covers(pc))
+            .filter(|entry| entry.covers(pc))
         {
-            successors.push(ExceptionalTarget::Handler(HandlerId::from_index(index)));
+            let id = *handler_by_pc.get(&entry.handler_pc).ok_or_else(|| {
+                Error::internal_at(
+                    entry.handler_pc,
+                    "an exception-table arm has no handler entry",
+                )
+            })?;
+            successors.push(ExceptionalTarget::Handler {
+                id,
+                catch_type: entry.catch_type.clone(),
+            });
             has_catch_all = catches_everything(entry);
             if has_catch_all {
                 break;
@@ -294,7 +317,7 @@ impl<'method> Builder<'method> {
         if !has_catch_all {
             successors.push(ExceptionalTarget::Unwind);
         }
-        successors
+        Ok(successors)
     }
 }
 

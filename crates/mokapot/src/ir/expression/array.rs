@@ -2,21 +2,18 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 
-use crate::{
-    ir::{TryMapValues, ValueId},
-    types::field_type::FieldType,
-};
+use crate::{ir::ValueId, types::field_type::FieldType};
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum Operation<OP = ValueId> {
+pub enum Operation {
     /// Create a new array.
     #[display("new {element_type}[{length}]")]
     New {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The length of the array.
-        length: OP,
+        length: ValueId,
     },
     /// Create a new multidimensional array.
     #[display(
@@ -27,35 +24,35 @@ pub enum Operation<OP = ValueId> {
         /// The type of the elements in the array.
         element_type: FieldType,
         /// The lengths of each of the dimensions of the array.
-        dimensions: Vec<OP>,
+        dimensions: Vec<ValueId>,
     },
     /// Gets an element from an array.
     #[display("{array_ref}[{index}]")]
     Read {
         /// The array to read from.
-        array_ref: OP,
+        array_ref: ValueId,
         /// The index of the element to read.
-        index: OP,
+        index: ValueId,
     },
     /// Sets an element in an array.
     #[display("{array_ref}[{index}] = {value}")]
     Write {
         /// The array to write to.
-        array_ref: OP,
+        array_ref: ValueId,
         /// The index of the element to write.
-        index: OP,
+        index: ValueId,
         /// The value to be written.
-        value: OP,
+        value: ValueId,
     },
     /// Gets the length of an array.
     #[display("array_len({array_ref})")]
     Length {
         /// The array to get the length of.
-        array_ref: OP,
+        array_ref: ValueId,
     },
 }
 
-impl Operation<ValueId> {
+impl Operation {
     /// Returns the values used by the expression.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
@@ -70,52 +67,6 @@ impl Operation<ValueId> {
             } => HashSet::from([*array_ref, *index, *value]),
             Self::Length { array_ref } => HashSet::from([*array_ref]),
         }
-    }
-}
-
-impl<OP, OUT> TryMapValues<OUT> for Operation<OP> {
-    type Value = OP;
-    type Mapped = Operation<OUT>;
-
-    fn try_map_values<E>(
-        self,
-        mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<Operation<OUT>, E> {
-        Ok(match self {
-            Self::New {
-                element_type,
-                length,
-            } => Operation::New {
-                element_type,
-                length: remap(length)?,
-            },
-            Self::NewMultiDim {
-                element_type,
-                dimensions,
-            } => Operation::NewMultiDim {
-                element_type,
-                dimensions: dimensions
-                    .into_iter()
-                    .map(&mut remap)
-                    .collect::<Result<_, _>>()?,
-            },
-            Self::Read { array_ref, index } => Operation::Read {
-                array_ref: remap(array_ref)?,
-                index: remap(index)?,
-            },
-            Self::Write {
-                array_ref,
-                index,
-                value,
-            } => Operation::Write {
-                array_ref: remap(array_ref)?,
-                index: remap(index)?,
-                value: remap(value)?,
-            },
-            Self::Length { array_ref } => Operation::Length {
-                array_ref: remap(array_ref)?,
-            },
-        })
     }
 }
 

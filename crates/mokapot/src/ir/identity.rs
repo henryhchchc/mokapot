@@ -23,6 +23,10 @@ impl InstructionId {
     pub(crate) const fn new(index: u32) -> Self {
         Self(index)
     }
+
+    pub(crate) const fn index(self) -> u32 {
+        self.0
+    }
 }
 
 /// The identity of a control-flow edge within one Moka IR method.

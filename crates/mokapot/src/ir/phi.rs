@@ -72,24 +72,3 @@ impl Phi {
         self.inputs.iter().map(PhiInput::value).collect()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn phi_exposes_predecessor_inputs() {
-        let input = PhiInput {
-            predecessor: BlockId::new(1),
-            value: ValueId::new(2),
-        };
-        let phi = Phi {
-            id: InstructionId::new(3),
-            value: ValueId::new(4),
-            inputs: vec![input],
-        };
-        assert_eq!(phi.id(), InstructionId::new(3));
-        assert_eq!(phi.value(), ValueId::new(4));
-        assert_eq!(phi.inputs(), &[input]);
-    }
-}

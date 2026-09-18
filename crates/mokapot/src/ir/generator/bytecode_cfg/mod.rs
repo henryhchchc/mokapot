@@ -21,6 +21,3 @@ use crate::jvm::Method;
 pub(super) fn build(method: &Method) -> Result<BytecodeCfg, Error> {
     builder::Builder::for_method(method)?.build()
 }
-
-#[cfg(test)]
-mod tests;

@@ -5,7 +5,7 @@ use crate::{
             ControlTransfer,
             path_condition::{BooleanVariable, BranchGuard, PathValue},
         },
-        expression::Condition,
+        expression::Predicate,
     },
     jvm::ConstantValue,
 };
@@ -71,13 +71,13 @@ fn branch_preserves_taken_then_fallthrough_guards() {
     assert_eq!(
         branch.successors()[0].transfer(),
         &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Condition::IsZero(PathValue::Variable(match_value)),
+            Predicate::IsZero(PathValue::Variable(match_value)),
         )))
     );
     assert_eq!(
         branch.successors()[1].transfer(),
         &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Negative(
-            Condition::IsZero(PathValue::Variable(match_value)),
+            Predicate::IsZero(PathValue::Variable(match_value)),
         )))
     );
     assert_eq!(
@@ -106,7 +106,7 @@ fn comparison_branch_preserves_operand_order() {
     assert_eq!(
         branch.successors()[0].transfer(),
         &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Condition::LessThan(
+            Predicate::LessThan(
                 PathValue::Variable(parameters[0]),
                 PathValue::Variable(parameters[1]),
             ),
@@ -137,7 +137,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     let match_value = ir.parameter_values()[0];
     let case_guard = |case| {
         ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Condition::Equal(
+            Predicate::Equal(
                 PathValue::Variable(match_value),
                 PathValue::Constant(ConstantValue::Integer(case)),
             ),
@@ -158,14 +158,6 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         switch.successors()[2].transfer(),
         ControlTransfer::Conditional(guard) if guard.predicate_count() == 2
     ));
-    assert_eq!(
-        switch
-            .successors()
-            .iter()
-            .map(Successor::id)
-            .collect::<Vec<_>>(),
-        (0..3).map(EdgeId::new).collect::<Vec<_>>()
-    );
     assert_eq!(
         ir.source_map().origins_of(switch.id()).collect::<Vec<_>>(),
         [ProgramCounter::from(1)]

@@ -1,10 +1,9 @@
 use super::definition_operation;
 use crate::ir::{
-    OperationKind,
+    OperationKind, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::{
         bytecode_analysis::{
-            FrameValue,
             jvm::{
                 Frame, ValueCategory,
                 ValueCategory::{Category1, Category2},
@@ -12,34 +11,33 @@ use crate::ir::{
             lifting::Context,
         },
         error::Error,
-        identity::SsaValueId,
     },
 };
 
 #[inline]
 pub(super) fn lift_conversion(
-    frame: &mut Frame<FrameValue>,
-    value: SsaValueId,
-    conversion: impl FnOnce(FrameValue) -> Conversion<FrameValue>,
+    frame: &mut Frame,
+    value: ValueId,
+    conversion: impl FnOnce(ValueId) -> Conversion,
     operand_category: ValueCategory,
     result_category: ValueCategory,
-) -> Result<Option<OperationKind<FrameValue>>, Error> {
+) -> Result<Option<OperationKind>, Error> {
     let operand = frame.stack.pop(operand_category)?;
-    frame.stack.push(value.into(), result_category)?;
+    frame.stack.push(value, result_category)?;
     let expr = conversion(operand).into();
     Ok(Some(definition_operation(value, expr)))
 }
 
 #[inline]
 pub(super) fn lift_binary_math(
-    frame: &mut Frame<FrameValue>,
-    value: SsaValueId,
-    math: impl FnOnce(FrameValue, FrameValue) -> MathOperation<FrameValue>,
+    frame: &mut Frame,
+    value: ValueId,
+    math: impl FnOnce(ValueId, ValueId) -> MathOperation,
     category: ValueCategory,
-) -> Result<Option<OperationKind<FrameValue>>, Error> {
+) -> Result<Option<OperationKind>, Error> {
     let rhs = frame.stack.pop(category)?;
     let lhs = frame.stack.pop(category)?;
-    frame.stack.push(value.into(), category)?;
+    frame.stack.push(value, category)?;
 
     let expr = math(lhs, rhs).into();
     Ok(Some(definition_operation(value, expr)))
@@ -48,21 +46,21 @@ pub(super) fn lift_binary_math(
 impl Context<'_, '_, '_> {
     pub(super) fn shift_long(
         &mut self,
-        operation: impl FnOnce(FrameValue, FrameValue) -> MathOperation<FrameValue>,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
-        self.frame.stack.push(value.into(), Category2)?;
+        self.frame.stack.push(value, Category2)?;
         let expr = operation(base, shift_amount).into();
         Ok(Some(definition_operation(value, expr)))
     }
 
-    pub(super) fn compare_long(&mut self) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    pub(super) fn compare_long(&mut self) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
-        self.frame.stack.push(value.into(), Category1)?;
+        self.frame.stack.push(value, Category1)?;
         let expr = MathOperation::LongComparison(lhs, rhs).into();
         Ok(Some(definition_operation(value, expr)))
     }
@@ -71,11 +69,11 @@ impl Context<'_, '_, '_> {
         &mut self,
         nan_treatment: NaNTreatment,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind<FrameValue>>, Error> {
+    ) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;
-        self.frame.stack.push(value.into(), Category1)?;
+        self.frame.stack.push(value, Category1)?;
         let expr = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into();
         Ok(Some(definition_operation(value, expr)))
     }

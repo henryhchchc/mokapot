@@ -2,14 +2,16 @@
 
 use std::collections::BTreeMap;
 
-use super::{FrameValue, jvm};
+use super::jvm;
 use crate::{
-    ir::generator::{bytecode_cfg, identity::SsaValueId},
-    ir::{OperationKind, TerminatorKind, control_flow::ControlTransfer},
+    ir::{
+        OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer,
+        generator::bytecode_cfg,
+    },
     jvm::code::ProgramCounter,
 };
 
-pub(super) type Frame = jvm::Frame<FrameValue>;
+pub(super) type Frame = jvm::Frame;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Location {
@@ -32,24 +34,24 @@ pub(super) struct PhiSite {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PhiDefinition {
-    pub(super) result: SsaValueId,
-    pub(super) inputs: BTreeMap<Predecessor, SsaValueId>,
+    pub(super) result: ValueId,
+    pub(super) inputs: BTreeMap<Predecessor, ValueId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AnalyzedSuccessor {
+pub(super) struct AnalyzedEdge {
     pub(super) target: Location,
-    pub(super) transfer: ControlTransfer<FrameValue>,
-    pub(super) frame: Frame,
+    pub(super) transfer: ControlTransfer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AnalyzedBlock {
-    pub(super) caught_exception: Option<SsaValueId>,
-    pub(super) operations: Vec<(ProgramCounter, OperationKind<FrameValue>)>,
-    pub(super) terminator: TerminatorKind<FrameValue>,
+    pub(super) caught_exception: Option<ValueId>,
+    pub(super) operations: Vec<(ProgramCounter, OperationKind)>,
+    pub(super) terminator: TerminatorKind,
     pub(super) terminator_source: Option<ProgramCounter>,
-    pub(super) successors: Vec<AnalyzedSuccessor>,
+    pub(super) edges: Vec<AnalyzedEdge>,
+    pub(super) output_frames: BTreeMap<Location, Frame>,
 }
 
 /// Analysis state for one location.

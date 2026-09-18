@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::{
     ir::{
-        BasicBlock, EdgeId, InstructionId, MokaIRBuildError, MokaIRMethod, Operation,
-        OperationKind, Successor, Terminator, TerminatorKind, ValueDefinition, ValueId,
+        BasicBlock, InstructionId, InstructionRef, MokaIRBuildError, MokaIRMethod, Operation,
+        OperationKind, Successor, Terminator, TerminatorKind, ValueDefinition,
         control_flow::ControlTransfer,
     },
     jvm::{

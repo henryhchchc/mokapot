@@ -21,6 +21,17 @@ fn straight_line_instructions_coalesce_into_one_block() {
         blocks[0].terminator().kind(),
         TerminatorKind::Return(Some(_))
     ));
+
+    let definition = ir
+        .source_map()
+        .instructions_at(0.into())
+        .next()
+        .expect("the constant definition must retain its source");
+    assert!(matches!(
+        ir.instruction(definition),
+        Some(InstructionRef::Operation(operation)) if operation.id() == definition
+    ));
+    assert!(ir.instruction(InstructionId::new(u32::MAX)).is_none());
 }
 
 #[test]

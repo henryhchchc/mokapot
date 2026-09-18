@@ -1,22 +1,22 @@
 use super::{ValueCategory, error::Error};
-use crate::types::method_descriptor::MethodDescriptor;
+use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct LocalValue<V> {
-    value: V,
+struct LocalValue {
+    value: ValueId,
     category: ValueCategory,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-enum LocalSlot<V> {
-    Value(LocalValue<V>),
+enum LocalSlot {
+    Value(LocalValue),
     Reserved,
     Unset,
     Unavailable,
 }
 
-impl<V> LocalSlot<V> {
-    const fn value(&self) -> Option<&V> {
+impl LocalSlot {
+    const fn value(&self) -> Option<&ValueId> {
         match self {
             Self::Value(value) => Some(&value.value),
             Self::Reserved | Self::Unset | Self::Unavailable => None,
@@ -26,7 +26,7 @@ impl<V> LocalSlot<V> {
     fn merge_from_with<E>(
         &mut self,
         other: Self,
-        join_values: impl FnOnce(&mut V, V) -> Result<(), E>,
+        join_values: impl FnOnce(&mut ValueId, ValueId) -> Result<(), E>,
     ) -> Result<(), E> {
         use LocalSlot::{Reserved, Unavailable, Unset, Value};
         match (self, other) {
@@ -47,8 +47,8 @@ impl<V> LocalSlot<V> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct LocalVariables<V> {
-    slots: Box<[LocalSlot<V>]>,
+pub(crate) struct LocalVariables {
+    slots: Box<[LocalSlot]>,
 }
 
 /// Slots assigned to the method-entry values in a fresh local-variable table.
@@ -64,7 +64,7 @@ pub(crate) struct EntrySlots {
     pub(crate) parameters: Vec<u16>,
 }
 
-impl<V> LocalVariables<V> {
+impl LocalVariables {
     fn invalidate_overlapping_category_2(&mut self, index: usize) {
         if index > 0
             && matches!(self.slots[index], LocalSlot::Reserved)
@@ -84,7 +84,7 @@ impl<V> LocalVariables<V> {
         }
     }
 
-    pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&V, Error> {
+    pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, Error> {
         let index = usize::from(index);
         let value = match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
             LocalSlot::Value(value) if value.category == expected => &value.value,
@@ -102,7 +102,12 @@ impl<V> LocalVariables<V> {
         Ok(value)
     }
 
-    pub fn set(&mut self, index: u16, value: V, category: ValueCategory) -> Result<(), Error> {
+    pub fn set(
+        &mut self,
+        index: u16,
+        value: ValueId,
+        category: ValueCategory,
+    ) -> Result<(), Error> {
         let index = usize::from(index);
         let end = index
             .checked_add(category.slot_count())
@@ -127,12 +132,9 @@ impl<V> LocalVariables<V> {
     pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_slots: u16,
-        this_value: Option<V>,
-        parameters: &[V],
-    ) -> Result<(Self, EntrySlots), Error>
-    where
-        V: Clone,
-    {
+        this_value: Option<ValueId>,
+        parameters: &[ValueId],
+    ) -> Result<(Self, EntrySlots), Error> {
         if parameters.len() != descriptor.parameters_types.len() {
             return Err(Error::ParameterCountMismatch);
         }
@@ -151,7 +153,7 @@ impl<V> LocalVariables<V> {
         let mut parameter_slots = Vec::with_capacity(parameters.len());
         for (value_type, value) in descriptor.parameters_types.iter().zip(parameters) {
             let category = ValueCategory::of_field_type(value_type);
-            locals.set(index, value.clone(), category)?;
+            locals.set(index, *value, category)?;
             parameter_slots.push(index);
             index += u16::try_from(category.slot_count())
                 .expect("JVM categories occupy at most two slots");
@@ -176,7 +178,7 @@ impl<V> LocalVariables<V> {
     pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(usize, &mut V, V) -> Result<(), E>,
+        mut merge_values: impl FnMut(usize, &mut ValueId, ValueId) -> Result<(), E>,
     ) -> Result<(), E> {
         for (index, (lhs, rhs)) in self.slots.iter_mut().zip(other.slots).enumerate() {
             lhs.merge_from_with(rhs, |lhs, rhs| merge_values(index, lhs, rhs))?;
@@ -188,7 +190,7 @@ impl<V> LocalVariables<V> {
         self.slots.len() == other.slots.len()
     }
 
-    pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&V>> {
+    pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&ValueId>> {
         self.slots.iter().map(LocalSlot::value)
     }
 }

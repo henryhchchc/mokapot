@@ -3,11 +3,11 @@ use std::{collections::BTreeMap, convert::Infallible};
 
 use super::model;
 use crate::ir::{
-    BlockId, TryMapValues,
+    BlockId, ValueId,
     generator::{
         bytecode_analysis::scalar::{PhiCandidate, ScalarBlock, Successor},
         error::Error,
-        identity::SsaValueId,
+        remap::RemapValues,
         ssa::{model::Phi, simplify::SimplifiedPhis},
     },
 };
@@ -50,7 +50,7 @@ pub(super) fn finalize(
 fn finalize_block(
     block: ScalarBlock,
     phis: Vec<Phi>,
-    canonical: &impl Fn(SsaValueId) -> SsaValueId,
+    canonical: &impl Fn(ValueId) -> ValueId,
 ) -> model::Block {
     let ScalarBlock {
         id,
@@ -95,15 +95,9 @@ fn finalize_block(
     }
 }
 
-fn apply_substitutions<T>(
-    value: T,
-    canonical: &impl Fn(SsaValueId) -> SsaValueId,
-) -> <T as TryMapValues<SsaValueId>>::Mapped
-where
-    T: TryMapValues<SsaValueId, Value = SsaValueId>,
-{
-    match value.try_map_values(|value| Ok::<_, Infallible>(canonical(value))) {
-        Ok(mapped) => mapped,
+fn apply_substitutions<T: RemapValues>(mut value: T, canonical: &impl Fn(ValueId) -> ValueId) -> T {
+    match value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value))) {
+        Ok(()) => value,
         Err(never) => match never {},
     }
 }

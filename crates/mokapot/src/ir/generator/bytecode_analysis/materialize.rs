@@ -5,15 +5,12 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 
 use super::{
-    FrameValue,
     analyzer::Analyzer,
     model::{AnalyzedBlock, Location, PhiDefinition, Predecessor},
     scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor},
 };
 use crate::ir::{
-    BlockId, TerminatorKind, TryMapValues,
-    control_flow::ControlTransfer,
-    generator::{error::Error, identity::SsaValueId},
+    BlockId, TerminatorKind, ValueId, control_flow::ControlTransfer, generator::error::Error,
 };
 
 impl Analyzer<'_, '_> {
@@ -87,7 +84,7 @@ impl Analyzer<'_, '_> {
         &self,
         block_ids_by_location: &BTreeMap<Location, BlockId>,
         preheader: Option<BlockId>,
-    ) -> Result<BTreeMap<SsaValueId, PhiCandidate>, Error> {
+    ) -> Result<BTreeMap<ValueId, PhiCandidate>, Error> {
         self.phi_definitions
             .iter()
             .filter(|(site, _)| block_ids_by_location.contains_key(&site.location))
@@ -133,31 +130,18 @@ fn materialize_block(
     block_ids_by_location: &BTreeMap<Location, BlockId>,
 ) -> Result<ScalarBlock, Error> {
     let successors = analyzed
-        .successors
+        .edges
         .into_iter()
         .map(|successor| {
             let target = *block_ids_by_location
                 .get(&successor.target)
                 .ok_or_else(|| Error::internal("a successor target has no scalar block"))?;
-            let transfer = successor
-                .transfer
-                .try_map_values(FrameValue::into_ssa_value_id)?;
+            let transfer = successor.transfer;
             Ok(Successor { target, transfer })
         })
         .collect::<Result<_, Error>>()?;
-    let operations = analyzed
-        .operations
-        .into_iter()
-        .map(|(pc, operation)| {
-            operation
-                .try_map_values(FrameValue::into_ssa_value_id)
-                .map(|operation| (pc, operation))
-                .map_err(|error| error.at_instruction(pc))
-        })
-        .collect::<Result<_, _>>()?;
-    let terminator = analyzed
-        .terminator
-        .try_map_values(FrameValue::into_ssa_value_id)?;
+    let operations = analyzed.operations;
+    let terminator = analyzed.terminator;
     Ok(ScalarBlock {
         id,
         caught_exception: analyzed.caught_exception,

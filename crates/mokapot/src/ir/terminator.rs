@@ -1,8 +1,7 @@
 use std::{collections::HashSet, fmt};
 
 use super::{
-    BlockId, EdgeId, InstructionId, TryMapValues, ValueId, control_flow::ControlTransfer,
-    expression::Predicate,
+    BlockId, EdgeId, InstructionId, ValueId, control_flow::ControlTransfer, expression::Predicate,
 };
 /// One ordered outgoing arm of a terminator.
 ///
@@ -35,7 +34,7 @@ impl Successor {
 
 /// The control-flow operation ending a basic block.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum TerminatorKind<OP = ValueId> {
+pub enum TerminatorKind {
     /// Transfers control to one successor.
     #[display("goto")]
     Goto,
@@ -46,43 +45,20 @@ pub enum TerminatorKind<OP = ValueId> {
     #[display("switch {match_value}")]
     Switch {
         /// The value matched by the switch arms.
-        match_value: OP,
+        match_value: ValueId,
     },
-    /// Completes the method normally, with exceptional successors when method
-    /// exit itself can fail.
+    /// Completes the method normally.
     #[display("return{}", _0.as_ref().map(|value| format!(" {value}")).unwrap_or_default())]
-    Return(Option<OP>),
+    Return(Option<ValueId>),
     /// Throws an exception.
     #[display("throw {_0}")]
-    Throw(OP),
+    Throw(ValueId),
     /// Selects the normal or an exceptional outcome of a fallible operation.
     #[display("fallible")]
     Fallible,
     /// Propagates an exception out of the method.
     #[display("unwind")]
     Unwind,
-}
-
-impl<OP, OUT> TryMapValues<OUT> for TerminatorKind<OP> {
-    type Value = OP;
-    type Mapped = TerminatorKind<OUT>;
-
-    fn try_map_values<E>(
-        self,
-        mut remap: impl FnMut(OP) -> Result<OUT, E>,
-    ) -> Result<TerminatorKind<OUT>, E> {
-        Ok(match self {
-            Self::Goto => TerminatorKind::Goto,
-            Self::Branch => TerminatorKind::Branch,
-            Self::Switch { match_value } => TerminatorKind::Switch {
-                match_value: remap(match_value)?,
-            },
-            Self::Return(value) => TerminatorKind::Return(value.map(remap).transpose()?),
-            Self::Throw(value) => TerminatorKind::Throw(remap(value)?),
-            Self::Fallible => TerminatorKind::Fallible,
-            Self::Unwind => TerminatorKind::Unwind,
-        })
-    }
 }
 
 /// An identified terminator and its ordered successor arms.
@@ -141,30 +117,5 @@ impl Terminator {
 impl fmt::Display for Terminator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.kind.fmt(f)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{TerminatorKind, TryMapValues};
-
-    #[test]
-    fn maps_value_bearing_terminators() {
-        assert_eq!(
-            TerminatorKind::Switch { match_value: 1_u8 }
-                .try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
-            Ok(TerminatorKind::Switch {
-                match_value: 11_u16
-            })
-        );
-        assert_eq!(
-            TerminatorKind::Return(Some(1_u8))
-                .try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
-            Ok(TerminatorKind::Return(Some(11_u16)))
-        );
-        assert_eq!(
-            TerminatorKind::Throw(1_u8).try_map_values(|_| Err::<u16, _>("unmapped")),
-            Err("unmapped")
-        );
     }
 }

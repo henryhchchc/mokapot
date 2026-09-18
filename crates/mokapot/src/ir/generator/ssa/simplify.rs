@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::generator::{bytecode_analysis::scalar::PhiCandidate, identity::SsaValueId};
+use crate::ir::{ValueId, generator::bytecode_analysis::scalar::PhiCandidate};
 
 /// The result of simplifying a set of provisional phi nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SimplifiedPhis {
     /// Canonical replacements for eliminated phi results.
-    pub(super) substitutions: BTreeMap<SsaValueId, SsaValueId>,
+    pub(super) substitutions: BTreeMap<ValueId, ValueId>,
     /// Phi candidates that represent genuine choices after rewriting.
-    pub(super) candidates: BTreeMap<SsaValueId, PhiCandidate>,
+    pub(super) candidates: BTreeMap<ValueId, PhiCandidate>,
 }
 
 /// An inconsistency found while simplifying provisional phi nodes.
@@ -18,7 +18,7 @@ pub(super) enum PhiSimplificationError {
     #[error("reachable phi cycle containing {representative} has no external value")]
     ClosedCycle {
         /// The lowest-numbered result in the remaining canonical cycle.
-        representative: SsaValueId,
+        representative: ValueId,
     },
 }
 
@@ -28,7 +28,7 @@ pub(super) enum PhiSimplificationError {
 /// returned as fully canonical substitutions, and every retained input is
 /// rewritten through those substitutions.
 pub(super) fn simplify_phis(
-    mut candidates: BTreeMap<SsaValueId, PhiCandidate>,
+    mut candidates: BTreeMap<ValueId, PhiCandidate>,
 ) -> Result<SimplifiedPhis, PhiSimplificationError> {
     let mut substitutions = BTreeMap::new();
 
@@ -109,10 +109,7 @@ pub(super) fn simplify_phis(
     })
 }
 
-fn canonical(
-    mut value: SsaValueId,
-    substitutions: &BTreeMap<SsaValueId, SsaValueId>,
-) -> SsaValueId {
+fn canonical(mut value: ValueId, substitutions: &BTreeMap<ValueId, ValueId>) -> ValueId {
     while let Some(&replacement) = substitutions.get(&value) {
         debug_assert_ne!(value, replacement, "a substitution must make progress");
         value = replacement;
@@ -121,8 +118,8 @@ fn canonical(
 }
 
 fn rewrite_candidates(
-    candidates: &mut BTreeMap<SsaValueId, PhiCandidate>,
-    substitutions: &BTreeMap<SsaValueId, SsaValueId>,
+    candidates: &mut BTreeMap<ValueId, PhiCandidate>,
+    substitutions: &BTreeMap<ValueId, ValueId>,
 ) {
     for candidate in candidates.values_mut() {
         for (_, value) in &mut candidate.inputs {
@@ -132,8 +129,8 @@ fn rewrite_candidates(
 }
 
 fn strongly_connected_components(
-    candidates: &BTreeMap<SsaValueId, PhiCandidate>,
-) -> Vec<BTreeSet<SsaValueId>> {
+    candidates: &BTreeMap<ValueId, PhiCandidate>,
+) -> Vec<BTreeSet<ValueId>> {
     let nodes = candidates.keys().copied().collect::<BTreeSet<_>>();
     let adjacency = candidates
         .iter()
@@ -216,6 +213,3 @@ fn strongly_connected_components(
     });
     components
 }
-
-#[cfg(test)]
-mod tests;
