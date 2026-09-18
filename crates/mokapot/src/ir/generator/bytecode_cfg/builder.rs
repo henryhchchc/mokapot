@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use itertools::Itertools;
+
 use super::{
     fallibility::Fallibility,
     model::{Block, BlockExit, BytecodeCfg, ExceptionalTarget, HandlerId, StructuralBlockId},
@@ -173,28 +175,26 @@ impl<'method> Builder<'method> {
     }
 
     fn exceptional_successors(&self, pc: ProgramCounter) -> Vec<ExceptionalTarget> {
-        let mut successors = Vec::new();
-        let mut has_catch_all = false;
-        for entry in self
+        let effective_handlers: Vec<_> = self
             .body
             .exception_table
             .iter()
             .filter(|entry| entry.covers(pc))
-        {
-            let catch_type = entry.catch_type.clone();
-            successors.push(ExceptionalTarget::Handler {
+            // Handler selection walks the table in order, so the first catch-all shadows later ones.
+            .take_while_inclusive(|it| !it.catches_all())
+            .collect();
+        let unwind = effective_handlers
+            .last()
+            .is_none_or(|it| !it.catches_all())
+            .then_some(ExceptionalTarget::Unwind);
+        effective_handlers
+            .into_iter()
+            .map(|entry| ExceptionalTarget::Handler {
                 id: HandlerId::from_pc(entry.handler_pc),
-                catch_type,
-            });
-            has_catch_all = entry.catches_all();
-            if has_catch_all {
-                break;
-            }
-        }
-        if !has_catch_all {
-            successors.push(ExceptionalTarget::Unwind);
-        }
-        successors
+                catch_type: entry.catch_type.clone(),
+            })
+            .chain(unwind)
+            .collect()
     }
 }
 
