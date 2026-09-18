@@ -151,13 +151,13 @@ impl MokaIRMethod {
             .get(usize::try_from(id.index()).ok()?)?;
         Some(match *location {
             InstructionLocation::Phi { block, index } => {
-                InstructionRef::Phi(self.block(block)?.phis().get(index)?)
+                InstructionRef::Phi(self.block(block)?.phis.get(index)?)
             }
             InstructionLocation::Operation { block, index } => {
-                InstructionRef::Operation(self.block(block)?.operations().get(index)?)
+                InstructionRef::Operation(self.block(block)?.operations.get(index)?)
             }
             InstructionLocation::Terminator { block } => {
-                InstructionRef::Terminator(self.block(block)?.terminator())
+                InstructionRef::Terminator(&self.block(block)?.terminator)
             }
         })
     }
@@ -186,7 +186,7 @@ impl MokaIRMethod {
     /// need not have JVM source provenance.
     #[must_use]
     pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
-        self.block(block).and_then(BasicBlock::caught_exception)
+        self.block(block)?.caught_exception
     }
 
     /// Returns the unique definition of a method-local SSA value.

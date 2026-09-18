@@ -85,7 +85,7 @@ impl IntoNodeIdentifiers for &ControlFlowGraph<'_> {
     fn node_identifiers(self) -> Self::NodeIdentifiers {
         self.blocks
             .iter()
-            .map(BasicBlock::id)
+            .map(|it| it.id)
             .collect::<Vec<_>>()
             .into_iter()
     }
@@ -107,7 +107,7 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
             self.blocks
                 .get(usize::try_from(block.index()).unwrap_or(usize::MAX))
                 .into_iter()
-                .flat_map(|block| block.terminator().successors())
+                .flat_map(|block| block.terminator.successors())
                 .map(super::super::Successor::target)
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -116,11 +116,11 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
                 .iter()
                 .flat_map(|candidate| {
                     candidate
-                        .terminator()
+                        .terminator
                         .successors()
                         .iter()
                         .filter(move |successor| successor.target() == block)
-                        .map(move |_| candidate.id())
+                        .map(move |_| candidate.id)
                 })
                 .collect::<Vec<_>>()
                 .into_iter()

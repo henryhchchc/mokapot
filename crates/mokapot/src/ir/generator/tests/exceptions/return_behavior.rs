@@ -63,7 +63,7 @@ fn unhandled_synchronized_return_reaches_unwind() {
     assert_eq!(
         ir.block(return_terminator.successors()[0].target())
             .unwrap()
-            .terminator()
+            .terminator
             .kind(),
         &TerminatorKind::Unwind
     );

@@ -17,16 +17,16 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
     let ir = build(&method).unwrap();
     let join = ir
         .blocks()
-        .find(|block| matches!(block.terminator().kind(), TerminatorKind::Return(Some(_))))
+        .find(|block| matches!(block.terminator.kind(), TerminatorKind::Return(Some(_))))
         .unwrap();
-    let [phi] = join.phis() else {
+    let [phi] = join.phis.as_slice() else {
         panic!("the join must contain one phi")
     };
 
     assert_eq!(phi.inputs.len(), 2);
     assert_ne!(phi.inputs[0].predecessor, phi.inputs[1].predecessor);
     assert!(matches!(
-        join.terminator().kind(),
+        join.terminator.kind(),
         TerminatorKind::Return(Some(value)) if *value == phi.value
     ));
     assert_eq!(
@@ -81,16 +81,16 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     );
     let ir = build(&method).unwrap();
     let preheader = ir.block(ir.entry_block()).unwrap();
-    let header_id = preheader.terminator().successors()[0].target();
+    let header_id = preheader.terminator.successors()[0].target();
     let header = ir.block(header_id).unwrap();
-    let [phi] = header.phis() else {
+    let [phi] = header.phis.as_slice() else {
         panic!("the loop header must contain one phi")
     };
 
-    assert_eq!(preheader.operations().len(), 0);
+    assert_eq!(preheader.operations.len(), 0);
     assert_eq!(
         ir.source_map()
-            .origins_of(preheader.terminator().id())
+            .origins_of(preheader.terminator.id())
             .count(),
         0
     );
@@ -112,7 +112,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     };
     let definition = ir
         .blocks()
-        .flat_map(BasicBlock::operations)
+        .flat_map(|block| &block.operations)
         .find(|instruction| instruction.id() == backedge_definition)
         .unwrap();
     assert!(definition.uses().contains(&phi.value));
@@ -125,28 +125,28 @@ fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 2);
-    assert!(blocks.iter().all(|block| block.phis().is_empty()));
-    assert!(blocks[0].operations().is_empty());
-    assert_eq!(blocks[0].terminator().successors().len(), 1);
+    assert!(blocks.iter().all(|block| block.phis.is_empty()));
+    assert!(blocks[0].operations.is_empty());
+    assert_eq!(blocks[0].terminator.successors().len(), 1);
     assert!(matches!(
-        blocks[0].terminator().successors()[0].transfer(),
+        blocks[0].terminator.successors()[0].transfer(),
         ControlTransfer::Unconditional
     ));
     assert_eq!(
         ir.source_map()
-            .origins_of(blocks[0].terminator().id())
+            .origins_of(blocks[0].terminator.id())
             .count(),
         0
     );
-    let [arm] = blocks[0].terminator().successors() else {
+    let [arm] = blocks[0].terminator.successors() else {
         panic!("the preheader must have exactly one successor")
     };
     let header = ir.block(arm.target()).unwrap();
     assert_eq!(header, blocks[1]);
-    assert_eq!(header.terminator().successors()[0].target(), header.id());
+    assert_eq!(header.terminator.successors()[0].target(), header.id);
     assert_eq!(
         ir.source_map()
-            .origins_of(header.terminator().id())
+            .origins_of(header.terminator.id())
             .collect::<Vec<_>>(),
         [ProgramCounter::from(0)]
     );
@@ -177,15 +177,15 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     let ir = build(&method).unwrap();
     let header = ir
         .blocks()
-        .find(|block| matches!(block.terminator().kind(), TerminatorKind::Branch))
+        .find(|block| matches!(block.terminator.kind(), TerminatorKind::Branch))
         .unwrap();
 
-    assert_eq!(header.phis().len(), 1);
-    let counter = &header.phis()[0];
+    assert_eq!(header.phis.len(), 1);
+    let counter = &header.phis[0];
     assert_eq!(counter.inputs.len(), 2);
     let returned = ir
         .blocks()
-        .find_map(|block| match block.terminator().kind() {
+        .find_map(|block| match block.terminator.kind() {
             TerminatorKind::Return(Some(value)) => Some(value),
             _ => None,
         })
@@ -218,7 +218,10 @@ fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let phis = ir.blocks().flat_map(BasicBlock::phis).collect::<Vec<_>>();
+    let phis = ir
+        .blocks()
+        .flat_map(|block| &block.phis)
+        .collect::<Vec<_>>();
 
     assert_eq!(phis.len(), 3);
     let cyclic_results = phis

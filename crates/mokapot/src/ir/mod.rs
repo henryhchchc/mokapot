@@ -29,10 +29,10 @@
 //! for method in class.methods.iter().filter(|method| method.body.is_some()) {
 //!     let ir = MokaIRMethod::from_method(method)?;
 //!     for block in ir.blocks() {
-//!         for operation in block.operations() {
+//!         for operation in &block.operations {
 //!             println!("{}: {operation}", operation.id());
 //!         }
-//!         println!("{}: {}", block.terminator().id(), block.terminator());
+//!         println!("{}: {}", block.terminator.id(), block.terminator);
 //!     }
 //! }
 //! # Ok(())

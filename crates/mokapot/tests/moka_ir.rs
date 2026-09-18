@@ -84,7 +84,7 @@ fn builds_ir_blocks_and_provenance() {
     ));
 
     for block in ir.blocks() {
-        assert!(ir.block(block.id()).is_some());
+        assert!(ir.block(block.id).is_some());
     }
 }
 
@@ -93,7 +93,7 @@ fn builds_ir_blocks_and_provenance() {
 fn du_chain_definitions_use_instruction_identities() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let chain = DefUseChain::new(&ir);
-    for instruction in ir.blocks().flat_map(|block| block.operations()) {
+    for instruction in ir.blocks().flat_map(|block| &block.operations) {
         if let Some(value) = instruction.def() {
             assert_eq!(
                 chain.definition_of(value),
@@ -116,21 +116,21 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
     }
     definitions.extend(ir.parameter_values());
     for block in ir.blocks() {
-        if let Some(value) = ir.caught_exception(block.id()) {
+        if let Some(value) = ir.caught_exception(block.id) {
             definitions.insert(value);
         }
         let predecessors = ir
             .blocks()
             .filter(|candidate| {
                 candidate
-                    .terminator()
+                    .terminator
                     .successors()
                     .iter()
-                    .any(|successor| successor.target() == block.id())
+                    .any(|successor| successor.target() == block.id)
             })
-            .map(mokapot::ir::BasicBlock::id)
+            .map(|block| block.id)
             .collect::<BTreeSet<_>>();
-        for phi in block.phis() {
+        for phi in &block.phis {
             assert!(instruction_ids.insert(phi.id));
             assert!(definitions.insert(phi.value));
             assert_eq!(
@@ -142,15 +142,15 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             );
             uses.extend(phi.inputs.iter().map(|it| it.value));
         }
-        for instruction in block.operations() {
+        for instruction in &block.operations {
             assert!(instruction_ids.insert(instruction.id()));
             if let Some(value) = instruction.def() {
                 assert!(definitions.insert(value));
             }
             uses.extend(instruction.uses());
         }
-        assert!(instruction_ids.insert(block.terminator().id()));
-        uses.extend(block.terminator().uses());
+        assert!(instruction_ids.insert(block.terminator.id()));
+        uses.extend(block.terminator.uses());
     }
 
     assert!(uses.iter().all(|value| definitions.contains(value)));
@@ -211,7 +211,7 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
             .count(),
         0
     );
-    assert!(ir.blocks().flat_map(|block| block.phis()).all(|phi| {
+    assert!(ir.blocks().flat_map(|block| &block.phis).all(|phi| {
         ir.source_map().origins_of(phi.id).next().is_none() && !covered_nodes.contains(&phi.id)
     }));
 }
@@ -239,7 +239,7 @@ fn dominance() {
     assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);
     assert!(
         ir.blocks()
-            .filter(|block| block.id() != ir.entry_block())
-            .all(|block| { dominance.immediate_dominator(block.id()).is_some() })
+            .filter(|block| block.id != ir.entry_block())
+            .all(|block| { dominance.immediate_dominator(block.id).is_some() })
     );
 }

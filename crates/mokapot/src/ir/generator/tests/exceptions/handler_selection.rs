@@ -42,7 +42,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let ir = build(&method).unwrap();
     let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
     let transfers = fallible
-        .terminator()
+        .terminator
         .successors()
         .iter()
         .map(Successor::transfer)
@@ -83,8 +83,8 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
 
     assert_eq!(ir.blocks().len(), 1);
     assert!(ir.blocks().all(|block| {
-        !matches!(block.terminator().kind(), TerminatorKind::Fallible)
-            && block.terminator().successors().iter().all(|successor| {
+        !matches!(block.terminator.kind(), TerminatorKind::Fallible)
+            && block.terminator.successors().iter().all(|successor| {
                 matches!(successor.transfer(), ControlTransfer::Unconditional)
                     || matches!(successor.transfer(), ControlTransfer::Conditional(_))
             })

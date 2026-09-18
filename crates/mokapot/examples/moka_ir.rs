@@ -21,19 +21,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}{}:", ir.name(), ir.descriptor());
 
         for block in ir.blocks() {
-            println!("{}:", block.id());
-            for phi in block.phis() {
+            println!("{}:", block.id);
+            for phi in &block.phis {
                 print!("  {}: {} = phi", phi.id, phi.value);
                 for input in &phi.inputs {
                     print!(" [{}: {}]", input.predecessor, input.value);
                 }
                 println!();
             }
-            for operation in block.operations() {
+            for operation in &block.operations {
                 println!("  {}: {operation}", operation.id());
             }
 
-            let terminator = block.terminator();
+            let terminator = &block.terminator;
             println!("  {}: {terminator}", terminator.id());
             for successor in terminator.successors() {
                 println!(

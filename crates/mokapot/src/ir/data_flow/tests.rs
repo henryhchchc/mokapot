@@ -34,7 +34,7 @@ fn records_parameter_phi_and_terminator_data_flow() {
         Some(ValueDefinition::Parameter(0))
     );
 
-    let branch = ir.block(ir.entry_block()).unwrap().terminator();
+    let branch = &ir.block(ir.entry_block()).unwrap().terminator;
     assert!(matches!(branch.kind(), TerminatorKind::Branch));
     assert_eq!(
         chain.uses_of(parameter).collect::<BTreeSet<_>>(),
@@ -43,8 +43,8 @@ fn records_parameter_phi_and_terminator_data_flow() {
 
     let (join, phi) = ir
         .blocks()
-        .find_map(|block| match block.terminator().kind() {
-            TerminatorKind::Return(Some(_)) => block.phis().first().map(|phi| (block, phi)),
+        .find_map(|block| match block.terminator.kind() {
+            TerminatorKind::Return(Some(_)) => block.phis.first().map(|phi| (block, phi)),
             _ => None,
         })
         .expect("the join must hold the phi feeding its return");
@@ -54,7 +54,7 @@ fn records_parameter_phi_and_terminator_data_flow() {
     );
     assert_eq!(
         chain.uses_of(phi.value).collect::<BTreeSet<_>>(),
-        BTreeSet::from([UseSite::Instruction(join.terminator().id())])
+        BTreeSet::from([UseSite::Instruction(join.terminator.id())])
     );
     for &PhiInput { predecessor, value } in &phi.inputs {
         let site = UseSite::PhiInput {
@@ -83,13 +83,13 @@ fn records_the_this_definition_and_its_terminator_use() {
     let this = ir
         .this_value()
         .expect("an instance method has a this value");
-    let returned = ir
+    let returned = &ir
         .blocks()
         .find(|block| {
-            matches!(block.terminator().kind(), TerminatorKind::Return(Some(value)) if *value == this)
+            matches!(block.terminator.kind(), TerminatorKind::Return(Some(value)) if *value == this)
         })
         .expect("the method must return this")
-        .terminator();
+        .terminator;
 
     assert_eq!(chain.definition_of(this), Some(ValueDefinition::This));
     assert_eq!(
@@ -124,10 +124,7 @@ fn records_an_unused_caught_exception_definition() {
 
     let (handler, caught) = ir
         .blocks()
-        .find_map(|block| {
-            ir.caught_exception(block.id())
-                .map(|value| (block.id(), value))
-        })
+        .find_map(|block| ir.caught_exception(block.id).map(|value| (block.id, value)))
         .expect("the handler entry must define a caught exception");
 
     assert_eq!(

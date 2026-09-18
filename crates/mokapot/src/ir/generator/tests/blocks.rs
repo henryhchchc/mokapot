@@ -16,9 +16,9 @@ fn straight_line_instructions_coalesce_into_one_block() {
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 1);
-    assert_eq!(blocks[0].operations().len(), 1);
+    assert_eq!(blocks[0].operations.len(), 1);
     assert!(matches!(
-        blocks[0].terminator().kind(),
+        blocks[0].terminator.kind(),
         TerminatorKind::Return(Some(_))
     ));
 
@@ -85,8 +85,8 @@ fn backward_target_starts_a_block_even_when_transfer_is_last() {
     assert_eq!(ir.blocks().len(), 2);
     let loop_block = ir.blocks().nth(1).unwrap();
     assert_eq!(
-        loop_block.terminator().successors()[0].target(),
-        loop_block.id()
+        loop_block.terminator.successors()[0].target(),
+        loop_block.id
     );
 }
 
@@ -104,8 +104,8 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
     );
     let ir = build(&method).unwrap();
     let entry = ir.block(ir.entry_block()).unwrap();
-    let fallthrough = entry.terminator().successors()[1].target();
-    let synthetic = ir.block(fallthrough).unwrap().terminator();
+    let fallthrough = entry.terminator.successors()[1].target();
+    let synthetic = &ir.block(fallthrough).unwrap().terminator;
 
     assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
     assert_eq!(ir.source_map().instructions_at(2.into()).count(), 0);

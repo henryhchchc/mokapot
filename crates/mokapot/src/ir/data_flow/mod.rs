@@ -53,7 +53,7 @@ impl DefUseChain {
         let mut uses: HashMap<ValueId, BTreeSet<UseSite>> = HashMap::new();
 
         for block in method.blocks() {
-            for phi in block.phis() {
+            for phi in &block.phis {
                 for &PhiInput { predecessor, value } in &phi.inputs {
                     uses.entry(value).or_default().insert(UseSite::PhiInput {
                         phi: phi.id,
@@ -61,17 +61,17 @@ impl DefUseChain {
                     });
                 }
             }
-            for operation in block.operations() {
+            for operation in &block.operations {
                 for value in operation.uses() {
                     uses.entry(value)
                         .or_default()
                         .insert(UseSite::Instruction(operation.id()));
                 }
             }
-            for value in block.terminator().uses() {
+            for value in block.terminator.uses() {
                 uses.entry(value)
                     .or_default()
-                    .insert(UseSite::Instruction(block.terminator().id()));
+                    .insert(UseSite::Instruction(block.terminator.id()));
             }
         }
 
