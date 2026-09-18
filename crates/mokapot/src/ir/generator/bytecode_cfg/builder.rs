@@ -54,7 +54,7 @@ impl<'method> Builder<'method> {
         self.body
             .instructions
             .iter()
-            .map(|(&pc, instruction)| {
+            .map(|(pc, instruction)| {
                 PcFlow::classify(self.body, pc, instruction).map(|flow| (pc, flow))
             })
             .collect()
@@ -73,7 +73,7 @@ impl<'method> Builder<'method> {
                 .map(|entry| entry.handler_pc),
         );
 
-        for (&pc, instruction) in self.body.instructions.iter() {
+        for (pc, instruction) in self.body.instructions.iter() {
             let flow = flows
                 .get(&pc)
                 .ok_or_else(|| Error::internal_at(pc, "a decoded instruction has no flow"))?;
@@ -135,7 +135,7 @@ impl<'method> Builder<'method> {
 
     fn is_instruction_boundary(&self, pc: ProgramCounter) -> bool {
         self.body.instruction_at(pc).is_some()
-            || self.body.instructions.iter().any(|(&start, instruction)| {
+            || self.body.instructions.iter().any(|(start, instruction)| {
                 instruction
                     .encoded_end_pc(start)
                     .is_some_and(|end| end == pc)
@@ -143,7 +143,7 @@ impl<'method> Builder<'method> {
     }
 
     fn validate_instructions(&self) -> Result<(), Error> {
-        for (&pc, instruction) in self.body.instructions.iter() {
+        for (pc, instruction) in self.body.instructions.iter() {
             if matches!(
                 instruction,
                 Instruction::Jsr(_)
@@ -197,7 +197,7 @@ impl<'method> Builder<'method> {
     ) -> Result<(Vec<BlockGroup>, BTreeMap<ProgramCounter, StructuralBlockId>), Error> {
         let mut groups: Vec<BlockGroup> = Vec::with_capacity(leaders.len());
         let mut block_by_start_pc = BTreeMap::new();
-        for (&pc, _) in self.body.instructions.iter() {
+        for (pc, _) in self.body.instructions.iter() {
             if leaders.contains(&pc) {
                 let id = StructuralBlockId::from_index(groups.len());
                 groups.push(BlockGroup {
