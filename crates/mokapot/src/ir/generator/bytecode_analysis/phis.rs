@@ -50,12 +50,12 @@ impl Analyzer<'_, '_> {
             .retain(|site, _| site.location != location);
         self.phi_definitions.extend(phi_definitions);
 
-        let analysis = &mut self
+        let execution = &mut self
             .locations
             .get_mut(&location)
             .ok_or_else(|| Error::internal("a reachable block has no location state"))?
-            .analysis;
-        Ok(analysis.update_entry(merged))
+            .execution;
+        Ok(execution.update_input(merged))
     }
 }
 

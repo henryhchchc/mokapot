@@ -58,21 +58,21 @@ pub(super) struct AnalyzedBlock {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct AnalyzedSuccessors {
     pub(super) edges: Vec<AnalyzedEdge>,
-    frames: BTreeMap<Location, Frame>,
+    output_frames: BTreeMap<Location, Frame>,
 }
 
 impl AnalyzedSuccessors {
     pub(super) fn push(&mut self, edge: AnalyzedEdge, frame: Frame) {
-        if let Some(existing) = self.frames.get(&edge.target) {
+        if let Some(existing) = self.output_frames.get(&edge.target) {
             assert_eq!(existing, &frame, "parallel edges must contribute one frame");
         } else {
-            self.frames.insert(edge.target, frame);
+            self.output_frames.insert(edge.target, frame);
         }
         self.edges.push(edge);
     }
 
-    pub(super) fn take_frames(&mut self) -> BTreeMap<Location, Frame> {
-        std::mem::take(&mut self.frames)
+    pub(super) fn take_output_frames(&mut self) -> BTreeMap<Location, Frame> {
+        std::mem::take(&mut self.output_frames)
     }
 }
 
@@ -83,48 +83,48 @@ impl AnalyzedSuccessors {
 #[derive(Debug, Default)]
 pub(super) struct LocationState {
     pub(super) contributions: BTreeMap<Predecessor, Frame>,
-    pub(super) analysis: LocationAnalysis,
+    pub(super) execution: LocationExecution,
 }
 
-/// Lifecycle of a reachable analysis location.
+/// Execution lifecycle of a reachable analysis location.
 #[derive(Debug, Default)]
-pub(super) enum LocationAnalysis {
-    /// No contribution has yet been merged.
+pub(super) enum LocationExecution {
+    /// No input frame has yet been computed.
     #[default]
-    Unreached,
-    /// The entry frame changed and the location must be executed.
-    Pending(Frame),
-    /// The location was executed with the current entry frame.
-    Executed { entry: Frame, block: AnalyzedBlock },
+    Uninitialized,
+    /// The input frame changed and the location must be executed.
+    Pending { input: Frame },
+    /// The location was executed with the current input frame.
+    Complete { input: Frame, block: AnalyzedBlock },
 }
 
-impl LocationAnalysis {
-    pub(super) const fn entry_frame(&self) -> Option<&Frame> {
+impl LocationExecution {
+    pub(super) const fn input(&self) -> Option<&Frame> {
         match self {
-            Self::Unreached => None,
-            Self::Pending(frame) | Self::Executed { entry: frame, .. } => Some(frame),
+            Self::Uninitialized => None,
+            Self::Pending { input } | Self::Complete { input, .. } => Some(input),
         }
     }
 
-    pub(super) const fn execution(&self) -> Option<&AnalyzedBlock> {
+    pub(super) const fn block(&self) -> Option<&AnalyzedBlock> {
         match self {
-            Self::Executed { block, .. } => Some(block),
-            Self::Unreached | Self::Pending(_) => None,
+            Self::Complete { block, .. } => Some(block),
+            Self::Uninitialized | Self::Pending { .. } => None,
         }
     }
 
-    pub(super) fn update_entry(&mut self, frame: Frame) -> bool {
-        if self.entry_frame() == Some(&frame) {
+    pub(super) fn update_input(&mut self, input: Frame) -> bool {
+        if self.input() == Some(&input) {
             return false;
         }
-        *self = Self::Pending(frame);
+        *self = Self::Pending { input };
         true
     }
 
-    pub(super) fn finish(&mut self, block: AnalyzedBlock) {
-        let Self::Pending(entry) = std::mem::take(self) else {
+    pub(super) fn complete(&mut self, block: AnalyzedBlock) {
+        let Self::Pending { input } = std::mem::take(self) else {
             unreachable!("only a pending location can finish execution");
         };
-        *self = Self::Executed { entry, block };
+        *self = Self::Complete { input, block };
     }
 }

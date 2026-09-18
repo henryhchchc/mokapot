@@ -60,14 +60,14 @@ impl Analyzer<'_, '_> {
     fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let block = self.cfg.block(id);
         let final_pc = block.end_pc;
-        let explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
+        let has_explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
         let mut frame = input;
         let mut operations = Vec::new();
-        let mut instructions = self.cfg.instructions(id);
-        let (decoded_final_pc, final_instruction) = instructions
+        let mut instructions = self.cfg.block_instructions(id);
+        let (actual_final_pc, final_instruction) = instructions
             .next_back()
             .expect("a structural block must contain its final instruction");
-        debug_assert_eq!(decoded_final_pc, final_pc);
+        debug_assert_eq!(actual_final_pc, final_pc);
 
         for (pc, instruction) in instructions {
             let operation = self
@@ -79,8 +79,8 @@ impl Analyzer<'_, '_> {
             }
         }
 
-        let exceptional_input = frame.clone();
-        if !explicit_terminator {
+        let pre_final_frame = frame.clone();
+        if !has_explicit_terminator {
             let operation = self
                 .executor
                 .lift_instruction(final_instruction, final_pc, &mut frame)
@@ -99,29 +99,29 @@ impl Analyzer<'_, '_> {
         for edge in edges {
             successors.push(edge, frame.clone());
         }
-        for target in &block.exception_handlers {
-            self.push_exception_successor(target, &exceptional_input, &mut successors)?;
+        for exceptional_target in &block.exception_handlers {
+            self.push_exception_successor(exceptional_target, &pre_final_frame, &mut successors)?;
         }
         Ok(AnalyzedBlock {
             caught_exception: None,
             operations,
             terminator,
-            terminator_source: explicit_terminator.then_some(final_pc),
+            terminator_source: has_explicit_terminator.then_some(final_pc),
             successors,
         })
     }
 
     fn push_exception_successor(
         &mut self,
-        target: &bytecode_cfg::ExceptionalTarget,
-        input: &Frame,
+        exceptional_target: &bytecode_cfg::ExceptionalTarget,
+        input_frame: &Frame,
         successors: &mut AnalyzedSuccessors,
     ) -> Result<(), Error> {
-        match target {
+        match exceptional_target {
             bytecode_cfg::ExceptionalTarget::Handler { block, catch_type } => {
                 let location = Location::Handler(*block);
                 let caught = self.caught_exception(*block)?;
-                let frame = input.clone().exception_handler_frame(caught)?;
+                let frame = input_frame.clone().exception_handler_frame(caught)?;
                 successors.push(
                     AnalyzedEdge {
                         target: location,
@@ -136,7 +136,7 @@ impl Analyzer<'_, '_> {
                         target: Location::Unwind,
                         transfer: ControlTransfer::Unwind,
                     },
-                    input.clone().into_unwind_frame(),
+                    input_frame.clone().into_unwind_frame(),
                 );
             }
         }

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     Executor,
-    model::{Location, LocationAnalysis, LocationState, PhiDefinition, PhiSite, Predecessor},
+    model::{Location, LocationExecution, LocationState, PhiDefinition, PhiSite, Predecessor},
     scalar::ScalarGraph,
 };
 use crate::{
@@ -69,7 +69,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     ///
     /// The worklist rests on the invariant documented on [`LocationState`]: a
     /// location's successor targets never change, so its predecessor set only
-    /// grows and neither an entry frame nor an execution can be revoked.
+    /// grows. A changed input frame moves a completed location back to pending.
     pub(super) fn run(mut self) -> Result<ScalarGraph, Error> {
         let entry = Location::Bytecode(self.cfg.entry_block());
         self.locations
@@ -85,17 +85,17 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 .locations
                 .get(&location)
                 .expect("a worklist location must have analysis state");
-            let LocationAnalysis::Pending(input) = &state.analysis else {
+            let LocationExecution::Pending { input } = &state.execution else {
                 unreachable!("a worklist location must be pending");
             };
             let input = input.clone();
             let mut block = self.execute(location, input)?;
-            let outputs = block.successors.take_frames();
+            let outputs = block.successors.take_output_frames();
             self.locations
                 .entry(location)
                 .or_default()
-                .analysis
-                .finish(block);
+                .execution
+                .complete(block);
             for (target, frame) in outputs {
                 self.locations
                     .entry(target)

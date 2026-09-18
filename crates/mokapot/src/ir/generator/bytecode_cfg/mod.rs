@@ -60,12 +60,12 @@ impl<'method> JvmBlockGraph<'method> {
             .expect("a CFG block identity must belong to its graph")
     }
 
-    /// Iterates over the decoded instructions in `block`.
-    pub fn instructions(
+    /// Iterates over the decoded instructions in `block_id`.
+    pub fn block_instructions(
         &self,
-        block: JvmBlockId,
+        block_id: JvmBlockId,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &Instruction)> {
-        let block = self.block(block);
+        let block = self.block(block_id);
         self.body()
             .instructions
             .range(block.start_pc..=block.end_pc)
