@@ -4,7 +4,7 @@ use crate::jvm::{code::ProgramCounter, references::ClassRef};
 
 /// The value comparison performed by a conditional bytecode transfer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::ir::generator) enum BranchPredicate {
+pub(crate) enum BranchPredicate {
     IsZero,
     IsNonZero,
     IsNegative,
@@ -22,7 +22,7 @@ pub(in crate::ir::generator) enum BranchPredicate {
 }
 
 impl BranchPredicate {
-    pub(in crate::ir::generator) const fn operand_count(self) -> usize {
+    pub const fn operand_count(self) -> usize {
         match self {
             Self::IsZero
             | Self::IsNonZero
@@ -44,7 +44,7 @@ impl BranchPredicate {
 
 /// The stack shape consumed by a method return.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::ir::generator) enum ReturnOperand {
+pub(crate) enum ReturnOperand {
     Void,
     Category1,
     Category2,
@@ -52,7 +52,7 @@ pub(in crate::ir::generator) enum ReturnOperand {
 
 /// A dense identifier for a structural bytecode block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(in crate::ir::generator) struct StructuralBlockId(usize);
+pub(crate) struct StructuralBlockId(usize);
 
 impl StructuralBlockId {
     pub(super) const fn from_index(index: usize) -> Self {
@@ -66,7 +66,7 @@ impl StructuralBlockId {
 
 /// A dense identifier for a synthetic exception-handler entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(in crate::ir::generator) struct HandlerId(usize);
+pub(crate) struct HandlerId(usize);
 
 impl HandlerId {
     pub(super) const fn from_index(index: usize) -> Self {
@@ -80,7 +80,7 @@ impl HandlerId {
 
 /// The target of an exceptional structural control-flow edge.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) enum ExceptionalTarget {
+pub(crate) enum ExceptionalTarget {
     /// A synthetic entry that installs the caught exception before its block.
     Handler {
         /// The handler entry selected by this exception-table arm.
@@ -94,7 +94,7 @@ pub(in crate::ir::generator) enum ExceptionalTarget {
 
 /// One synthetic exception-handler entry.
 #[derive(Debug, Clone)]
-pub(in crate::ir::generator) struct HandlerEntry {
+pub(crate) struct HandlerEntry {
     /// The handler's bytecode entry PC.
     pub handler_pc: ProgramCounter,
     /// The decoded bytecode entered after materializing the caught exception.
@@ -103,7 +103,7 @@ pub(in crate::ir::generator) struct HandlerEntry {
 
 /// The ordinary transfer ending a structural block.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) enum StructuralTerminator {
+pub(crate) enum StructuralTerminator {
     /// Ordinary execution continues at the following block.
     Fallthrough { target: StructuralBlockId },
     /// An unconditional static jump.
@@ -133,7 +133,7 @@ pub(in crate::ir::generator) enum StructuralTerminator {
 /// of a location monotone; a terminator with frame-dependent targets would
 /// invalidate that assumption.
 #[derive(Debug, Clone)]
-pub(in crate::ir::generator) struct Block {
+pub(crate) struct Block {
     /// The first decoded instruction in the block.
     pub start_pc: ProgramCounter,
     /// Every raw bytecode PC belonging to the block, in bytecode order.
@@ -146,10 +146,10 @@ pub(in crate::ir::generator) struct Block {
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
 #[derive(Debug, Clone)]
-pub(in crate::ir::generator) struct BytecodeCfg {
-    pub(super) entry: StructuralBlockId,
-    pub(super) blocks: Vec<Block>,
-    pub(super) handlers: Vec<HandlerEntry>,
+pub(crate) struct BytecodeCfg {
+    pub entry: StructuralBlockId,
+    pub blocks: Vec<Block>,
+    pub handlers: Vec<HandlerEntry>,
 }
 
 impl BytecodeCfg {
@@ -162,7 +162,7 @@ impl BytecodeCfg {
     ///
     /// Blocks are stored in identity order and identities are never reordered or
     /// removed, so the lookup is positional: `id.index()` is the block's index.
-    pub(in crate::ir::generator) fn block(&self, id: StructuralBlockId) -> Option<&Block> {
+    pub fn block(&self, id: StructuralBlockId) -> Option<&Block> {
         self.blocks.get(id.index())
     }
 
@@ -170,7 +170,7 @@ impl BytecodeCfg {
     ///
     /// Entries are stored in identity order, so the lookup is positional:
     /// `id.index()` is the entry's index.
-    pub(in crate::ir::generator) fn handler(&self, id: HandlerId) -> Option<&HandlerEntry> {
+    pub fn handler(&self, id: HandlerId) -> Option<&HandlerEntry> {
         self.handlers.get(id.index())
     }
 }

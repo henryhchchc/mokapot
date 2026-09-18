@@ -8,7 +8,9 @@ pub(super) mod lifting;
 mod materialize;
 mod model;
 mod phis;
-pub(super) mod scalar;
+mod scalar;
+
+pub(super) use scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
 
 use std::collections::BTreeMap;
 

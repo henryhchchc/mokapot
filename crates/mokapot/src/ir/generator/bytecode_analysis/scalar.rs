@@ -8,34 +8,34 @@ use crate::{
 
 /// One outgoing arm from an SSA block.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) struct Successor {
-    pub(in crate::ir::generator) target: BlockId,
-    pub(in crate::ir::generator) transfer: ControlTransfer,
+pub(crate) struct Successor {
+    pub target: BlockId,
+    pub transfer: ControlTransfer,
 }
 
 /// A block whose JVM-frame operands have all been lowered to scalar values.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) struct ScalarBlock {
-    pub(in crate::ir::generator) id: BlockId,
-    pub(in crate::ir::generator) caught_exception: Option<ValueId>,
-    pub(in crate::ir::generator) operations: Vec<(ProgramCounter, OperationKind)>,
-    pub(in crate::ir::generator) terminator: TerminatorKind,
-    pub(in crate::ir::generator) terminator_source: Option<ProgramCounter>,
-    pub(in crate::ir::generator) successors: Vec<Successor>,
+pub(crate) struct ScalarBlock {
+    pub id: BlockId,
+    pub caught_exception: Option<ValueId>,
+    pub operations: Vec<(ProgramCounter, OperationKind)>,
+    pub terminator: TerminatorKind,
+    pub terminator_source: Option<ProgramCounter>,
+    pub successors: Vec<Successor>,
 }
 
 /// A predecessor-indexed scalar phi candidate and its placement.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ir::generator) struct PhiCandidate {
-    pub(in crate::ir::generator) placement: BlockId,
-    pub(in crate::ir::generator) inputs: Vec<(BlockId, ValueId)>,
+pub(crate) struct PhiCandidate {
+    pub placement: BlockId,
+    pub inputs: Vec<(BlockId, ValueId)>,
 }
 
 /// Frame-free scalar blocks and provisional phis produced by bytecode analysis.
-pub(in crate::ir::generator) struct ScalarGraph {
-    pub(in crate::ir::generator) entry: BlockId,
-    pub(in crate::ir::generator) blocks: Vec<ScalarBlock>,
-    pub(in crate::ir::generator) phi_candidates: std::collections::BTreeMap<ValueId, PhiCandidate>,
-    pub(in crate::ir::generator) this_value: Option<ValueId>,
-    pub(in crate::ir::generator) parameter_values: Vec<ValueId>,
+pub(crate) struct ScalarGraph {
+    pub entry: BlockId,
+    pub blocks: Vec<ScalarBlock>,
+    pub phi_candidates: std::collections::BTreeMap<ValueId, PhiCandidate>,
+    pub this_value: Option<ValueId>,
+    pub parameter_values: Vec<ValueId>,
 }

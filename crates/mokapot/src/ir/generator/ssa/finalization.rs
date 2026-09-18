@@ -5,7 +5,7 @@ use super::model;
 use crate::ir::{
     BlockId, ValueId,
     generator::{
-        bytecode_analysis::scalar::{PhiCandidate, ScalarBlock, Successor},
+        bytecode_analysis::{PhiCandidate, ScalarBlock, Successor},
         error::Error,
         remap::RemapValues,
         ssa::{model::Phi, simplify::SimplifiedPhis},
