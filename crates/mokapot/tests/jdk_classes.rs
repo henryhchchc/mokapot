@@ -61,10 +61,10 @@ fn test_a_class(class: Class) {
                 panic!("Failed to brew {}: {}", it.name, e);
             });
             let variable_count: usize = ir_method
-                .control_flow_graph
+                .control_flow_graph()
                 .edges()
                 .map(|edge| {
-                    if let ControlTransfer::Conditional(it) = edge.data {
+                    if let ControlTransfer::Conditional(it) = edge.transfer() {
                         it.predicate_count()
                     } else {
                         0
@@ -81,7 +81,7 @@ fn test_a_class(class: Class) {
                     it.name,
                     it.descriptor.descriptor()
                 );
-                let _ = ir_method.control_flow_graph.path_conditions();
+                let _ = ir_method.control_flow_graph().path_conditions();
             } else {
                 println!(
                     "Skip path condition for: {}::{}{}",

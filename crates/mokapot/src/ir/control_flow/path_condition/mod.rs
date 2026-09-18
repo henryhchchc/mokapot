@@ -10,8 +10,7 @@ use std::{
 
 use crate::{
     analysis::fixed_point,
-    ir::{ControlFlowGraph, control_flow::ControlTransfer, expression::Condition},
-    jvm::code::ProgramCounter,
+    ir::{BlockId, control_flow::ControlFlowGraph, expression::Condition},
 };
 use itertools::Itertools;
 
@@ -34,10 +33,10 @@ pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
 pub use predicate::Value;
 
-pub(super) fn analyze<N>(
-    cfg: &ControlFlowGraph<N, ControlTransfer>,
+pub(super) fn analyze(
+    cfg: ControlFlowGraph<'_>,
     budget: SolvingBudget,
-) -> HashMap<ProgramCounter, PathCondition<&Condition<Value>>> {
+) -> HashMap<BlockId, PathCondition<&Condition<Value>>> {
     let mut problem = analyzer::PathConditionProblem::new(cfg, budget);
     let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
     path_conditions

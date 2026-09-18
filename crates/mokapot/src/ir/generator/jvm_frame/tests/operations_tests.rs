@@ -1,5 +1,5 @@
 use crate::ir::{
-    Identifier, LocalValue, Operand,
+    Identifier, Operand, ValueId,
     generator::{
         ExecutionError,
         jvm_frame::{JvmStackFrame, SINGLE_SLOT, StackOperations},
@@ -18,7 +18,7 @@ proptest! {
             pop_count,
         ).unwrap();
         for i in 0..pop_count {
-            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
@@ -39,7 +39,7 @@ proptest! {
             pop_count * 2,
         ).unwrap();
         for i in 0..(pop_count * 2) {
-            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..pop_count {
