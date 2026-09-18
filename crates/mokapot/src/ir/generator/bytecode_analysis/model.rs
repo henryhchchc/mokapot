@@ -20,6 +20,20 @@ pub(super) enum Location {
     Unwind,
 }
 
+impl Location {
+    /// The bytecode PC backing this location, if any.
+    ///
+    /// A bytecode block and a handler entry are both identified by their PC, so
+    /// only the synthetic unwind exit has no PC.
+    pub(super) const fn pc(self) -> Option<ProgramCounter> {
+        match self {
+            Self::Bytecode(id) => Some(id.pc()),
+            Self::Handler(id) => Some(id.pc()),
+            Self::Unwind => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Predecessor {
     Entry,

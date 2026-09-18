@@ -15,7 +15,7 @@ use crate::{
             error::Error,
         },
     },
-    jvm::{Method, code::ProgramCounter},
+    jvm::Method,
 };
 
 pub(super) struct Analyzer<'method, 'cfg> {
@@ -91,16 +91,5 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
         }
 
         self.into_scalar_graph(entry)
-    }
-
-    pub(super) fn pc(&self, location: Location) -> Option<ProgramCounter> {
-        match location {
-            Location::Bytecode(id) => self.cfg.block(id).map(|block| block.start_pc),
-            Location::Handler(id) => self
-                .cfg
-                .handler(id)
-                .and_then(|handler| Some(self.cfg.block(handler.target)?.start_pc)),
-            Location::Unwind => None,
-        }
     }
 }

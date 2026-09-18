@@ -28,7 +28,7 @@ impl Analyzer<'_, '_> {
     ) -> Result<AnalyzedBlock, Error> {
         match location {
             Location::Bytecode(id) => self.execute_bytecode(id, input),
-            Location::Handler(id) => self.execute_handler(id, input),
+            Location::Handler(id) => Self::execute_handler(id, input),
             Location::Unwind => Ok(AnalyzedBlock {
                 caught_exception: None,
                 operations: Vec::new(),
@@ -40,17 +40,9 @@ impl Analyzer<'_, '_> {
         }
     }
 
-    fn execute_handler(
-        &mut self,
-        id: bytecode_cfg::HandlerId,
-        input: Frame,
-    ) -> Result<AnalyzedBlock, Error> {
-        let handler = self
-            .cfg
-            .handler(id)
-            .ok_or_else(|| Error::internal("a handler location has no structural entry"))?;
+    fn execute_handler(id: bytecode_cfg::HandlerId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
-        let target = Location::Bytecode(handler.target);
+        let target = Location::Bytecode(StructuralBlockId::from_pc(id.pc()));
         Ok(AnalyzedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
@@ -79,7 +71,7 @@ impl Analyzer<'_, '_> {
         let mut operations = Vec::new();
         let mut exceptional_input = None;
 
-        let mut pc = block.start_pc;
+        let mut pc = id.pc();
         loop {
             let instruction =
                 self.executor.body.instruction_at(pc).ok_or_else(|| {

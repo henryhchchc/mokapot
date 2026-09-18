@@ -39,11 +39,11 @@ impl Analyzer<'_, '_> {
                         allocator,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(self.pc(location)))?;
+                .map_err(|error| error.at_instruction_if_present(location.pc()))?;
         }
 
         let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
-            .map_err(|error| error.at_instruction_if_present(self.pc(location)))?;
+            .map_err(|error| error.at_instruction_if_present(location.pc()))?;
 
         self.phi_definitions
             .retain(|site, _| site.location != location);

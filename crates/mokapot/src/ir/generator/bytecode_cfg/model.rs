@@ -2,30 +2,38 @@ use std::collections::BTreeMap;
 
 use crate::jvm::{code::ProgramCounter, references::ClassRef};
 
-/// A dense identifier for a structural bytecode block.
+/// The identity of a structural bytecode block: the program counter of its
+/// first instruction.
+///
+/// A block's start PC is unique and stable, so a target PC *is* the identity of
+/// the block it starts, and successors resolve without a lookup table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct StructuralBlockId(usize);
+pub(crate) struct StructuralBlockId(ProgramCounter);
 
 impl StructuralBlockId {
-    pub(super) const fn from_index(index: usize) -> Self {
-        Self(index)
+    pub(crate) const fn from_pc(pc: ProgramCounter) -> Self {
+        Self(pc)
     }
 
-    pub(super) const fn index(self) -> usize {
+    pub(crate) const fn pc(self) -> ProgramCounter {
         self.0
     }
 }
 
-/// A dense identifier for a synthetic exception-handler entry.
+/// The identity of a synthetic exception-handler entry: the handler's program
+/// counter.
+///
+/// Distinct handler PCs are distinct entries, so exception-table arms that
+/// share a handler share its identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct HandlerId(usize);
+pub(crate) struct HandlerId(ProgramCounter);
 
 impl HandlerId {
-    pub(super) const fn from_index(index: usize) -> Self {
-        Self(index)
+    pub(crate) const fn from_pc(pc: ProgramCounter) -> Self {
+        Self(pc)
     }
 
-    pub(super) const fn index(self) -> usize {
+    pub(crate) const fn pc(self) -> ProgramCounter {
         self.0
     }
 }
@@ -42,13 +50,6 @@ pub(crate) enum ExceptionalTarget {
     },
     /// The synthetic exit for an exception that escapes the method.
     Unwind,
-}
-
-/// One synthetic exception-handler entry.
-#[derive(Debug, Clone)]
-pub(crate) struct HandlerEntry {
-    /// The decoded bytecode entered after materializing the caught exception.
-    pub target: StructuralBlockId,
 }
 
 /// The control-flow topology at the end of a structural block.
@@ -74,10 +75,9 @@ pub(crate) enum BlockExit {
 
 /// A maximal bytecode block ending at an ordinary transfer or fallible instruction.
 ///
+/// Its start PC is its key in [`BytecodeCfg::blocks`].
 #[derive(Debug, Clone)]
 pub(crate) struct Block {
-    /// The first decoded instruction in the block.
-    pub start_pc: ProgramCounter,
     /// The final decoded instruction in the block.
     pub end_pc: ProgramCounter,
     /// The ordinary control-flow topology after the final instruction.
@@ -87,11 +87,15 @@ pub(crate) struct Block {
 }
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
+///
+/// Blocks are keyed by their start PC, which is also their identity, so no
+/// renumbering or PC-to-index table is needed.
 #[derive(Debug, Clone)]
 pub(crate) struct BytecodeCfg {
+    /// The block containing the first decoded instruction.
     pub entry: StructuralBlockId,
-    pub blocks: Vec<Block>,
-    pub handlers: Vec<HandlerEntry>,
+    /// The blocks, keyed by start PC.
+    pub blocks: BTreeMap<ProgramCounter, Block>,
 }
 
 impl BytecodeCfg {
@@ -100,19 +104,8 @@ impl BytecodeCfg {
         self.entry
     }
 
-    /// Looks up a bytecode block by its dense identity.
-    ///
-    /// Blocks are stored in identity order and identities are never reordered or
-    /// removed, so the lookup is positional: `id.index()` is the block's index.
+    /// Looks up a bytecode block by its identity, which is its start PC.
     pub fn block(&self, id: StructuralBlockId) -> Option<&Block> {
-        self.blocks.get(id.index())
-    }
-
-    /// Looks up a synthetic handler entry by its dense identity.
-    ///
-    /// Entries are stored in identity order, so the lookup is positional:
-    /// `id.index()` is the entry's index.
-    pub fn handler(&self, id: HandlerId) -> Option<&HandlerEntry> {
-        self.handlers.get(id.index())
+        self.blocks.get(&id.pc())
     }
 }
