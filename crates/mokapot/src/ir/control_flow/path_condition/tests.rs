@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proptest::{collection::hash_set, prelude::*};
 
@@ -37,11 +37,8 @@ fn exposes_dnf_terms_and_guard_literals() {
         BooleanVariable::Negative(2),
     ]);
     assert_eq!(
-        guard.literals().collect::<std::collections::HashSet<_>>(),
-        std::collections::HashSet::from([
-            BooleanVariable::Positive(&1),
-            BooleanVariable::Negative(&2),
-        ])
+        guard.literals().collect::<HashSet<_>>(),
+        HashSet::from([BooleanVariable::Positive(&1), BooleanVariable::Negative(&2),])
     );
 
     let condition = PathCondition::one() & guard;
@@ -49,13 +46,8 @@ fn exposes_dnf_terms_and_guard_literals() {
     assert_eq!(terms.len(), 1);
     assert!(!terms[0].is_tautology());
     assert_eq!(
-        terms[0]
-            .literals()
-            .collect::<std::collections::HashSet<_>>(),
-        std::collections::HashSet::from([
-            BooleanVariable::Positive(&1),
-            BooleanVariable::Negative(&2),
-        ])
+        terms[0].literals().collect::<HashSet<_>>(),
+        HashSet::from([BooleanVariable::Positive(&1), BooleanVariable::Negative(&2),])
     );
 
     let tautology_condition = PathCondition::<u32>::one();

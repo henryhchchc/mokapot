@@ -94,8 +94,8 @@ impl BytecodeError<ParseErrorKind> {
     }
 }
 
-impl From<std::io::Error> for BytecodeError<ParseErrorKind> {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for BytecodeError<ParseErrorKind> {
+    fn from(error: io::Error) -> Self {
         Self::io(error)
     }
 }

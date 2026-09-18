@@ -1,6 +1,8 @@
 //! The scalar-graph contract produced by bytecode analysis and consumed by SSA
 //! construction.
 
+use std::collections::BTreeMap;
+
 use crate::{
     ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
     jvm::code::ProgramCounter,
@@ -35,7 +37,7 @@ pub(crate) struct PhiCandidate {
 pub(crate) struct ScalarGraph {
     pub entry: BlockId,
     pub blocks: Vec<ScalarBlock>,
-    pub phi_candidates: std::collections::BTreeMap<ValueId, PhiCandidate>,
+    pub phi_candidates: BTreeMap<ValueId, PhiCandidate>,
     pub this_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }

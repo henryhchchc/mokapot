@@ -25,7 +25,7 @@ pub struct Code {
 }
 
 impl FromBytecode for Code {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let max_stack = reader.decode_value()?;
         let max_locals = reader.decode_value()?;
         let code_length: u32 = reader.decode_value()?;
@@ -74,7 +74,7 @@ pub struct ExceptionTableEntry {
 }
 
 impl FromBytecode for ExceptionTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> std::io::Result<Self> {
+    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             start_pc: reader.decode_value()?,
             end_pc: reader.decode_value()?,

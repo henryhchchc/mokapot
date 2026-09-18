@@ -66,6 +66,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use super::*;
 
     fn compute_unordered_hash<I>(iter: I) -> u64
@@ -120,7 +122,7 @@ mod tests {
 
     #[test]
     fn empty_collection() {
-        let hash_empty = compute_unordered_hash(std::iter::empty::<i32>());
+        let hash_empty = compute_unordered_hash(iter::empty::<i32>());
         let hash_one = compute_unordered_hash([0].iter());
 
         assert_ne!(hash_empty, hash_one);
@@ -144,8 +146,8 @@ mod tests {
     proptest! {
         #[test]
         fn same_elements_same_hash(element in any::<i32>(), count in 1usize..10) {
-            let vec1: Vec<_> = std::iter::repeat_n(element, count).collect();
-            let vec2: Vec<_> = std::iter::repeat_n(element, count).collect();
+            let vec1: Vec<_> = iter::repeat_n(element, count).collect();
+            let vec2: Vec<_> = iter::repeat_n(element, count).collect();
 
             let hash1 = compute_unordered_hash(vec1.iter());
             let hash2 = compute_unordered_hash(vec2.iter());

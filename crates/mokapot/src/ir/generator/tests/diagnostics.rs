@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::*;
 use crate::{
     ir::{MalformedBytecode, MokaIRFrameError, UnsupportedBytecode},
@@ -6,7 +8,7 @@ use crate::{
 
 #[test]
 fn reports_empty_code_at_the_method_boundary() {
-    let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
+    let method = method(iter::empty::<(u16, Instruction)>(), "()V", vec![]);
 
     assert!(matches!(
         build(&method),
