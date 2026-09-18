@@ -1,7 +1,6 @@
 use super::*;
-
 #[test]
-fn unhandled_exceptions_share_one_synthetic_unwind_block() {
+fn unhandled_exceptions_target_the_method_unwind_exit() {
     let method = method(
         [
             (0, Instruction::ALoad0),
@@ -22,37 +21,28 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     );
     let ir = build(&method).unwrap();
     let unwind_targets = [1, 4].map(|pc| {
-        let block = block_containing_instruction(&ir, instruction_at(&ir, pc.into()).id());
+        let location = ir
+            .source_map()
+            .instructions_at(pc.into())
+            .find(|&loc| {
+                ir.instruction(loc)
+                    .is_some_and(|it| matches!(it, InstructionRef::Terminator(_)))
+            })
+            .unwrap();
+        let block = block_containing_instruction(&ir, location);
         block
             .terminator
             .successors()
-            .iter()
-            .find(|successor| matches!(successor.transfer(), ControlTransfer::Unwind))
+            .find(|successor| successor.block_target().is_none())
             .unwrap()
-            .target()
+            .block_target()
     });
 
-    assert_eq!(unwind_targets[0], unwind_targets[1]);
-    let unwind = ir.block(unwind_targets[0]).unwrap();
-    assert_eq!(unwind.terminator.kind(), &TerminatorKind::Unwind);
-    assert!(unwind.phis.is_empty());
-    assert!(unwind.operations.is_empty());
-    assert!(unwind.terminator.successors().is_empty());
-    assert_eq!(
-        ir.source_map().origins_of(unwind.terminator.id()).count(),
-        0
-    );
+    assert_eq!(unwind_targets, [None; 2]);
+    assert_eq!(ir.blocks().len(), 3);
 
-    let mut instruction_ids = HashSet::new();
     let mut edge_ids = HashSet::new();
-    for block in ir.blocks() {
-        for phi in &block.phis {
-            assert!(instruction_ids.insert(phi.id));
-        }
-        for instruction in &block.operations {
-            assert!(instruction_ids.insert(instruction.id()));
-        }
-        assert!(instruction_ids.insert(block.terminator.id()));
+    for (_, block) in ir.blocks() {
         for successor in block.terminator.successors() {
             assert!(edge_ids.insert(successor.id()));
         }
@@ -79,17 +69,19 @@ fn throw_has_only_ordered_exceptional_outcomes() {
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
         .successors()
-        .iter()
         .map(Successor::transfer)
         .collect::<Vec<_>>();
 
-    assert!(matches!(throw.kind(), TerminatorKind::Throw(_)));
+    assert!(matches!(throw, Terminator::Throw { .. }));
     assert_eq!(transfers.len(), 2);
-    assert!(matches!(transfers[0], ControlTransfer::Exception(Some(_))));
-    assert!(matches!(transfers[1], ControlTransfer::Unwind));
+    assert!(matches!(
+        transfers[0],
+        Some(ControlTransfer::Exception(Some(_)))
+    ));
+    assert_eq!(transfers[1], None);
     assert!(
         !transfers
             .iter()
-            .any(|transfer| matches!(transfer, ControlTransfer::Unconditional))
+            .any(|transfer| matches!(transfer, Some(ControlTransfer::Unconditional)))
     );
 }

@@ -21,20 +21,27 @@ fn synchronized_return_has_only_exceptional_successors() {
     );
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
-    let return_terminator = terminator_at(&ir, 1.into());
-    let successors = return_terminator.successors();
+    let ret_term = terminator_at(&ir, 1.into());
+    let Terminator::TryReturn { exceptional, .. } = ret_term else {
+        panic!("expected a fallible return terminator");
+    };
 
-    assert_eq!(successors.len(), 2);
+    assert_eq!(exceptional.len(), 2);
     assert!(
-        matches!(successors[0].transfer(), ControlTransfer::Exception(Some(caught)) if caught == &illegal_monitor_state)
+        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(caught))) if caught == &illegal_monitor_state)
     );
-    assert!(matches!(successors[1].transfer(), ControlTransfer::Unwind));
+    assert_eq!(exceptional[1].transfer(), None);
     assert!(
-        successors
+        exceptional
             .iter()
-            .all(|successor| !matches!(successor.transfer(), ControlTransfer::Unconditional))
+            .all(|successor| !matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
     );
-    assert!(ir.caught_exception(successors[0].target()).is_some());
+    assert!(matches!(
+        ir.block(exceptional[0].block_target().unwrap())
+            .unwrap()
+            .kind,
+        crate::ir::BlockKind::LandingPad { .. }
+    ));
 }
 
 #[test]
@@ -42,51 +49,36 @@ fn unhandled_synchronized_return_reaches_unwind() {
     let mut method = method([(0, Instruction::Return)], "()V", vec![]);
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
-    let return_terminator = terminator_at(&ir, 0.into());
+    let ret_term = terminator_at(&ir, 0.into());
 
-    assert_eq!(return_terminator.kind(), &TerminatorKind::Return(None));
-    assert_eq!(return_terminator.successors().len(), 1);
     assert!(matches!(
-        return_terminator.successors()[0].transfer(),
-        ControlTransfer::Unwind
+        ret_term,
+        Terminator::TryReturn { value: None, .. }
     ));
-    assert_eq!(
-        ir.block(return_terminator.successors()[0].target())
-            .unwrap()
-            .terminator
-            .kind(),
-        &TerminatorKind::Unwind
-    );
+    assert_eq!(ret_term.successors().count(), 1);
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
+    assert_eq!(ret_term.successors().next().unwrap().block_target(), None);
 }
 
 #[test]
 fn explicit_monitor_operations_have_fallible_returns() {
-    let method = method(
-        [
-            (0, Instruction::ALoad0),
-            (1, Instruction::MonitorEnter),
-            (2, Instruction::Return),
-        ],
-        "(Ljava/lang/Object;)V",
-        vec![],
-    );
+    let instructions = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::MonitorEnter),
+        (2, Instruction::Return),
+    ];
+    let method = method(instructions, "(Ljava/lang/Object;)V", vec![]);
     let ir = build(&method).unwrap();
-    let return_terminator = terminator_at(&ir, 2.into());
-    assert_eq!(return_terminator.successors().len(), 1);
-    assert!(matches!(
-        return_terminator.successors()[0].transfer(),
-        ControlTransfer::Unwind
-    ));
+    let ret_term = terminator_at(&ir, 2.into());
+    assert_eq!(ret_term.successors().count(), 1);
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
 }
 
 #[test]
 fn monitor_free_nonsynchronized_return_is_conservatively_fallible() {
     let method = method([(0, Instruction::Return)], "()V", vec![]);
     let ir = build(&method).unwrap();
-    let return_terminator = terminator_at(&ir, 0.into());
-    assert_eq!(return_terminator.successors().len(), 1);
-    assert!(matches!(
-        return_terminator.successors()[0].transfer(),
-        ControlTransfer::Unwind
-    ));
+    let ret_term = terminator_at(&ir, 0.into());
+    assert_eq!(ret_term.successors().count(), 1);
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
 }

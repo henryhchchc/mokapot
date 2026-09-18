@@ -5,117 +5,100 @@ use std::collections::BTreeMap;
 use super::{Frame, Position};
 use crate::{
     ir::{
-        OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer,
-        generator::bytecode_cfg,
+        BlockId, BlockKind, EdgeId, Operation, Terminator, ValueId, control_flow::ControlTransfer,
     },
     jvm::code::ProgramCounter,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Location {
-    Bytecode(bytecode_cfg::JvmBlockId),
-    /// The synthetic entry that installs the caught exception and enters a block.
-    Handler(bytecode_cfg::JvmBlockId),
-    Unwind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Predecessor {
+pub(crate) enum Contribution {
     Entry,
-    Location(Location),
+    Edge(EdgeId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct PhiSite {
-    pub location: Location,
+pub(crate) struct ParameterSite {
+    pub block: BlockId,
     pub position: Position,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PhiDefinition {
-    pub result: ValueId,
-    pub inputs: BTreeMap<Predecessor, ValueId>,
+pub(crate) enum LiftedEdge {
+    Block {
+        id: EdgeId,
+        target: BlockId,
+        transfer: ControlTransfer,
+    },
+    Unwind {
+        id: EdgeId,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LiftedEdge {
-    pub target: Location,
-    pub transfer: ControlTransfer,
+impl LiftedEdge {
+    pub(crate) const fn id(&self) -> EdgeId {
+        match self {
+            Self::Block { id, .. } | Self::Unwind { id } => *id,
+        }
+    }
+
+    pub(crate) const fn block_target(&self) -> Option<BlockId> {
+        match self {
+            Self::Block { target, .. } => Some(*target),
+            Self::Unwind { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiftedBlock {
-    pub caught_exception: Option<ValueId>,
-    pub operations: Vec<(ProgramCounter, OperationKind)>,
-    pub terminator: TerminatorKind,
+    pub kind: BlockKind,
+    pub operations: Vec<(ProgramCounter, Operation)>,
+    pub terminator: LiftedTerminator,
     pub terminator_source: Option<ProgramCounter>,
-    pub successors: LiftedSuccessors,
 }
 
-/// Successor transfers coupled to the frame contributed to each target.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct LiftedSuccessors {
-    pub edges: Vec<LiftedEdge>,
-    output_frames: BTreeMap<Location, Frame>,
-}
+pub(crate) type LiftedArm = (LiftedEdge, Option<Frame>);
 
-impl LiftedSuccessors {
-    pub(crate) fn push(&mut self, edge: LiftedEdge, frame: Frame) {
-        if let Some(existing) = self.output_frames.get(&edge.target) {
-            assert_eq!(existing, &frame, "parallel edges must contribute one frame");
-        } else {
-            self.output_frames.insert(edge.target, frame);
-        }
-        self.edges.push(edge);
-    }
+pub(crate) type LiftedTerminator = Terminator<LiftedArm>;
 
-    pub(crate) fn take_output_frames(&mut self) -> BTreeMap<Location, Frame> {
-        std::mem::take(&mut self.output_frames)
-    }
-}
-
-/// Analysis state for one location.
+/// Analysis state for one normalized block.
 ///
-/// The structural CFG fixes a location's successor targets, so the analyzer
-/// only adds entries to `contributions`; it never removes them.
+/// The structural CFG fixes predecessor and successor membership. The analyzer
+/// only fills frame `contributions`; it never changes topology.
 #[derive(Debug, Default)]
-pub(crate) struct LocationState {
-    pub contributions: BTreeMap<Predecessor, Frame>,
-    pub execution: LocationExecution,
+pub(crate) struct BlockState {
+    pub contributions: BTreeMap<Contribution, Frame>,
+    pub execution: BlockExecution,
 }
 
-/// Execution lifecycle of a reachable analysis location.
+/// Execution lifecycle of a reachable normalized block.
 #[derive(Debug, Default)]
-pub(crate) enum LocationExecution {
+pub(crate) enum BlockExecution {
     /// No input frame has yet been computed.
     #[default]
     Uninitialized,
-    /// The input frame changed and the location must be executed.
+    /// The input frame changed and the block must be executed.
     Pending { input: Frame },
-    /// The location was executed with the current input frame.
-    Complete { input: Frame, block: LiftedBlock },
+    /// The block was executed with the current input frame.
+    Complete {
+        input: Frame,
+        block: Box<LiftedBlock>,
+    },
 }
 
-/// The complete analysis state passed to scalar-graph materialization.
+/// The complete analysis state passed to draft-IR materialization.
 pub(crate) struct CompletedAnalysis {
-    pub locations: BTreeMap<Location, LocationState>,
-    pub phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
+    pub blocks: BTreeMap<BlockId, BlockState>,
+    pub parameter_definitions: BTreeMap<ParameterSite, ValueId>,
     pub receiver_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }
 
-impl LocationExecution {
+impl BlockExecution {
     pub(crate) const fn input(&self) -> Option<&Frame> {
         match self {
             Self::Uninitialized => None,
             Self::Pending { input } | Self::Complete { input, .. } => Some(input),
-        }
-    }
-
-    pub(crate) const fn block(&self) -> Option<&LiftedBlock> {
-        match self {
-            Self::Complete { block, .. } => Some(block),
-            Self::Uninitialized | Self::Pending { .. } => None,
         }
     }
 
@@ -129,8 +112,11 @@ impl LocationExecution {
 
     pub(crate) fn complete(&mut self, block: LiftedBlock) {
         let Self::Pending { input } = std::mem::take(self) else {
-            unreachable!("only a pending location can finish execution");
+            unreachable!("only a pending block can finish execution");
         };
-        *self = Self::Complete { input, block };
+        *self = Self::Complete {
+            input,
+            block: Box::new(block),
+        };
     }
 }

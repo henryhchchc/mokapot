@@ -5,7 +5,8 @@
 //! partitioning supported bytecode into blocks.
 
 mod builder;
-mod fallibility;
+mod classification;
+mod normalized;
 
 use std::collections::BTreeMap;
 
@@ -19,9 +20,14 @@ use crate::jvm::{
 };
 
 /// Builds the decoded-bytecode CFG used by the later block analyzer.
-pub(super) fn build(method: &Method) -> Result<JvmBlockGraph<'_>, Error> {
-    builder::Builder::for_method(method)?.build()
+pub(super) fn build(method: &Method) -> Result<NormalizedCfg<'_>, Error> {
+    let bytecode = builder::Builder::for_method(method)?.build()?;
+    normalized::normalize(bytecode)
 }
+
+pub(super) use normalized::{
+    EdgeKind, NormalizedBlockKind, NormalizedCfg, NormalizedEdge, NormalizedTarget,
+};
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
 #[derive(Debug, Clone)]

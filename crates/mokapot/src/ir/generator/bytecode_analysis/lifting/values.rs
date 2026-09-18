@@ -1,7 +1,7 @@
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{
-        OperationKind,
+        Operation,
         expression::{Expression, MathOperation},
         generator::error::Error,
     },
@@ -14,7 +14,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         constant: ConstantValue,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value, category)?;
         let expr = Expression::Const(constant);
@@ -25,7 +25,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         idx: u16,
         constant: i32,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value, Category1)?;
@@ -37,7 +37,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = *self.frame.locals.get(idx, category)?;
         self.frame.stack.push(value, category)?;
         Ok(None)
@@ -47,13 +47,13 @@ impl LiftContext<'_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.frame.stack.pop(category)?;
         self.frame.locals.set(idx, value, category)?;
         Ok(None)
     }
 
-    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn new_object(&mut self, class: &ClassRef) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         self.frame.stack.push(value, Category1)?;
         let expr = Expression::New(class.clone());

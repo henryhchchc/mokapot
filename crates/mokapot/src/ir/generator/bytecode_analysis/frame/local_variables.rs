@@ -167,14 +167,6 @@ impl LocalVariables {
         ))
     }
 
-    pub(super) fn clear_for_unwind(&mut self) {
-        for slot in &mut self.slots {
-            if matches!(slot, LocalSlot::Value(_) | LocalSlot::Unset) {
-                *slot = LocalSlot::Unset;
-            }
-        }
-    }
-
     pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,

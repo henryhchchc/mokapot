@@ -53,9 +53,7 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
                     ControlTransfer::Conditional(guard) => {
                         fact.conjoin_branch_guard(guard.as_ref())
                     }
-                    ControlTransfer::Unconditional
-                    | ControlTransfer::Exception(_)
-                    | ControlTransfer::Unwind => fact.clone(),
+                    ControlTransfer::Unconditional | ControlTransfer::Exception(_) => fact.clone(),
                 };
                 (!propagated.is_contradiction()).then_some((edge.target(), propagated))
             })

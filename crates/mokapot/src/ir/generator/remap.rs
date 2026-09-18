@@ -1,7 +1,7 @@
-//! Rewrites the single IR value identity space during SSA finalization and emission.
+//! Rewrites the single IR value identity space during canonicalization.
 
 use crate::ir::{
-    OperationKind, TerminatorKind, ValueId,
+    Operation, Successor, Terminator, ValueId,
     control_flow::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
@@ -27,7 +27,7 @@ fn remap_value<E>(
     Ok(())
 }
 
-impl RemapValues for OperationKind {
+impl RemapValues for Operation {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
@@ -42,19 +42,23 @@ impl RemapValues for OperationKind {
     }
 }
 
-impl RemapValues for TerminatorKind {
+impl RemapValues for Terminator<Successor> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
     ) -> Result<(), E> {
         match self {
-            Self::Switch { match_value } | Self::Throw(match_value) => {
-                remap_value(match_value, remap)
-            }
-            Self::Return(Some(value)) => remap_value(value, remap),
-            Self::Goto | Self::Branch | Self::Return(None) | Self::Fallible | Self::Unwind => {
-                Ok(())
-            }
+            Self::Throw { value, .. }
+            | Self::Return { value: Some(value) }
+            | Self::TryReturn {
+                value: Some(value), ..
+            } => remap_value(value, remap),
+            Self::Goto { .. }
+            | Self::Branch { .. }
+            | Self::Switch { .. }
+            | Self::Return { value: None }
+            | Self::TryReturn { value: None, .. } => Ok(()),
+            Self::Try { operation, .. } => operation.try_remap_values(remap),
         }
     }
 }

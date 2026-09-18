@@ -1,12 +1,12 @@
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{OperationKind, ValueId, expression::FieldAccess, generator::error::Error},
+    ir::{Operation, ValueId, expression::FieldAccess, generator::error::Error},
     jvm::references::FieldRef,
 };
 use ValueCategory::Category1;
 
 impl LiftContext<'_, '_> {
-    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         self.frame
             .stack
@@ -20,10 +20,7 @@ impl LiftContext<'_, '_> {
         )))
     }
 
-    pub(super) fn read_instance(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
@@ -39,24 +36,18 @@ impl LiftContext<'_, '_> {
         )))
     }
 
-    pub(super) fn write_static(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.pop_field_value(field)?;
         let field = field.clone();
-        Ok(Some(OperationKind::Effect {
+        Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteStatic { field, value }.into(),
         }))
     }
 
-    pub(super) fn write_instance(
-        &mut self,
-        field: &FieldRef,
-    ) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(Some(OperationKind::Effect {
+        Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteInstance {
                 object_ref,
                 field: field.clone(),

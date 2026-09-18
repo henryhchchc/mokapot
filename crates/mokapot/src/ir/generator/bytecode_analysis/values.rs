@@ -4,7 +4,7 @@ use super::{EntrySlots, Frame, Position};
 use crate::{
     ir::{
         ValueId,
-        generator::{bytecode_cfg::JvmBlockGraph, error::Error},
+        generator::{bytecode_cfg::NormalizedCfg, error::Error},
     },
     jvm::method,
 };
@@ -17,7 +17,7 @@ pub(super) struct ValueContext {
 }
 
 impl ValueContext {
-    pub(super) fn for_cfg(cfg: &JvmBlockGraph<'_>) -> Result<(Self, Frame), Error> {
+    pub(super) fn for_cfg(cfg: &NormalizedCfg<'_>) -> Result<(Self, Frame), Error> {
         let method = cfg.method();
         let body = cfg.body();
 

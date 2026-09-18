@@ -5,41 +5,41 @@ mod merge;
 mod state;
 
 pub(super) use state::{
-    CompletedAnalysis, LiftedBlock, Location, PhiDefinition, PhiSite, Predecessor,
+    CompletedAnalysis, Contribution, LiftedArm, LiftedBlock, LiftedTerminator, ParameterSite,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{Frame, Position, ScalarGraph, ValueCategory, output, values::ValueContext};
+use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        ValueId,
+        BasicBlock, BlockId, BlockParameter, SourceMap, Successor, Terminator, ValueId,
         generator::{
-            bytecode_cfg::{JvmBlockGraph, JvmBlockId},
+            bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
+            draft::DraftMethod,
             error::Error,
         },
     },
     jvm::code::ProgramCounter,
 };
-use state::{LiftedEdge, LiftedSuccessors, LocationExecution, LocationState};
+use state::{BlockExecution, BlockState, LiftedEdge};
 
 pub(super) struct Analyzer<'method, 'cfg> {
-    pub(super) cfg: &'cfg JvmBlockGraph<'method>,
+    pub(super) cfg: &'cfg NormalizedCfg<'method>,
     pub(super) values: ValueContext,
     pub(super) initial_frame: Frame,
-    pub(super) locations: BTreeMap<Location, LocationState>,
-    pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
-    pub(super) caught_exceptions: BTreeMap<JvmBlockId, ValueId>,
+    pub(super) blocks: BTreeMap<BlockId, BlockState>,
+    pub(super) parameter_definitions: BTreeMap<ParameterSite, ValueId>,
+    pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
 }
 
 impl Analyzer<'_, '_> {
-    /// Interns the identity of the value caught by the handler entering `block`.
+    /// Interns the identity of the value caught by handler-entry `block`.
     ///
     /// Every exceptional arm into one handler-entry location must carry the
-    /// *same* value: distinct values would merge into a phi at stack position 0
-    /// in the handler's entry frame, and `execute_handler` requires that frame
-    /// to hold a single stack value.
-    pub(super) fn caught_exception(&mut self, block: JvmBlockId) -> Result<ValueId, Error> {
+    /// *same* value: distinct values would create a parameter at stack position 0
+    /// in the handler's entry frame, which must hold one caught value.
+    pub(super) fn caught_exception(&mut self, block: BlockId) -> Result<ValueId, Error> {
         if let Some(&value) = self.caught_exceptions.get(&block) {
             return Ok(value);
         }
@@ -48,80 +48,267 @@ impl Analyzer<'_, '_> {
         Ok(value)
     }
 
-    /// The PC to attribute a diagnostic for `location` to, if it has one.
+    /// The PC to attribute a diagnostic for `block` to, if it has one.
     ///
-    /// A bytecode and a handler location both point at the start of their
-    /// block; only the synthetic unwind exit has no PC.
-    pub(super) fn location_pc(&self, location: Location) -> Option<ProgramCounter> {
-        match location {
-            Location::Bytecode(id) | Location::Handler(id) => Some(self.cfg.block(id).start_pc),
-            Location::Unwind => None,
+    /// A bytecode and its handler entry both point at the bytecode block's
+    /// start.
+    pub(super) fn block_pc(&self, block: BlockId) -> ProgramCounter {
+        match self.cfg.block(block).kind {
+            NormalizedBlockKind::Bytecode(id) | NormalizedBlockKind::HandlerEntry(id) => {
+                self.cfg.bytecode_block(id).start_pc
+            }
         }
     }
 }
 
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
-    pub(super) fn new(cfg: &'cfg JvmBlockGraph<'method>) -> Result<Self, Error> {
+    pub(super) fn new(cfg: &'cfg NormalizedCfg<'method>) -> Result<Self, Error> {
         let (values, initial_frame) = ValueContext::for_cfg(cfg)?;
+        let blocks = cfg
+            .blocks()
+            .map(|(id, _)| (id, BlockState::default()))
+            .collect();
         Ok(Self {
             cfg,
             values,
             initial_frame,
-            locations: BTreeMap::new(),
-            phi_definitions: BTreeMap::new(),
+            blocks,
+            parameter_definitions: BTreeMap::new(),
             caught_exceptions: BTreeMap::new(),
         })
     }
 
-    /// Analyzes every reachable location to a fixed point.
+    /// Analyzes every reachable normalized block to a fixed point.
     ///
-    /// The worklist rests on the invariant documented on [`LocationState`]: a
-    /// location's successor targets never change, so its predecessor set only
-    /// grows. A changed input frame moves a completed location back to pending.
-    pub(super) fn run(mut self) -> Result<ScalarGraph, Error> {
-        let entry = Location::Bytecode(self.cfg.entry_block());
-        self.locations
-            .entry(entry)
-            .or_default()
+    /// A block's topology never changes; only frame contributions become
+    /// available. A changed input frame moves a completed block back to pending.
+    pub(super) fn run(mut self) -> Result<DraftMethod, Error> {
+        let entry = self.cfg.entry_block();
+        self.blocks
+            .get_mut(&entry)
+            .expect("the normalized entry must have analysis state")
             .contributions
-            .insert(Predecessor::Entry, self.initial_frame.clone());
+            .insert(Contribution::Entry, self.initial_frame.clone());
         self.recompute_entry(entry)?;
 
         let mut pending = BTreeSet::from([entry]);
-        while let Some(location) = pending.pop_first() {
+        while let Some(block_id) = pending.pop_first() {
             let state = self
-                .locations
-                .get(&location)
-                .expect("a worklist location must have analysis state");
-            let LocationExecution::Pending { input } = &state.execution else {
-                unreachable!("a worklist location must be pending");
+                .blocks
+                .get(&block_id)
+                .expect("a worklist block must have analysis state");
+            let BlockExecution::Pending { input } = &state.execution else {
+                unreachable!("a worklist block must be pending");
             };
             let input = input.clone();
-            let mut block = self.execute(location, input)?;
-            let outputs = block.successors.take_output_frames();
-            self.locations
-                .entry(location)
-                .or_default()
+            let block = self.execute(block_id, input)?;
+            let outputs = block
+                .terminator
+                .arms()
+                .filter_map(|(edge, frame)| match (edge.block_target(), frame) {
+                    (Some(target), Some(frame)) => Some((edge.id(), target, frame.clone())),
+                    (None, None) => None,
+                    _ => unreachable!("only block successors contribute frames"),
+                })
+                .collect::<Vec<_>>();
+            self.blocks
+                .get_mut(&block_id)
+                .expect("an executed block must have analysis state")
                 .execution
                 .complete(block);
-            for (target, frame) in outputs {
-                self.locations
-                    .entry(target)
-                    .or_default()
+            for (edge, target, frame) in outputs {
+                debug_assert!(
+                    self.cfg
+                        .block(block_id)
+                        .successors
+                        .iter()
+                        .any(|normalized| {
+                            normalized.id == edge
+                                && normalized.target
+                                    == crate::ir::generator::bytecode_cfg::NormalizedTarget::Block(
+                                        target,
+                                    )
+                        }),
+                    "frame propagation must follow normalized topology"
+                );
+                self.blocks
+                    .get_mut(&target)
+                    .expect("a normalized successor must have analysis state")
                     .contributions
-                    .insert(Predecessor::Location(location), frame);
+                    .insert(Contribution::Edge(edge), frame);
                 if self.recompute_entry(target)? {
                     pending.insert(target);
                 }
             }
         }
 
-        let completed = CompletedAnalysis {
-            locations: self.locations,
-            phi_definitions: self.phi_definitions,
+        CompletedAnalysis {
+            blocks: self.blocks,
+            parameter_definitions: self.parameter_definitions,
             receiver_value: self.values.receiver_value,
             parameter_values: self.values.parameter_values,
-        };
-        output::materialize(completed, entry)
+        }
+        .into_draft(entry)
+    }
+}
+
+impl CompletedAnalysis {
+    fn into_draft(self, entry: BlockId) -> Result<DraftMethod, Error> {
+        let Self {
+            blocks: lifted_blocks,
+            parameter_definitions,
+            receiver_value: this_value,
+            parameter_values,
+        } = self;
+        // Keep this index local to materialization; contribution frames remain
+        // the only source of incoming argument values during analysis.
+        let parameters_by_block = parameter_definitions.iter().fold(
+            BTreeMap::<BlockId, Vec<(ParameterSite, ValueId)>>::new(),
+            |mut parameters, (&site, &value)| {
+                parameters
+                    .entry(site.block)
+                    .or_default()
+                    .push((site, value));
+                parameters
+            },
+        );
+
+        let entry_arguments = parameters_by_block
+            .get(&entry)
+            .into_iter()
+            .flatten()
+            .map(|(site, _)| contribution_value(&lifted_blocks, entry, Contribution::Entry, *site))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Derive each edge's final arguments before consuming the analysis
+        // states. This view is discarded after successor construction.
+        let mut edge_arguments = lifted_blocks
+            .values()
+            .flat_map(|state| match &state.execution {
+                BlockExecution::Complete { block, .. } => block.terminator.arms(),
+                BlockExecution::Uninitialized | BlockExecution::Pending { .. } => {
+                    unreachable!("a normalized reachable block was not executed")
+                }
+            })
+            .filter_map(|(edge, _)| edge.block_target().map(|target| (edge.id(), target)))
+            .map(|(edge, target)| {
+                let arguments = parameters_by_block
+                    .get(&target)
+                    .into_iter()
+                    .flatten()
+                    .map(|(site, _)| {
+                        contribution_value(&lifted_blocks, target, Contribution::Edge(edge), *site)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((edge, arguments))
+            })
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+        let mut source_map = SourceMap::default();
+        let mut blocks = lifted_blocks
+            .into_iter()
+            .map(|(id, state)| {
+                let lifted = state.execution.into_block().ok_or_else(|| {
+                    Error::internal("a normalized reachable block was not executed")
+                })?;
+                Ok((id, materialize_block(id, lifted, &mut source_map)))
+            })
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+
+        for (site, value) in &parameter_definitions {
+            let Some(block) = blocks.get_mut(&site.block) else {
+                continue;
+            };
+            block.parameters.push(BlockParameter { value: *value });
+        }
+
+        for block in blocks.values_mut() {
+            for edge in block.terminator.arms_mut() {
+                if let Successor::Block { id, arguments, .. } = edge {
+                    *arguments = edge_arguments
+                        .remove(id)
+                        .ok_or_else(|| Error::internal("a block successor lacks its arguments"))?;
+                }
+            }
+        }
+
+        Ok(DraftMethod {
+            entry,
+            entry_arguments,
+            blocks,
+            source_map,
+            this_value,
+            parameter_values,
+        })
+    }
+}
+
+fn contribution_value(
+    blocks: &BTreeMap<BlockId, BlockState>,
+    block: BlockId,
+    contribution: Contribution,
+    site: ParameterSite,
+) -> Result<ValueId, Error> {
+    blocks
+        .get(&block)
+        .and_then(|state| state.contributions.get(&contribution))
+        .and_then(|frame| frame.value_at(site.position))
+        .copied()
+        .ok_or_else(|| Error::internal("a block parameter lacks its contribution value"))
+}
+
+impl BlockExecution {
+    fn into_block(self) -> Option<LiftedBlock> {
+        match self {
+            Self::Complete { block, .. } => Some(*block),
+            Self::Uninitialized | Self::Pending { .. } => None,
+        }
+    }
+}
+
+/// Materializes the final addressable draft structure and its detached provenance.
+///
+/// Later phases may rewrite values, but must not insert, remove, or reorder
+/// operations or terminators because their source locations are fixed here.
+fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMap) -> BasicBlock {
+    if let Some(origin) = lifted.terminator_source {
+        source_map.record_terminator(origin, id);
+    }
+    let operations = lifted
+        .operations
+        .into_iter()
+        .enumerate()
+        .map(|(index, (origin, kind))| {
+            source_map.record_operation(origin, id, index);
+            kind
+        })
+        .collect();
+    BasicBlock {
+        kind: lifted.kind,
+        parameters: Vec::new(),
+        operations,
+        terminator: lifted.terminator.into(),
+    }
+}
+
+impl From<LiftedEdge> for Successor {
+    fn from(edge: LiftedEdge) -> Self {
+        match edge {
+            LiftedEdge::Block {
+                id,
+                target,
+                transfer,
+            } => Self::Block {
+                id,
+                target,
+                arguments: Vec::new(),
+                transfer,
+            },
+            LiftedEdge::Unwind { id } => Self::Unwind { id },
+        }
+    }
+}
+
+impl From<state::LiftedTerminator> for Terminator<Successor> {
+    fn from(value: state::LiftedTerminator) -> Self {
+        value.map_arms(|(edge, _)| edge.into())
     }
 }

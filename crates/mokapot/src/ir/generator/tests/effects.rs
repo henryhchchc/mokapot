@@ -19,13 +19,13 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let ir = build(&dup_method).unwrap();
     let operation = ir
         .blocks()
-        .flat_map(|block| &block.operations)
+        .flat_map(|(_, block)| &block.operations)
         .next()
         .unwrap();
 
     assert!(matches!(
-        operation.kind(),
-        OperationKind::Definition {
+        operation,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if lhs == rhs && *lhs == ir.parameter_values()[0]
@@ -44,12 +44,12 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let ir = build(&category_2_method).unwrap();
     let operation = ir
         .blocks()
-        .flat_map(|block| &block.operations)
+        .flat_map(|(_, block)| &block.operations)
         .next()
         .unwrap();
     assert!(matches!(
-        operation.kind(),
-        OperationKind::Definition {
+        operation,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if lhs == rhs && *lhs == ir.parameter_values()[0]
@@ -69,20 +69,20 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&mixed_method).unwrap();
-    let mut operations = ir.blocks().flat_map(|block| &block.operations);
+    let mut operations = ir.blocks().flat_map(|(_, block)| &block.operations);
     let conversion = operations.next().unwrap();
     let conversion_value = conversion.def().unwrap();
     assert!(matches!(
-        conversion.kind(),
-        OperationKind::Definition {
+        conversion,
+        Operation::Definition {
             expr: Expression::Conversion(Conversion::Long2Int(value)),
             ..
         } if *value == ir.parameter_values()[0]
     ));
     let addition = operations.next().unwrap();
     assert!(matches!(
-        addition.kind(),
-        OperationKind::Definition {
+        addition,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if *lhs == ir.parameter_values()[1] && *rhs == conversion_value
@@ -155,14 +155,13 @@ fn array_write_is_an_effect_without_a_definition() {
     let effect = ir
         .source_map()
         .instructions_at(3.into())
-        .find_map(|id| {
-            ir.blocks()
-                .flat_map(|block| &block.operations)
-                .find(|instruction| instruction.id() == id)
+        .find_map(|location| match ir.instruction(location) {
+            Some(InstructionRef::Terminator(terminator)) => terminator.operation(),
+            Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
         })
         .unwrap();
 
-    assert!(matches!(effect.kind(), OperationKind::Effect { .. }));
+    assert!(matches!(effect, Operation::Effect { .. }));
     assert_eq!(effect.def(), None);
     assert_eq!(effect.uses().len(), 3);
     assert_eq!(ir.source_map().instructions_at(0.into()).count(), 0);
@@ -186,11 +185,11 @@ fn monitor_operations_are_effects_without_definitions() {
     let ir = build(&method).unwrap();
     let instructions = ir
         .blocks()
-        .flat_map(|block| &block.operations)
+        .filter_map(|(_, block)| block.terminator.operation())
         .collect::<Vec<_>>();
 
     assert_eq!(instructions.len(), 2);
     assert!(instructions.iter().all(|instruction| {
-        instruction.def().is_none() && matches!(instruction.kind(), OperationKind::Effect { .. })
+        instruction.def().is_none() && matches!(instruction, Operation::Effect { .. })
     }));
 }

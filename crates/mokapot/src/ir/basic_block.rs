@@ -1,19 +1,37 @@
-use super::{BlockId, Operation, Phi, Terminator, ValueId};
+use super::{Operation, Terminator, ValueId};
+
+/// A scalar value defined on entry to a basic block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BlockParameter {
+    /// The value defined by this parameter.
+    pub value: ValueId,
+}
 
 /// A maximal reachable basic block in completed `MokaIR`.
 ///
-/// Its phis are evaluated simultaneously on entry, its operations execute in
-/// order, and its single terminator defines every outgoing control-flow arm.
+/// Its parameters are bound simultaneously on entry, its operations execute in
+/// order, and its single terminator defines every outgoing control-flow arm
+/// and may define a result available only after successful completion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
-    /// This block's method-local identity.
-    pub id: BlockId,
-    /// The caught exception introduced at this synthetic handler entry.
-    pub caught_exception: Option<ValueId>,
-    /// The phi nodes evaluated at block entry.
-    pub phis: Vec<Phi>,
+    /// The semantic role of this block.
+    pub kind: BlockKind,
+    /// The scalar parameters bound at block entry.
+    pub parameters: Vec<BlockParameter>,
     /// The ordinary operations in execution order.
     pub operations: Vec<Operation>,
     /// The block terminator.
     pub terminator: Terminator,
+}
+
+/// The semantic role of a basic block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BlockKind {
+    /// An ordinary code block.
+    Code,
+    /// An exception-handler landing pad defining the caught exception.
+    LandingPad {
+        /// The caught exception available on entry.
+        exception: ValueId,
+    },
 }
