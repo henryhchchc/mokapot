@@ -185,18 +185,21 @@ impl<'method> Builder<'method> {
         instruction: &Instruction,
         block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
     ) -> Result<BlockExit, Error> {
+        use Instruction::{
+            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, LReturn, LookupSwitch, Return,
+            TableSwitch,
+        };
         let block_at = |target| Self::block_id_at_pc(block_by_start_pc, target);
         if let Some(target) = conditional_target(instruction) {
-            return Ok(BlockExit::Branch {
-                taken: block_at(target)?,
-                fallthrough: block_at(self.require_next_pc(pc)?)?,
-            });
+            let taken = block_at(target)?;
+            let fallthrough = block_at(self.require_next_pc(pc)?)?;
+            return Ok(BlockExit::Branch { taken, fallthrough });
         }
         let exit = match instruction {
-            Instruction::Goto(target) | Instruction::GotoW(target) => BlockExit::Goto {
+            Goto(target) | GotoW(target) => BlockExit::Goto {
                 target: block_at(*target)?,
             },
-            Instruction::TableSwitch {
+            TableSwitch {
                 range,
                 jump_targets,
                 default,
@@ -208,7 +211,7 @@ impl<'method> Builder<'method> {
                     .collect::<Result<_, _>>()?,
                 default: block_at(*default)?,
             },
-            Instruction::LookupSwitch {
+            LookupSwitch {
                 match_targets,
                 default,
             } => BlockExit::Switch {
@@ -218,13 +221,9 @@ impl<'method> Builder<'method> {
                     .collect::<Result<_, _>>()?,
                 default: block_at(*default)?,
             },
-            Instruction::IReturn
-            | Instruction::LReturn
-            | Instruction::FReturn
-            | Instruction::DReturn
-            | Instruction::AReturn
-            | Instruction::Return
-            | Instruction::AThrow => BlockExit::Terminal,
+            IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => {
+                BlockExit::Terminal
+            }
             _ => BlockExit::Fallthrough {
                 target: block_at(self.require_next_pc(pc)?)?,
             },
@@ -280,10 +279,8 @@ impl<'method> Builder<'method> {
                     "an exception-table arm has no handler entry",
                 )
             })?;
-            successors.push(ExceptionalTarget::Handler {
-                id,
-                catch_type: entry.catch_type.clone(),
-            });
+            let catch_type = entry.catch_type.clone();
+            successors.push(ExceptionalTarget::Handler { id, catch_type });
             has_catch_all = catches_everything(entry);
             if has_catch_all {
                 break;
@@ -307,27 +304,19 @@ fn catches_everything(entry: &ExceptionTableEntry) -> bool {
     entry
         .catch_type
         .as_ref()
-        .is_none_or(|caught| caught.0.as_ref() == "java/lang/Throwable")
+        .is_none_or(|caught| caught.0 == "java/lang/Throwable")
 }
 
 const fn conditional_target(instruction: &Instruction) -> Option<ProgramCounter> {
+    use Instruction::{
+        IfACmpEq, IfACmpNe, IfEq, IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt,
+        IfICmpNe, IfLe, IfLt, IfNe, IfNonNull, IfNull,
+    };
     match instruction {
-        Instruction::IfEq(target)
-        | Instruction::IfNe(target)
-        | Instruction::IfLt(target)
-        | Instruction::IfGe(target)
-        | Instruction::IfGt(target)
-        | Instruction::IfLe(target)
-        | Instruction::IfICmpEq(target)
-        | Instruction::IfICmpNe(target)
-        | Instruction::IfICmpLt(target)
-        | Instruction::IfICmpGe(target)
-        | Instruction::IfICmpGt(target)
-        | Instruction::IfICmpLe(target)
-        | Instruction::IfACmpEq(target)
-        | Instruction::IfACmpNe(target)
-        | Instruction::IfNull(target)
-        | Instruction::IfNonNull(target) => Some(*target),
+        IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target) | IfLe(target)
+        | IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target) | IfICmpGe(target)
+        | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target) | IfACmpNe(target)
+        | IfNull(target) | IfNonNull(target) => Some(*target),
         _ => None,
     }
 }
