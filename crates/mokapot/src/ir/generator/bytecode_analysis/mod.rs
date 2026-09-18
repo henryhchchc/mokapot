@@ -1,36 +1,18 @@
 //! Constructs a reachable register-form graph from JVM instructions.
 
-mod analyzer;
-mod block_execution;
-mod executor;
-pub(super) mod jvm;
+mod analysis;
+mod frame;
 pub(super) mod lifting;
-mod materialize;
-mod model;
-mod phis;
-mod scalar;
+mod output;
+mod values;
 
-pub(super) use scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
+pub use frame::FrameError;
+pub(super) use output::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
 
-use std::collections::BTreeMap;
+use self::analysis::Analyzer;
+use crate::ir::generator::error::Error;
+use frame::{EntrySlots, Frame, Position, StackOperation, ValueCategory};
 
-use self::{analyzer::Analyzer, jvm::Frame};
-use crate::{
-    ir::{ValueId, generator::error::Error},
-    jvm::code::ProgramCounter,
-};
-
-pub(super) fn analyze(
-    cfg: &super::bytecode_cfg::JvmBlockGraph<'_>,
-) -> Result<scalar::ScalarGraph, Error> {
+pub(super) fn analyze(cfg: &super::bytecode_cfg::JvmBlockGraph<'_>) -> Result<ScalarGraph, Error> {
     Analyzer::new(cfg)?.run()
-}
-
-/// Symbolic executor used by block-level bytecode analysis.
-struct Executor {
-    definition_ids: BTreeMap<ProgramCounter, ValueId>,
-    value_id_allocator: executor::ValueIdAllocator,
-    receiver_value: Option<ValueId>,
-    parameter_values: Vec<ValueId>,
-    initial_frame: Frame,
 }

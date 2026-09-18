@@ -1,20 +1,23 @@
 use std::collections::BTreeMap;
 
-use super::Executor;
+use super::{EntrySlots, Frame, Position};
 use crate::{
     ir::{
         ValueId,
-        generator::{
-            bytecode_analysis::jvm::{EntrySlots, Frame, Position},
-            bytecode_cfg::JvmBlockGraph,
-            error::Error,
-        },
+        generator::{bytecode_cfg::JvmBlockGraph, error::Error},
     },
     jvm::method,
 };
 
-impl Executor {
-    pub(super) fn for_cfg(cfg: &JvmBlockGraph<'_>) -> Result<Self, Error> {
+pub(super) struct ValueContext {
+    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
+    value_id_allocator: ValueIdAllocator,
+    pub(super) receiver_value: Option<ValueId>,
+    pub(super) parameter_values: Vec<ValueId>,
+}
+
+impl ValueContext {
+    pub(super) fn for_cfg(cfg: &JvmBlockGraph<'_>) -> Result<(Self, Frame), Error> {
         let method = cfg.method();
         let body = cfg.body();
 
@@ -41,13 +44,13 @@ impl Executor {
             receiver_value,
             &parameter_values,
         );
-        Ok(Self {
+        let values = Self {
             definition_ids: BTreeMap::new(),
             value_id_allocator,
             receiver_value,
             parameter_values,
-            initial_frame,
-        })
+        };
+        Ok((values, initial_frame))
     }
 
     /// Checks the entry-frame convention: parameters follow `this` in descriptor
@@ -80,30 +83,30 @@ impl Executor {
         }
     }
 
-    pub(super) fn new_value_id(&mut self) -> Result<ValueId, Error> {
+    pub(super) fn fresh(&mut self) -> Result<ValueId, Error> {
         self.value_id_allocator.new_value_id()
     }
 
-    pub(super) fn definition_id_at(
+    pub(super) fn definition_at(
         &mut self,
         pc: crate::jvm::code::ProgramCounter,
     ) -> Result<ValueId, Error> {
         if let Some(&id) = self.definition_ids.get(&pc) {
             return Ok(id);
         }
-        let id = self.new_value_id()?;
+        let id = self.fresh()?;
         self.definition_ids.insert(pc, id);
         Ok(id)
     }
 }
 
 #[derive(Debug, Default)]
-pub(super) struct ValueIdAllocator {
+struct ValueIdAllocator {
     next_value_idx: u32,
 }
 
 impl ValueIdAllocator {
-    pub(super) fn new_value_id(&mut self) -> Result<ValueId, Error> {
+    fn new_value_id(&mut self) -> Result<ValueId, Error> {
         let id = ValueId::new(self.next_value_idx);
         self.next_value_idx = self
             .next_value_idx

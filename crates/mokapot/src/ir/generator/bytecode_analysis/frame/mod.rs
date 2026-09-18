@@ -23,29 +23,29 @@ pub(crate) enum Position {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Frame {
-    pub locals: LocalVariables,
-    pub stack: OperandStack,
+    pub(crate) locals: LocalVariables,
+    pub(crate) stack: OperandStack,
 }
 
 impl Frame {
-    pub fn into_unwind_frame(mut self) -> Self {
+    pub(crate) fn into_unwind_frame(mut self) -> Self {
         self.locals.clear_for_unwind();
         self.stack.clear();
         self
     }
 
-    pub fn value_at(&self, position: Position) -> Option<&ValueId> {
+    pub(crate) fn value_at(&self, position: Position) -> Option<&ValueId> {
         match position {
             Position::Local(index) => self.locals.slot_values().nth(index).flatten(),
             Position::Stack(index) => self.stack.slot_values().nth(index).flatten(),
         }
     }
 
-    pub fn handler_exception(&self) -> Result<&ValueId, FrameError> {
+    pub(crate) fn handler_exception(&self) -> Result<&ValueId, FrameError> {
         self.stack.single_value(ValueCategory::Category1)
     }
 
-    pub fn merge_from_with<E>(
+    pub(crate) fn merge_from_with<E>(
         &mut self,
         other: Self,
         mut merge_values: impl FnMut(Position, &mut ValueId, ValueId) -> Result<(), E>,
@@ -75,7 +75,7 @@ impl Frame {
     /// The parameters follow the receiver in descriptor order, with a category-2
     /// parameter occupying two slots; the callers of this constructor rely on
     /// that convention to map parameter identities to slots.
-    pub fn for_method_entry(
+    pub(crate) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
@@ -94,7 +94,7 @@ impl Frame {
         ))
     }
 
-    pub fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
+    pub(crate) fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
         let locals = self.locals.clone();
         let stack = OperandStack::with_max_slots(self.stack.max_slots());
         let mut frame = Self { locals, stack };

@@ -1,20 +1,15 @@
-use super::definition_operation;
+use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{
         OperationKind,
         expression::{Expression, MathOperation},
-        generator::{
-            bytecode_analysis::{
-                jvm::{ValueCategory, ValueCategory::Category1},
-                lifting::Context,
-            },
-            error::Error,
-        },
+        generator::error::Error,
     },
     jvm::{ConstantValue, references::ClassRef},
 };
+use ValueCategory::Category1;
 
-impl Context<'_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn constant(
         &mut self,
         constant: ConstantValue,

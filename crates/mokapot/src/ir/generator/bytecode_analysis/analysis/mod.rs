@@ -1,12 +1,16 @@
 //! Worklist orchestration for reachable block analysis.
 
+mod execution;
+mod merge;
+mod state;
+
+pub(super) use state::{
+    CompletedAnalysis, LiftedBlock, Location, PhiDefinition, PhiSite, Predecessor,
+};
+
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{
-    Executor,
-    model::{Location, LocationExecution, LocationState, PhiDefinition, PhiSite, Predecessor},
-    scalar::ScalarGraph,
-};
+use super::{Frame, Position, ScalarGraph, ValueCategory, output, values::ValueContext};
 use crate::{
     ir::{
         ValueId,
@@ -17,10 +21,12 @@ use crate::{
     },
     jvm::code::ProgramCounter,
 };
+use state::{LiftedEdge, LiftedSuccessors, LocationExecution, LocationState};
 
 pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) cfg: &'cfg JvmBlockGraph<'method>,
-    pub(super) executor: Executor,
+    pub(super) values: ValueContext,
+    pub(super) initial_frame: Frame,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
     pub(super) caught_exceptions: BTreeMap<JvmBlockId, ValueId>,
@@ -37,7 +43,7 @@ impl Analyzer<'_, '_> {
         if let Some(&value) = self.caught_exceptions.get(&block) {
             return Ok(value);
         }
-        let value = self.executor.new_value_id()?;
+        let value = self.values.fresh()?;
         self.caught_exceptions.insert(block, value);
         Ok(value)
     }
@@ -56,9 +62,11 @@ impl Analyzer<'_, '_> {
 
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     pub(super) fn new(cfg: &'cfg JvmBlockGraph<'method>) -> Result<Self, Error> {
+        let (values, initial_frame) = ValueContext::for_cfg(cfg)?;
         Ok(Self {
             cfg,
-            executor: Executor::for_cfg(cfg)?,
+            values,
+            initial_frame,
             locations: BTreeMap::new(),
             phi_definitions: BTreeMap::new(),
             caught_exceptions: BTreeMap::new(),
@@ -76,7 +84,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             .entry(entry)
             .or_default()
             .contributions
-            .insert(Predecessor::Entry, self.executor.initial_frame.clone());
+            .insert(Predecessor::Entry, self.initial_frame.clone());
         self.recompute_entry(entry)?;
 
         let mut pending = BTreeSet::from([entry]);
@@ -108,6 +116,12 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             }
         }
 
-        self.into_scalar_graph(entry)
+        let completed = CompletedAnalysis {
+            locations: self.locations,
+            phi_definitions: self.phi_definitions,
+            receiver_value: self.values.receiver_value,
+            parameter_values: self.values.parameter_values,
+        };
+        output::materialize(completed, entry)
     }
 }

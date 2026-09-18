@@ -1,21 +1,12 @@
-use super::definition_operation;
+use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{
-        OperationKind, ValueId,
-        expression::Expression,
-        generator::{
-            bytecode_analysis::{
-                jvm::ValueCategory::{self, Category1},
-                lifting::Context,
-            },
-            error::Error,
-        },
-    },
+    ir::{OperationKind, ValueId, expression::Expression, generator::error::Error},
     jvm::references::MethodRef,
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
+use ValueCategory::Category1;
 
-impl Context<'_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn invoke(
         &mut self,
         method: &MethodRef,

@@ -1,18 +1,13 @@
+use super::{
+    LiftContext,
+    ValueCategory::{Category1, Category2},
+};
 use crate::{
-    ir::{
-        OperationKind,
-        generator::{
-            bytecode_analysis::{
-                jvm::ValueCategory::{Category1, Category2},
-                lifting::Context,
-            },
-            error::Error,
-        },
-    },
+    ir::{OperationKind, generator::error::Error},
     jvm::code::WideInstruction,
 };
 
-impl Context<'_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,

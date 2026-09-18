@@ -19,7 +19,7 @@ mod error;
 mod remap;
 mod ssa;
 
-pub use bytecode_analysis::jvm::FrameError as MokaIRFrameError;
+pub use bytecode_analysis::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
 use crate::{ir::MokaIRMethod, jvm::Method};

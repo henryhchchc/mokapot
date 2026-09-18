@@ -1,18 +1,11 @@
-use super::definition_operation;
+use super::super::Frame;
+use super::{LiftContext, ValueCategory, definition_operation};
 use crate::ir::{
     OperationKind, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
-    generator::{
-        bytecode_analysis::{
-            jvm::{
-                Frame, ValueCategory,
-                ValueCategory::{Category1, Category2},
-            },
-            lifting::Context,
-        },
-        error::Error,
-    },
+    generator::error::Error,
 };
+use ValueCategory::{Category1, Category2};
 
 #[inline]
 pub(super) fn lift_conversion(
@@ -43,7 +36,7 @@ pub(super) fn lift_binary_math(
     Ok(Some(definition_operation(value, expr)))
 }
 
-impl Context<'_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn shift_long(
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,

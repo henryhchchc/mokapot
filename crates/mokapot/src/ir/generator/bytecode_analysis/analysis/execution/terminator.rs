@@ -3,9 +3,8 @@
 use std::collections::BTreeMap;
 
 use super::super::{
-    analyzer::Analyzer,
-    jvm::ValueCategory::{Category1, Category2},
-    model::{Frame, LiftedEdge, Location},
+    Frame, LiftedEdge, Location,
+    ValueCategory::{Category1, Category2},
 };
 use crate::ir::{
     OperationKind, TerminatorKind,
@@ -23,34 +22,29 @@ use crate::jvm::code::Instruction;
 
 type LoweredTerminator = (TerminatorKind, Vec<LiftedEdge>, Option<OperationKind>);
 
-impl Analyzer<'_, '_> {
-    /// Lowers the structural terminator of `block`, appending its successors.
-    ///
-    pub(super) fn lower_terminator(
-        block: &bytecode_cfg::JvmBlock,
-        instruction: &Instruction,
-        frame: &mut Frame,
-    ) -> Result<LoweredTerminator, Error> {
-        let result = match &block.exit {
-            BlockExit::Fallthrough { target } => {
-                let terminator_kind = if block.exception_handlers.is_empty() {
-                    TerminatorKind::Goto
-                } else {
-                    TerminatorKind::Fallible
-                };
-                (terminator_kind, vec![unconditional(*target)], None)
-            }
-            BlockExit::Goto { target } => {
-                (TerminatorKind::Goto, vec![unconditional(*target)], None)
-            }
-            BlockExit::Branch { taken, fallthrough } => {
-                lower_branch(instruction, *taken, *fallthrough, frame)?
-            }
-            BlockExit::Switch { cases, default } => lower_switch(cases, *default, frame)?,
-            BlockExit::Terminal => lower_terminal(instruction, frame)?,
-        };
-        Ok(result)
-    }
+/// Lowers the structural terminator of `block`, appending its successors.
+pub(super) fn lower(
+    block: &bytecode_cfg::JvmBlock,
+    instruction: &Instruction,
+    frame: &mut Frame,
+) -> Result<LoweredTerminator, Error> {
+    let result = match &block.exit {
+        BlockExit::Fallthrough { target } => {
+            let terminator_kind = if block.exception_handlers.is_empty() {
+                TerminatorKind::Goto
+            } else {
+                TerminatorKind::Fallible
+            };
+            (terminator_kind, vec![unconditional(*target)], None)
+        }
+        BlockExit::Goto { target } => (TerminatorKind::Goto, vec![unconditional(*target)], None),
+        BlockExit::Branch { taken, fallthrough } => {
+            lower_branch(instruction, *taken, *fallthrough, frame)?
+        }
+        BlockExit::Switch { cases, default } => lower_switch(cases, *default, frame)?,
+        BlockExit::Terminal => lower_terminal(instruction, frame)?,
+    };
+    Ok(result)
 }
 
 fn lower_branch(

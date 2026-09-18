@@ -1,4 +1,4 @@
-use crate::{ir::generator::bytecode_analysis::jvm::FrameError, jvm::code::ProgramCounter};
+use crate::{ir::generator::bytecode_analysis::FrameError, jvm::code::ProgramCounter};
 
 /// Why JVM bytecode cannot be converted to Moka IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]

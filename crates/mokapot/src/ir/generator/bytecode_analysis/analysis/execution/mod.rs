@@ -2,10 +2,8 @@
 
 mod terminator;
 
-use super::{
-    analyzer::Analyzer,
-    model::{Frame, LiftedBlock, LiftedEdge, LiftedSuccessors, Location},
-};
+use super::super::lifting;
+use super::{Analyzer, Frame, LiftedBlock, LiftedEdge, LiftedSuccessors, Location};
 use crate::{
     ir::generator::{
         bytecode_cfg::{self, BlockExit, JvmBlockId},
@@ -70,10 +68,9 @@ impl Analyzer<'_, '_> {
         debug_assert_eq!(actual_final_pc, final_pc);
 
         for (pc, instruction) in instructions {
-            let operation = self
-                .executor
-                .lift_instruction(instruction, pc, &mut frame)
-                .map_err(|error| error.at_instruction(pc))?;
+            let operation =
+                lifting::lift_instruction(&mut self.values, instruction, pc, &mut frame)
+                    .map_err(|error| error.at_instruction(pc))?;
             if let Some(operation) = operation {
                 operations.push((pc, operation));
             }
@@ -81,16 +78,19 @@ impl Analyzer<'_, '_> {
 
         let pre_final_frame = frame.clone();
         if !has_explicit_terminator {
-            let operation = self
-                .executor
-                .lift_instruction(final_instruction, final_pc, &mut frame)
-                .map_err(|error| error.at_instruction(final_pc))?;
+            let operation = lifting::lift_instruction(
+                &mut self.values,
+                final_instruction,
+                final_pc,
+                &mut frame,
+            )
+            .map_err(|error| error.at_instruction(final_pc))?;
             if let Some(operation) = operation {
                 operations.push((final_pc, operation));
             }
         }
         let (terminator, edges, terminator_operation) =
-            Self::lower_terminator(block, final_instruction, &mut frame)
+            terminator::lower(block, final_instruction, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));

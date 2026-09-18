@@ -1,20 +1,11 @@
-use super::definition_operation;
+use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{
-        OperationKind,
-        expression::ArrayOperation,
-        generator::{
-            bytecode_analysis::{
-                jvm::{ValueCategory, ValueCategory::Category1},
-                lifting::Context,
-            },
-            error::Error,
-        },
-    },
+    ir::{OperationKind, expression::ArrayOperation, generator::error::Error},
     types::field_type::FieldType,
 };
+use ValueCategory::Category1;
 
-impl Context<'_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn array_read(
         &mut self,
         category: ValueCategory,
