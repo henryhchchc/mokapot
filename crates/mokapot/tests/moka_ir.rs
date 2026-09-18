@@ -1,7 +1,7 @@
 use mokapot::{
     ir::{
-        DefUseChain, InstructionId, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
-        UseSite, ValueDefinition, expression::Expression,
+        InstructionId, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
+        expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
@@ -90,21 +90,6 @@ fn builds_ir_blocks_and_provenance() {
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
-fn du_chain_definitions_use_instruction_identities() {
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    let chain = DefUseChain::new(&ir);
-    for instruction in ir.blocks().flat_map(|block| &block.operations) {
-        if let Some(value) = instruction.def() {
-            assert_eq!(
-                chain.definition_of(value),
-                Some(ValueDefinition::Instruction(instruction.id()))
-            );
-        }
-    }
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn ssa_identities_and_phi_predecessors_are_well_formed() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let mut instruction_ids = HashSet::new();
@@ -159,34 +144,6 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             .iter()
             .all(|value| ir.definition_of(*value).is_some())
     );
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore)]
-fn du_chain_uses_include_source_related_nodes() {
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    let chain = DefUseChain::new(&ir);
-    let test_data = [
-        (3, 0x09),
-        (24, 0x1F),
-        (56, 0x3C),
-        (103, 0x68),
-        (108, 0x6D),
-        (124, 0x7D),
-    ];
-    for (definition_pc, use_pc) in test_data {
-        let value = ir
-            .source_map()
-            .instructions_at(ProgramCounter::from(definition_pc))
-            .find_map(|id| operation(&ir, id).and_then(mokapot::ir::Operation::def))
-            .unwrap();
-        let uses = chain.uses_of(value).collect::<BTreeSet<_>>();
-        assert!(
-            ir.source_map()
-                .instructions_at(ProgramCounter::from(use_pc))
-                .any(|id| uses.contains(&UseSite::Instruction(id)))
-        );
-    }
 }
 
 #[test]

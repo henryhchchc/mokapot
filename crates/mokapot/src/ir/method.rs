@@ -213,21 +213,6 @@ impl MokaIRMethod {
         }
     }
 
-    pub(crate) fn value_definitions(
-        &self,
-    ) -> impl Iterator<Item = (ValueId, ValueDefinition)> + '_ {
-        self.value_definitions
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(id, definition)| {
-                (
-                    ValueId::new(u32::try_from(id).expect("value identity must fit u32")),
-                    definition,
-                )
-            })
-    }
-
     /// Returns a borrowed control-flow view derived from block terminators.
     ///
     /// The returned view does not store an independent edge set.

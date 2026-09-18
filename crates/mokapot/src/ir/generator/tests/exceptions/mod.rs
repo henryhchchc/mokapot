@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    ir::{DefUseChain, UseSite},
-    jvm::references::ClassRef,
-};
+use crate::jvm::references::ClassRef;
 
 fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Operation {
     method

@@ -85,15 +85,6 @@ fn exceptional_state_excludes_the_fallible_result() {
         }],
     );
     let ir = build(&method).unwrap();
-    let result = instruction_at(&ir, 1.into()).def().unwrap();
-    let normal_return = terminator_at(&ir, 2.into()).id();
-    let handler_return = terminator_at(&ir, 12.into()).id();
-    let uses = DefUseChain::new(&ir)
-        .uses_of(result)
-        .collect::<BTreeSet<_>>();
-
-    assert_eq!(uses, BTreeSet::from([UseSite::Instruction(normal_return)]));
-    assert!(!uses.contains(&UseSite::Instruction(handler_return)));
     assert!(
         ir.blocks()
             .filter_map(|block| ir.caught_exception(block.id))

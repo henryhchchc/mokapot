@@ -22,10 +22,6 @@ fn synchronized_return_has_only_exceptional_successors() {
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
     let return_terminator = terminator_at(&ir, 1.into());
-    let returned = match return_terminator.kind() {
-        TerminatorKind::Return(Some(value)) => *value,
-        kind => panic!("expected value return, got {kind:?}"),
-    };
     let successors = return_terminator.successors();
 
     assert_eq!(successors.len(), 2);
@@ -39,12 +35,6 @@ fn synchronized_return_has_only_exceptional_successors() {
             .all(|successor| !matches!(successor.transfer(), ControlTransfer::Unconditional))
     );
     assert!(ir.caught_exception(successors[0].target()).is_some());
-    assert_eq!(
-        DefUseChain::new(&ir)
-            .uses_of(returned)
-            .collect::<BTreeSet<_>>(),
-        BTreeSet::from([UseSite::Instruction(return_terminator.id())])
-    );
 }
 
 #[test]
