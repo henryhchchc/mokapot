@@ -96,7 +96,10 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     pub(super) fn pc(&self, location: Location) -> Option<ProgramCounter> {
         match location {
             Location::Bytecode(id) => self.cfg.block(id).map(|block| block.start_pc),
-            Location::Handler(id) => self.cfg.handler(id).map(|handler| handler.handler_pc),
+            Location::Handler(id) => self
+                .cfg
+                .handler(id)
+                .and_then(|handler| Some(self.cfg.block(handler.target)?.start_pc)),
             Location::Unwind => None,
         }
     }

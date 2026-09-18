@@ -2,8 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     fallibility::Fallibility,
-    instruction_flow::PcFlow,
-    model::{Block, BytecodeCfg, ExceptionalTarget, HandlerEntry, HandlerId, StructuralBlockId},
+    model::{
+        Block, BlockExit, BytecodeCfg, ExceptionalTarget, HandlerEntry, HandlerId,
+        StructuralBlockId,
+    },
 };
 use crate::{
     ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
@@ -33,14 +35,11 @@ impl<'method> Builder<'method> {
             .instructions
             .entry_point()
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
-        self.validate_instructions()?;
-        self.validate_handler_targets()?;
-        let flows = self.classify_instructions()?;
-
-        let leaders = self.collect_leaders(entry_pc, &flows)?;
+        self.reject_legacy_subroutines()?;
+        let leaders = self.collect_leaders(entry_pc)?;
         let (groups, block_by_start_pc) = self.partition(&leaders)?;
         let (handlers, handler_by_pc) = self.build_handlers(&block_by_start_pc)?;
-        let blocks = self.build_blocks(groups, &block_by_start_pc, &handler_by_pc, &flows)?;
+        let blocks = self.build_blocks(groups, &block_by_start_pc, &handler_by_pc)?;
 
         let entry = Self::block_id_at_pc(&block_by_start_pc, entry_pc)?;
         Ok(BytecodeCfg {
@@ -50,21 +49,7 @@ impl<'method> Builder<'method> {
         })
     }
 
-    fn classify_instructions(&self) -> Result<BTreeMap<ProgramCounter, PcFlow>, Error> {
-        self.body
-            .instructions
-            .iter()
-            .map(|(pc, instruction)| {
-                PcFlow::classify(self.body, pc, instruction).map(|flow| (pc, flow))
-            })
-            .collect()
-    }
-
-    fn collect_leaders(
-        &self,
-        entry_pc: ProgramCounter,
-        flows: &BTreeMap<ProgramCounter, PcFlow>,
-    ) -> Result<BTreeSet<ProgramCounter>, Error> {
+    fn collect_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
         let mut leaders = BTreeSet::from([entry_pc]);
         leaders.extend(
             self.body
@@ -74,33 +59,46 @@ impl<'method> Builder<'method> {
         );
 
         for (pc, instruction) in self.body.instructions.iter() {
-            let flow = flows
-                .get(&pc)
-                .ok_or_else(|| Error::internal_at(pc, "a decoded instruction has no flow"))?;
-            match flow {
-                PcFlow::Fallthrough { target } => {
-                    if self.fallibility.is_synchronously_fallible(instruction) {
-                        leaders.insert(*target);
-                    }
-                }
-                PcFlow::Goto { target } => {
+            if let Some(target) = conditional_target(instruction) {
+                leaders.insert(target);
+                leaders.insert(self.next_pc(pc)?);
+                continue;
+            }
+            match instruction {
+                Instruction::Jsr(_)
+                | Instruction::JsrW(_)
+                | Instruction::Ret(_)
+                | Instruction::Wide(WideInstruction::Ret(_)) => unreachable!("validated above"),
+                Instruction::Goto(target) | Instruction::GotoW(target) => {
                     leaders.insert(*target);
                     self.insert_instruction_after(&mut leaders, pc);
                 }
-                PcFlow::Branch {
-                    taken, fallthrough, ..
+                Instruction::TableSwitch {
+                    jump_targets,
+                    default,
+                    ..
                 } => {
-                    leaders.insert(*taken);
-                    leaders.insert(*fallthrough);
+                    leaders.extend(jump_targets.iter().copied().chain([*default]));
+                    self.insert_instruction_after(&mut leaders, pc);
                 }
-                PcFlow::Switch { cases, default } => {
-                    for target in cases.values().copied().chain([*default]) {
-                        leaders.insert(target);
+                Instruction::LookupSwitch {
+                    match_targets,
+                    default,
+                } => {
+                    leaders.extend(match_targets.values().copied().chain([*default]));
+                    self.insert_instruction_after(&mut leaders, pc);
+                }
+                Instruction::IReturn
+                | Instruction::LReturn
+                | Instruction::FReturn
+                | Instruction::DReturn
+                | Instruction::AReturn
+                | Instruction::Return
+                | Instruction::AThrow => self.insert_instruction_after(&mut leaders, pc),
+                _ => {
+                    if self.fallibility.is_synchronously_fallible(instruction) {
+                        leaders.insert(self.next_pc(pc)?);
                     }
-                    self.insert_instruction_after(&mut leaders, pc);
-                }
-                PcFlow::Return { .. } | PcFlow::Throw => {
-                    self.insert_instruction_after(&mut leaders, pc);
                 }
             }
         }
@@ -113,36 +111,14 @@ impl<'method> Builder<'method> {
         }
     }
 
-    fn validate_handler_targets(&self) -> Result<(), Error> {
-        for entry in &self.body.exception_table {
-            self.validate_target(entry.handler_pc)?;
-            let range = &entry.covered_pc;
-            if range.start >= range.end || self.body.instruction_at(range.start).is_none() {
-                return Err(Error::malformed(
-                    Some(range.start),
-                    MalformedBytecode::InvalidExceptionRange,
-                ));
-            }
-            if !self.is_instruction_boundary(range.end) {
-                return Err(Error::malformed(
-                    Some(range.end),
-                    MalformedBytecode::InvalidExceptionRange,
-                ));
-            }
-        }
-        Ok(())
+    fn next_pc(&self, pc: ProgramCounter) -> Result<ProgramCounter, Error> {
+        self.body
+            .instructions
+            .next_pc_of(&pc)
+            .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
     }
 
-    fn is_instruction_boundary(&self, pc: ProgramCounter) -> bool {
-        self.body.instruction_at(pc).is_some()
-            || self.body.instructions.iter().any(|(start, instruction)| {
-                instruction
-                    .encoded_end_pc(start)
-                    .is_some_and(|end| end == pc)
-            })
-    }
-
-    fn validate_instructions(&self) -> Result<(), Error> {
+    fn reject_legacy_subroutines(&self) -> Result<(), Error> {
         for (pc, instruction) in self.body.instructions.iter() {
             if matches!(
                 instruction,
@@ -156,39 +132,14 @@ impl<'method> Builder<'method> {
                     kind: UnsupportedBytecode::LegacySubroutine,
                 });
             }
-            if let Instruction::TableSwitch {
-                range,
-                jump_targets,
-                ..
-            } = instruction
-            {
-                let count = (*range.start() <= *range.end())
-                    .then(|| i64::from(*range.end()) - i64::from(*range.start()))
-                    .and_then(|span| span.checked_add(1))
-                    .and_then(|count| usize::try_from(count).ok());
-                if count != Some(jump_targets.len()) {
-                    return Err(Error::malformed(
-                        Some(pc),
-                        MalformedBytecode::InvalidTableSwitch,
-                    ));
-                }
-            }
         }
         Ok(())
-    }
-
-    fn validate_target(&self, target: ProgramCounter) -> Result<(), Error> {
-        self.body
-            .instruction_at(target)
-            .is_some()
-            .then_some(())
-            .ok_or_else(|| Error::malformed(Some(target), MalformedBytecode::MissingInstruction))
     }
 
     /// Assigns every block start PC its dense identity and groups the decoded
     /// instruction PCs under it.
     ///
-    /// No block is built here: terminators resolve through
+    /// No block is built here: exits resolve through
     /// `block_by_start_pc`, so they can only be derived once every start PC has
     /// an identity.
     fn partition(
@@ -202,44 +153,36 @@ impl<'method> Builder<'method> {
                 let id = StructuralBlockId::from_index(groups.len());
                 groups.push(BlockGroup {
                     start_pc: pc,
-                    instruction_pcs: vec![pc],
+                    end_pc: pc,
                 });
                 block_by_start_pc.insert(pc, id);
             } else {
                 let group = groups
                     .last_mut()
                     .ok_or_else(|| Error::internal_at(pc, "decoded bytecode has no entry block"))?;
-                group.instruction_pcs.push(pc);
+                group.end_pc = pc;
             }
         }
         Ok((groups, block_by_start_pc))
     }
 
-    /// Builds every block together with its terminator and exceptional
+    /// Builds every block together with its exit and exceptional
     /// successors, which follow from the block's final instruction alone.
     fn build_blocks(
         &self,
         groups: Vec<BlockGroup>,
         block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
         handler_by_pc: &BTreeMap<ProgramCounter, HandlerId>,
-        flows: &BTreeMap<ProgramCounter, PcFlow>,
     ) -> Result<Vec<Block>, Error> {
         groups
             .into_iter()
             .map(|group| {
-                let final_pc = *group
-                    .instruction_pcs
-                    .last()
-                    .expect("a structural block is never empty");
+                let final_pc = group.end_pc;
                 let instruction = self
                     .body
                     .instruction_at(final_pc)
                     .expect("a structural block PC comes from decoded bytecode");
-                let flow = flows.get(&final_pc).ok_or_else(|| {
-                    Error::internal_at(final_pc, "a decoded instruction has no flow")
-                })?;
-                let terminator =
-                    flow.resolve(|target| Self::block_id_at_pc(block_by_start_pc, target))?;
+                let exit = self.build_exit(final_pc, instruction, block_by_start_pc)?;
                 let exceptional_successors =
                     if self.fallibility.is_synchronously_fallible(instruction) {
                         self.exceptional_successors(final_pc, handler_by_pc)?
@@ -248,12 +191,65 @@ impl<'method> Builder<'method> {
                     };
                 Ok(Block {
                     start_pc: group.start_pc,
-                    instruction_pcs: group.instruction_pcs,
-                    terminator,
+                    end_pc: group.end_pc,
+                    exit,
                     exceptional_successors,
                 })
             })
             .collect()
+    }
+
+    fn build_exit(
+        &self,
+        pc: ProgramCounter,
+        instruction: &Instruction,
+        block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
+    ) -> Result<BlockExit, Error> {
+        let block_at = |target| Self::block_id_at_pc(block_by_start_pc, target);
+        if let Some(target) = conditional_target(instruction) {
+            return Ok(BlockExit::Branch {
+                taken: block_at(target)?,
+                fallthrough: block_at(self.next_pc(pc)?)?,
+            });
+        }
+        let exit = match instruction {
+            Instruction::Goto(target) | Instruction::GotoW(target) => BlockExit::Goto {
+                target: block_at(*target)?,
+            },
+            Instruction::TableSwitch {
+                range,
+                jump_targets,
+                default,
+            } => BlockExit::Switch {
+                cases: range
+                    .clone()
+                    .zip(jump_targets)
+                    .map(|(case, &target)| block_at(target).map(|block| (case, block)))
+                    .collect::<Result<_, _>>()?,
+                default: block_at(*default)?,
+            },
+            Instruction::LookupSwitch {
+                match_targets,
+                default,
+            } => BlockExit::Switch {
+                cases: match_targets
+                    .iter()
+                    .map(|(&case, &target)| block_at(target).map(|block| (case, block)))
+                    .collect::<Result<_, _>>()?,
+                default: block_at(*default)?,
+            },
+            Instruction::IReturn
+            | Instruction::LReturn
+            | Instruction::FReturn
+            | Instruction::DReturn
+            | Instruction::AReturn
+            | Instruction::Return
+            | Instruction::AThrow => BlockExit::Terminal,
+            _ => BlockExit::Fallthrough {
+                target: block_at(self.next_pc(pc)?)?,
+            },
+        };
+        Ok(exit)
     }
 
     fn build_handlers(
@@ -268,7 +264,6 @@ impl<'method> Builder<'method> {
             }
             let id = HandlerId::from_index(handlers.len());
             handlers.push(HandlerEntry {
-                handler_pc: entry.handler_pc,
                 target: Self::block_id_at_pc(block_by_start_pc, entry.handler_pc)?,
             });
             handler_by_pc.insert(entry.handler_pc, id);
@@ -325,7 +320,7 @@ impl<'method> Builder<'method> {
 /// resolved.
 struct BlockGroup {
     start_pc: ProgramCounter,
-    instruction_pcs: Vec<ProgramCounter>,
+    end_pc: ProgramCounter,
 }
 
 fn catches_everything(entry: &ExceptionTableEntry) -> bool {
@@ -333,4 +328,26 @@ fn catches_everything(entry: &ExceptionTableEntry) -> bool {
         .catch_type
         .as_ref()
         .is_none_or(|caught| caught.0.as_ref() == "java/lang/Throwable")
+}
+
+const fn conditional_target(instruction: &Instruction) -> Option<ProgramCounter> {
+    match instruction {
+        Instruction::IfEq(target)
+        | Instruction::IfNe(target)
+        | Instruction::IfLt(target)
+        | Instruction::IfGe(target)
+        | Instruction::IfGt(target)
+        | Instruction::IfLe(target)
+        | Instruction::IfICmpEq(target)
+        | Instruction::IfICmpNe(target)
+        | Instruction::IfICmpLt(target)
+        | Instruction::IfICmpGe(target)
+        | Instruction::IfICmpGt(target)
+        | Instruction::IfICmpLe(target)
+        | Instruction::IfACmpEq(target)
+        | Instruction::IfACmpNe(target)
+        | Instruction::IfNull(target)
+        | Instruction::IfNonNull(target) => Some(*target),
+        _ => None,
+    }
 }

@@ -6,12 +6,10 @@
 
 mod builder;
 mod fallibility;
-mod instruction_flow;
 mod model;
 
 pub(super) use model::{
-    Block, BranchPredicate, BytecodeCfg, ExceptionalTarget, HandlerId, ReturnOperand,
-    StructuralBlockId, StructuralTerminator,
+    Block, BlockExit, BytecodeCfg, ExceptionalTarget, HandlerId, StructuralBlockId,
 };
 
 use super::error::Error;

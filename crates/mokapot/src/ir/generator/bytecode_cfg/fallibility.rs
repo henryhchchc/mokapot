@@ -8,26 +8,15 @@ use crate::{
 /// Method-level state needed to classify instruction fallibility.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Fallibility {
-    return_can_throw: bool,
+    synchronized_method: bool,
 }
 
 impl Fallibility {
-    pub fn for_method(method: &Method) -> Self {
-        // Exact structured-locking analysis is path- and alias-sensitive, so
-        // explicit monitor use conservatively makes every method exit fallible.
-        let has_explicit_monitor_operation = method.body.as_ref().is_some_and(|body| {
-            body.instructions.iter().any(|(_, instruction)| {
-                matches!(
-                    instruction,
-                    Instruction::MonitorEnter | Instruction::MonitorExit
-                )
-            })
-        });
+    pub const fn for_method(method: &Method) -> Self {
         Self {
-            return_can_throw: method
+            synchronized_method: method
                 .access_flags
-                .contains(method::AccessFlags::SYNCHRONIZED)
-                || has_explicit_monitor_operation,
+                .contains(method::AccessFlags::SYNCHRONIZED),
         }
     }
 
@@ -49,7 +38,7 @@ impl Fallibility {
 
         match instruction {
             Ldc(value) | LdcW(value) | Ldc2W(value) => constant_resolution_is_fallible(value),
-            IReturn | LReturn | FReturn | DReturn | AReturn | Return => self.return_can_throw,
+            IReturn | LReturn | FReturn | DReturn | AReturn | Return => self.synchronized_method,
             IALoad
             | LALoad
             | FALoad

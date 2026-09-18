@@ -56,11 +56,10 @@ pub(super) struct AnalyzedBlock {
 
 /// Analysis state for one location.
 ///
-/// A location's successor targets are a pure function of the location, so the
-/// predecessors that contribute to it are fixed once it is reached: the
-/// analyzer only ever adds entries to `contributions`, never removes them.
-/// Therefore `contributions` is non-empty if and only if `entry_frame` and
-/// `execution` are both set; a state is either unreached or fully analyzed.
+/// The structural CFG fixes a location's successor targets, so the analyzer
+/// only adds entries to `contributions`; it never removes them. Therefore
+/// `contributions` is non-empty if and only if `entry_frame` and `execution`
+/// are both set.
 #[derive(Debug, Default)]
 pub(super) struct LocationState {
     pub(super) contributions: BTreeMap<Predecessor, Frame>,

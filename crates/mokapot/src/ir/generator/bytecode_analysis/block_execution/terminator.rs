@@ -15,28 +15,24 @@ use crate::ir::{
     },
     expression::Predicate,
     generator::{
-        bytecode_cfg::{
-            self, BranchPredicate, ReturnOperand, StructuralBlockId, StructuralTerminator,
-        },
+        bytecode_cfg::{self, BlockExit, StructuralBlockId},
         error::Error,
     },
 };
+use crate::jvm::code::Instruction;
 
 type LoweredTerminator = (TerminatorKind, Vec<AnalyzedEdge>, Option<OperationKind>);
 
 impl Analyzer<'_, '_> {
     /// Lowers the structural terminator of `block`, appending its successors.
     ///
-    /// The returned successors' target set is a pure function of `block`:
-    /// `frame` only supplies operand values, so a mismatching frame can turn
-    /// the lowering into an error but never change the targets (see
-    /// `Analyzer::execute`).
     pub(super) fn lower_terminator(
         block: &bytecode_cfg::Block,
+        instruction: &Instruction,
         frame: &mut Frame,
     ) -> Result<LoweredTerminator, Error> {
-        let result = match &block.terminator {
-            StructuralTerminator::Fallthrough { target } => {
+        let result = match &block.exit {
+            BlockExit::Fallthrough { target } => {
                 let terminator_kind = if block.exceptional_successors.is_empty() {
                     TerminatorKind::Goto
                 } else {
@@ -44,41 +40,26 @@ impl Analyzer<'_, '_> {
                 };
                 (terminator_kind, vec![unconditional(*target)], None)
             }
-            StructuralTerminator::Goto { target } => {
+            BlockExit::Goto { target } => {
                 (TerminatorKind::Goto, vec![unconditional(*target)], None)
             }
-            StructuralTerminator::Branch {
-                predicate,
-                taken,
-                fallthrough,
-            } => lower_branch(*predicate, *taken, *fallthrough, frame)?,
-            StructuralTerminator::Switch { cases, default } => {
-                lower_switch(cases, *default, frame)?
+            BlockExit::Branch { taken, fallthrough } => {
+                lower_branch(instruction, *taken, *fallthrough, frame)?
             }
-            StructuralTerminator::Return { operand } => {
-                let value = match operand {
-                    ReturnOperand::Void => None,
-                    ReturnOperand::Category1 => Some(frame.stack.pop(Category1)?),
-                    ReturnOperand::Category2 => Some(frame.stack.pop(Category2)?),
-                };
-                (TerminatorKind::Return(value), Vec::new(), None)
-            }
-            StructuralTerminator::Throw => {
-                let throw = TerminatorKind::Throw(frame.stack.pop(Category1)?);
-                (throw, Vec::new(), None)
-            }
+            BlockExit::Switch { cases, default } => lower_switch(cases, *default, frame)?,
+            BlockExit::Terminal => lower_terminal(instruction, frame)?,
         };
         Ok(result)
     }
 }
 
 fn lower_branch(
-    predicate: BranchPredicate,
+    instruction: &Instruction,
     taken: StructuralBlockId,
     fallthrough: StructuralBlockId,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
-    let condition: BooleanVariable<_> = pop_condition(frame, predicate)?.into();
+    let condition: BooleanVariable<_> = pop_condition(frame, instruction)?.into();
     Ok((
         TerminatorKind::Branch,
         vec![
@@ -129,34 +110,74 @@ fn lower_switch(
     Ok((TerminatorKind::Switch { match_value }, successors, None))
 }
 
-fn pop_condition(frame: &mut Frame, predicate: BranchPredicate) -> Result<Predicate, Error> {
-    if predicate.operand_count() == 1 {
-        let operand = frame.stack.pop(Category1)?.into();
-        let condition = match predicate {
-            BranchPredicate::IsZero => Predicate::IsZero(operand),
-            BranchPredicate::IsNonZero => Predicate::IsNonZero(operand),
-            BranchPredicate::IsNegative => Predicate::IsNegative(operand),
-            BranchPredicate::IsNonNegative => Predicate::IsNonNegative(operand),
-            BranchPredicate::IsPositive => Predicate::IsPositive(operand),
-            BranchPredicate::IsNonPositive => Predicate::IsNonPositive(operand),
-            BranchPredicate::IsNull => Predicate::IsNull(operand),
-            BranchPredicate::IsNotNull => Predicate::IsNotNull(operand),
-            _ => unreachable!("operand count classifies every branch predicate"),
-        };
-        return Ok(condition);
-    }
-
-    let rhs = frame.stack.pop(Category1)?.into();
-    let lhs = frame.stack.pop(Category1)?.into();
-    Ok(match predicate {
-        BranchPredicate::Equal => Predicate::Equal(lhs, rhs),
-        BranchPredicate::NotEqual => Predicate::NotEqual(lhs, rhs),
-        BranchPredicate::LessThan => Predicate::LessThan(lhs, rhs),
-        BranchPredicate::GreaterThanOrEqual => Predicate::GreaterThanOrEqual(lhs, rhs),
-        BranchPredicate::GreaterThan => Predicate::GreaterThan(lhs, rhs),
-        BranchPredicate::LessThanOrEqual => Predicate::LessThanOrEqual(lhs, rhs),
-        _ => unreachable!("operand count classifies every branch predicate"),
+fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, Error> {
+    let unary = |frame: &mut Frame| frame.stack.pop(Category1).map(Into::into);
+    let binary = |frame: &mut Frame| {
+        let rhs = frame.stack.pop(Category1)?.into();
+        let lhs = frame.stack.pop(Category1)?.into();
+        Ok::<_, Error>((lhs, rhs))
+    };
+    Ok(match instruction {
+        Instruction::IfEq(_) => Predicate::IsZero(unary(frame)?),
+        Instruction::IfNe(_) => Predicate::IsNonZero(unary(frame)?),
+        Instruction::IfLt(_) => Predicate::IsNegative(unary(frame)?),
+        Instruction::IfGe(_) => Predicate::IsNonNegative(unary(frame)?),
+        Instruction::IfGt(_) => Predicate::IsPositive(unary(frame)?),
+        Instruction::IfLe(_) => Predicate::IsNonPositive(unary(frame)?),
+        Instruction::IfNull(_) => Predicate::IsNull(unary(frame)?),
+        Instruction::IfNonNull(_) => Predicate::IsNotNull(unary(frame)?),
+        Instruction::IfICmpEq(_) | Instruction::IfACmpEq(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::Equal(lhs, rhs)
+        }
+        Instruction::IfICmpNe(_) | Instruction::IfACmpNe(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::NotEqual(lhs, rhs)
+        }
+        Instruction::IfICmpLt(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::LessThan(lhs, rhs)
+        }
+        Instruction::IfICmpGe(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::GreaterThanOrEqual(lhs, rhs)
+        }
+        Instruction::IfICmpGt(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::GreaterThan(lhs, rhs)
+        }
+        Instruction::IfICmpLe(_) => {
+            let (lhs, rhs) = binary(frame)?;
+            Predicate::LessThanOrEqual(lhs, rhs)
+        }
+        _ => {
+            return Err(Error::internal(
+                "a branch block ends in a non-branch instruction",
+            ));
+        }
     })
+}
+
+fn lower_terminal(
+    instruction: &Instruction,
+    frame: &mut Frame,
+) -> Result<LoweredTerminator, Error> {
+    let kind = match instruction {
+        Instruction::Return => TerminatorKind::Return(None),
+        Instruction::IReturn | Instruction::FReturn | Instruction::AReturn => {
+            TerminatorKind::Return(Some(frame.stack.pop(Category1)?))
+        }
+        Instruction::LReturn | Instruction::DReturn => {
+            TerminatorKind::Return(Some(frame.stack.pop(Category2)?))
+        }
+        Instruction::AThrow => TerminatorKind::Throw(frame.stack.pop(Category1)?),
+        _ => {
+            return Err(Error::internal(
+                "a terminal block ends in a non-terminal instruction",
+            ));
+        }
+    };
+    Ok((kind, Vec::new(), None))
 }
 
 const fn unconditional(target: StructuralBlockId) -> AnalyzedEdge {

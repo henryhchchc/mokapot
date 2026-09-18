@@ -2,54 +2,6 @@ use std::collections::BTreeMap;
 
 use crate::jvm::{code::ProgramCounter, references::ClassRef};
 
-/// The value comparison performed by a conditional bytecode transfer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BranchPredicate {
-    IsZero,
-    IsNonZero,
-    IsNegative,
-    IsNonNegative,
-    IsPositive,
-    IsNonPositive,
-    IsNull,
-    IsNotNull,
-    Equal,
-    NotEqual,
-    LessThan,
-    GreaterThanOrEqual,
-    GreaterThan,
-    LessThanOrEqual,
-}
-
-impl BranchPredicate {
-    pub const fn operand_count(self) -> usize {
-        match self {
-            Self::IsZero
-            | Self::IsNonZero
-            | Self::IsNegative
-            | Self::IsNonNegative
-            | Self::IsPositive
-            | Self::IsNonPositive
-            | Self::IsNull
-            | Self::IsNotNull => 1,
-            Self::Equal
-            | Self::NotEqual
-            | Self::LessThan
-            | Self::GreaterThanOrEqual
-            | Self::GreaterThan
-            | Self::LessThanOrEqual => 2,
-        }
-    }
-}
-
-/// The stack shape consumed by a method return.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReturnOperand {
-    Void,
-    Category1,
-    Category2,
-}
-
 /// A dense identifier for a structural bytecode block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct StructuralBlockId(usize);
@@ -95,22 +47,19 @@ pub(crate) enum ExceptionalTarget {
 /// One synthetic exception-handler entry.
 #[derive(Debug, Clone)]
 pub(crate) struct HandlerEntry {
-    /// The handler's bytecode entry PC.
-    pub handler_pc: ProgramCounter,
     /// The decoded bytecode entered after materializing the caught exception.
     pub target: StructuralBlockId,
 }
 
-/// The ordinary transfer ending a structural block.
+/// The control-flow topology at the end of a structural block.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum StructuralTerminator {
+pub(crate) enum BlockExit {
     /// Ordinary execution continues at the following block.
     Fallthrough { target: StructuralBlockId },
     /// An unconditional static jump.
     Goto { target: StructuralBlockId },
     /// A conditional static jump and its required fallthrough.
     Branch {
-        predicate: BranchPredicate,
         taken: StructuralBlockId,
         fallthrough: StructuralBlockId,
     },
@@ -119,27 +68,20 @@ pub(crate) enum StructuralTerminator {
         cases: BTreeMap<i32, StructuralBlockId>,
         default: StructuralBlockId,
     },
-    /// A normal method exit.
-    Return { operand: ReturnOperand },
-    /// An explicit `athrow`; exceptional successors select handlers or unwind.
-    Throw,
+    /// A return or explicit throw with no ordinary successor.
+    Terminal,
 }
 
 /// A maximal bytecode block ending at an ordinary transfer or fallible instruction.
 ///
-/// Its successor targets are fixed by construction: `terminator` and
-/// `exceptional_successors` are derived from decoded bytecode alone, never from
-/// an execution frame. Block analysis relies on this to keep the predecessors
-/// of a location monotone; a terminator with frame-dependent targets would
-/// invalidate that assumption.
 #[derive(Debug, Clone)]
 pub(crate) struct Block {
     /// The first decoded instruction in the block.
     pub start_pc: ProgramCounter,
-    /// Every raw bytecode PC belonging to the block, in bytecode order.
-    pub instruction_pcs: Vec<ProgramCounter>,
-    /// The ordinary transfer after the final instruction.
-    pub terminator: StructuralTerminator,
+    /// The final decoded instruction in the block.
+    pub end_pc: ProgramCounter,
+    /// The ordinary control-flow topology after the final instruction.
+    pub exit: BlockExit,
     /// Ordered exceptional successors of the final fallible instruction.
     pub exceptional_successors: Vec<ExceptionalTarget>,
 }

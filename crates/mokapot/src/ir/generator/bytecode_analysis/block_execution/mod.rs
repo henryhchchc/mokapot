@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     ir::generator::{
-        bytecode_cfg::{self, StructuralBlockId, StructuralTerminator},
+        bytecode_cfg::{self, BlockExit, StructuralBlockId},
         error::{Error, MalformedBytecode},
     },
     ir::{TerminatorKind, control_flow::ControlTransfer},
@@ -19,11 +19,8 @@ use crate::{
 impl Analyzer<'_, '_> {
     /// Executes one location, producing its analyzed block.
     ///
-    /// Precondition: a location's successor *target set* is a pure function of
-    /// the location. The targets come only from a structural block's terminator
-    /// and exception table, never from `input`: the frames differ between
-    /// executions of one location, the targets never do. `Analyzer::run` relies
-    /// on this to treat predecessor sets as monotonically growing.
+    /// The structural CFG fixes the successor target set independently of the
+    /// input frame, allowing `Analyzer::run` to grow predecessor sets monotonically.
     pub(super) fn execute(
         &mut self,
         location: Location,
@@ -76,27 +73,24 @@ impl Analyzer<'_, '_> {
             .cfg
             .block(id)
             .ok_or_else(|| Error::internal("a bytecode location has no structural block"))?;
-        let final_pc = *block
-            .instruction_pcs
-            .last()
-            .ok_or_else(|| Error::internal("a structural bytecode block is empty"))?;
-        let explicit_terminator =
-            !matches!(block.terminator, StructuralTerminator::Fallthrough { .. });
+        let final_pc = block.end_pc;
+        let explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
         let mut frame = input;
         let mut operations = Vec::new();
         let mut exceptional_input = None;
 
-        for &pc in &block.instruction_pcs {
-            if pc == final_pc {
-                exceptional_input = Some(frame.clone());
-                if explicit_terminator {
-                    continue;
-                }
-            }
+        let mut pc = block.start_pc;
+        loop {
             let instruction =
                 self.executor.body.instruction_at(pc).ok_or_else(|| {
                     Error::malformed(Some(pc), MalformedBytecode::MissingInstruction)
                 })?;
+            if pc == final_pc {
+                exceptional_input = Some(frame.clone());
+                if explicit_terminator {
+                    break;
+                }
+            }
             let operation = self
                 .executor
                 .lift_instruction(instruction, pc, &mut frame)
@@ -104,10 +98,22 @@ impl Analyzer<'_, '_> {
             if let Some(operation) = operation {
                 operations.push((pc, operation));
             }
+            if pc == final_pc {
+                break;
+            }
+            pc = self
+                .executor
+                .body
+                .instructions
+                .next_pc_of(&pc)
+                .ok_or_else(|| Error::internal_at(pc, "a block ends after decoded bytecode"))?;
         }
 
+        let final_instruction = self.executor.body.instruction_at(final_pc).ok_or_else(|| {
+            Error::malformed(Some(final_pc), MalformedBytecode::MissingInstruction)
+        })?;
         let (terminator, mut edges, terminator_operation) =
-            Self::lower_terminator(block, &mut frame)
+            Self::lower_terminator(block, final_instruction, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
