@@ -28,7 +28,7 @@ fn switch_retains_parallel_successor_arms() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let switch = ir.block(ir.entry_block()).unwrap().terminator();
+    let switch = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert!(matches!(switch.kind(), TerminatorKind::Switch { .. }));
     assert_eq!(switch.successors().len(), 3);
@@ -47,7 +47,7 @@ fn switch_retains_parallel_successor_arms() {
             .windows(2)
             .all(|pair| pair[0].target() == pair[1].target())
     );
-    assert_eq!(ir.control_flow_graph().edges().count(), 3);
+    assert_eq!(ir.control_flow_graph().edges().count(), 4);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn branch_preserves_taken_then_fallthrough_guards() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let branch = ir.block(ir.entry_block()).unwrap().terminator();
+    let branch = &ir.block(ir.entry_block()).unwrap().terminator;
     let match_value = ir.parameter_values()[0];
 
     assert_eq!(branch.kind(), &TerminatorKind::Branch);
@@ -100,7 +100,7 @@ fn comparison_branch_preserves_operand_order() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let branch = ir.block(ir.entry_block()).unwrap().terminator();
+    let branch = &ir.block(ir.entry_block()).unwrap().terminator;
     let parameters = ir.parameter_values();
 
     assert_eq!(
@@ -133,7 +133,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let switch = ir.block(ir.entry_block()).unwrap().terminator();
+    let switch = &ir.block(ir.entry_block()).unwrap().terminator;
     let match_value = ir.parameter_values()[0];
     let case_guard = |case| {
         ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
@@ -196,7 +196,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         exception_table,
     );
     let ir = build(&method).unwrap();
-    let fallible = ir.block(ir.entry_block()).unwrap().terminator();
+    let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert_eq!(fallible.kind(), &TerminatorKind::Fallible);
     assert_eq!(ir.source_map().origins_of(fallible.id()).count(), 0);
@@ -239,28 +239,28 @@ fn normally_reachable_handler_still_starts_a_block() {
     let ir = build(&method).unwrap();
     let entry = ir.block(ir.entry_block()).unwrap();
     let normal = entry
-        .terminator()
+        .terminator
         .successors()
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
         .target();
     let handler = entry
-        .terminator()
+        .terminator
         .successors()
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
         .unwrap()
         .target();
 
-    assert_eq!(ir.blocks().len(), 3);
+    assert_eq!(ir.blocks().len(), 4);
     assert_ne!(handler, ir.entry_block());
     assert_ne!(handler, normal);
     assert_eq!(
-        ir.block(handler).unwrap().terminator().successors()[0].target(),
+        ir.block(handler).unwrap().terminator.successors()[0].target(),
         normal
     );
-    assert_eq!(ir.block(handler).unwrap().operations().len(), 0);
+    assert_eq!(ir.block(handler).unwrap().operations.len(), 0);
     assert!(ir.caught_exception(handler).is_some());
 }
 
@@ -274,13 +274,10 @@ fn throw_is_a_source_backed_terminator() {
     let ir = build(&method).unwrap();
     let block = ir.block(ir.entry_block()).unwrap();
 
-    assert!(matches!(
-        block.terminator().kind(),
-        TerminatorKind::Throw(_)
-    ));
+    assert!(matches!(block.terminator.kind(), TerminatorKind::Throw(_)));
     assert_eq!(
         ir.source_map()
-            .origins_of(block.terminator().id())
+            .origins_of(block.terminator.id())
             .collect::<Vec<_>>(),
         [ProgramCounter::from(1)]
     );

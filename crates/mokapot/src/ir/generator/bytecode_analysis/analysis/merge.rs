@@ -2,15 +2,13 @@
 
 use std::collections::BTreeMap;
 
-use super::{
-    analyzer::Analyzer,
-    executor::ValueIdAllocator,
-    model::{Location, PhiDefinition, PhiSite, Predecessor},
-};
+use super::super::values::ValueContext;
+use super::{Analyzer, Frame, Location, PhiDefinition, PhiSite, Predecessor};
 use crate::ir::{ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
     pub(super) fn recompute_entry(&mut self, location: Location) -> Result<bool, Error> {
+        let location_pc = self.location_pc(location);
         let contributions = self
             .locations
             .get(&location)
@@ -27,7 +25,7 @@ impl Analyzer<'_, '_> {
 
         for contribution in frames {
             let existing_phis = &self.phi_definitions;
-            let allocator = &mut self.executor.value_id_allocator;
+            let values = &mut self.values;
             merged
                 .merge_from_with(contribution, |position, lhs, rhs| {
                     merge_value(
@@ -36,26 +34,25 @@ impl Analyzer<'_, '_> {
                         rhs,
                         existing_phis,
                         &mut active_phis,
-                        allocator,
+                        values,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(self.pc(location)))?;
+                .map_err(|error| error.at_instruction_if_present(location_pc))?;
         }
 
         let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
-            .map_err(|error| error.at_instruction_if_present(self.pc(location)))?;
+            .map_err(|error| error.at_instruction_if_present(location_pc))?;
 
         self.phi_definitions
             .retain(|site, _| site.location != location);
         self.phi_definitions.extend(phi_definitions);
 
-        let state = self
+        let execution = &mut self
             .locations
             .get_mut(&location)
-            .ok_or_else(|| Error::internal("a reachable block has no location state"))?;
-        let changed = state.entry_frame.as_ref() != Some(&merged);
-        state.entry_frame = Some(merged);
-        Ok(changed)
+            .ok_or_else(|| Error::internal("a reachable block has no location state"))?
+            .execution;
+        Ok(execution.update_input(merged))
     }
 }
 
@@ -65,7 +62,7 @@ fn merge_value(
     rhs: ValueId,
     existing_phis: &BTreeMap<PhiSite, PhiDefinition>,
     active_phis: &mut BTreeMap<PhiSite, ValueId>,
-    allocator: &mut ValueIdAllocator,
+    values: &mut ValueContext,
 ) -> Result<(), Error> {
     if *lhs == rhs {
         return Ok(());
@@ -73,10 +70,9 @@ fn merge_value(
     let result = if let Some(&result) = active_phis.get(&site) {
         result
     } else {
-        let result = existing_phis.get(&site).map_or_else(
-            || allocator.new_value_id(),
-            |definition| Ok(definition.result),
-        )?;
+        let result = existing_phis
+            .get(&site)
+            .map_or_else(|| values.fresh(), |definition| Ok(definition.result))?;
         active_phis.insert(site, result);
         result
     };
@@ -87,7 +83,7 @@ fn merge_value(
 
 fn phi_inputs(
     site: PhiSite,
-    contributions: &[(Predecessor, super::model::Frame)],
+    contributions: &[(Predecessor, Frame)],
 ) -> Result<BTreeMap<Predecessor, ValueId>, Error> {
     contributions
         .iter()
@@ -101,8 +97,8 @@ fn phi_inputs(
 }
 
 fn synchronize_phi_definitions(
-    merged: &super::model::Frame,
-    contributions: &[(Predecessor, super::model::Frame)],
+    merged: &Frame,
+    contributions: &[(Predecessor, Frame)],
     active_phis: BTreeMap<PhiSite, ValueId>,
 ) -> Result<BTreeMap<PhiSite, PhiDefinition>, Error> {
     active_phis

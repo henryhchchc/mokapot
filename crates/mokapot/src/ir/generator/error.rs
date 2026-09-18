@@ -1,4 +1,4 @@
-use crate::{ir::generator::bytecode_analysis::jvm::FrameError, jvm::code::ProgramCounter};
+use crate::{ir::generator::bytecode_analysis::FrameError, jvm::code::ProgramCounter};
 
 /// Why JVM bytecode cannot be converted to Moka IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
@@ -13,9 +13,6 @@ pub enum MalformedBytecode {
     /// An instruction that must fall through has no following instruction.
     #[display("an instruction has no required fallthrough")]
     MissingFallthrough,
-    /// An exception-table range is empty, reversed, or not instruction-aligned.
-    #[display("an exception-table range is invalid")]
-    InvalidExceptionRange,
     /// A `tableswitch` range and jump table have different cardinalities.
     #[display("a tableswitch range does not match its jump table")]
     InvalidTableSwitch,

@@ -18,22 +18,10 @@ pub enum ValueDefinition {
 /// One predecessor-selected incoming value of a phi node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PhiInput {
-    pub(super) predecessor: BlockId,
-    pub(super) value: ValueId,
-}
-
-impl PhiInput {
-    /// Returns the predecessor selecting this input.
-    #[must_use]
-    pub const fn predecessor(&self) -> BlockId {
-        self.predecessor
-    }
-
-    /// Returns the value supplied by the predecessor.
-    #[must_use]
-    pub const fn value(&self) -> ValueId {
-        self.value
-    }
+    /// The predecessor block that supplies this value.
+    pub predecessor: BlockId,
+    /// The value supplied by the predecessor.
+    pub value: ValueId,
 }
 
 /// A scalar value merge at basic-block entry.
@@ -42,33 +30,18 @@ impl PhiInput {
 /// predecessor must therefore agree on the supplied value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    pub(super) id: InstructionId,
-    pub(super) value: ValueId,
-    pub(super) inputs: Vec<PhiInput>,
+    /// The method-local instruction identity of this phi.
+    pub id: InstructionId,
+    /// The value defined by this phi.
+    pub value: ValueId,
+    /// The values selected by this phi.
+    pub inputs: Vec<PhiInput>,
 }
 
 impl Phi {
-    /// Returns this phi's method-local instruction identity.
-    #[must_use]
-    pub const fn id(&self) -> InstructionId {
-        self.id
-    }
-
-    /// Returns the value defined by this phi.
-    #[must_use]
-    pub const fn value(&self) -> ValueId {
-        self.value
-    }
-
-    /// Returns the predecessor-indexed inputs.
-    #[must_use]
-    pub fn inputs(&self) -> &[PhiInput] {
-        &self.inputs
-    }
-
     /// Returns the values selected by this phi.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
-        self.inputs.iter().map(PhiInput::value).collect()
+        self.inputs.iter().map(|it| it.value).collect()
     }
 }

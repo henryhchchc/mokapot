@@ -119,25 +119,6 @@ Loop-carried values can make this graph cyclic.
 Trivial phis are removed during construction.
 JVM loads, stores, stack manipulation, and `nop` affect lifting state but do not produce placeholder MokaIR instructions.
 
-`DefUseChain` builds an owned method-local definition/use index.
-Phi uses retain the predecessor that selects them:
-
-```rust,no_run
-# use mokapot::ir::{DefUseChain, MokaIRMethod};
-# use mokapot::jvm::Method;
-# fn inspect(method: &Method) -> Result<(), mokapot::ir::MokaIRBuildError> {
-# let ir = MokaIRMethod::from_method(method)?;
-let def_use = DefUseChain::new(&ir);
-for value in ir.parameter_values() {
-    println!("{value}: {:?}", def_use.definition_of(*value));
-    for use_site in def_use.uses_of(*value) {
-        println!("  used at {use_site:?}");
-    }
-}
-# Ok(())
-# }
-```
-
 ## Exceptional and legacy control flow
 
 A potentially throwing definition or effect with modeled handlers ends its block with normal and exceptional arms.
@@ -175,4 +156,4 @@ Do not infer coverage for a node whose `origins_of` iterator is empty.
 It supports node and edge iteration, outgoing edges, exit blocks, and path-condition analysis.
 The optional `petgraph` feature adds petgraph CFG traits without introducing a second source of control-flow truth.
 
-Together, the block CFG, `DefUseChain`, and sparse `SourceMap` provide the public views needed for control-flow, scalar data-flow, and JVM-origin-aware analysis.
+Together, the block CFG and sparse `SourceMap` provide public views for control-flow and JVM-origin-aware analysis.

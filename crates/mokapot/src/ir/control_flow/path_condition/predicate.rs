@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     ir::{ValueId, expression::Predicate},
     jvm::ConstantValue,
@@ -67,7 +69,7 @@ impl From<ConstantValue> for PathValue {
 }
 
 impl Predicate {
-    pub(crate) fn uses(&self) -> std::collections::HashSet<ValueId> {
+    pub(crate) fn uses(&self) -> HashSet<ValueId> {
         use Predicate::{
             Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
             IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,

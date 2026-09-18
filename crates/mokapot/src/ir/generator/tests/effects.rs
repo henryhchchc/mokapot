@@ -17,7 +17,11 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&dup_method).unwrap();
-    let operation = ir.blocks().flat_map(BasicBlock::operations).next().unwrap();
+    let operation = ir
+        .blocks()
+        .flat_map(|block| &block.operations)
+        .next()
+        .unwrap();
 
     assert!(matches!(
         operation.kind(),
@@ -38,7 +42,11 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&category_2_method).unwrap();
-    let operation = ir.blocks().flat_map(BasicBlock::operations).next().unwrap();
+    let operation = ir
+        .blocks()
+        .flat_map(|block| &block.operations)
+        .next()
+        .unwrap();
     assert!(matches!(
         operation.kind(),
         OperationKind::Definition {
@@ -61,7 +69,7 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&mixed_method).unwrap();
-    let mut operations = ir.blocks().flat_map(BasicBlock::operations);
+    let mut operations = ir.blocks().flat_map(|block| &block.operations);
     let conversion = operations.next().unwrap();
     let conversion_value = conversion.def().unwrap();
     assert!(matches!(
@@ -149,7 +157,7 @@ fn array_write_is_an_effect_without_a_definition() {
         .instructions_at(3.into())
         .find_map(|id| {
             ir.blocks()
-                .flat_map(BasicBlock::operations)
+                .flat_map(|block| &block.operations)
                 .find(|instruction| instruction.id() == id)
         })
         .unwrap();
@@ -178,7 +186,7 @@ fn monitor_operations_are_effects_without_definitions() {
     let ir = build(&method).unwrap();
     let instructions = ir
         .blocks()
-        .flat_map(BasicBlock::operations)
+        .flat_map(|block| &block.operations)
         .collect::<Vec<_>>();
 
     assert_eq!(instructions.len(), 2);

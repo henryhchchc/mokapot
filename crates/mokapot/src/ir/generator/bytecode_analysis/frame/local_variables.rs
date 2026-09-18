@@ -84,7 +84,7 @@ impl LocalVariables {
         }
     }
 
-    pub fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, Error> {
+    pub(crate) fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, Error> {
         let index = usize::from(index);
         let value = match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
             LocalSlot::Value(value) if value.category == expected => &value.value,
@@ -102,7 +102,7 @@ impl LocalVariables {
         Ok(value)
     }
 
-    pub fn set(
+    pub(crate) fn set(
         &mut self,
         index: u16,
         value: ValueId,

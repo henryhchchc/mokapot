@@ -1,38 +1,18 @@
 //! Constructs a reachable register-form graph from JVM instructions.
 
-mod analyzer;
-mod block_execution;
-mod executor;
-pub(super) mod jvm;
+mod analysis;
+mod frame;
 pub(super) mod lifting;
-mod materialize;
-mod model;
-mod phis;
-pub(super) mod scalar;
+mod output;
+mod values;
 
-use std::collections::BTreeMap;
+pub use frame::FrameError;
+pub(super) use output::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
 
-use crate::{
-    ir::{
-        ValueId,
-        generator::{bytecode_analysis::jvm::Frame, error::Error},
-    },
-    jvm::{Method, code::MethodBody},
-};
+use self::analysis::Analyzer;
+use crate::ir::generator::error::Error;
+use frame::{EntrySlots, Frame, Position, StackOperation, ValueCategory};
 
-pub(super) fn analyze(
-    method: &Method,
-    cfg: &super::bytecode_cfg::BytecodeCfg,
-) -> Result<scalar::ScalarGraph, Error> {
-    analyzer::analyze(method, cfg)
-}
-
-/// Symbolic executor used by block-level bytecode analysis.
-struct Executor<'method> {
-    body: &'method MethodBody,
-    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
-    value_id_allocator: executor::ValueIdAllocator,
-    receiver_value: Option<ValueId>,
-    parameter_values: Vec<ValueId>,
-    initial_frame: Frame,
+pub(super) fn analyze(cfg: &super::bytecode_cfg::JvmBlockGraph<'_>) -> Result<ScalarGraph, Error> {
+    Analyzer::new(cfg)?.run()
 }

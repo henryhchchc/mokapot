@@ -19,14 +19,14 @@ mod error;
 mod remap;
 mod ssa;
 
-pub use bytecode_analysis::jvm::FrameError as MokaIRFrameError;
+pub use bytecode_analysis::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 
 pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = bytecode_cfg::build(method)?;
-    let scalar_graph = bytecode_analysis::analyze(method, &cfg)?;
+    let scalar_graph = bytecode_analysis::analyze(&cfg)?;
     let ssa_graph = ssa::construct(scalar_graph)?;
     emission::emit(method, ssa_graph)
 }

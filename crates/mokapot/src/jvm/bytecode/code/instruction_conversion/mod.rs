@@ -849,16 +849,16 @@ impl Instruction {
 }
 
 fn try_offset(target: ProgramCounter, pc: ProgramCounter) -> Result<i16, GenerationError> {
-    let target: i32 = target.into();
-    let pc: i32 = pc.into();
+    let target: i32 = target.into_inner().into();
+    let pc: i32 = pc.into_inner().into();
     let offset = target - pc;
     let offset = i16::try_from(offset)?;
     Ok(offset)
 }
 
 fn offset_wide(target: ProgramCounter, pc: ProgramCounter) -> i32 {
-    let target: i32 = target.into();
-    let pc: i32 = pc.into();
+    let target: i32 = target.into_inner().into();
+    let pc: i32 = pc.into_inner().into();
     target - pc
 }
 

@@ -45,7 +45,7 @@ impl InstructionRef<'_> {
     #[must_use]
     pub const fn id(self) -> InstructionId {
         match self {
-            Self::Phi(phi) => phi.id(),
+            Self::Phi(phi) => phi.id,
             Self::Operation(operation) => operation.id(),
             Self::Terminator(terminator) => terminator.id(),
         }
@@ -151,13 +151,13 @@ impl MokaIRMethod {
             .get(usize::try_from(id.index()).ok()?)?;
         Some(match *location {
             InstructionLocation::Phi { block, index } => {
-                InstructionRef::Phi(self.block(block)?.phis().get(index)?)
+                InstructionRef::Phi(self.block(block)?.phis.get(index)?)
             }
             InstructionLocation::Operation { block, index } => {
-                InstructionRef::Operation(self.block(block)?.operations().get(index)?)
+                InstructionRef::Operation(self.block(block)?.operations.get(index)?)
             }
             InstructionLocation::Terminator { block } => {
-                InstructionRef::Terminator(self.block(block)?.terminator())
+                InstructionRef::Terminator(&self.block(block)?.terminator)
             }
         })
     }
@@ -186,7 +186,7 @@ impl MokaIRMethod {
     /// need not have JVM source provenance.
     #[must_use]
     pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
-        self.block(block).and_then(BasicBlock::caught_exception)
+        self.block(block)?.caught_exception
     }
 
     /// Returns the unique definition of a method-local SSA value.
@@ -211,21 +211,6 @@ impl MokaIRMethod {
             value_definitions: parts.value_definitions,
             instruction_locations: parts.instruction_locations,
         }
-    }
-
-    pub(crate) fn value_definitions(
-        &self,
-    ) -> impl Iterator<Item = (ValueId, ValueDefinition)> + '_ {
-        self.value_definitions
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(id, definition)| {
-                (
-                    ValueId::new(u32::try_from(id).expect("value identity must fit u32")),
-                    definition,
-                )
-            })
     }
 
     /// Returns a borrowed control-flow view derived from block terminators.

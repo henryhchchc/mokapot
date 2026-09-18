@@ -86,7 +86,7 @@ impl OperandStack {
         }
     }
 
-    pub fn push(&mut self, value: ValueId, category: ValueCategory) -> Result<(), Error> {
+    pub(crate) fn push(&mut self, value: ValueId, category: ValueCategory) -> Result<(), Error> {
         let slot_count = self.slot_count + category.slot_count();
         if slot_count > usize::from(self.max_slots) {
             return Err(Error::StackOverflow);
@@ -96,7 +96,7 @@ impl OperandStack {
         Ok(())
     }
 
-    pub fn pop(&mut self, expected: ValueCategory) -> Result<ValueId, Error> {
+    pub(crate) fn pop(&mut self, expected: ValueCategory) -> Result<ValueId, Error> {
         let top = self.values.last().ok_or(Error::StackUnderflow)?;
         if top.category != expected {
             return Err(Error::InvalidSlotLayout);
@@ -106,7 +106,10 @@ impl OperandStack {
         Ok(value.value)
     }
 
-    pub fn pop_arguments(&mut self, descriptor: &MethodDescriptor) -> Result<Vec<ValueId>, Error> {
+    pub(crate) fn pop_arguments(
+        &mut self,
+        descriptor: &MethodDescriptor,
+    ) -> Result<Vec<ValueId>, Error> {
         let mut arguments: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -117,7 +120,7 @@ impl OperandStack {
         Ok(arguments)
     }
 
-    pub fn apply(&mut self, operation: StackOperation) -> Result<(), Error> {
+    pub(crate) fn apply(&mut self, operation: StackOperation) -> Result<(), Error> {
         if self.slot_count < operation.consumed_slots() {
             return Err(Error::StackUnderflow);
         }

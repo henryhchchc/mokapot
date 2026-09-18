@@ -292,62 +292,6 @@ pub enum WideInstruction {
 }
 
 impl Instruction {
-    /// Returns the first PC after this instruction at `pc`, when it fits in a
-    /// [`ProgramCounter`].
-    ///
-    /// This only describes the JVM encoding; it does not require that another
-    /// decoded instruction begins at the returned PC.
-    #[must_use]
-    pub(crate) fn encoded_end_pc(&self, pc: ProgramCounter) -> Option<ProgramCounter> {
-        let length = match self {
-            Self::TableSwitch { jump_targets, .. } => {
-                let padding = (4 - (u16::from(pc) + 1) % 4) % 4;
-                u16::try_from(jump_targets.len()).ok().and_then(|entries| {
-                    entries
-                        .checked_mul(4)
-                        .and_then(|entries| 13_u16.checked_add(padding)?.checked_add(entries))
-                })?
-            }
-            Self::LookupSwitch { match_targets, .. } => {
-                let padding = (4 - (u16::from(pc) + 1) % 4) % 4;
-                u16::try_from(match_targets.len())
-                    .ok()
-                    .and_then(|entries| {
-                        entries
-                            .checked_mul(8)
-                            .and_then(|entries| 9_u16.checked_add(padding)?.checked_add(entries))
-                    })?
-            }
-            Self::Wide(WideInstruction::IInc(_, _)) => 6,
-            Self::Wide(_) => 4,
-            _ => match self.opcode() {
-                0x00..=0x0f
-                | 0x1a..=0x35
-                | 0x3b..=0x83
-                | 0x85..=0x98
-                | 0xac..=0xb1
-                | 0xbe..=0xbf
-                | 0xc2..=0xc3
-                | 0xca
-                | 0xfe..=0xff => 1,
-                0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => 2,
-                0x11
-                | 0x13..=0x14
-                | 0x84
-                | 0x99..=0xa8
-                | 0xb2..=0xb8
-                | 0xbb
-                | 0xbd
-                | 0xc0..=0xc1
-                | 0xc6..=0xc7 => 3,
-                0xc5 => 4,
-                0xb9..=0xba | 0xc8..=0xc9 => 5,
-                _ => return None,
-            },
-        };
-        (pc + length).ok()
-    }
-
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {

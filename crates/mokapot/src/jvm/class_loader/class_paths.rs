@@ -1,6 +1,6 @@
 //! Implementations of [`ClassPath`].
 
-use std::{collections::HashSet, fs::File, io::BufReader};
+use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
 
 #[cfg(feature = "jar")]
 use zip::{ZipArchive, result::ZipError};
@@ -39,7 +39,7 @@ impl ClassRefs for NopClassPath {
 /// A class path that searches for classes in a directory.
 #[derive(Debug)]
 pub struct DirectoryClassPath {
-    directory: std::path::PathBuf,
+    directory: PathBuf,
 }
 
 impl ClassPath for DirectoryClassPath {
@@ -61,7 +61,7 @@ impl ClassPath for DirectoryClassPath {
 
 impl DirectoryClassPath {
     /// Create a new directory class path.
-    pub fn new(directory: impl Into<std::path::PathBuf>) -> Self {
+    pub fn new(directory: impl Into<PathBuf>) -> Self {
         Self {
             directory: directory.into(),
         }
@@ -93,13 +93,13 @@ impl ClassRefs for DirectoryClassPath {
 #[derive(Debug)]
 #[cfg(feature = "jar")]
 pub struct JarClassPath {
-    jar_file: std::path::PathBuf,
+    jar_file: PathBuf,
 }
 
 #[cfg(feature = "jar")]
 impl JarClassPath {
     /// Create a new JAR class path.
-    pub fn new(jar_file: impl Into<std::path::PathBuf>) -> Self {
+    pub fn new(jar_file: impl Into<PathBuf>) -> Self {
         Self {
             jar_file: jar_file.into(),
         }
