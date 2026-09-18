@@ -88,13 +88,8 @@ impl ProgramCounter {
         self.0 == 0
     }
 
-    /// Converts the program counter into a different type.
-    #[must_use]
-    pub fn into<T>(self) -> T
-    where
-        u16: Into<T>,
-    {
-        self.0.into()
+    pub(crate) const fn into_inner(self) -> u16 {
+        self.0
     }
 }
 
