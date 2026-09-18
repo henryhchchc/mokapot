@@ -1,11 +1,11 @@
 # MokaPot
 
-[![Crates.io](https://img.shields.io/crates/v/mokapot?logo=rust&logoColor=white)](https://crates.io/crates/mokapot)
-[![docs.rs](https://img.shields.io/docsrs/mokapot?logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
+[![Crates.io](https://img.shields.io/crates/v/mokapot?logo=rust&logoColor=white)](https://crates.io/crates/mokapot) [![docs.rs](https://img.shields.io/docsrs/mokapot?logo=docsdotrs&logoColor=white&label=docs%2Frelease)](https://docs.rs/mokapot)
 
 ## Overview
 
-MokaPot is a Rust library for working with JVM bytecode. You can use it to parse, inspect, and analyze Java class files.
+MokaPot is a Rust library for working with JVM bytecode.
+You can use it to parse, inspect, and analyze Java class files.
 
 Main features:
 
@@ -55,11 +55,9 @@ See the [examples](examples/) directory for more code samples.
 
 ### MokaIR
 
-MokaIR is a scalar SSA representation of reachable JVM method behavior. It
-uses maximal basic blocks, explicit predecessor-indexed phis and terminators,
-edge-sensitive exceptional control flow, and sparse JVM source provenance.
-See the [MokaIR guide](../../docs/MokaIR.md) for construction and analysis
-examples.
+MokaIR is a scalar SSA representation of reachable JVM method behavior.
+It uses maximal basic blocks, explicit predecessor-indexed phis and terminators, edge-sensitive exceptional control flow, and sparse JVM source provenance.
+See the [MokaIR guide](../../docs/MokaIR.md) for construction and analysis examples.
 
 ## Contributing
 
@@ -67,4 +65,5 @@ See the [project repository](https://github.com/henryhchchc/mokapot) for contrib
 
 ## License
 
-MIT License. See [LICENSE](../../LICENSE) for details.
+MIT License.
+See [LICENSE](../../LICENSE) for details.
