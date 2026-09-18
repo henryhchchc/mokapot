@@ -84,6 +84,14 @@ impl<P> BranchGuard<P> {
             .count()
     }
 
+    pub(crate) fn predicates(&self) -> impl Iterator<Item = &P> {
+        self.0.iter().map(|literal| match literal {
+            BooleanVariable::Positive(predicate) | BooleanVariable::Negative(predicate) => {
+                predicate
+            }
+        })
+    }
+
     /// Borrows the predicates while preserving the conjunction structure.
     pub(super) fn as_ref(&self) -> BranchGuard<&P>
     where

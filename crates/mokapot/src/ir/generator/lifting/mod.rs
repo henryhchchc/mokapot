@@ -9,12 +9,12 @@ use locals::{load_local, store_local};
 use operations::{binary_op_math, conversion_op};
 
 use super::{
-    MokaIRBrewingError, MokaIRGenerator,
+    LiftedInstruction as IR, MokaIRBrewingError, MokaIRGenerator,
     jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
 };
 use crate::{
     ir::{
-        LocalValue, MokaInstruction as IR, Operand,
+        Operand, ValueId,
         expression::{
             ArrayOperation, Condition, Conversion, Expression, FieldAccess, LockOperation,
             MathOperation, NaNTreatment,
@@ -42,7 +42,7 @@ impl MokaIRGenerator<'_> {
         #[allow(clippy::enum_glob_use)]
         use Instruction::*;
 
-        let def = LocalValue::new(pc.into());
+        let def = self.value_at(pc)?;
         let ir_instruction = match jvm_instruction {
             Nop | Breakpoint | ImpDep1 | ImpDep2 => IR::Nop,
             AConstNull => {
@@ -348,24 +348,21 @@ impl MokaIRGenerator<'_> {
             },
             Jsr(target) | JsrW(target) => {
                 let next_pc = self.next_pc_of(pc)?;
-                let value = Expression::Subroutine {
+                frame.push_value::<SINGLE_SLOT>(def.into())?;
+                IR::Subroutine {
+                    value: def,
                     return_address: next_pc,
                     target: *target,
-                };
-                frame.push_value::<SINGLE_SLOT>(def.into())?;
-                IR::Definition {
-                    value: def,
-                    expr: value,
                 }
             }
             Ret(idx) => {
                 let idx = (*idx).into();
                 let return_address = frame.get_local::<SINGLE_SLOT>(idx)?;
-                IR::SubroutineRet(return_address)
+                IR::SubroutineReturn(return_address)
             }
             Wide(WideInstruction::Ret(idx)) => {
                 let return_address = frame.get_local::<SINGLE_SLOT>(*idx)?;
-                IR::SubroutineRet(return_address)
+                IR::SubroutineReturn(return_address)
             }
             TableSwitch {
                 range,
@@ -556,8 +553,7 @@ impl MokaIRGenerator<'_> {
             }
             AThrow => {
                 let exception_ref = frame.pop_value::<SINGLE_SLOT>()?;
-                let expr = Expression::Throw(exception_ref);
-                IR::Definition { value: def, expr }
+                IR::Throw(exception_ref)
             }
             CheckCast(target_type) => {
                 conversion_op::<SINGLE_SLOT, SINGLE_SLOT>(frame, def, |value| {

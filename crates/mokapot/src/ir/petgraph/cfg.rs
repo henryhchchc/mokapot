@@ -1,6 +1,6 @@
-//! Implementations for the traits in the `petgraph` crate.
+//! Petgraph support for Moka IR control-flow views.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use petgraph::{
     Directed, Direction,
@@ -10,71 +10,65 @@ use petgraph::{
     },
 };
 
-use crate::{
-    ir::{ControlFlowGraph, control_flow},
-    jvm::code::ProgramCounter,
+use crate::ir::{
+    BasicBlock, BlockId, EdgeId,
+    control_flow::{ControlFlowGraph, ControlTransfer, Edge},
 };
 
-impl<N, E> Data for ControlFlowGraph<N, E> {
-    type NodeWeight = N;
-    type EdgeWeight = E;
+impl Data for ControlFlowGraph<'_> {
+    type NodeWeight = BasicBlock;
+    type EdgeWeight = ControlTransfer;
 }
 
-impl<'a, N, E> IntoNodeReferences for &'a ControlFlowGraph<N, E> {
-    type NodeRef = (ProgramCounter, &'a Self::NodeWeight);
-
-    // TODO: Replace it with opaque type when it's stable.
-    //       See https://github.com/rust-lang/rust/issues/63063.
+impl<'method> IntoNodeReferences for &ControlFlowGraph<'method> {
+    type NodeRef = (BlockId, &'method BasicBlock);
     type NodeReferences = <Vec<Self::NodeRef> as IntoIterator>::IntoIter;
 
     fn node_references(self) -> Self::NodeReferences {
-        self.nodes().collect::<Vec<_>>().into_iter()
+        (*self).nodes().collect::<Vec<_>>().into_iter()
     }
 }
 
-impl<'a, N, E> IntoEdgeReferences for &'a ControlFlowGraph<N, E> {
-    type EdgeRef = control_flow::Edge<&'a E>;
-
+impl<'method> IntoEdgeReferences for &ControlFlowGraph<'method> {
+    type EdgeRef = Edge<'method>;
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
     type EdgeReferences = <Vec<Self::EdgeRef> as IntoIterator>::IntoIter;
 
     fn edge_references(self) -> Self::EdgeReferences {
-        self.edges().collect::<Vec<_>>().into_iter()
+        (*self).edges().collect::<Vec<_>>().into_iter()
     }
 }
 
-impl<E> EdgeRef for control_flow::Edge<&E> {
-    type NodeId = ProgramCounter;
-
-    type EdgeId = (Self::NodeId, Self::NodeId);
-
-    type Weight = E;
+impl EdgeRef for Edge<'_> {
+    type NodeId = BlockId;
+    type EdgeId = EdgeId;
+    type Weight = ControlTransfer;
 
     fn source(&self) -> Self::NodeId {
-        self.source
+        (*self).source()
     }
 
     fn target(&self) -> Self::NodeId {
-        self.target
+        (*self).target()
     }
 
     fn weight(&self) -> &Self::Weight {
-        self.data
+        (*self).transfer()
     }
 
     fn id(&self) -> Self::EdgeId {
-        (self.source, self.target)
+        (*self).id()
     }
 }
 
-impl<N, E> GraphBase for ControlFlowGraph<N, E> {
-    type NodeId = ProgramCounter;
-    type EdgeId = (ProgramCounter, ProgramCounter);
+impl GraphBase for ControlFlowGraph<'_> {
+    type NodeId = BlockId;
+    type EdgeId = EdgeId;
 }
 
-impl<N, E> Visitable for ControlFlowGraph<N, E> {
-    type Map = HashSet<ProgramCounter>;
+impl Visitable for ControlFlowGraph<'_> {
+    type Map = HashSet<BlockId>;
 
     fn visit_map(&self) -> Self::Map {
         HashSet::new()
@@ -85,68 +79,124 @@ impl<N, E> Visitable for ControlFlowGraph<N, E> {
     }
 }
 
-impl<N, E> IntoNodeIdentifiers for &ControlFlowGraph<N, E> {
-    type NodeIdentifiers = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
+impl IntoNodeIdentifiers for &ControlFlowGraph<'_> {
+    type NodeIdentifiers = <Vec<BlockId> as IntoIterator>::IntoIter;
 
     fn node_identifiers(self) -> Self::NodeIdentifiers {
-        self.inner
-            .keys()
-            .copied()
-            .collect::<BTreeSet<_>>()
+        self.blocks
+            .iter()
+            .map(BasicBlock::id)
+            .collect::<Vec<_>>()
             .into_iter()
     }
 }
 
-impl<N, E> IntoNeighbors for &ControlFlowGraph<N, E> {
-    type Neighbors = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
+impl IntoNeighbors for &ControlFlowGraph<'_> {
+    type Neighbors = <Vec<BlockId> as IntoIterator>::IntoIter;
 
-    fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
-        self.neighbors_directed(a, Direction::Outgoing)
+    fn neighbors(self, block: BlockId) -> Self::Neighbors {
+        self.neighbors_directed(block, Direction::Outgoing)
     }
 }
 
-impl<N, E> IntoNeighborsDirected for &ControlFlowGraph<N, E> {
-    type NeighborsDirected = <BTreeSet<Self::NodeId> as IntoIterator>::IntoIter;
+impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
+    type NeighborsDirected = <Vec<BlockId> as IntoIterator>::IntoIter;
 
-    fn neighbors_directed(self, n: Self::NodeId, d: Direction) -> Self::NeighborsDirected {
-        if d == Direction::Outgoing {
-            self.inner
-                .get(&n)
-                .map(|(_, edges)| edges.keys().copied())
-                .unwrap_or_default()
-                .collect::<BTreeSet<_>>()
+    fn neighbors_directed(self, block: BlockId, direction: Direction) -> Self::NeighborsDirected {
+        if direction == Direction::Outgoing {
+            self.blocks
+                .get(usize::try_from(block.index()).unwrap_or(usize::MAX))
+                .into_iter()
+                .flat_map(|block| block.terminator().successors())
+                .map(super::super::Successor::target)
+                .collect::<Vec<_>>()
                 .into_iter()
         } else {
-            self.inner
+            self.blocks
                 .iter()
-                .flat_map(|(src, (_, outgoing_edges))| {
-                    outgoing_edges.iter().map(|(dst, data)| (*src, *dst, data))
+                .flat_map(|candidate| {
+                    candidate
+                        .terminator()
+                        .successors()
+                        .iter()
+                        .filter(move |successor| successor.target() == block)
+                        .map(move |_| candidate.id())
                 })
-                .filter(|(_, dst, _)| *dst == n)
-                .map(|(src, _, _)| src)
-                .collect::<BTreeSet<_>>()
+                .collect::<Vec<_>>()
                 .into_iter()
         }
     }
 }
 
-impl<N, E> NodeIndexable for ControlFlowGraph<N, E> {
+impl NodeIndexable for ControlFlowGraph<'_> {
     fn node_bound(&self) -> usize {
-        self.inner
-            .last_key_value()
-            .map(|(n, _)| u16::from(*n).into())
-            .unwrap_or_default()
+        self.blocks.len()
     }
 
-    fn to_index(&self, ix: Self::NodeId) -> usize {
-        usize::from(u16::from(ix))
+    fn to_index(&self, block: Self::NodeId) -> usize {
+        usize::try_from(block.index()).expect("block identity must fit usize")
     }
 
-    fn from_index(&self, ix: usize) -> Self::NodeId {
-        u16::try_from(ix).expect("Index is out of u16").into()
+    fn from_index(&self, index: usize) -> Self::NodeId {
+        BlockId::new(u32::try_from(index).expect("block index must fit u32"))
     }
 }
 
-impl<N, E> GraphProp for ControlFlowGraph<N, E> {
+impl GraphProp for ControlFlowGraph<'_> {
     type EdgeType = Directed;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use petgraph::{
+        Direction,
+        visit::{EdgeRef, IntoEdgeReferences, IntoNeighborsDirected, NodeIndexable},
+    };
+
+    use super::*;
+    use crate::ir::{InstructionId, Successor, Terminator, TerminatorKind};
+
+    #[test]
+    fn dense_nodes_and_parallel_edges_are_preserved() {
+        let target = BlockId::new(1);
+        let source = BasicBlock::new(
+            BlockId::new(0),
+            vec![],
+            Terminator::new(
+                InstructionId::new(0),
+                TerminatorKind::Switch {
+                    match_value: crate::ir::Identifier::Arg(0).into(),
+                },
+                (0..3)
+                    .map(|id| {
+                        Successor::new(EdgeId::new(id), target, ControlTransfer::Unconditional)
+                    })
+                    .collect(),
+            ),
+        );
+        let exit = BasicBlock::new(
+            target,
+            vec![],
+            Terminator::new(InstructionId::new(1), TerminatorKind::Return(None), vec![]),
+        );
+        let blocks = [source, exit];
+        let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
+
+        assert_eq!(cfg.node_bound(), 2);
+        assert_eq!(cfg.from_index(cfg.to_index(target)), target);
+        let edges = (&cfg).edge_references().collect::<Vec<_>>();
+        assert_eq!(edges.len(), 3);
+        assert_eq!(
+            edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
+            3
+        );
+        assert_eq!(
+            (&cfg)
+                .neighbors_directed(target, Direction::Incoming)
+                .collect::<Vec<_>>(),
+            [BlockId::new(0), BlockId::new(0), BlockId::new(0)]
+        );
+    }
 }

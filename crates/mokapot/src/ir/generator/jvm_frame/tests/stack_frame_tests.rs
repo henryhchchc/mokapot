@@ -1,5 +1,5 @@
 use crate::ir::{
-    Identifier, LocalValue, Operand,
+    Identifier, Operand, ValueId,
     generator::{
         ExecutionError,
         jvm_frame::{DUAL_SLOT, JvmStackFrame, SINGLE_SLOT},
@@ -62,7 +62,7 @@ proptest! {
             capacity,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
             if i < capacity {
                 stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
             } else {
@@ -83,7 +83,7 @@ proptest! {
             push_count,
         ).unwrap();
         for i in 0..push_count {
-            let value = Operand::just(Identifier::Local(LocalValue::new(i)));
+            let value = Operand::just(Identifier::Local(ValueId::new(u32::from(i))));
             stack_frame.push_value::<SINGLE_SLOT>(value).expect("Fail to push");
         }
         for _ in 0..push_count {
