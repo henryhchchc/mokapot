@@ -11,7 +11,7 @@ use crate::{
     ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
     jvm::{
         Method,
-        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter, WideInstruction},
+        code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
     },
 };
 
@@ -33,7 +33,6 @@ impl<'method> Builder<'method> {
             .instructions
             .entry_point()
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
-        self.reject_legacy_subroutines()?;
         let block_leaders = self.block_leaders(entry_pc)?;
         let (groups, block_by_start_pc) = self.partition(&block_leaders)?;
         let (handlers, handler_by_pc) = self.build_handlers(&block_by_start_pc)?;
@@ -48,51 +47,32 @@ impl<'method> Builder<'method> {
     }
 
     fn block_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
-        use Instruction::{
-            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, Jsr, JsrW, LReturn,
-            LookupSwitch, Ret, Return, TableSwitch, Wide,
-        };
-
         let mut leaders = BTreeSet::from([entry_pc]);
-        let iter = self.body.exception_table.iter().map(|it| it.handler_pc);
-        leaders.extend(iter);
+        let exception_handlers = self.body.exception_table.iter().map(|it| it.handler_pc);
+        leaders.extend(exception_handlers);
 
         for (pc, instruction) in self.body.instructions.iter() {
-            if let Some(target) = conditional_target(instruction) {
-                leaders.insert(target);
-                leaders.insert(self.require_next_pc(pc)?);
-                continue;
-            }
-            match instruction {
-                Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
-                    unreachable!("explicitly rejected")
-                }
-                Goto(target) | GotoW(target) => {
-                    leaders.insert(*target);
+            match instruction.control_flow() {
+                ControlFlow::Goto(target) | ControlFlow::Branch(target) => {
+                    leaders.insert(target);
                     leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                TableSwitch {
-                    jump_targets,
-                    default,
-                    ..
-                } => {
-                    leaders.extend(jump_targets.iter().copied().chain([*default]));
+                ControlFlow::Switch(targets, default) => {
+                    leaders.extend(targets.values());
+                    leaders.insert(default);
                     leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                LookupSwitch {
-                    match_targets,
-                    default,
-                } => {
-                    leaders.extend(match_targets.values().copied().chain([*default]));
+                ControlFlow::Terminal => {
                     leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => {
-                    leaders.extend(self.body.instructions.next_pc_of(&pc));
-                }
-                _ if self.fallibility.can_throw(instruction) => {
+                ControlFlow::Fallthrough if self.fallibility.can_throw(instruction) => {
                     leaders.insert(self.require_next_pc(pc)?);
                 }
-                _ => {}
+                ControlFlow::Fallthrough => {}
+                ControlFlow::Legacy => {
+                    let kind = UnsupportedBytecode::LegacySubroutine;
+                    return Err(Error::UnsupportedBytecode { pc, kind });
+                }
             }
         }
         Ok(leaders)
@@ -103,18 +83,6 @@ impl<'method> Builder<'method> {
             .instructions
             .next_pc_of(&pc)
             .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
-    }
-
-    fn reject_legacy_subroutines(&self) -> Result<(), Error> {
-        use Instruction::{Jsr, JsrW, Ret, Wide};
-        use WideInstruction::Ret as WRet;
-        if let Some(pc) = self.body.instructions.iter().find_map(|(pc, it)| {
-            matches!(it, Jsr(_) | JsrW(_) | Ret(_) | Wide(WRet(_))).then_some(pc)
-        }) {
-            let kind = UnsupportedBytecode::LegacySubroutine;
-            return Err(Error::UnsupportedBytecode { pc, kind });
-        }
-        Ok(())
     }
 
     /// Assigns every block start PC its dense identity and groups the decoded
@@ -185,50 +153,31 @@ impl<'method> Builder<'method> {
         instruction: &Instruction,
         block_by_start_pc: &BTreeMap<ProgramCounter, StructuralBlockId>,
     ) -> Result<BlockExit, Error> {
-        use Instruction::{
-            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, LReturn, LookupSwitch, Return,
-            TableSwitch,
-        };
         let block_at = |target| Self::block_id_at_pc(block_by_start_pc, target);
-        if let Some(target) = conditional_target(instruction) {
-            let taken = block_at(target)?;
-            let fallthrough = block_at(self.require_next_pc(pc)?)?;
-            return Ok(BlockExit::Branch { taken, fallthrough });
-        }
-        let exit = match instruction {
-            Goto(target) | GotoW(target) => BlockExit::Goto {
-                target: block_at(*target)?,
-            },
-            TableSwitch {
-                range,
-                jump_targets,
-                default,
-            } => BlockExit::Switch {
-                cases: range
-                    .clone()
-                    .zip(jump_targets)
-                    .map(|(case, &target)| block_at(target).map(|block| (case, block)))
-                    .collect::<Result<_, _>>()?,
-                default: block_at(*default)?,
-            },
-            LookupSwitch {
-                match_targets,
-                default,
-            } => BlockExit::Switch {
-                cases: match_targets
-                    .iter()
-                    .map(|(&case, &target)| block_at(target).map(|block| (case, block)))
-                    .collect::<Result<_, _>>()?,
-                default: block_at(*default)?,
-            },
-            IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => {
-                BlockExit::Terminal
+        let block_exit = match instruction.control_flow() {
+            ControlFlow::Branch(target) => {
+                let taken = block_at(target)?;
+                let fallthrough = block_at(self.require_next_pc(pc)?)?;
+                BlockExit::Branch { taken, fallthrough }
             }
-            _ => BlockExit::Fallthrough {
+            ControlFlow::Goto(target) => BlockExit::Goto {
+                target: block_at(target)?,
+            },
+            ControlFlow::Switch(targets, default) => {
+                let cases = targets
+                    .into_iter()
+                    .map(|(case, target)| block_at(target).map(|block| (case, block)))
+                    .collect::<Result<_, _>>()?;
+                let default = block_at(default)?;
+                BlockExit::Switch { cases, default }
+            }
+            ControlFlow::Terminal => BlockExit::Terminal,
+            ControlFlow::Fallthrough => BlockExit::Fallthrough {
                 target: block_at(self.require_next_pc(pc)?)?,
             },
+            ControlFlow::Legacy => unreachable!("Rejected"),
         };
-        Ok(exit)
+        Ok(block_exit)
     }
 
     fn build_handlers(
@@ -281,7 +230,7 @@ impl<'method> Builder<'method> {
             })?;
             let catch_type = entry.catch_type.clone();
             successors.push(ExceptionalTarget::Handler { id, catch_type });
-            has_catch_all = catches_everything(entry);
+            has_catch_all = entry.catches_all();
             if has_catch_all {
                 break;
             }
@@ -300,23 +249,48 @@ struct BlockGroup {
     end_pc: ProgramCounter,
 }
 
-fn catches_everything(entry: &ExceptionTableEntry) -> bool {
-    entry
-        .catch_type
-        .as_ref()
-        .is_none_or(|caught| caught.0 == "java/lang/Throwable")
+trait ControlFlowClassification {
+    fn control_flow(&self) -> ControlFlow;
 }
 
-const fn conditional_target(instruction: &Instruction) -> Option<ProgramCounter> {
-    use Instruction::{
-        IfACmpEq, IfACmpNe, IfEq, IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt,
-        IfICmpNe, IfLe, IfLt, IfNe, IfNonNull, IfNull,
-    };
-    match instruction {
-        IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target) | IfLe(target)
-        | IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target) | IfICmpGe(target)
-        | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target) | IfACmpNe(target)
-        | IfNull(target) | IfNonNull(target) => Some(*target),
-        _ => None,
+enum ControlFlow {
+    Fallthrough,
+    Goto(ProgramCounter),
+    Branch(ProgramCounter),
+    Switch(BTreeMap<i32, ProgramCounter>, ProgramCounter),
+    Terminal,
+    Legacy,
+}
+
+impl ControlFlowClassification for Instruction {
+    fn control_flow(&self) -> ControlFlow {
+        use Instruction::{
+            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq,
+            IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
+            IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
+        };
+        match self {
+            IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => {
+                ControlFlow::Terminal
+            }
+            Goto(target) | GotoW(target) => ControlFlow::Goto(*target),
+            IfEq(pc) | IfNe(pc) | IfLt(pc) | IfGe(pc) | IfGt(pc) | IfLe(pc) | IfICmpEq(pc)
+            | IfICmpNe(pc) | IfICmpLt(pc) | IfICmpGe(pc) | IfICmpGt(pc) | IfICmpLe(pc)
+            | IfACmpEq(pc) | IfACmpNe(pc) | IfNull(pc) | IfNonNull(pc) => ControlFlow::Branch(*pc),
+            Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => ControlFlow::Legacy,
+            Instruction::TableSwitch {
+                jump_targets,
+                default,
+                range,
+            } => {
+                let matches = range.clone().zip(jump_targets.clone()).collect();
+                ControlFlow::Switch(matches, *default)
+            }
+            Instruction::LookupSwitch {
+                default,
+                match_targets,
+            } => ControlFlow::Switch(match_targets.clone(), *default),
+            _ => ControlFlow::Fallthrough,
+        }
     }
 }

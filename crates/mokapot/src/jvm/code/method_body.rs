@@ -264,6 +264,15 @@ impl ExceptionTableEntry {
     pub fn covers(&self, pc: ProgramCounter) -> bool {
         self.covered_pc.contains(&pc)
     }
+
+    /// Returns whether this exception handler catches all exceptions.
+    #[must_use]
+    pub fn catches_all(&self) -> bool {
+        const THROWABLE_NAME: &str = "java/lang/Throwable";
+        self.catch_type
+            .as_ref()
+            .is_none_or(|caught| caught.0 == THROWABLE_NAME)
+    }
 }
 
 /// An entry in the line number table.
