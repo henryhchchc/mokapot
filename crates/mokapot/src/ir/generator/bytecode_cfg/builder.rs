@@ -23,10 +23,8 @@ pub(super) struct Builder<'method> {
 impl<'method> Builder<'method> {
     pub(super) fn for_method(method: &'method Method) -> Result<Self, Error> {
         let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
-        Ok(Self {
-            body,
-            fallibility: Fallibility::for_method(method),
-        })
+        let fallibility = Fallibility::for_method(method);
+        Ok(Self { body, fallibility })
     }
 
     pub(super) fn build(self) -> Result<BytecodeCfg, Error> {
@@ -36,8 +34,8 @@ impl<'method> Builder<'method> {
             .entry_point()
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
         self.reject_legacy_subroutines()?;
-        let leaders = self.collect_leaders(entry_pc)?;
-        let (groups, block_by_start_pc) = self.partition(&leaders)?;
+        let block_leaders = self.block_leaders(entry_pc)?;
+        let (groups, block_by_start_pc) = self.partition(&block_leaders)?;
         let (handlers, handler_by_pc) = self.build_handlers(&block_by_start_pc)?;
         let blocks = self.build_blocks(groups, &block_by_start_pc, &handler_by_pc)?;
 
@@ -49,69 +47,58 @@ impl<'method> Builder<'method> {
         })
     }
 
-    fn collect_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
+    fn block_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
+        use Instruction::{
+            AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, Jsr, JsrW, LReturn,
+            LookupSwitch, Ret, Return, TableSwitch, Wide,
+        };
+
         let mut leaders = BTreeSet::from([entry_pc]);
-        leaders.extend(
-            self.body
-                .exception_table
-                .iter()
-                .map(|entry| entry.handler_pc),
-        );
+        let iter = self.body.exception_table.iter().map(|it| it.handler_pc);
+        leaders.extend(iter);
 
         for (pc, instruction) in self.body.instructions.iter() {
             if let Some(target) = conditional_target(instruction) {
                 leaders.insert(target);
-                leaders.insert(self.next_pc(pc)?);
+                leaders.insert(self.require_next_pc(pc)?);
                 continue;
             }
             match instruction {
-                Instruction::Jsr(_)
-                | Instruction::JsrW(_)
-                | Instruction::Ret(_)
-                | Instruction::Wide(WideInstruction::Ret(_)) => unreachable!("validated above"),
-                Instruction::Goto(target) | Instruction::GotoW(target) => {
-                    leaders.insert(*target);
-                    self.insert_instruction_after(&mut leaders, pc);
+                Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
+                    unreachable!("explicitly rejected")
                 }
-                Instruction::TableSwitch {
+                Goto(target) | GotoW(target) => {
+                    leaders.insert(*target);
+                    leaders.extend(self.body.instructions.next_pc_of(&pc));
+                }
+                TableSwitch {
                     jump_targets,
                     default,
                     ..
                 } => {
                     leaders.extend(jump_targets.iter().copied().chain([*default]));
-                    self.insert_instruction_after(&mut leaders, pc);
+                    leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                Instruction::LookupSwitch {
+                LookupSwitch {
                     match_targets,
                     default,
                 } => {
                     leaders.extend(match_targets.values().copied().chain([*default]));
-                    self.insert_instruction_after(&mut leaders, pc);
+                    leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                Instruction::IReturn
-                | Instruction::LReturn
-                | Instruction::FReturn
-                | Instruction::DReturn
-                | Instruction::AReturn
-                | Instruction::Return
-                | Instruction::AThrow => self.insert_instruction_after(&mut leaders, pc),
-                _ => {
-                    if self.fallibility.is_synchronously_fallible(instruction) {
-                        leaders.insert(self.next_pc(pc)?);
-                    }
+                IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => {
+                    leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
+                _ if self.fallibility.can_throw(instruction) => {
+                    leaders.insert(self.require_next_pc(pc)?);
+                }
+                _ => {}
             }
         }
         Ok(leaders)
     }
 
-    fn insert_instruction_after(&self, leaders: &mut BTreeSet<ProgramCounter>, pc: ProgramCounter) {
-        if let Some(next_pc) = self.body.instructions.next_pc_of(&pc) {
-            leaders.insert(next_pc);
-        }
-    }
-
-    fn next_pc(&self, pc: ProgramCounter) -> Result<ProgramCounter, Error> {
+    fn require_next_pc(&self, pc: ProgramCounter) -> Result<ProgramCounter, Error> {
         self.body
             .instructions
             .next_pc_of(&pc)
@@ -119,19 +106,13 @@ impl<'method> Builder<'method> {
     }
 
     fn reject_legacy_subroutines(&self) -> Result<(), Error> {
-        for (pc, instruction) in self.body.instructions.iter() {
-            if matches!(
-                instruction,
-                Instruction::Jsr(_)
-                    | Instruction::JsrW(_)
-                    | Instruction::Ret(_)
-                    | Instruction::Wide(WideInstruction::Ret(_))
-            ) {
-                return Err(Error::UnsupportedBytecode {
-                    pc,
-                    kind: UnsupportedBytecode::LegacySubroutine,
-                });
-            }
+        use Instruction::{Jsr, JsrW, Ret, Wide};
+        use WideInstruction::Ret as WRet;
+        if let Some(pc) = self.body.instructions.iter().find_map(|(pc, it)| {
+            matches!(it, Jsr(_) | JsrW(_) | Ret(_) | Wide(WRet(_))).then_some(pc)
+        }) {
+            let kind = UnsupportedBytecode::LegacySubroutine;
+            return Err(Error::UnsupportedBytecode { pc, kind });
         }
         Ok(())
     }
@@ -183,12 +164,11 @@ impl<'method> Builder<'method> {
                     .instruction_at(final_pc)
                     .expect("a structural block PC comes from decoded bytecode");
                 let exit = self.build_exit(final_pc, instruction, block_by_start_pc)?;
-                let exceptional_successors =
-                    if self.fallibility.is_synchronously_fallible(instruction) {
-                        self.exceptional_successors(final_pc, handler_by_pc)?
-                    } else {
-                        Vec::new()
-                    };
+                let exceptional_successors = if self.fallibility.can_throw(instruction) {
+                    self.exceptional_successors(final_pc, handler_by_pc)?
+                } else {
+                    Vec::new()
+                };
                 Ok(Block {
                     start_pc: group.start_pc,
                     end_pc: group.end_pc,
@@ -209,7 +189,7 @@ impl<'method> Builder<'method> {
         if let Some(target) = conditional_target(instruction) {
             return Ok(BlockExit::Branch {
                 taken: block_at(target)?,
-                fallthrough: block_at(self.next_pc(pc)?)?,
+                fallthrough: block_at(self.require_next_pc(pc)?)?,
             });
         }
         let exit = match instruction {
@@ -246,7 +226,7 @@ impl<'method> Builder<'method> {
             | Instruction::Return
             | Instruction::AThrow => BlockExit::Terminal,
             _ => BlockExit::Fallthrough {
-                target: block_at(self.next_pc(pc)?)?,
+                target: block_at(self.require_next_pc(pc)?)?,
             },
         };
         Ok(exit)

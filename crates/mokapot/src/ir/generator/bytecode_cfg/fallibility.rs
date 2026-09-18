@@ -26,7 +26,7 @@ impl Fallibility {
     /// This is deliberately an exhaustive opcode classification. It includes
     /// resolution, initialization, allocation, bootstrap, and method-exit
     /// failures in addition to the instruction's most obvious runtime exception.
-    pub const fn is_synchronously_fallible(self, instruction: &Instruction) -> bool {
+    pub const fn can_throw(self, instruction: &Instruction) -> bool {
         use Instruction::{
             AALoad, AAStore, ANewArray, AReturn, AThrow, ArrayLength, BALoad, BAStore, CALoad,
             CAStore, CheckCast, DALoad, DAStore, DReturn, FALoad, FAStore, FReturn, GetField,
