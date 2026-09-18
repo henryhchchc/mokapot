@@ -12,16 +12,17 @@ use crate::{
 };
 
 pub(super) struct Builder<'method> {
+    method: &'method Method,
     body: &'method MethodBody,
 }
 
 impl<'method> Builder<'method> {
     pub(super) fn for_method(method: &'method Method) -> Result<Self, Error> {
         let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
-        Ok(Self { body })
+        Ok(Self { method, body })
     }
 
-    pub(super) fn build(self) -> Result<JvmBlockGraph, Error> {
+    pub(super) fn build(self) -> Result<JvmBlockGraph<'method>, Error> {
         let (entry_pc, _) = self
             .body
             .instructions
@@ -30,7 +31,11 @@ impl<'method> Builder<'method> {
         let block_leaders = self.block_leaders(entry_pc)?;
         let blocks = self.build_blocks(&block_leaders)?;
         let entry = JvmBlockId::from(entry_pc);
-        Ok(JvmBlockGraph { entry, blocks })
+        Ok(JvmBlockGraph {
+            method: self.method,
+            entry,
+            blocks,
+        })
     }
 
     /// Collects every PC that starts a block, and verifies each is decoded.

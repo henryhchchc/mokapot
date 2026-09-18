@@ -12,7 +12,7 @@ use crate::{
     jvm::code::WideInstruction,
 };
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,

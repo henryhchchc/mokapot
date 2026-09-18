@@ -14,7 +14,7 @@ use crate::{
     jvm::{ConstantValue, references::ClassRef},
 };
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn constant(
         &mut self,
         constant: ConstantValue,

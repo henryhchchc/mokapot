@@ -43,7 +43,7 @@ pub(super) fn lift_binary_math(
     Ok(Some(definition_operation(value, expr)))
 }
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn shift_long(
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,

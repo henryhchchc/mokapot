@@ -14,28 +14,21 @@ pub(super) use scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
 
 use std::collections::BTreeMap;
 
+use self::{analyzer::Analyzer, jvm::Frame};
 use crate::{
-    ir::{
-        ValueId,
-        generator::{
-            bytecode_analysis::{analyzer::Analyzer, jvm::Frame},
-            error::Error,
-        },
-    },
-    jvm::{Method, code::MethodBody},
+    ir::{ValueId, generator::error::Error},
+    jvm::code::ProgramCounter,
 };
 
 pub(super) fn analyze(
-    method: &Method,
-    cfg: &super::bytecode_cfg::JvmBlockGraph,
+    cfg: &super::bytecode_cfg::JvmBlockGraph<'_>,
 ) -> Result<scalar::ScalarGraph, Error> {
-    Analyzer::new(method, cfg)?.run()
+    Analyzer::new(cfg)?.run()
 }
 
 /// Symbolic executor used by block-level bytecode analysis.
-struct Executor<'method> {
-    body: &'method MethodBody,
-    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
+struct Executor {
+    definition_ids: BTreeMap<ProgramCounter, ValueId>,
     value_id_allocator: executor::ValueIdAllocator,
     receiver_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,

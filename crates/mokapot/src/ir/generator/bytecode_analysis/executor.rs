@@ -6,18 +6,17 @@ use crate::{
         ValueId,
         generator::{
             bytecode_analysis::jvm::{EntrySlots, Frame, Position},
-            error::{Error, MalformedBytecode},
+            bytecode_cfg::JvmBlockGraph,
+            error::Error,
         },
     },
-    jvm::{Method, method},
+    jvm::method,
 };
 
-impl<'method> Executor<'method> {
-    pub(super) fn for_method(method: &'method Method) -> Result<Self, Error> {
-        let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
-        body.instructions
-            .entry_point()
-            .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
+impl Executor {
+    pub(super) fn for_cfg(cfg: &JvmBlockGraph<'_>) -> Result<Self, Error> {
+        let method = cfg.method();
+        let body = cfg.body();
 
         let mut value_id_allocator = ValueIdAllocator::default();
         let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
@@ -43,7 +42,6 @@ impl<'method> Executor<'method> {
             &parameter_values,
         );
         Ok(Self {
-            body,
             definition_ids: BTreeMap::new(),
             value_id_allocator,
             receiver_value,

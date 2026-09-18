@@ -15,7 +15,7 @@ use crate::{
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn invoke(
         &mut self,
         method: &MethodRef,

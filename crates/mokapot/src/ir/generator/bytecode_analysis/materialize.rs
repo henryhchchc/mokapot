@@ -24,7 +24,7 @@ impl Analyzer<'_, '_> {
         let analyzed_locations = self
             .locations
             .iter()
-            .filter_map(|(&location, state)| state.execution.as_ref().map(|_| location))
+            .filter_map(|(&location, state)| state.analysis.execution().map(|_| location))
             .collect::<Vec<_>>();
         let offset = usize::from(has_preheader);
         let block_ids_by_location = analyzed_locations
@@ -55,7 +55,7 @@ impl Analyzer<'_, '_> {
             let analyzed = self
                 .locations
                 .get(location)
-                .and_then(|state| state.execution.clone())
+                .and_then(|state| state.analysis.execution().cloned())
                 .ok_or_else(|| Error::internal("a reachable location was not executed"))?;
             materialize_block(
                 analyzed,
@@ -130,6 +130,7 @@ fn materialize_block(
     block_ids_by_location: &BTreeMap<Location, BlockId>,
 ) -> Result<ScalarBlock, Error> {
     let successors = analyzed
+        .successors
         .edges
         .into_iter()
         .map(|successor| {

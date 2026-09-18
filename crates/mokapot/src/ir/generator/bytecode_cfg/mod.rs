@@ -12,31 +12,63 @@ use std::collections::BTreeMap;
 use derive_more::From;
 
 use super::error::Error;
-use crate::jvm::{Method, code::ProgramCounter, references::ClassRef};
+use crate::jvm::{
+    Method,
+    code::{Instruction, MethodBody, ProgramCounter},
+    references::ClassRef,
+};
 
 /// Builds the decoded-bytecode CFG used by the later block analyzer.
-pub(super) fn build(method: &Method) -> Result<JvmBlockGraph, Error> {
+pub(super) fn build(method: &Method) -> Result<JvmBlockGraph<'_>, Error> {
     builder::Builder::for_method(method)?.build()
 }
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
 #[derive(Debug, Clone)]
-pub(super) struct JvmBlockGraph {
+pub(super) struct JvmBlockGraph<'method> {
+    /// The validated method represented by this graph.
+    method: &'method Method,
     /// The block containing the first decoded instruction.
     entry: JvmBlockId,
     /// The blocks, keyed by identity.
     blocks: BTreeMap<JvmBlockId, JvmBlock>,
 }
 
-impl JvmBlockGraph {
+impl<'method> JvmBlockGraph<'method> {
+    /// The validated method represented by this graph.
+    pub const fn method(&self) -> &'method Method {
+        self.method
+    }
+
+    /// The validated method body represented by this graph.
+    pub const fn body(&self) -> &'method MethodBody {
+        self.method
+            .body
+            .as_ref()
+            .expect("a validated CFG method must have a body")
+    }
+
     /// The block containing the first decoded instruction.
     pub const fn entry_block(&self) -> JvmBlockId {
         self.entry
     }
 
     /// Looks up a bytecode block by its identity.
-    pub fn block(&self, id: JvmBlockId) -> Option<&JvmBlock> {
-        self.blocks.get(&id)
+    pub fn block(&self, id: JvmBlockId) -> &JvmBlock {
+        self.blocks
+            .get(&id)
+            .expect("a CFG block identity must belong to its graph")
+    }
+
+    /// Iterates over the decoded instructions in `block`.
+    pub fn instructions(
+        &self,
+        block: JvmBlockId,
+    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &Instruction)> {
+        let block = self.block(block);
+        self.body()
+            .instructions
+            .range(block.start_pc..=block.end_pc)
     }
 }
 

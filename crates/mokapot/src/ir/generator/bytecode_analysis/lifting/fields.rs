@@ -14,7 +14,7 @@ use crate::{
     jvm::references::FieldRef,
 };
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         self.frame

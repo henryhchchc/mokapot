@@ -14,7 +14,7 @@ use crate::{
     types::field_type::FieldType,
 };
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     pub(super) fn array_read(
         &mut self,
         category: ValueCategory,

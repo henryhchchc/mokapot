@@ -30,13 +30,13 @@ const fn definition_operation(value: ValueId, expr: Expression) -> OperationKind
     OperationKind::Definition { value, expr }
 }
 
-struct Context<'executor, 'frame, 'method> {
-    executor: &'executor mut Executor<'method>,
+struct Context<'executor, 'frame> {
+    executor: &'executor mut Executor,
     pc: crate::jvm::code::ProgramCounter,
     frame: &'frame mut Frame,
 }
 
-impl Executor<'_> {
+impl Executor {
     #[expect(
         clippy::too_many_lines,
         reason = "the match is an exhaustive JVM instruction dispatch"
@@ -206,7 +206,7 @@ impl Executor<'_> {
     }
 }
 
-impl Context<'_, '_, '_> {
+impl Context<'_, '_> {
     fn monitor(
         &mut self,
         operation: impl FnOnce(ValueId) -> LockOperation,

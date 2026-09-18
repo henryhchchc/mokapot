@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
-    ops::{Bound, Range},
+    ops::{Bound, Range, RangeBounds},
 };
 
 use super::{Instruction, ProgramCounter, RawInstruction};
@@ -89,6 +89,16 @@ impl<I> InstructionList<I> {
         &self,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> + ExactSizeIterator {
         self.into_iter()
+    }
+
+    /// Iterates over the instructions whose program counters are in `range`.
+    pub(crate) fn range(
+        &self,
+        range: impl RangeBounds<ProgramCounter>,
+    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> {
+        self.0
+            .range(range)
+            .map(|(&pc, instruction)| (pc, instruction))
     }
 }
 

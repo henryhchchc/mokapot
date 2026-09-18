@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     Executor,
-    model::{Location, LocationState, PhiDefinition, PhiSite, Predecessor},
+    model::{Location, LocationAnalysis, LocationState, PhiDefinition, PhiSite, Predecessor},
     scalar::ScalarGraph,
 };
 use crate::{
@@ -15,12 +15,12 @@ use crate::{
             error::Error,
         },
     },
-    jvm::{Method, code::ProgramCounter},
+    jvm::code::ProgramCounter,
 };
 
 pub(super) struct Analyzer<'method, 'cfg> {
-    pub(super) cfg: &'cfg JvmBlockGraph,
-    pub(super) executor: Executor<'method>,
+    pub(super) cfg: &'cfg JvmBlockGraph<'method>,
+    pub(super) executor: Executor,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
     pub(super) caught_exceptions: BTreeMap<JvmBlockId, ValueId>,
@@ -47,19 +47,18 @@ impl Analyzer<'_, '_> {
     /// A bytecode and a handler location both point at the start of their
     /// block; only the synthetic unwind exit has no PC.
     pub(super) fn location_pc(&self, location: Location) -> Option<ProgramCounter> {
-        let block = match location {
-            Location::Bytecode(id) | Location::Handler(id) => self.cfg.block(id),
+        match location {
+            Location::Bytecode(id) | Location::Handler(id) => Some(self.cfg.block(id).start_pc),
             Location::Unwind => None,
-        };
-        block.map(|block| block.start_pc)
+        }
     }
 }
 
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
-    pub(super) fn new(method: &'method Method, cfg: &'cfg JvmBlockGraph) -> Result<Self, Error> {
+    pub(super) fn new(cfg: &'cfg JvmBlockGraph<'method>) -> Result<Self, Error> {
         Ok(Self {
             cfg,
-            executor: Executor::for_method(method)?,
+            executor: Executor::for_cfg(cfg)?,
             locations: BTreeMap::new(),
             phi_definitions: BTreeMap::new(),
             caught_exceptions: BTreeMap::new(),
@@ -82,14 +81,21 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
 
         let mut pending = BTreeSet::from([entry]);
         while let Some(location) = pending.pop_first() {
-            let input = self
+            let state = self
                 .locations
                 .get(&location)
-                .and_then(|state| state.entry_frame.clone())
-                .ok_or_else(|| Error::internal("a pending block has no entry frame"))?;
+                .expect("a worklist location must have analysis state");
+            let LocationAnalysis::Pending(input) = &state.analysis else {
+                unreachable!("a worklist location must be pending");
+            };
+            let input = input.clone();
             let mut block = self.execute(location, input)?;
-            let outputs = std::mem::take(&mut block.output_frames);
-            self.locations.entry(location).or_default().execution = Some(block);
+            let outputs = block.successors.take_frames();
+            self.locations
+                .entry(location)
+                .or_default()
+                .analysis
+                .finish(block);
             for (target, frame) in outputs {
                 self.locations
                     .entry(target)

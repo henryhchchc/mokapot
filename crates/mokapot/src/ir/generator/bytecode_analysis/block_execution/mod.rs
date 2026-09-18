@@ -2,16 +2,14 @@
 
 mod terminator;
 
-use std::collections::{BTreeMap, btree_map::Entry};
-
 use super::{
     analyzer::Analyzer,
-    model::{AnalyzedBlock, AnalyzedEdge, Frame, Location},
+    model::{AnalyzedBlock, AnalyzedEdge, AnalyzedSuccessors, Frame, Location},
 };
 use crate::{
     ir::generator::{
         bytecode_cfg::{self, BlockExit, JvmBlockId},
-        error::{Error, MalformedBytecode},
+        error::Error,
     },
     ir::{TerminatorKind, control_flow::ControlTransfer},
 };
@@ -34,8 +32,7 @@ impl Analyzer<'_, '_> {
                 operations: Vec::new(),
                 terminator: TerminatorKind::Unwind,
                 terminator_source: None,
-                edges: Vec::new(),
-                output_frames: BTreeMap::default(),
+                successors: AnalyzedSuccessors::default(),
             }),
         }
     }
@@ -43,42 +40,36 @@ impl Analyzer<'_, '_> {
     fn execute_handler(block: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
         let target = Location::Bytecode(block);
+        let mut successors = AnalyzedSuccessors::default();
+        successors.push(
+            AnalyzedEdge {
+                target,
+                transfer: ControlTransfer::Unconditional,
+            },
+            input,
+        );
         Ok(AnalyzedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
-            edges: vec![AnalyzedEdge {
-                target,
-                transfer: ControlTransfer::Unconditional,
-            }],
-            output_frames: [(target, input)].into_iter().collect(),
+            successors,
         })
     }
 
     fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
-        let block = self
-            .cfg
-            .block(id)
-            .ok_or_else(|| Error::internal("a bytecode location has no structural block"))?;
+        let block = self.cfg.block(id);
         let final_pc = block.end_pc;
         let explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
         let mut frame = input;
         let mut operations = Vec::new();
-        let mut exceptional_input = None;
+        let mut instructions = self.cfg.instructions(id);
+        let (decoded_final_pc, final_instruction) = instructions
+            .next_back()
+            .expect("a structural block must contain its final instruction");
+        debug_assert_eq!(decoded_final_pc, final_pc);
 
-        let mut pc = block.start_pc;
-        loop {
-            let instruction =
-                self.executor.body.instruction_at(pc).ok_or_else(|| {
-                    Error::malformed(Some(pc), MalformedBytecode::MissingInstruction)
-                })?;
-            if pc == final_pc {
-                exceptional_input = Some(frame.clone());
-                if explicit_terminator {
-                    break;
-                }
-            }
+        for (pc, instruction) in instructions {
             let operation = self
                 .executor
                 .lift_instruction(instruction, pc, &mut frame)
@@ -86,74 +77,69 @@ impl Analyzer<'_, '_> {
             if let Some(operation) = operation {
                 operations.push((pc, operation));
             }
-            if pc == final_pc {
-                break;
-            }
-            pc = self
-                .executor
-                .body
-                .instructions
-                .next_pc_of(&pc)
-                .ok_or_else(|| Error::internal_at(pc, "a block ends after decoded bytecode"))?;
         }
 
-        let final_instruction = self.executor.body.instruction_at(final_pc).ok_or_else(|| {
-            Error::malformed(Some(final_pc), MalformedBytecode::MissingInstruction)
-        })?;
-        let (terminator, mut edges, terminator_operation) =
+        let exceptional_input = frame.clone();
+        if !explicit_terminator {
+            let operation = self
+                .executor
+                .lift_instruction(final_instruction, final_pc, &mut frame)
+                .map_err(|error| error.at_instruction(final_pc))?;
+            if let Some(operation) = operation {
+                operations.push((final_pc, operation));
+            }
+        }
+        let (terminator, edges, terminator_operation) =
             Self::lower_terminator(block, final_instruction, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
         }
-        let exceptional_input = exceptional_input
-            .ok_or_else(|| Error::internal("a structural bytecode block has no final input"))?;
-        let mut output_frames = BTreeMap::new();
-        for edge in &edges {
-            output_frames
-                .entry(edge.target)
-                .or_insert_with(|| frame.clone());
+        let mut successors = AnalyzedSuccessors::default();
+        for edge in edges {
+            successors.push(edge, frame.clone());
         }
         for target in &block.exception_handlers {
-            edges.push(self.exception_edge(target, &exceptional_input, &mut output_frames)?);
+            self.push_exception_successor(target, &exceptional_input, &mut successors)?;
         }
         Ok(AnalyzedBlock {
             caught_exception: None,
             operations,
             terminator,
             terminator_source: explicit_terminator.then_some(final_pc),
-            edges,
-            output_frames,
+            successors,
         })
     }
 
-    fn exception_edge(
+    fn push_exception_successor(
         &mut self,
         target: &bytecode_cfg::ExceptionalTarget,
         input: &Frame,
-        output_frames: &mut BTreeMap<Location, Frame>,
-    ) -> Result<AnalyzedEdge, Error> {
+        successors: &mut AnalyzedSuccessors,
+    ) -> Result<(), Error> {
         match target {
             bytecode_cfg::ExceptionalTarget::Handler { block, catch_type } => {
                 let location = Location::Handler(*block);
                 let caught = self.caught_exception(*block)?;
-                if let Entry::Vacant(output) = output_frames.entry(location) {
-                    output.insert(input.clone().exception_handler_frame(caught)?);
-                }
-                Ok(AnalyzedEdge {
-                    target: location,
-                    transfer: ControlTransfer::Exception(catch_type.clone()),
-                })
+                let frame = input.clone().exception_handler_frame(caught)?;
+                successors.push(
+                    AnalyzedEdge {
+                        target: location,
+                        transfer: ControlTransfer::Exception(catch_type.clone()),
+                    },
+                    frame,
+                );
             }
             bytecode_cfg::ExceptionalTarget::Unwind => {
-                output_frames
-                    .entry(Location::Unwind)
-                    .or_insert_with(|| input.clone().into_unwind_frame());
-                Ok(AnalyzedEdge {
-                    target: Location::Unwind,
-                    transfer: ControlTransfer::Unwind,
-                })
+                successors.push(
+                    AnalyzedEdge {
+                        target: Location::Unwind,
+                        transfer: ControlTransfer::Unwind,
+                    },
+                    input.clone().into_unwind_frame(),
+                );
             }
         }
+        Ok(())
     }
 }
