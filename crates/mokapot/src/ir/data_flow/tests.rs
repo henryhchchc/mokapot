@@ -49,23 +49,23 @@ fn records_parameter_phi_and_terminator_data_flow() {
         })
         .expect("the join must hold the phi feeding its return");
     assert_eq!(
-        chain.definition_of(phi.value()),
-        Some(ValueDefinition::Instruction(phi.id()))
+        chain.definition_of(phi.value),
+        Some(ValueDefinition::Instruction(phi.id))
     );
     assert_eq!(
-        chain.uses_of(phi.value()).collect::<BTreeSet<_>>(),
+        chain.uses_of(phi.value).collect::<BTreeSet<_>>(),
         BTreeSet::from([UseSite::Instruction(join.terminator().id())])
     );
-    for input in phi.inputs() {
+    for &PhiInput { predecessor, value } in &phi.inputs {
         let site = UseSite::PhiInput {
-            phi: phi.id(),
-            predecessor: input.predecessor(),
+            phi: phi.id,
+            predecessor,
         };
         assert_eq!(
-            chain.uses_of(input.value()).collect::<BTreeSet<_>>(),
+            chain.uses_of(value).collect::<BTreeSet<_>>(),
             BTreeSet::from([site])
         );
-        assert_eq!(site.instruction(), phi.id());
+        assert_eq!(site.instruction(), phi.id);
     }
 }
 

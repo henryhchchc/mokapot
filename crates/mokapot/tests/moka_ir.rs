@@ -131,16 +131,16 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             .map(mokapot::ir::BasicBlock::id)
             .collect::<BTreeSet<_>>();
         for phi in block.phis() {
-            assert!(instruction_ids.insert(phi.id()));
-            assert!(definitions.insert(phi.value()));
+            assert!(instruction_ids.insert(phi.id));
+            assert!(definitions.insert(phi.value));
             assert_eq!(
-                phi.inputs()
+                phi.inputs
                     .iter()
-                    .map(mokapot::ir::PhiInput::predecessor)
+                    .map(|it| it.predecessor)
                     .collect::<BTreeSet<_>>(),
                 predecessors
             );
-            uses.extend(phi.inputs().iter().map(mokapot::ir::PhiInput::value));
+            uses.extend(phi.inputs.iter().map(|it| it.value));
         }
         for instruction in block.operations() {
             assert!(instruction_ids.insert(instruction.id()));
@@ -212,7 +212,7 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
         0
     );
     assert!(ir.blocks().flat_map(|block| block.phis()).all(|phi| {
-        ir.source_map().origins_of(phi.id()).next().is_none() && !covered_nodes.contains(&phi.id())
+        ir.source_map().origins_of(phi.id).next().is_none() && !covered_nodes.contains(&phi.id)
     }));
 }
 

@@ -47,7 +47,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     let mut edge_ids = HashSet::new();
     for block in ir.blocks() {
         for phi in block.phis() {
-            assert!(instruction_ids.insert(phi.id()));
+            assert!(instruction_ids.insert(phi.id));
         }
         for instruction in block.operations() {
             assert!(instruction_ids.insert(instruction.id()));

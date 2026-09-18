@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::ir::PhiInput;
+
 use super::{BlockId, InstructionId, MokaIRMethod, ValueDefinition, ValueId};
 
 /// A location at which an SSA value is used.
@@ -52,13 +54,11 @@ impl DefUseChain {
 
         for block in method.blocks() {
             for phi in block.phis() {
-                for input in phi.inputs() {
-                    uses.entry(input.value())
-                        .or_default()
-                        .insert(UseSite::PhiInput {
-                            phi: phi.id(),
-                            predecessor: input.predecessor(),
-                        });
+                for &PhiInput { predecessor, value } in &phi.inputs {
+                    uses.entry(value).or_default().insert(UseSite::PhiInput {
+                        phi: phi.id,
+                        predecessor,
+                    });
                 }
             }
             for operation in block.operations() {

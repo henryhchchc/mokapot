@@ -45,7 +45,7 @@ impl InstructionRef<'_> {
     #[must_use]
     pub const fn id(self) -> InstructionId {
         match self {
-            Self::Phi(phi) => phi.id(),
+            Self::Phi(phi) => phi.id,
             Self::Operation(operation) => operation.id(),
             Self::Terminator(terminator) => terminator.id(),
         }

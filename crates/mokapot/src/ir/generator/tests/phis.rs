@@ -23,17 +23,17 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         panic!("the join must contain one phi")
     };
 
-    assert_eq!(phi.inputs().len(), 2);
-    assert_ne!(phi.inputs()[0].predecessor(), phi.inputs()[1].predecessor());
+    assert_eq!(phi.inputs.len(), 2);
+    assert_ne!(phi.inputs[0].predecessor, phi.inputs[1].predecessor);
     assert!(matches!(
         join.terminator().kind(),
-        TerminatorKind::Return(Some(value)) if *value == phi.value()
+        TerminatorKind::Return(Some(value)) if *value == phi.value
     ));
     assert_eq!(
-        ir.definition_of(phi.value()),
-        Some(ValueDefinition::Instruction(phi.id()))
+        ir.definition_of(phi.value),
+        Some(ValueDefinition::Instruction(phi.id))
     );
-    assert_eq!(ir.source_map().origins_of(phi.id()).count(), 0);
+    assert_eq!(ir.source_map().origins_of(phi.id).count(), 0);
 }
 
 #[test]
@@ -94,18 +94,18 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
             .count(),
         0
     );
-    assert_eq!(phi.inputs().len(), 2);
+    assert_eq!(phi.inputs.len(), 2);
     assert!(
-        phi.inputs()
+        phi.inputs
             .iter()
-            .any(|input| input.predecessor() == ir.entry_block())
+            .any(|input| input.predecessor == ir.entry_block())
     );
     let backedge_value = phi
-        .inputs()
+        .inputs
         .iter()
-        .find(|input| input.predecessor() != ir.entry_block())
+        .find(|input| input.predecessor != ir.entry_block())
         .unwrap()
-        .value();
+        .value;
     let Some(ValueDefinition::Instruction(backedge_definition)) = ir.definition_of(backedge_value)
     else {
         panic!("the loop-carried input must be computed in the loop")
@@ -115,7 +115,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         .flat_map(BasicBlock::operations)
         .find(|instruction| instruction.id() == backedge_definition)
         .unwrap();
-    assert!(definition.uses().contains(&phi.value()));
+    assert!(definition.uses().contains(&phi.value));
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
 
     assert_eq!(header.phis().len(), 1);
     let counter = &header.phis()[0];
-    assert_eq!(counter.inputs().len(), 2);
+    assert_eq!(counter.inputs.len(), 2);
     let returned = ir
         .blocks()
         .find_map(|block| match block.terminator().kind() {
@@ -225,23 +225,23 @@ fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
         .iter()
         .filter(|candidate| {
             phis.iter().any(|phi| {
-                phi.inputs()
+                phi.inputs
                     .iter()
-                    .any(|input| input.value() == candidate.value())
+                    .any(|input| input.value == candidate.value)
             })
         })
-        .map(|phi| phi.value())
+        .map(|phi| phi.value)
         .collect::<HashSet<_>>();
     assert_eq!(cyclic_results.len(), 2);
     assert!(
         phis.iter()
-            .filter(|phi| cyclic_results.contains(&phi.value()))
+            .filter(|phi| cyclic_results.contains(&phi.value))
             .all(|phi| {
-                phi.inputs().len() == 2
+                phi.inputs.len() == 2
                     && phi
-                        .inputs()
+                        .inputs
                         .iter()
-                        .any(|input| cyclic_results.contains(&input.value()))
+                        .any(|input| cyclic_results.contains(&input.value))
             })
     );
 }

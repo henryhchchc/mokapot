@@ -23,9 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for block in ir.blocks() {
             println!("{}:", block.id());
             for phi in block.phis() {
-                print!("  {}: {} = phi", phi.id(), phi.value());
-                for input in phi.inputs() {
-                    print!(" [{}: {}]", input.predecessor(), input.value());
+                print!("  {}: {} = phi", phi.id, phi.value);
+                for input in &phi.inputs {
+                    print!(" [{}: {}]", input.predecessor, input.value);
                 }
                 println!();
             }
