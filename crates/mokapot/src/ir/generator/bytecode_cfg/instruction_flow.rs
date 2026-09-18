@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::model::{BranchPredicate, ReturnOperand, StructuralBlockId, StructuralTerminator};
 use crate::{
     ir::generator::error::{Error, MalformedBytecode},
-    jvm::code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
+    jvm::code::{Instruction, MethodBody, ProgramCounter},
 };
 
 /// The PC-level control flow of one decoded instruction.
@@ -27,13 +27,6 @@ pub(super) enum InstructionFlow<'instruction> {
     LookupSwitch {
         match_targets: &'instruction BTreeMap<i32, ProgramCounter>,
         default: ProgramCounter,
-    },
-    Jsr {
-        target: ProgramCounter,
-        continuation: ProgramCounter,
-    },
-    Ret {
-        local: u16,
     },
     Return {
         operand: ReturnOperand,
@@ -122,17 +115,6 @@ impl<'instruction> InstructionFlow<'instruction> {
                     default: *default,
                 }
             }
-            Instruction::Jsr(target) | Instruction::JsrW(target) => {
-                validate_target(*target)?;
-                Self::Jsr {
-                    target: *target,
-                    continuation: fallthrough()?,
-                }
-            }
-            Instruction::Ret(local) => Self::Ret {
-                local: u16::from(*local),
-            },
-            Instruction::Wide(WideInstruction::Ret(local)) => Self::Ret { local: *local },
             Instruction::IReturn | Instruction::FReturn | Instruction::AReturn => Self::Return {
                 operand: ReturnOperand::Category1,
             },
@@ -191,17 +173,6 @@ impl<'instruction> InstructionFlow<'instruction> {
                     .map(|(&case, &target)| block_at(target).map(|block| (case, block)))
                     .collect::<Result<_, _>>()?,
                 default: block_at(*default)?,
-            },
-            Self::Jsr {
-                target,
-                continuation,
-            } => StructuralTerminator::Jsr {
-                target: block_at(*target)?,
-                continuation: block_at(*continuation)?,
-            },
-            Self::Ret { local } => StructuralTerminator::Ret {
-                local: *local,
-                continuations: BTreeMap::new(),
             },
             Self::Return { operand } => StructuralTerminator::Return { operand: *operand },
             Self::Throw => StructuralTerminator::Throw,

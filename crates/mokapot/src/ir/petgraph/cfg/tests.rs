@@ -7,13 +7,6 @@ use petgraph::{
 
 use super::*;
 use crate::ir::{InstructionId, Successor, Terminator, TerminatorKind, ValueId};
-use crate::{
-    ir::{
-        control_flow::path_condition::{BooleanVariable, BranchGuard, PathValue},
-        expression::Condition,
-    },
-    jvm::code::ProgramCounter,
-};
 
 #[test]
 fn dense_nodes_and_parallel_edges_are_preserved() {
@@ -131,73 +124,4 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
             .collect::<Vec<_>>(),
         [BlockId::new(0)]
     );
-}
-
-#[test]
-fn legacy_subroutine_edge_data_is_preserved() {
-    let continuation = ProgramCounter::from(0x10);
-    let guard = BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
-        PathValue::Variable(ValueId::new(0)),
-        PathValue::ReturnAddress(continuation),
-    )));
-    let source = BasicBlock {
-        id: BlockId::new(0),
-        phis: vec![],
-        operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(0),
-            kind: TerminatorKind::SubroutineCall,
-            successors: vec![Successor {
-                id: EdgeId::new(0),
-                target: BlockId::new(1),
-                transfer: ControlTransfer::SubroutineCall { continuation },
-            }],
-        },
-    };
-    let subroutine = BasicBlock {
-        id: BlockId::new(1),
-        phis: vec![],
-        operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(1),
-            kind: TerminatorKind::SubroutineReturn {
-                address: ValueId::new(0),
-            },
-            successors: vec![Successor {
-                id: EdgeId::new(1),
-                target: BlockId::new(2),
-                transfer: ControlTransfer::SubroutineReturn {
-                    continuation,
-                    guard: guard.clone(),
-                },
-            }],
-        },
-    };
-    let exit = BasicBlock {
-        id: BlockId::new(2),
-        phis: vec![],
-        operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(2),
-            kind: TerminatorKind::Return(None),
-            successors: vec![],
-        },
-    };
-    let blocks = [source, subroutine, exit];
-    let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
-    let edges = (&cfg).edge_references().collect::<Vec<_>>();
-
-    assert!(matches!(
-        edges[0].weight(),
-        ControlTransfer::SubroutineCall {
-            continuation: actual,
-        } if *actual == continuation
-    ));
-    assert!(matches!(
-        edges[1].weight(),
-        ControlTransfer::SubroutineReturn {
-            continuation: actual,
-            guard: actual_guard,
-        } if *actual == continuation && actual_guard == &guard
-    ));
 }

@@ -40,5 +40,4 @@ mod control_flow;
 mod diagnostics;
 mod effects;
 mod exceptions;
-mod legacy;
 mod phis;

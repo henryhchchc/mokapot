@@ -28,7 +28,7 @@ use crate::{
 /// Builds the definition operation produced by a lifted expression.
 ///
 /// This is the only place a lifted identity is wrapped as an ordinary frame
-/// value: materialization rejects the return-address and invalid variants.
+/// value; materialization rejects invalid frame values.
 const fn definition_operation(
     value: SsaValueId,
     expr: Expression<FrameValue>,

@@ -31,15 +31,14 @@ pub struct MokaIRMethod {
 impl MokaIRMethod {
     /// Builds completed `MokaIR` from a JVM method.
     ///
-    /// JVM stack and local state are eliminated during construction. Legacy
-    /// subroutine calls and token-guarded returns remain explicit, trivial phis
-    /// are removed, and only reachable blocks are emitted.
+    /// JVM stack and local state are eliminated during construction, trivial
+    /// phis are removed, and only reachable blocks are emitted.
     ///
     /// # Errors
     ///
-    /// Returns [`MokaIRBuildError`] when the method has no body, its bytecode
-    /// structure or reachable frame state is invalid, or an internal
-    /// construction invariant is violated.
+    /// Returns [`MokaIRBuildError`] when the method has no body, uses unsupported
+    /// bytecode, has invalid bytecode structure or reachable frame state, or an
+    /// internal construction invariant is violated.
     pub fn from_method(method: &JvmMethod) -> Result<Self, MokaIRBuildError> {
         generator::generate(method)
     }

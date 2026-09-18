@@ -50,12 +50,10 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
             .outgoing_edges(*location)
             .filter_map(|edge| {
                 let propagated = match edge.transfer() {
-                    ControlTransfer::Conditional(guard)
-                    | ControlTransfer::SubroutineReturn { guard, .. } => {
+                    ControlTransfer::Conditional(guard) => {
                         fact.conjoin_branch_guard(guard.as_ref())
                     }
                     ControlTransfer::Unconditional
-                    | ControlTransfer::SubroutineCall { .. }
                     | ControlTransfer::Exception(_)
                     | ControlTransfer::Unwind => fact.clone(),
                 };

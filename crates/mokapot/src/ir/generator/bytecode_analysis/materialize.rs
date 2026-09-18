@@ -141,7 +141,7 @@ fn materialize_block(
                 .ok_or_else(|| Error::internal("a successor target has no scalar block"))?;
             let transfer = successor
                 .transfer
-                .try_map_values(FrameValue::into_ordinary_ssa_value_id)?;
+                .try_map_values(FrameValue::into_ssa_value_id)?;
             Ok(Successor { target, transfer })
         })
         .collect::<Result<_, Error>>()?;
@@ -150,14 +150,14 @@ fn materialize_block(
         .into_iter()
         .map(|(pc, operation)| {
             operation
-                .try_map_values(FrameValue::into_ordinary_ssa_value_id)
+                .try_map_values(FrameValue::into_ssa_value_id)
                 .map(|operation| (pc, operation))
                 .map_err(|error| error.at_instruction(pc))
         })
         .collect::<Result<_, _>>()?;
     let terminator = analyzed
         .terminator
-        .try_map_values(FrameValue::into_ordinary_ssa_value_id)?;
+        .try_map_values(FrameValue::into_ssa_value_id)?;
     Ok(ScalarBlock {
         id,
         caught_exception: analyzed.caught_exception,

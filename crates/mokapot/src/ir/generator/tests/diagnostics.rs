@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    ir::{MalformedBytecode, MokaIRFrameError},
+    ir::{MalformedBytecode, MokaIRFrameError, UnsupportedBytecode},
     jvm::code::WideInstruction,
 };
 
@@ -89,69 +89,21 @@ fn reports_method_entry_frame_initialization_failures() {
 }
 
 #[test]
-fn reports_an_invalid_legacy_return_operand() {
-    let method = method(
-        [
-            (0, Instruction::IConst0),
-            (1, Instruction::IStore0),
-            (2, Instruction::Ret(0)),
-        ],
-        "()V",
-        vec![],
-    );
+fn rejects_every_legacy_subroutine_instruction_even_when_unreachable() {
+    for instruction in [
+        Instruction::Jsr(0.into()),
+        Instruction::JsrW(0.into()),
+        Instruction::Ret(0),
+        Instruction::Wide(WideInstruction::Ret(300)),
+    ] {
+        let method = method([(0, Instruction::Return), (1, instruction)], "()V", vec![]);
 
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::MalformedBytecode {
-            pc: Some(pc),
-            kind: MalformedBytecode::InvalidSubroutineReturn,
-        }) if pc == 2.into()
-    ));
-}
-
-#[test]
-fn reports_a_return_address_used_as_an_ordinary_value() {
-    let method = method(
-        [
-            (0, Instruction::Jsr(10.into())),
-            (3, Instruction::Return),
-            (10, Instruction::AStore0),
-            (11, Instruction::ALoad0),
-            (12, Instruction::Ret(0)),
-        ],
-        "()V",
-        vec![],
-    );
-
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::MalformedBytecode {
-            pc: Some(pc),
-            kind: MalformedBytecode::InvalidFrameValue,
-        }) if pc == 11.into()
-    ));
-}
-
-#[test]
-fn reports_a_wide_return_address_used_as_an_ordinary_value() {
-    let mut method = method(
-        [
-            (0, Instruction::Jsr(10.into())),
-            (3, Instruction::Return),
-            (10, Instruction::Wide(WideInstruction::AStore(300))),
-            (14, Instruction::Wide(WideInstruction::ALoad(300))),
-            (18, Instruction::Wide(WideInstruction::Ret(300))),
-        ],
-        "()V",
-        vec![],
-    );
-    method.body.as_mut().expect("method has a body").max_locals = 301;
-
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::MalformedBytecode {
-            pc: Some(pc),
-            kind: MalformedBytecode::InvalidFrameValue,
-        }) if pc == 14.into()
-    ));
+        assert!(matches!(
+            build(&method),
+            Err(MokaIRBuildError::UnsupportedBytecode {
+                pc,
+                kind: UnsupportedBytecode::LegacySubroutine,
+            }) if pc == 1.into()
+        ));
+    }
 }

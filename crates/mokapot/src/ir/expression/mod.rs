@@ -8,7 +8,6 @@ use super::{TryMapValues, ValueId};
 use crate::{
     jvm::{
         ConstantValue,
-        code::ProgramCounter,
         references::{ClassRef, MethodRef},
     },
     types::method_descriptor::MethodDescriptor,
@@ -23,8 +22,7 @@ mod math;
 
 pub use array::Operation as ArrayOperation;
 pub use condition::Condition;
-/// A branch predicate over scalar SSA values, JVM constants, and legacy
-/// return-address tokens.
+/// A branch predicate over scalar SSA values and JVM constants.
 pub type Predicate = Condition<crate::ir::control_flow::path_condition::PathValue>;
 pub use conversion::Operation as Conversion;
 pub use field::Access as FieldAccess;
@@ -37,12 +35,6 @@ pub use math::Operation as MathOperation;
 pub enum Expression<OP = ValueId> {
     /// A constant value.
     Const(ConstantValue),
-    /// A legacy subroutine return-address token.
-    ///
-    /// The token names the instruction following the `jsr` or `jsr_w` that
-    /// produced it. It is not an integer address and can only be consumed by a
-    /// legacy subroutine return.
-    ReturnAddress(ProgramCounter),
     /// A function call
     /// Corresponds to the following JVM instructions:
     /// - `invokestatic`
@@ -89,7 +81,6 @@ impl<OP: fmt::Display> fmt::Display for Expression<OP> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Const(value) => value.fmt(f),
-            Self::ReturnAddress(continuation) => write!(f, "return_address {continuation}"),
             Self::Call { method, this, args } => write!(
                 f,
                 "call {} {}{}::{}({})",
@@ -134,7 +125,6 @@ impl<OP, OUT> TryMapValues<OUT> for Expression<OP> {
     ) -> Result<Expression<OUT>, E> {
         Ok(match self {
             Self::Const(value) => Expression::Const(value),
-            Self::ReturnAddress(continuation) => Expression::ReturnAddress(continuation),
             Self::Call { method, this, args } => Expression::Call {
                 method,
                 this: this.map(&mut remap).transpose()?,
@@ -186,7 +176,6 @@ impl Expression {
 #[cfg(test)]
 mod tests {
     use super::{Expression, MathOperation, TryMapValues};
-    use crate::jvm::code::ProgramCounter;
 
     #[test]
     fn maps_nested_values_and_propagates_errors() {
@@ -212,17 +201,6 @@ mod tests {
             Expression::<u8>::Const(crate::jvm::ConstantValue::Integer(3))
                 .try_map_values(|_| Err::<u16, _>("unreachable")),
             Ok(Expression::Const(crate::jvm::ConstantValue::Integer(3)))
-        );
-
-        let continuation = ProgramCounter::from(0x12);
-        assert_eq!(
-            Expression::<u8>::ReturnAddress(continuation)
-                .try_map_values(|_| Err::<u16, _>("unreachable")),
-            Ok(Expression::ReturnAddress(continuation))
-        );
-        assert_eq!(
-            Expression::<u8>::ReturnAddress(continuation).to_string(),
-            "return_address #0012"
         );
     }
 }

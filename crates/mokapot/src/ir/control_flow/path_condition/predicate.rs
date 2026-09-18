@@ -3,7 +3,7 @@ use crate::{
         self, TryMapValues, ValueId,
         expression::{Condition, Predicate},
     },
-    jvm::{ConstantValue, code::ProgramCounter},
+    jvm::ConstantValue,
 };
 
 use super::BooleanVariable;
@@ -72,15 +72,13 @@ where
     }
 }
 
-/// An operand, constant, or legacy return-address token in a path predicate.
+/// An operand or constant in a path predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
 pub enum PathValue<OP = ValueId> {
     /// A value produced by the IR.
     Variable(OP),
     /// A JVM constant embedded in the condition.
     Constant(ConstantValue),
-    /// A legacy subroutine return-address token.
-    ReturnAddress(ProgramCounter),
 }
 
 impl<OP, OUT> TryMapValues<OUT> for PathValue<OP> {
@@ -94,7 +92,6 @@ impl<OP, OUT> TryMapValues<OUT> for PathValue<OP> {
         match self {
             Self::Variable(value) => remap(value).map(PathValue::Variable),
             Self::Constant(value) => Ok(PathValue::Constant(value)),
-            Self::ReturnAddress(continuation) => Ok(PathValue::ReturnAddress(continuation)),
         }
     }
 }
@@ -121,7 +118,7 @@ impl Predicate {
             .into_iter()
             .filter_map(|value| match value {
                 PathValue::Variable(value) => Some(value),
-                PathValue::Constant(_) | PathValue::ReturnAddress(_) => None,
+                PathValue::Constant(_) => None,
             })
             .copied()
             .collect()
@@ -171,12 +168,6 @@ mod tests {
 
     #[test]
     fn maps_only_ssa_variables() {
-        let continuation = ProgramCounter::from(0x12);
-        assert_eq!(
-            PathValue::<u8>::ReturnAddress(continuation)
-                .try_map_values(|_| Err::<u16, _>("unreachable")),
-            Ok(PathValue::ReturnAddress(continuation))
-        );
         assert_eq!(
             PathValue::<u8>::Constant(ConstantValue::Integer(3))
                 .try_map_values(|_| Err::<u16, _>("unreachable")),

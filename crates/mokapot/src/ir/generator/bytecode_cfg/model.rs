@@ -116,16 +116,6 @@ pub(in crate::ir::generator) enum StructuralTerminator {
         cases: BTreeMap<i32, StructuralBlockId>,
         default: StructuralBlockId,
     },
-    /// A legacy subroutine call and its static return continuation.
-    Jsr {
-        target: StructuralBlockId,
-        continuation: StructuralBlockId,
-    },
-    /// A legacy subroutine return and its statically over-approximated continuations.
-    Ret {
-        local: u16,
-        continuations: BTreeMap<ProgramCounter, StructuralBlockId>,
-    },
     /// A normal method exit.
     Return { operand: ReturnOperand },
     /// An explicit `athrow`; exceptional successors select handlers or unwind.

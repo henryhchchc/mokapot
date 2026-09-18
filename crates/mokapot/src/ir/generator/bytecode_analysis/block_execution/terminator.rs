@@ -8,22 +8,19 @@ use super::super::{
     jvm::ValueCategory::{Category1, Category2},
     model::{AnalyzedSuccessor, Frame, Location},
 };
-use crate::{
-    ir::{
-        OperationKind, TerminatorKind,
-        control_flow::{
-            ControlTransfer,
-            path_condition::{BooleanVariable, BranchGuard, PathValue},
-        },
-        expression::{Condition, Expression},
-        generator::{
-            bytecode_cfg::{
-                self, BranchPredicate, ReturnOperand, StructuralBlockId, StructuralTerminator,
-            },
-            error::{Error, MalformedBytecode},
-        },
+use crate::ir::{
+    OperationKind, TerminatorKind,
+    control_flow::{
+        ControlTransfer,
+        path_condition::{BooleanVariable, BranchGuard, PathValue},
     },
-    jvm::code::ProgramCounter,
+    expression::Condition,
+    generator::{
+        bytecode_cfg::{
+            self, BranchPredicate, ReturnOperand, StructuralBlockId, StructuralTerminator,
+        },
+        error::Error,
+    },
 };
 
 type LoweredTerminator = (
@@ -40,10 +37,8 @@ impl Analyzer<'_, '_> {
     /// the lowering into an error but never change the targets (see
     /// `Analyzer::execute`).
     pub(super) fn lower_terminator(
-        &mut self,
         block: &bytecode_cfg::Block,
         frame: &mut Frame,
-        pc: ProgramCounter,
     ) -> Result<LoweredTerminator, Error> {
         let result = match &block.terminator {
             StructuralTerminator::Fallthrough { target } => {
@@ -67,14 +62,6 @@ impl Analyzer<'_, '_> {
             StructuralTerminator::Switch { cases, default } => {
                 lower_switch(cases, *default, frame)?
             }
-            StructuralTerminator::Jsr {
-                target,
-                continuation,
-            } => self.lower_jsr(*target, *continuation, frame, pc)?,
-            StructuralTerminator::Ret {
-                local,
-                continuations,
-            } => lower_ret(*local, continuations, frame, pc)?,
             StructuralTerminator::Return { operand } => {
                 let value = match operand {
                     ReturnOperand::Void => None,
@@ -89,38 +76,6 @@ impl Analyzer<'_, '_> {
             }
         };
         Ok(result)
-    }
-
-    fn lower_jsr(
-        &mut self,
-        target: StructuralBlockId,
-        continuation: StructuralBlockId,
-        frame: &mut Frame,
-        pc: ProgramCounter,
-    ) -> Result<LoweredTerminator, Error> {
-        let continuation_pc = self
-            .cfg
-            .block(continuation)
-            .ok_or_else(|| Error::internal("a jsr continuation has no structural block"))?
-            .start_pc;
-        let value = self.executor.definition_id_at(pc)?;
-        frame
-            .stack
-            .push(FrameValue::ReturnAddress(value), Category1)?;
-        Ok((
-            TerminatorKind::SubroutineCall,
-            vec![AnalyzedSuccessor {
-                target: Location::Bytecode(target),
-                transfer: ControlTransfer::SubroutineCall {
-                    continuation: continuation_pc,
-                },
-                frame: frame.clone(),
-            }],
-            Some(OperationKind::Definition {
-                value: FrameValue::Ordinary(value),
-                expr: Expression::ReturnAddress(continuation_pc),
-            }),
-        ))
     }
 }
 
@@ -183,50 +138,6 @@ fn lower_switch(
         frame: frame.clone(),
     });
     Ok((TerminatorKind::Switch { match_value }, successors, None))
-}
-
-fn lower_ret(
-    local: u16,
-    continuations: &BTreeMap<ProgramCounter, StructuralBlockId>,
-    frame: &Frame,
-    pc: ProgramCounter,
-) -> Result<LoweredTerminator, Error> {
-    let address = *frame.locals.get(local, Category1)?;
-    let FrameValue::ReturnAddress(address) = address else {
-        return Err(invalid_ret(pc));
-    };
-    if continuations.is_empty() {
-        return Err(invalid_ret(pc));
-    }
-    let successors = continuations
-        .iter()
-        .map(|(&continuation, &target)| {
-            let guard = BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
-                PathValue::Variable(FrameValue::Ordinary(address)),
-                PathValue::ReturnAddress(continuation),
-            )));
-            let transfer = ControlTransfer::SubroutineReturn {
-                continuation,
-                guard,
-            };
-            AnalyzedSuccessor {
-                target: Location::Bytecode(target),
-                transfer,
-                frame: frame.clone(),
-            }
-        })
-        .collect();
-    Ok((
-        TerminatorKind::SubroutineReturn {
-            address: FrameValue::Ordinary(address),
-        },
-        successors,
-        None,
-    ))
-}
-
-const fn invalid_ret(pc: ProgramCounter) -> Error {
-    Error::malformed(Some(pc), MalformedBytecode::InvalidSubroutineReturn)
 }
 
 fn pop_condition(

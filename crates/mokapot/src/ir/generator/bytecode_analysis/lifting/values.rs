@@ -45,7 +45,7 @@ impl Context<'_, '_, '_> {
         category: ValueCategory,
     ) -> Result<Option<OperationKind<FrameValue>>, Error> {
         let value = *self.frame.locals.get(idx, category)?;
-        if matches!(value, FrameValue::ReturnAddress(_) | FrameValue::Invalid) {
+        if matches!(value, FrameValue::Invalid) {
             let pc = self.pc;
             return Err(Error::malformed(
                 Some(pc),

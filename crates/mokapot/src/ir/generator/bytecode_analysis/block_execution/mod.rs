@@ -24,9 +24,7 @@ impl Analyzer<'_, '_> {
     /// the location. The targets come only from a structural block's terminator
     /// and exception table, never from `input`: the frames differ between
     /// executions of one location, the targets never do. `Analyzer::run` relies
-    /// on this to treat predecessor sets as monotonically growing, so a
-    /// terminator whose targets depend on the frame (e.g. resolving `ret`
-    /// continuations from it) must revisit that worklist.
+    /// on this to treat predecessor sets as monotonically growing.
     pub(super) fn execute(
         &mut self,
         location: Location,
@@ -110,9 +108,9 @@ impl Analyzer<'_, '_> {
             }
         }
 
-        let (terminator, mut successors, terminator_operation) = self
-            .lower_terminator(block, &mut frame, final_pc)
-            .map_err(|error| error.at_instruction(final_pc))?;
+        let (terminator, mut successors, terminator_operation) =
+            Self::lower_terminator(block, &mut frame)
+                .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
         }

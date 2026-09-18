@@ -43,30 +43,16 @@ struct Executor<'method> {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) enum FrameValue {
     Ordinary(SsaValueId),
-    #[display("%return_address")]
-    ReturnAddress(SsaValueId),
     #[display("%invalid")]
     Invalid,
 }
 
 impl FrameValue {
-    /// Extracts the temporary ID from either well-formed scalar frame value.
-    ///
-    /// Phi inputs may carry return-address values; ordinary scalar IR may not.
+    /// Extracts the temporary ID from a well-formed scalar frame value.
     pub(super) const fn into_ssa_value_id(self) -> Result<SsaValueId, Error> {
         match self {
-            Self::Ordinary(value) | Self::ReturnAddress(value) => Ok(value),
-            Self::Invalid => Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue)),
-        }
-    }
-
-    /// Extracts the temporary ID from an ordinary scalar frame value.
-    pub(super) const fn into_ordinary_ssa_value_id(self) -> Result<SsaValueId, Error> {
-        match self {
             Self::Ordinary(value) => Ok(value),
-            Self::ReturnAddress(_) | Self::Invalid => {
-                Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue))
-            }
+            Self::Invalid => Err(Error::malformed(None, MalformedBytecode::InvalidFrameValue)),
         }
     }
 }

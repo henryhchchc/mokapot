@@ -30,16 +30,9 @@ pub(super) struct PhiSite {
     pub(super) position: jvm::Position,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PhiKind {
-    Ordinary,
-    ReturnAddress,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PhiDefinition {
     pub(super) result: SsaValueId,
-    pub(super) kind: PhiKind,
     pub(super) inputs: BTreeMap<Predecessor, SsaValueId>,
 }
 

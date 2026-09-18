@@ -1,8 +1,8 @@
 //! A structural control-flow graph over decoded JVM bytecode.
 //!
-//! This phase deliberately precedes frame analysis. It keeps every decoded
-//! instruction, including bytecode unreachable from method entry, and records
-//! legacy `jsr`/`ret` without inferring dynamic return targets.
+//! This phase deliberately precedes frame analysis. It validates every decoded
+//! instruction, including bytecode unreachable from method entry, before
+//! partitioning supported bytecode into blocks.
 
 mod builder;
 mod fallibility;

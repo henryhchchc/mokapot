@@ -39,15 +39,6 @@ pub enum TerminatorKind<OP = ValueId> {
     /// Transfers control to one successor.
     #[display("goto")]
     Goto,
-    /// Enters a legacy bytecode subroutine.
-    #[display("subroutine call")]
-    SubroutineCall,
-    /// Returns from a legacy bytecode subroutine through an address token.
-    #[display("subroutine return {address}")]
-    SubroutineReturn {
-        /// The return-address value consumed by `ret`.
-        address: OP,
-    },
     /// Selects one of two guarded successors.
     #[display("branch")]
     Branch,
@@ -82,10 +73,6 @@ impl<OP, OUT> TryMapValues<OUT> for TerminatorKind<OP> {
     ) -> Result<TerminatorKind<OUT>, E> {
         Ok(match self {
             Self::Goto => TerminatorKind::Goto,
-            Self::SubroutineCall => TerminatorKind::SubroutineCall,
-            Self::SubroutineReturn { address } => TerminatorKind::SubroutineReturn {
-                address: remap(address)?,
-            },
             Self::Branch => TerminatorKind::Branch,
             Self::Switch { match_value } => TerminatorKind::Switch {
                 match_value: remap(match_value)?,
@@ -129,11 +116,9 @@ impl Terminator {
     pub fn uses(&self) -> HashSet<ValueId> {
         let mut uses = match &self.kind {
             TerminatorKind::Switch { match_value: value }
-            | TerminatorKind::SubroutineReturn { address: value }
             | TerminatorKind::Throw(value)
             | TerminatorKind::Return(Some(value)) => HashSet::from([*value]),
             TerminatorKind::Goto
-            | TerminatorKind::SubroutineCall
             | TerminatorKind::Branch
             | TerminatorKind::Return(None)
             | TerminatorKind::Fallible
@@ -141,12 +126,10 @@ impl Terminator {
         };
         for successor in &self.successors {
             match successor.transfer() {
-                ControlTransfer::Conditional(guard)
-                | ControlTransfer::SubroutineReturn { guard, .. } => {
+                ControlTransfer::Conditional(guard) => {
                     uses.extend(guard.predicates().flat_map(Predicate::uses));
                 }
                 ControlTransfer::Unconditional
-                | ControlTransfer::SubroutineCall { .. }
                 | ControlTransfer::Exception(_)
                 | ControlTransfer::Unwind => {}
             }
@@ -163,17 +146,7 @@ impl fmt::Display for Terminator {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ControlTransfer, EdgeId, InstructionId, Successor, Terminator, TerminatorKind,
-        TryMapValues, ValueId,
-    };
-    use crate::{
-        ir::{
-            control_flow::path_condition::{BooleanVariable, BranchGuard, PathValue},
-            expression::Condition,
-        },
-        jvm::code::ProgramCounter,
-    };
+    use super::{TerminatorKind, TryMapValues};
 
     #[test]
     fn maps_value_bearing_terminators() {
@@ -192,47 +165,6 @@ mod tests {
         assert_eq!(
             TerminatorKind::Throw(1_u8).try_map_values(|_| Err::<u16, _>("unmapped")),
             Err("unmapped")
-        );
-        assert_eq!(
-            TerminatorKind::SubroutineReturn { address: 2_u8 }
-                .try_map_values(|value| Ok::<_, ()>(u16::from(value) + 10)),
-            Ok(TerminatorKind::SubroutineReturn { address: 12_u16 })
-        );
-
-        assert_eq!(
-            TerminatorKind::<u8>::SubroutineCall.to_string(),
-            "subroutine call"
-        );
-        assert_eq!(
-            TerminatorKind::SubroutineReturn { address: 3_u8 }.to_string(),
-            "subroutine return 3"
-        );
-    }
-
-    #[test]
-    fn uses_include_subroutine_return_address_and_guard_values() {
-        let continuation = ProgramCounter::from(0x12);
-        let terminator = Terminator {
-            id: InstructionId::new(0),
-            kind: TerminatorKind::SubroutineReturn {
-                address: ValueId::new(1),
-            },
-            successors: vec![Successor {
-                id: EdgeId::new(0),
-                target: super::BlockId::new(1),
-                transfer: ControlTransfer::SubroutineReturn {
-                    continuation,
-                    guard: BranchGuard::of(BooleanVariable::Positive(Condition::Equal(
-                        PathValue::Variable(ValueId::new(2)),
-                        PathValue::ReturnAddress(continuation),
-                    ))),
-                },
-            }],
-        };
-
-        assert_eq!(
-            terminator.uses(),
-            [ValueId::new(1), ValueId::new(2)].into_iter().collect()
         );
     }
 }

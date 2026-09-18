@@ -13,10 +13,7 @@ pub enum MalformedBytecode {
     /// An instruction that must fall through has no following instruction.
     #[display("an instruction has no required fallthrough")]
     MissingFallthrough,
-    /// A legacy `ret` does not contain a valid return address for its context.
-    #[display("a legacy subroutine return address is invalid")]
-    InvalidSubroutineReturn,
-    /// An ordinary value operation observed a legacy or unavailable frame value.
+    /// An ordinary value operation observed an unavailable frame value.
     #[display("an instruction uses an unavailable frame value")]
     InvalidFrameValue,
     /// An exception-table range is empty, reversed, or not instruction-aligned.
@@ -25,6 +22,15 @@ pub enum MalformedBytecode {
     /// A `tableswitch` range and jump table have different cardinalities.
     #[display("a tableswitch range does not match its jump table")]
     InvalidTableSwitch,
+}
+
+/// A well-formed JVM bytecode feature that Moka IR does not support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+#[non_exhaustive]
+pub enum UnsupportedBytecode {
+    /// Legacy `jsr`/`ret` subroutines.
+    #[display("legacy jsr/ret subroutines are unsupported")]
+    LegacySubroutine,
 }
 
 /// An error that occurs when generating Moka IR.
@@ -50,6 +56,14 @@ pub enum Error {
         pc: Option<ProgramCounter>,
         /// The invalid bytecode condition.
         kind: MalformedBytecode,
+    },
+    /// JVM bytecode uses a feature that Moka IR intentionally does not model.
+    #[error("unsupported JVM bytecode at instruction {pc}: {kind}")]
+    UnsupportedBytecode {
+        /// The unsupported instruction's location.
+        pc: ProgramCounter,
+        /// The unsupported bytecode feature.
+        kind: UnsupportedBytecode,
     },
     /// Private construction phases disagreed about an intermediate invariant.
     ///

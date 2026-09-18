@@ -3,16 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     fallibility::Fallibility,
     instruction_flow::InstructionFlow,
-    model::{
-        Block, BytecodeCfg, ExceptionalTarget, HandlerEntry, HandlerId, StructuralBlockId,
-        StructuralTerminator,
-    },
+    model::{Block, BytecodeCfg, ExceptionalTarget, HandlerEntry, HandlerId, StructuralBlockId},
 };
 use crate::{
-    ir::generator::error::{Error, MalformedBytecode},
+    ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
     jvm::{
         Method,
-        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
+        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter, WideInstruction},
     },
 };
 
@@ -42,8 +39,7 @@ impl<'method> Builder<'method> {
         let leaders = self.collect_leaders(entry_pc)?;
         let (groups, block_by_start_pc) = self.partition(&leaders)?;
         let handlers = self.build_handlers(&block_by_start_pc)?;
-        let mut blocks = self.build_blocks(groups, &block_by_start_pc)?;
-        Self::resolve_ret_continuations(&mut blocks, &handlers)?;
+        let blocks = self.build_blocks(groups, &block_by_start_pc)?;
 
         let entry = Self::block_id_at_pc(&block_by_start_pc, entry_pc)?;
         Ok(BytecodeCfg {
@@ -51,93 +47,6 @@ impl<'method> Builder<'method> {
             blocks,
             handlers,
         })
-    }
-
-    fn resolve_ret_continuations(
-        blocks: &mut [Block],
-        handlers: &[HandlerEntry],
-    ) -> Result<(), Error> {
-        let calls = blocks
-            .iter()
-            .filter_map(|block| match block.terminator {
-                StructuralTerminator::Jsr {
-                    target,
-                    continuation,
-                } => Some((target, continuation)),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        let mut candidates =
-            BTreeMap::<StructuralBlockId, BTreeMap<ProgramCounter, StructuralBlockId>>::new();
-
-        for (subroutine_entry, continuation) in calls {
-            let continuation_pc = Self::block_at(blocks, continuation)
-                .ok_or_else(|| Error::internal("a jsr continuation has no structural block"))?
-                .start_pc;
-            let mut pending = BTreeSet::from([subroutine_entry]);
-            let mut visited = BTreeSet::new();
-            while let Some(id) = pending.pop_first() {
-                if !visited.insert(id) {
-                    continue;
-                }
-                let block = Self::block_at(blocks, id).ok_or_else(|| {
-                    Error::internal("a subroutine traversal reached no structural block")
-                })?;
-                for target in &block.exceptional_successors {
-                    if let ExceptionalTarget::Handler(handler) = target {
-                        pending.insert(
-                            handlers
-                                .get(handler.index())
-                                .ok_or_else(|| {
-                                    Error::internal("an exception edge has no handler entry")
-                                })?
-                                .target,
-                        );
-                    }
-                }
-                match &block.terminator {
-                    StructuralTerminator::Fallthrough { target }
-                    | StructuralTerminator::Goto { target } => {
-                        pending.insert(*target);
-                    }
-                    StructuralTerminator::Branch {
-                        taken, fallthrough, ..
-                    } => {
-                        pending.extend([*taken, *fallthrough]);
-                    }
-                    StructuralTerminator::Switch { cases, default } => {
-                        pending.extend(cases.values().copied());
-                        pending.insert(*default);
-                    }
-                    // Nested subroutines resume in the current subroutine at the continuation.
-                    StructuralTerminator::Jsr { continuation, .. } => {
-                        pending.insert(*continuation);
-                    }
-                    StructuralTerminator::Ret { .. } => {
-                        candidates
-                            .entry(id)
-                            .or_default()
-                            .insert(continuation_pc, continuation);
-                    }
-                    StructuralTerminator::Return { .. } | StructuralTerminator::Throw => {}
-                }
-            }
-        }
-
-        for (ret, continuations) in candidates {
-            let block = blocks
-                .get_mut(ret.index())
-                .ok_or_else(|| Error::internal("a ret candidate has no structural block"))?;
-            let StructuralTerminator::Ret {
-                continuations: resolved,
-                ..
-            } = &mut block.terminator
-            else {
-                return Err(Error::internal("a ret candidate is not a ret block"));
-            };
-            *resolved = continuations;
-        }
-        Ok(())
     }
 
     fn collect_leaders(&self, entry_pc: ProgramCounter) -> Result<BTreeSet<ProgramCounter>, Error> {
@@ -186,16 +95,7 @@ impl<'method> Builder<'method> {
                     }
                     self.insert_instruction_after(&mut leaders, pc);
                 }
-                InstructionFlow::Jsr {
-                    target,
-                    continuation,
-                } => {
-                    leaders.insert(target);
-                    leaders.insert(continuation);
-                }
-                InstructionFlow::Ret { .. }
-                | InstructionFlow::Return { .. }
-                | InstructionFlow::Throw => {
+                InstructionFlow::Return { .. } | InstructionFlow::Throw => {
                     self.insert_instruction_after(&mut leaders, pc);
                 }
             }
@@ -240,6 +140,18 @@ impl<'method> Builder<'method> {
 
     fn validate_instructions(&self) -> Result<(), Error> {
         for (&pc, instruction) in self.body.instructions.iter() {
+            if matches!(
+                instruction,
+                Instruction::Jsr(_)
+                    | Instruction::JsrW(_)
+                    | Instruction::Ret(_)
+                    | Instruction::Wide(WideInstruction::Ret(_))
+            ) {
+                return Err(Error::UnsupportedBytecode {
+                    pc,
+                    kind: UnsupportedBytecode::LegacySubroutine,
+                });
+            }
             if let Instruction::TableSwitch {
                 range,
                 jump_targets,
@@ -351,11 +263,6 @@ impl<'method> Builder<'method> {
                 })
             })
             .collect()
-    }
-
-    /// Looks up a block by its dense identity, which is its position.
-    fn block_at(blocks: &[Block], id: StructuralBlockId) -> Option<&Block> {
-        blocks.get(id.index())
     }
 
     fn block_id_at_pc(
