@@ -122,6 +122,7 @@ impl<'method> Builder<'method> {
                     Vec::default()
                 };
                 let block = JvmBlock {
+                    start_pc,
                     end_pc,
                     exit,
                     exception_handlers,
@@ -179,7 +180,7 @@ impl<'method> Builder<'method> {
         effective_handlers
             .into_iter()
             .map(|entry| ExceptionalTarget::Handler {
-                id: entry.handler_pc.into(),
+                block: entry.handler_pc.into(),
                 catch_type: entry.catch_type.clone(),
             })
             .chain(unwind)

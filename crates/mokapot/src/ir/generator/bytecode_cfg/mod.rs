@@ -8,9 +8,7 @@ mod builder;
 mod fallibility;
 mod model;
 
-pub(super) use model::{
-    BlockExit, ExceptionalTarget, HandlerId, JvmBlock, JvmBlockGraph, StructuralBlockId,
-};
+pub(super) use model::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, StructuralBlockId};
 
 use super::error::Error;
 use crate::jvm::Method;

@@ -4,41 +4,23 @@ use derive_more::From;
 
 use crate::jvm::{code::ProgramCounter, references::ClassRef};
 
-/// The identity of a structural bytecode block: the program counter of its
-/// first instruction.
+/// The identity of a structural bytecode block.
 ///
-/// A block's start PC is unique and stable, so a target PC *is* the identity of
-/// the block it starts, and successors resolve without a lookup table.
+/// The identity is minted from the program counter at which the block starts,
+/// because a PC is unique and therefore yields distinct identities without a
+/// lookup table. It is otherwise opaque: a block's position is read from
+/// [`JvmBlock::start_pc`], never recovered from its identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From)]
 pub(crate) struct StructuralBlockId(#[from] ProgramCounter);
-
-impl StructuralBlockId {
-    pub(crate) const fn pc(self) -> ProgramCounter {
-        self.0
-    }
-}
-
-/// The identity of a synthetic exception-handler entry: the handler's program
-/// counter.
-///
-/// Distinct handler PCs are distinct entries, so exception-table arms that
-/// share a handler share its identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From)]
-pub(crate) struct HandlerId(#[from] ProgramCounter);
-
-impl HandlerId {
-    pub(crate) const fn pc(self) -> ProgramCounter {
-        self.0
-    }
-}
 
 /// The target of an exceptional structural control-flow edge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ExceptionalTarget {
-    /// A synthetic entry that installs the caught exception before its block.
+    /// A synthetic entry that installs the caught exception before entering the
+    /// block at `handler_pc`.
     Handler {
-        /// The handler entry selected by this exception-table arm.
-        id: HandlerId,
+        /// The bytecode block the selected handler enters.
+        block: StructuralBlockId,
         /// The exception type selected by this arm, or `None` for catch-all.
         catch_type: Option<ClassRef>,
     },
@@ -69,9 +51,12 @@ pub(crate) enum BlockExit {
 
 /// A maximal bytecode block ending at an ordinary transfer or fallible instruction.
 ///
-/// Its start PC is its key in [`JvmBlockGraph::blocks`].
+/// It is keyed by its identity in [`JvmBlockGraph::blocks`]; its bytecode span
+/// is carried by its own `start_pc` and `end_pc`.
 #[derive(Debug, Clone)]
 pub(crate) struct JvmBlock {
+    /// The first decoded instruction in the block.
+    pub start_pc: ProgramCounter,
     /// The final decoded instruction in the block.
     pub end_pc: ProgramCounter,
     /// The ordinary control-flow topology after the final instruction.
@@ -82,13 +67,13 @@ pub(crate) struct JvmBlock {
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
 ///
-/// Blocks are keyed by their start PC, which is also their identity, so no
-/// renumbering or PC-to-index table is needed.
+/// Blocks are keyed by an opaque identity, so no renumbering or PC-to-index
+/// table is needed; bytecode positions live on [`JvmBlock`].
 #[derive(Debug, Clone)]
 pub(crate) struct JvmBlockGraph {
     /// The block containing the first decoded instruction.
     pub entry: StructuralBlockId,
-    /// The blocks, keyed by start PC.
+    /// The blocks, keyed by identity.
     pub blocks: BTreeMap<StructuralBlockId, JvmBlock>,
 }
 
@@ -98,7 +83,7 @@ impl JvmBlockGraph {
         self.entry
     }
 
-    /// Looks up a bytecode block by its identity, which is its start PC.
+    /// Looks up a bytecode block by its identity.
     pub fn block(&self, id: StructuralBlockId) -> Option<&JvmBlock> {
         self.blocks.get(&id)
     }

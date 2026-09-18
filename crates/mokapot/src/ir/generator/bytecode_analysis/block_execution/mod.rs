@@ -28,7 +28,7 @@ impl Analyzer<'_, '_> {
     ) -> Result<AnalyzedBlock, Error> {
         match location {
             Location::Bytecode(id) => self.execute_bytecode(id, input),
-            Location::Handler(id) => Self::execute_handler(id, input),
+            Location::Handler(block) => Self::execute_handler(block, input),
             Location::Unwind => Ok(AnalyzedBlock {
                 caught_exception: None,
                 operations: Vec::new(),
@@ -40,9 +40,9 @@ impl Analyzer<'_, '_> {
         }
     }
 
-    fn execute_handler(id: bytecode_cfg::HandlerId, input: Frame) -> Result<AnalyzedBlock, Error> {
+    fn execute_handler(block: StructuralBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
-        let target = Location::Bytecode(StructuralBlockId::from(id.pc()));
+        let target = Location::Bytecode(block);
         Ok(AnalyzedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
@@ -71,7 +71,7 @@ impl Analyzer<'_, '_> {
         let mut operations = Vec::new();
         let mut exceptional_input = None;
 
-        let mut pc = id.pc();
+        let mut pc = block.start_pc;
         loop {
             let instruction =
                 self.executor.body.instruction_at(pc).ok_or_else(|| {
@@ -138,9 +138,9 @@ impl Analyzer<'_, '_> {
         output_frames: &mut BTreeMap<Location, Frame>,
     ) -> Result<AnalyzedEdge, Error> {
         match target {
-            bytecode_cfg::ExceptionalTarget::Handler { id, catch_type } => {
-                let location = Location::Handler(*id);
-                let caught = self.caught_exception(*id)?;
+            bytecode_cfg::ExceptionalTarget::Handler { block, catch_type } => {
+                let location = Location::Handler(*block);
+                let caught = self.caught_exception(*block)?;
                 if let Entry::Vacant(output) = output_frames.entry(location) {
                     output.insert(input.clone().exception_handler_frame(caught)?);
                 }

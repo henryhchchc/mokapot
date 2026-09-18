@@ -11,6 +11,7 @@ use crate::ir::{ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
     pub(super) fn recompute_entry(&mut self, location: Location) -> Result<bool, Error> {
+        let location_pc = self.location_pc(location);
         let contributions = self
             .locations
             .get(&location)
@@ -39,11 +40,11 @@ impl Analyzer<'_, '_> {
                         allocator,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(location.pc()))?;
+                .map_err(|error| error.at_instruction_if_present(location_pc))?;
         }
 
         let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
-            .map_err(|error| error.at_instruction_if_present(location.pc()))?;
+            .map_err(|error| error.at_instruction_if_present(location_pc))?;
 
         self.phi_definitions
             .retain(|site, _| site.location != location);

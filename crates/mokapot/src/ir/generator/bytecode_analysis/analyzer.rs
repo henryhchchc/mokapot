@@ -11,11 +11,11 @@ use crate::{
     ir::{
         ValueId,
         generator::{
-            bytecode_cfg::{HandlerId, JvmBlockGraph},
+            bytecode_cfg::{JvmBlockGraph, StructuralBlockId},
             error::Error,
         },
     },
-    jvm::Method,
+    jvm::{Method, code::ProgramCounter},
 };
 
 pub(super) struct Analyzer<'method, 'cfg> {
@@ -23,23 +23,35 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) executor: Executor<'method>,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
-    pub(super) caught_exceptions: BTreeMap<HandlerId, ValueId>,
+    pub(super) caught_exceptions: BTreeMap<StructuralBlockId, ValueId>,
 }
 
 impl Analyzer<'_, '_> {
-    /// Interns the identity of the value caught by `handler`.
+    /// Interns the identity of the value caught by the handler entering `block`.
     ///
     /// Every exceptional arm into one handler-entry location must carry the
     /// *same* value: distinct values would merge into a phi at stack position 0
     /// in the handler's entry frame, and `execute_handler` requires that frame
     /// to hold a single stack value.
-    pub(super) fn caught_exception(&mut self, handler: HandlerId) -> Result<ValueId, Error> {
-        if let Some(&value) = self.caught_exceptions.get(&handler) {
+    pub(super) fn caught_exception(&mut self, block: StructuralBlockId) -> Result<ValueId, Error> {
+        if let Some(&value) = self.caught_exceptions.get(&block) {
             return Ok(value);
         }
         let value = self.executor.new_value_id()?;
-        self.caught_exceptions.insert(handler, value);
+        self.caught_exceptions.insert(block, value);
         Ok(value)
+    }
+
+    /// The PC to attribute a diagnostic for `location` to, if it has one.
+    ///
+    /// A bytecode and a handler location both point at the start of their
+    /// block; only the synthetic unwind exit has no PC.
+    pub(super) fn location_pc(&self, location: Location) -> Option<ProgramCounter> {
+        let block = match location {
+            Location::Bytecode(id) | Location::Handler(id) => self.cfg.block(id),
+            Location::Unwind => None,
+        };
+        block.map(|block| block.start_pc)
     }
 }
 
