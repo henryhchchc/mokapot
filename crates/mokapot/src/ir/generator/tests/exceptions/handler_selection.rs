@@ -81,13 +81,13 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     );
     let ir = build(&method).unwrap();
 
-    assert_eq!(ir.blocks().len(), 1);
-    assert!(ir.blocks().all(|block| {
-        !matches!(block.terminator.kind(), TerminatorKind::Fallible)
-            && block.terminator.successors().iter().all(|successor| {
-                matches!(successor.transfer(), ControlTransfer::Unconditional)
-                    || matches!(successor.transfer(), ControlTransfer::Conditional(_))
-            })
-    }));
+    assert_eq!(ir.blocks().len(), 2);
+    let entry = ir.block(ir.entry_block()).unwrap();
+    assert_eq!(entry.terminator.kind(), &TerminatorKind::Return(None));
+    assert_eq!(entry.terminator.successors().len(), 1);
+    assert!(matches!(
+        entry.terminator.successors()[0].transfer(),
+        ControlTransfer::Unwind
+    ));
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
 }

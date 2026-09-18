@@ -60,7 +60,7 @@ fn unhandled_synchronized_return_reaches_unwind() {
 }
 
 #[test]
-fn explicit_monitor_operations_do_not_make_returns_fallible() {
+fn explicit_monitor_operations_have_fallible_returns() {
     let method = method(
         [
             (0, Instruction::ALoad0),
@@ -72,12 +72,21 @@ fn explicit_monitor_operations_do_not_make_returns_fallible() {
     );
     let ir = build(&method).unwrap();
     let return_terminator = terminator_at(&ir, 2.into());
-    assert!(return_terminator.successors().is_empty());
+    assert_eq!(return_terminator.successors().len(), 1);
+    assert!(matches!(
+        return_terminator.successors()[0].transfer(),
+        ControlTransfer::Unwind
+    ));
 }
 
 #[test]
-fn monitor_free_nonsynchronized_return_remains_terminal() {
+fn monitor_free_nonsynchronized_return_is_conservatively_fallible() {
     let method = method([(0, Instruction::Return)], "()V", vec![]);
     let ir = build(&method).unwrap();
-    assert!(terminator_at(&ir, 0.into()).successors().is_empty());
+    let return_terminator = terminator_at(&ir, 0.into());
+    assert_eq!(return_terminator.successors().len(), 1);
+    assert!(matches!(
+        return_terminator.successors()[0].transfer(),
+        ControlTransfer::Unwind
+    ));
 }

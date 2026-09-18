@@ -2,9 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 
-use super::{
-    BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId, fallibility::Fallibility,
-};
+use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId, fallibility};
 use crate::{
     ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
     jvm::{
@@ -15,14 +13,12 @@ use crate::{
 
 pub(super) struct Builder<'method> {
     body: &'method MethodBody,
-    fallibility: Fallibility,
 }
 
 impl<'method> Builder<'method> {
     pub(super) fn for_method(method: &'method Method) -> Result<Self, Error> {
         let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
-        let fallibility = Fallibility::for_method(method);
-        Ok(Self { body, fallibility })
+        Ok(Self { body })
     }
 
     pub(super) fn build(self) -> Result<JvmBlockGraph, Error> {
@@ -60,7 +56,7 @@ impl<'method> Builder<'method> {
                 ControlFlow::Terminal => {
                     leaders.extend(self.body.instructions.next_pc_of(&pc));
                 }
-                ControlFlow::Fallthrough if self.fallibility.can_throw(instruction) => {
+                ControlFlow::Fallthrough if fallibility::can_throw(instruction) => {
                     leaders.insert(self.require_next_pc(pc)?);
                 }
                 ControlFlow::Fallthrough => {}
@@ -115,7 +111,7 @@ impl<'method> Builder<'method> {
                     .instruction_at(end_pc)
                     .expect("a structural block PC comes from decoded bytecode");
                 let exit = self.build_exit(end_pc, instruction)?;
-                let exception_handlers = if self.fallibility.can_throw(instruction) {
+                let exception_handlers = if fallibility::can_throw(instruction) {
                     self.exceptional_successors(end_pc)
                 } else {
                     Vec::default()

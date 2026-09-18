@@ -13,9 +13,6 @@ pub enum MalformedBytecode {
     /// An instruction that must fall through has no following instruction.
     #[display("an instruction has no required fallthrough")]
     MissingFallthrough,
-    /// An exception-table range is empty, reversed, or not instruction-aligned.
-    #[display("an exception-table range is invalid")]
-    InvalidExceptionRange,
     /// A `tableswitch` range and jump table have different cardinalities.
     #[display("a tableswitch range does not match its jump table")]
     InvalidTableSwitch,

@@ -47,7 +47,7 @@ fn switch_retains_parallel_successor_arms() {
             .windows(2)
             .all(|pair| pair[0].target() == pair[1].target())
     );
-    assert_eq!(ir.control_flow_graph().edges().count(), 3);
+    assert_eq!(ir.control_flow_graph().edges().count(), 4);
 }
 
 #[test]
@@ -253,7 +253,7 @@ fn normally_reachable_handler_still_starts_a_block() {
         .unwrap()
         .target();
 
-    assert_eq!(ir.blocks().len(), 3);
+    assert_eq!(ir.blocks().len(), 4);
     assert_ne!(handler, ir.entry_block());
     assert_ne!(handler, normal);
     assert_eq!(
