@@ -7,7 +7,7 @@ mod output;
 mod values;
 
 pub use frame::FrameError;
-pub(super) use output::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
+pub(super) use output::{PhiCandidate, ScalarBlock, ScalarGraph};
 
 use self::analysis::Analyzer;
 use crate::ir::generator::error::Error;

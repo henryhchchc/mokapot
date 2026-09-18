@@ -8,13 +8,6 @@ use crate::{
     jvm::code::ProgramCounter,
 };
 
-/// One outgoing arm from an SSA block.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Successor {
-    pub target: BlockId,
-    pub transfer: ControlTransfer,
-}
-
 /// A block whose JVM-frame operands have all been lowered to scalar values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ScalarBlock {
@@ -23,7 +16,7 @@ pub(crate) struct ScalarBlock {
     pub operations: Vec<(ProgramCounter, OperationKind)>,
     pub terminator: TerminatorKind,
     pub terminator_source: Option<ProgramCounter>,
-    pub successors: Vec<Successor>,
+    pub successors: Vec<(BlockId, ControlTransfer)>,
 }
 
 /// A predecessor-indexed scalar phi candidate and its placement.

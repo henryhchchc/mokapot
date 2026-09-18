@@ -149,14 +149,12 @@ fn materialize_block(
     let successors = block
         .successors
         .into_iter()
-        .map(|mut successor| {
-            successor
-                .transfer
-                .try_remap_values(&mut |value| allocation.resolve(value))?;
+        .map(|(target, mut transfer)| {
+            transfer.try_remap_values(&mut |value| allocation.resolve(value))?;
             Ok(Successor {
                 id: allocation.edge()?,
-                target: successor.target,
-                transfer: successor.transfer,
+                target,
+                transfer,
             })
         })
         .collect::<Result<_, Error>>()?;

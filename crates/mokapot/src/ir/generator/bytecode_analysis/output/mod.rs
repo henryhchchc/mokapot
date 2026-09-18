@@ -2,7 +2,7 @@
 
 mod model;
 
-pub(crate) use model::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
+pub(crate) use model::{PhiCandidate, ScalarBlock, ScalarGraph};
 
 use std::collections::BTreeMap;
 
@@ -54,10 +54,7 @@ pub(super) fn materialize(
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
-            successors: vec![Successor {
-                target: entry_block,
-                transfer: ControlTransfer::Unconditional,
-            }],
+            successors: vec![(entry_block, ControlTransfer::Unconditional)],
         })
     });
     let location_blocks = analyzed_locations.iter().map(|location| {
@@ -144,8 +141,7 @@ fn materialize_block(
             let target = *block_ids_by_location
                 .get(&successor.target)
                 .ok_or_else(|| Error::internal("a successor target has no scalar block"))?;
-            let transfer = successor.transfer;
-            Ok(Successor { target, transfer })
+            Ok((target, successor.transfer))
         })
         .collect::<Result<_, Error>>()?;
     let operations = analyzed.operations;

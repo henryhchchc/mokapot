@@ -1,7 +1,5 @@
 use crate::{
-    ir::{
-        BlockId, OperationKind, TerminatorKind, ValueId, generator::bytecode_analysis::Successor,
-    },
+    ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
     jvm::code::ProgramCounter,
 };
 
@@ -13,7 +11,7 @@ pub(crate) struct Block {
     pub operations: Vec<(ProgramCounter, OperationKind)>,
     pub terminator: TerminatorKind,
     pub terminator_source: Option<ProgramCounter>,
-    pub successors: Vec<Successor>,
+    pub successors: Vec<(BlockId, ControlTransfer)>,
 }
 
 /// A retained SSA phi and its predecessor-indexed inputs.
