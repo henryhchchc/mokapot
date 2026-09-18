@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use derive_more::From;
+
 use crate::jvm::{code::ProgramCounter, references::ClassRef};
 
 /// The identity of a structural bytecode block: the program counter of its
@@ -7,14 +9,10 @@ use crate::jvm::{code::ProgramCounter, references::ClassRef};
 ///
 /// A block's start PC is unique and stable, so a target PC *is* the identity of
 /// the block it starts, and successors resolve without a lookup table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct StructuralBlockId(ProgramCounter);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From)]
+pub(crate) struct StructuralBlockId(#[from] ProgramCounter);
 
 impl StructuralBlockId {
-    pub(crate) const fn from_pc(pc: ProgramCounter) -> Self {
-        Self(pc)
-    }
-
     pub(crate) const fn pc(self) -> ProgramCounter {
         self.0
     }
@@ -25,14 +23,10 @@ impl StructuralBlockId {
 ///
 /// Distinct handler PCs are distinct entries, so exception-table arms that
 /// share a handler share its identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct HandlerId(ProgramCounter);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From)]
+pub(crate) struct HandlerId(#[from] ProgramCounter);
 
 impl HandlerId {
-    pub(crate) const fn from_pc(pc: ProgramCounter) -> Self {
-        Self(pc)
-    }
-
     pub(crate) const fn pc(self) -> ProgramCounter {
         self.0
     }
@@ -75,15 +69,15 @@ pub(crate) enum BlockExit {
 
 /// A maximal bytecode block ending at an ordinary transfer or fallible instruction.
 ///
-/// Its start PC is its key in [`BytecodeCfg::blocks`].
+/// Its start PC is its key in [`JvmBlockGraph::blocks`].
 #[derive(Debug, Clone)]
-pub(crate) struct Block {
+pub(crate) struct JvmBlock {
     /// The final decoded instruction in the block.
     pub end_pc: ProgramCounter,
     /// The ordinary control-flow topology after the final instruction.
     pub exit: BlockExit,
     /// Ordered exceptional successors of the final fallible instruction.
-    pub exceptional_successors: Vec<ExceptionalTarget>,
+    pub exception_handlers: Vec<ExceptionalTarget>,
 }
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
@@ -91,21 +85,21 @@ pub(crate) struct Block {
 /// Blocks are keyed by their start PC, which is also their identity, so no
 /// renumbering or PC-to-index table is needed.
 #[derive(Debug, Clone)]
-pub(crate) struct BytecodeCfg {
+pub(crate) struct JvmBlockGraph {
     /// The block containing the first decoded instruction.
     pub entry: StructuralBlockId,
     /// The blocks, keyed by start PC.
-    pub blocks: BTreeMap<ProgramCounter, Block>,
+    pub blocks: BTreeMap<StructuralBlockId, JvmBlock>,
 }
 
-impl BytecodeCfg {
+impl JvmBlockGraph {
     /// The block containing the first decoded instruction.
     pub const fn entry_block(&self) -> StructuralBlockId {
         self.entry
     }
 
     /// Looks up a bytecode block by its identity, which is its start PC.
-    pub fn block(&self, id: StructuralBlockId) -> Option<&Block> {
-        self.blocks.get(&id.pc())
+    pub fn block(&self, id: StructuralBlockId) -> Option<&JvmBlock> {
+        self.blocks.get(&id)
     }
 }

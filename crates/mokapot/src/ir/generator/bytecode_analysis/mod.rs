@@ -27,7 +27,7 @@ use crate::{
 
 pub(super) fn analyze(
     method: &Method,
-    cfg: &super::bytecode_cfg::BytecodeCfg,
+    cfg: &super::bytecode_cfg::JvmBlockGraph,
 ) -> Result<scalar::ScalarGraph, Error> {
     Analyzer::new(method, cfg)?.run()
 }

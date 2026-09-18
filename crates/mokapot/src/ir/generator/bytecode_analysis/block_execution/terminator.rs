@@ -27,13 +27,13 @@ impl Analyzer<'_, '_> {
     /// Lowers the structural terminator of `block`, appending its successors.
     ///
     pub(super) fn lower_terminator(
-        block: &bytecode_cfg::Block,
+        block: &bytecode_cfg::JvmBlock,
         instruction: &Instruction,
         frame: &mut Frame,
     ) -> Result<LoweredTerminator, Error> {
         let result = match &block.exit {
             BlockExit::Fallthrough { target } => {
-                let terminator_kind = if block.exceptional_successors.is_empty() {
+                let terminator_kind = if block.exception_handlers.is_empty() {
                     TerminatorKind::Goto
                 } else {
                     TerminatorKind::Fallible

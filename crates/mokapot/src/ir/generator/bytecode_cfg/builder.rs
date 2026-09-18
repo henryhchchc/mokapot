@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use super::{
     fallibility::Fallibility,
-    model::{Block, BlockExit, BytecodeCfg, ExceptionalTarget, HandlerId, StructuralBlockId},
+    model::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, StructuralBlockId},
 };
 use crate::{
     ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
@@ -26,20 +26,16 @@ impl<'method> Builder<'method> {
         Ok(Self { body, fallibility })
     }
 
-    pub(super) fn build(self) -> Result<BytecodeCfg, Error> {
+    pub(super) fn build(self) -> Result<JvmBlockGraph, Error> {
         let (entry_pc, _) = self
             .body
             .instructions
             .entry_point()
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
         let block_leaders = self.block_leaders(entry_pc)?;
-        let groups = self.partition(&block_leaders);
-        let blocks = self.build_blocks(groups)?;
-
-        Ok(BytecodeCfg {
-            entry: StructuralBlockId::from_pc(entry_pc),
-            blocks,
-        })
+        let blocks = self.build_blocks(&block_leaders)?;
+        let entry = StructuralBlockId::from(entry_pc);
+        Ok(JvmBlockGraph { entry, blocks })
     }
 
     /// Collects every PC that starts a block, and verifies each is decoded.
@@ -92,52 +88,45 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
     }
 
-    /// Groups the decoded instruction PCs under the leader that starts each block.
-    fn partition(&self, leaders: &BTreeSet<ProgramCounter>) -> Vec<BlockGroup> {
-        let mut groups: Vec<BlockGroup> = Vec::with_capacity(leaders.len());
-        for (pc, _) in self.body.instructions.iter() {
-            if leaders.contains(&pc) {
-                groups.push(BlockGroup {
-                    start_pc: pc,
-                    end_pc: pc,
-                });
-            } else {
-                // The entry PC is always a leader, so a non-leader always has a block to extend.
-                let group = groups.last_mut().expect("the entry PC is always a leader");
-                group.end_pc = pc;
-            }
-        }
-        groups
-    }
-
-    /// Builds every block together with its exit and exceptional
-    /// successors, which follow from the block's final instruction alone.
+    /// Builds every block, deriving each block's exit and exceptional
+    /// successors from its final instruction alone.
+    ///
+    /// A block spans from its leader up to the instruction before the next
+    /// leader, so the leaders alone determine both the blocks and their spans.
     fn build_blocks(
         &self,
-        groups: Vec<BlockGroup>,
-    ) -> Result<BTreeMap<ProgramCounter, Block>, Error> {
-        groups
-            .into_iter()
-            .map(|group| {
-                let final_pc = group.end_pc;
+        leaders: &BTreeSet<ProgramCounter>,
+    ) -> Result<BTreeMap<StructuralBlockId, JvmBlock>, Error> {
+        let instructions = &self.body.instructions;
+        let last_pc = instructions
+            .iter()
+            .next_back()
+            .expect("a body with an entry point has instructions")
+            .0;
+        leaders
+            .iter()
+            .map(|&start_pc| {
+                let end_pc = leaders.range(start_pc..).nth(1).map_or(last_pc, |&next| {
+                    instructions
+                        .prev_pc_of(&next)
+                        .expect("a later leader is preceded by the previous leader")
+                });
                 let instruction = self
                     .body
-                    .instruction_at(final_pc)
+                    .instruction_at(end_pc)
                     .expect("a structural block PC comes from decoded bytecode");
-                let exit = self.build_exit(final_pc, instruction)?;
-                let exceptional_successors = if self.fallibility.can_throw(instruction) {
-                    self.exceptional_successors(final_pc)
+                let exit = self.build_exit(end_pc, instruction)?;
+                let exception_handlers = if self.fallibility.can_throw(instruction) {
+                    self.exceptional_successors(end_pc)
                 } else {
-                    Vec::new()
+                    Vec::default()
                 };
-                Ok((
-                    group.start_pc,
-                    Block {
-                        end_pc: group.end_pc,
-                        exit,
-                        exceptional_successors,
-                    },
-                ))
+                let block = JvmBlock {
+                    end_pc,
+                    exit,
+                    exception_handlers,
+                };
+                Ok((start_pc.into(), block))
             })
             .collect()
     }
@@ -149,25 +138,25 @@ impl<'method> Builder<'method> {
     ) -> Result<BlockExit, Error> {
         let block_exit = match instruction.control_flow() {
             ControlFlow::Branch(target) => BlockExit::Branch {
-                taken: StructuralBlockId::from_pc(target),
-                fallthrough: StructuralBlockId::from_pc(self.require_next_pc(pc)?),
+                taken: target.into(),
+                fallthrough: self.require_next_pc(pc)?.into(),
             },
             ControlFlow::Goto(target) => BlockExit::Goto {
-                target: StructuralBlockId::from_pc(target),
+                target: target.into(),
             },
             ControlFlow::Switch(targets, default) => {
                 let cases = targets
                     .into_iter()
-                    .map(|(case, target)| (case, StructuralBlockId::from_pc(target)))
+                    .map(|(case, target)| (case, target.into()))
                     .collect();
                 BlockExit::Switch {
                     cases,
-                    default: StructuralBlockId::from_pc(default),
+                    default: default.into(),
                 }
             }
             ControlFlow::Terminal => BlockExit::Terminal,
             ControlFlow::Fallthrough => BlockExit::Fallthrough {
-                target: StructuralBlockId::from_pc(self.require_next_pc(pc)?),
+                target: self.require_next_pc(pc)?.into(),
             },
             ControlFlow::Legacy => unreachable!("Rejected"),
         };
@@ -190,19 +179,12 @@ impl<'method> Builder<'method> {
         effective_handlers
             .into_iter()
             .map(|entry| ExceptionalTarget::Handler {
-                id: HandlerId::from_pc(entry.handler_pc),
+                id: entry.handler_pc.into(),
                 catch_type: entry.catch_type.clone(),
             })
             .chain(unwind)
             .collect()
     }
-}
-
-/// The decoded instruction PCs of one structural block, before its identity is
-/// resolved.
-struct BlockGroup {
-    start_pc: ProgramCounter,
-    end_pc: ProgramCounter,
 }
 
 trait ControlFlowClassification {

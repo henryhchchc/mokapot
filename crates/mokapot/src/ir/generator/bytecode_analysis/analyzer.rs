@@ -11,7 +11,7 @@ use crate::{
     ir::{
         ValueId,
         generator::{
-            bytecode_cfg::{BytecodeCfg, HandlerId},
+            bytecode_cfg::{HandlerId, JvmBlockGraph},
             error::Error,
         },
     },
@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub(super) struct Analyzer<'method, 'cfg> {
-    pub(super) cfg: &'cfg BytecodeCfg,
+    pub(super) cfg: &'cfg JvmBlockGraph,
     pub(super) executor: Executor<'method>,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
@@ -44,7 +44,7 @@ impl Analyzer<'_, '_> {
 }
 
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
-    pub(super) fn new(method: &'method Method, cfg: &'cfg BytecodeCfg) -> Result<Self, Error> {
+    pub(super) fn new(method: &'method Method, cfg: &'cfg JvmBlockGraph) -> Result<Self, Error> {
         Ok(Self {
             cfg,
             executor: Executor::for_method(method)?,

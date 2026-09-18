@@ -42,7 +42,7 @@ impl Analyzer<'_, '_> {
 
     fn execute_handler(id: bytecode_cfg::HandlerId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
-        let target = Location::Bytecode(StructuralBlockId::from_pc(id.pc()));
+        let target = Location::Bytecode(StructuralBlockId::from(id.pc()));
         Ok(AnalyzedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
@@ -118,7 +118,7 @@ impl Analyzer<'_, '_> {
                 .entry(edge.target)
                 .or_insert_with(|| frame.clone());
         }
-        for target in &block.exceptional_successors {
+        for target in &block.exception_handlers {
             edges.push(self.exception_edge(target, &exceptional_input, &mut output_frames)?);
         }
         Ok(AnalyzedBlock {

@@ -9,13 +9,13 @@ mod fallibility;
 mod model;
 
 pub(super) use model::{
-    Block, BlockExit, BytecodeCfg, ExceptionalTarget, HandlerId, StructuralBlockId,
+    BlockExit, ExceptionalTarget, HandlerId, JvmBlock, JvmBlockGraph, StructuralBlockId,
 };
 
 use super::error::Error;
 use crate::jvm::Method;
 
 /// Builds the decoded-bytecode CFG used by the later block analyzer.
-pub(super) fn build(method: &Method) -> Result<BytecodeCfg, Error> {
+pub(super) fn build(method: &Method) -> Result<JvmBlockGraph, Error> {
     builder::Builder::for_method(method)?.build()
 }
