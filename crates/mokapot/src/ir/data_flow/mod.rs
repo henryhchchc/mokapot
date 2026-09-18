@@ -14,12 +14,12 @@ impl<'a> DefUseChain<'a> {
         let defs = method
             .instructions
             .iter()
-            .filter_map(|(pc, insn)| insn.def().map(|it| (it, *pc)))
+            .filter_map(|(pc, insn)| insn.def().map(|it| (it, pc)))
             .collect();
         let uses = method
             .instructions
             .iter()
-            .flat_map(|(pc, insn)| insn.uses().into_iter().map(|it| (it, *pc)))
+            .flat_map(|(pc, insn)| insn.uses().into_iter().map(move |it| (it, pc)))
             .into_group_map()
             .into_iter()
             .map(|(id, uses)| (id, uses.into_iter().collect()))

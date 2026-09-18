@@ -52,7 +52,7 @@ fn decodes_every_defined_opcode_and_rejects_undefined_opcodes() {
             .unwrap_or_else(|error| panic!("opcode 0x{opcode:02x} failed to parse: {error}"));
         let decoded: Vec<_> = instructions.iter().collect();
         assert_eq!(decoded.len(), 1, "opcode 0x{opcode:02x}");
-        assert_eq!(*decoded[0].0, ProgramCounter::default());
+        assert_eq!(decoded[0].0, ProgramCounter::default());
         assert_eq!(decoded[0].1.opcode(), opcode);
     }
 }

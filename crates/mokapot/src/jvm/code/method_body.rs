@@ -71,14 +71,14 @@ impl<I> IntoIterator for InstructionList<I> {
 }
 
 impl<'i, I> IntoIterator for &'i InstructionList<I> {
-    type Item = (&'i ProgramCounter, &'i I);
+    type Item = (ProgramCounter, &'i I);
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = <&'i BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
+    type IntoIter = instruction_list::Iter<'i, I>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
+        instruction_list::Iter::new(self.0.iter())
     }
 }
 
@@ -87,7 +87,7 @@ impl<I> InstructionList<I> {
     #[must_use]
     pub fn iter(
         &self,
-    ) -> impl DoubleEndedIterator<Item = (&ProgramCounter, &I)> + ExactSizeIterator {
+    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> + ExactSizeIterator {
         self.into_iter()
     }
 }
@@ -180,6 +180,37 @@ impl InstructionList<RawInstruction> {
             instructions.insert(pc, instruction);
         }
         Ok(InstructionList(instructions))
+    }
+}
+
+pub mod instruction_list {
+    use crate::jvm::code::ProgramCounter;
+    use derive_more::Constructor;
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, Constructor)]
+    pub struct Iter<'a, I> {
+        inner: <&'a BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter,
+    }
+
+    impl<'a, I> Iterator for Iter<'a, I> {
+        type Item = (ProgramCounter, &'a I);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(pc, insn)| (*pc, insn))
+        }
+    }
+
+    impl<I> DoubleEndedIterator for Iter<'_, I> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.inner.next_back().map(|(pc, insn)| (*pc, insn))
+        }
+    }
+
+    impl<I> ExactSizeIterator for Iter<'_, I> {
+        fn len(&self) -> usize {
+            self.inner.len()
+        }
     }
 }
 
