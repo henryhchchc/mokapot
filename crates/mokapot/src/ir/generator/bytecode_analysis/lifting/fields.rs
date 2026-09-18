@@ -1,20 +1,11 @@
-use super::definition_operation;
+use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{
-        OperationKind, ValueId,
-        expression::FieldAccess,
-        generator::{
-            bytecode_analysis::{
-                jvm::ValueCategory::{self, Category1},
-                lifting::Context,
-            },
-            error::Error,
-        },
-    },
+    ir::{OperationKind, ValueId, expression::FieldAccess, generator::error::Error},
     jvm::references::FieldRef,
 };
+use ValueCategory::Category1;
 
-impl Context<'_, '_, '_> {
+impl LiftContext<'_, '_> {
     pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<OperationKind>, Error> {
         let value = self.definition_id()?;
         self.frame

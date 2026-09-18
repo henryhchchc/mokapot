@@ -2,6 +2,7 @@
 
 use std::{
     borrow::Borrow,
+    cmp,
     collections::{HashMap, HashSet},
     hash::Hash,
     mem::transmute,
@@ -30,19 +31,16 @@ where
     unsafe { *std::ptr::from_ref(value).cast::<D>() }
 }
 
-pub(crate) fn hashset_partial_order<T>(
-    lhs: &HashSet<T>,
-    rhs: &HashSet<T>,
-) -> Option<std::cmp::Ordering>
+pub(crate) fn hashset_partial_order<T>(lhs: &HashSet<T>, rhs: &HashSet<T>) -> Option<cmp::Ordering>
 where
     T: Hash + Eq,
 {
     if lhs == rhs {
-        Some(std::cmp::Ordering::Equal)
+        Some(cmp::Ordering::Equal)
     } else if lhs.is_subset(rhs) {
-        Some(std::cmp::Ordering::Less)
+        Some(cmp::Ordering::Less)
     } else if lhs.is_superset(lhs) {
-        Some(std::cmp::Ordering::Greater)
+        Some(cmp::Ordering::Greater)
     } else {
         None
     }

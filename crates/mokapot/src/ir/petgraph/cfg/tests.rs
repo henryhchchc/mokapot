@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, iter};
 
 use petgraph::{
     Direction,
@@ -108,7 +108,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
             },
         })
         .collect::<Vec<_>>();
-    let blocks = std::iter::once(source).chain(exits).collect::<Vec<_>>();
+    let blocks = iter::once(source).chain(exits).collect::<Vec<_>>();
     let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
     let edges = (&cfg).edge_references().collect::<Vec<_>>();
 

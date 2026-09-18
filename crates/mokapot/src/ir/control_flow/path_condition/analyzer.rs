@@ -1,4 +1,4 @@
-use std::{convert::Infallible, hash::Hash};
+use std::{cmp, convert::Infallible, hash::Hash};
 
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
@@ -118,7 +118,7 @@ impl<P> PartialOrd for PathConditionFact<P>
 where
     P: Hash + Eq + Clone,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         debug_assert_eq!(self.budget, other.budget);
         self.inner.cover.partial_cmp(&other.inner.cover)
     }

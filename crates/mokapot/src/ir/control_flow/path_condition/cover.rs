@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
 };
@@ -41,15 +42,15 @@ impl<P> PartialOrd for Cover<P>
 where
     P: Hash + Eq + Clone,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         if self.cubes == other.cubes {
-            return Some(std::cmp::Ordering::Equal);
+            return Some(cmp::Ordering::Equal);
         }
 
         match (self.implies(other), other.implies(self)) {
-            (true, true) => Some(std::cmp::Ordering::Equal),
-            (true, false) => Some(std::cmp::Ordering::Less),
-            (false, true) => Some(std::cmp::Ordering::Greater),
+            (true, true) => Some(cmp::Ordering::Equal),
+            (true, false) => Some(cmp::Ordering::Less),
+            (false, true) => Some(cmp::Ordering::Greater),
             (false, false) => None,
         }
     }

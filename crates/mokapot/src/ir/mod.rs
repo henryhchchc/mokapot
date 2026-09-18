@@ -29,10 +29,10 @@
 //! for method in class.methods.iter().filter(|method| method.body.is_some()) {
 //!     let ir = MokaIRMethod::from_method(method)?;
 //!     for block in ir.blocks() {
-//!         for operation in block.operations() {
+//!         for operation in &block.operations {
 //!             println!("{}: {operation}", operation.id());
 //!         }
-//!         println!("{}: {}", block.terminator().id(), block.terminator());
+//!         println!("{}: {}", block.terminator.id(), block.terminator);
 //!     }
 //! }
 //! # Ok(())
@@ -41,7 +41,6 @@
 
 mod basic_block;
 pub mod control_flow;
-pub mod data_flow;
 pub mod expression;
 mod generator;
 mod identity;
@@ -54,7 +53,6 @@ mod source_map;
 mod terminator;
 
 pub use basic_block::BasicBlock;
-pub use data_flow::{DefUseChain, UseSite};
 pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
 pub use identity::{BlockId, EdgeId, InstructionId, ValueId};
 pub use method::{InstructionRef, MokaIRMethod};

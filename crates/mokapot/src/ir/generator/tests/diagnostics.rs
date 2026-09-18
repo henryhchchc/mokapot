@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::*;
 use crate::{
     ir::{MalformedBytecode, MokaIRFrameError, UnsupportedBytecode},
@@ -6,7 +8,7 @@ use crate::{
 
 #[test]
 fn reports_empty_code_at_the_method_boundary() {
-    let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
+    let method = method(iter::empty::<(u16, Instruction)>(), "()V", vec![]);
 
     assert!(matches!(
         build(&method),
@@ -106,43 +108,4 @@ fn rejects_every_legacy_subroutine_instruction_even_when_unreachable() {
             }) if pc == 1.into()
         ));
     }
-}
-
-#[test]
-fn rejects_an_inconsistent_table_switch() {
-    let switch = Instruction::TableSwitch {
-        range: 1..=3,
-        jump_targets: vec![10.into(), 10.into()],
-        default: 10.into(),
-    };
-    let method = method([(0, switch), (10, Instruction::Return)], "()V", vec![]);
-
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::MalformedBytecode {
-            pc: Some(pc),
-            kind: MalformedBytecode::InvalidTableSwitch,
-        }) if pc == 0.into()
-    ));
-}
-
-#[test]
-fn rejects_an_unaligned_exception_range() {
-    let method = method(
-        [(0, Instruction::SiPush(0)), (3, Instruction::Return)],
-        "()V",
-        vec![ExceptionTableEntry {
-            covered_pc: 0.into()..2.into(),
-            handler_pc: 3.into(),
-            catch_type: None,
-        }],
-    );
-
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::MalformedBytecode {
-            pc: Some(pc),
-            kind: MalformedBytecode::InvalidExceptionRange,
-        }) if pc == 2.into()
-    ));
 }

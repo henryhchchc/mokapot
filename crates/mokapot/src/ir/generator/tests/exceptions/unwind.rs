@@ -24,7 +24,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     let unwind_targets = [1, 4].map(|pc| {
         let block = block_containing_instruction(&ir, instruction_at(&ir, pc.into()).id());
         block
-            .terminator()
+            .terminator
             .successors()
             .iter()
             .find(|successor| matches!(successor.transfer(), ControlTransfer::Unwind))
@@ -34,26 +34,26 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
 
     assert_eq!(unwind_targets[0], unwind_targets[1]);
     let unwind = ir.block(unwind_targets[0]).unwrap();
-    assert_eq!(unwind.terminator().kind(), &TerminatorKind::Unwind);
-    assert!(unwind.phis().is_empty());
-    assert!(unwind.operations().is_empty());
-    assert!(unwind.terminator().successors().is_empty());
+    assert_eq!(unwind.terminator.kind(), &TerminatorKind::Unwind);
+    assert!(unwind.phis.is_empty());
+    assert!(unwind.operations.is_empty());
+    assert!(unwind.terminator.successors().is_empty());
     assert_eq!(
-        ir.source_map().origins_of(unwind.terminator().id()).count(),
+        ir.source_map().origins_of(unwind.terminator.id()).count(),
         0
     );
 
     let mut instruction_ids = HashSet::new();
     let mut edge_ids = HashSet::new();
     for block in ir.blocks() {
-        for phi in block.phis() {
-            assert!(instruction_ids.insert(phi.id()));
+        for phi in &block.phis {
+            assert!(instruction_ids.insert(phi.id));
         }
-        for instruction in block.operations() {
+        for instruction in &block.operations {
             assert!(instruction_ids.insert(instruction.id()));
         }
-        assert!(instruction_ids.insert(block.terminator().id()));
-        for successor in block.terminator().successors() {
+        assert!(instruction_ids.insert(block.terminator.id()));
+        for successor in block.terminator.successors() {
             assert!(edge_ids.insert(successor.id()));
         }
     }

@@ -8,14 +8,14 @@ pub(crate) enum ValueCategory {
 }
 
 impl ValueCategory {
-    pub const fn slot_count(self) -> usize {
+    pub(crate) const fn slot_count(self) -> usize {
         match self {
             Self::Category1 => 1,
             Self::Category2 => 2,
         }
     }
 
-    pub const fn of_field_type(value_type: &FieldType) -> Self {
+    pub(crate) const fn of_field_type(value_type: &FieldType) -> Self {
         match value_type {
             FieldType::Base(PrimitiveType::Long | PrimitiveType::Double) => Self::Category2,
             _ => Self::Category1,

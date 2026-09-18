@@ -86,19 +86,19 @@ impl<'method> ControlFlowGraph<'method> {
     /// a position in this sequence.
     #[must_use]
     pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'method BasicBlock)> {
-        self.blocks.iter().map(|block| (block.id(), block))
+        self.blocks.iter().map(|block| (block.id, block))
     }
 
     /// Returns every successor arm, retaining parallel edges.
     pub fn edges(self) -> impl Iterator<Item = Edge<'method>> {
         self.blocks.iter().flat_map(|block| {
             block
-                .terminator()
+                .terminator
                 .successors()
                 .iter()
                 .map(move |successor| Edge {
                     id: successor.id(),
-                    source: block.id(),
+                    source: block.id,
                     target: successor.target(),
                     data: successor.transfer(),
                 })
@@ -109,8 +109,7 @@ impl<'method> ControlFlowGraph<'method> {
     pub fn exits(self) -> impl Iterator<Item = BlockId> + 'method {
         self.blocks
             .iter()
-            .filter(|block| block.terminator().successors().is_empty())
-            .map(BasicBlock::id)
+            .filter_map(|block| block.terminator.successors().is_empty().then_some(block.id))
     }
 
     /// Returns all outgoing arms from `source`.
@@ -124,7 +123,7 @@ impl<'method> ControlFlowGraph<'method> {
             .into_iter()
             .flat_map(move |block| {
                 block
-                    .terminator()
+                    .terminator
                     .successors()
                     .iter()
                     .map(move |successor| Edge {

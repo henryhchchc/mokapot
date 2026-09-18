@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     collections::{HashSet, hash_set},
     fmt::Display,
     hash::{Hash, Hasher},
@@ -40,7 +41,7 @@ impl<P> PartialOrd for BranchGuard<P>
 where
     P: Hash + Eq,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         hashset_partial_order(&self.0, &other.0)
     }
 }

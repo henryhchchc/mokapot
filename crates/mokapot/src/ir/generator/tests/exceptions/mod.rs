@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    ir::{DefUseChain, UseSite},
-    jvm::references::ClassRef,
-};
+use crate::jvm::references::ClassRef;
 
 fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Operation {
     method
@@ -11,7 +8,7 @@ fn instruction_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Operation {
         .find_map(|id| {
             method
                 .blocks()
-                .flat_map(BasicBlock::operations)
+                .flat_map(|block| &block.operations)
                 .find(|instruction| instruction.id() == id)
         })
         .expect("the source PC must map to an ordinary instruction")
@@ -24,7 +21,7 @@ fn terminator_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
         .find_map(|id| {
             method
                 .blocks()
-                .map(BasicBlock::terminator)
+                .map(|block| &block.terminator)
                 .find(|terminator| terminator.id() == id)
         })
         .expect("the source PC must map to a terminator")
@@ -35,7 +32,7 @@ fn block_containing_instruction(method: &MokaIRMethod, instruction: InstructionI
         .blocks()
         .find(|block| {
             block
-                .operations()
+                .operations
                 .iter()
                 .any(|candidate| candidate.id() == instruction)
         })
