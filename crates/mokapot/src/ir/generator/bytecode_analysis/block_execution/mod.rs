@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     ir::generator::{
-        bytecode_cfg::{self, BlockExit, StructuralBlockId},
+        bytecode_cfg::{self, BlockExit, JvmBlockId},
         error::{Error, MalformedBytecode},
     },
     ir::{TerminatorKind, control_flow::ControlTransfer},
@@ -40,7 +40,7 @@ impl Analyzer<'_, '_> {
         }
     }
 
-    fn execute_handler(block: StructuralBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
+    fn execute_handler(block: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
         let target = Location::Bytecode(block);
         Ok(AnalyzedBlock {
@@ -56,11 +56,7 @@ impl Analyzer<'_, '_> {
         })
     }
 
-    fn execute_bytecode(
-        &mut self,
-        id: StructuralBlockId,
-        input: Frame,
-    ) -> Result<AnalyzedBlock, Error> {
+    fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
         let block = self
             .cfg
             .block(id)

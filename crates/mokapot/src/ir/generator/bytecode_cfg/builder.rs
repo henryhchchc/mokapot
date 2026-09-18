@@ -3,8 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 
 use super::{
-    fallibility::Fallibility,
-    model::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, StructuralBlockId},
+    BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId, fallibility::Fallibility,
 };
 use crate::{
     ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
@@ -34,7 +33,7 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
         let block_leaders = self.block_leaders(entry_pc)?;
         let blocks = self.build_blocks(&block_leaders)?;
-        let entry = StructuralBlockId::from(entry_pc);
+        let entry = JvmBlockId::from(entry_pc);
         Ok(JvmBlockGraph { entry, blocks })
     }
 
@@ -96,7 +95,7 @@ impl<'method> Builder<'method> {
     fn build_blocks(
         &self,
         leaders: &BTreeSet<ProgramCounter>,
-    ) -> Result<BTreeMap<StructuralBlockId, JvmBlock>, Error> {
+    ) -> Result<BTreeMap<JvmBlockId, JvmBlock>, Error> {
         let instructions = &self.body.instructions;
         let last_pc = instructions
             .iter()

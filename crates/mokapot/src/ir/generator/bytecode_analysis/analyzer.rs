@@ -11,7 +11,7 @@ use crate::{
     ir::{
         ValueId,
         generator::{
-            bytecode_cfg::{JvmBlockGraph, StructuralBlockId},
+            bytecode_cfg::{JvmBlockGraph, JvmBlockId},
             error::Error,
         },
     },
@@ -23,7 +23,7 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) executor: Executor<'method>,
     pub(super) locations: BTreeMap<Location, LocationState>,
     pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
-    pub(super) caught_exceptions: BTreeMap<StructuralBlockId, ValueId>,
+    pub(super) caught_exceptions: BTreeMap<JvmBlockId, ValueId>,
 }
 
 impl Analyzer<'_, '_> {
@@ -33,7 +33,7 @@ impl Analyzer<'_, '_> {
     /// *same* value: distinct values would merge into a phi at stack position 0
     /// in the handler's entry frame, and `execute_handler` requires that frame
     /// to hold a single stack value.
-    pub(super) fn caught_exception(&mut self, block: StructuralBlockId) -> Result<ValueId, Error> {
+    pub(super) fn caught_exception(&mut self, block: JvmBlockId) -> Result<ValueId, Error> {
         if let Some(&value) = self.caught_exceptions.get(&block) {
             return Ok(value);
         }

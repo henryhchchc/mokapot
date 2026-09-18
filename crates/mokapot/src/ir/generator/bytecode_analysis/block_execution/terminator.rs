@@ -15,7 +15,7 @@ use crate::ir::{
     },
     expression::Predicate,
     generator::{
-        bytecode_cfg::{self, BlockExit, StructuralBlockId},
+        bytecode_cfg::{self, BlockExit, JvmBlockId},
         error::Error,
     },
 };
@@ -55,8 +55,8 @@ impl Analyzer<'_, '_> {
 
 fn lower_branch(
     instruction: &Instruction,
-    taken: StructuralBlockId,
-    fallthrough: StructuralBlockId,
+    taken: JvmBlockId,
+    fallthrough: JvmBlockId,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let condition: BooleanVariable<_> = pop_condition(frame, instruction)?.into();
@@ -77,8 +77,8 @@ fn lower_branch(
 }
 
 fn lower_switch(
-    cases: &BTreeMap<i32, StructuralBlockId>,
-    default: StructuralBlockId,
+    cases: &BTreeMap<i32, JvmBlockId>,
+    default: JvmBlockId,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let match_value = frame.stack.pop(Category1)?;
@@ -180,7 +180,7 @@ fn lower_terminal(
     Ok((kind, Vec::new(), None))
 }
 
-const fn unconditional(target: StructuralBlockId) -> AnalyzedEdge {
+const fn unconditional(target: JvmBlockId) -> AnalyzedEdge {
     AnalyzedEdge {
         target: Location::Bytecode(target),
         transfer: ControlTransfer::Unconditional,

@@ -15,9 +15,9 @@ pub(super) type Frame = jvm::Frame;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Location {
-    Bytecode(bytecode_cfg::StructuralBlockId),
+    Bytecode(bytecode_cfg::JvmBlockId),
     /// The synthetic entry that installs the caught exception and enters a block.
-    Handler(bytecode_cfg::StructuralBlockId),
+    Handler(bytecode_cfg::JvmBlockId),
     Unwind,
 }
 
