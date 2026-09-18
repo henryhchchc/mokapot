@@ -1,6 +1,6 @@
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{OperationKind, ValueId, expression::Expression, generator::error::Error},
+    ir::{Operation, ValueId, expression::Expression, generator::error::Error},
     jvm::references::MethodRef,
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
@@ -11,7 +11,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -30,7 +30,7 @@ impl LiftContext<'_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let definition = self.definition_id_for_return(&descriptor.return_type)?;
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -46,7 +46,7 @@ impl LiftContext<'_, '_> {
         descriptor: &MethodDescriptor,
         definition: Option<ValueId>,
         expr: Expression,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         match &descriptor.return_type {
             ReturnType::Some(return_type) => {
                 let value = definition
@@ -56,7 +56,7 @@ impl LiftContext<'_, '_> {
                     .push(value, ValueCategory::of_field_type(return_type))?;
                 Ok(Some(definition_operation(value, expr)))
             }
-            ReturnType::Void => Ok(Some(OperationKind::Effect { expr })),
+            ReturnType::Void => Ok(Some(Operation::Effect { expr })),
         }
     }
 }

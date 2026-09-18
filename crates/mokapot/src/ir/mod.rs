@@ -2,7 +2,7 @@
 //!
 //! Build a [`MokaIRMethod`] from a [`crate::jvm::Method`] with
 //! [`MokaIRMethod::from_method`]. The result contains maximal [`BasicBlock`]s:
-//! block-entry [`Phi`] nodes, semantic [`Operation`]s in execution order, and
+//! block-entry [`BlockParameter`]s, semantic [`Operation`]s in execution order, and
 //! exactly one [`Terminator`]. The terminators' ordered [`Successor`] arms are
 //! the authoritative control-flow graph.
 //!
@@ -14,7 +14,7 @@
 //!
 //! [`SourceMap`] records sparse, bidirectional JVM provenance. There is no
 //! bytecode-to-IR bijection: erased stack operations may have no IR node, while
-//! phis and other synthetic nodes may have no JVM origin.
+//! block parameters and other synthetic nodes may have no JVM origin.
 //!
 //! # Example
 //!
@@ -28,11 +28,11 @@
 //! let class = Class::from_reader(&mut reader)?;
 //! for method in class.methods.iter().filter(|method| method.body.is_some()) {
 //!     let ir = MokaIRMethod::from_method(method)?;
-//!     for block in ir.blocks() {
-//!         for operation in &block.operations {
-//!             println!("{}: {operation}", operation.id());
+//!     for (block_id, block) in ir.blocks() {
+//!         for (index, operation) in block.operations.iter().enumerate() {
+//!             println!("{block_id}, operation {index}: {operation}");
 //!         }
-//!         println!("{}: {}", block.terminator.id(), block.terminator);
+//!         println!("{block_id}, terminator: {}", block.terminator);
 //!     }
 //! }
 //! # Ok(())
@@ -48,15 +48,17 @@ mod method;
 mod operation;
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
-mod phi;
 mod source_map;
 mod terminator;
+mod value_definition;
+#[cfg(test)]
+mod verify;
 
-pub use basic_block::BasicBlock;
+pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
 pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
-pub use identity::{BlockId, EdgeId, InstructionId, ValueId};
-pub use method::{InstructionRef, MokaIRMethod};
-pub use operation::{Operation, OperationKind};
-pub use phi::{Phi, PhiInput, ValueDefinition};
+pub use identity::{BlockId, EdgeId, InstructionLocation, ValueId};
+pub use method::{InstructionRef, MethodEntry, MokaIRMethod};
+pub use operation::Operation;
 pub use source_map::SourceMap;
-pub use terminator::{Successor, Terminator, TerminatorKind};
+pub use terminator::{Successor, Terminator};
+pub use value_definition::ValueDefinition;

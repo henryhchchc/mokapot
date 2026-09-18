@@ -28,12 +28,6 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    pub(crate) fn into_unwind_frame(mut self) -> Self {
-        self.locals.clear_for_unwind();
-        self.stack.clear();
-        self
-    }
-
     pub(crate) fn value_at(&self, position: Position) -> Option<&ValueId> {
         match position {
             Position::Local(index) => self.locals.slot_values().nth(index).flatten(),

@@ -1,6 +1,6 @@
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
-    ir::{OperationKind, expression::ArrayOperation, generator::error::Error},
+    ir::{Operation, expression::ArrayOperation, generator::error::Error},
     types::field_type::FieldType,
 };
 use ValueCategory::Category1;
@@ -9,7 +9,7 @@ impl LiftContext<'_, '_> {
     pub(super) fn array_read(
         &mut self,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -21,7 +21,7 @@ impl LiftContext<'_, '_> {
     pub(super) fn array_write(
         &mut self,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.frame.stack.pop(category)?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -31,13 +31,13 @@ impl LiftContext<'_, '_> {
             value,
         }
         .into();
-        Ok(Some(OperationKind::Effect { expr }))
+        Ok(Some(Operation::Effect { expr }))
     }
 
     pub(super) fn new_array(
         &mut self,
         element_type: FieldType,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
@@ -53,7 +53,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         element_type: FieldType,
         dimension: u8,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let dimensions = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
@@ -67,7 +67,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(definition_operation(value, expr)))
     }
 
-    pub(super) fn array_length(&mut self) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn array_length(&mut self) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;

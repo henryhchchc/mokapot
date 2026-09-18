@@ -1,4 +1,7 @@
-use std::{collections::HashSet, iter};
+use std::{
+    collections::{BTreeMap, HashSet},
+    iter,
+};
 
 use petgraph::{
     Direction,
@@ -6,43 +9,40 @@ use petgraph::{
 };
 
 use super::*;
-use crate::ir::{InstructionId, Successor, Terminator, TerminatorKind, ValueId};
+use crate::ir::{BlockKind, Successor, Terminator};
 
 #[test]
-fn dense_nodes_and_parallel_edges_are_preserved() {
-    let target = BlockId::new(1);
+fn sparse_nodes_and_parallel_edges_are_preserved() {
+    let source_id = BlockId::new(7);
+    let target = BlockId::new(42);
     let source = BasicBlock {
-        id: BlockId::new(0),
-        caught_exception: None,
-        phis: vec![],
+        kind: BlockKind::Code,
+        parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(0),
-            kind: TerminatorKind::Switch {
-                match_value: ValueId::new(0),
-            },
-            successors: (0..3)
-                .map(|id| Successor {
+        terminator: {
+            let mut arms = (0..3)
+                .map(|id| Successor::Block {
                     id: EdgeId::new(id),
                     target,
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 })
-                .collect(),
+                .collect::<Vec<_>>();
+            let default = arms.pop().unwrap();
+            Terminator::Switch {
+                cases: arms,
+                default,
+            }
         },
     };
     let exit = BasicBlock {
-        id: target,
-        caught_exception: None,
-        phis: vec![],
+        kind: BlockKind::Code,
+        parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(1),
-            kind: TerminatorKind::Return(None),
-            successors: vec![],
-        },
+        terminator: Terminator::Return { value: None },
     };
-    let blocks = [source, exit];
-    let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
+    let blocks = BTreeMap::from([(source_id, source), (target, exit)]);
+    let cfg = ControlFlowGraph::new(&blocks, source_id);
 
     assert_eq!(cfg.node_bound(), 2);
     assert_eq!(cfg.from_index(cfg.to_index(target)), target);
@@ -56,76 +56,76 @@ fn dense_nodes_and_parallel_edges_are_preserved() {
         (&cfg)
             .neighbors_directed(target, Direction::Incoming)
             .collect::<Vec<_>>(),
-        [BlockId::new(0), BlockId::new(0), BlockId::new(0)]
+        [source_id, source_id, source_id]
     );
 }
 
 #[test]
 fn exceptional_edge_kinds_and_identities_are_preserved() {
     let source = BasicBlock {
-        id: BlockId::new(0),
-        caught_exception: None,
-        phis: vec![],
+        kind: BlockKind::Code,
+        parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            id: InstructionId::new(0),
-            kind: TerminatorKind::Fallible,
-            successors: vec![
-                Successor {
+        terminator: {
+            let mut arms = vec![
+                Successor::Block {
                     id: EdgeId::new(0),
                     target: BlockId::new(1),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
-                Successor {
+                Successor::Block {
                     id: EdgeId::new(1),
                     target: BlockId::new(2),
+                    arguments: vec![],
                     transfer: ControlTransfer::Exception(Some(
                         "java/lang/RuntimeException".parse().unwrap(),
                     )),
                 },
-                Successor {
-                    id: EdgeId::new(2),
-                    target: BlockId::new(3),
-                    transfer: ControlTransfer::Unwind,
+                Successor::Unwind { id: EdgeId::new(2) },
+            ];
+            Terminator::Try {
+                operation: crate::ir::Operation::Effect {
+                    expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
                 },
-            ],
+                normal: arms.remove(0),
+                exceptional: arms,
+            }
         },
     };
-    let exits = (1..=3)
-        .map(|id| BasicBlock {
-            id: BlockId::new(id),
-            caught_exception: None,
-            phis: vec![],
-            operations: vec![],
-            terminator: Terminator {
-                id: InstructionId::new(id),
-                kind: if id == 3 {
-                    TerminatorKind::Unwind
-                } else {
-                    TerminatorKind::Return(None)
-                },
-                successors: vec![],
-            },
+    let exits = (1..=2)
+        .map(|id| {
+            let terminator = Terminator::Return { value: None };
+            let basic_block = BasicBlock {
+                kind: BlockKind::Code,
+                parameters: vec![],
+                operations: vec![],
+                terminator,
+            };
+            (BlockId::new(id), basic_block)
         })
         .collect::<Vec<_>>();
-    let blocks = iter::once(source).chain(exits).collect::<Vec<_>>();
+    let blocks = iter::once((BlockId::new(0), source))
+        .chain(exits)
+        .collect::<BTreeMap<_, _>>();
     let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
     let edges = (&cfg).edge_references().collect::<Vec<_>>();
 
     assert_eq!(
         edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
-        3
+        2
     );
     assert!(matches!(edges[0].weight(), ControlTransfer::Unconditional));
     assert!(matches!(
         edges[1].weight(),
         ControlTransfer::Exception(Some(_))
     ));
-    assert!(matches!(edges[2].weight(), ControlTransfer::Unwind));
-    assert_eq!(
-        (&cfg)
-            .neighbors_directed(BlockId::new(3), Direction::Incoming)
-            .collect::<Vec<_>>(),
-        [BlockId::new(0)]
-    );
+    assert!(source_has_explicit_unwind(&blocks));
+}
+
+fn source_has_explicit_unwind(blocks: &BTreeMap<BlockId, BasicBlock>) -> bool {
+    blocks[&BlockId::new(0)]
+        .terminator
+        .successors()
+        .any(|successor| successor.block_target().is_none())
 }

@@ -3,7 +3,7 @@ use super::{
     ValueCategory::{Category1, Category2},
 };
 use crate::{
-    ir::{OperationKind, generator::error::Error},
+    ir::{Operation, generator::error::Error},
     jvm::code::WideInstruction,
 };
 
@@ -11,7 +11,7 @@ impl LiftContext<'_, '_> {
     pub(super) fn lift_wide(
         &mut self,
         instruction: &WideInstruction,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         match instruction {
             WideInstruction::ILoad(idx)
             | WideInstruction::FLoad(idx)

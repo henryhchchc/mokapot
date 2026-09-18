@@ -1,7 +1,7 @@
 use super::super::Frame;
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::ir::{
-    OperationKind, ValueId,
+    Operation, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::error::Error,
 };
@@ -14,7 +14,7 @@ pub(super) fn lift_conversion(
     conversion: impl FnOnce(ValueId) -> Conversion,
     operand_category: ValueCategory,
     result_category: ValueCategory,
-) -> Result<Option<OperationKind>, Error> {
+) -> Result<Option<Operation>, Error> {
     let operand = frame.stack.pop(operand_category)?;
     frame.stack.push(value, result_category)?;
     let expr = conversion(operand).into();
@@ -27,7 +27,7 @@ pub(super) fn lift_binary_math(
     value: ValueId,
     math: impl FnOnce(ValueId, ValueId) -> MathOperation,
     category: ValueCategory,
-) -> Result<Option<OperationKind>, Error> {
+) -> Result<Option<Operation>, Error> {
     let rhs = frame.stack.pop(category)?;
     let lhs = frame.stack.pop(category)?;
     frame.stack.push(value, category)?;
@@ -40,7 +40,7 @@ impl LiftContext<'_, '_> {
     pub(super) fn shift_long(
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
@@ -49,7 +49,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(definition_operation(value, expr)))
     }
 
-    pub(super) fn compare_long(&mut self) -> Result<Option<OperationKind>, Error> {
+    pub(super) fn compare_long(&mut self) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
@@ -62,7 +62,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         nan_treatment: NaNTreatment,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id()?;
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;

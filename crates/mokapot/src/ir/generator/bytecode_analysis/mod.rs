@@ -1,18 +1,15 @@
-//! Constructs a reachable register-form graph from JVM instructions.
+//! Constructs provisional SSA while analyzing reachable JVM bytecode.
 
 mod analysis;
 mod frame;
 pub(super) mod lifting;
-mod output;
 mod values;
 
-pub use frame::FrameError;
-pub(super) use output::{PhiCandidate, ScalarBlock, ScalarGraph, Successor};
-
 use self::analysis::Analyzer;
-use crate::ir::generator::error::Error;
+use crate::ir::generator::{draft::DraftMethod, error::Error};
+pub use frame::FrameError;
 use frame::{EntrySlots, Frame, Position, StackOperation, ValueCategory};
 
-pub(super) fn analyze(cfg: &super::bytecode_cfg::JvmBlockGraph<'_>) -> Result<ScalarGraph, Error> {
+pub(super) fn analyze(cfg: &super::bytecode_cfg::NormalizedCfg<'_>) -> Result<DraftMethod, Error> {
     Analyzer::new(cfg)?.run()
 }

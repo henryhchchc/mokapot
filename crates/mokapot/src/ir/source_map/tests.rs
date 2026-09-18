@@ -1,30 +1,47 @@
 use super::*;
+use crate::ir::BlockId;
 
 #[test]
-fn source_map_is_a_sparse_many_to_many_relation() {
+fn source_map_is_sparse_and_one_to_many() {
     let pc0 = ProgramCounter::from(0);
     let pc1 = ProgramCounter::from(100);
     let pc2 = ProgramCounter::from(200);
-    let instruction0 = InstructionId::new(0);
-    let instruction1 = InstructionId::new(1);
-    let instruction2 = InstructionId::new(2);
-    let instruction3 = InstructionId::new(3);
-    let synthetic = InstructionId::new(4);
+    let instruction0 = InstructionLocation::Operation {
+        block: BlockId::new(0),
+        index: 0,
+    };
+    let instruction1 = InstructionLocation::Operation {
+        block: BlockId::new(0),
+        index: 1,
+    };
+    let instruction2 = InstructionLocation::Operation {
+        block: BlockId::new(1),
+        index: 0,
+    };
+    let instruction3 = InstructionLocation::Terminator {
+        block: BlockId::new(1),
+    };
+    let synthetic = InstructionLocation::BlockParameter {
+        block: BlockId::new(1),
+        index: 0,
+    };
     let mut map = SourceMap::default();
-    map.insert(pc0, instruction0);
-    map.insert(pc0, instruction1);
-    map.insert(pc1, instruction1);
-    map.insert(pc1, instruction2);
-    map.insert(pc2, instruction3);
+    map.record_operation(pc0, BlockId::new(0), 0);
+    map.record_operation(pc0, BlockId::new(0), 1);
+    map.record_operation(pc1, BlockId::new(1), 0);
+    map.record_terminator(pc2, BlockId::new(1));
 
     assert_eq!(
         map.instructions_at(pc0).collect::<Vec<_>>(),
         [instruction0, instruction1]
     );
-    assert_eq!(map.origins_of(instruction1).collect::<Vec<_>>(), [pc0, pc1]);
+    assert_eq!(map.origin_of(instruction0), Some(pc0));
+    assert_eq!(map.origin_of(instruction1), Some(pc0));
+    assert_eq!(map.origin_of(instruction2), Some(pc1));
+    assert_eq!(map.origin_of(instruction3), Some(pc2));
     assert_eq!(map.instructions_at(pc2).collect::<Vec<_>>(), [instruction3]);
     assert_eq!(map.instructions_at(50.into()).count(), 0);
-    assert_eq!(map.origins_of(synthetic).count(), 0);
+    assert_eq!(map.origin_of(synthetic), None);
 
     let covered_nodes = BTreeSet::from([pc0])
         .into_iter()

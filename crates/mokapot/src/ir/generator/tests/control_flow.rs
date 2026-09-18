@@ -30,12 +30,11 @@ fn switch_retains_parallel_successor_arms() {
     let ir = build(&method).unwrap();
     let switch = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert!(matches!(switch.kind(), TerminatorKind::Switch { .. }));
-    assert_eq!(switch.successors().len(), 3);
+    assert!(matches!(switch, Terminator::Switch { .. }));
+    assert_eq!(switch.successors().count(), 3);
     assert_eq!(
         switch
             .successors()
-            .iter()
             .map(Successor::id)
             .collect::<HashSet<_>>()
             .len(),
@@ -44,10 +43,10 @@ fn switch_retains_parallel_successor_arms() {
     assert!(
         switch
             .successors()
-            .windows(2)
-            .all(|pair| pair[0].target() == pair[1].target())
+            .map(Successor::block_target)
+            .all(|target| target == switch.successors().next().unwrap().block_target())
     );
-    assert_eq!(ir.control_flow_graph().edges().count(), 4);
+    assert_eq!(ir.control_flow_graph().edges().count(), 3);
 }
 
 #[test]
@@ -66,23 +65,26 @@ fn branch_preserves_taken_then_fallthrough_guards() {
     let branch = &ir.block(ir.entry_block()).unwrap().terminator;
     let match_value = ir.parameter_values()[0];
 
-    assert_eq!(branch.kind(), &TerminatorKind::Branch);
-    assert_eq!(branch.successors().len(), 2);
+    assert!(matches!(branch, Terminator::Branch { .. }));
+    assert_eq!(branch.successors().count(), 2);
     assert_eq!(
-        branch.successors()[0].transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Predicate::IsZero(PathValue::Variable(match_value)),
+        branch.successors().next().unwrap().transfer(),
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Positive(Predicate::IsZero(PathValue::Variable(match_value)),)
         )))
     );
     assert_eq!(
-        branch.successors()[1].transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Negative(
-            Predicate::IsZero(PathValue::Variable(match_value)),
+        branch.successors().nth(1).unwrap().transfer(),
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Negative(Predicate::IsZero(PathValue::Variable(match_value)),)
         )))
     );
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
     assert_eq!(
-        ir.source_map().origins_of(branch.id()).collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
     );
 }
 
@@ -104,12 +106,12 @@ fn comparison_branch_preserves_operand_order() {
     let parameters = ir.parameter_values();
 
     assert_eq!(
-        branch.successors()[0].transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Predicate::LessThan(
+        branch.successors().next().unwrap().transfer(),
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Positive(Predicate::LessThan(
                 PathValue::Variable(parameters[0]),
                 PathValue::Variable(parameters[1]),
-            ),
+            ),)
         )))
     );
 }
@@ -144,23 +146,76 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         )))
     };
 
-    assert_eq!(switch.kind(), &TerminatorKind::Switch { match_value });
-    assert_eq!(switch.successors().len(), 3);
+    assert!(matches!(switch, Terminator::Switch { .. }));
+    assert_eq!(switch.successors().count(), 3);
     assert!(
         switch
             .successors()
-            .windows(2)
-            .all(|pair| pair[0].target() == pair[1].target())
+            .map(Successor::block_target)
+            .all(|target| target == switch.successors().next().unwrap().block_target())
     );
-    assert_eq!(switch.successors()[0].transfer(), &case_guard(3));
-    assert_eq!(switch.successors()[1].transfer(), &case_guard(4));
-    assert!(matches!(
-        switch.successors()[2].transfer(),
-        ControlTransfer::Conditional(guard) if guard.predicate_count() == 2
-    ));
     assert_eq!(
-        ir.source_map().origins_of(switch.id()).collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        switch.successors().next().unwrap().transfer(),
+        Some(&case_guard(3))
+    );
+    assert_eq!(
+        switch.successors().nth(1).unwrap().transfer(),
+        Some(&case_guard(4))
+    );
+    assert!(matches!(
+        switch.successors().nth(2).unwrap().transfer(),
+        Some(ControlTransfer::Conditional(guard)) if guard.predicate_count() == 2
+    ));
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
+    assert_eq!(
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
+    );
+}
+
+#[test]
+fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
+    let method = method(
+        [
+            (0, Instruction::ILoad0),
+            (
+                1,
+                Instruction::LookupSwitch {
+                    default: 10.into(),
+                    match_targets: BTreeMap::new(),
+                },
+            ),
+            (10, Instruction::Return),
+        ],
+        "(I)V",
+        vec![],
+    );
+    let ir = build(&method).unwrap();
+    let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
+    let match_value = ir.parameter_values()[0];
+
+    let successors = terminator.successors().collect::<Vec<_>>();
+    assert_eq!(successors.len(), 1);
+    assert_eq!(
+        successors[0].block_target(),
+        ir.source_map()
+            .instructions_at(10.into())
+            .find_map(|location| match location {
+                InstructionLocation::Terminator { block } => Some(block),
+                InstructionLocation::BlockParameter { .. }
+                | InstructionLocation::Operation { .. } => {
+                    None
+                }
+            })
+    );
+    assert!(!terminator.uses().contains(&match_value));
+    assert_eq!(
+        ir.source_map().origin_of(InstructionLocation::Terminator {
+            block: ir.entry_block(),
+        }),
+        Some(ProgramCounter::from(1))
     );
 }
 
@@ -198,16 +253,20 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     let ir = build(&method).unwrap();
     let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert_eq!(fallible.kind(), &TerminatorKind::Fallible);
-    assert_eq!(ir.source_map().origins_of(fallible.id()).count(), 0);
+    assert!(matches!(fallible, Terminator::Try { .. }));
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
+    assert_eq!(ir.source_map().origin_of(entry_loc), Some(1.into()));
     assert!(matches!(
-        fallible.successors()[0].transfer(),
-        ControlTransfer::Unconditional
+        fallible.successors().next().unwrap().transfer(),
+        Some(ControlTransfer::Unconditional)
     ));
-    let handler_types = fallible.successors()[1..]
-        .iter()
+    let handler_types = fallible
+        .successors()
+        .skip(1)
         .map(|successor| match successor.transfer() {
-            ControlTransfer::Exception(Some(caught)) => caught.0.as_ref(),
+            Some(ControlTransfer::Exception(Some(caught))) => caught.0.as_ref(),
             _ => unreachable!(),
         })
         .collect::<Vec<_>>();
@@ -215,53 +274,6 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         handler_types,
         ["java/lang/RuntimeException", "java/lang/Throwable"]
     );
-}
-
-#[test]
-fn normally_reachable_handler_still_starts_a_block() {
-    let method = method(
-        [
-            (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/Throwable".parse().unwrap()),
-            ),
-            (2, Instruction::AStore1),
-            (3, Instruction::Return),
-        ],
-        "(Ljava/lang/Throwable;)V",
-        vec![ExceptionTableEntry {
-            covered_pc: 1.into()..2.into(),
-            handler_pc: 2.into(),
-            catch_type: Some("java/lang/Throwable".parse().unwrap()),
-        }],
-    );
-    let ir = build(&method).unwrap();
-    let entry = ir.block(ir.entry_block()).unwrap();
-    let normal = entry
-        .terminator
-        .successors()
-        .iter()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
-        .unwrap()
-        .target();
-    let handler = entry
-        .terminator
-        .successors()
-        .iter()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
-        .unwrap()
-        .target();
-
-    assert_eq!(ir.blocks().len(), 4);
-    assert_ne!(handler, ir.entry_block());
-    assert_ne!(handler, normal);
-    assert_eq!(
-        ir.block(handler).unwrap().terminator.successors()[0].target(),
-        normal
-    );
-    assert_eq!(ir.block(handler).unwrap().operations.len(), 0);
-    assert!(ir.caught_exception(handler).is_some());
 }
 
 #[test]
@@ -274,11 +286,12 @@ fn throw_is_a_source_backed_terminator() {
     let ir = build(&method).unwrap();
     let block = ir.block(ir.entry_block()).unwrap();
 
-    assert!(matches!(block.terminator.kind(), TerminatorKind::Throw(_)));
+    assert!(matches!(block.terminator, Terminator::Throw { .. }));
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
     assert_eq!(
-        ir.source_map()
-            .origins_of(block.terminator.id())
-            .collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
     );
 }

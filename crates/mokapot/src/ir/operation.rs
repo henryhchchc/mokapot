@@ -1,10 +1,10 @@
-use std::{collections::HashSet, fmt};
+use std::collections::HashSet;
 
-use super::{InstructionId, ValueId, expression::Expression};
+use super::{ValueId, expression::Expression};
 
-/// The kind of an ordinary Moka IR operation.
+/// An ordinary non-parameter, non-terminator operation.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum OperationKind {
+pub enum Operation {
     /// Evaluates an expression and defines its result.
     #[display("{value} = {expr}")]
     Definition {
@@ -21,7 +21,7 @@ pub enum OperationKind {
     },
 }
 
-impl OperationKind {
+impl Operation {
     /// Returns the value defined by this operation, if any.
     #[must_use]
     pub const fn def(&self) -> Option<ValueId> {
@@ -37,41 +37,5 @@ impl OperationKind {
         match self {
             Self::Definition { expr, .. } | Self::Effect { expr } => expr.uses(),
         }
-    }
-}
-
-/// An identified ordinary non-phi, non-terminator operation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Operation {
-    pub(super) id: InstructionId,
-    pub(super) kind: OperationKind,
-}
-
-impl Operation {
-    /// Returns this operation's method-local instruction identity.
-    #[must_use]
-    pub const fn id(&self) -> InstructionId {
-        self.id
-    }
-    /// Returns the kind of operation performed.
-    #[must_use]
-    pub const fn kind(&self) -> &OperationKind {
-        &self.kind
-    }
-    /// Returns the value defined by this operation, if any.
-    #[must_use]
-    pub const fn def(&self) -> Option<ValueId> {
-        self.kind.def()
-    }
-    /// Returns the values used by this operation.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        self.kind.uses()
-    }
-}
-
-impl fmt::Display for Operation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.kind.fmt(f)
     }
 }

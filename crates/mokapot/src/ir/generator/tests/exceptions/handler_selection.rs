@@ -40,26 +40,25 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         ],
     );
     let ir = build(&method).unwrap();
-    let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
+    let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let fallible = block_containing_instruction(&ir, fallible_location);
     let transfers = fallible
         .terminator
         .successors()
-        .iter()
         .map(Successor::transfer)
         .collect::<Vec<_>>();
 
     assert_eq!(transfers.len(), 3);
-    assert!(matches!(transfers[0], ControlTransfer::Unconditional));
+    assert!(matches!(transfers[0], Some(ControlTransfer::Unconditional)));
     assert!(
-        matches!(transfers[1], ControlTransfer::Exception(Some(caught)) if caught == &runtime_exception)
+        matches!(transfers[1], Some(ControlTransfer::Exception(Some(caught))) if caught == &runtime_exception)
     );
-    assert!(matches!(transfers[2], ControlTransfer::Exception(None)));
+    assert!(matches!(
+        transfers[2],
+        Some(ControlTransfer::Exception(None))
+    ));
     assert_eq!(ir.source_map().instructions_at(30.into()).count(), 0);
-    assert!(
-        !transfers
-            .iter()
-            .any(|transfer| matches!(transfer, ControlTransfer::Unwind))
-    );
+    assert!(!transfers.iter().any(Option::is_none));
 }
 
 #[test]
@@ -81,13 +80,16 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     );
     let ir = build(&method).unwrap();
 
-    assert_eq!(ir.blocks().len(), 2);
+    assert_eq!(ir.blocks().len(), 1);
     let entry = ir.block(ir.entry_block()).unwrap();
-    assert_eq!(entry.terminator.kind(), &TerminatorKind::Return(None));
-    assert_eq!(entry.terminator.successors().len(), 1);
     assert!(matches!(
-        entry.terminator.successors()[0].transfer(),
-        ControlTransfer::Unwind
+        entry.terminator,
+        Terminator::TryReturn { value: None, .. }
     ));
+    assert_eq!(entry.terminator.successors().count(), 1);
+    assert_eq!(
+        entry.terminator.successors().next().unwrap().transfer(),
+        None
+    );
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
 }

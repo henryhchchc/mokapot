@@ -2,9 +2,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::{
     ir::{
-        BasicBlock, InstructionId, InstructionRef, MokaIRBuildError, MokaIRMethod, Operation,
-        OperationKind, Successor, Terminator, TerminatorKind, ValueDefinition,
-        control_flow::ControlTransfer,
+        BasicBlock, InstructionLocation, InstructionRef, MokaIRBuildError, MokaIRMethod, Operation,
+        Successor, Terminator, ValueDefinition, control_flow::ControlTransfer,
     },
     jvm::{
         Method,
@@ -35,9 +34,9 @@ fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     MokaIRMethod::from_method(method)
 }
 
+mod block_arguments;
 mod blocks;
 mod control_flow;
 mod diagnostics;
 mod effects;
 mod exceptions;
-mod phis;

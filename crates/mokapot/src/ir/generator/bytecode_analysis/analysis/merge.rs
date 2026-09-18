@@ -1,18 +1,18 @@
-//! Entry-frame merging and complete phi-definition maintenance.
+//! Entry-frame merging and complete block-parameter maintenance.
 
 use std::collections::BTreeMap;
 
 use super::super::values::ValueContext;
-use super::{Analyzer, Frame, Location, PhiDefinition, PhiSite, Predecessor};
-use crate::ir::{ValueId, generator::error::Error};
+use super::{Analyzer, ParameterSite};
+use crate::ir::{BlockId, ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
-    pub(super) fn recompute_entry(&mut self, location: Location) -> Result<bool, Error> {
-        let location_pc = self.location_pc(location);
+    pub(super) fn recompute_entry(&mut self, block: BlockId) -> Result<bool, Error> {
+        let block_pc = self.block_pc(block);
         let contributions = self
-            .locations
-            .get(&location)
-            .ok_or_else(|| Error::internal("a reachable block has no location state"))?
+            .blocks
+            .get(&block)
+            .ok_or_else(|| Error::internal("a reachable block has no analysis state"))?
             .contributions
             .iter()
             .map(|(&predecessor, frame)| (predecessor, frame.clone()))
@@ -21,97 +21,65 @@ impl Analyzer<'_, '_> {
         let mut merged = frames
             .next()
             .ok_or_else(|| Error::internal("a reachable block has no predecessor frame"))?;
-        let mut active_phis = BTreeMap::new();
+        let mut active_parameters = BTreeMap::new();
 
         for contribution in frames {
-            let existing_phis = &self.phi_definitions;
+            let existing_parameters = &self.parameter_definitions;
             let values = &mut self.values;
             merged
                 .merge_from_with(contribution, |position, lhs, rhs| {
                     merge_value(
-                        PhiSite { location, position },
+                        ParameterSite { block, position },
                         lhs,
                         rhs,
-                        existing_phis,
-                        &mut active_phis,
+                        existing_parameters,
+                        &mut active_parameters,
                         values,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(location_pc))?;
+                .map_err(|error| error.at_instruction(block_pc))?;
         }
 
-        let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
-            .map_err(|error| error.at_instruction_if_present(location_pc))?;
+        let parameter_definitions = active_parameters
+            .into_iter()
+            .filter(|(site, result)| merged.value_at(site.position) == Some(result))
+            .collect::<BTreeMap<_, _>>();
 
-        self.phi_definitions
-            .retain(|site, _| site.location != location);
-        self.phi_definitions.extend(phi_definitions);
+        self.parameter_definitions
+            .retain(|site, _| site.block != block);
+        self.parameter_definitions.extend(parameter_definitions);
 
         let execution = &mut self
-            .locations
-            .get_mut(&location)
-            .ok_or_else(|| Error::internal("a reachable block has no location state"))?
+            .blocks
+            .get_mut(&block)
+            .ok_or_else(|| Error::internal("a reachable block has no analysis state"))?
             .execution;
         Ok(execution.update_input(merged))
     }
 }
 
 fn merge_value(
-    site: PhiSite,
+    site: ParameterSite,
     lhs: &mut ValueId,
     rhs: ValueId,
-    existing_phis: &BTreeMap<PhiSite, PhiDefinition>,
-    active_phis: &mut BTreeMap<PhiSite, ValueId>,
+    existing_parameters: &BTreeMap<ParameterSite, ValueId>,
+    active_parameters: &mut BTreeMap<ParameterSite, ValueId>,
     values: &mut ValueContext,
 ) -> Result<(), Error> {
     if *lhs == rhs {
         return Ok(());
     }
-    let result = if let Some(&result) = active_phis.get(&site) {
+    let result = if let Some(&result) = active_parameters.get(&site) {
         result
     } else {
-        let result = existing_phis
+        let result = existing_parameters
             .get(&site)
-            .map_or_else(|| values.fresh(), |definition| Ok(definition.result))?;
-        active_phis.insert(site, result);
+            .copied()
+            .map_or_else(|| values.fresh(), Ok)?;
+        active_parameters.insert(site, result);
         result
     };
 
     *lhs = result;
     Ok(())
-}
-
-fn phi_inputs(
-    site: PhiSite,
-    contributions: &[(Predecessor, Frame)],
-) -> Result<BTreeMap<Predecessor, ValueId>, Error> {
-    contributions
-        .iter()
-        .map(|(predecessor, frame)| {
-            let value = frame.value_at(site.position).copied().ok_or_else(|| {
-                Error::internal("an active phi input frame lacks its merged slot")
-            })?;
-            Ok((*predecessor, value))
-        })
-        .collect()
-}
-
-fn synchronize_phi_definitions(
-    merged: &Frame,
-    contributions: &[(Predecessor, Frame)],
-    active_phis: BTreeMap<PhiSite, ValueId>,
-) -> Result<BTreeMap<PhiSite, PhiDefinition>, Error> {
-    active_phis
-        .into_iter()
-        .filter_map(|(site, result)| {
-            let merged_value = merged.value_at(site.position).copied();
-            (merged_value == Some(result)).then_some((site, result))
-        })
-        .map(|(site, result)| {
-            phi_inputs(site, contributions).map(|inputs| {
-                let phi_definition = PhiDefinition { result, inputs };
-                (site, phi_definition)
-            })
-        })
-        .collect()
 }
