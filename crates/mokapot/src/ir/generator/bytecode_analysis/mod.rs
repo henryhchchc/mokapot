@@ -15,7 +15,10 @@ use std::collections::BTreeMap;
 use crate::{
     ir::{
         ValueId,
-        generator::{bytecode_analysis::jvm::Frame, error::Error},
+        generator::{
+            bytecode_analysis::{analyzer::Analyzer, jvm::Frame},
+            error::Error,
+        },
     },
     jvm::{Method, code::MethodBody},
 };
@@ -24,7 +27,7 @@ pub(super) fn analyze(
     method: &Method,
     cfg: &super::bytecode_cfg::BytecodeCfg,
 ) -> Result<scalar::ScalarGraph, Error> {
-    analyzer::analyze(method, cfg)
+    Analyzer::new(method, cfg)?.run()
 }
 
 /// Symbolic executor used by block-level bytecode analysis.

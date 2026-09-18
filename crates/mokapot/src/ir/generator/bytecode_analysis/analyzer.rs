@@ -43,12 +43,8 @@ impl Analyzer<'_, '_> {
     }
 }
 
-pub(super) fn analyze(method: &Method, cfg: &BytecodeCfg) -> Result<ScalarGraph, Error> {
-    Analyzer::new(method, cfg)?.run()
-}
-
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
-    fn new(method: &'method Method, cfg: &'cfg BytecodeCfg) -> Result<Self, Error> {
+    pub(super) fn new(method: &'method Method, cfg: &'cfg BytecodeCfg) -> Result<Self, Error> {
         Ok(Self {
             cfg,
             executor: Executor::for_method(method)?,
@@ -63,7 +59,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     /// The worklist rests on the invariant documented on [`LocationState`]: a
     /// location's successor targets never change, so its predecessor set only
     /// grows and neither an entry frame nor an execution can be revoked.
-    fn run(mut self) -> Result<ScalarGraph, Error> {
+    pub(super) fn run(mut self) -> Result<ScalarGraph, Error> {
         let entry = Location::Bytecode(self.cfg.entry_block());
         self.locations
             .entry(entry)
