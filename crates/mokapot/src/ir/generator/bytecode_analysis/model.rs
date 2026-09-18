@@ -29,40 +29,40 @@ pub(super) enum Predecessor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct PhiSite {
-    pub(super) location: Location,
-    pub(super) position: jvm::Position,
+    pub location: Location,
+    pub position: jvm::Position,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PhiDefinition {
-    pub(super) result: ValueId,
-    pub(super) inputs: BTreeMap<Predecessor, ValueId>,
+    pub result: ValueId,
+    pub inputs: BTreeMap<Predecessor, ValueId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AnalyzedEdge {
-    pub(super) target: Location,
-    pub(super) transfer: ControlTransfer,
+pub(super) struct LiftedEdge {
+    pub target: Location,
+    pub transfer: ControlTransfer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AnalyzedBlock {
-    pub(super) caught_exception: Option<ValueId>,
-    pub(super) operations: Vec<(ProgramCounter, OperationKind)>,
-    pub(super) terminator: TerminatorKind,
-    pub(super) terminator_source: Option<ProgramCounter>,
-    pub(super) successors: AnalyzedSuccessors,
+pub(super) struct LiftedBlock {
+    pub caught_exception: Option<ValueId>,
+    pub operations: Vec<(ProgramCounter, OperationKind)>,
+    pub terminator: TerminatorKind,
+    pub terminator_source: Option<ProgramCounter>,
+    pub successors: LiftedSuccessors,
 }
 
 /// Successor transfers coupled to the frame contributed to each target.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct AnalyzedSuccessors {
-    pub(super) edges: Vec<AnalyzedEdge>,
+pub(super) struct LiftedSuccessors {
+    pub edges: Vec<LiftedEdge>,
     output_frames: BTreeMap<Location, Frame>,
 }
 
-impl AnalyzedSuccessors {
-    pub(super) fn push(&mut self, edge: AnalyzedEdge, frame: Frame) {
+impl LiftedSuccessors {
+    pub(super) fn push(&mut self, edge: LiftedEdge, frame: Frame) {
         if let Some(existing) = self.output_frames.get(&edge.target) {
             assert_eq!(existing, &frame, "parallel edges must contribute one frame");
         } else {
@@ -82,8 +82,8 @@ impl AnalyzedSuccessors {
 /// only adds entries to `contributions`; it never removes them.
 #[derive(Debug, Default)]
 pub(super) struct LocationState {
-    pub(super) contributions: BTreeMap<Predecessor, Frame>,
-    pub(super) execution: LocationExecution,
+    pub contributions: BTreeMap<Predecessor, Frame>,
+    pub execution: LocationExecution,
 }
 
 /// Execution lifecycle of a reachable analysis location.
@@ -95,7 +95,7 @@ pub(super) enum LocationExecution {
     /// The input frame changed and the location must be executed.
     Pending { input: Frame },
     /// The location was executed with the current input frame.
-    Complete { input: Frame, block: AnalyzedBlock },
+    Complete { input: Frame, block: LiftedBlock },
 }
 
 impl LocationExecution {
@@ -106,7 +106,7 @@ impl LocationExecution {
         }
     }
 
-    pub(super) const fn block(&self) -> Option<&AnalyzedBlock> {
+    pub(super) const fn block(&self) -> Option<&LiftedBlock> {
         match self {
             Self::Complete { block, .. } => Some(block),
             Self::Uninitialized | Self::Pending { .. } => None,
@@ -121,7 +121,7 @@ impl LocationExecution {
         true
     }
 
-    pub(super) fn complete(&mut self, block: AnalyzedBlock) {
+    pub(super) fn complete(&mut self, block: LiftedBlock) {
         let Self::Pending { input } = std::mem::take(self) else {
             unreachable!("only a pending location can finish execution");
         };

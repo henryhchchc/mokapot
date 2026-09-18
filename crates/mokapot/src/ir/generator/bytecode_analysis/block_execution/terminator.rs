@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use super::super::{
     analyzer::Analyzer,
     jvm::ValueCategory::{Category1, Category2},
-    model::{AnalyzedEdge, Frame, Location},
+    model::{Frame, LiftedEdge, Location},
 };
 use crate::ir::{
     OperationKind, TerminatorKind,
@@ -21,7 +21,7 @@ use crate::ir::{
 };
 use crate::jvm::code::Instruction;
 
-type LoweredTerminator = (TerminatorKind, Vec<AnalyzedEdge>, Option<OperationKind>);
+type LoweredTerminator = (TerminatorKind, Vec<LiftedEdge>, Option<OperationKind>);
 
 impl Analyzer<'_, '_> {
     /// Lowers the structural terminator of `block`, appending its successors.
@@ -63,11 +63,11 @@ fn lower_branch(
     Ok((
         TerminatorKind::Branch,
         vec![
-            AnalyzedEdge {
+            LiftedEdge {
                 target: Location::Bytecode(taken),
                 transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
             },
-            AnalyzedEdge {
+            LiftedEdge {
                 target: Location::Bytecode(fallthrough),
                 transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
             },
@@ -84,7 +84,7 @@ fn lower_switch(
     let match_value = frame.stack.pop(Category1)?;
     let mut successors = cases
         .iter()
-        .map(|(&case, &target)| AnalyzedEdge {
+        .map(|(&case, &target)| LiftedEdge {
             target: Location::Bytecode(target),
             transfer: ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
                 Predicate::Equal(
@@ -103,7 +103,7 @@ fn lower_switch(
             ))
         })
         .collect();
-    successors.push(AnalyzedEdge {
+    successors.push(LiftedEdge {
         target: Location::Bytecode(default),
         transfer: ControlTransfer::Conditional(default_guard),
     });
@@ -180,8 +180,8 @@ fn lower_terminal(
     Ok((kind, Vec::new(), None))
 }
 
-const fn unconditional(target: JvmBlockId) -> AnalyzedEdge {
-    AnalyzedEdge {
+const fn unconditional(target: JvmBlockId) -> LiftedEdge {
+    LiftedEdge {
         target: Location::Bytecode(target),
         transfer: ControlTransfer::Unconditional,
     }

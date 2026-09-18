@@ -4,7 +4,7 @@ mod terminator;
 
 use super::{
     analyzer::Analyzer,
-    model::{AnalyzedBlock, AnalyzedEdge, AnalyzedSuccessors, Frame, Location},
+    model::{Frame, LiftedBlock, LiftedEdge, LiftedSuccessors, Location},
 };
 use crate::{
     ir::generator::{
@@ -23,32 +23,32 @@ impl Analyzer<'_, '_> {
         &mut self,
         location: Location,
         input: Frame,
-    ) -> Result<AnalyzedBlock, Error> {
+    ) -> Result<LiftedBlock, Error> {
         match location {
             Location::Bytecode(id) => self.execute_bytecode(id, input),
             Location::Handler(block) => Self::execute_handler(block, input),
-            Location::Unwind => Ok(AnalyzedBlock {
+            Location::Unwind => Ok(LiftedBlock {
                 caught_exception: None,
                 operations: Vec::new(),
                 terminator: TerminatorKind::Unwind,
                 terminator_source: None,
-                successors: AnalyzedSuccessors::default(),
+                successors: LiftedSuccessors::default(),
             }),
         }
     }
 
-    fn execute_handler(block: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
+    fn execute_handler(block: JvmBlockId, input: Frame) -> Result<LiftedBlock, Error> {
         let caught = *input.handler_exception().map_err(Error::from)?;
         let target = Location::Bytecode(block);
-        let mut successors = AnalyzedSuccessors::default();
+        let mut successors = LiftedSuccessors::default();
         successors.push(
-            AnalyzedEdge {
+            LiftedEdge {
                 target,
                 transfer: ControlTransfer::Unconditional,
             },
             input,
         );
-        Ok(AnalyzedBlock {
+        Ok(LiftedBlock {
             caught_exception: Some(caught),
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
@@ -57,7 +57,7 @@ impl Analyzer<'_, '_> {
         })
     }
 
-    fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<AnalyzedBlock, Error> {
+    fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<LiftedBlock, Error> {
         let block = self.cfg.block(id);
         let final_pc = block.end_pc;
         let has_explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
@@ -95,14 +95,14 @@ impl Analyzer<'_, '_> {
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
         }
-        let mut successors = AnalyzedSuccessors::default();
+        let mut successors = LiftedSuccessors::default();
         for edge in edges {
             successors.push(edge, frame.clone());
         }
         for exceptional_target in &block.exception_handlers {
             self.push_exception_successor(exceptional_target, &pre_final_frame, &mut successors)?;
         }
-        Ok(AnalyzedBlock {
+        Ok(LiftedBlock {
             caught_exception: None,
             operations,
             terminator,
@@ -115,7 +115,7 @@ impl Analyzer<'_, '_> {
         &mut self,
         exceptional_target: &bytecode_cfg::ExceptionalTarget,
         input_frame: &Frame,
-        successors: &mut AnalyzedSuccessors,
+        successors: &mut LiftedSuccessors,
     ) -> Result<(), Error> {
         match exceptional_target {
             bytecode_cfg::ExceptionalTarget::Handler { block, catch_type } => {
@@ -123,7 +123,7 @@ impl Analyzer<'_, '_> {
                 let caught = self.caught_exception(*block)?;
                 let frame = input_frame.clone().exception_handler_frame(caught)?;
                 successors.push(
-                    AnalyzedEdge {
+                    LiftedEdge {
                         target: location,
                         transfer: ControlTransfer::Exception(catch_type.clone()),
                     },
@@ -132,7 +132,7 @@ impl Analyzer<'_, '_> {
             }
             bytecode_cfg::ExceptionalTarget::Unwind => {
                 successors.push(
-                    AnalyzedEdge {
+                    LiftedEdge {
                         target: Location::Unwind,
                         transfer: ControlTransfer::Unwind,
                     },

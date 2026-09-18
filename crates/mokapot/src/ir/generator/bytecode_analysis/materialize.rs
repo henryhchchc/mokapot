@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use super::{
     analyzer::Analyzer,
-    model::{AnalyzedBlock, Location, PhiDefinition, Predecessor},
+    model::{LiftedBlock, Location, PhiDefinition, Predecessor},
     scalar::{PhiCandidate, ScalarBlock, ScalarGraph, Successor},
 };
 use crate::ir::{
@@ -125,7 +125,7 @@ fn materialize_phi(
 }
 
 fn materialize_block(
-    analyzed: AnalyzedBlock,
+    analyzed: LiftedBlock,
     id: BlockId,
     block_ids_by_location: &BTreeMap<Location, BlockId>,
 ) -> Result<ScalarBlock, Error> {
