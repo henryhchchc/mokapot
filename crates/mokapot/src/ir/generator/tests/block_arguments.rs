@@ -157,7 +157,7 @@ fn entry_self_loop_needs_no_synthetic_block_or_redundant_parameters() {
 }
 
 #[test]
-fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
+fn mutually_recursive_trivial_block_arguments_collapse_in_a_loop() {
     let method = method(
         [
             (0, Instruction::ILoad1),
@@ -200,7 +200,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
 }
 
 #[test]
-fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
+fn irreducible_loop_retains_a_finite_cyclic_block_argument_pair() {
     let method = method(
         [
             (0, Instruction::ILoad0),

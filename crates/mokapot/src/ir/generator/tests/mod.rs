@@ -34,9 +34,9 @@ fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     MokaIRMethod::from_method(method)
 }
 
+mod block_arguments;
 mod blocks;
 mod control_flow;
 mod diagnostics;
 mod effects;
 mod exceptions;
-mod phis;
