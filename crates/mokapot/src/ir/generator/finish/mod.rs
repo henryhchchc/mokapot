@@ -1,5 +1,7 @@
 //! Attaches method metadata and derived indexes to canonical SSA blocks.
 
+use std::collections::HashMap;
+
 use crate::{
     ir::{
         BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, ValueDefinition,
@@ -89,20 +91,12 @@ impl FinishState {
 
 #[derive(Default)]
 struct FinishState {
-    definitions: Vec<Option<ValueDefinition>>,
+    definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 impl FinishState {
     fn define(&mut self, value: ValueId, definition: ValueDefinition) -> Result<(), Error> {
-        let index = usize::try_from(value.index())
-            .map_err(|_| Error::internal("the value index cannot be addressed"))?;
-        let required_len = index
-            .checked_add(1)
-            .ok_or_else(|| Error::internal("the value index cannot be addressed"))?;
-        if self.definitions.len() < required_len {
-            self.definitions.resize(required_len, None);
-        }
-        if self.definitions[index].replace(definition).is_some() {
+        if self.definitions.insert(value, definition).is_some() {
             return Err(Error::internal("a value identity has multiple definitions"));
         }
         Ok(())
@@ -125,7 +119,7 @@ mod tests {
     };
 
     #[test]
-    fn eliminated_parameter_leaves_a_hole_without_renumbering_live_values() {
+    fn eliminated_parameter_has_no_definition_without_renumbering_live_values() {
         let block = BlockId::new(0);
         let parameter = ValueId::new(0);
         let eliminated_parameter = ValueId::new(1);

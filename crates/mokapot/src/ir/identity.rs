@@ -60,8 +60,4 @@ impl ValueId {
     pub(crate) const fn new(index: u32) -> Self {
         Self(index)
     }
-
-    pub(crate) const fn index(self) -> u32 {
-        self.0
-    }
 }

@@ -299,26 +299,19 @@ fn verify_definition_index(
     method: &MokaIRMethod,
     definitions: &BTreeMap<ValueId, ValueDefinition>,
 ) -> VerificationResult {
-    for (index, &indexed_definition) in method.value_definitions().iter().enumerate() {
-        let index = u32::try_from(index)
-            .map_err(|_| "value definition index cannot be represented".to_owned())?;
-        let value = ValueId::new(index);
-        let actual_definition = definitions.get(&value).copied();
-        if indexed_definition != actual_definition {
-            return Err(match (indexed_definition, actual_definition) {
-                (Some(indexed), Some(actual)) => {
-                    format!("definition index for {value} is {indexed:?}, expected {actual:?}")
-                }
-                (Some(indexed), None) => {
-                    format!("definition index contains undefined value {value} as {indexed:?}")
-                }
-                (None, Some(actual)) => format!(
-                    "definition index has a hole for live value {value}, expected {actual:?}"
+    for (&value, &indexed_definition) in method.value_definitions() {
+        let expected = definitions.get(&value).copied();
+        if expected != Some(indexed_definition) {
+            return Err(match expected {
+                Some(expected) => format!(
+                    "definition index for {value} is {indexed_definition:?}, expected {expected:?}"
                 ),
-                (None, None) => unreachable!("equal empty definitions were handled above"),
+                None => format!(
+                    "definition index contains undefined value {value} as {indexed_definition:?}"
+                ),
             });
         }
-        if let Some(ValueDefinition::Instruction(location)) = indexed_definition
+        if let ValueDefinition::Instruction(location) = indexed_definition
             && method.instruction(location).is_none()
         {
             return Err(format!(

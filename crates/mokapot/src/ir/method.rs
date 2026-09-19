@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::{
     BasicBlock, BlockId, BlockParameter, InstructionLocation, MokaIRBuildError, Operation,
@@ -27,7 +27,7 @@ pub struct MokaIRMethod {
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
-    value_definitions: Vec<Option<ValueDefinition>>,
+    value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -49,7 +49,7 @@ pub(crate) struct MokaIRMethodParts {
     pub(crate) source_map: SourceMap,
     pub(crate) this_value: Option<ValueId>,
     pub(crate) parameter_values: Vec<ValueId>,
-    pub(crate) value_definitions: Vec<Option<ValueDefinition>>,
+    pub(crate) value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// The invocation boundary that supplies arguments to the method's entry block.
@@ -188,10 +188,7 @@ impl MokaIRMethod {
     /// retained definition yields `None`.
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
-        self.value_definitions
-            .get(usize::try_from(value.index()).ok()?)
-            .copied()
-            .flatten()
+        self.value_definitions.get(&value).copied()
     }
 
     pub(crate) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
@@ -210,7 +207,7 @@ impl MokaIRMethod {
     }
 
     #[cfg(test)]
-    pub(crate) fn value_definitions(&self) -> &[Option<ValueDefinition>] {
+    pub(crate) const fn value_definitions(&self) -> &HashMap<ValueId, ValueDefinition> {
         &self.value_definitions
     }
 
