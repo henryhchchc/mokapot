@@ -1,8 +1,14 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::{
     BasicBlock, BlockId, BlockParameter, InstructionLocation, MokaIRBuildError, Operation,
-    SourceMap, Terminator, ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
+    SourceMap, Terminator, ValueDefinition, ValueId,
+    control_flow::{
+        self, Edge,
+        path_condition::{PathCondition, SolvingBudget},
+    },
+    expression::Predicate,
+    generator,
 };
 use crate::{
     jvm::{self, Method as JvmMethod, method, references::ClassRef},
@@ -11,9 +17,9 @@ use crate::{
 
 /// A completed scalar-SSA representation of the reachable part of a JVM method.
 ///
-/// Blocks, edges, and values have opaque identities local to this method.
-/// Value identities may be sparse and must not be interpreted as a count or
-/// ordering of definitions.
+/// Blocks and values have opaque identities local to this method. These
+/// identities may be sparse and must not be interpreted as positions, counts,
+/// or creation order.
 /// Instructions are addressed by structural locations, and block terminators
 /// are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
@@ -23,11 +29,11 @@ pub struct MokaIRMethod {
     descriptor: MethodDescriptor,
     owner: ClassRef,
     entry: MethodEntry,
-    blocks: BTreeMap<BlockId, BasicBlock>,
+    blocks: HashMap<BlockId, BasicBlock>,
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
-    value_definitions: Vec<Option<ValueDefinition>>,
+    value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -43,13 +49,13 @@ pub enum InstructionRef<'method> {
     Terminator(&'method Terminator),
 }
 
-pub(crate) struct MokaIRMethodParts {
-    pub(crate) entry: MethodEntry,
-    pub(crate) blocks: BTreeMap<BlockId, BasicBlock>,
-    pub(crate) source_map: SourceMap,
-    pub(crate) this_value: Option<ValueId>,
-    pub(crate) parameter_values: Vec<ValueId>,
-    pub(crate) value_definitions: Vec<Option<ValueDefinition>>,
+pub(super) struct MokaIRMethodParts {
+    pub(super) entry: MethodEntry,
+    pub(super) blocks: HashMap<BlockId, BasicBlock>,
+    pub(super) source_map: SourceMap,
+    pub(super) this_value: Option<ValueId>,
+    pub(super) parameter_values: Vec<ValueId>,
+    pub(super) value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// The invocation boundary that supplies arguments to the method's entry block.
@@ -130,14 +136,6 @@ impl MokaIRMethod {
         &self.entry
     }
 
-    /// Returns all reachable blocks in deterministic identity order.
-    ///
-    /// Each block exposes entry parameters, ordered operations, and one terminator.
-    #[must_use]
-    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> {
-        self.blocks.iter().map(|(&id, block)| (id, block))
-    }
-
     /// Looks up a block by its method-local identity.
     ///
     /// Identities outside this method's block set yield `None`.
@@ -188,13 +186,35 @@ impl MokaIRMethod {
     /// retained definition yields `None`.
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
-        self.value_definitions
-            .get(usize::try_from(value.index()).ok()?)
-            .copied()
-            .flatten()
+        self.value_definitions.get(&value).copied()
     }
 
-    pub(crate) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
+    /// Returns all outgoing block-to-block successor arms from `source`.
+    ///
+    /// An identity outside this method yields no arms. Method-exiting unwind
+    /// arms are not returned because they have no basic-block target.
+    pub fn outgoing_edges(&self, source: BlockId) -> impl Iterator<Item = Edge<'_>> {
+        control_flow::outgoing_edges(&self.blocks, source)
+    }
+
+    /// Computes path conditions at reachable blocks.
+    #[must_use]
+    pub fn path_conditions(&self) -> HashMap<BlockId, PathCondition<&Predicate>> {
+        self.path_conditions_with_budget(SolvingBudget::default())
+    }
+
+    /// Computes path conditions with a custom minimization budget.
+    #[must_use]
+    pub fn path_conditions_with_budget(
+        &self,
+        budget: SolvingBudget,
+    ) -> HashMap<BlockId, PathCondition<&Predicate>> {
+        control_flow::path_condition::analyze(&self.blocks, self.entry.target, budget)
+    }
+}
+
+impl MokaIRMethod {
+    pub(super) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
         Self {
             access_flags: method.access_flags,
             name: method.name.clone(),
@@ -208,27 +228,7 @@ impl MokaIRMethod {
             value_definitions: parts.value_definitions,
         }
     }
-
-    #[cfg(test)]
-    pub(crate) fn value_definitions(&self) -> &[Option<ValueDefinition>] {
-        &self.value_definitions
-    }
-
-    #[cfg(test)]
-    pub(crate) const fn entry_mut(&mut self) -> &mut MethodEntry {
-        &mut self.entry
-    }
-
-    #[cfg(test)]
-    pub(crate) const fn blocks_mut(&mut self) -> &mut BTreeMap<BlockId, BasicBlock> {
-        &mut self.blocks
-    }
-
-    /// Returns a borrowed control-flow view derived from block terminators.
-    ///
-    /// The returned view does not store an independent edge set.
-    #[must_use]
-    pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
-        ControlFlowGraph::new(&self.blocks, self.entry.target)
-    }
 }
+
+#[cfg(test)]
+mod verify;

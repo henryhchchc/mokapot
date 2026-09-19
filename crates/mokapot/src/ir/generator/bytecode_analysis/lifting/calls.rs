@@ -12,7 +12,7 @@ impl LiftContext<'_, '_> {
         method: &MethodRef,
         has_receiver: bool,
     ) -> Result<Option<Operation>, Error> {
-        let definition = self.definition_id_for_return(&method.descriptor.return_type)?;
+        let definition = self.definition_id_for_return(&method.descriptor.return_type);
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
             .then(|| self.frame.stack.pop(Category1))
@@ -31,7 +31,7 @@ impl LiftContext<'_, '_> {
         bootstrap_method_index: u16,
         name: &str,
     ) -> Result<Option<Operation>, Error> {
-        let definition = self.definition_id_for_return(&descriptor.return_type)?;
+        let definition = self.definition_id_for_return(&descriptor.return_type);
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,

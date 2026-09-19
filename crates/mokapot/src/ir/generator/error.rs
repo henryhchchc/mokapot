@@ -72,22 +72,22 @@ pub enum Error {
 }
 
 impl Error {
-    pub(crate) const fn malformed(pc: Option<ProgramCounter>, kind: MalformedBytecode) -> Self {
+    pub(super) const fn malformed(pc: Option<ProgramCounter>, kind: MalformedBytecode) -> Self {
         Self::MalformedBytecode { pc, kind }
     }
 
-    pub(crate) const fn internal(message: &'static str) -> Self {
+    pub(super) const fn internal(message: &'static str) -> Self {
         Self::InternalInvariant { pc: None, message }
     }
 
-    pub(crate) const fn internal_at(pc: ProgramCounter, message: &'static str) -> Self {
+    pub(super) const fn internal_at(pc: ProgramCounter, message: &'static str) -> Self {
         Self::InternalInvariant {
             pc: Some(pc),
             message,
         }
     }
 
-    pub(crate) const fn at_instruction(self, pc: ProgramCounter) -> Self {
+    pub(super) const fn at_instruction(self, pc: ProgramCounter) -> Self {
         match self {
             Self::InvalidFrame { pc: None, source } => Self::InvalidFrame {
                 pc: Some(pc),

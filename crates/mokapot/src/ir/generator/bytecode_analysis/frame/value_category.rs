@@ -8,7 +8,7 @@ pub(crate) enum ValueCategory {
 }
 
 impl ValueCategory {
-    pub(crate) const fn slot_count(self) -> usize {
+    pub(super) const fn slot_count(self) -> usize {
         match self {
             Self::Category1 => 1,
             Self::Category2 => 2,

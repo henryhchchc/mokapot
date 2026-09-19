@@ -10,6 +10,6 @@ use crate::ir::generator::{draft::DraftMethod, error::Error};
 pub use frame::FrameError;
 use frame::{EntrySlots, Frame, Position, StackOperation, ValueCategory};
 
-pub(super) fn analyze(cfg: &super::bytecode_cfg::NormalizedCfg<'_>) -> Result<DraftMethod, Error> {
+pub(super) fn analyze(cfg: &super::bytecode_cfg::Cfg<'_>) -> Result<DraftMethod, Error> {
     Analyzer::new(cfg)?.run()
 }

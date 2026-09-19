@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     analysis::fixed_point,
-    ir::{BlockId, control_flow::ControlFlowGraph, expression::Predicate},
+    ir::{BasicBlock, BlockId, expression::Predicate},
 };
 use itertools::Itertools;
 
@@ -33,11 +33,12 @@ pub use budget::SolvingBudget;
 pub use literal::BooleanVariable;
 pub use predicate::PathValue;
 
-pub(super) fn analyze(
-    cfg: ControlFlowGraph<'_>,
+pub(in crate::ir) fn analyze(
+    blocks: &HashMap<BlockId, BasicBlock>,
+    entry: BlockId,
     budget: SolvingBudget,
 ) -> HashMap<BlockId, PathCondition<&Predicate>> {
-    let mut problem = analyzer::PathConditionProblem::new(cfg, budget);
+    let mut problem = analyzer::PathConditionProblem::new(blocks, entry, budget);
     let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
     path_conditions
         .into_iter()
@@ -58,13 +59,6 @@ pub struct PathCondition<P> {
 pub struct PathConditionTerm<'a, P>(&'a cube::Cube<P>);
 
 impl<P> PathConditionTerm<'_, P> {
-    /// Iterates over this term's literals.
-    ///
-    /// The iteration order is unspecified.
-    pub fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
-        self.0.literals()
-    }
-
     /// Returns whether this term is the tautological conjunction `⊤`.
     #[must_use]
     pub fn is_tautology(&self) -> bool {
@@ -93,10 +87,6 @@ where
 }
 
 impl<P> PathCondition<P> {
-    const fn with_cover(cover: Cover<P>) -> Self {
-        Self { cover }
-    }
-
     /// Creates the tautological condition `⊤`.
     #[must_use]
     pub fn one() -> Self
@@ -165,13 +155,11 @@ impl<P> PathCondition<P> {
     {
         Self::with_cover(self.cover.reduce(budget))
     }
+}
 
-    #[cfg(test)]
-    fn from_branch_guards(branch_guards: impl IntoIterator<Item = BranchGuard<P>>) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        Self::with_cover(Cover::from_branch_guards(branch_guards))
+impl<P> PathCondition<P> {
+    const fn with_cover(cover: Cover<P>) -> Self {
+        Self { cover }
     }
 }
 

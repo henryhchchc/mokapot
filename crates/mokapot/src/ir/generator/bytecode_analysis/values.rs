@@ -1,36 +1,35 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::{EntrySlots, Frame, Position};
 use crate::{
     ir::{
-        ValueId,
-        generator::{bytecode_cfg::NormalizedCfg, error::Error},
+        IdAllocator, ValueId,
+        generator::{bytecode_cfg::Cfg, error::Error},
     },
-    jvm::method,
+    jvm::{code::ProgramCounter, method},
 };
 
 pub(super) struct ValueContext {
-    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
-    value_id_allocator: ValueIdAllocator,
+    definition_ids: HashMap<ProgramCounter, ValueId>,
+    value_id_allocator: IdAllocator<ValueId>,
     pub(super) receiver_value: Option<ValueId>,
     pub(super) parameter_values: Vec<ValueId>,
 }
 
 impl ValueContext {
-    pub(super) fn for_cfg(cfg: &NormalizedCfg<'_>) -> Result<(Self, Frame), Error> {
+    pub(super) fn for_cfg(cfg: &Cfg<'_>) -> Result<(Self, Frame), Error> {
         let method = cfg.method();
         let body = cfg.body();
 
-        let mut value_id_allocator = ValueIdAllocator::default();
+        let mut value_id_allocator = IdAllocator::default();
         let receiver_value = (!method.access_flags.contains(method::AccessFlags::STATIC))
-            .then(|| value_id_allocator.new_value_id())
-            .transpose()?;
+            .then(|| value_id_allocator.new_id());
         let parameter_values: Vec<ValueId> = method
             .descriptor
             .parameters_types
             .iter()
-            .map(|_| value_id_allocator.new_value_id())
-            .collect::<Result<_, _>>()?;
+            .map(|_| value_id_allocator.new_id())
+            .collect();
         let (initial_frame, entry_slots) = Frame::for_method_entry(
             &method.descriptor,
             body.max_locals,
@@ -45,7 +44,7 @@ impl ValueContext {
             &parameter_values,
         );
         let values = Self {
-            definition_ids: BTreeMap::new(),
+            definition_ids: HashMap::new(),
             value_id_allocator,
             receiver_value,
             parameter_values,
@@ -83,35 +82,16 @@ impl ValueContext {
         }
     }
 
-    pub(super) fn fresh(&mut self) -> Result<ValueId, Error> {
-        self.value_id_allocator.new_value_id()
+    pub(super) fn fresh(&mut self) -> ValueId {
+        self.value_id_allocator.new_id()
     }
 
-    pub(super) fn definition_at(
-        &mut self,
-        pc: crate::jvm::code::ProgramCounter,
-    ) -> Result<ValueId, Error> {
+    pub(super) fn definition_at(&mut self, pc: ProgramCounter) -> ValueId {
         if let Some(&id) = self.definition_ids.get(&pc) {
-            return Ok(id);
+            return id;
         }
-        let id = self.fresh()?;
+        let id = self.fresh();
         self.definition_ids.insert(pc, id);
-        Ok(id)
-    }
-}
-
-#[derive(Debug, Default)]
-struct ValueIdAllocator {
-    next_value_idx: u32,
-}
-
-impl ValueIdAllocator {
-    fn new_value_id(&mut self) -> Result<ValueId, Error> {
-        let id = ValueId::new(self.next_value_idx);
-        self.next_value_idx = self
-            .next_value_idx
-            .checked_add(1)
-            .ok_or_else(|| Error::internal("the scalar value identity space is exhausted"))?;
-        Ok(id)
+        id
     }
 }

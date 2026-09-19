@@ -1,8 +1,30 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use proptest::{collection::hash_set, prelude::*};
 
-use super::{BooleanVariable, BranchGuard, PathCondition, SolvingBudget};
+use super::cover::Cover;
+use super::{BooleanVariable, BranchGuard, PathCondition, PathConditionTerm, SolvingBudget};
+
+impl<P> PathConditionTerm<'_, P> {
+    /// Iterates over this term's literals.
+    ///
+    /// The iteration order is unspecified.
+    pub fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
+        self.0.literals()
+    }
+}
+
+impl<P> PathCondition<P> {
+    fn from_branch_guards(branch_guards: impl IntoIterator<Item = BranchGuard<P>>) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        Self::with_cover(Cover::from_branch_guards(branch_guards))
+    }
+}
 
 impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
     type Parameters = (u32, bool);
@@ -73,14 +95,6 @@ fn arb_test_cond() -> impl Strategy<Value = PathCondition<u32>> {
     .prop_map(PathCondition::from_branch_guards)
 }
 
-fn conjunction(literals: impl IntoIterator<Item = BooleanVariable<u32>>) -> PathCondition<u32> {
-    literals
-        .into_iter()
-        .fold(PathCondition::one(), |condition, literal| {
-            condition & literal
-        })
-}
-
 mod raw_structure {
     use super::*;
 
@@ -119,64 +133,6 @@ mod raw_structure {
         let lhs = PathCondition::one() & BooleanVariable::Positive(1_u32);
         let rhs = lhs & BooleanVariable::Negative(1_u32);
         assert_eq!(rhs, PathCondition::zero());
-    }
-
-    #[test]
-    fn disjunction_preserves_more_specific_terms_structurally() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathCondition::of(a.clone());
-        let rhs = PathCondition::of(a.clone()) & b;
-        assert_ne!(lhs.clone() | rhs, lhs);
-    }
-
-    #[test]
-    fn disjunction_preserves_complementary_terms_structurally() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let lhs = PathCondition::of(a.clone()) & b.clone();
-        let rhs = PathCondition::of(a.clone()) & !b;
-        assert_ne!(lhs | rhs, PathCondition::of(a));
-    }
-
-    #[test]
-    fn structurally_distinct_equivalent_forms_are_not_equal_without_reduction() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let specific = PathCondition::of(a.clone()) & b.clone();
-        let general = PathCondition::of(a.clone()) & b.clone() | (PathCondition::of(a) & !b);
-        assert_ne!(specific, general);
-    }
-
-    #[test]
-    fn disjunction_order_is_irrelevant_even_for_complex_covers() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let c = BooleanVariable::Positive(3_u32);
-
-        let branch_guards = [
-            conjunction([!a.clone(), !b.clone(), !c.clone()]),
-            conjunction([!a.clone(), b.clone(), !c.clone()]),
-            conjunction([!a.clone(), b.clone(), c.clone()]),
-            conjunction([a.clone(), !b.clone(), !c.clone()]),
-            conjunction([a.clone(), !b.clone(), c.clone()]),
-        ];
-
-        let lhs = branch_guards
-            .iter()
-            .cloned()
-            .fold(PathCondition::zero(), |condition, branch_guard| {
-                condition | branch_guard
-            });
-        let rhs = branch_guards
-            .iter()
-            .rev()
-            .cloned()
-            .fold(PathCondition::zero(), |condition, branch_guard| {
-                condition | branch_guard
-            });
-
-        assert_eq!(lhs, rhs);
     }
 }
 

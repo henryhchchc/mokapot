@@ -1,84 +1,100 @@
 //! Lifting and successor construction for one reachable structural block.
 
-mod terminator;
+mod dataflow;
+
+use std::collections::BTreeMap;
 
 use super::super::lifting;
-use super::{Analyzer, Frame, LiftedArm, LiftedBlock, LiftedEdge, LiftedTerminator};
+use super::{Analyzer, Frame, LiftedArm, LiftedBlock, LiftedTerminator};
 use crate::ir::{
-    BlockId, BlockKind,
+    BlockId, BlockKind, Operation,
     control_flow::ControlTransfer,
     generator::{
-        bytecode_cfg::{
-            BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge, NormalizedTarget,
-        },
+        bytecode_cfg::{ArmId, Block, ControlFlow, Handler, Target},
         error::Error,
     },
 };
-use terminator::LoweredTerminator;
+use crate::jvm::code::{Instruction, ProgramCounter};
+
+/// The frame and operations reached at a block's final instruction.
+struct BlockTail<'instruction> {
+    instruction: &'instruction Instruction,
+    pc: ProgramCounter,
+    /// The frame before the final instruction runs; handler frames derive from it.
+    pre_final_frame: Frame,
+    frame: Frame,
+    operations: Vec<(ProgramCounter, Operation)>,
+}
+
+/// Builds one block arm carrying `frame`.
+const fn block_arm(
+    arm: ArmId,
+    target: BlockId,
+    transfer: ControlTransfer,
+    frame: Frame,
+) -> LiftedArm {
+    LiftedArm::Block {
+        arm,
+        target,
+        transfer,
+        frame,
+    }
+}
 
 impl Analyzer<'_, '_> {
-    /// Executes one normalized block, producing its analyzed block.
+    /// Executes one block, producing its analyzed block.
     ///
-    /// Its successor identities and targets were fixed before frame analysis.
+    /// Its successor targets and arms were fixed before frame analysis.
     pub(super) fn execute(&mut self, block: BlockId, input: Frame) -> Result<LiftedBlock, Error> {
-        match self.cfg.block(block).kind {
-            NormalizedBlockKind::Bytecode(id) => self.execute_bytecode(block, id, input),
-            NormalizedBlockKind::HandlerEntry(_) => {
+        let node = self.cfg.block(block);
+        match node {
+            Block::Bytecode {
+                start_pc, end_pc, ..
+            } => {
+                let control = node
+                    .control()
+                    .expect("a bytecode block has a control transfer")
+                    .clone();
+                self.execute_bytecode(*start_pc, *end_pc, control, input)
+            }
+            Block::HandlerEntry { successor } => {
                 let caught = *input.handler_exception().map_err(Error::from)?;
-                self.execute_passthrough(block, input, BlockKind::LandingPad { exception: caught })
+                let kind = BlockKind::LandingPad { exception: caught };
+                Ok(Self::execute_passthrough(*successor, input, kind))
             }
         }
     }
 
-    fn execute_passthrough(
-        &self,
-        block: BlockId,
-        input: Frame,
-        kind: BlockKind,
-    ) -> Result<LiftedBlock, Error> {
-        let [edge] = self.cfg.block(block).successors.as_slice() else {
-            return Err(Error::internal(
-                "a normalized passthrough block must have one successor",
-            ));
-        };
-        let NormalizedTarget::Block(target) = edge.target else {
-            return Err(Error::internal(
-                "a normalized passthrough must target a block",
-            ));
-        };
-        let target = (
-            LiftedEdge::Block {
-                id: edge.id,
-                target,
-                transfer: ControlTransfer::Unconditional,
-            },
-            Some(input),
+    /// Lowers a landing pad, which unconditionally enters its handler block.
+    const fn execute_passthrough(successor: BlockId, input: Frame, kind: BlockKind) -> LiftedBlock {
+        let target = block_arm(
+            ArmId::Goto,
+            successor,
+            ControlTransfer::Unconditional,
+            input,
         );
-        Ok(LiftedBlock {
+        LiftedBlock {
             kind,
             operations: Vec::new(),
             terminator: LiftedTerminator::Goto { target },
             terminator_source: None,
-        })
+        }
     }
 
     fn execute_bytecode(
         &mut self,
-        block_id: BlockId,
-        id: JvmBlockId,
+        start_pc: ProgramCounter,
+        end_pc: ProgramCounter,
+        control: ControlFlow<BlockId>,
         input: Frame,
     ) -> Result<LiftedBlock, Error> {
-        let block = self.cfg.bytecode_block(id);
-        let final_pc = block.end_pc;
-        let has_explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
         let mut frame = input;
-        let mut operations = Vec::new();
-        let mut instructions = self.cfg.block_instructions(id);
-        let (actual_final_pc, final_instruction) = instructions
+        let mut instructions = self.cfg.instructions_in(start_pc, end_pc);
+        let (final_pc, instruction) = instructions
             .next_back()
             .expect("a structural block must contain its final instruction");
-        debug_assert_eq!(actual_final_pc, final_pc);
-
+        debug_assert_eq!(final_pc, end_pc);
+        let mut operations = Vec::new();
         for (pc, instruction) in instructions {
             let operation =
                 lifting::lift_instruction(&mut self.values, instruction, pc, &mut frame)
@@ -87,109 +103,176 @@ impl Analyzer<'_, '_> {
                 operations.push((pc, operation));
             }
         }
-
-        let pre_final_frame = frame.clone();
-        let mut final_operation = if has_explicit_terminator {
-            None
-        } else {
-            lifting::lift_instruction(&mut self.values, final_instruction, final_pc, &mut frame)
-                .map_err(|error| error.at_instruction(final_pc))?
+        let mut tail = BlockTail {
+            instruction,
+            pc: final_pc,
+            pre_final_frame: frame.clone(),
+            frame,
+            operations,
         };
-        let lowered = terminator::lower(block, final_instruction, &mut frame)
-            .map_err(|error| error.at_instruction(final_pc))?;
-        let fallible_operation = matches!(lowered, LoweredTerminator::Try(_));
-        if !fallible_operation && let Some(operation) = final_operation.take() {
-            operations.push((final_pc, operation));
-        }
-        let topology = self.cfg.block(block_id).successors.clone();
-        let (normal_edges, exceptional_edges): (Vec<_>, Vec<_>) = topology
-            .into_iter()
-            .partition(|edge| matches!(edge.kind, EdgeKind::Normal));
-        let mut normal_edges = normal_edges.into_iter();
-        let mut normal = |transfer| {
-            let edge = normal_edges.next().ok_or_else(|| {
-                Error::internal("lowered successors do not match normalized topology")
-            })?;
-            Ok::<LiftedArm, Error>((
-                LiftedEdge::Block {
-                    id: edge.id,
-                    target: edge.block_target().ok_or_else(|| {
-                        Error::internal("an ordinary successor must target a block")
-                    })?,
-                    transfer,
-                },
-                Some(frame.clone()),
-            ))
-        };
-        let exceptional = exceptional_edges
-            .iter()
-            .map(|edge| self.exception_successor(edge, &pre_final_frame))
-            .collect::<Result<Vec<_>, _>>()?;
-        let terminator = match lowered {
-            LoweredTerminator::Goto(transfer) => LiftedTerminator::Goto {
-                target: normal(transfer)?,
-            },
-            LoweredTerminator::Branch { taken, otherwise } => LiftedTerminator::Branch {
-                taken: normal(taken)?,
-                otherwise: normal(otherwise)?,
-            },
-            LoweredTerminator::Switch { cases, default } => LiftedTerminator::Switch {
-                cases: cases
-                    .into_iter()
-                    .map(&mut normal)
-                    .collect::<Result<_, _>>()?,
-                default: normal(default)?,
-            },
-            LoweredTerminator::Try(transfer) => {
-                let operation = final_operation
-                    .ok_or_else(|| Error::internal("a fallible block must end in an operation"))?;
-                LiftedTerminator::Try {
-                    operation,
-                    normal: normal(transfer)?,
-                    exceptional,
-                }
+        let terminator_source = control.has_terminator_source().then_some(final_pc);
+        let terminator = match control {
+            ControlFlow::Fallthrough { next, handlers } => {
+                self.lower_fallthrough(next, handlers, &mut tail)?
             }
-            LoweredTerminator::Return(value) if exceptional.is_empty() => {
-                LiftedTerminator::Return { value }
-            }
-            LoweredTerminator::Return(value) => LiftedTerminator::TryReturn { value, exceptional },
-            LoweredTerminator::Throw(value) => LiftedTerminator::Throw { value, exceptional },
+            ControlFlow::Goto { target } => LiftedTerminator::Goto {
+                target: block_arm(
+                    ArmId::Goto,
+                    target,
+                    ControlTransfer::Unconditional,
+                    tail.frame.clone(),
+                ),
+            },
+            ControlFlow::Branch { taken, otherwise } => lower_branch(taken, otherwise, &mut tail)?,
+            ControlFlow::Switch { cases, default } => lower_switch(cases, default, &mut tail)?,
+            ControlFlow::Return { handlers } => self.lower_return(handlers, &mut tail)?,
+            ControlFlow::Throw { handlers } => self.lower_throw(handlers, &mut tail)?,
         };
-        if normal_edges.next().is_some() {
-            return Err(Error::internal(
-                "lowered successors do not match normalized topology",
-            ));
-        }
         Ok(LiftedBlock {
             kind: BlockKind::Code,
-            operations,
+            operations: tail.operations,
             terminator,
-            terminator_source: (has_explicit_terminator || fallible_operation).then_some(final_pc),
+            terminator_source,
         })
     }
 
-    fn exception_successor(
+    /// Lowers a fallthrough, whose final operation is ordinary or fallible.
+    fn lower_fallthrough(
         &mut self,
-        edge: &NormalizedEdge,
-        input_frame: &Frame,
-    ) -> Result<LiftedArm, Error> {
-        match &edge.kind {
-            EdgeKind::Exception(catch_type) => match edge.target {
-                NormalizedTarget::Block(target) => {
-                    let caught = self.caught_exception(target)?;
-                    let frame = input_frame.clone().exception_handler_frame(caught)?;
-                    let lifted = LiftedEdge::Block {
-                        id: edge.id,
-                        target,
-                        transfer: ControlTransfer::Exception(catch_type.clone()),
-                    };
-                    Ok((lifted, Some(frame)))
-                }
-                NormalizedTarget::Unwind => Ok((LiftedEdge::Unwind { id: edge.id }, None)),
-            },
-            EdgeKind::Normal => Err(Error::internal(
-                "an ordinary edge was treated as an exceptional successor",
-            )),
+        next: BlockId,
+        handlers: Vec<Handler<BlockId>>,
+        tail: &mut BlockTail<'_>,
+    ) -> Result<LiftedTerminator, Error> {
+        let operation =
+            lifting::lift_instruction(&mut self.values, tail.instruction, tail.pc, &mut tail.frame)
+                .map_err(|error| error.at_instruction(tail.pc))?;
+        let normal = block_arm(
+            ArmId::Fallthrough,
+            next,
+            ControlTransfer::Unconditional,
+            tail.frame.clone(),
+        );
+        if handlers.is_empty() {
+            if let Some(operation) = operation {
+                tail.operations.push((tail.pc, operation));
+            }
+            return Ok(LiftedTerminator::Goto { target: normal });
         }
+        let operation = operation
+            .ok_or_else(|| Error::internal("a fallible block must end in an operation"))?;
+        let exceptional = self.exceptional_arms(handlers, &tail.pre_final_frame)?;
+        Ok(LiftedTerminator::Try {
+            operation,
+            normal,
+            exceptional,
+        })
     }
+
+    /// Lowers a return, which may fail while exiting.
+    fn lower_return(
+        &mut self,
+        handlers: Vec<Handler<BlockId>>,
+        tail: &mut BlockTail<'_>,
+    ) -> Result<LiftedTerminator, Error> {
+        let value = dataflow::return_operand(tail.instruction, &mut tail.frame)
+            .map_err(|error| error.at_instruction(tail.pc))?;
+        if handlers.is_empty() {
+            return Ok(LiftedTerminator::Return { value });
+        }
+        let exceptional = self.exceptional_arms(handlers, &tail.pre_final_frame)?;
+        Ok(LiftedTerminator::TryReturn { value, exceptional })
+    }
+
+    /// Lowers a throw, which delivers to its handlers or unwinds.
+    fn lower_throw(
+        &mut self,
+        handlers: Vec<Handler<BlockId>>,
+        tail: &mut BlockTail<'_>,
+    ) -> Result<LiftedTerminator, Error> {
+        let value = dataflow::throw_operand(tail.instruction, &mut tail.frame)
+            .map_err(|error| error.at_instruction(tail.pc))?;
+        let exceptional = self.exceptional_arms(handlers, &tail.pre_final_frame)?;
+        Ok(LiftedTerminator::Throw { value, exceptional })
+    }
+
+    /// Lowers the ordered exception handlers of a terminator into arms.
+    fn exceptional_arms(
+        &mut self,
+        handlers: Vec<Handler<BlockId>>,
+        input_frame: &Frame,
+    ) -> Result<Vec<LiftedArm>, Error> {
+        handlers
+            .into_iter()
+            .enumerate()
+            .map(|(index, handler)| {
+                let arm = ArmId::Handler(index);
+                match handler.target {
+                    Target::Block(target) => {
+                        let caught = self.caught_exception(target);
+                        let frame = input_frame.clone().exception_handler_frame(caught)?;
+                        let transfer = ControlTransfer::Exception(handler.catch);
+                        Ok(block_arm(arm, target, transfer, frame))
+                    }
+                    Target::Unwind => Ok(LiftedArm::Unwind { arm }),
+                }
+            })
+            .collect()
+    }
+}
+
+/// Lowers a two-way branch, whose guard is read from the final instruction.
+fn lower_branch(
+    taken: BlockId,
+    otherwise: BlockId,
+    tail: &mut BlockTail<'_>,
+) -> Result<LiftedTerminator, Error> {
+    let (taken_transfer, otherwise_transfer) =
+        dataflow::branch_transfers(tail.instruction, &mut tail.frame)
+            .map_err(|error| error.at_instruction(tail.pc))?;
+    Ok(LiftedTerminator::Branch {
+        taken: block_arm(ArmId::Taken, taken, taken_transfer, tail.frame.clone()),
+        otherwise: block_arm(
+            ArmId::Otherwise,
+            otherwise,
+            otherwise_transfer,
+            tail.frame.clone(),
+        ),
+    })
+}
+
+/// Lowers a switch, whose selector is popped and matched by the final instruction.
+fn lower_switch(
+    cases: BTreeMap<i32, BlockId>,
+    default: BlockId,
+    tail: &mut BlockTail<'_>,
+) -> Result<LiftedTerminator, Error> {
+    let selector = dataflow::switch_selector(&mut tail.frame)
+        .map_err(|error| error.at_instruction(tail.pc))?;
+    if cases.is_empty() {
+        return Ok(LiftedTerminator::Goto {
+            target: block_arm(
+                ArmId::Default,
+                default,
+                ControlTransfer::Unconditional,
+                tail.frame.clone(),
+            ),
+        });
+    }
+    let default_transfer = dataflow::default_guard(selector, &cases);
+    let cases = cases
+        .into_iter()
+        .map(|(case, target)| {
+            let transfer = dataflow::case_guard(selector, case);
+            block_arm(ArmId::Case(case), target, transfer, tail.frame.clone())
+        })
+        .collect();
+    Ok(LiftedTerminator::Switch {
+        cases,
+        default: block_arm(
+            ArmId::Default,
+            default,
+            default_transfer,
+            tail.frame.clone(),
+        ),
+    })
 }

@@ -17,11 +17,5 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
         vec![],
     );
 
-    assert!(matches!(
-        build(&method),
-        Err(MokaIRBuildError::InvalidFrame {
-            pc: Some(pc),
-            ..
-        }) if pc == 6.into()
-    ));
+    assert_eq!(frame_failure(&method).0, Some(6.into()));
 }

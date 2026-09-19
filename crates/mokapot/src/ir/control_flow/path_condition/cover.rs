@@ -81,20 +81,6 @@ impl<P> Cover<P> {
         }
     }
 
-    #[cfg(test)]
-    pub(super) fn from_branch_guards(
-        branch_guards: impl IntoIterator<Item = BranchGuard<P>>,
-    ) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        let cubes = branch_guards
-            .into_iter()
-            .filter_map(Cube::from_branch_guard)
-            .collect();
-        Self { cubes }
-    }
-
     pub(super) fn predicates(&self) -> impl Iterator<Item = &P> {
         self.cubes.iter().flat_map(Cube::predicates)
     }
@@ -236,5 +222,21 @@ impl<P> Cover<P> {
         Self {
             cubes: minimizer.minimize(self.cubes),
         }
+    }
+}
+
+#[cfg(test)]
+impl<P> Cover<P> {
+    pub(super) fn from_branch_guards(
+        branch_guards: impl IntoIterator<Item = BranchGuard<P>>,
+    ) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        let cubes = branch_guards
+            .into_iter()
+            .filter_map(Cube::from_branch_guard)
+            .collect();
+        Self { cubes }
     }
 }

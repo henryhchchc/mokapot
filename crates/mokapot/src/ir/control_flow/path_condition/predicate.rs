@@ -48,7 +48,7 @@ impl From<Predicate> for BooleanVariable<Predicate> {
 }
 
 /// An SSA value or constant in a path predicate.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display)]
 pub enum PathValue {
     /// A value produced by the IR.
     Variable(ValueId),

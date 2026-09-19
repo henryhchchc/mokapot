@@ -210,7 +210,7 @@ impl LiftContext<'_, '_> {
         Ok(None)
     }
 
-    fn definition_id(&mut self) -> Result<ValueId, Error> {
+    fn definition_id(&mut self) -> ValueId {
         self.values.definition_at(self.pc)
     }
 
@@ -218,7 +218,7 @@ impl LiftContext<'_, '_> {
     where
         L: FnOnce(ValueId, &mut Frame) -> Result<T, Error>,
     {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         lift(value, self.frame)
     }
 
@@ -256,13 +256,10 @@ impl LiftContext<'_, '_> {
         })
     }
 
-    fn definition_id_for_return(
-        &mut self,
-        return_type: &ReturnType,
-    ) -> Result<Option<ValueId>, Error> {
+    fn definition_id_for_return(&mut self, return_type: &ReturnType) -> Option<ValueId> {
         match return_type {
-            ReturnType::Some(_) => self.definition_id().map(Some),
-            ReturnType::Void => Ok(None),
+            ReturnType::Some(_) => Some(self.definition_id()),
+            ReturnType::Void => None,
         }
     }
 }

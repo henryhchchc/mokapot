@@ -1,5 +1,7 @@
 //! Attaches method metadata and derived indexes to canonical SSA blocks.
 
+use std::collections::HashMap;
+
 use crate::{
     ir::{
         BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, ValueDefinition,
@@ -51,6 +53,11 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
     Ok(method)
 }
 
+#[derive(Default)]
+struct FinishState {
+    definitions: HashMap<ValueId, ValueDefinition>,
+}
+
 impl FinishState {
     fn define_block_values(
         &mut self,
@@ -85,24 +92,9 @@ impl FinishState {
         }
         Ok(())
     }
-}
 
-#[derive(Default)]
-struct FinishState {
-    definitions: Vec<Option<ValueDefinition>>,
-}
-
-impl FinishState {
     fn define(&mut self, value: ValueId, definition: ValueDefinition) -> Result<(), Error> {
-        let index = usize::try_from(value.index())
-            .map_err(|_| Error::internal("the value index cannot be addressed"))?;
-        let required_len = index
-            .checked_add(1)
-            .ok_or_else(|| Error::internal("the value index cannot be addressed"))?;
-        if self.definitions.len() < required_len {
-            self.definitions.resize(required_len, None);
-        }
-        if self.definitions[index].replace(definition).is_some() {
+        if self.definitions.insert(value, definition).is_some() {
             return Err(Error::internal("a value identity has multiple definitions"));
         }
         Ok(())
@@ -111,12 +103,12 @@ impl FinishState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     use super::*;
     use crate::{
         ir::{
-            BasicBlock, BlockId, BlockParameter, EdgeId, Operation, Successor, Terminator,
+            BasicBlock, BlockId, BlockParameter, NumericalId, Operation, Successor, Terminator,
             control_flow::ControlTransfer,
             expression::MathOperation,
             generator::{canonicalize, draft::DraftMethod},
@@ -125,15 +117,15 @@ mod tests {
     };
 
     #[test]
-    fn eliminated_parameter_leaves_a_hole_without_renumbering_live_values() {
-        let block = BlockId::new(0);
-        let parameter = ValueId::new(0);
-        let eliminated_parameter = ValueId::new(1);
-        let result = ValueId::new(2);
+    fn eliminated_parameter_has_no_definition_without_renumbering_live_values() {
+        let block = BlockId::from_raw(0);
+        let parameter = ValueId::from_raw(0);
+        let eliminated_parameter = ValueId::from_raw(1);
+        let result = ValueId::from_raw(2);
         let draft = DraftMethod {
             entry: block,
             entry_arguments: vec![parameter],
-            blocks: BTreeMap::from([(
+            blocks: HashMap::from([(
                 block,
                 BasicBlock {
                     kind: BlockKind::Code,
@@ -146,7 +138,6 @@ mod tests {
                     }],
                     terminator: Terminator::Goto {
                         target: Successor::Block {
-                            id: EdgeId::new(0),
                             target: block,
                             arguments: vec![parameter],
                             transfer: ControlTransfer::Unconditional,
@@ -188,6 +179,6 @@ mod tests {
                 .chain(completed_block.terminator.uses())
                 .all(|value| ir.definition_of(value).is_some())
         );
-        crate::ir::verify::verify(&ir).unwrap();
+        ir.verify();
     }
 }

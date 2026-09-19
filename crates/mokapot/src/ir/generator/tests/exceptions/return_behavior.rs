@@ -1,47 +1,41 @@
 use super::*;
+use crate::ir::BlockKind;
 use crate::jvm::method;
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {
-    let illegal_monitor_state: ClassRef = "java/lang/IllegalMonitorStateException".parse().unwrap();
-    let mut method = method(
-        [
-            (0, Instruction::IConst1),
-            (1, Instruction::IReturn),
-            (10, Instruction::AStore0),
-            (11, Instruction::IConst0),
-            (12, Instruction::IReturn),
-        ],
-        "()I",
-        vec![ExceptionTableEntry {
-            covered_pc: 1.into()..2.into(),
-            handler_pc: 10.into(),
-            catch_type: Some(illegal_monitor_state.clone()),
-        }],
-    );
+    let illegal: ClassRef = "java/lang/IllegalMonitorStateException".parse().unwrap();
+    let body = [
+        (0, Instruction::IConst1),
+        (1, Instruction::IReturn),
+        (10, Instruction::AStore0),
+        (11, Instruction::IConst0),
+        (12, Instruction::IReturn),
+    ];
+    let table = vec![handler(
+        1.into()..2.into(),
+        10.into(),
+        Some(illegal.clone()),
+    )];
+    let mut method = method(body, "()I", table);
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
-    let ret_term = terminator_at(&ir, 1.into());
-    let Terminator::TryReturn { exceptional, .. } = ret_term else {
+    let Terminator::TryReturn { exceptional, .. } = terminator_at(&ir, 1.into()) else {
         panic!("expected a fallible return terminator");
     };
 
     assert_eq!(exceptional.len(), 2);
     assert!(
-        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(caught))) if caught == &illegal_monitor_state)
+        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(it))) if it == &illegal)
     );
     assert_eq!(exceptional[1].transfer(), None);
     assert!(
         exceptional
             .iter()
-            .all(|successor| !matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
+            .all(|s| !matches!(s.transfer(), Some(ControlTransfer::Unconditional)))
     );
-    assert!(matches!(
-        ir.block(exceptional[0].block_target().unwrap())
-            .unwrap()
-            .kind,
-        crate::ir::BlockKind::LandingPad { .. }
-    ));
+    let pad = ir.block(exceptional[0].block_target().unwrap()).unwrap();
+    assert!(matches!(pad.kind, BlockKind::LandingPad { .. }));
 }
 
 #[test]

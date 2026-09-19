@@ -5,14 +5,12 @@ fn terminator_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
     method
         .source_map()
         .instructions_at(pc)
-        .find_map(|location| {
-            matches!(
-                method.instruction(location),
-                Some(InstructionRef::Terminator(_))
-            )
-            .then(|| match method.instruction(location) {
-                Some(InstructionRef::Terminator(terminator)) => terminator,
-                _ => unreachable!(),
+        .find_map(|it| {
+            matches!(method.instruction(it), Some(InstructionRef::Terminator(_))).then(|| {
+                match method.instruction(it) {
+                    Some(InstructionRef::Terminator(terminator)) => terminator,
+                    _ => unreachable!(),
+                }
             })
         })
         .expect("the source PC must map to a terminator")

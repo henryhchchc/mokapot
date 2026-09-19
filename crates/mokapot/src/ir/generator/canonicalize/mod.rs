@@ -3,7 +3,7 @@
 mod finalization;
 mod simplify;
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use crate::ir::{
     ValueId,
@@ -13,7 +13,7 @@ use simplify::{ParameterCandidate, simplify_parameters};
 
 /// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
 pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
-    let mut inputs = BTreeMap::<ValueId, Vec<ValueId>>::new();
+    let mut inputs = HashMap::<ValueId, Vec<ValueId>>::new();
     let entry = &draft.blocks[&draft.entry];
     assert_eq!(entry.parameters.len(), draft.entry_arguments.len());
     for (parameter, &argument) in entry.parameters.iter().zip(&draft.entry_arguments) {
@@ -44,7 +44,7 @@ pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
             };
             (parameter.value, candidate)
         })
-        .collect::<BTreeMap<ValueId, _>>();
+        .collect::<HashMap<ValueId, _>>();
     let simplified = simplify_parameters(candidates)
         .map_err(|_| Error::internal("reachable block parameters form a closed cycle"))?;
     finalization::finalize(draft, &simplified);

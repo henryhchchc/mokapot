@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt, slice};
 
 use super::{
-    BlockId, EdgeId, Operation, ValueId,
+    BlockId, Operation, ValueId,
     control_flow::{ControlTransfer, path_condition::BranchGuard},
     expression::Predicate,
 };
@@ -11,8 +11,6 @@ use super::{
 pub enum Successor {
     /// Continues execution in a basic block.
     Block {
-        /// This arm's identity.
-        id: EdgeId,
         /// The destination block.
         target: BlockId,
         /// Values supplied to the target block's parameters.
@@ -21,26 +19,16 @@ pub enum Successor {
         transfer: ControlTransfer,
     },
     /// Propagates an exception out of the method.
-    Unwind {
-        /// This arm's identity.
-        id: EdgeId,
-    },
+    Unwind,
 }
 
 impl Successor {
-    /// Returns this arm's identity.
-    #[must_use]
-    pub const fn id(&self) -> EdgeId {
-        match self {
-            Self::Block { id, .. } | Self::Unwind { id } => *id,
-        }
-    }
     /// Returns the target block, or `None` when this arm exits by unwinding.
     #[must_use]
     pub const fn block_target(&self) -> Option<BlockId> {
         match self {
             Self::Block { target, .. } => Some(*target),
-            Self::Unwind { .. } => None,
+            Self::Unwind => None,
         }
     }
     /// Returns the values supplied to the target block's parameters.
@@ -48,7 +36,7 @@ impl Successor {
     pub fn arguments(&self) -> &[ValueId] {
         match self {
             Self::Block { arguments, .. } => arguments,
-            Self::Unwind { .. } => &[],
+            Self::Unwind => &[],
         }
     }
     /// Returns the state transfer associated with a block arm.
@@ -58,7 +46,7 @@ impl Successor {
     pub const fn transfer(&self) -> Option<&ControlTransfer> {
         match self {
             Self::Block { transfer, .. } => Some(transfer),
-            Self::Unwind { .. } => None,
+            Self::Unwind => None,
         }
     }
 }
@@ -124,22 +112,23 @@ pub enum Terminator<Arm = Successor> {
 }
 
 impl<Arm> Terminator<Arm> {
-    /// Maps every outgoing arm while preserving the terminator's structure.
-    pub(crate) fn map_arms<MappedArm>(
+    /// Maps every outgoing arm fallibly while preserving the terminator's
+    /// structure.
+    pub(super) fn try_map_arms<MappedArm, E>(
         self,
-        mut map: impl FnMut(Arm) -> MappedArm,
-    ) -> Terminator<MappedArm> {
-        match self {
+        mut map: impl FnMut(Arm) -> Result<MappedArm, E>,
+    ) -> Result<Terminator<MappedArm>, E> {
+        Ok(match self {
             Self::Goto { target } => Terminator::Goto {
-                target: map(target),
+                target: map(target)?,
             },
             Self::Branch { taken, otherwise } => Terminator::Branch {
-                taken: map(taken),
-                otherwise: map(otherwise),
+                taken: map(taken)?,
+                otherwise: map(otherwise)?,
             },
             Self::Switch { cases, default } => Terminator::Switch {
-                cases: cases.into_iter().map(&mut map).collect(),
-                default: map(default),
+                cases: cases.into_iter().map(&mut map).collect::<Result<_, _>>()?,
+                default: map(default)?,
             },
             Self::Try {
                 operation,
@@ -147,23 +136,32 @@ impl<Arm> Terminator<Arm> {
                 exceptional,
             } => Terminator::Try {
                 operation,
-                normal: map(normal),
-                exceptional: exceptional.into_iter().map(map).collect(),
+                normal: map(normal)?,
+                exceptional: exceptional
+                    .into_iter()
+                    .map(&mut map)
+                    .collect::<Result<_, _>>()?,
             },
             Self::Return { value } => Terminator::Return { value },
             Self::TryReturn { value, exceptional } => Terminator::TryReturn {
                 value,
-                exceptional: exceptional.into_iter().map(map).collect(),
+                exceptional: exceptional
+                    .into_iter()
+                    .map(&mut map)
+                    .collect::<Result<_, _>>()?,
             },
             Self::Throw { value, exceptional } => Terminator::Throw {
                 value,
-                exceptional: exceptional.into_iter().map(map).collect(),
+                exceptional: exceptional
+                    .into_iter()
+                    .map(&mut map)
+                    .collect::<Result<_, _>>()?,
             },
-        }
+        })
     }
 
     /// Iterates over outgoing arms in semantic order.
-    pub(crate) fn arms(&self) -> impl Iterator<Item = &Arm> {
+    pub(super) fn arms(&self) -> impl Iterator<Item = &Arm> {
         let (head, tail): (&[_], &[_]) = match self {
             Self::Goto { target } => (slice::from_ref(target), &[]),
             Self::Branch { taken, otherwise } => {
@@ -184,7 +182,7 @@ impl<Arm> Terminator<Arm> {
     }
 
     /// Iterates mutably over outgoing arms in semantic order.
-    pub(crate) fn arms_mut(&mut self) -> impl Iterator<Item = &mut Arm> {
+    pub(super) fn arms_mut(&mut self) -> impl Iterator<Item = &mut Arm> {
         let (head, tail): (&mut [_], &mut [_]) = match self {
             Self::Goto { target } => (slice::from_mut(target), &mut []),
             Self::Branch { taken, otherwise } => {
@@ -206,14 +204,6 @@ impl<Arm> Terminator<Arm> {
 }
 
 impl Terminator<Successor> {
-    #[cfg(test)]
-    pub(crate) fn successor_mut(
-        &mut self,
-        mut predicate: impl FnMut(&Successor) -> bool,
-    ) -> Option<&mut Successor> {
-        self.arms_mut().find(|arm| predicate(arm))
-    }
-
     /// Iterates over outgoing arms in semantic order.
     pub fn successors(&self) -> impl Iterator<Item = &Successor> {
         self.arms()
@@ -240,8 +230,19 @@ impl Terminator<Successor> {
             .collect()
     }
 
+    /// Returns the value defined by a successful attempted operation.
+    #[must_use]
+    pub const fn def(&self) -> Option<ValueId> {
+        match self {
+            Self::Try { operation, .. } => operation.def(),
+            _ => None,
+        }
+    }
+}
+
+impl Terminator<Successor> {
     /// Returns the values this terminator uses, excluding successor arguments.
-    pub(crate) fn local_uses(&self) -> HashSet<ValueId> {
+    pub(super) fn local_uses(&self) -> HashSet<ValueId> {
         let value = match self {
             Self::Throw { value, .. }
             | Self::Return { value: Some(value) }
@@ -268,15 +269,6 @@ impl Terminator<Successor> {
             .chain(guard_uses)
             .collect()
     }
-
-    /// Returns the value defined by a successful attempted operation.
-    #[must_use]
-    pub const fn def(&self) -> Option<ValueId> {
-        match self {
-            Self::Try { operation, .. } => operation.def(),
-            _ => None,
-        }
-    }
 }
 
 impl<Arm> fmt::Display for Terminator<Arm> {
@@ -294,64 +286,5 @@ impl<Arm> fmt::Display for Terminator<Arm> {
             Self::TryReturn { value: None, .. } => f.write_str("try return"),
             Self::Throw { value, .. } => write!(f, "throw {value}"),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn arm(id: u32) -> Successor {
-        Successor::Block {
-            id: EdgeId::new(id),
-            target: BlockId::new(0),
-            arguments: vec![],
-            transfer: ControlTransfer::Unconditional,
-        }
-    }
-
-    fn ids(terminator: &Terminator) -> Vec<EdgeId> {
-        terminator.successors().map(Successor::id).collect()
-    }
-
-    #[test]
-    fn structural_terminators_iterate_arms_in_semantic_order() {
-        assert_eq!(ids(&Terminator::Goto { target: arm(0) }), [EdgeId::new(0)]);
-        assert_eq!(
-            ids(&Terminator::Branch {
-                taken: arm(1),
-                otherwise: arm(2),
-            }),
-            [EdgeId::new(1), EdgeId::new(2)]
-        );
-        assert_eq!(
-            ids(&Terminator::Switch {
-                cases: vec![arm(3), arm(4)],
-                default: arm(5),
-            }),
-            [EdgeId::new(3), EdgeId::new(4), EdgeId::new(5)]
-        );
-        assert_eq!(
-            ids(&Terminator::Throw {
-                value: ValueId::new(0),
-                exceptional: vec![arm(6), arm(7)],
-            }),
-            [EdgeId::new(6), EdgeId::new(7)]
-        );
-    }
-
-    #[test]
-    fn try_terminator_orders_normal_before_exceptional_outcomes() {
-        let terminator = Terminator::Try {
-            operation: crate::ir::Operation::Effect {
-                expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
-            },
-            normal: arm(2),
-            exceptional: vec![arm(0), arm(1)],
-        };
-        assert_eq!(
-            ids(&terminator),
-            [EdgeId::new(2), EdgeId::new(0), EdgeId::new(1)]
-        );
     }
 }

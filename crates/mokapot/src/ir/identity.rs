@@ -1,17 +1,23 @@
+use derive_more::Display;
+
+use crate::ir::NumericalId;
+
 /// The identity of a basic block within one Moka IR method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
+///
+/// Identities may be sparse and convey neither block order nor a block count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display)]
 #[repr(transparent)]
 #[display("b{_0}")]
 pub struct BlockId(u32);
 
-impl BlockId {
-    pub(crate) const fn new(index: u32) -> Self {
-        Self(index)
+impl NumericalId for BlockId {
+    fn from_raw(value: u32) -> Self {
+        Self(value)
     }
 }
 
 /// The structural location of an instruction within a method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InstructionLocation {
     /// A block parameter at the given block-entry index.
     BlockParameter {
@@ -34,34 +40,19 @@ pub enum InstructionLocation {
     },
 }
 
-/// The identity of a control-flow edge within one Moka IR method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
-#[repr(transparent)]
-#[display("e{_0}")]
-pub struct EdgeId(u32);
-
-impl EdgeId {
-    pub(crate) const fn new(index: u32) -> Self {
-        Self(index)
-    }
-}
-
+/// The structural location of an instruction within a method.
 /// The opaque identity of a scalar value within one Moka IR method.
 ///
 /// Identities may be sparse and convey neither definition order nor a value
 /// count.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
 #[display("%{_0}")]
 pub struct ValueId(u32);
 
-impl ValueId {
-    pub(crate) const fn new(index: u32) -> Self {
-        Self(index)
-    }
-
-    pub(crate) const fn index(self) -> u32 {
-        self.0
+impl NumericalId for ValueId {
+    fn from_raw(value: u32) -> Self {
+        Self(value)
     }
 }

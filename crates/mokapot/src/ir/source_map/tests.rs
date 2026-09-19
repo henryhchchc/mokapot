@@ -1,5 +1,6 @@
 use super::*;
-use crate::ir::BlockId;
+use crate::ir::{BlockId, NumericalId};
+use std::collections::HashSet;
 
 #[test]
 fn source_map_is_sparse_and_one_to_many() {
@@ -7,29 +8,29 @@ fn source_map_is_sparse_and_one_to_many() {
     let pc1 = ProgramCounter::from(100);
     let pc2 = ProgramCounter::from(200);
     let instruction0 = InstructionLocation::Operation {
-        block: BlockId::new(0),
+        block: BlockId::from_raw(0),
         index: 0,
     };
     let instruction1 = InstructionLocation::Operation {
-        block: BlockId::new(0),
+        block: BlockId::from_raw(0),
         index: 1,
     };
     let instruction2 = InstructionLocation::Operation {
-        block: BlockId::new(1),
+        block: BlockId::from_raw(1),
         index: 0,
     };
     let instruction3 = InstructionLocation::Terminator {
-        block: BlockId::new(1),
+        block: BlockId::from_raw(1),
     };
     let synthetic = InstructionLocation::BlockParameter {
-        block: BlockId::new(1),
+        block: BlockId::from_raw(1),
         index: 0,
     };
     let mut map = SourceMap::default();
-    map.record_operation(pc0, BlockId::new(0), 0);
-    map.record_operation(pc0, BlockId::new(0), 1);
-    map.record_operation(pc1, BlockId::new(1), 0);
-    map.record_terminator(pc2, BlockId::new(1));
+    map.record_operation(pc0, BlockId::from_raw(0), 0);
+    map.record_operation(pc0, BlockId::from_raw(0), 1);
+    map.record_operation(pc1, BlockId::from_raw(1), 0);
+    map.record_terminator(pc2, BlockId::from_raw(1));
 
     assert_eq!(
         map.instructions_at(pc0).collect::<Vec<_>>(),
@@ -43,11 +44,11 @@ fn source_map_is_sparse_and_one_to_many() {
     assert_eq!(map.instructions_at(50.into()).count(), 0);
     assert_eq!(map.origin_of(synthetic), None);
 
-    let covered_nodes = BTreeSet::from([pc0])
+    let covered_nodes = HashSet::from([pc0])
         .into_iter()
         .flat_map(|pc| map.instructions_at(pc))
-        .collect::<BTreeSet<_>>();
-    assert_eq!(covered_nodes, BTreeSet::from([instruction0, instruction1]));
+        .collect::<HashSet<_>>();
+    assert_eq!(covered_nodes, HashSet::from([instruction0, instruction1]));
     assert!(!covered_nodes.contains(&instruction2));
     assert!(!covered_nodes.contains(&synthetic));
 }
