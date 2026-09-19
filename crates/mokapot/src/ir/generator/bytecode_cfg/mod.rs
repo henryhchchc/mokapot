@@ -8,7 +8,7 @@ mod builder;
 mod classification;
 mod normalized;
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use derive_more::From;
 
@@ -38,7 +38,7 @@ pub(super) struct JvmBlockGraph<'method> {
     /// The block containing the first decoded instruction.
     entry: JvmBlockId,
     /// The blocks, keyed by identity.
-    blocks: BTreeMap<JvmBlockId, JvmBlock>,
+    blocks: HashMap<JvmBlockId, JvmBlock>,
 }
 
 impl<'method> JvmBlockGraph<'method> {
@@ -96,7 +96,7 @@ pub(super) struct JvmBlock {
 }
 
 /// The identity of a structural bytecode block.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, From)]
 pub(super) struct JvmBlockId(#[from] ProgramCounter);
 
 /// The target of an exceptional structural control-flow edge.

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use itertools::Itertools;
 
@@ -110,7 +110,7 @@ impl<'method> Builder<'method> {
         &self,
         leaders: &BTreeSet<ProgramCounter>,
         descriptions: &BTreeMap<ProgramCounter, InstructionDescription>,
-    ) -> Result<BTreeMap<JvmBlockId, JvmBlock>, Error> {
+    ) -> Result<HashMap<JvmBlockId, JvmBlock>, Error> {
         let instructions = &self.body.instructions;
         let last_pc = instructions
             .iter()
