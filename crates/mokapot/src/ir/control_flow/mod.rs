@@ -2,7 +2,7 @@
 
 pub mod path_condition;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
 use super::{BasicBlock, BlockId, EdgeId, Successor};
@@ -63,7 +63,7 @@ impl<'method> Edge<'method> {
 /// A borrowed control-flow graph derived solely from block terminators.
 #[derive(Debug, Clone, Copy)]
 pub struct ControlFlowGraph<'method> {
-    pub(super) blocks: &'method BTreeMap<BlockId, BasicBlock>,
+    pub(super) blocks: &'method HashMap<BlockId, BasicBlock>,
     entry: BlockId,
 }
 
@@ -72,49 +72,6 @@ impl<'m> ControlFlowGraph<'m> {
     #[must_use]
     pub const fn entry_block(self) -> BlockId {
         self.entry
-    }
-
-    /// Returns the blocks in deterministic identity order.
-    #[must_use]
-    pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'m BasicBlock)> {
-        self.blocks.iter().map(|(&id, block)| (id, block))
-    }
-
-    /// Returns every block-to-block successor arm, retaining parallel edges.
-    ///
-    /// Method-exiting unwind arms remain available on terminators but are not
-    /// graph edges because they have no basic-block target.
-    pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
-        self.blocks.iter().flat_map(|(&source, block)| {
-            block
-                .terminator
-                .successors()
-                .filter_map(move |successor| match successor {
-                    Successor::Block {
-                        id,
-                        target,
-                        transfer,
-                        ..
-                    } => Some(Edge {
-                        id: *id,
-                        source,
-                        target: *target,
-                        data: transfer,
-                    }),
-                    Successor::Unwind { .. } => None,
-                })
-        })
-    }
-
-    /// Returns blocks with no outgoing successor arms.
-    pub fn exits(self) -> impl Iterator<Item = BlockId> + 'm {
-        self.blocks.iter().filter_map(|(&id, block)| {
-            block
-                .terminator
-                .successors()
-                .all(|successor| successor.block_target().is_none())
-                .then_some(id)
-        })
     }
 
     /// Returns all outgoing arms from `source`.
@@ -159,7 +116,7 @@ impl<'m> ControlFlowGraph<'m> {
 }
 
 impl<'m> ControlFlowGraph<'m> {
-    pub(super) const fn new(blocks: &'m BTreeMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
+    pub(super) const fn new(blocks: &'m HashMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
         Self { blocks, entry }
     }
 }

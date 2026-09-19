@@ -43,7 +43,7 @@ glob = { workspace = true }
 default = ["jar", "petgraph"]
 ## Enables loading classes from `.jar` files
 jar = ["dep:zip"]
-## Enables the analyses of control flow graphs with `petgraph`.
+## Enables graph analyses backed by `petgraph`.
 petgraph = ["dep:petgraph"]
 #! ### Experimental APIs
 #!

@@ -1,6 +1,6 @@
 //! Internal state shared by block analysis stages.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::{Frame, Position};
 use crate::{
@@ -10,13 +10,13 @@ use crate::{
     jvm::code::ProgramCounter,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum Contribution {
     Entry,
     Edge(EdgeId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) struct ParameterSite {
     pub block: BlockId,
     pub position: Position,
@@ -67,7 +67,7 @@ pub(super) type LiftedTerminator = Terminator<LiftedArm>;
 /// only fills frame `contributions`; it never changes topology.
 #[derive(Debug, Default)]
 pub(super) struct BlockState {
-    pub contributions: BTreeMap<Contribution, Frame>,
+    pub contributions: HashMap<Contribution, Frame>,
     pub execution: BlockExecution,
 }
 
@@ -88,8 +88,8 @@ pub(super) enum BlockExecution {
 
 /// The complete analysis state passed to draft-IR materialization.
 pub(super) struct CompletedAnalysis {
-    pub blocks: BTreeMap<BlockId, BlockState>,
-    pub parameter_definitions: BTreeMap<ParameterSite, ValueId>,
+    pub blocks: HashMap<BlockId, BlockState>,
+    pub parameter_definitions: HashMap<ParameterSite, ValueId>,
     pub receiver_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }

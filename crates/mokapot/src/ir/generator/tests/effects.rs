@@ -17,8 +17,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&dup_method).unwrap();
-    let operation = ir
-        .blocks()
+    let operation = reachable_blocks(&ir)
+        .into_iter()
         .flat_map(|(_, block)| &block.operations)
         .next()
         .unwrap();
@@ -42,8 +42,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&category_2_method).unwrap();
-    let operation = ir
-        .blocks()
+    let operation = reachable_blocks(&ir)
+        .into_iter()
         .flat_map(|(_, block)| &block.operations)
         .next()
         .unwrap();
@@ -69,7 +69,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         vec![],
     );
     let ir = build(&mixed_method).unwrap();
-    let mut operations = ir.blocks().flat_map(|(_, block)| &block.operations);
+    let blocks = reachable_blocks(&ir);
+    let mut operations = blocks.iter().flat_map(|(_, block)| &block.operations);
     let conversion = operations.next().unwrap();
     let conversion_value = conversion.def().unwrap();
     assert!(matches!(
@@ -183,8 +184,8 @@ fn monitor_operations_are_effects_without_definitions() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let instructions = ir
-        .blocks()
+    let instructions = reachable_blocks(&ir)
+        .into_iter()
         .filter_map(|(_, block)| block.terminator.operation())
         .collect::<Vec<_>>();
 

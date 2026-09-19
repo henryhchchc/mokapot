@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use crate::{
     ir::{
@@ -32,6 +32,26 @@ where
 
 fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     MokaIRMethod::from_method(method)
+}
+
+fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
+    let mut result = Vec::new();
+    let mut visited = HashSet::new();
+    let mut pending = VecDeque::from([ir.entry_block()]);
+    while let Some(id) = pending.pop_front() {
+        if !visited.insert(id) {
+            continue;
+        }
+        let block = ir.block(id).expect("a successor must belong to its method");
+        pending.extend(
+            block
+                .terminator
+                .successors()
+                .filter_map(Successor::block_target),
+        );
+        result.push((id, block));
+    }
+    result
 }
 
 mod block_arguments;

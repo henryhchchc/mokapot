@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::HashMap;
 
 use super::InstructionLocation;
 use crate::jvm::code::ProgramCounter;
@@ -10,8 +10,8 @@ use crate::jvm::code::ProgramCounter;
 /// origin.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
-    by_pc: BTreeMap<ProgramCounter, BTreeSet<InstructionLocation>>,
-    by_location: BTreeMap<InstructionLocation, ProgramCounter>,
+    by_pc: HashMap<ProgramCounter, Vec<InstructionLocation>>,
+    by_location: HashMap<InstructionLocation, ProgramCounter>,
 }
 
 impl SourceMap {
@@ -58,7 +58,7 @@ impl SourceMap {
             self.by_location.insert(instruction, pc).is_none(),
             "an IR instruction location cannot have multiple JVM origins"
         );
-        self.by_pc.entry(pc).or_default().insert(instruction);
+        self.by_pc.entry(pc).or_default().push(instruction);
     }
 }
 

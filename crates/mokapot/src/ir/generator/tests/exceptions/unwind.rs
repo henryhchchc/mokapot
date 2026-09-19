@@ -36,10 +36,10 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
     });
 
     assert_eq!(unwind_targets, [None; 2]);
-    assert_eq!(ir.blocks().len(), 3);
+    assert_eq!(reachable_blocks(&ir).len(), 3);
 
     let mut edge_ids = HashSet::new();
-    for (_, block) in ir.blocks() {
+    for (_, block) in reachable_blocks(&ir) {
         for successor in block.terminator.successors() {
             assert!(edge_ids.insert(successor.id()));
         }

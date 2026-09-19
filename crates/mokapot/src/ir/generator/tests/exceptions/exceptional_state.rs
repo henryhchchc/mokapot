@@ -179,7 +179,8 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
     let handler = ir.block(exceptional[0].block_target().unwrap()).unwrap();
     assert!(matches!(handler.kind, BlockKind::LandingPad { .. }));
     assert_eq!(
-        ir.blocks()
+        reachable_blocks(&ir)
+            .into_iter()
             .filter(|(_, block)| matches!(block.kind, BlockKind::LandingPad { .. }))
             .count(),
         1

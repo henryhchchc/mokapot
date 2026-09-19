@@ -1,5 +1,6 @@
 use super::*;
 use crate::ir::BlockId;
+use std::collections::HashSet;
 
 impl SourceMap {
     pub(crate) fn mappings(
@@ -53,11 +54,11 @@ fn source_map_is_sparse_and_one_to_many() {
     assert_eq!(map.instructions_at(50.into()).count(), 0);
     assert_eq!(map.origin_of(synthetic), None);
 
-    let covered_nodes = BTreeSet::from([pc0])
+    let covered_nodes = HashSet::from([pc0])
         .into_iter()
         .flat_map(|pc| map.instructions_at(pc))
-        .collect::<BTreeSet<_>>();
-    assert_eq!(covered_nodes, BTreeSet::from([instruction0, instruction1]));
+        .collect::<HashSet<_>>();
+    assert_eq!(covered_nodes, HashSet::from([instruction0, instruction1]));
     assert!(!covered_nodes.contains(&instruction2));
     assert!(!covered_nodes.contains(&synthetic));
 }

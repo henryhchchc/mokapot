@@ -19,20 +19,27 @@
 //! # Example
 //!
 //! ```no_run
-//! use std::{fs::File, io::BufReader};
+//! use std::{collections::HashSet, fs::File, io::BufReader};
 //!
-//! use mokapot::{ir::MokaIRMethod, jvm::Class};
+//! use mokapot::{ir::{MokaIRMethod, Successor}, jvm::Class};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut reader = BufReader::new(File::open("Example.class")?);
 //! let class = Class::from_reader(&mut reader)?;
 //! for method in class.methods.iter().filter(|method| method.body.is_some()) {
 //!     let ir = MokaIRMethod::from_method(method)?;
-//!     for (block_id, block) in ir.blocks() {
+//!     let mut pending = vec![ir.entry_block()];
+//!     let mut visited = HashSet::new();
+//!     while let Some(block_id) = pending.pop() {
+//!         if !visited.insert(block_id) {
+//!             continue;
+//!         }
+//!         let block = ir.block(block_id).expect("successor blocks belong to the method");
 //!         for (index, operation) in block.operations.iter().enumerate() {
 //!             println!("{block_id}, operation {index}: {operation}");
 //!         }
 //!         println!("{block_id}, terminator: {}", block.terminator);
+//!         pending.extend(block.terminator.successors().filter_map(Successor::block_target));
 //!     }
 //! }
 //! # Ok(())
@@ -46,8 +53,6 @@ mod generator;
 mod identity;
 mod method;
 mod operation;
-#[cfg(feature = "petgraph")]
-pub mod petgraph;
 mod source_map;
 mod terminator;
 mod value_definition;

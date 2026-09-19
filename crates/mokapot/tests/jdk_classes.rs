@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf};
+use std::{collections::HashSet, env, fs, path::PathBuf};
 
 use mokapot::{
     ir::{MokaIRMethod, control_flow::ControlTransfer},
@@ -60,17 +60,21 @@ fn test_a_class(class: Class) {
             let ir_method = MokaIRMethod::from_method(it).unwrap_or_else(|e| {
                 panic!("Failed to build {}: {}", it.name, e);
             });
-            let variable_count: usize = ir_method
-                .control_flow_graph()
-                .edges()
-                .map(|edge| {
-                    if let ControlTransfer::Conditional(it) = edge.transfer() {
-                        it.predicate_count()
-                    } else {
-                        0
+            let cfg = ir_method.control_flow_graph();
+            let mut pending = vec![ir_method.entry_block()];
+            let mut visited = HashSet::new();
+            let mut variable_count = 0;
+            while let Some(block) = pending.pop() {
+                if !visited.insert(block) {
+                    continue;
+                }
+                for edge in cfg.outgoing_edges(block) {
+                    pending.push(edge.target());
+                    if let ControlTransfer::Conditional(guard) = edge.transfer() {
+                        variable_count += guard.predicate_count();
                     }
-                })
-                .sum();
+                }
+            }
             // Set a limit here due to high resource consumption.
             // [TODO] optimized later.
             let variable_count_limit = if env::var("CI").is_ok() { 8 } else { 16 };

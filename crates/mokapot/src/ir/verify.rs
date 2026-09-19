@@ -1,6 +1,6 @@
 //! Test-only validation of completed Moka IR invariants.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::{
     BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, Terminator, ValueDefinition,
@@ -34,8 +34,8 @@ enum DefinitionSite {
 }
 
 struct DefinitionIndex {
-    definitions: BTreeMap<ValueId, ValueDefinition>,
-    sites: BTreeMap<ValueId, DefinitionSite>,
+    definitions: HashMap<ValueId, ValueDefinition>,
+    sites: HashMap<ValueId, DefinitionSite>,
 }
 
 /// Verifies the invariants promised by a completed generated method.
@@ -53,9 +53,9 @@ pub(super) fn verify(method: &MokaIRMethod) -> VerificationResult {
     Ok(())
 }
 
-fn collect_blocks(method: &MokaIRMethod) -> Result<BTreeSet<BlockId>, String> {
-    let mut blocks = BTreeSet::new();
-    for (block, _) in method.blocks() {
+fn collect_blocks(method: &MokaIRMethod) -> Result<HashSet<BlockId>, String> {
+    let mut blocks = HashSet::new();
+    for &block in method.blocks.keys() {
         if !blocks.insert(block) {
             return Err(format!("block {block} is defined more than once"));
         }
@@ -80,14 +80,14 @@ fn collect_blocks(method: &MokaIRMethod) -> Result<BTreeSet<BlockId>, String> {
 
 fn verify_edges(
     method: &MokaIRMethod,
-    blocks: &BTreeSet<BlockId>,
-) -> Result<BTreeMap<BlockId, BTreeSet<BlockId>>, String> {
-    let mut edge_ids = BTreeSet::new();
+    blocks: &HashSet<BlockId>,
+) -> Result<HashMap<BlockId, HashSet<BlockId>>, String> {
+    let mut edge_ids = HashSet::new();
     let mut predecessors = blocks
         .iter()
-        .map(|&block| (block, BTreeSet::new()))
-        .collect::<BTreeMap<_, _>>();
-    for (source, block) in method.blocks() {
+        .map(|&block| (block, HashSet::new()))
+        .collect::<HashMap<_, _>>();
+    for (&source, block) in &method.blocks {
         for successor in block.terminator.successors() {
             if !edge_ids.insert(successor.id()) {
                 return Err(format!("edge {} is defined more than once", successor.id()));
@@ -121,8 +121,8 @@ fn verify_edges(
     Ok(predecessors)
 }
 
-fn verify_reachability(method: &MokaIRMethod, blocks: &BTreeSet<BlockId>) -> VerificationResult {
-    let reachable = reachable_blocks(method, &BTreeSet::new());
+fn verify_reachability(method: &MokaIRMethod, blocks: &HashSet<BlockId>) -> VerificationResult {
+    let reachable = reachable_blocks(method, &HashSet::new());
     if &reachable == blocks {
         Ok(())
     } else {
@@ -133,8 +133,8 @@ fn verify_reachability(method: &MokaIRMethod, blocks: &BTreeSet<BlockId>) -> Ver
     }
 }
 
-fn reachable_blocks(method: &MokaIRMethod, excluded_edges: &BTreeSet<EdgeId>) -> BTreeSet<BlockId> {
-    let mut reachable = BTreeSet::from([method.entry_block()]);
+fn reachable_blocks(method: &MokaIRMethod, excluded_edges: &HashSet<EdgeId>) -> HashSet<BlockId> {
+    let mut reachable = HashSet::from([method.entry_block()]);
     let mut pending = VecDeque::from([method.entry_block()]);
     while let Some(block_id) = pending.pop_front() {
         let block = method
@@ -154,21 +154,21 @@ fn reachable_blocks(method: &MokaIRMethod, excluded_edges: &BTreeSet<EdgeId>) ->
 
 fn compute_dominators(
     method: &MokaIRMethod,
-    blocks: &BTreeSet<BlockId>,
-    predecessors: &BTreeMap<BlockId, BTreeSet<BlockId>>,
-) -> Result<BTreeMap<BlockId, BTreeSet<BlockId>>, String> {
+    blocks: &HashSet<BlockId>,
+    predecessors: &HashMap<BlockId, HashSet<BlockId>>,
+) -> Result<HashMap<BlockId, HashSet<BlockId>>, String> {
     let entry = method.entry_block();
     let mut dominators = blocks
         .iter()
         .map(|&block| {
             let initial = if block == entry {
-                BTreeSet::from([entry])
+                HashSet::from([entry])
             } else {
                 blocks.clone()
             };
             (block, initial)
         })
-        .collect::<BTreeMap<_, _>>();
+        .collect::<HashMap<_, _>>();
 
     loop {
         let mut changed = false;
@@ -195,8 +195,8 @@ fn compute_dominators(
 }
 
 fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String> {
-    let mut definitions = BTreeMap::new();
-    let mut sites = BTreeMap::new();
+    let mut definitions = HashMap::new();
+    let mut sites = HashMap::new();
     if let Some(value) = method.this_value() {
         insert_definition(
             &mut definitions,
@@ -217,7 +217,7 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
             DefinitionSite::External,
         )?;
     }
-    for (block_id, block) in method.blocks() {
+    for (&block_id, block) in &method.blocks {
         if let BlockKind::LandingPad { exception: value } = block.kind {
             insert_definition(
                 &mut definitions,
@@ -280,8 +280,8 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
 }
 
 fn insert_definition(
-    definitions: &mut BTreeMap<ValueId, ValueDefinition>,
-    sites: &mut BTreeMap<ValueId, DefinitionSite>,
+    definitions: &mut HashMap<ValueId, ValueDefinition>,
+    sites: &mut HashMap<ValueId, DefinitionSite>,
     value: ValueId,
     definition: ValueDefinition,
     site: DefinitionSite,
@@ -297,7 +297,7 @@ fn insert_definition(
 
 fn verify_definition_index(
     method: &MokaIRMethod,
-    definitions: &BTreeMap<ValueId, ValueDefinition>,
+    definitions: &HashMap<ValueId, ValueDefinition>,
 ) -> VerificationResult {
     for (&value, &indexed_definition) in method.value_definitions() {
         let expected = definitions.get(&value).copied();
@@ -331,8 +331,8 @@ fn verify_definition_index(
 
 fn verify_block_arguments(
     method: &MokaIRMethod,
-    definitions: &BTreeMap<ValueId, DefinitionSite>,
-    dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
+    definitions: &HashMap<ValueId, DefinitionSite>,
+    dominators: &HashMap<BlockId, HashSet<BlockId>>,
 ) -> VerificationResult {
     for &value in method.entry().arguments() {
         if !matches!(definitions.get(&value), Some(DefinitionSite::External)) {
@@ -341,7 +341,7 @@ fn verify_block_arguments(
             ));
         }
     }
-    for (source, block) in method.blocks() {
+    for (&source, block) in &method.blocks {
         for successor in block.terminator.successors() {
             for &value in successor.arguments() {
                 verify_use(
@@ -362,10 +362,10 @@ fn verify_block_arguments(
 
 fn verify_instruction_uses(
     method: &MokaIRMethod,
-    definitions: &BTreeMap<ValueId, DefinitionSite>,
-    dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
+    definitions: &HashMap<ValueId, DefinitionSite>,
+    dominators: &HashMap<BlockId, HashSet<BlockId>>,
 ) -> VerificationResult {
-    for (block_id, block) in method.blocks() {
+    for (&block_id, block) in &method.blocks {
         for (index, operation) in block.operations.iter().enumerate() {
             for value in operation.uses() {
                 verify_use(
@@ -397,8 +397,8 @@ fn verify_use(
     method: &MokaIRMethod,
     value: ValueId,
     usage: UseSite,
-    definitions: &BTreeMap<ValueId, DefinitionSite>,
-    dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
+    definitions: &HashMap<ValueId, DefinitionSite>,
+    dominators: &HashMap<BlockId, HashSet<BlockId>>,
 ) -> VerificationResult {
     let Some(&definition) = definitions.get(&value) else {
         return Err(format!("{value} is used at {usage:?} but is not defined"));
@@ -448,7 +448,7 @@ fn verify_edge_sensitive_use(
         ));
     }
 
-    let reachable_without_normal = reachable_blocks(method, &BTreeSet::from([normal_edge]));
+    let reachable_without_normal = reachable_blocks(method, &HashSet::from([normal_edge]));
     if reachable_without_normal.contains(&usage.evaluation_block()) {
         return Err(format!(
             "fallible result {value} is visible at {usage:?} without taking its normal edge"

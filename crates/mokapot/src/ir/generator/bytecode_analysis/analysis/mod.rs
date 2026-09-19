@@ -9,7 +9,7 @@ use state::{
     LiftedEdge, LiftedTerminator, ParameterSite,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
@@ -28,9 +28,9 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) cfg: &'cfg NormalizedCfg<'method>,
     pub(super) values: ValueContext,
     pub(super) initial_frame: Frame,
-    blocks: BTreeMap<BlockId, BlockState>,
-    parameter_definitions: BTreeMap<ParameterSite, ValueId>,
-    pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
+    blocks: HashMap<BlockId, BlockState>,
+    parameter_definitions: HashMap<ParameterSite, ValueId>,
+    pub(super) caught_exceptions: HashMap<BlockId, ValueId>,
 }
 
 impl<'method, 'cfg> Analyzer<'method, 'cfg> {
@@ -71,8 +71,8 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             values,
             initial_frame,
             blocks,
-            parameter_definitions: BTreeMap::new(),
-            caught_exceptions: BTreeMap::new(),
+            parameter_definitions: HashMap::new(),
+            caught_exceptions: HashMap::new(),
         })
     }
 
@@ -89,8 +89,10 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             .insert(Contribution::Entry, self.initial_frame.clone());
         self.recompute_entry(entry)?;
 
-        let mut pending = BTreeSet::from([entry]);
-        while let Some(block_id) = pending.pop_first() {
+        let mut pending = VecDeque::from([entry]);
+        let mut queued = HashSet::from([entry]);
+        while let Some(block_id) = pending.pop_front() {
+            queued.remove(&block_id);
             let state = self
                 .blocks
                 .get(&block_id)
@@ -134,8 +136,8 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                     .expect("a normalized successor must have analysis state")
                     .contributions
                     .insert(Contribution::Edge(edge), frame);
-                if self.recompute_entry(target)? {
-                    pending.insert(target);
+                if self.recompute_entry(target)? && queued.insert(target) {
+                    pending.push_back(target);
                 }
             }
         }
@@ -160,8 +162,8 @@ impl CompletedAnalysis {
         } = self;
         // Keep this index local to materialization; contribution frames remain
         // the only source of incoming argument values during analysis.
-        let parameters_by_block = parameter_definitions.iter().fold(
-            BTreeMap::<BlockId, Vec<(ParameterSite, ValueId)>>::new(),
+        let mut parameters_by_block = parameter_definitions.iter().fold(
+            HashMap::<BlockId, Vec<(ParameterSite, ValueId)>>::new(),
             |mut parameters, (&site, &value)| {
                 parameters
                     .entry(site.block)
@@ -170,6 +172,9 @@ impl CompletedAnalysis {
                 parameters
             },
         );
+        for parameters in parameters_by_block.values_mut() {
+            parameters.sort_by_key(|(site, _)| site.position);
+        }
 
         let entry_arguments = parameters_by_block
             .get(&entry)
@@ -199,7 +204,7 @@ impl CompletedAnalysis {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok((edge, arguments))
             })
-            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+            .collect::<Result<HashMap<_, _>, Error>>()?;
         let mut source_map = SourceMap::default();
         let mut blocks = lifted_blocks
             .into_iter()
@@ -209,7 +214,7 @@ impl CompletedAnalysis {
                 })?;
                 Ok((id, materialize_block(id, lifted, &mut source_map)))
             })
-            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+            .collect::<Result<HashMap<_, _>, Error>>()?;
 
         for (site, value) in &parameter_definitions {
             let Some(block) = blocks.get_mut(&site.block) else {
@@ -240,7 +245,7 @@ impl CompletedAnalysis {
 }
 
 fn contribution_value(
-    blocks: &BTreeMap<BlockId, BlockState>,
+    blocks: &HashMap<BlockId, BlockState>,
     block: BlockId,
     contribution: Contribution,
     site: ParameterSite,

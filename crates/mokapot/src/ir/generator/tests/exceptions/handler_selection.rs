@@ -78,7 +78,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     );
     let ir = build(&method).unwrap();
 
-    assert_eq!(ir.blocks().len(), 1);
+    assert_eq!(reachable_blocks(&ir).len(), 1);
     let entry = ir.block(ir.entry_block()).unwrap();
     assert!(matches!(
         entry.terminator,

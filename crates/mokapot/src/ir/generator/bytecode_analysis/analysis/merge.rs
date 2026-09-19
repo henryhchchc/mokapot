@@ -1,6 +1,6 @@
 //! Entry-frame merging and complete block-parameter maintenance.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::super::values::ValueContext;
 use super::{Analyzer, ParameterSite};
@@ -21,7 +21,7 @@ impl Analyzer<'_, '_> {
         let mut merged = frames
             .next()
             .ok_or_else(|| Error::internal("a reachable block has no predecessor frame"))?;
-        let mut active_parameters = BTreeMap::new();
+        let mut active_parameters = HashMap::new();
 
         for contribution in frames {
             let existing_parameters = &self.parameter_definitions;
@@ -43,7 +43,7 @@ impl Analyzer<'_, '_> {
         let parameter_definitions = active_parameters
             .into_iter()
             .filter(|(site, result)| merged.value_at(site.position) == Some(result))
-            .collect::<BTreeMap<_, _>>();
+            .collect::<HashMap<_, _>>();
 
         self.parameter_definitions
             .retain(|site, _| site.block != block);
@@ -62,8 +62,8 @@ fn merge_value(
     site: ParameterSite,
     lhs: &mut ValueId,
     rhs: ValueId,
-    existing_parameters: &BTreeMap<ParameterSite, ValueId>,
-    active_parameters: &mut BTreeMap<ParameterSite, ValueId>,
+    existing_parameters: &HashMap<ParameterSite, ValueId>,
+    active_parameters: &mut HashMap<ParameterSite, ValueId>,
     values: &mut ValueContext,
 ) -> Result<(), Error> {
     if *lhs == rhs {

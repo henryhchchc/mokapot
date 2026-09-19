@@ -1,5 +1,5 @@
 //! Applies scalar substitutions and removes eliminated block parameters.
-use std::{collections::BTreeMap, convert::Infallible};
+use std::{collections::HashMap, convert::Infallible};
 
 use crate::ir::{
     BasicBlock, BlockId, BlockKind, Successor, ValueId,
@@ -20,16 +20,15 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
         .blocks
         .iter_mut()
         .map(|(&id, block)| {
-            let mut positions = std::mem::take(&mut block.parameters)
+            let positions = std::mem::take(&mut block.parameters)
                 .into_iter()
                 .enumerate()
                 .filter(|(_, parameter)| simplified.candidates.contains_key(&parameter.value))
                 .collect::<Vec<_>>();
-            positions.sort_by_key(|(_, parameter)| parameter.value);
             block.parameters = positions.iter().map(|(_, parameter)| *parameter).collect();
             (id, positions.into_iter().map(|(index, _)| index).collect())
         })
-        .collect::<BTreeMap<BlockId, Vec<usize>>>();
+        .collect::<HashMap<BlockId, Vec<usize>>>();
 
     draft.entry_arguments = retained[&draft.entry]
         .iter()
@@ -43,7 +42,7 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
 
 fn finalize_block(
     block: &mut BasicBlock,
-    retained: &BTreeMap<BlockId, Vec<usize>>,
+    retained: &HashMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {
     if let BlockKind::LandingPad { exception } = &mut block.kind {

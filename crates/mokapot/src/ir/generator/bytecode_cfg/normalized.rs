@@ -1,6 +1,6 @@
 //! Reachable control-flow topology consumed by frame analysis.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
 pub(crate) struct NormalizedCfg<'method> {
     bytecode: JvmBlockGraph<'method>,
     entry: BlockId,
-    blocks: BTreeMap<BlockId, NormalizedBlock>,
+    blocks: HashMap<BlockId, NormalizedBlock>,
 }
 
 impl<'method> NormalizedCfg<'method> {
@@ -155,7 +155,7 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
             },
         ))
     });
-    let blocks: BTreeMap<_, _> = normalized.collect::<Result<_, Error>>()?;
+    let blocks: HashMap<_, _> = normalized.collect::<Result<_, Error>>()?;
 
     Ok(NormalizedCfg {
         bytecode,
@@ -221,7 +221,7 @@ fn allocate_edge(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, HashSet};
 
     use super::{NormalizedBlockKind, NormalizedTarget};
     use crate::{
@@ -251,7 +251,14 @@ mod tests {
         let normalized_edge_ids = successors.iter().map(|edge| edge.id).collect::<Vec<_>>();
 
         assert_eq!(successors.len(), 3);
-        assert!(successors.windows(2).all(|pair| pair[0].id < pair[1].id));
+        assert_eq!(
+            normalized_edge_ids
+                .iter()
+                .copied()
+                .collect::<HashSet<_>>()
+                .len(),
+            3
+        );
         assert!(
             successors
                 .windows(2)
@@ -332,7 +339,7 @@ mod tests {
         let incoming_ids = incoming
             .iter()
             .map(|edge| edge.id())
-            .collect::<BTreeSet<_>>();
+            .collect::<HashSet<_>>();
         assert_eq!(incoming_ids.len(), 3);
 
         crate::ir::generator::canonicalize::canonicalize(&mut draft).unwrap();
@@ -342,8 +349,9 @@ mod tests {
         };
         assert_eq!(parameter.value, parameter_value);
         let public_incoming = ir
-            .blocks()
-            .flat_map(|(_, block)| block.terminator.successors())
+            .blocks
+            .values()
+            .flat_map(|block| block.terminator.successors())
             .filter(|edge| edge.block_target() == Some(target))
             .collect::<Vec<_>>();
         assert_eq!(public_incoming.len(), 3);

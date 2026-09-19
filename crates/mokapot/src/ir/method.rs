@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use super::{
     BasicBlock, BlockId, BlockParameter, InstructionLocation, MokaIRBuildError, Operation,
@@ -11,9 +11,9 @@ use crate::{
 
 /// A completed scalar-SSA representation of the reachable part of a JVM method.
 ///
-/// Blocks, edges, and values have opaque identities local to this method.
-/// Value identities may be sparse and must not be interpreted as a count or
-/// ordering of definitions.
+/// Blocks, edges, and values have opaque identities local to this method. These
+/// identities may be sparse and must not be interpreted as positions, counts,
+/// or creation order.
 /// Instructions are addressed by structural locations, and block terminators
 /// are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct MokaIRMethod {
     descriptor: MethodDescriptor,
     owner: ClassRef,
     entry: MethodEntry,
-    blocks: BTreeMap<BlockId, BasicBlock>,
+    pub(super) blocks: HashMap<BlockId, BasicBlock>,
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
@@ -45,7 +45,7 @@ pub enum InstructionRef<'method> {
 
 pub(super) struct MokaIRMethodParts {
     pub(super) entry: MethodEntry,
-    pub(super) blocks: BTreeMap<BlockId, BasicBlock>,
+    pub(super) blocks: HashMap<BlockId, BasicBlock>,
     pub(super) source_map: SourceMap,
     pub(super) this_value: Option<ValueId>,
     pub(super) parameter_values: Vec<ValueId>,
@@ -128,14 +128,6 @@ impl MokaIRMethod {
     #[must_use]
     pub const fn entry(&self) -> &MethodEntry {
         &self.entry
-    }
-
-    /// Returns all reachable blocks in deterministic identity order.
-    ///
-    /// Each block exposes entry parameters, ordered operations, and one terminator.
-    #[must_use]
-    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> {
-        self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
     /// Looks up a block by its method-local identity.
@@ -227,7 +219,7 @@ impl MokaIRMethod {
         &mut self.entry
     }
 
-    pub(super) const fn blocks_mut(&mut self) -> &mut BTreeMap<BlockId, BasicBlock> {
+    pub(super) const fn blocks_mut(&mut self) -> &mut HashMap<BlockId, BasicBlock> {
         &mut self.blocks
     }
 }

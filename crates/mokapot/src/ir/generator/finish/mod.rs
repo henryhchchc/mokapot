@@ -103,7 +103,7 @@ impl FinishState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     use super::*;
     use crate::{
@@ -125,7 +125,7 @@ mod tests {
         let draft = DraftMethod {
             entry: block,
             entry_arguments: vec![parameter],
-            blocks: BTreeMap::from([(
+            blocks: HashMap::from([(
                 block,
                 BasicBlock {
                     kind: BlockKind::Code,

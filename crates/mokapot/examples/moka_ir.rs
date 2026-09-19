@@ -1,6 +1,6 @@
 //! Builds and prints MokaIR for each concrete method in a class file.
 
-use std::{env, fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashSet, env, fs::File, io::BufReader, path::PathBuf};
 
 use mokapot::{
     ir::{InstructionLocation, MokaIRMethod},
@@ -23,7 +23,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ir = MokaIRMethod::from_method(method)?;
         println!("{}{}:", ir.name(), ir.descriptor());
 
-        for (block, bb) in ir.blocks() {
+        let mut pending = vec![ir.entry_block()];
+        let mut visited = HashSet::new();
+        while let Some(block) = pending.pop() {
+            if !visited.insert(block) {
+                continue;
+            }
+            let bb = ir
+                .block(block)
+                .expect("a successor must belong to its method");
             println!("{block}:");
             for (index, parameter) in bb.parameters.iter().enumerate() {
                 let loc = InstructionLocation::BlockParameter { block, index };
@@ -37,6 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let loc = InstructionLocation::Terminator { block };
             println!("  {:?}: {}", loc, bb.terminator);
             for successor in bb.terminator.successors() {
+                pending.extend(successor.block_target());
                 println!(
                     "    {} -> {:?} {:?} ({:?})",
                     successor.id(),

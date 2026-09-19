@@ -3,6 +3,7 @@ use crate::ir::{
     BasicBlock, BlockKind, EdgeId, Successor, Terminator,
     control_flow::path_condition::BooleanVariable, expression::Predicate,
 };
+use std::collections::HashMap;
 
 fn code_bb(id: u32, terminator: Terminator) -> (BlockId, BasicBlock) {
     let bb = BasicBlock {
@@ -44,7 +45,7 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
     };
     let exit = Terminator::Return { value: None };
 
-    let blocks = BTreeMap::from([
+    let blocks = HashMap::from([
         code_bb(0, goto),
         code_bb(1, branch),
         code_bb(2, exit.clone()),
@@ -101,7 +102,7 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
     };
     let exit = Terminator::Return { value: None };
 
-    let blocks = BTreeMap::from([
+    let blocks = HashMap::from([
         code_bb(0, branch),
         code_bb(1, fallible),
         code_bb(2, exit.clone()),
