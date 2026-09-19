@@ -40,7 +40,7 @@ impl OperationKind {
     }
 }
 
-/// An ordinary non-phi, non-terminator operation.
+/// An ordinary non-parameter, non-terminator operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Operation {
     pub(super) kind: OperationKind,

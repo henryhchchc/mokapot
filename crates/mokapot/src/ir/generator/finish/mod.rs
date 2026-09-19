@@ -1,11 +1,9 @@
 //! Finishes canonical SSA blocks into completed public `MokaIR`.
 
-use std::collections::BTreeMap;
-
 use crate::{
     ir::{
-        BasicBlock, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
-        Successor, Terminator, ValueDefinition, ValueId,
+        BasicBlock, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod, Operation,
+        SourceMap, Successor, Terminator, ValueDefinition, ValueId,
         generator::{
             draft::{DraftBlock, DraftMethod},
             error::Error,
@@ -19,6 +17,7 @@ use crate::{
 pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod, Error> {
     let DraftMethod {
         entry,
+        entry_arguments,
         blocks,
         this_value,
         parameter_values,
@@ -36,17 +35,11 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
         state.define_block_values(id, block)?;
     }
 
-    let phi_inputs = public_phi_inputs(&blocks)?;
     let mut source_map = SourceMap::default();
     let blocks = blocks
         .into_iter()
         .map(|(id, block)| {
-            let block = materialize_block(
-                id,
-                block,
-                phi_inputs.get(&id).map(Vec::as_slice).unwrap_or_default(),
-                &mut source_map,
-            );
+            let block = materialize_block(id, block, &mut source_map);
             (id, block)
         })
         .collect();
@@ -54,7 +47,10 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
     let method = MokaIRMethod::new(
         method,
         MokaIRMethodParts {
-            entry_block: entry,
+            entry: MethodEntry {
+                target: entry,
+                arguments: entry_arguments,
+            },
             blocks,
             source_map,
             this_value,
@@ -76,7 +72,7 @@ impl FinishState {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
         }
         for (index, parameter) in block.parameters.iter().enumerate() {
-            let location = InstructionLocation::Phi {
+            let location = InstructionLocation::BlockParameter {
                 block: block_id,
                 index,
             };
@@ -99,21 +95,15 @@ impl FinishState {
 fn materialize_block(
     id: crate::ir::BlockId,
     block: DraftBlock,
-    phi_inputs: &[Vec<PhiInput>],
     source_map: &mut SourceMap,
 ) -> BasicBlock {
     if let Some(origin) = block.terminator.origin {
         source_map.record_terminator(origin, id);
     }
-    assert_eq!(block.parameters.len(), phi_inputs.len());
-    let phis = block
+    let parameters = block
         .parameters
         .into_iter()
-        .zip(phi_inputs)
-        .map(|(parameter, inputs)| Phi {
-            value: parameter.value,
-            inputs: inputs.clone(),
-        })
+        .map(|it| BlockParameter { value: it.value })
         .collect();
     let operations = block
         .operations
@@ -135,64 +125,19 @@ fn materialize_block(
         .map(|successor| Successor {
             id: successor.id,
             target: successor.target,
+            arguments: successor.arguments,
             transfer: successor.transfer,
         })
         .collect();
     BasicBlock {
         caught_exception: block.caught_exception,
-        phis,
+        parameters,
         operations,
         terminator: Terminator {
             kind: block.terminator.kind,
             successors,
         },
     }
-}
-
-/// Adapts edge arguments to the predecessor-indexed public phi model.
-fn public_phi_inputs(
-    blocks: &BTreeMap<crate::ir::BlockId, DraftBlock>,
-) -> Result<BTreeMap<crate::ir::BlockId, Vec<Vec<PhiInput>>>, Error> {
-    let mut incoming = blocks
-        .iter()
-        .map(|(&id, block)| (id, vec![BTreeMap::new(); block.parameters.len()]))
-        .collect::<BTreeMap<_, Vec<BTreeMap<_, _>>>>();
-    for (&predecessor, block) in blocks {
-        for edge in &block.terminator.successors {
-            let target = incoming
-                .get_mut(&edge.target)
-                .expect("a draft edge target must belong to the method");
-            if target.len() != edge.arguments.len() {
-                return Err(Error::internal(
-                    "a draft edge argument count differs from its target parameter count",
-                ));
-            }
-            for (inputs, &value) in target.iter_mut().zip(&edge.arguments) {
-                if let Some(existing) = inputs.insert(predecessor, value)
-                    && existing != value
-                {
-                    return Err(Error::internal(
-                        "parallel edges cannot be represented by a public phi",
-                    ));
-                }
-            }
-        }
-    }
-    Ok(incoming
-        .into_iter()
-        .map(|(block, parameters)| {
-            let parameters = parameters
-                .into_iter()
-                .map(|inputs| {
-                    inputs
-                        .into_iter()
-                        .map(|(predecessor, value)| PhiInput { predecessor, value })
-                        .collect()
-                })
-                .collect();
-            (block, parameters)
-        })
-        .collect())
 }
 
 #[derive(Default)]
@@ -239,24 +184,25 @@ mod tests {
     };
 
     #[test]
-    fn eliminated_phi_leaves_a_hole_without_renumbering_live_values() {
+    fn eliminated_parameter_leaves_a_hole_without_renumbering_live_values() {
         let block = BlockId::new(0);
         let parameter = ValueId::new(0);
-        let eliminated_phi = ValueId::new(1);
+        let eliminated_parameter = ValueId::new(1);
         let result = ValueId::new(2);
         let draft = DraftMethod {
             entry: block,
+            entry_arguments: vec![parameter],
             blocks: BTreeMap::from([(
                 block,
                 DraftBlock {
                     caught_exception: None,
                     parameters: vec![DraftParameter {
-                        value: eliminated_phi,
+                        value: eliminated_parameter,
                     }],
                     operations: vec![DraftOperation {
                         kind: OperationKind::Definition {
                             value: result,
-                            expr: MathOperation::Increment(eliminated_phi, 1).into(),
+                            expr: MathOperation::Increment(eliminated_parameter, 1).into(),
                         },
                         origin: None,
                     }],
@@ -291,7 +237,7 @@ mod tests {
         assert_eq!(ir.parameter_values(), [parameter]);
         assert_eq!(operation.def(), Some(result));
         assert_eq!(operation.uses(), [parameter].into_iter().collect());
-        assert_eq!(ir.definition_of(eliminated_phi), None);
+        assert_eq!(ir.definition_of(eliminated_parameter), None);
         assert_eq!(
             ir.definition_of(result),
             Some(ValueDefinition::Instruction(

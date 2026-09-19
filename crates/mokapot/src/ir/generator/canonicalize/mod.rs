@@ -14,6 +14,11 @@ use simplify::{ParameterCandidate, simplify_parameters};
 /// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
 pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
     let mut inputs = BTreeMap::<ValueId, Vec<ValueId>>::new();
+    let entry = &draft.blocks[&draft.entry];
+    assert_eq!(entry.parameters.len(), draft.entry_arguments.len());
+    for (parameter, &argument) in entry.parameters.iter().zip(&draft.entry_arguments) {
+        inputs.entry(parameter.value).or_default().push(argument);
+    }
     for block in draft.blocks.values() {
         for edge in &block.terminator.successors {
             let target = draft

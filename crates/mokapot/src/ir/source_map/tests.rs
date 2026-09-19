@@ -21,7 +21,7 @@ fn source_map_is_sparse_and_one_to_many() {
     let instruction3 = InstructionLocation::Terminator {
         block: BlockId::new(1),
     };
-    let synthetic = InstructionLocation::Phi {
+    let synthetic = InstructionLocation::BlockParameter {
         block: BlockId::new(1),
         index: 0,
     };

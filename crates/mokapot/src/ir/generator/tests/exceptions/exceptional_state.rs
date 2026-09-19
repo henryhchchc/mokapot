@@ -45,7 +45,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         ir.definition_of(caught),
         Some(ValueDefinition::CaughtException(handler_entry_id))
     );
-    assert!(handler_entry.phis.is_empty());
+    assert!(handler_entry.parameters.is_empty());
     assert!(handler_entry.operations.is_empty());
     assert_eq!(handler_entry.terminator.successors().len(), 1);
     assert!(matches!(
@@ -89,7 +89,7 @@ fn exceptional_state_excludes_the_fallible_result() {
         .instructions_at(1.into())
         .find_map(|location| match ir.instruction(location) {
             Some(InstructionRef::Operation(operation)) => operation.def(),
-            Some(InstructionRef::Phi(_) | InstructionRef::Terminator(_)) | None => None,
+            Some(InstructionRef::BlockParameter(_) | InstructionRef::Terminator(_)) | None => None,
         })
         .expect("checkcast must define a result");
     let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();

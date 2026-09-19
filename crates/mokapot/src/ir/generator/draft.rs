@@ -10,6 +10,7 @@ use crate::{
 /// A method under construction.
 pub(super) struct DraftMethod {
     pub entry: BlockId,
+    pub entry_arguments: Vec<ValueId>,
     pub blocks: BTreeMap<BlockId, DraftBlock>,
     pub this_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,

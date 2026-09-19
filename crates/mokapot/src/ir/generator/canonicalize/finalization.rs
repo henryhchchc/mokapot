@@ -36,6 +36,11 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
         })
         .collect::<BTreeMap<BlockId, Vec<usize>>>();
 
+    draft.entry_arguments = retained[&draft.entry]
+        .iter()
+        .map(|&index| canonical(draft.entry_arguments[index]))
+        .collect();
+
     for block in draft.blocks.values_mut() {
         finalize_block(block, &retained, &canonical);
     }

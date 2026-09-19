@@ -9,6 +9,7 @@ use super::{BlockId, EdgeId, ValueId, control_flow::ControlTransfer, expression:
 pub struct Successor {
     pub(super) id: EdgeId,
     pub(super) target: BlockId,
+    pub(super) arguments: Vec<ValueId>,
     pub(super) transfer: ControlTransfer,
 }
 
@@ -22,6 +23,11 @@ impl Successor {
     #[must_use]
     pub const fn target(&self) -> BlockId {
         self.target
+    }
+    /// Returns the values supplied to the target block's parameters.
+    #[must_use]
+    pub fn arguments(&self) -> &[ValueId] {
+        &self.arguments
     }
     /// Returns the state transfer associated with this arm.
     #[must_use]
@@ -82,6 +88,14 @@ impl Terminator {
     /// Returns the values used by this terminator and its successor guards.
     #[must_use]
     pub fn uses(&self) -> HashSet<ValueId> {
+        let mut uses = self.local_uses();
+        for successor in &self.successors {
+            uses.extend(successor.arguments.iter().copied());
+        }
+        uses
+    }
+
+    pub(crate) fn local_uses(&self) -> HashSet<ValueId> {
         let mut uses = match &self.kind {
             TerminatorKind::Switch { match_value: value }
             | TerminatorKind::Throw(value)

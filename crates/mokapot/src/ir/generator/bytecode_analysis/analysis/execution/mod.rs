@@ -19,7 +19,6 @@ impl Analyzer<'_, '_> {
     /// Its successor identities and targets were fixed before frame analysis.
     pub(super) fn execute(&mut self, block: BlockId, input: Frame) -> Result<LiftedBlock, Error> {
         match self.cfg.block(block).kind {
-            NormalizedBlockKind::EntryPreheader => self.execute_passthrough(block, input, None),
             NormalizedBlockKind::Bytecode(id) => self.execute_bytecode(block, id, input),
             NormalizedBlockKind::HandlerEntry(_) => {
                 let caught = *input.handler_exception().map_err(Error::from)?;

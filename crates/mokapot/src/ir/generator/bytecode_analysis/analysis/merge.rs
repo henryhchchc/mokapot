@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use super::super::values::ValueContext;
 use super::{Analyzer, Contribution, Frame, ParameterDefinition, ParameterSite};
-use crate::ir::{BlockId, EdgeId, ValueId, generator::error::Error};
+use crate::ir::{BlockId, ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
     pub(super) fn recompute_entry(&mut self, block: BlockId) -> Result<bool, Error> {
@@ -85,20 +85,15 @@ fn merge_value(
 fn edge_arguments(
     site: ParameterSite,
     contributions: &[(Contribution, Frame)],
-) -> Result<BTreeMap<EdgeId, ValueId>, Error> {
+) -> Result<BTreeMap<Contribution, ValueId>, Error> {
     contributions
         .iter()
         .map(|(contribution, frame)| {
-            let Contribution::Edge(edge) = contribution else {
-                return Err(Error::internal(
-                    "an entry contribution cannot be an active block parameter argument",
-                ));
-            };
             let value = frame
                 .value_at(site.position)
                 .copied()
                 .ok_or_else(|| Error::internal("an edge argument frame lacks its merged slot"))?;
-            Ok((*edge, value))
+            Ok((*contribution, value))
         })
         .collect()
 }

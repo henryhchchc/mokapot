@@ -13,11 +13,11 @@ impl BlockId {
 /// The structural location of an instruction within a method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InstructionLocation {
-    /// A phi node at the given block-entry index.
-    Phi {
-        /// The block containing the phi.
+    /// A block parameter at the given block-entry index.
+    BlockParameter {
+        /// The block containing the parameter.
         block: BlockId,
-        /// The phi's index in the block-entry list.
+        /// The parameter's index in the block-entry list.
         index: usize,
     },
     /// An ordinary operation at the given block-local index.

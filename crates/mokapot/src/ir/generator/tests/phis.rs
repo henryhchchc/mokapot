@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn diamond_merge_uses_a_predecessor_indexed_phi() {
+fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     let method = method(
         [
             (0, Instruction::ILoad0),
@@ -19,25 +19,30 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         .blocks()
         .find(|(_, block)| matches!(block.terminator.kind(), TerminatorKind::Return(Some(_))))
         .unwrap();
-    let [phi] = join.phis.as_slice() else {
-        panic!("the join must contain one phi")
+    let [parameter] = join.parameters.as_slice() else {
+        panic!("the join must contain one parameter")
     };
 
-    assert_eq!(phi.inputs.len(), 2);
-    assert_ne!(phi.inputs[0].predecessor, phi.inputs[1].predecessor);
+    let incoming = ir
+        .blocks()
+        .flat_map(|(_, bb)| bb.terminator.successors())
+        .filter(|it| it.target() == join_id)
+        .collect::<Vec<_>>();
+    assert_eq!(incoming.len(), 2);
+    assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
     assert!(matches!(
         join.terminator.kind(),
-        TerminatorKind::Return(Some(value)) if *value == phi.value
+        TerminatorKind::Return(Some(value)) if *value == parameter.value
     ));
-    let join_loc = InstructionLocation::Phi {
+    let join_loc = InstructionLocation::BlockParameter {
         block: join_id,
         index: 0,
     };
     assert_eq!(
-        ir.definition_of(phi.value),
+        ir.definition_of(parameter.value),
         Some(ValueDefinition::Instruction(join_loc))
     );
-    let join_loc = InstructionLocation::Phi {
+    let join_loc = InstructionLocation::BlockParameter {
         block: join_id,
         index: 0,
     };
@@ -71,7 +76,7 @@ fn value_missing_on_one_predecessor_cannot_be_used_at_the_join() {
 }
 
 #[test]
-fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
+fn entry_backedge_uses_method_entry_arguments_and_a_loop_parameter() {
     let method = method(
         [
             (0, Instruction::ILoad0),
@@ -88,30 +93,22 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let preheader = ir.block(ir.entry_block()).unwrap();
-    let header_id = preheader.terminator.successors()[0].target();
+    let header_id = ir.entry_block();
     let header = ir.block(header_id).unwrap();
-    let [phi] = header.phis.as_slice() else {
-        panic!("the loop header must contain one phi")
+    let [parameter] = header.parameters.as_slice() else {
+        panic!("the loop header must contain one parameter")
     };
 
-    assert_eq!(preheader.operations.len(), 0);
-    let loc = InstructionLocation::Terminator {
-        block: ir.entry_block(),
-    };
-    assert_eq!(ir.source_map().origin_of(loc), None);
-    assert_eq!(phi.inputs.len(), 2);
-    assert!(
-        phi.inputs
-            .iter()
-            .any(|input| input.predecessor == ir.entry_block())
-    );
-    let backedge_value = phi
-        .inputs
-        .iter()
-        .find(|input| input.predecessor != ir.entry_block())
-        .unwrap()
-        .value;
+    assert_eq!(ir.entry().target(), header_id);
+    assert_eq!(ir.entry().arguments(), ir.parameter_values());
+    let backedge_value = ir
+        .blocks()
+        .flat_map(|(_, bb)| bb.terminator.successors())
+        .filter(|it| it.target() == header_id)
+        .flat_map(Successor::arguments)
+        .copied()
+        .find(|&value| value != ir.entry().arguments()[0])
+        .unwrap();
     let Some(ValueDefinition::Instruction(backedge_definition)) = ir.definition_of(backedge_value)
     else {
         panic!("the loop-carried input must be computed in the loop")
@@ -120,33 +117,24 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
         panic!("the loop-carried input must be computed by an operation")
     };
     let definition = &ir.block(block).unwrap().operations[index];
-    assert!(definition.uses().contains(&phi.value));
+    assert!(definition.uses().contains(&parameter.value));
 }
 
 #[test]
-fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
+fn entry_self_loop_needs_no_synthetic_block_or_redundant_parameters() {
     let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
     let ir = build(&method).unwrap();
-    let preheader_id = ir.entry_block();
-    let preheader = ir.block(preheader_id).unwrap();
+    let header_id = ir.entry_block();
+    let header = ir.block(header_id).unwrap();
 
-    assert_eq!(ir.blocks().len(), 2);
-    assert!(ir.blocks().all(|(_, block)| block.phis.is_empty()));
-    assert!(preheader.operations.is_empty());
-    assert_eq!(preheader.terminator.successors().len(), 1);
+    assert_eq!(ir.blocks().len(), 1);
+    assert!(header.parameters.is_empty());
+    assert!(ir.entry().arguments().is_empty());
+    assert_eq!(header.terminator.successors().len(), 1);
     assert!(matches!(
-        preheader.terminator.successors()[0].transfer(),
+        header.terminator.successors()[0].transfer(),
         ControlTransfer::Unconditional
     ));
-    let loc = InstructionLocation::Terminator {
-        block: preheader_id,
-    };
-    assert_eq!(ir.source_map().origin_of(loc), None);
-    let [arm] = preheader.terminator.successors() else {
-        panic!("the preheader must have exactly one successor")
-    };
-    let header_id = arm.target();
-    let header = ir.block(header_id).unwrap();
     assert_eq!(header.terminator.successors()[0].target(), header_id);
     let loc = InstructionLocation::Terminator { block: header_id };
     assert_eq!(
@@ -184,9 +172,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
         .find(|block| matches!(block.terminator.kind(), TerminatorKind::Branch))
         .unwrap();
 
-    assert_eq!(header.phis.len(), 1);
-    let counter = &header.phis[0];
-    assert_eq!(counter.inputs.len(), 2);
+    assert_eq!(header.parameters.len(), 1);
     let returned = ir
         .blocks()
         .map(|(_, block)| block)
@@ -223,33 +209,28 @@ fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let phis = ir
+    let parameters = ir
         .blocks()
-        .flat_map(|(_, block)| &block.phis)
+        .flat_map(|(_, block)| &block.parameters)
         .collect::<Vec<_>>();
 
-    assert_eq!(phis.len(), 3);
-    let cyclic_results = phis
+    assert_eq!(parameters.len(), 3);
+    let argument_values = ir
+        .blocks()
+        .flat_map(|(_, bb)| bb.terminator.successors())
+        .flat_map(Successor::arguments)
+        .copied()
+        .collect::<HashSet<_>>();
+    let cyclic_results = parameters
         .iter()
-        .filter(|candidate| {
-            phis.iter().any(|phi| {
-                phi.inputs
-                    .iter()
-                    .any(|input| input.value == candidate.value)
-            })
-        })
-        .map(|phi| phi.value)
+        .filter(|it| argument_values.contains(&it.value))
+        .map(|it| it.value)
         .collect::<HashSet<_>>();
     assert_eq!(cyclic_results.len(), 2);
     assert!(
-        phis.iter()
-            .filter(|phi| cyclic_results.contains(&phi.value))
-            .all(|phi| {
-                phi.inputs.len() == 2
-                    && phi
-                        .inputs
-                        .iter()
-                        .any(|input| cyclic_results.contains(&input.value))
-            })
+        parameters
+            .iter()
+            .filter(|it| cyclic_results.contains(&it.value))
+            .all(|it| argument_values.contains(&it.value))
     );
 }

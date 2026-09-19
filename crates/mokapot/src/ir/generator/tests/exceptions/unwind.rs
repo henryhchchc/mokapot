@@ -43,7 +43,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     assert_eq!(unwind_targets[0], unwind_targets[1]);
     let unwind = ir.block(unwind_targets[0]).unwrap();
     assert_eq!(unwind.terminator.kind(), &TerminatorKind::Unwind);
-    assert!(unwind.phis.is_empty());
+    assert!(unwind.parameters.is_empty());
     assert!(unwind.operations.is_empty());
     assert!(unwind.terminator.successors().is_empty());
     let terminator_loc = InstructionLocation::Terminator {

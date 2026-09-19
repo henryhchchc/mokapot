@@ -66,7 +66,6 @@ pub(crate) struct NormalizedBlock {
 /// The executable role of a normalized block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NormalizedBlockKind {
-    EntryPreheader,
     Bytecode(JvmBlockId),
     HandlerEntry(JvmBlockId),
     Unwind,
@@ -110,37 +109,16 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
         );
     }
 
-    let has_preheader = reachable.iter().copied().any(|node| {
-        successors(&bytecode, node)
-            .iter()
-            .any(|(target, _)| *target == bytecode_entry)
-    });
-    let offset = usize::from(has_preheader);
     let ids = reachable
         .iter()
         .copied()
         .enumerate()
-        .map(|(index, node)| block_id(index + offset).map(|id| (node, id)))
+        .map(|(index, node)| block_id(index).map(|id| (node, id)))
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let bytecode_entry_id = ids[&bytecode_entry];
-    let entry = if has_preheader {
-        BlockId::new(0)
-    } else {
-        bytecode_entry_id
-    };
+    let entry = bytecode_entry_id;
 
     let mut next_edge = 0_u32;
-    let preheader = has_preheader.then(|| {
-        let edge = allocate_edge(&mut next_edge, bytecode_entry_id, EdgeKind::Normal)?;
-        Ok((
-            BlockId::new(0),
-            NormalizedBlock {
-                kind: NormalizedBlockKind::EntryPreheader,
-                predecessors: BTreeSet::new(),
-                successors: vec![edge],
-            },
-        ))
-    });
     let normalized = reachable.iter().copied().map(|node| {
         let id = ids[&node];
         let edges = successors(&bytecode, node)
@@ -161,10 +139,7 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
             },
         ))
     });
-    let mut blocks: BTreeMap<_, _> = preheader
-        .into_iter()
-        .chain(normalized)
-        .collect::<Result<_, Error>>()?;
+    let mut blocks: BTreeMap<_, _> = normalized.collect::<Result<_, Error>>()?;
 
     let predecessors = blocks
         .iter()
@@ -292,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn normalization_materializes_entry_preheader_and_backedge() {
+    fn normalization_keeps_method_entry_external_to_a_self_loop() {
         let method = crate::tests::method(
             [(0, Instruction::Goto(0.into()))],
             "()V",
@@ -300,25 +275,17 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = bytecode_cfg::build(&method).unwrap();
-        let preheader = cfg.entry_block();
-        assert_eq!(
-            cfg.block(preheader).kind,
-            NormalizedBlockKind::EntryPreheader
-        );
-        let [entry_edge] = cfg.block(preheader).successors.as_slice() else {
-            panic!("the preheader must have one successor");
-        };
-        let header = entry_edge.target;
+        let header = cfg.entry_block();
+        assert!(matches!(
+            cfg.block(header).kind,
+            NormalizedBlockKind::Bytecode(_)
+        ));
         let [backedge] = cfg.block(header).successors.as_slice() else {
             panic!("the self-loop header must have one successor");
         };
 
         assert_eq!(backedge.target, header);
-        assert_eq!(
-            cfg.block(header).predecessors,
-            BTreeSet::from([preheader, header])
-        );
-        assert_ne!(entry_edge.id, backedge.id);
+        assert_eq!(cfg.block(header).predecessors, BTreeSet::from([header]));
     }
 
     #[test]
@@ -353,6 +320,7 @@ mod tests {
             .find(|(_, block)| !block.parameters.is_empty())
             .expect("the local-variable join must have a block parameter");
         assert_eq!(target_block.parameters.len(), 1);
+        let parameter_value = target_block.parameters[0].value;
 
         let incoming = draft
             .blocks
@@ -373,10 +341,17 @@ mod tests {
 
         crate::ir::generator::canonicalize::canonicalize(&mut draft).unwrap();
         let ir = crate::ir::generator::finish::finish(&method, draft).unwrap();
-        let [phi] = ir.block(target).unwrap().phis.as_slice() else {
-            panic!("the public join must contain one phi");
+        let [parameter] = ir.block(target).unwrap().parameters.as_slice() else {
+            panic!("the public join must contain one parameter");
         };
-        assert_eq!(phi.inputs.len(), 2);
+        assert_eq!(parameter.value, parameter_value);
+        let public_incoming = ir
+            .blocks()
+            .flat_map(|(_, block)| block.terminator.successors())
+            .filter(|edge| edge.target() == target)
+            .collect::<Vec<_>>();
+        assert_eq!(public_incoming.len(), 3);
+        assert!(public_incoming.iter().all(|it| it.arguments().len() == 1));
         crate::ir::verify::verify(&ir).unwrap();
     }
 }

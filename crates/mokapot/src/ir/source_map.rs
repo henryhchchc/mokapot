@@ -45,7 +45,7 @@ impl SourceMap {
 
     /// Returns the JVM instruction location directly related to an IR node.
     ///
-    /// Synthetic nodes, including phis, have no JVM origin.
+    /// Synthetic nodes, including block parameters, have no JVM origin.
     #[must_use]
     pub fn origin_of(&self, instruction: InstructionLocation) -> Option<ProgramCounter> {
         self.by_location.get(&instruction).copied()

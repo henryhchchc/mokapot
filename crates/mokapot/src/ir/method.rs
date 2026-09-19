@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use super::{
-    BasicBlock, BlockId, InstructionLocation, MokaIRBuildError, Operation, Phi, SourceMap,
-    Terminator, ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
+    BasicBlock, BlockId, BlockParameter, InstructionLocation, MokaIRBuildError, Operation,
+    SourceMap, Terminator, ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
 };
 use crate::{
     jvm::{self, Method as JvmMethod, method, references::ClassRef},
@@ -22,7 +22,7 @@ pub struct MokaIRMethod {
     name: String,
     descriptor: MethodDescriptor,
     owner: ClassRef,
-    entry_block: BlockId,
+    entry: MethodEntry,
     blocks: BTreeMap<BlockId, BasicBlock>,
     source_map: SourceMap,
     this_value: Option<ValueId>,
@@ -35,8 +35,8 @@ pub struct MokaIRMethod {
 /// This enum preserves which kind of instruction was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionRef<'method> {
-    /// A phi evaluated on block entry.
-    Phi(&'method Phi),
+    /// A parameter bound on block entry.
+    BlockParameter(&'method BlockParameter),
     /// An ordinary operation.
     Operation(&'method Operation),
     /// A block terminator.
@@ -44,7 +44,7 @@ pub enum InstructionRef<'method> {
 }
 
 pub(crate) struct MokaIRMethodParts {
-    pub(crate) entry_block: BlockId,
+    pub(crate) entry: MethodEntry,
     pub(crate) blocks: BTreeMap<BlockId, BasicBlock>,
     pub(crate) source_map: SourceMap,
     pub(crate) this_value: Option<ValueId>,
@@ -52,11 +52,32 @@ pub(crate) struct MokaIRMethodParts {
     pub(crate) value_definitions: Vec<Option<ValueDefinition>>,
 }
 
+/// The invocation boundary that supplies arguments to the method's entry block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MethodEntry {
+    pub(super) target: BlockId,
+    pub(super) arguments: Vec<ValueId>,
+}
+
+impl MethodEntry {
+    /// Returns the invoked entry block.
+    #[must_use]
+    pub const fn target(&self) -> BlockId {
+        self.target
+    }
+
+    /// Returns the values supplied to the entry block's parameters.
+    #[must_use]
+    pub fn arguments(&self) -> &[ValueId] {
+        &self.arguments
+    }
+}
+
 impl MokaIRMethod {
     /// Builds completed `MokaIR` from a JVM method.
     ///
     /// JVM stack and local state are eliminated during construction, trivial
-    /// phis are removed, and only reachable blocks are emitted.
+    /// block parameters are simplified, and only reachable blocks are emitted.
     ///
     /// # Errors
     ///
@@ -100,12 +121,18 @@ impl MokaIRMethod {
     /// Returns the entry block identity.
     #[must_use]
     pub const fn entry_block(&self) -> BlockId {
-        self.entry_block
+        self.entry.target
+    }
+
+    /// Returns the method-entry invocation.
+    #[must_use]
+    pub const fn entry(&self) -> &MethodEntry {
+        &self.entry
     }
 
     /// Returns all reachable blocks in deterministic identity order.
     ///
-    /// Each block exposes entry phis, ordered operations, and one terminator.
+    /// Each block exposes entry parameters, ordered operations, and one terminator.
     #[must_use]
     pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> {
         self.blocks.iter().map(|(&id, block)| (id, block))
@@ -119,14 +146,14 @@ impl MokaIRMethod {
         self.blocks.get(&id)
     }
 
-    /// Resolves an instruction, phi, or terminator by its structural location.
+    /// Resolves a block parameter, operation, or terminator by structural location.
     ///
     /// Locations outside this method's block structure yield `None`.
     #[must_use]
     pub fn instruction(&self, location: InstructionLocation) -> Option<InstructionRef<'_>> {
         Some(match location {
-            InstructionLocation::Phi { block, index } => {
-                InstructionRef::Phi(self.block(block)?.phis.get(index)?)
+            InstructionLocation::BlockParameter { block, index } => {
+                InstructionRef::BlockParameter(self.block(block)?.parameters.get(index)?)
             }
             InstructionLocation::Operation { block, index } => {
                 InstructionRef::Operation(self.block(block)?.operations.get(index)?)
@@ -182,7 +209,7 @@ impl MokaIRMethod {
             name: method.name.clone(),
             descriptor: method.descriptor.clone(),
             owner: method.owner.clone(),
-            entry_block: parts.entry_block,
+            entry: parts.entry,
             blocks: parts.blocks,
             source_map: parts.source_map,
             this_value: parts.this_value,
@@ -196,11 +223,21 @@ impl MokaIRMethod {
         &self.value_definitions
     }
 
+    #[cfg(test)]
+    pub(crate) const fn entry_mut(&mut self) -> &mut MethodEntry {
+        &mut self.entry
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn blocks_mut(&mut self) -> &mut BTreeMap<BlockId, BasicBlock> {
+        &mut self.blocks
+    }
+
     /// Returns a borrowed control-flow view derived from block terminators.
     ///
     /// The returned view does not store an independent edge set.
     #[must_use]
     pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
-        ControlFlowGraph::new(&self.blocks, self.entry_block)
+        ControlFlowGraph::new(&self.blocks, self.entry.target)
     }
 }

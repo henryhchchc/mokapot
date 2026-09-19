@@ -17,7 +17,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
     let target = BlockId::new(42);
     let source = BasicBlock {
         caught_exception: None,
-        phis: vec![],
+        parameters: vec![],
         operations: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Switch {
@@ -27,6 +27,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
                 .map(|id| Successor {
                     id: EdgeId::new(id),
                     target,
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 })
                 .collect(),
@@ -34,7 +35,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
     };
     let exit = BasicBlock {
         caught_exception: None,
-        phis: vec![],
+        parameters: vec![],
         operations: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Return(None),
@@ -64,7 +65,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
 fn exceptional_edge_kinds_and_identities_are_preserved() {
     let source = BasicBlock {
         caught_exception: None,
-        phis: vec![],
+        parameters: vec![],
         operations: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Fallible,
@@ -72,11 +73,13 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                 Successor {
                     id: EdgeId::new(0),
                     target: BlockId::new(1),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
                 Successor {
                     id: EdgeId::new(1),
                     target: BlockId::new(2),
+                    arguments: vec![],
                     transfer: ControlTransfer::Exception(Some(
                         "java/lang/RuntimeException".parse().unwrap(),
                     )),
@@ -84,6 +87,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                 Successor {
                     id: EdgeId::new(2),
                     target: BlockId::new(3),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unwind,
                 },
             ],
@@ -101,7 +105,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
             };
             let basic_block = BasicBlock {
                 caught_exception: None,
-                phis: vec![],
+                parameters: vec![],
                 operations: vec![],
                 terminator,
             };

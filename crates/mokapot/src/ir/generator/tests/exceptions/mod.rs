@@ -23,7 +23,7 @@ fn block_containing_instruction(
     location: InstructionLocation,
 ) -> &BasicBlock {
     let block = match location {
-        InstructionLocation::Phi { block, .. }
+        InstructionLocation::BlockParameter { block, .. }
         | InstructionLocation::Operation { block, .. }
         | InstructionLocation::Terminator { block } => block,
     };

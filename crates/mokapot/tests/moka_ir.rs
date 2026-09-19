@@ -34,7 +34,7 @@ fn operation(
 ) -> Option<&mokapot::ir::Operation> {
     match method.instruction(location) {
         Some(InstructionRef::Operation(operation)) => Some(operation),
-        Some(InstructionRef::Phi(_) | InstructionRef::Terminator(_)) | None => None,
+        Some(InstructionRef::BlockParameter(_) | InstructionRef::Terminator(_)) | None => None,
     }
 }
 
@@ -44,7 +44,7 @@ fn terminator(
 ) -> Option<&mokapot::ir::Terminator> {
     match method.instruction(location) {
         Some(InstructionRef::Terminator(terminator)) => Some(terminator),
-        Some(InstructionRef::Phi(_) | InstructionRef::Operation(_)) | None => None,
+        Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
     }
 }
 
@@ -96,7 +96,7 @@ fn builds_ir_blocks_and_provenance() {
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]
-fn ssa_identities_and_phi_predecessors_are_well_formed() {
+fn ssa_definitions_and_block_arguments_are_well_formed() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let mut instruction_locations = HashSet::new();
     let mut definitions = HashSet::new();
@@ -106,35 +106,23 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
         definitions.insert(value);
     }
     definitions.extend(ir.parameter_values());
+    assert_eq!(
+        ir.entry().arguments().len(),
+        ir.block(ir.entry_block()).unwrap().parameters.len()
+    );
+    uses.extend(ir.entry().arguments());
     for (block_id, block) in ir.blocks() {
         if let Some(value) = ir.caught_exception(block_id) {
             definitions.insert(value);
         }
-        let predecessors = ir
-            .blocks()
-            .filter(|(_, candidate)| {
-                candidate
-                    .terminator
-                    .successors()
-                    .iter()
-                    .any(|successor| successor.target() == block_id)
-            })
-            .map(|(candidate_id, _)| candidate_id)
-            .collect::<BTreeSet<_>>();
-        for (index, phi) in block.phis.iter().enumerate() {
-            assert!(instruction_locations.insert(InstructionLocation::Phi {
-                block: block_id,
-                index,
-            }));
-            assert!(definitions.insert(phi.value));
-            assert_eq!(
-                phi.inputs
-                    .iter()
-                    .map(|it| it.predecessor)
-                    .collect::<BTreeSet<_>>(),
-                predecessors
+        for (index, parameter) in block.parameters.iter().enumerate() {
+            assert!(
+                instruction_locations.insert(InstructionLocation::BlockParameter {
+                    block: block_id,
+                    index,
+                })
             );
-            uses.extend(phi.inputs.iter().map(|it| it.value));
+            assert!(definitions.insert(parameter.value));
         }
         for (index, instruction) in block.operations.iter().enumerate() {
             assert!(
@@ -149,6 +137,12 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             uses.extend(instruction.uses());
         }
         assert!(instruction_locations.insert(InstructionLocation::Terminator { block: block_id }));
+        for successor in block.terminator.successors() {
+            assert_eq!(
+                successor.arguments().len(),
+                ir.block(successor.target()).unwrap().parameters.len()
+            );
+        }
         uses.extend(block.terminator.uses());
     }
 
@@ -182,15 +176,17 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
             .count(),
         0
     );
-    let mut phis = ir.blocks().flat_map(|(block, bb)| {
-        bb.phis
+    let mut params = ir.blocks().flat_map(|(block, bb)| {
+        bb.parameters
             .iter()
             .enumerate()
-            .map(move |(index, _)| InstructionLocation::Phi { block, index })
+            .map(move |(index, _)| InstructionLocation::BlockParameter { block, index })
     });
-    assert!(phis.all(|location| {
-        ir.source_map().origin_of(location).is_none() && !covered_nodes.contains(&location)
-    }));
+    assert!(
+        params.all(|loc| {
+            ir.source_map().origin_of(loc).is_none() && !covered_nodes.contains(&loc)
+        })
+    );
 }
 
 #[test]

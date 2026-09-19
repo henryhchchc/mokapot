@@ -5,7 +5,7 @@
 //! 1. [`bytecode_cfg`] partitions all decoded bytecode into a structural CFG.
 //! 2. [`bytecode_analysis`] analyzes reachable structural blocks and
 //!    materializes a mutable draft IR with provisional SSA.
-//! 3. [`canonicalize`] simplifies provisional phis in place.
+//! 3. [`canonicalize`] simplifies provisional block parameters in place.
 //! 4. [`finish`] constructs public wrappers and derived indexes.
 //!
 //! The [`bytecode_analysis::lifting`] module contains the JVM opcode semantics

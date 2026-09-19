@@ -11,24 +11,16 @@ type VerificationResult = Result<(), String>;
 
 #[derive(Debug, Clone, Copy)]
 enum UseSite {
-    Operation {
-        block: BlockId,
-        index: usize,
-    },
-    Terminator {
-        block: BlockId,
-    },
-    PhiInput {
-        block: BlockId,
-        predecessor: BlockId,
-    },
+    Operation { block: BlockId, index: usize },
+    Terminator { block: BlockId },
+    EdgeArgument { edge: EdgeId, source: BlockId },
 }
 
 impl UseSite {
     const fn evaluation_block(self) -> BlockId {
         match self {
             Self::Operation { block, .. } | Self::Terminator { block } => block,
-            Self::PhiInput { predecessor, .. } => predecessor,
+            Self::EdgeArgument { source, .. } => source,
         }
     }
 }
@@ -61,13 +53,7 @@ pub(crate) fn verify(method: &MokaIRMethod) -> VerificationResult {
     let edge_sensitive = collect_edge_sensitive_definitions(method);
 
     verify_definition_index(method, &definitions.definitions)?;
-    verify_phis(
-        method,
-        &predecessors,
-        &definitions.sites,
-        &dominators,
-        &edge_sensitive,
-    )?;
+    verify_block_arguments(method, &definitions.sites, &dominators, &edge_sensitive)?;
     verify_instruction_uses(method, &definitions.sites, &dominators, &edge_sensitive)?;
     verify_source_map(method)?;
     Ok(())
@@ -85,6 +71,15 @@ fn collect_blocks(method: &MokaIRMethod) -> Result<BTreeSet<BlockId>, String> {
             "entry block {} has no definition",
             method.entry_block()
         ));
+    }
+    if method.entry().arguments().len()
+        != method
+            .block(method.entry_block())
+            .expect("the entry block was checked above")
+            .parameters
+            .len()
+    {
+        return Err("method-entry argument count differs from entry parameter count".to_owned());
     }
     Ok(blocks)
 }
@@ -110,6 +105,19 @@ fn verify_edges(
                     successor.target()
                 ));
             };
+            let expected = method
+                .block(successor.target())
+                .expect("the successor target was checked above")
+                .parameters
+                .len();
+            if successor.arguments().len() != expected {
+                return Err(format!(
+                    "edge {} supplies {} arguments to {} parameters",
+                    successor.id(),
+                    successor.arguments().len(),
+                    expected
+                ));
+            }
             target_predecessors.insert(source);
         }
     }
@@ -219,15 +227,15 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
                 DefinitionSite::BlockEntry(block_id),
             )?;
         }
-        for (index, phi) in block.phis.iter().enumerate() {
-            let location = InstructionLocation::Phi {
+        for (index, parameter) in block.parameters.iter().enumerate() {
+            let location = InstructionLocation::BlockParameter {
                 block: block_id,
                 index,
             };
             insert_definition(
                 &mut definitions,
                 &mut sites,
-                phi.value,
+                parameter.value,
                 ValueDefinition::Instruction(location),
                 DefinitionSite::BlockEntry(block_id),
             )?;
@@ -345,40 +353,33 @@ fn collect_edge_sensitive_definitions(
         .collect()
 }
 
-fn verify_phis(
+fn verify_block_arguments(
     method: &MokaIRMethod,
-    predecessors: &BTreeMap<BlockId, BTreeSet<BlockId>>,
     definitions: &BTreeMap<ValueId, DefinitionSite>,
     dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
     edge_sensitive: &BTreeMap<ValueId, EdgeSensitiveDefinition>,
 ) -> VerificationResult {
-    for (block_id, block) in method.blocks() {
-        for phi in &block.phis {
-            let mut inputs = BTreeSet::new();
-            for input in &phi.inputs {
-                if !inputs.insert(input.predecessor) {
-                    return Err(format!(
-                        "phi {} has more than one input from {}",
-                        phi.value, input.predecessor
-                    ));
-                }
+    for &value in method.entry().arguments() {
+        if !matches!(definitions.get(&value), Some(DefinitionSite::External)) {
+            return Err(format!(
+                "method-entry argument {value} is not an externally defined value"
+            ));
+        }
+    }
+    for (source, block) in method.blocks() {
+        for successor in block.terminator.successors() {
+            for &value in successor.arguments() {
                 verify_use(
                     method,
-                    input.value,
-                    UseSite::PhiInput {
-                        block: block_id,
-                        predecessor: input.predecessor,
+                    value,
+                    UseSite::EdgeArgument {
+                        edge: successor.id(),
+                        source,
                     },
                     definitions,
                     dominators,
                     edge_sensitive,
                 )?;
-            }
-            if inputs != predecessors[&block_id] {
-                return Err(format!(
-                    "phi {} covers predecessors {inputs:?}, expected {:?}",
-                    phi.value, predecessors[&block_id]
-                ));
             }
         }
     }
@@ -407,7 +408,7 @@ fn verify_instruction_uses(
                 )?;
             }
         }
-        for value in block.terminator.uses() {
+        for value in block.terminator.local_uses() {
             verify_use(
                 method,
                 value,
@@ -439,7 +440,7 @@ fn verify_use(
             UseSite::Operation {
                 index: use_index, ..
             } => index < use_index,
-            UseSite::Terminator { .. } | UseSite::PhiInput { .. } => true,
+            UseSite::Terminator { .. } | UseSite::EdgeArgument { .. } => true,
         },
         DefinitionSite::BlockEntry(block) | DefinitionSite::Operation { block, .. } => {
             dominators[&use_block].contains(&block)
@@ -467,26 +468,22 @@ fn verify_edge_sensitive_use(
             "fallible result {value} is used despite having no normal outcome"
         ));
     }
-    if let UseSite::PhiInput { block, predecessor } = usage
-        && predecessor == definition.block
+    if let UseSite::EdgeArgument { edge, source } = usage
+        && source == definition.block
     {
-        let transfers = method
-            .block(predecessor)
+        let normal = method
+            .block(source)
             .expect("the predecessor is a defined block")
             .terminator
             .successors()
             .iter()
-            .filter(|successor| successor.target() == block)
-            .collect::<Vec<_>>();
-        let only_normal_edges = !transfers.is_empty()
-            && transfers
-                .iter()
-                .all(|successor| definition.normal_edges.contains(&successor.id()));
-        if only_normal_edges {
+            .find(|successor| successor.id() == edge)
+            .is_some_and(|successor| definition.normal_edges.contains(&successor.id()));
+        if normal {
             return Ok(());
         }
         return Err(format!(
-            "fallible result {value} is used by a phi on a non-normal edge from {predecessor} to {block}"
+            "fallible result {value} is used as an argument on non-normal edge {edge}"
         ));
     }
 
@@ -518,4 +515,77 @@ fn verify_source_map(method: &MokaIRMethod) -> VerificationResult {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::MokaIRMethod,
+        jvm::{code::Instruction, method::AccessFlags},
+    };
+
+    fn entry_loop() -> MokaIRMethod {
+        let method = crate::tests::method(
+            [
+                (0, Instruction::ILoad0),
+                (1, Instruction::IfEq(8.into())),
+                (2, Instruction::ILoad0),
+                (3, Instruction::IConst1),
+                (4, Instruction::ISub),
+                (5, Instruction::IStore0),
+                (6, Instruction::Goto(0.into())),
+                (8, Instruction::Return),
+            ],
+            "(I)V",
+            vec![],
+            AccessFlags::PUBLIC | AccessFlags::STATIC,
+        );
+        MokaIRMethod::from_method(&method).unwrap()
+    }
+
+    #[test]
+    fn rejects_method_entry_argument_arity_mismatch() {
+        let mut method = entry_loop();
+        method.entry_mut().arguments.clear();
+
+        assert!(
+            verify(&method)
+                .unwrap_err()
+                .contains("method-entry argument count")
+        );
+    }
+
+    #[test]
+    fn rejects_successor_argument_arity_mismatch() {
+        let mut method = entry_loop();
+        let entry = method.entry_block();
+        let successor = method
+            .blocks_mut()
+            .values_mut()
+            .flat_map(|block| &mut block.terminator.successors)
+            .find(|successor| successor.target == entry)
+            .unwrap();
+        successor.arguments.clear();
+
+        assert!(
+            verify(&method)
+                .unwrap_err()
+                .contains("supplies 0 arguments")
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_block_parameter_definition() {
+        let mut method = entry_loop();
+        let external = method.parameter_values()[0];
+        let entry = method.entry_block();
+        method.blocks_mut().get_mut(&entry).unwrap().parameters[0].value = external;
+
+        assert!(
+            verify(&method)
+                .unwrap_err()
+                .contains("multiple definitions")
+        );
+    }
 }

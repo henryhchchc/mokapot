@@ -23,7 +23,7 @@ pub(crate) struct ParameterSite {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParameterDefinition {
     pub result: ValueId,
-    pub inputs: BTreeMap<EdgeId, ValueId>,
+    pub inputs: BTreeMap<Contribution, ValueId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -9,7 +9,7 @@ fn block(id: u32, successors: Vec<Successor>) -> (BlockId, BasicBlock) {
         BlockId::new(id),
         BasicBlock {
             caught_exception: None,
-            phis: vec![],
+            parameters: vec![],
             operations: vec![],
             terminator: Terminator {
                 kind: if successors.len() == 2 {
@@ -36,6 +36,7 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
             vec![Successor {
                 id: EdgeId::new(0),
                 target: BlockId::new(1),
+                arguments: vec![],
                 transfer: ControlTransfer::Conditional(BranchGuard::of(positive.clone())),
             }],
         ),
@@ -45,11 +46,13 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
                 Successor {
                     id: EdgeId::new(1),
                     target: BlockId::new(2),
+                    arguments: vec![],
                     transfer: ControlTransfer::Conditional(BranchGuard::of(negative)),
                 },
                 Successor {
                     id: EdgeId::new(2),
                     target: BlockId::new(3),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
             ],
@@ -77,11 +80,13 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
                 Successor {
                     id: EdgeId::new(0),
                     target: BlockId::new(1),
+                    arguments: vec![],
                     transfer: ControlTransfer::Conditional(BranchGuard::of(positive)),
                 },
                 Successor {
                     id: EdgeId::new(1),
                     target: BlockId::new(5),
+                    arguments: vec![],
                     transfer: ControlTransfer::Conditional(BranchGuard::of(negative)),
                 },
             ],
@@ -92,11 +97,13 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
                 Successor {
                     id: EdgeId::new(2),
                     target: BlockId::new(2),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
                 Successor {
                     id: EdgeId::new(3),
                     target: BlockId::new(3),
+                    arguments: vec![],
                     transfer: ControlTransfer::Exception(Some(
                         "java/lang/RuntimeException".parse().unwrap(),
                     )),
@@ -104,6 +111,7 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
                 Successor {
                     id: EdgeId::new(4),
                     target: BlockId::new(4),
+                    arguments: vec![],
                     transfer: ControlTransfer::Unwind,
                 },
             ],

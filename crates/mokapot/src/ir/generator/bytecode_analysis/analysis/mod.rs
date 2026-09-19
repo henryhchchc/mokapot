@@ -39,7 +39,7 @@ impl Analyzer<'_, '_> {
     /// Interns the identity of the value caught by handler-entry `block`.
     ///
     /// Every exceptional arm into one handler-entry location must carry the
-    /// *same* value: distinct values would merge into a phi at stack position 0
+    /// *same* value: distinct values would create a parameter at stack position 0
     /// in the handler's entry frame, which must hold one caught value.
     pub(super) fn caught_exception(&mut self, block: BlockId) -> Result<ValueId, Error> {
         if let Some(&value) = self.caught_exceptions.get(&block) {
@@ -59,7 +59,7 @@ impl Analyzer<'_, '_> {
             NormalizedBlockKind::Bytecode(id) | NormalizedBlockKind::HandlerEntry(id) => {
                 Some(self.cfg.bytecode_block(id).start_pc)
             }
-            NormalizedBlockKind::EntryPreheader | NormalizedBlockKind::Unwind => None,
+            NormalizedBlockKind::Unwind => None,
         }
     }
 }
@@ -186,6 +186,16 @@ impl CompletedAnalysis {
             .values()
             .map(|definition| (definition.result, definition))
             .collect::<BTreeMap<_, _>>();
+        let entry_arguments = target_parameters[&entry]
+            .iter()
+            .map(|parameter| {
+                definitions_by_value
+                    .get(parameter)
+                    .and_then(|definition| definition.inputs.get(&Contribution::Entry))
+                    .copied()
+                    .ok_or_else(|| Error::internal("an entry parameter lacks an entry argument"))
+            })
+            .collect::<Result<_, _>>()?;
         for block in draft_blocks.values_mut() {
             for edge in &mut block.terminator.successors {
                 let parameters = target_parameters
@@ -196,7 +206,7 @@ impl CompletedAnalysis {
                     .map(|parameter| {
                         definitions_by_value
                             .get(parameter)
-                            .and_then(|definition| definition.inputs.get(&edge.id))
+                            .and_then(|def| def.inputs.get(&Contribution::Edge(edge.id)))
                             .copied()
                             .ok_or_else(|| {
                                 Error::internal("a block parameter lacks an edge argument")
@@ -208,6 +218,7 @@ impl CompletedAnalysis {
 
         Ok(DraftMethod {
             entry,
+            entry_arguments,
             blocks: draft_blocks,
             this_value: receiver_value,
             parameter_values,
