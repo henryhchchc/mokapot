@@ -63,8 +63,9 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     pub(super) fn new(cfg: &'cfg NormalizedCfg<'method>) -> Result<Self, Error> {
         let (values, initial_frame) = ValueContext::for_cfg(cfg)?;
         let blocks = cfg
-            .blocks()
-            .map(|(id, _)| (id, BlockState::default()))
+            .blocks
+            .keys()
+            .map(|id| (*id, BlockState::default()))
             .collect();
         Ok(Self {
             cfg,

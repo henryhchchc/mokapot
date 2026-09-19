@@ -15,9 +15,9 @@ use crate::{
 /// A reachable graph whose synthetic nodes and identities are fixed before
 /// frame propagation begins.
 pub(crate) struct NormalizedCfg<'method> {
-    bytecode: JvmBlockGraph<'method>,
-    entry: BlockId,
-    blocks: HashMap<BlockId, NormalizedBlock>,
+    pub bytecode: JvmBlockGraph<'method>,
+    pub entry: BlockId,
+    pub blocks: HashMap<BlockId, NormalizedBlock>,
 }
 
 impl<'method> NormalizedCfg<'method> {
@@ -31,10 +31,6 @@ impl<'method> NormalizedCfg<'method> {
 
     pub const fn entry_block(&self) -> BlockId {
         self.entry
-    }
-
-    pub fn blocks(&self) -> impl Iterator<Item = (BlockId, &NormalizedBlock)> {
-        self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
     pub fn block(&self, id: BlockId) -> &NormalizedBlock {
