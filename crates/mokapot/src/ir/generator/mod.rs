@@ -6,7 +6,7 @@
 //! 2. [`bytecode_analysis`] analyzes reachable structural blocks and
 //!    materializes a mutable draft IR with provisional SSA.
 //! 3. [`canonicalize`] simplifies provisional block parameters in place.
-//! 4. [`finish`] constructs public wrappers and derived indexes.
+//! 4. [`finish`] attaches method metadata and derived indexes.
 //!
 //! Analysis fixes addressable instruction positions and records their JVM
 //! origins in a detached source map. Later phases preserve those positions.

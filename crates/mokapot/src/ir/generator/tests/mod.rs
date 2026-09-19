@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::{
     ir::{
         BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRBuildError, MokaIRMethod,
-        OperationKind, Successor, Terminator, ValueDefinition, control_flow::ControlTransfer,
+        Operation, Successor, Terminator, ValueDefinition, control_flow::ControlTransfer,
     },
     jvm::{
         Method,

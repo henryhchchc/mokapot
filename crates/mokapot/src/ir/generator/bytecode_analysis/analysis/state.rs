@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use super::{Frame, Position};
 use crate::{
     ir::{
-        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, Terminator, ValueId,
+        BlockId, BlockKind, EdgeId, Operation, SuccessorTarget, Terminator, ValueId,
         control_flow::ControlTransfer,
     },
     jvm::code::ProgramCounter,
@@ -39,14 +39,14 @@ pub(crate) struct LiftedEdge {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiftedBlock {
     pub kind: BlockKind,
-    pub operations: Vec<(ProgramCounter, OperationKind)>,
+    pub operations: Vec<(ProgramCounter, Operation)>,
     pub terminator: LiftedTerminator,
     pub terminator_source: Option<ProgramCounter>,
 }
 
 pub(crate) type LiftedArm = (LiftedEdge, Option<Frame>);
 
-pub(crate) type LiftedTerminator = Terminator<LiftedArm, OperationKind>;
+pub(crate) type LiftedTerminator = Terminator<LiftedArm>;
 
 /// Analysis state for one normalized block.
 ///

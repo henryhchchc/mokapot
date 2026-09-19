@@ -2,7 +2,7 @@
 use std::{collections::BTreeMap, convert::Infallible};
 
 use crate::ir::{
-    BasicBlock, BlockId, BlockKind, OperationKind, SuccessorTarget, ValueId,
+    BasicBlock, BlockId, BlockKind, SuccessorTarget, ValueId,
     generator::{
         canonicalize::simplify::SimplifiedParameters, draft::DraftMethod, remap::RemapValues,
     },
@@ -42,7 +42,7 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
 }
 
 fn finalize_block(
-    block: &mut BasicBlock<OperationKind>,
+    block: &mut BasicBlock,
     retained: &BTreeMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {

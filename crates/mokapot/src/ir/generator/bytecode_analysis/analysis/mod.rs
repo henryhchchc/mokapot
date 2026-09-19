@@ -243,11 +243,7 @@ impl BlockExecution {
 ///
 /// Later phases may rewrite values, but must not insert, remove, or reorder
 /// operations or terminators because their source locations are fixed here.
-fn materialize_block(
-    id: BlockId,
-    lifted: LiftedBlock,
-    source_map: &mut SourceMap,
-) -> BasicBlock<crate::ir::OperationKind> {
+fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMap) -> BasicBlock {
     if let Some(origin) = lifted.terminator_source {
         source_map.record_terminator(origin, id);
     }
@@ -279,7 +275,7 @@ impl From<LiftedEdge> for Successor {
     }
 }
 
-impl From<state::LiftedTerminator> for Terminator<Successor, crate::ir::OperationKind> {
+impl From<state::LiftedTerminator> for Terminator<Successor> {
     fn from(value: state::LiftedTerminator) -> Self {
         value.map_arms(|(edge, _)| edge.into())
     }

@@ -1,7 +1,7 @@
 //! Rewrites the single IR value identity space during canonicalization.
 
 use crate::ir::{
-    OperationKind, Successor, Terminator, ValueId,
+    Operation, Successor, Terminator, ValueId,
     control_flow::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
@@ -27,7 +27,7 @@ fn remap_value<E>(
     Ok(())
 }
 
-impl RemapValues for OperationKind {
+impl RemapValues for Operation {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
@@ -42,7 +42,7 @@ impl RemapValues for OperationKind {
     }
 }
 
-impl RemapValues for Terminator<Successor, OperationKind> {
+impl RemapValues for Terminator<Successor> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,

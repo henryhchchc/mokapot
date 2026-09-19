@@ -1,6 +1,6 @@
 use mokapot::{
     ir::{
-        InstructionLocation, InstructionRef, MokaIRMethod, OperationKind, Terminator,
+        InstructionLocation, InstructionRef, MokaIRMethod, Operation, Terminator,
         expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
@@ -65,8 +65,8 @@ fn builds_ir_blocks_and_provenance() {
         .find_map(|id| operation(&ir, id))
         .unwrap();
     assert!(matches!(
-        first.kind(),
-        OperationKind::Definition {
+        first,
+        Operation::Definition {
             expr: Expression::Const(ConstantValue::String(JavaString::Utf8(value))),
             ..
         } if value == "233"

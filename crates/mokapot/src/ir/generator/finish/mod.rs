@@ -1,16 +1,16 @@
-//! Finishes canonical SSA blocks into completed public `MokaIR`.
+//! Attaches method metadata and derived indexes to canonical SSA blocks.
 
 use crate::{
     ir::{
-        BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, Operation,
-        OperationKind, ValueDefinition, ValueId,
+        BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, ValueDefinition,
+        ValueId,
         generator::{draft::DraftMethod, error::Error},
         method::MokaIRMethodParts,
     },
     jvm::Method,
 };
 
-/// Constructs public wrappers and indexes from canonical draft IR.
+/// Constructs a completed method and its value-definition index.
 pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod, Error> {
     let DraftMethod {
         entry,
@@ -32,11 +32,6 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
     for (&id, block) in &blocks {
         state.define_block_values(id, block)?;
     }
-
-    let blocks = blocks
-        .into_iter()
-        .map(|(id, block)| (id, block.map_operations(|kind| Operation { kind })))
-        .collect();
 
     let method = MokaIRMethod::new(
         method,
@@ -60,7 +55,7 @@ impl FinishState {
     fn define_block_values(
         &mut self,
         block_id: crate::ir::BlockId,
-        block: &BasicBlock<OperationKind>,
+        block: &BasicBlock,
     ) -> Result<(), Error> {
         if let BlockKind::LandingPad { exception: value } = block.kind {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
@@ -121,7 +116,7 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            BasicBlock, BlockId, BlockParameter, EdgeId, OperationKind, Successor, SuccessorTarget,
+            BasicBlock, BlockId, BlockParameter, EdgeId, Operation, Successor, SuccessorTarget,
             Terminator,
             control_flow::ControlTransfer,
             expression::MathOperation,
@@ -146,7 +141,7 @@ mod tests {
                     parameters: vec![BlockParameter {
                         value: eliminated_parameter,
                     }],
-                    operations: vec![OperationKind::Definition {
+                    operations: vec![Operation::Definition {
                         value: result,
                         expr: MathOperation::Increment(eliminated_parameter, 1).into(),
                     }],

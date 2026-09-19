@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt, slice};
 
 use super::{
-    BlockId, EdgeId, Operation, OperationKind, ValueId,
+    BlockId, EdgeId, Operation, ValueId,
     control_flow::{ControlTransfer, path_condition::BranchGuard},
     expression::Predicate,
 };
@@ -57,11 +57,11 @@ pub enum SuccessorTarget {
 
 /// A structurally valid control-flow operation ending a basic block.
 ///
-/// The shape is parameterized by its outgoing arm type so the draft, lifted,
-/// and completed IR stages share one definition. [`Successor`] is the default,
-/// so `Terminator` names the completed public form.
+/// The shape is parameterized by its outgoing arm type so lifted and completed
+/// IR stages share one definition. [`Successor`] is the default, so
+/// `Terminator` names the completed public form.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Terminator<Arm = Successor, Op = Operation> {
+pub enum Terminator<Arm = Successor> {
     /// Transfers control to one successor.
     Goto {
         /// The sole continuation.
@@ -88,7 +88,7 @@ pub enum Terminator<Arm = Successor, Op = Operation> {
     /// Selects the normal or an exceptional outcome of a fallible operation.
     Try {
         /// The operation attempted by this terminator.
-        operation: Op,
+        operation: Operation,
         /// The continuation taken after successful completion.
         normal: Arm,
         /// Ordered exceptional outcomes.
@@ -115,12 +115,12 @@ pub enum Terminator<Arm = Successor, Op = Operation> {
     },
 }
 
-impl<Arm, Op> Terminator<Arm, Op> {
+impl<Arm> Terminator<Arm> {
     /// Maps every outgoing arm while preserving the terminator's structure.
     pub(crate) fn map_arms<MappedArm>(
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
-    ) -> Terminator<MappedArm, Op> {
+    ) -> Terminator<MappedArm> {
         match self {
             Self::Goto { target } => Terminator::Goto {
                 target: map(target),
@@ -194,30 +194,6 @@ impl<Arm, Op> Terminator<Arm, Op> {
             Self::Return { .. } => (&mut [], &mut []),
         };
         head.iter_mut().chain(tail)
-    }
-
-    /// Maps the attempted operation while preserving control-flow structure.
-    pub(crate) fn map_operation<MappedOp>(
-        self,
-        map: impl FnOnce(Op) -> MappedOp,
-    ) -> Terminator<Arm, MappedOp> {
-        match self {
-            Self::Goto { target } => Terminator::Goto { target },
-            Self::Branch { taken, otherwise } => Terminator::Branch { taken, otherwise },
-            Self::Switch { cases, default } => Terminator::Switch { cases, default },
-            Self::Try {
-                operation,
-                normal,
-                exceptional,
-            } => Terminator::Try {
-                operation: map(operation),
-                normal,
-                exceptional,
-            },
-            Self::Return { value } => Terminator::Return { value },
-            Self::TryReturn { value, exceptional } => Terminator::TryReturn { value, exceptional },
-            Self::Throw { value, exceptional } => Terminator::Throw { value, exceptional },
-        }
     }
 }
 
@@ -295,16 +271,7 @@ impl Terminator<Successor> {
     }
 }
 
-impl<Arm> Terminator<Arm, OperationKind> {
-    pub(crate) const fn def(&self) -> Option<ValueId> {
-        match self {
-            Self::Try { operation, .. } => operation.def(),
-            _ => None,
-        }
-    }
-}
-
-impl<Arm, Op: fmt::Display> fmt::Display for Terminator<Arm, Op> {
+impl<Arm> fmt::Display for Terminator<Arm> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Goto { .. } => f.write_str("goto"),
@@ -368,10 +335,8 @@ mod tests {
     #[test]
     fn try_terminator_orders_normal_before_exceptional_outcomes() {
         let terminator = Terminator::Try {
-            operation: Operation {
-                kind: crate::ir::OperationKind::Effect {
-                    expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
-                },
+            operation: crate::ir::Operation::Effect {
+                expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
             },
             normal: arm(2),
             exceptional: vec![arm(0), arm(1)],

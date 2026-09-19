@@ -24,8 +24,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         .unwrap();
 
     assert!(matches!(
-        operation.kind(),
-        OperationKind::Definition {
+        operation,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if lhs == rhs && *lhs == ir.parameter_values()[0]
@@ -48,8 +48,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         .next()
         .unwrap();
     assert!(matches!(
-        operation.kind(),
-        OperationKind::Definition {
+        operation,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if lhs == rhs && *lhs == ir.parameter_values()[0]
@@ -73,16 +73,16 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let conversion = operations.next().unwrap();
     let conversion_value = conversion.def().unwrap();
     assert!(matches!(
-        conversion.kind(),
-        OperationKind::Definition {
+        conversion,
+        Operation::Definition {
             expr: Expression::Conversion(Conversion::Long2Int(value)),
             ..
         } if *value == ir.parameter_values()[0]
     ));
     let addition = operations.next().unwrap();
     assert!(matches!(
-        addition.kind(),
-        OperationKind::Definition {
+        addition,
+        Operation::Definition {
             expr: Expression::Math(MathOperation::Add(lhs, rhs)),
             ..
         } if *lhs == ir.parameter_values()[1] && *rhs == conversion_value
@@ -161,7 +161,7 @@ fn array_write_is_an_effect_without_a_definition() {
         })
         .unwrap();
 
-    assert!(matches!(effect.kind(), OperationKind::Effect { .. }));
+    assert!(matches!(effect, Operation::Effect { .. }));
     assert_eq!(effect.def(), None);
     assert_eq!(effect.uses().len(), 3);
     assert_eq!(ir.source_map().instructions_at(0.into()).count(), 0);
@@ -190,6 +190,6 @@ fn monitor_operations_are_effects_without_definitions() {
 
     assert_eq!(instructions.len(), 2);
     assert!(instructions.iter().all(|instruction| {
-        instruction.def().is_none() && matches!(instruction.kind(), OperationKind::Effect { .. })
+        instruction.def().is_none() && matches!(instruction, Operation::Effect { .. })
     }));
 }

@@ -90,12 +90,8 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                 },
             ];
             Terminator::Try {
-                operation: crate::ir::Operation {
-                    kind: crate::ir::OperationKind::Effect {
-                        expr: crate::ir::expression::Expression::Const(
-                            crate::jvm::ConstantValue::Null,
-                        ),
-                    },
+                operation: crate::ir::Operation::Effect {
+                    expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
                 },
                 normal: arms.remove(0),
                 exceptional: arms,

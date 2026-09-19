@@ -80,10 +80,8 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
     };
     let exception_type = "java/lang/RuntimeException".parse().unwrap();
     let fallible = Terminator::Try {
-        operation: crate::ir::Operation {
-            kind: crate::ir::OperationKind::Effect {
-                expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
-            },
+        operation: crate::ir::Operation::Effect {
+            expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
         },
         normal: Successor {
             id: EdgeId::new(2),

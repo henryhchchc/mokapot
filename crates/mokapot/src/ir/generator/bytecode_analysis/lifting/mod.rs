@@ -10,7 +10,7 @@ mod wide;
 use super::{Frame, StackOperation, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        OperationKind, ValueId,
+        Operation, ValueId,
         expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
         generator::error::Error,
     },
@@ -21,8 +21,8 @@ use ValueCategory::{Category1, Category2};
 
 /// Builds the definition operation produced by a lifted expression.
 ///
-const fn definition_operation(value: ValueId, expr: Expression) -> OperationKind {
-    OperationKind::Definition { value, expr }
+const fn definition_operation(value: ValueId, expr: Expression) -> Operation {
+    Operation::Definition { value, expr }
 }
 
 pub(super) struct LiftContext<'values, 'frame> {
@@ -40,7 +40,7 @@ pub(super) fn lift_instruction(
     jvm_instruction: &JVM,
     pc: crate::jvm::code::ProgramCounter,
     frame: &mut Frame,
-) -> Result<Option<OperationKind>, Error> {
+) -> Result<Option<Operation>, Error> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this match exhaustively dispatches the JVM instruction enum"
@@ -199,13 +199,13 @@ impl LiftContext<'_, '_> {
     fn monitor(
         &mut self,
         operation: impl FnOnce(ValueId) -> LockOperation,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         let object_ref = self.frame.stack.pop(Category1)?;
         let expr = operation(object_ref).into();
-        Ok(Some(OperationKind::Effect { expr }))
+        Ok(Some(Operation::Effect { expr }))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<OperationKind>, Error> {
+    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<Operation>, Error> {
         self.frame.stack.apply(operation)?;
         Ok(None)
     }
@@ -226,7 +226,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         self.with_def(|value, frame| {
             let operand = frame.stack.pop(category)?;
             frame.stack.push(value, category)?;
@@ -239,7 +239,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         self.with_def(|value, frame| {
             operations::lift_binary_math(frame, value, operation, category)
         })
@@ -250,7 +250,7 @@ impl LiftContext<'_, '_> {
         conversion: impl FnOnce(ValueId) -> Conversion,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<Option<OperationKind>, Error> {
+    ) -> Result<Option<Operation>, Error> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })
