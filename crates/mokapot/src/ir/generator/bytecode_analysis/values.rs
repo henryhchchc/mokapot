@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::{EntrySlots, Frame, Position};
 use crate::{
@@ -6,11 +6,11 @@ use crate::{
         ValueId,
         generator::{bytecode_cfg::NormalizedCfg, error::Error},
     },
-    jvm::method,
+    jvm::{code::ProgramCounter, method},
 };
 
 pub(super) struct ValueContext {
-    definition_ids: BTreeMap<crate::jvm::code::ProgramCounter, ValueId>,
+    definition_ids: HashMap<ProgramCounter, ValueId>,
     value_id_allocator: ValueIdAllocator,
     pub(super) receiver_value: Option<ValueId>,
     pub(super) parameter_values: Vec<ValueId>,
@@ -45,7 +45,7 @@ impl ValueContext {
             &parameter_values,
         );
         let values = Self {
-            definition_ids: BTreeMap::new(),
+            definition_ids: HashMap::new(),
             value_id_allocator,
             receiver_value,
             parameter_values,
@@ -87,10 +87,7 @@ impl ValueContext {
         self.value_id_allocator.new_value_id()
     }
 
-    pub(super) fn definition_at(
-        &mut self,
-        pc: crate::jvm::code::ProgramCounter,
-    ) -> Result<ValueId, Error> {
+    pub(super) fn definition_at(&mut self, pc: ProgramCounter) -> Result<ValueId, Error> {
         if let Some(&id) = self.definition_ids.get(&pc) {
             return Ok(id);
         }

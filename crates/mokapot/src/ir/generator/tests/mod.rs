@@ -34,7 +34,7 @@ fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     MokaIRMethod::from_method(method)
 }
 
-fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
+pub(super) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
     let mut result = Vec::new();
     let mut visited = HashSet::new();
     let mut pending = VecDeque::from([ir.entry_block()]);

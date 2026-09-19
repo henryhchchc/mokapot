@@ -23,7 +23,7 @@ pub struct MokaIRMethod {
     descriptor: MethodDescriptor,
     owner: ClassRef,
     entry: MethodEntry,
-    pub(super) blocks: HashMap<BlockId, BasicBlock>,
+    blocks: HashMap<BlockId, BasicBlock>,
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
@@ -221,5 +221,9 @@ impl MokaIRMethod {
 
     pub(super) const fn blocks_mut(&mut self) -> &mut HashMap<BlockId, BasicBlock> {
         &mut self.blocks
+    }
+
+    pub(super) fn blocks_for_verification(&self) -> impl Iterator<Item = (BlockId, &BasicBlock)> {
+        self.blocks.iter().map(|(&id, block)| (id, block))
     }
 }

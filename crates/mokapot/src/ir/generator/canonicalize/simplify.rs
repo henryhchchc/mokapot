@@ -13,8 +13,8 @@ pub(super) struct ParameterCandidate {
 pub(super) struct SimplifiedParameters {
     /// Canonical replacements for eliminated parameter results.
     pub(super) substitutions: HashMap<ValueId, ValueId>,
-    /// Parameters that represent genuine choices after rewriting.
-    pub(super) candidates: HashMap<ValueId, ParameterCandidate>,
+    /// Results of parameters that represent genuine choices after rewriting.
+    pub(super) retained: HashSet<ValueId>,
 }
 
 /// An inconsistency found while simplifying provisional block parameters.
@@ -104,7 +104,7 @@ pub(super) fn simplify_parameters(
 
     Ok(SimplifiedParameters {
         substitutions,
-        candidates,
+        retained: candidates.into_keys().collect(),
     })
 }
 

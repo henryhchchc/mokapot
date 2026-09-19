@@ -1,6 +1,6 @@
 //! Reachable control-flow topology consumed by frame analysis.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
 use crate::{
@@ -99,7 +99,7 @@ pub(crate) enum EdgeKind {
     Exception(Option<ClassRef>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Node {
     Bytecode(JvmBlockId),
     Handler(JvmBlockId),
@@ -107,18 +107,22 @@ enum Node {
 
 pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>, Error> {
     let bytecode_entry = Node::Bytecode(bytecode.entry_block());
-    let mut reachable = BTreeSet::new();
-    let mut pending = BTreeSet::from([bytecode_entry]);
-    while let Some(node) = pending.pop_first() {
-        if !reachable.insert(node) {
-            continue;
-        }
-        pending.extend(successors(&bytecode, node).into_iter().filter_map(
-            |(target, _)| match target {
+    let mut reachable = Vec::new();
+    let mut discovered = HashSet::from([bytecode_entry]);
+    let mut pending = VecDeque::from([bytecode_entry]);
+    while let Some(node) = pending.pop_front() {
+        reachable.push(node);
+        for successor in successors(&bytecode, node)
+            .into_iter()
+            .filter_map(|(target, _)| match target {
                 NodeTarget::Block(target) => Some(target),
                 NodeTarget::Unwind => None,
-            },
-        ));
+            })
+        {
+            if discovered.insert(successor) {
+                pending.push_back(successor);
+            }
+        }
     }
 
     let ids = reachable
@@ -126,7 +130,7 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
         .copied()
         .enumerate()
         .map(|(index, node)| block_id(index).map(|id| (node, id)))
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
+        .collect::<Result<HashMap<_, _>, _>>()?;
     let bytecode_entry_id = ids[&bytecode_entry];
     let entry = bytecode_entry_id;
 
@@ -225,7 +229,10 @@ mod tests {
 
     use super::{NormalizedBlockKind, NormalizedTarget};
     use crate::{
-        ir::{MokaIRMethod, Successor, generator::bytecode_cfg},
+        ir::{
+            MokaIRMethod, Successor,
+            generator::{bytecode_cfg, tests::reachable_blocks},
+        },
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -348,9 +355,9 @@ mod tests {
             panic!("the public join must contain one parameter");
         };
         assert_eq!(parameter.value, parameter_value);
-        let public_incoming = ir
-            .blocks
-            .values()
+        let public_incoming = reachable_blocks(&ir)
+            .into_iter()
+            .map(|(_, block)| block)
             .flat_map(|block| block.terminator.successors())
             .filter(|edge| edge.block_target() == Some(target))
             .collect::<Vec<_>>();

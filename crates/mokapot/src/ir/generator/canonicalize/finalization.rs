@@ -23,7 +23,7 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
             let positions = std::mem::take(&mut block.parameters)
                 .into_iter()
                 .enumerate()
-                .filter(|(_, parameter)| simplified.candidates.contains_key(&parameter.value))
+                .filter(|(_, parameter)| simplified.retained.contains(&parameter.value))
                 .collect::<Vec<_>>();
             block.parameters = positions.iter().map(|(_, parameter)| *parameter).collect();
             (id, positions.into_iter().map(|(index, _)| index).collect())

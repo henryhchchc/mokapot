@@ -54,13 +54,11 @@ pub(super) fn verify(method: &MokaIRMethod) -> VerificationResult {
 }
 
 fn collect_blocks(method: &MokaIRMethod) -> Result<HashSet<BlockId>, String> {
-    let mut blocks = HashSet::new();
-    for &block in method.blocks.keys() {
-        if !blocks.insert(block) {
-            return Err(format!("block {block} is defined more than once"));
-        }
-    }
-    if !blocks.contains(&method.entry_block()) {
+    let blocks = method
+        .blocks_for_verification()
+        .map(|(id, _)| id)
+        .collect::<HashSet<_>>();
+    if method.block(method.entry_block()).is_none() {
         return Err(format!(
             "entry block {} has no definition",
             method.entry_block()
@@ -87,7 +85,7 @@ fn verify_edges(
         .iter()
         .map(|&block| (block, HashSet::new()))
         .collect::<HashMap<_, _>>();
-    for (&source, block) in &method.blocks {
+    for (source, block) in method.blocks_for_verification() {
         for successor in block.terminator.successors() {
             if !edge_ids.insert(successor.id()) {
                 return Err(format!("edge {} is defined more than once", successor.id()));
@@ -217,7 +215,7 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
             DefinitionSite::External,
         )?;
     }
-    for (&block_id, block) in &method.blocks {
+    for (block_id, block) in method.blocks_for_verification() {
         if let BlockKind::LandingPad { exception: value } = block.kind {
             insert_definition(
                 &mut definitions,
@@ -341,7 +339,7 @@ fn verify_block_arguments(
             ));
         }
     }
-    for (&source, block) in &method.blocks {
+    for (source, block) in method.blocks_for_verification() {
         for successor in block.terminator.successors() {
             for &value in successor.arguments() {
                 verify_use(
@@ -365,7 +363,7 @@ fn verify_instruction_uses(
     definitions: &HashMap<ValueId, DefinitionSite>,
     dominators: &HashMap<BlockId, HashSet<BlockId>>,
 ) -> VerificationResult {
-    for (&block_id, block) in &method.blocks {
+    for (block_id, block) in method.blocks_for_verification() {
         for (index, operation) in block.operations.iter().enumerate() {
             for value in operation.uses() {
                 verify_use(
