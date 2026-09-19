@@ -1,8 +1,7 @@
 //! Rewrites the single IR value identity space during canonicalization.
 
-use super::draft::DraftEdge;
 use crate::ir::{
-    OperationKind, Terminator, ValueId,
+    OperationKind, Successor, Terminator, ValueId,
     control_flow::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
@@ -43,7 +42,7 @@ impl RemapValues for OperationKind {
     }
 }
 
-impl RemapValues for Terminator<DraftEdge, OperationKind> {
+impl RemapValues for Terminator<Successor, OperationKind> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,

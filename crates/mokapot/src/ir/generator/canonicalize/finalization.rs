@@ -2,11 +2,9 @@
 use std::{collections::BTreeMap, convert::Infallible};
 
 use crate::ir::{
-    BlockId, BlockKind, SuccessorTarget, ValueId,
+    BasicBlock, BlockId, BlockKind, OperationKind, SuccessorTarget, ValueId,
     generator::{
-        canonicalize::simplify::SimplifiedParameters,
-        draft::{DraftBlock, DraftMethod},
-        remap::RemapValues,
+        canonicalize::simplify::SimplifiedParameters, draft::DraftMethod, remap::RemapValues,
     },
 };
 
@@ -28,10 +26,7 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
                 .filter(|(_, parameter)| simplified.candidates.contains_key(&parameter.value))
                 .collect::<Vec<_>>();
             positions.sort_by_key(|(_, parameter)| parameter.value);
-            block.parameters = positions
-                .iter()
-                .map(|(_, parameter)| parameter.clone())
-                .collect();
+            block.parameters = positions.iter().map(|(_, parameter)| *parameter).collect();
             (id, positions.into_iter().map(|(index, _)| index).collect())
         })
         .collect::<BTreeMap<BlockId, Vec<usize>>>();
@@ -47,7 +42,7 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
 }
 
 fn finalize_block(
-    block: &mut DraftBlock,
+    block: &mut BasicBlock<OperationKind>,
     retained: &BTreeMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {

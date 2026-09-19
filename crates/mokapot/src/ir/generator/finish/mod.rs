@@ -2,12 +2,9 @@
 
 use crate::{
     ir::{
-        BasicBlock, BlockKind, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod,
-        Operation, Successor, ValueDefinition, ValueId,
-        generator::{
-            draft::{DraftBlock, DraftEdge, DraftMethod},
-            error::Error,
-        },
+        BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, Operation,
+        OperationKind, ValueDefinition, ValueId,
+        generator::{draft::DraftMethod, error::Error},
         method::MokaIRMethodParts,
     },
     jvm::Method,
@@ -38,7 +35,7 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
 
     let blocks = blocks
         .into_iter()
-        .map(|(id, block)| (id, materialize_block(block)))
+        .map(|(id, block)| (id, block.map_operations(|kind| Operation { kind })))
         .collect();
 
     let method = MokaIRMethod::new(
@@ -63,7 +60,7 @@ impl FinishState {
     fn define_block_values(
         &mut self,
         block_id: crate::ir::BlockId,
-        block: &DraftBlock,
+        block: &BasicBlock<OperationKind>,
     ) -> Result<(), Error> {
         if let BlockKind::LandingPad { exception: value } = block.kind {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
@@ -92,34 +89,6 @@ impl FinishState {
             )?;
         }
         Ok(())
-    }
-}
-
-fn materialize_block(block: DraftBlock) -> BasicBlock {
-    let parameters = block
-        .parameters
-        .into_iter()
-        .map(|it| BlockParameter { value: it.value })
-        .collect();
-    let operations = block
-        .operations
-        .into_iter()
-        .map(|kind| Operation { kind })
-        .collect();
-    let terminator = block
-        .terminator
-        .map_arms(|successor: DraftEdge| Successor {
-            id: successor.id,
-            target: successor.target,
-            arguments: successor.arguments,
-            transfer: successor.transfer,
-        })
-        .map_operation(|kind| Operation { kind });
-    BasicBlock {
-        kind: block.kind,
-        parameters,
-        operations,
-        terminator,
     }
 }
 
@@ -152,13 +121,11 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            BlockId, EdgeId, OperationKind,
+            BasicBlock, BlockId, BlockParameter, EdgeId, OperationKind, Successor, SuccessorTarget,
+            Terminator,
             control_flow::ControlTransfer,
             expression::MathOperation,
-            generator::{
-                canonicalize,
-                draft::{DraftBlock, DraftEdge, DraftMethod, DraftParameter, DraftTerminator},
-            },
+            generator::{canonicalize, draft::DraftMethod},
         },
         jvm::{code::Instruction, method::AccessFlags},
     };
@@ -174,19 +141,19 @@ mod tests {
             entry_arguments: vec![parameter],
             blocks: BTreeMap::from([(
                 block,
-                DraftBlock {
+                BasicBlock {
                     kind: BlockKind::Code,
-                    parameters: vec![DraftParameter {
+                    parameters: vec![BlockParameter {
                         value: eliminated_parameter,
                     }],
                     operations: vec![OperationKind::Definition {
                         value: result,
                         expr: MathOperation::Increment(eliminated_parameter, 1).into(),
                     }],
-                    terminator: DraftTerminator::Goto {
-                        target: DraftEdge {
+                    terminator: Terminator::Goto {
+                        target: Successor {
                             id: EdgeId::new(0),
-                            target: crate::ir::SuccessorTarget::Block(block),
+                            target: SuccessorTarget::Block(block),
                             arguments: vec![parameter],
                             transfer: ControlTransfer::Unconditional,
                         },

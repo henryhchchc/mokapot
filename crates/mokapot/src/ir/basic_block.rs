@@ -1,4 +1,4 @@
-use super::{Operation, Terminator, ValueId};
+use super::{Operation, Successor, Terminator, ValueId};
 
 /// A scalar value defined on entry to a basic block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -13,15 +13,30 @@ pub struct BlockParameter {
 /// order, and its single terminator defines every outgoing control-flow arm
 /// and may define a result available only after successful completion.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BasicBlock {
+pub struct BasicBlock<Op = Operation> {
     /// The semantic role of this block.
     pub kind: BlockKind,
     /// The scalar parameters bound at block entry.
     pub parameters: Vec<BlockParameter>,
     /// The ordinary operations in execution order.
-    pub operations: Vec<Operation>,
+    pub operations: Vec<Op>,
     /// The block terminator.
-    pub terminator: Terminator,
+    pub terminator: Terminator<Successor, Op>,
+}
+
+impl<Op> BasicBlock<Op> {
+    /// Maps the block's ordinary and terminator operations.
+    pub(crate) fn map_operations<MappedOp>(
+        self,
+        mut map: impl FnMut(Op) -> MappedOp,
+    ) -> BasicBlock<MappedOp> {
+        BasicBlock {
+            kind: self.kind,
+            parameters: self.parameters,
+            operations: self.operations.into_iter().map(&mut map).collect(),
+            terminator: self.terminator.map_operation(map),
+        }
+    }
 }
 
 /// The semantic role of a basic block.

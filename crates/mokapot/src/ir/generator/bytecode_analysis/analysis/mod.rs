@@ -14,10 +14,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        BlockId, SourceMap, SuccessorTarget, ValueId,
+        BasicBlock, BlockId, BlockParameter, SourceMap, Successor, SuccessorTarget, Terminator,
+        ValueId,
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
-            draft::{DraftBlock, DraftEdge, DraftMethod, DraftParameter, DraftTerminator},
+            draft::DraftMethod,
             error::Error,
         },
     },
@@ -168,7 +169,7 @@ impl CompletedAnalysis {
             let Some(block) = blocks.get_mut(&site.block) else {
                 continue;
             };
-            block.parameters.push(DraftParameter {
+            block.parameters.push(BlockParameter {
                 value: definition.result,
             });
         }
@@ -242,7 +243,11 @@ impl BlockExecution {
 ///
 /// Later phases may rewrite values, but must not insert, remove, or reorder
 /// operations or terminators because their source locations are fixed here.
-fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMap) -> DraftBlock {
+fn materialize_block(
+    id: BlockId,
+    lifted: LiftedBlock,
+    source_map: &mut SourceMap,
+) -> BasicBlock<crate::ir::OperationKind> {
     if let Some(origin) = lifted.terminator_source {
         source_map.record_terminator(origin, id);
     }
@@ -255,7 +260,7 @@ fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMa
             kind
         })
         .collect();
-    DraftBlock {
+    BasicBlock {
         kind: lifted.kind,
         parameters: Vec::new(),
         operations,
@@ -263,7 +268,7 @@ fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMa
     }
 }
 
-impl From<LiftedEdge> for DraftEdge {
+impl From<LiftedEdge> for Successor {
     fn from(edge: LiftedEdge) -> Self {
         Self {
             id: edge.id,
@@ -274,7 +279,7 @@ impl From<LiftedEdge> for DraftEdge {
     }
 }
 
-impl From<state::LiftedTerminator> for DraftTerminator {
+impl From<state::LiftedTerminator> for Terminator<Successor, crate::ir::OperationKind> {
     fn from(value: state::LiftedTerminator) -> Self {
         value.map_arms(|(edge, _)| edge.into())
     }
