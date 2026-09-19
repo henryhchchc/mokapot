@@ -37,12 +37,7 @@ fn switch_retains_parallel_successor_arms() {
     assert_eq!(ids.len(), 3);
     let check = |it| it == switch.successors().next().unwrap().block_target();
     assert!(switch.successors().map(Successor::block_target).all(check));
-    assert_eq!(
-        ir.control_flow_graph()
-            .outgoing_edges(ir.entry_block())
-            .count(),
-        3
-    );
+    assert_eq!(ir.outgoing_edges(ir.entry_block()).count(), 3);
 }
 
 #[test]

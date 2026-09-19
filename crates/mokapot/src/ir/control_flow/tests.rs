@@ -51,7 +51,11 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
         code_bb(2, exit.clone()),
         code_bb(3, exit),
     ]);
-    let conditions = ControlFlowGraph::new(&blocks, BlockId::new(0)).path_conditions();
+    let conditions = path_condition::analyze(
+        &blocks,
+        BlockId::new(0),
+        path_condition::SolvingBudget::default(),
+    );
 
     assert!(conditions.contains_key(&BlockId::new(0)));
     assert!(conditions.contains_key(&BlockId::new(1)));
@@ -109,7 +113,11 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
         code_bb(3, exit.clone()),
         code_bb(5, exit),
     ]);
-    let conditions = ControlFlowGraph::new(&blocks, BlockId::new(0)).path_conditions();
+    let conditions = path_condition::analyze(
+        &blocks,
+        BlockId::new(0),
+        path_condition::SolvingBudget::default(),
+    );
 
     assert_eq!(conditions[&BlockId::new(1)], conditions[&BlockId::new(2)]);
     assert_eq!(conditions[&BlockId::new(1)], conditions[&BlockId::new(3)]);

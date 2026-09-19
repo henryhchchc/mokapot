@@ -2,7 +2,13 @@ use std::collections::HashMap;
 
 use super::{
     BasicBlock, BlockId, BlockParameter, InstructionLocation, MokaIRBuildError, Operation,
-    SourceMap, Terminator, ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
+    SourceMap, Terminator, ValueDefinition, ValueId,
+    control_flow::{
+        self, Edge,
+        path_condition::{PathCondition, SolvingBudget},
+    },
+    expression::Predicate,
+    generator,
 };
 use crate::{
     jvm::{self, Method as JvmMethod, method, references::ClassRef},
@@ -183,12 +189,27 @@ impl MokaIRMethod {
         self.value_definitions.get(&value).copied()
     }
 
-    /// Returns a borrowed control-flow view derived from block terminators.
+    /// Returns all outgoing block-to-block successor arms from `source`.
     ///
-    /// The returned view does not store an independent edge set.
+    /// An identity outside this method yields no arms. Method-exiting unwind
+    /// arms are not returned because they have no basic-block target.
+    pub fn outgoing_edges(&self, source: BlockId) -> impl Iterator<Item = Edge<'_>> {
+        control_flow::outgoing_edges(&self.blocks, source)
+    }
+
+    /// Computes path conditions at reachable blocks.
     #[must_use]
-    pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
-        ControlFlowGraph::new(&self.blocks, self.entry.target)
+    pub fn path_conditions(&self) -> HashMap<BlockId, PathCondition<&Predicate>> {
+        self.path_conditions_with_budget(SolvingBudget::default())
+    }
+
+    /// Computes path conditions with a custom minimization budget.
+    #[must_use]
+    pub fn path_conditions_with_budget(
+        &self,
+        budget: SolvingBudget,
+    ) -> HashMap<BlockId, PathCondition<&Predicate>> {
+        control_flow::path_condition::analyze(&self.blocks, self.entry.target, budget)
     }
 }
 

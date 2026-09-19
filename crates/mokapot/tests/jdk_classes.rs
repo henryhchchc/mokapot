@@ -60,7 +60,6 @@ fn test_a_class(class: Class) {
             let ir_method = MokaIRMethod::from_method(it).unwrap_or_else(|e| {
                 panic!("Failed to build {}: {}", it.name, e);
             });
-            let cfg = ir_method.control_flow_graph();
             let mut pending = vec![ir_method.entry_block()];
             let mut visited = HashSet::new();
             let mut variable_count = 0;
@@ -68,7 +67,7 @@ fn test_a_class(class: Class) {
                 if !visited.insert(block) {
                     continue;
                 }
-                for edge in cfg.outgoing_edges(block) {
+                for edge in ir_method.outgoing_edges(block) {
                     pending.push(edge.target());
                     if let ControlTransfer::Conditional(guard) = edge.transfer() {
                         variable_count += guard.predicate_count();
@@ -85,7 +84,7 @@ fn test_a_class(class: Class) {
                     it.name,
                     it.descriptor.descriptor()
                 );
-                let _ = ir_method.control_flow_graph().path_conditions();
+                let _ = ir_method.path_conditions();
             } else {
                 println!(
                     "Skip path condition for: {}::{}{}",

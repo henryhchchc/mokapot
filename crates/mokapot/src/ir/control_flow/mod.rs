@@ -4,7 +4,7 @@ pub mod path_condition;
 
 use std::collections::HashMap;
 
-use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
+use self::path_condition::BranchGuard;
 use super::{BasicBlock, BlockId, EdgeId, Successor};
 use crate::{ir::expression::Predicate, jvm::references::ClassRef};
 
@@ -60,65 +60,29 @@ impl<'method> Edge<'method> {
     }
 }
 
-/// A borrowed control-flow graph derived solely from block terminators.
-#[derive(Debug, Clone, Copy)]
-pub struct ControlFlowGraph<'method> {
-    pub(super) blocks: &'method HashMap<BlockId, BasicBlock>,
-    entry: BlockId,
-}
-
-impl<'m> ControlFlowGraph<'m> {
-    /// Returns the entry block.
-    #[must_use]
-    pub const fn entry_block(self) -> BlockId {
-        self.entry
-    }
-
-    /// Returns all outgoing arms from `source`.
-    ///
-    /// An identity outside this graph yields no arms.
-    pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'m>> {
-        self.blocks.get(&source).into_iter().flat_map(move |block| {
-            block
-                .terminator
-                .successors()
-                .filter_map(move |successor| match successor {
-                    Successor::Block {
-                        id,
-                        target,
-                        transfer,
-                        ..
-                    } => Some(Edge {
-                        id: *id,
-                        source,
-                        target: *target,
-                        data: transfer,
-                    }),
-                    Successor::Unwind { .. } => None,
-                })
-        })
-    }
-
-    /// Computes path conditions at reachable blocks.
-    #[must_use]
-    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
-        self.path_conditions_with_budget(SolvingBudget::default())
-    }
-
-    /// Computes path conditions with a custom minimization budget.
-    #[must_use]
-    pub fn path_conditions_with_budget(
-        self,
-        budget: SolvingBudget,
-    ) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
-        path_condition::analyze(self, budget)
-    }
-}
-
-impl<'m> ControlFlowGraph<'m> {
-    pub(super) const fn new(blocks: &'m HashMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
-        Self { blocks, entry }
-    }
+pub(super) fn outgoing_edges(
+    blocks: &HashMap<BlockId, BasicBlock>,
+    source: BlockId,
+) -> impl Iterator<Item = Edge<'_>> {
+    blocks.get(&source).into_iter().flat_map(move |block| {
+        block
+            .terminator
+            .successors()
+            .filter_map(move |successor| match successor {
+                Successor::Block {
+                    id,
+                    target,
+                    transfer,
+                    ..
+                } => Some(Edge {
+                    id: *id,
+                    source,
+                    target: *target,
+                    data: transfer,
+                }),
+                Successor::Unwind { .. } => None,
+            })
+    })
 }
 
 #[cfg(test)]
