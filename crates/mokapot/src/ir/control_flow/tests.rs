@@ -42,10 +42,7 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
             transfer: ControlTransfer::Unconditional,
         },
     };
-    let exit = Terminator::Return {
-        value: None,
-        exceptional: vec![],
-    };
+    let exit = Terminator::Return { value: None };
 
     let blocks = BTreeMap::from([
         code_bb(0, goto),
@@ -82,13 +79,18 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
         },
     };
     let exception_type = "java/lang/RuntimeException".parse().unwrap();
-    let fallible = Terminator::Fallible {
-        normal: Some(Successor {
+    let fallible = Terminator::Try {
+        operation: crate::ir::Operation {
+            kind: crate::ir::OperationKind::Effect {
+                expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
+            },
+        },
+        normal: Successor {
             id: EdgeId::new(2),
             target: SuccessorTarget::Block(BlockId::new(2)),
             arguments: vec![],
             transfer: ControlTransfer::Unconditional,
-        }),
+        },
         exceptional: vec![
             Successor {
                 id: EdgeId::new(3),
@@ -104,10 +106,7 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
             },
         ],
     };
-    let exit = Terminator::Return {
-        value: None,
-        exceptional: vec![],
-    };
+    let exit = Terminator::Return { value: None };
 
     let blocks = BTreeMap::from([
         code_bb(0, branch),

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt, slice};
 
 use super::{
-    BlockId, EdgeId, ValueId,
+    BlockId, EdgeId, Operation, OperationKind, ValueId,
     control_flow::{ControlTransfer, path_condition::BranchGuard},
     expression::Predicate,
 };
@@ -61,7 +61,7 @@ pub enum SuccessorTarget {
 /// and completed IR stages share one definition. [`Successor`] is the default,
 /// so `Terminator` names the completed public form.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Terminator<Arm = Successor> {
+pub enum Terminator<Arm = Successor, Op = Operation> {
     /// Transfers control to one successor.
     Goto {
         /// The sole continuation.
@@ -86,9 +86,11 @@ pub enum Terminator<Arm = Successor> {
         default: Arm,
     },
     /// Selects the normal or an exceptional outcome of a fallible operation.
-    Fallible {
-        /// The successful continuation, when execution can continue normally.
-        normal: Option<Arm>,
+    Try {
+        /// The operation attempted by this terminator.
+        operation: Op,
+        /// The continuation taken after successful completion.
+        normal: Arm,
         /// Ordered exceptional outcomes.
         exceptional: Vec<Arm>,
     },
@@ -96,7 +98,12 @@ pub enum Terminator<Arm = Successor> {
     Return {
         /// The returned value, or `None` for a void return.
         value: Option<ValueId>,
-        /// Ordered failures possible while completing a synchronized return.
+    },
+    /// Attempts to complete the method normally, but may fail while exiting.
+    TryReturn {
+        /// The returned value, or `None` for a void return.
+        value: Option<ValueId>,
+        /// Ordered failures possible while completing the return.
         exceptional: Vec<Arm>,
     },
     /// Throws an exception to an ordered handler or out of the method.
@@ -108,12 +115,12 @@ pub enum Terminator<Arm = Successor> {
     },
 }
 
-impl<Arm> Terminator<Arm> {
+impl<Arm, Op> Terminator<Arm, Op> {
     /// Maps every outgoing arm while preserving the terminator's structure.
     pub(crate) fn map_arms<MappedArm>(
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
-    ) -> Terminator<MappedArm> {
+    ) -> Terminator<MappedArm, Op> {
         match self {
             Self::Goto { target } => Terminator::Goto {
                 target: map(target),
@@ -126,14 +133,17 @@ impl<Arm> Terminator<Arm> {
                 cases: cases.into_iter().map(&mut map).collect(),
                 default: map(default),
             },
-            Self::Fallible {
+            Self::Try {
+                operation,
                 normal,
                 exceptional,
-            } => Terminator::Fallible {
-                normal: normal.map(&mut map),
+            } => Terminator::Try {
+                operation,
+                normal: map(normal),
                 exceptional: exceptional.into_iter().map(map).collect(),
             },
-            Self::Return { value, exceptional } => Terminator::Return {
+            Self::Return { value } => Terminator::Return { value },
+            Self::TryReturn { value, exceptional } => Terminator::TryReturn {
                 value,
                 exceptional: exceptional.into_iter().map(map).collect(),
             },
@@ -152,13 +162,15 @@ impl<Arm> Terminator<Arm> {
                 (slice::from_ref(taken), slice::from_ref(otherwise))
             }
             Self::Switch { cases, default } => (cases, slice::from_ref(default)),
-            Self::Fallible {
+            Self::Try {
                 normal,
                 exceptional,
-            } => (normal.as_slice(), exceptional),
-            Self::Return { exceptional, .. } | Self::Throw { exceptional, .. } => {
+                ..
+            } => (slice::from_ref(normal), exceptional),
+            Self::TryReturn { exceptional, .. } | Self::Throw { exceptional, .. } => {
                 (&[], exceptional)
             }
+            Self::Return { .. } => (&[], &[]),
         };
         head.iter().chain(tail)
     }
@@ -171,15 +183,41 @@ impl<Arm> Terminator<Arm> {
                 (slice::from_mut(taken), slice::from_mut(otherwise))
             }
             Self::Switch { cases, default } => (cases, slice::from_mut(default)),
-            Self::Fallible {
+            Self::Try {
                 normal,
                 exceptional,
-            } => (normal.as_mut_slice(), exceptional),
-            Self::Return { exceptional, .. } | Self::Throw { exceptional, .. } => {
+                ..
+            } => (slice::from_mut(normal), exceptional),
+            Self::TryReturn { exceptional, .. } | Self::Throw { exceptional, .. } => {
                 (&mut [], exceptional)
             }
+            Self::Return { .. } => (&mut [], &mut []),
         };
         head.iter_mut().chain(tail)
+    }
+
+    /// Maps the attempted operation while preserving control-flow structure.
+    pub(crate) fn map_operation<MappedOp>(
+        self,
+        map: impl FnOnce(Op) -> MappedOp,
+    ) -> Terminator<Arm, MappedOp> {
+        match self {
+            Self::Goto { target } => Terminator::Goto { target },
+            Self::Branch { taken, otherwise } => Terminator::Branch { taken, otherwise },
+            Self::Switch { cases, default } => Terminator::Switch { cases, default },
+            Self::Try {
+                operation,
+                normal,
+                exceptional,
+            } => Terminator::Try {
+                operation: map(operation),
+                normal,
+                exceptional,
+            },
+            Self::Return { value } => Terminator::Return { value },
+            Self::TryReturn { value, exceptional } => Terminator::TryReturn { value, exceptional },
+            Self::Throw { value, exceptional } => Terminator::Throw { value, exceptional },
+        }
     }
 }
 
@@ -195,6 +233,15 @@ impl Terminator<Successor> {
     /// Iterates over outgoing arms in semantic order.
     pub fn successors(&self) -> impl Iterator<Item = &Successor> {
         self.arms()
+    }
+
+    /// Returns the operation attempted by this terminator, if any.
+    #[must_use]
+    pub const fn operation(&self) -> Option<&Operation> {
+        match self {
+            Self::Try { operation, .. } => Some(operation),
+            _ => None,
+        }
     }
 
     /// Returns the values used by this terminator and its successor guards.
@@ -213,7 +260,8 @@ impl Terminator<Successor> {
     pub(crate) fn local_uses(&self) -> HashSet<ValueId> {
         let value = match self {
             Self::Throw { value, .. }
-            | Self::Return {
+            | Self::Return { value: Some(value) }
+            | Self::TryReturn {
                 value: Some(value), ..
             } => Some(*value),
             _ => None,
@@ -226,21 +274,49 @@ impl Terminator<Successor> {
             })
             .flat_map(BranchGuard::predicates)
             .flat_map(Predicate::uses);
-        value.into_iter().chain(guard_uses).collect()
+        let operation_uses = match self {
+            Self::Try { operation, .. } => operation.uses(),
+            _ => HashSet::new(),
+        };
+        value
+            .into_iter()
+            .chain(operation_uses)
+            .chain(guard_uses)
+            .collect()
+    }
+
+    /// Returns the value defined by a successful attempted operation.
+    #[must_use]
+    pub const fn def(&self) -> Option<ValueId> {
+        match self {
+            Self::Try { operation, .. } => operation.def(),
+            _ => None,
+        }
     }
 }
 
-impl<Arm> fmt::Display for Terminator<Arm> {
+impl<Arm> Terminator<Arm, OperationKind> {
+    pub(crate) const fn def(&self) -> Option<ValueId> {
+        match self {
+            Self::Try { operation, .. } => operation.def(),
+            _ => None,
+        }
+    }
+}
+
+impl<Arm, Op: fmt::Display> fmt::Display for Terminator<Arm, Op> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Goto { .. } => f.write_str("goto"),
             Self::Branch { .. } => f.write_str("branch"),
             Self::Switch { .. } => f.write_str("switch"),
-            Self::Fallible { .. } => f.write_str("fallible"),
-            Self::Return {
+            Self::Try { operation, .. } => write!(f, "try {operation}"),
+            Self::Return { value: Some(value) } => write!(f, "return {value}"),
+            Self::Return { value: None } => f.write_str("return"),
+            Self::TryReturn {
                 value: Some(value), ..
-            } => write!(f, "return {value}"),
-            Self::Return { value: None, .. } => f.write_str("return"),
+            } => write!(f, "try return {value}"),
+            Self::TryReturn { value: None, .. } => f.write_str("try return"),
             Self::Throw { value, .. } => write!(f, "throw {value}"),
         }
     }
@@ -290,11 +366,19 @@ mod tests {
     }
 
     #[test]
-    fn fallible_terminator_can_have_no_normal_continuation() {
-        let terminator = Terminator::Fallible {
-            normal: None,
+    fn try_terminator_orders_normal_before_exceptional_outcomes() {
+        let terminator = Terminator::Try {
+            operation: Operation {
+                kind: crate::ir::OperationKind::Effect {
+                    expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
+                },
+            },
+            normal: arm(2),
             exceptional: vec![arm(0), arm(1)],
         };
-        assert_eq!(ids(&terminator), [EdgeId::new(0), EdgeId::new(1)]);
+        assert_eq!(
+            ids(&terminator),
+            [EdgeId::new(2), EdgeId::new(0), EdgeId::new(1)]
+        );
     }
 }

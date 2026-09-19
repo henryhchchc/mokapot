@@ -30,12 +30,7 @@ enum DefinitionSite {
     External,
     BlockEntry(BlockId),
     Operation { block: BlockId, index: usize },
-}
-
-#[derive(Debug, Clone)]
-struct EdgeSensitiveDefinition {
-    block: BlockId,
-    normal_edges: BTreeSet<EdgeId>,
+    Terminator { block: BlockId, normal_edge: EdgeId },
 }
 
 struct DefinitionIndex {
@@ -50,11 +45,10 @@ pub(crate) fn verify(method: &MokaIRMethod) -> VerificationResult {
     verify_reachability(method, &blocks)?;
     let dominators = compute_dominators(method, &blocks, &predecessors)?;
     let definitions = collect_definitions(method)?;
-    let edge_sensitive = collect_edge_sensitive_definitions(method);
 
     verify_definition_index(method, &definitions.definitions)?;
-    verify_block_arguments(method, &definitions.sites, &dominators, &edge_sensitive)?;
-    verify_instruction_uses(method, &definitions.sites, &dominators, &edge_sensitive)?;
+    verify_block_arguments(method, &definitions.sites, &dominators)?;
+    verify_instruction_uses(method, &definitions.sites, &dominators)?;
     verify_source_map(method)?;
     Ok(())
 }
@@ -279,6 +273,22 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
                 },
             )?;
         }
+        if let Terminator::Try {
+            operation, normal, ..
+        } = &block.terminator
+            && let Some(value) = operation.def()
+        {
+            insert_definition(
+                &mut definitions,
+                &mut sites,
+                value,
+                ValueDefinition::Instruction(InstructionLocation::Terminator { block: block_id }),
+                DefinitionSite::Terminator {
+                    block: block_id,
+                    normal_edge: normal.id(),
+                },
+            )?;
+        }
     }
     Ok(DefinitionIndex { definitions, sites })
 }
@@ -340,33 +350,10 @@ fn verify_definition_index(
     Ok(())
 }
 
-fn collect_edge_sensitive_definitions(
-    method: &MokaIRMethod,
-) -> BTreeMap<ValueId, EdgeSensitiveDefinition> {
-    method
-        .blocks()
-        .filter_map(|(block_id, block)| {
-            let Terminator::Fallible { normal, .. } = &block.terminator else {
-                return None;
-            };
-            let value = block.operations.last()?.def()?;
-            let normal_edges = normal.iter().map(super::Successor::id).collect();
-            Some((
-                value,
-                EdgeSensitiveDefinition {
-                    block: block_id,
-                    normal_edges,
-                },
-            ))
-        })
-        .collect()
-}
-
 fn verify_block_arguments(
     method: &MokaIRMethod,
     definitions: &BTreeMap<ValueId, DefinitionSite>,
     dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
-    edge_sensitive: &BTreeMap<ValueId, EdgeSensitiveDefinition>,
 ) -> VerificationResult {
     for &value in method.entry().arguments() {
         if !matches!(definitions.get(&value), Some(DefinitionSite::External)) {
@@ -387,7 +374,6 @@ fn verify_block_arguments(
                     },
                     definitions,
                     dominators,
-                    edge_sensitive,
                 )?;
             }
         }
@@ -399,7 +385,6 @@ fn verify_instruction_uses(
     method: &MokaIRMethod,
     definitions: &BTreeMap<ValueId, DefinitionSite>,
     dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
-    edge_sensitive: &BTreeMap<ValueId, EdgeSensitiveDefinition>,
 ) -> VerificationResult {
     for (block_id, block) in method.blocks() {
         for (index, operation) in block.operations.iter().enumerate() {
@@ -413,7 +398,6 @@ fn verify_instruction_uses(
                     },
                     definitions,
                     dominators,
-                    edge_sensitive,
                 )?;
             }
         }
@@ -424,7 +408,6 @@ fn verify_instruction_uses(
                 UseSite::Terminator { block: block_id },
                 definitions,
                 dominators,
-                edge_sensitive,
             )?;
         }
     }
@@ -437,7 +420,6 @@ fn verify_use(
     usage: UseSite,
     definitions: &BTreeMap<ValueId, DefinitionSite>,
     dominators: &BTreeMap<BlockId, BTreeSet<BlockId>>,
-    edge_sensitive: &BTreeMap<ValueId, EdgeSensitiveDefinition>,
 ) -> VerificationResult {
     let Some(&definition) = definitions.get(&value) else {
         return Err(format!("{value} is used at {usage:?} but is not defined"));
@@ -451,17 +433,20 @@ fn verify_use(
             } => index < use_index,
             UseSite::Terminator { .. } | UseSite::EdgeArgument { .. } => true,
         },
-        DefinitionSite::BlockEntry(block) | DefinitionSite::Operation { block, .. } => {
-            dominators[&use_block].contains(&block)
+        DefinitionSite::Terminator { block, .. } if block == use_block => {
+            matches!(usage, UseSite::EdgeArgument { .. })
         }
+        DefinitionSite::BlockEntry(block)
+        | DefinitionSite::Operation { block, .. }
+        | DefinitionSite::Terminator { block, .. } => dominators[&use_block].contains(&block),
     };
     if !dominates {
         return Err(format!(
             "definition of {value} at {definition:?} does not dominate use at {usage:?}"
         ));
     }
-    if let Some(edge_definition) = edge_sensitive.get(&value) {
-        verify_edge_sensitive_use(method, value, usage, edge_definition)?;
+    if let DefinitionSite::Terminator { block, normal_edge } = definition {
+        verify_edge_sensitive_use(method, value, usage, block, normal_edge)?;
     }
     Ok(())
 }
@@ -470,24 +455,13 @@ fn verify_edge_sensitive_use(
     method: &MokaIRMethod,
     value: ValueId,
     usage: UseSite,
-    definition: &EdgeSensitiveDefinition,
+    definition_block: BlockId,
+    normal_edge: EdgeId,
 ) -> VerificationResult {
-    if definition.normal_edges.is_empty() {
-        return Err(format!(
-            "fallible result {value} is used despite having no normal outcome"
-        ));
-    }
     if let UseSite::EdgeArgument { edge, source } = usage
-        && source == definition.block
+        && source == definition_block
     {
-        let normal = method
-            .block(source)
-            .expect("the predecessor is a defined block")
-            .terminator
-            .successors()
-            .find(|successor| successor.id() == edge)
-            .is_some_and(|successor| definition.normal_edges.contains(&successor.id()));
-        if normal {
+        if edge == normal_edge {
             return Ok(());
         }
         return Err(format!(
@@ -495,7 +469,7 @@ fn verify_edge_sensitive_use(
         ));
     }
 
-    let reachable_without_normal = reachable_blocks(method, &definition.normal_edges);
+    let reachable_without_normal = reachable_blocks(method, &BTreeSet::from([normal_edge]));
     if reachable_without_normal.contains(&usage.evaluation_block()) {
         return Err(format!(
             "fallible result {value} is visible at {usage:?} without taking its normal edge"
@@ -560,6 +534,64 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         MokaIRMethod::from_method(&method).unwrap()
+    }
+
+    fn method_with_fallible_result() -> MokaIRMethod {
+        let method = crate::tests::method(
+            [
+                (0, Instruction::ALoad0),
+                (
+                    1,
+                    Instruction::CheckCast("java/lang/String".parse().unwrap()),
+                ),
+                (2, Instruction::AReturn),
+                (10, Instruction::AStore1),
+                (11, Instruction::ALoad0),
+                (12, Instruction::AReturn),
+            ],
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+            vec![crate::jvm::code::ExceptionTableEntry {
+                covered_pc: 1.into()..2.into(),
+                handler_pc: 10.into(),
+                catch_type: None,
+            }],
+            AccessFlags::PUBLIC | AccessFlags::STATIC,
+        );
+        MokaIRMethod::from_method(&method).unwrap()
+    }
+
+    fn verify_fallible_result_on_edge(
+        method: &MokaIRMethod,
+        edge_predicate: impl Fn(&super::super::Successor) -> bool,
+    ) -> VerificationResult {
+        let blocks = collect_blocks(method)?;
+        let predecessors = verify_edges(method, &blocks)?;
+        let dominators = compute_dominators(method, &blocks, &predecessors)?;
+        let definitions = collect_definitions(method)?;
+        let (&value, &DefinitionSite::Terminator { block, .. }) = definitions
+            .sites
+            .iter()
+            .find(|(_, site)| matches!(site, DefinitionSite::Terminator { .. }))
+            .unwrap()
+        else {
+            unreachable!("the fixture must contain a terminator definition")
+        };
+        let defining_block = method.block(block).unwrap();
+        let edge = defining_block
+            .terminator
+            .successors()
+            .find(|edge| edge_predicate(edge))
+            .unwrap();
+        verify_use(
+            method,
+            value,
+            UseSite::EdgeArgument {
+                edge: edge.id(),
+                source: block,
+            },
+            &definitions.sites,
+            &dominators,
+        )
     }
 
     #[test]
@@ -652,5 +684,24 @@ mod tests {
             .transfer = ControlTransfer::Unconditional;
 
         assert!(verify(&method).unwrap_err().contains("inconsistent unwind"));
+    }
+
+    #[test]
+    fn accepts_a_try_result_on_its_normal_edge() {
+        let method = method_with_fallible_result();
+        verify_fallible_result_on_edge(&method, |edge| {
+            matches!(edge.transfer(), ControlTransfer::Unconditional)
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn rejects_a_try_result_on_an_exceptional_edge() {
+        let method = method_with_fallible_result();
+        let error = verify_fallible_result_on_edge(&method, |edge| {
+            matches!(edge.transfer(), ControlTransfer::Exception(_))
+        })
+        .unwrap_err();
+        assert!(error.contains("non-normal edge"), "{error}");
     }
 }

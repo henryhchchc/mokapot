@@ -17,7 +17,12 @@ fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     let ir = build(&method).unwrap();
     let (join_id, join) = ir
         .blocks()
-        .find(|(_, block)| matches!(block.terminator, Terminator::Return { value: Some(_), .. }))
+        .find(|(_, block)| {
+            matches!(
+                block.terminator,
+                Terminator::TryReturn { value: Some(_), .. }
+            )
+        })
         .unwrap();
     let [parameter] = join.parameters.as_slice() else {
         panic!("the join must contain one parameter")
@@ -32,7 +37,7 @@ fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
     assert!(matches!(
         join.terminator,
-        Terminator::Return { value: Some(value), .. } if value == parameter.value
+        Terminator::TryReturn { value: Some(value), .. } if value == parameter.value
     ));
     let join_loc = InstructionLocation::BlockParameter {
         block: join_id,
@@ -185,7 +190,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
         .blocks()
         .map(|(_, block)| block)
         .find_map(|block| match &block.terminator {
-            Terminator::Return {
+            Terminator::TryReturn {
                 value: Some(value), ..
             } => Some(value),
             _ => None,

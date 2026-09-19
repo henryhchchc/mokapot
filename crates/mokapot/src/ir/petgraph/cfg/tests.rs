@@ -39,10 +39,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
         kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
-        terminator: Terminator::Return {
-            value: None,
-            exceptional: vec![],
-        },
+        terminator: Terminator::Return { value: None },
     };
     let blocks = BTreeMap::from([(source_id, source), (target, exit)]);
     let cfg = ControlFlowGraph::new(&blocks, source_id);
@@ -92,18 +89,22 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                     transfer: ControlTransfer::Unwind,
                 },
             ];
-            Terminator::Fallible {
-                normal: Some(arms.remove(0)),
+            Terminator::Try {
+                operation: crate::ir::Operation {
+                    kind: crate::ir::OperationKind::Effect {
+                        expr: crate::ir::expression::Expression::Const(
+                            crate::jvm::ConstantValue::Null,
+                        ),
+                    },
+                },
+                normal: arms.remove(0),
                 exceptional: arms,
             }
         },
     };
     let exits = (1..=2)
         .map(|id| {
-            let terminator = Terminator::Return {
-                value: None,
-                exceptional: vec![],
-            };
+            let terminator = Terminator::Return { value: None };
             let basic_block = BasicBlock {
                 kind: BlockKind::Code,
                 parameters: vec![],

@@ -49,7 +49,7 @@ pub(super) struct DraftTerminator {
 }
 
 /// The structural shape of a terminator under construction.
-pub(super) type DraftTerminatorShape = Terminator<DraftEdge>;
+pub(super) type DraftTerminatorShape = Terminator<DraftEdge, OperationKind>;
 
 /// A normalized successor under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]

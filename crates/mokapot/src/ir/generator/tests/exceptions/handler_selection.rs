@@ -85,7 +85,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     let entry = ir.block(ir.entry_block()).unwrap();
     assert!(matches!(
         entry.terminator,
-        Terminator::Return { value: None, .. }
+        Terminator::TryReturn { value: None, .. }
     ));
     assert_eq!(entry.terminator.successors().count(), 1);
     assert!(matches!(

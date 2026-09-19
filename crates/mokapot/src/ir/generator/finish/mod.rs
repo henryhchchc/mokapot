@@ -88,6 +88,12 @@ impl FinishState {
             };
             self.define(value, ValueDefinition::Instruction(location))?;
         }
+        if let Some(value) = block.terminator.shape.def() {
+            self.define(
+                value,
+                ValueDefinition::Instruction(InstructionLocation::Terminator { block: block_id }),
+            )?;
+        }
         Ok(())
     }
 }
@@ -126,7 +132,8 @@ fn materialize_block(
             target: successor.target,
             arguments: successor.arguments,
             transfer: successor.transfer,
-        });
+        })
+        .map_operation(|kind| Operation { kind });
     BasicBlock {
         kind: block.kind,
         parameters,

@@ -10,7 +10,8 @@ pub struct BlockParameter {
 /// A maximal reachable basic block in completed `MokaIR`.
 ///
 /// Its parameters are bound simultaneously on entry, its operations execute in
-/// order, and its single terminator defines every outgoing control-flow arm.
+/// order, and its single terminator defines every outgoing control-flow arm
+/// and may define a result available only after successful completion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
     /// The semantic role of this block.

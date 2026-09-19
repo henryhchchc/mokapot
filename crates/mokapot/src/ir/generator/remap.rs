@@ -43,21 +43,23 @@ impl RemapValues for OperationKind {
     }
 }
 
-impl RemapValues for Terminator<DraftEdge> {
+impl RemapValues for Terminator<DraftEdge, OperationKind> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
     ) -> Result<(), E> {
         match self {
             Self::Throw { value, .. }
-            | Self::Return {
+            | Self::Return { value: Some(value) }
+            | Self::TryReturn {
                 value: Some(value), ..
             } => remap_value(value, remap),
             Self::Goto { .. }
             | Self::Branch { .. }
             | Self::Switch { .. }
-            | Self::Return { value: None, .. }
-            | Self::Fallible { .. } => Ok(()),
+            | Self::Return { value: None }
+            | Self::TryReturn { value: None, .. } => Ok(()),
+            Self::Try { operation, .. } => operation.try_remap_values(remap),
         }
     }
 }

@@ -9,6 +9,6 @@ pub enum ValueDefinition {
     Parameter(u16),
     /// The exception introduced by a landing-pad block.
     CaughtException(BlockId),
-    /// A value produced by an ordinary instruction or block parameter.
+    /// A value produced by a block parameter, operation, or terminator.
     Instruction(InstructionLocation),
 }

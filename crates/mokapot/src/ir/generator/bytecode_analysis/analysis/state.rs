@@ -46,7 +46,7 @@ pub(crate) struct LiftedBlock {
 
 pub(crate) type LiftedArm = (LiftedEdge, Option<Frame>);
 
-pub(crate) type LiftedTerminator = Terminator<LiftedArm>;
+pub(crate) type LiftedTerminator = Terminator<LiftedArm, OperationKind>;
 
 /// Analysis state for one normalized block.
 ///

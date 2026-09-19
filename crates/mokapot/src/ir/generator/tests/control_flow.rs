@@ -240,11 +240,11 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     let ir = build(&method).unwrap();
     let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert!(matches!(fallible, Terminator::Fallible { .. }));
+    assert!(matches!(fallible, Terminator::Try { .. }));
     let entry_loc = InstructionLocation::Terminator {
         block: ir.entry_block(),
     };
-    assert_eq!(ir.source_map().origin_of(entry_loc), None);
+    assert_eq!(ir.source_map().origin_of(entry_loc), Some(1.into()));
     assert!(matches!(
         fallible.successors().next().unwrap().transfer(),
         ControlTransfer::Unconditional

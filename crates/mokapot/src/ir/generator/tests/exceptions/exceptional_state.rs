@@ -102,11 +102,15 @@ fn exceptional_state_excludes_the_fallible_result() {
         .source_map()
         .instructions_at(1.into())
         .find_map(|location| match ir.instruction(location) {
-            Some(InstructionRef::Operation(operation)) => operation.def(),
-            Some(InstructionRef::BlockParameter(_) | InstructionRef::Terminator(_)) | None => None,
+            Some(InstructionRef::Terminator(terminator)) => terminator.def(),
+            Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
         })
         .expect("checkcast must define a result");
     let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    assert_eq!(
+        ir.definition_of(fallible_result),
+        Some(ValueDefinition::Instruction(fallible_location))
+    );
     let fallible = block_containing_instruction(&ir, fallible_location);
     let normal_target = fallible
         .terminator
@@ -136,11 +140,11 @@ fn exceptional_state_excludes_the_fallible_result() {
 
     assert!(matches!(
         ir.block(normal_target).unwrap().terminator,
-        Terminator::Return { value: Some(value), .. } if value == fallible_result
+        Terminator::TryReturn { value: Some(value), .. } if value == fallible_result
     ));
     assert!(matches!(
         handler_bb.terminator,
-        Terminator::Return { value: Some(value), .. }
+        Terminator::TryReturn { value: Some(value), .. }
             if value == ir.parameter_values()[0] && value != fallible_result
     ));
 }

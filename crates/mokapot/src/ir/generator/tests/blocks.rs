@@ -19,7 +19,7 @@ fn straight_line_instructions_coalesce_into_one_block() {
     assert_eq!(block.operations.len(), 1);
     assert!(matches!(
         block.terminator,
-        Terminator::Return { value: Some(_), .. }
+        Terminator::TryReturn { value: Some(_), .. }
     ));
 
     let definition = ir

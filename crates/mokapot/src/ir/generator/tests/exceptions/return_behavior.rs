@@ -22,8 +22,8 @@ fn synchronized_return_has_only_exceptional_successors() {
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
     let ret_term = terminator_at(&ir, 1.into());
-    let Terminator::Return { exceptional, .. } = ret_term else {
-        panic!("expected a return terminator");
+    let Terminator::TryReturn { exceptional, .. } = ret_term else {
+        panic!("expected a fallible return terminator");
     };
 
     assert_eq!(exceptional.len(), 2);
@@ -51,7 +51,10 @@ fn unhandled_synchronized_return_reaches_unwind() {
     let ir = build(&method).unwrap();
     let ret_term = terminator_at(&ir, 0.into());
 
-    assert!(matches!(ret_term, Terminator::Return { value: None, .. }));
+    assert!(matches!(
+        ret_term,
+        Terminator::TryReturn { value: None, .. }
+    ));
     assert_eq!(ret_term.successors().count(), 1);
     assert!(matches!(
         ret_term.successors().next().unwrap().transfer(),

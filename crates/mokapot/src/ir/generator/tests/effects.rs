@@ -155,13 +155,9 @@ fn array_write_is_an_effect_without_a_definition() {
     let effect = ir
         .source_map()
         .instructions_at(3.into())
-        .find_map(|location| {
-            matches!(ir.instruction(location), Some(InstructionRef::Operation(_))).then(|| match ir
-                .instruction(location)
-            {
-                Some(InstructionRef::Operation(instruction)) => instruction,
-                _ => unreachable!(),
-            })
+        .find_map(|location| match ir.instruction(location) {
+            Some(InstructionRef::Terminator(terminator)) => terminator.operation(),
+            Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
         })
         .unwrap();
 
@@ -189,7 +185,7 @@ fn monitor_operations_are_effects_without_definitions() {
     let ir = build(&method).unwrap();
     let instructions = ir
         .blocks()
-        .flat_map(|(_, block)| &block.operations)
+        .filter_map(|(_, block)| block.terminator.operation())
         .collect::<Vec<_>>();
 
     assert_eq!(instructions.len(), 2);

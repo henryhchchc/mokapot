@@ -28,7 +28,7 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
             .instructions_at(pc.into())
             .find(|&loc| {
                 ir.instruction(loc)
-                    .is_some_and(|it| matches!(it, InstructionRef::Operation(_)))
+                    .is_some_and(|it| matches!(it, InstructionRef::Terminator(_)))
             })
             .unwrap();
         let block = block_containing_instruction(&ir, location);

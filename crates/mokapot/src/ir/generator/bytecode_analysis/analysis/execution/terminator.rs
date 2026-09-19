@@ -7,7 +7,7 @@ use super::super::{
     ValueCategory::{Category1, Category2},
 };
 use crate::ir::{
-    OperationKind, ValueId,
+    ValueId,
     control_flow::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
@@ -30,7 +30,7 @@ pub(super) enum LoweredTerminator {
         cases: Vec<ControlTransfer>,
         default: ControlTransfer,
     },
-    Fallible(ControlTransfer),
+    Try(ControlTransfer),
     Return(Option<ValueId>),
     Throw(ValueId),
 }
@@ -40,23 +40,19 @@ pub(super) fn lower(
     block: &bytecode_cfg::JvmBlock,
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<(LoweredTerminator, Option<OperationKind>), Error> {
+) -> Result<LoweredTerminator, Error> {
     let result = match &block.exit {
         BlockExit::Fallthrough { .. } => {
-            let terminator = if block.exception_handlers.is_empty() {
+            if block.exception_handlers.is_empty() {
                 LoweredTerminator::Goto(ControlTransfer::Unconditional)
             } else {
-                LoweredTerminator::Fallible(ControlTransfer::Unconditional)
-            };
-            (terminator, None)
+                LoweredTerminator::Try(ControlTransfer::Unconditional)
+            }
         }
-        BlockExit::Goto { .. } => (
-            LoweredTerminator::Goto(ControlTransfer::Unconditional),
-            None,
-        ),
-        BlockExit::Branch { .. } => (lower_branch(instruction, frame)?, None),
-        BlockExit::Switch { cases, .. } => (lower_switch(cases, frame)?, None),
-        BlockExit::Terminal => (lower_terminal(instruction, frame)?, None),
+        BlockExit::Goto { .. } => LoweredTerminator::Goto(ControlTransfer::Unconditional),
+        BlockExit::Branch { .. } => lower_branch(instruction, frame)?,
+        BlockExit::Switch { cases, .. } => lower_switch(cases, frame)?,
+        BlockExit::Terminal => lower_terminal(instruction, frame)?,
     };
     Ok(result)
 }

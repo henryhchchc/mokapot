@@ -82,22 +82,16 @@ impl Analyzer<'_, '_> {
         }
 
         let pre_final_frame = frame.clone();
-        if !has_explicit_terminator {
-            let operation = lifting::lift_instruction(
-                &mut self.values,
-                final_instruction,
-                final_pc,
-                &mut frame,
-            )
+        let mut final_operation = if has_explicit_terminator {
+            None
+        } else {
+            lifting::lift_instruction(&mut self.values, final_instruction, final_pc, &mut frame)
+                .map_err(|error| error.at_instruction(final_pc))?
+        };
+        let lowered = terminator::lower(block, final_instruction, &mut frame)
             .map_err(|error| error.at_instruction(final_pc))?;
-            if let Some(operation) = operation {
-                operations.push((final_pc, operation));
-            }
-        }
-        let (lowered, terminator_operation) =
-            terminator::lower(block, final_instruction, &mut frame)
-                .map_err(|error| error.at_instruction(final_pc))?;
-        if let Some(operation) = terminator_operation {
+        let fallible_operation = matches!(lowered, LoweredTerminator::Try(_));
+        if !fallible_operation && let Some(operation) = final_operation.take() {
             operations.push((final_pc, operation));
         }
         let topology = self.cfg.block(block_id).successors.clone();
@@ -137,11 +131,19 @@ impl Analyzer<'_, '_> {
                     .collect::<Result<_, _>>()?,
                 default: normal(default)?,
             },
-            LoweredTerminator::Fallible(transfer) => LiftedTerminator::Fallible {
-                normal: Some(normal(transfer)?),
-                exceptional,
-            },
-            LoweredTerminator::Return(value) => LiftedTerminator::Return { value, exceptional },
+            LoweredTerminator::Try(transfer) => {
+                let operation = final_operation
+                    .ok_or_else(|| Error::internal("a fallible block must end in an operation"))?;
+                LiftedTerminator::Try {
+                    operation,
+                    normal: normal(transfer)?,
+                    exceptional,
+                }
+            }
+            LoweredTerminator::Return(value) if exceptional.is_empty() => {
+                LiftedTerminator::Return { value }
+            }
+            LoweredTerminator::Return(value) => LiftedTerminator::TryReturn { value, exceptional },
             LoweredTerminator::Throw(value) => LiftedTerminator::Throw { value, exceptional },
         };
         if normal_edges.next().is_some() {
@@ -153,7 +155,7 @@ impl Analyzer<'_, '_> {
             kind: BlockKind::Code,
             operations,
             terminator,
-            terminator_source: has_explicit_terminator.then_some(final_pc),
+            terminator_source: (has_explicit_terminator || fallible_operation).then_some(final_pc),
         })
     }
 
