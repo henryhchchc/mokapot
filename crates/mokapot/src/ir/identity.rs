@@ -46,7 +46,10 @@ impl EdgeId {
     }
 }
 
-/// The identity of a scalar value within one Moka IR method.
+/// The opaque identity of a scalar value within one Moka IR method.
+///
+/// Identities may be sparse and convey neither definition order nor a value
+/// count.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]

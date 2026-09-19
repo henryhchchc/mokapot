@@ -275,30 +275,37 @@ fn verify_definition_index(
     method: &MokaIRMethod,
     definitions: &BTreeMap<ValueId, ValueDefinition>,
 ) -> VerificationResult {
-    if method.value_definitions().len() != definitions.len() {
-        return Err(format!(
-            "definition index contains {} entries for {} defined values",
-            method.value_definitions().len(),
-            definitions.len()
-        ));
-    }
     for (index, &indexed_definition) in method.value_definitions().iter().enumerate() {
         let index = u32::try_from(index)
             .map_err(|_| "value definition index cannot be represented".to_owned())?;
         let value = ValueId::new(index);
-        let Some(&actual_definition) = definitions.get(&value) else {
-            return Err(format!("definition index contains undefined value {value}"));
-        };
+        let actual_definition = definitions.get(&value).copied();
         if indexed_definition != actual_definition {
-            return Err(format!(
-                "definition index for {value} is {indexed_definition:?}, expected {actual_definition:?}"
-            ));
+            return Err(match (indexed_definition, actual_definition) {
+                (Some(indexed), Some(actual)) => {
+                    format!("definition index for {value} is {indexed:?}, expected {actual:?}")
+                }
+                (Some(indexed), None) => {
+                    format!("definition index contains undefined value {value} as {indexed:?}")
+                }
+                (None, Some(actual)) => format!(
+                    "definition index has a hole for live value {value}, expected {actual:?}"
+                ),
+                (None, None) => unreachable!("equal empty definitions were handled above"),
+            });
         }
-        if let ValueDefinition::Instruction(location) = indexed_definition
+        if let Some(ValueDefinition::Instruction(location)) = indexed_definition
             && method.instruction(location).is_none()
         {
             return Err(format!(
                 "definition of {value} refers to missing instruction {location:?}"
+            ));
+        }
+    }
+    for (&value, &definition) in definitions {
+        if method.definition_of(value) != Some(definition) {
+            return Err(format!(
+                "definition index is missing live value {value} defined as {definition:?}"
             ));
         }
     }

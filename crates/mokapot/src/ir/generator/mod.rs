@@ -8,7 +8,7 @@
 //!    predecessor-indexed phis.
 //! 3. [`canonicalize`] simplifies provisional phis and materializes retained
 //!    phis in canonical SSA blocks.
-//! 4. [`finish`] remaps provisional values and assembles the completed
+//! 4. [`finish`] indexes stable value definitions and assembles the completed
 //!    [`MokaIRMethod`].
 //!
 //! The [`bytecode_analysis::lifting`] module contains the JVM opcode semantics

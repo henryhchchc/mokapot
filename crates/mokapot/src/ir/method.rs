@@ -12,6 +12,8 @@ use crate::{
 /// A completed scalar-SSA representation of the reachable part of a JVM method.
 ///
 /// Blocks, edges, and values have opaque identities local to this method.
+/// Value identities may be sparse and must not be interpreted as a count or
+/// ordering of definitions.
 /// Instructions are addressed by structural locations, and block terminators
 /// are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ pub struct MokaIRMethod {
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
-    value_definitions: Vec<ValueDefinition>,
+    value_definitions: Vec<Option<ValueDefinition>>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -47,7 +49,7 @@ pub(crate) struct MokaIRMethodParts {
     pub(crate) source_map: SourceMap,
     pub(crate) this_value: Option<ValueId>,
     pub(crate) parameter_values: Vec<ValueId>,
-    pub(crate) value_definitions: Vec<ValueDefinition>,
+    pub(crate) value_definitions: Vec<Option<ValueDefinition>>,
 }
 
 impl MokaIRMethod {
@@ -163,11 +165,15 @@ impl MokaIRMethod {
     }
 
     /// Returns the unique definition of a method-local SSA value.
+    ///
+    /// Value identities are opaque and may be sparse. An identity with no
+    /// retained definition yields `None`.
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
         self.value_definitions
             .get(usize::try_from(value.index()).ok()?)
             .copied()
+            .flatten()
     }
 
     pub(crate) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
@@ -186,7 +192,7 @@ impl MokaIRMethod {
     }
 
     #[cfg(test)]
-    pub(crate) fn value_definitions(&self) -> &[ValueDefinition] {
+    pub(crate) fn value_definitions(&self) -> &[Option<ValueDefinition>] {
         &self.value_definitions
     }
 

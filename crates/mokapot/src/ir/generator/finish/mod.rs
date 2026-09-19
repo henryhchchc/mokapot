@@ -1,12 +1,10 @@
 //! Finishes canonical SSA blocks into completed public `MokaIR`.
 
-use std::collections::BTreeMap;
-
 use crate::{
     ir::{
         BasicBlock, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{canonicalize, error::Error, remap::RemapValues},
+        generator::{canonicalize, error::Error},
         method::MokaIRMethodParts,
     },
     jvm::Method,
@@ -25,33 +23,22 @@ pub(super) fn finish(
         parameter_values,
     } = graph;
     let mut state = FinishState::default();
-    let this_value = this_value
-        .map(|value| state.value(value, ValueDefinition::This))
-        .transpose()?;
-    let parameter_values = parameter_values
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let index = u16::try_from(index)
-                .map_err(|_| Error::internal("the method parameter index cannot be represented"))?;
-            state.value(value, ValueDefinition::Parameter(index))
-        })
-        .collect::<Result<_, _>>()?;
-
-    let mut block_allocations = blocks
-        .iter()
-        .map(|(&id, block)| state.allocate_block(id, block).map(|state| (id, state)))
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    if let Some(value) = this_value {
+        state.define(value, ValueDefinition::This)?;
+    }
+    for (index, &value) in parameter_values.iter().enumerate() {
+        let index = u16::try_from(index)
+            .map_err(|_| Error::internal("the method parameter index cannot be represented"))?;
+        state.define(value, ValueDefinition::Parameter(index))?;
+    }
+    for (&id, block) in &blocks {
+        state.define_block_values(id, block)?;
+    }
 
     let blocks = blocks
         .into_iter()
-        .map(|(id, block)| {
-            let allocation = block_allocations
-                .remove(&id)
-                .ok_or_else(|| Error::internal("an SSA block has no instruction allocation"))?;
-            materialize_block(block, allocation, &mut state).map(|block| (id, block))
-        })
-        .collect::<Result<_, Error>>()?;
+        .map(|(id, block)| (id, materialize_block(block)))
+        .collect();
 
     let method = MokaIRMethod::new(
         method,
@@ -68,153 +55,171 @@ pub(super) fn finish(
     Ok(method)
 }
 
-#[derive(Clone, Copy)]
-struct BlockAllocation {
-    caught_exception: Option<ValueId>,
-}
-
 impl FinishState {
-    fn allocate_block(
+    fn define_block_values(
         &mut self,
         block_id: crate::ir::BlockId,
         block: &canonicalize::Block,
-    ) -> Result<BlockAllocation, Error> {
-        let caught_exception = block
-            .scalar
-            .caught_exception
-            .map(|value| self.value(value, ValueDefinition::CaughtException(block_id)))
-            .transpose()?;
-        block
-            .phis
-            .iter()
-            .enumerate()
-            .map(|(index, phi)| {
-                let location = InstructionLocation::Phi {
-                    block: block_id,
-                    index,
-                };
-                self.value(phi.value, ValueDefinition::Instruction(location))?;
-                Ok(())
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-        block
-            .scalar
-            .operations
-            .iter()
-            .enumerate()
-            .map(|(index, kind)| {
-                let location = InstructionLocation::Operation {
-                    block: block_id,
-                    index,
-                };
-                if let Some(value) = kind.def() {
-                    self.value(value, ValueDefinition::Instruction(location))?;
-                }
-                Ok(())
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-        Ok(BlockAllocation { caught_exception })
+    ) -> Result<(), Error> {
+        if let Some(value) = block.scalar.caught_exception {
+            self.define(value, ValueDefinition::CaughtException(block_id))?;
+        }
+        for (index, phi) in block.phis.iter().enumerate() {
+            let location = InstructionLocation::Phi {
+                block: block_id,
+                index,
+            };
+            self.define(phi.value, ValueDefinition::Instruction(location))?;
+        }
+        for (index, kind) in block.scalar.operations.iter().enumerate() {
+            let Some(value) = kind.def() else {
+                continue;
+            };
+            let location = InstructionLocation::Operation {
+                block: block_id,
+                index,
+            };
+            self.define(value, ValueDefinition::Instruction(location))?;
+        }
+        Ok(())
     }
 }
 
-fn materialize_block(
-    block: canonicalize::Block,
-    allocation: BlockAllocation,
-    state: &mut FinishState,
-) -> Result<BasicBlock, Error> {
+fn materialize_block(block: canonicalize::Block) -> BasicBlock {
     let phis = block
         .phis
         .into_iter()
-        .map(|phi| {
-            Ok(Phi {
-                value: state.resolve(phi.value)?,
-                inputs: phi
-                    .inputs
-                    .into_iter()
-                    .map(|(predecessor, value)| {
-                        let value = state.resolve(value)?;
-                        Ok(PhiInput { predecessor, value })
-                    })
-                    .collect::<Result<_, Error>>()?,
-            })
+        .map(|phi| Phi {
+            value: phi.value,
+            inputs: phi
+                .inputs
+                .into_iter()
+                .map(|(predecessor, value)| PhiInput { predecessor, value })
+                .collect(),
         })
-        .collect::<Result<_, Error>>()?;
+        .collect();
     let operations = block
         .scalar
         .operations
         .into_iter()
-        .map(|mut kind| {
-            kind.try_remap_values(&mut |value| state.resolve(value))?;
-            Ok(Operation { kind })
-        })
-        .collect::<Result<_, Error>>()?;
+        .map(|kind| Operation { kind })
+        .collect();
     let successors = block
         .scalar
         .successors
         .into_iter()
-        .map(|mut successor| {
-            successor
-                .transfer
-                .try_remap_values(&mut |value| state.resolve(value))?;
-            Ok(Successor {
-                id: successor.id,
-                target: successor.target,
-                transfer: successor.transfer,
-            })
+        .map(|successor| Successor {
+            id: successor.id,
+            target: successor.target,
+            transfer: successor.transfer,
         })
-        .collect::<Result<_, Error>>()?;
-    let mut terminator = block.scalar.terminator;
-    terminator.try_remap_values(&mut |value| state.resolve(value))?;
-    Ok(BasicBlock {
-        caught_exception: allocation.caught_exception,
+        .collect();
+    BasicBlock {
+        caught_exception: block.scalar.caught_exception,
         phis,
         operations,
         terminator: Terminator {
-            kind: terminator,
+            kind: block.scalar.terminator,
             successors,
         },
-    })
+    }
 }
 
 #[derive(Default)]
 struct FinishState {
-    values: Vec<Option<ValueId>>,
-    definitions: Vec<ValueDefinition>,
+    definitions: Vec<Option<ValueDefinition>>,
 }
 
 impl FinishState {
-    fn value(&mut self, temporary: ValueId, definition: ValueDefinition) -> Result<ValueId, Error> {
-        let finished_index = u32::try_from(self.definitions.len())
-            .ok()
-            .filter(|index| *index < u32::MAX)
-            .ok_or_else(|| Error::internal("the value identity space is exhausted"))?;
-        let temporary = value_index(temporary)?;
-        let required_len = temporary
+    fn define(&mut self, value: ValueId, definition: ValueDefinition) -> Result<(), Error> {
+        let index = usize::try_from(value.index())
+            .map_err(|_| Error::internal("the value index cannot be addressed"))?;
+        let required_len = index
             .checked_add(1)
-            .ok_or_else(|| Error::internal("the temporary value index cannot be addressed"))?;
-        if self.values.len() < required_len {
-            self.values.resize(required_len, None);
+            .ok_or_else(|| Error::internal("the value index cannot be addressed"))?;
+        if self.definitions.len() < required_len {
+            self.definitions.resize(required_len, None);
         }
-        if self.values[temporary].is_some() {
-            return Err(Error::internal(
-                "a temporary value identity has multiple definitions",
-            ));
+        if self.definitions[index].replace(definition).is_some() {
+            return Err(Error::internal("a value identity has multiple definitions"));
         }
-        let value = ValueId::new(finished_index);
-        self.values[temporary] = Some(value);
-        self.definitions.push(definition);
-        Ok(value)
-    }
-
-    fn resolve(&self, value: ValueId) -> Result<ValueId, Error> {
-        self.values
-            .get(value_index(value)?)
-            .and_then(|value| *value)
-            .ok_or_else(|| Error::internal("a temporary value has no finished definition"))
+        Ok(())
     }
 }
 
-fn value_index(value: ValueId) -> Result<usize, Error> {
-    usize::try_from(value.index())
-        .map_err(|_| Error::internal("a temporary value index cannot be addressed"))
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::{
+        ir::{
+            BlockId, OperationKind, TerminatorKind,
+            expression::MathOperation,
+            generator::bytecode_analysis::{PhiCandidate, ScalarBlock, ScalarGraph},
+        },
+        jvm::{code::Instruction, method::AccessFlags},
+    };
+
+    #[test]
+    fn eliminated_phi_leaves_a_hole_without_renumbering_live_values() {
+        let block = BlockId::new(0);
+        let parameter = ValueId::new(0);
+        let eliminated_phi = ValueId::new(1);
+        let result = ValueId::new(2);
+        let scalar = ScalarGraph {
+            entry: block,
+            blocks: BTreeMap::from([(
+                block,
+                ScalarBlock {
+                    caught_exception: None,
+                    operations: vec![OperationKind::Definition {
+                        value: result,
+                        expr: MathOperation::Increment(eliminated_phi, 1).into(),
+                    }],
+                    terminator: TerminatorKind::Return(Some(result)),
+                    successors: vec![],
+                },
+            )]),
+            phi_candidates: BTreeMap::from([(
+                eliminated_phi,
+                PhiCandidate {
+                    placement: block,
+                    inputs: vec![(block, parameter)],
+                },
+            )]),
+            this_value: None,
+            parameter_values: vec![parameter],
+        };
+        let graph = canonicalize::canonicalize(scalar).unwrap();
+        let method = crate::tests::method(
+            [(0, Instruction::ILoad0), (1, Instruction::IReturn)],
+            "(I)I",
+            vec![],
+            AccessFlags::PUBLIC | AccessFlags::STATIC,
+        );
+
+        let ir = finish(&method, graph, SourceMap::default()).unwrap();
+        let completed_block = ir.block(block).unwrap();
+        let operation = &completed_block.operations[0];
+
+        assert_eq!(ir.parameter_values(), [parameter]);
+        assert_eq!(operation.def(), Some(result));
+        assert_eq!(operation.uses(), [parameter].into_iter().collect());
+        assert_eq!(ir.definition_of(eliminated_phi), None);
+        assert_eq!(
+            ir.definition_of(result),
+            Some(ValueDefinition::Instruction(
+                InstructionLocation::Operation { block, index: 0 }
+            ))
+        );
+        assert!(
+            operation
+                .uses()
+                .into_iter()
+                .chain(completed_block.terminator.uses())
+                .all(|value| ir.definition_of(value).is_some())
+        );
+        crate::ir::verify::verify(&ir).unwrap();
+    }
 }

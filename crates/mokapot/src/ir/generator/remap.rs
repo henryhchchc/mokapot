@@ -1,4 +1,4 @@
-//! Rewrites the single IR value identity space during canonicalization and finishing.
+//! Rewrites the single IR value identity space during canonicalization.
 
 use crate::ir::{
     OperationKind, TerminatorKind, ValueId,
