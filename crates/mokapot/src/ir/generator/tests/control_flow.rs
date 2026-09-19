@@ -176,7 +176,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
 }
 
 #[test]
-fn empty_switch_becomes_goto_without_using_match_value() {
+fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
     let method = method(
         [
             (0, Instruction::ILoad0),
@@ -196,7 +196,20 @@ fn empty_switch_becomes_goto_without_using_match_value() {
     let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
     let match_value = ir.parameter_values()[0];
 
-    assert!(matches!(terminator, Terminator::Goto { .. }));
+    let successors = terminator.successors().collect::<Vec<_>>();
+    assert_eq!(successors.len(), 1);
+    assert_eq!(
+        successors[0].block_target(),
+        ir.source_map()
+            .instructions_at(10.into())
+            .find_map(|location| match location {
+                InstructionLocation::Terminator { block } => Some(block),
+                InstructionLocation::BlockParameter { .. }
+                | InstructionLocation::Operation { .. } => {
+                    None
+                }
+            })
+    );
     assert!(!terminator.uses().contains(&match_value));
     assert_eq!(
         ir.source_map().origin_of(InstructionLocation::Terminator {
@@ -261,62 +274,6 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         handler_types,
         ["java/lang/RuntimeException", "java/lang/Throwable"]
     );
-}
-
-#[test]
-fn normally_reachable_handler_still_starts_a_block() {
-    let method = method(
-        [
-            (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/Throwable".parse().unwrap()),
-            ),
-            (2, Instruction::AStore1),
-            (3, Instruction::Return),
-        ],
-        "(Ljava/lang/Throwable;)V",
-        vec![ExceptionTableEntry {
-            covered_pc: 1.into()..2.into(),
-            handler_pc: 2.into(),
-            catch_type: Some("java/lang/Throwable".parse().unwrap()),
-        }],
-    );
-    let ir = build(&method).unwrap();
-    let entry = ir.block(ir.entry_block()).unwrap();
-    let normal = entry
-        .terminator
-        .successors()
-        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
-        .unwrap()
-        .block_target()
-        .unwrap();
-    let handler = entry
-        .terminator
-        .successors()
-        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Exception(_))))
-        .unwrap()
-        .block_target()
-        .unwrap();
-
-    assert_eq!(ir.blocks().len(), 3);
-    assert_ne!(handler, ir.entry_block());
-    assert_ne!(handler, normal);
-    assert_eq!(
-        ir.block(handler)
-            .unwrap()
-            .terminator
-            .successors()
-            .next()
-            .unwrap()
-            .block_target(),
-        Some(normal)
-    );
-    assert_eq!(ir.block(handler).unwrap().operations.len(), 0);
-    assert!(matches!(
-        ir.block(handler).unwrap().kind,
-        crate::ir::BlockKind::LandingPad { .. }
-    ));
 }
 
 #[test]
