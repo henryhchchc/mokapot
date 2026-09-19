@@ -1,16 +1,11 @@
-use crate::{
-    ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
-    jvm::code::ProgramCounter,
-};
+use crate::ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer};
 
 /// A scalar SSA block ready for final IR emission.
 pub(crate) struct Block {
-    pub id: BlockId,
     pub caught_exception: Option<ValueId>,
     pub phis: Vec<Phi>,
-    pub operations: Vec<(ProgramCounter, OperationKind)>,
+    pub operations: Vec<OperationKind>,
     pub terminator: TerminatorKind,
-    pub terminator_source: Option<ProgramCounter>,
     pub successors: Vec<(BlockId, ControlTransfer)>,
 }
 

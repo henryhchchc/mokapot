@@ -13,9 +13,9 @@ use crate::ir::{
 };
 
 pub(super) fn finalize(
-    blocks: Vec<ScalarBlock>,
+    blocks: BTreeMap<BlockId, ScalarBlock>,
     simplified: SimplifiedPhis,
-) -> Result<Vec<model::Block>, Error> {
+) -> Result<BTreeMap<BlockId, model::Block>, Error> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
     let canonical = |value| {
         simplified
@@ -31,15 +31,13 @@ pub(super) fn finalize(
             .or_default()
             .push(Phi { value, inputs });
     }
-    let mut finalized = Vec::with_capacity(blocks.len());
-    for block in blocks {
-        let id = block.id;
-        finalized.push(finalize_block(
-            block,
-            phis_by_block.remove(&id).unwrap_or_default(),
-            &canonical,
-        ));
-    }
+    let finalized = blocks
+        .into_iter()
+        .map(|(id, block)| {
+            let phis = phis_by_block.remove(&id).unwrap_or_default();
+            (id, finalize_block(block, phis, &canonical))
+        })
+        .collect();
     if phis_by_block.is_empty() {
         Ok(finalized)
     } else {
@@ -53,11 +51,9 @@ fn finalize_block(
     canonical: &impl Fn(ValueId) -> ValueId,
 ) -> model::Block {
     let ScalarBlock {
-        id,
         caught_exception,
         operations,
         terminator,
-        terminator_source,
         successors,
     } = block;
     let caught_exception = caught_exception.map(canonical);
@@ -74,7 +70,7 @@ fn finalize_block(
         .collect();
     let operations = operations
         .into_iter()
-        .map(|(source, operation)| (source, apply_substitutions(operation, canonical)))
+        .map(|operation| apply_substitutions(operation, canonical))
         .collect();
     let terminator = apply_substitutions(terminator, canonical);
     let successors = successors
@@ -82,12 +78,10 @@ fn finalize_block(
         .map(|(target, transfer)| (target, apply_substitutions(transfer, canonical)))
         .collect();
     model::Block {
-        id,
         caught_exception,
         phis,
         operations,
         terminator,
-        terminator_source,
         successors,
     }
 }

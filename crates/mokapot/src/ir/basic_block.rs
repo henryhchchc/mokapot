@@ -1,4 +1,4 @@
-use super::{BlockId, Operation, Phi, Terminator, ValueId};
+use super::{Operation, Phi, Terminator, ValueId};
 
 /// A maximal reachable basic block in completed `MokaIR`.
 ///
@@ -6,8 +6,6 @@ use super::{BlockId, Operation, Phi, Terminator, ValueId};
 /// order, and its single terminator defines every outgoing control-flow arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
-    /// This block's method-local identity.
-    pub id: BlockId,
     /// The caught exception introduced at this synthetic handler entry.
     pub caught_exception: Option<ValueId>,
     /// The phi nodes evaluated at block entry.

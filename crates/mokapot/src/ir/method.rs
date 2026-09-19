@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use super::{
-    BasicBlock, BlockId, InstructionId, MokaIRBuildError, Operation, Phi, SourceMap, Terminator,
-    ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
+    BasicBlock, BlockId, InstructionLocation, MokaIRBuildError, Operation, Phi, SourceMap,
+    Terminator, ValueDefinition, ValueId, control_flow::ControlFlowGraph, generator,
 };
 use crate::{
     jvm::{self, Method as JvmMethod, method, references::ClassRef},
@@ -9,8 +11,9 @@ use crate::{
 
 /// A completed scalar-SSA representation of the reachable part of a JVM method.
 ///
-/// Blocks, instructions, edges, and values have opaque identities local to this
-/// method. Its block terminators are the sole source of control-flow edges.
+/// Blocks, edges, and values have opaque identities local to this method.
+/// Instructions are addressed by structural locations, and block terminators
+/// are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
     access_flags: method::AccessFlags,
@@ -18,18 +21,16 @@ pub struct MokaIRMethod {
     descriptor: MethodDescriptor,
     owner: ClassRef,
     entry_block: BlockId,
-    blocks: Vec<BasicBlock>,
+    blocks: BTreeMap<BlockId, BasicBlock>,
     source_map: SourceMap,
     this_value: Option<ValueId>,
     parameter_values: Vec<ValueId>,
     value_definitions: Vec<ValueDefinition>,
-    instruction_locations: Vec<InstructionLocation>,
 }
 
-/// A borrowed IR instruction resolved from an [`InstructionId`].
+/// A borrowed IR instruction resolved from an [`InstructionLocation`].
 ///
-/// Phis, ordinary operations, and terminators share one method-local identity
-/// space, so this enum preserves which kind of instruction was resolved.
+/// This enum preserves which kind of instruction was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionRef<'method> {
     /// A phi evaluated on block entry.
@@ -40,33 +41,13 @@ pub enum InstructionRef<'method> {
     Terminator(&'method Terminator),
 }
 
-impl InstructionRef<'_> {
-    /// Returns this instruction's method-local identity.
-    #[must_use]
-    pub const fn id(self) -> InstructionId {
-        match self {
-            Self::Phi(phi) => phi.id,
-            Self::Operation(operation) => operation.id(),
-            Self::Terminator(terminator) => terminator.id(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum InstructionLocation {
-    Phi { block: BlockId, index: usize },
-    Operation { block: BlockId, index: usize },
-    Terminator { block: BlockId },
-}
-
 pub(crate) struct MokaIRMethodParts {
     pub(crate) entry_block: BlockId,
-    pub(crate) blocks: Vec<BasicBlock>,
+    pub(crate) blocks: BTreeMap<BlockId, BasicBlock>,
     pub(crate) source_map: SourceMap,
     pub(crate) this_value: Option<ValueId>,
     pub(crate) parameter_values: Vec<ValueId>,
     pub(crate) value_definitions: Vec<ValueDefinition>,
-    pub(crate) instruction_locations: Vec<InstructionLocation>,
 }
 
 impl MokaIRMethod {
@@ -120,36 +101,28 @@ impl MokaIRMethod {
         self.entry_block
     }
 
-    /// Returns all reachable blocks in deterministic source order.
+    /// Returns all reachable blocks in deterministic identity order.
     ///
     /// Each block exposes entry phis, ordered operations, and one terminator.
-    /// Identities are dense and ascending here, so the block at index `i` has
-    /// identity index `i`.
     #[must_use]
-    pub fn blocks(&self) -> impl ExactSizeIterator<Item = &BasicBlock> {
-        self.blocks.iter()
+    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> {
+        self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
     /// Looks up a block by its method-local identity.
     ///
-    /// Resolution treats the identity as a position, sound only because
-    /// [`MokaIRMethod::blocks`] stores identities densely and ascendingly; a
-    /// sparse scheme would silently reject blocks. Identities outside the block
-    /// range yield `None`.
+    /// Identities outside this method's block set yield `None`.
     #[must_use]
     pub fn block(&self, id: BlockId) -> Option<&BasicBlock> {
-        self.blocks.get(usize::try_from(id.index()).ok()?)
+        self.blocks.get(&id)
     }
 
-    /// Resolves an instruction, phi, or terminator by its method-local identity.
+    /// Resolves an instruction, phi, or terminator by its structural location.
     ///
-    /// Identities outside this method's dense instruction space yield `None`.
+    /// Locations outside this method's block structure yield `None`.
     #[must_use]
-    pub fn instruction(&self, id: InstructionId) -> Option<InstructionRef<'_>> {
-        let location = self
-            .instruction_locations
-            .get(usize::try_from(id.index()).ok()?)?;
-        Some(match *location {
+    pub fn instruction(&self, location: InstructionLocation) -> Option<InstructionRef<'_>> {
+        Some(match location {
             InstructionLocation::Phi { block, index } => {
                 InstructionRef::Phi(self.block(block)?.phis.get(index)?)
             }
@@ -209,7 +182,6 @@ impl MokaIRMethod {
             this_value: parts.this_value,
             parameter_values: parts.parameter_values,
             value_definitions: parts.value_definitions,
-            instruction_locations: parts.instruction_locations,
         }
     }
 
@@ -217,7 +189,7 @@ impl MokaIRMethod {
     ///
     /// The returned view does not store an independent edge set.
     #[must_use]
-    pub fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
+    pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
         ControlFlowGraph::new(&self.blocks, self.entry_block)
     }
 }

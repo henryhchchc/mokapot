@@ -2,7 +2,7 @@
 
 pub mod path_condition;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
 use super::{BasicBlock, BlockId, EdgeId};
@@ -65,12 +65,12 @@ impl<'method> Edge<'method> {
 /// A borrowed control-flow graph derived solely from block terminators.
 #[derive(Debug, Clone, Copy)]
 pub struct ControlFlowGraph<'method> {
-    pub(crate) blocks: &'method [BasicBlock],
+    pub(crate) blocks: &'method BTreeMap<BlockId, BasicBlock>,
     entry: BlockId,
 }
 
-impl<'method> ControlFlowGraph<'method> {
-    pub(crate) const fn new(blocks: &'method [BasicBlock], entry: BlockId) -> Self {
+impl<'m> ControlFlowGraph<'m> {
+    pub(crate) const fn new(blocks: &'m BTreeMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
         Self { blocks, entry }
     }
 
@@ -80,25 +80,22 @@ impl<'method> ControlFlowGraph<'method> {
         self.entry
     }
 
-    /// Returns the blocks in deterministic source order.
-    ///
-    /// Identities are dense and ascending here, so a block identity doubles as
-    /// a position in this sequence.
+    /// Returns the blocks in deterministic identity order.
     #[must_use]
-    pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'method BasicBlock)> {
-        self.blocks.iter().map(|block| (block.id, block))
+    pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'m BasicBlock)> {
+        self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
     /// Returns every successor arm, retaining parallel edges.
-    pub fn edges(self) -> impl Iterator<Item = Edge<'method>> {
-        self.blocks.iter().flat_map(|block| {
+    pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
+        self.blocks.iter().flat_map(|(&source, block)| {
             block
                 .terminator
                 .successors()
                 .iter()
                 .map(move |successor| Edge {
                     id: successor.id(),
-                    source: block.id,
+                    source,
                     target: successor.target(),
                     data: successor.transfer(),
                 })
@@ -106,38 +103,33 @@ impl<'method> ControlFlowGraph<'method> {
     }
 
     /// Returns blocks with no outgoing successor arms.
-    pub fn exits(self) -> impl Iterator<Item = BlockId> + 'method {
+    pub fn exits(self) -> impl Iterator<Item = BlockId> + 'm {
         self.blocks
             .iter()
-            .filter_map(|block| block.terminator.successors().is_empty().then_some(block.id))
+            .filter_map(|(&id, block)| block.terminator.successors().is_empty().then_some(id))
     }
 
     /// Returns all outgoing arms from `source`.
     ///
-    /// The identity is resolved as a position, which relies on the dense,
-    /// ascending identities that [`ControlFlowGraph::nodes`] reports; an
-    /// identity outside this graph yields no arms.
-    pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'method>> {
-        self.blocks
-            .get(usize::try_from(source.index()).unwrap_or(usize::MAX))
-            .into_iter()
-            .flat_map(move |block| {
-                block
-                    .terminator
-                    .successors()
-                    .iter()
-                    .map(move |successor| Edge {
-                        id: successor.id(),
-                        source,
-                        target: successor.target(),
-                        data: successor.transfer(),
-                    })
-            })
+    /// An identity outside this graph yields no arms.
+    pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'m>> {
+        self.blocks.get(&source).into_iter().flat_map(move |block| {
+            block
+                .terminator
+                .successors()
+                .iter()
+                .map(move |successor| Edge {
+                    id: successor.id(),
+                    source,
+                    target: successor.target(),
+                    data: successor.transfer(),
+                })
+        })
     }
 
     /// Computes path conditions at reachable blocks.
     #[must_use]
-    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'method Predicate>> {
+    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
         self.path_conditions_with_budget(SolvingBudget::default())
     }
 
@@ -146,7 +138,7 @@ impl<'method> ControlFlowGraph<'method> {
     pub fn path_conditions_with_budget(
         self,
         budget: SolvingBudget,
-    ) -> HashMap<BlockId, PathCondition<&'method Predicate>> {
+    ) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
         path_condition::analyze(self, budget)
     }
 }

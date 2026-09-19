@@ -15,9 +15,9 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         vec![],
     );
     let ir = build(&method).unwrap();
-    let join = ir
+    let (join_id, join) = ir
         .blocks()
-        .find(|block| matches!(block.terminator.kind(), TerminatorKind::Return(Some(_))))
+        .find(|(_, block)| matches!(block.terminator.kind(), TerminatorKind::Return(Some(_))))
         .unwrap();
     let [phi] = join.phis.as_slice() else {
         panic!("the join must contain one phi")
@@ -29,11 +29,19 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         join.terminator.kind(),
         TerminatorKind::Return(Some(value)) if *value == phi.value
     ));
+    let join_loc = InstructionLocation::Phi {
+        block: join_id,
+        index: 0,
+    };
     assert_eq!(
         ir.definition_of(phi.value),
-        Some(ValueDefinition::Instruction(phi.id))
+        Some(ValueDefinition::Instruction(join_loc))
     );
-    assert_eq!(ir.source_map().origins_of(phi.id).count(), 0);
+    let join_loc = InstructionLocation::Phi {
+        block: join_id,
+        index: 0,
+    };
+    assert_eq!(ir.source_map().origins_of(join_loc).count(), 0);
 }
 
 #[test]
@@ -88,12 +96,10 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     };
 
     assert_eq!(preheader.operations.len(), 0);
-    assert_eq!(
-        ir.source_map()
-            .origins_of(preheader.terminator.id())
-            .count(),
-        0
-    );
+    let loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
+    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
     assert_eq!(phi.inputs.len(), 2);
     assert!(
         phi.inputs
@@ -110,11 +116,10 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     else {
         panic!("the loop-carried input must be computed in the loop")
     };
-    let definition = ir
-        .blocks()
-        .flat_map(|block| &block.operations)
-        .find(|instruction| instruction.id() == backedge_definition)
-        .unwrap();
+    let InstructionLocation::Operation { block, index } = backedge_definition else {
+        panic!("the loop-carried input must be computed by an operation")
+    };
+    let definition = &ir.block(block).unwrap().operations[index];
     assert!(definition.uses().contains(&phi.value));
 }
 
@@ -125,29 +130,24 @@ fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
     let blocks = ir.blocks().collect::<Vec<_>>();
 
     assert_eq!(blocks.len(), 2);
-    assert!(blocks.iter().all(|block| block.phis.is_empty()));
-    assert!(blocks[0].operations.is_empty());
-    assert_eq!(blocks[0].terminator.successors().len(), 1);
+    assert!(blocks.iter().all(|(_, block)| block.phis.is_empty()));
+    assert!(blocks[0].1.operations.is_empty());
+    assert_eq!(blocks[0].1.terminator.successors().len(), 1);
     assert!(matches!(
-        blocks[0].terminator.successors()[0].transfer(),
+        blocks[0].1.terminator.successors()[0].transfer(),
         ControlTransfer::Unconditional
     ));
-    assert_eq!(
-        ir.source_map()
-            .origins_of(blocks[0].terminator.id())
-            .count(),
-        0
-    );
-    let [arm] = blocks[0].terminator.successors() else {
+    let loc = InstructionLocation::Terminator { block: blocks[0].0 };
+    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
+    let [arm] = blocks[0].1.terminator.successors() else {
         panic!("the preheader must have exactly one successor")
     };
     let header = ir.block(arm.target()).unwrap();
-    assert_eq!(header, blocks[1]);
-    assert_eq!(header.terminator.successors()[0].target(), header.id);
+    assert_eq!(header, blocks[1].1);
+    assert_eq!(header.terminator.successors()[0].target(), blocks[1].0);
+    let loc = InstructionLocation::Terminator { block: blocks[1].0 };
     assert_eq!(
-        ir.source_map()
-            .origins_of(header.terminator.id())
-            .collect::<Vec<_>>(),
+        ir.source_map().origins_of(loc).collect::<Vec<_>>(),
         [ProgramCounter::from(0)]
     );
 }
@@ -177,6 +177,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     let ir = build(&method).unwrap();
     let header = ir
         .blocks()
+        .map(|(_, block)| block)
         .find(|block| matches!(block.terminator.kind(), TerminatorKind::Branch))
         .unwrap();
 
@@ -185,6 +186,7 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     assert_eq!(counter.inputs.len(), 2);
     let returned = ir
         .blocks()
+        .map(|(_, block)| block)
         .find_map(|block| match block.terminator.kind() {
             TerminatorKind::Return(Some(value)) => Some(value),
             _ => None,
@@ -220,7 +222,7 @@ fn irreducible_loop_retains_a_finite_cyclic_phi_pair() {
     let ir = build(&method).unwrap();
     let phis = ir
         .blocks()
-        .flat_map(|block| &block.phis)
+        .flat_map(|(_, block)| &block.phis)
         .collect::<Vec<_>>();
 
     assert_eq!(phis.len(), 3);

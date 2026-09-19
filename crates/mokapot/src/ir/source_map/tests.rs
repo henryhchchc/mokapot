@@ -1,15 +1,30 @@
 use super::*;
+use crate::ir::BlockId;
 
 #[test]
 fn source_map_is_a_sparse_many_to_many_relation() {
     let pc0 = ProgramCounter::from(0);
     let pc1 = ProgramCounter::from(100);
     let pc2 = ProgramCounter::from(200);
-    let instruction0 = InstructionId::new(0);
-    let instruction1 = InstructionId::new(1);
-    let instruction2 = InstructionId::new(2);
-    let instruction3 = InstructionId::new(3);
-    let synthetic = InstructionId::new(4);
+    let instruction0 = InstructionLocation::Operation {
+        block: BlockId::new(0),
+        index: 0,
+    };
+    let instruction1 = InstructionLocation::Operation {
+        block: BlockId::new(0),
+        index: 1,
+    };
+    let instruction2 = InstructionLocation::Operation {
+        block: BlockId::new(1),
+        index: 0,
+    };
+    let instruction3 = InstructionLocation::Terminator {
+        block: BlockId::new(1),
+    };
+    let synthetic = InstructionLocation::Phi {
+        block: BlockId::new(1),
+        index: 0,
+    };
     let mut map = SourceMap::default();
     map.insert(pc0, instruction0);
     map.insert(pc0, instruction1);

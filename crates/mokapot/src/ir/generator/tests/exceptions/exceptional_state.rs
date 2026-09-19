@@ -20,7 +20,8 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         }],
     );
     let ir = build(&method).unwrap();
-    let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
+    let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let fallible = block_containing_instruction(&ir, fallible_location);
 
     let normal_target = fallible
         .terminator
@@ -29,7 +30,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
         .target();
-    let handler_entry = fallible
+    let handler_entry_id = fallible
         .terminator
         .successors()
         .iter()
@@ -37,12 +38,12 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         .unwrap()
         .target();
 
-    assert_ne!(normal_target, handler_entry);
-    let handler_entry = ir.block(handler_entry).unwrap();
-    let caught = ir.caught_exception(handler_entry.id).unwrap();
+    assert_ne!(normal_target, handler_entry_id);
+    let handler_entry = ir.block(handler_entry_id).unwrap();
+    let caught = ir.caught_exception(handler_entry_id).unwrap();
     assert_eq!(
         ir.definition_of(caught),
-        Some(ValueDefinition::CaughtException(handler_entry.id))
+        Some(ValueDefinition::CaughtException(handler_entry_id))
     );
     assert!(handler_entry.phis.is_empty());
     assert!(handler_entry.operations.is_empty());
@@ -55,12 +56,10 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         handler_entry.terminator.successors()[0].target(),
         normal_target
     );
-    assert_eq!(
-        ir.source_map()
-            .origins_of(handler_entry.terminator.id())
-            .count(),
-        0
-    );
+    let loc = InstructionLocation::Terminator {
+        block: handler_entry_id,
+    };
+    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
 }
 
 #[test]
@@ -87,7 +86,7 @@ fn exceptional_state_excludes_the_fallible_result() {
     let ir = build(&method).unwrap();
     assert!(
         ir.blocks()
-            .filter_map(|block| ir.caught_exception(block.id))
+            .filter_map(|(block_id, _)| ir.caught_exception(block_id))
             .all(|caught| ir.definition_of(caught).is_some())
     );
 }
@@ -122,7 +121,8 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
         ],
     );
     let ir = build(&method).unwrap();
-    let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
+    let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let fallible = block_containing_instruction(&ir, fallible_location);
     let exceptional = fallible
         .terminator
         .successors()
@@ -144,7 +144,7 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
     assert!(handler.caught_exception.is_some());
     assert_eq!(
         ir.blocks()
-            .filter(|block| block.caught_exception.is_some())
+            .filter(|(_, block)| block.caught_exception.is_some())
             .count(),
         1
     );

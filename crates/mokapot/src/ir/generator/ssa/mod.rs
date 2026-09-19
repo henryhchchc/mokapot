@@ -4,8 +4,10 @@ mod finalization;
 mod model;
 mod simplify;
 
+use std::collections::BTreeMap;
+
 use crate::ir::{
-    BlockId, ValueId,
+    BlockId, SourceMap, ValueId,
     generator::{bytecode_analysis::ScalarGraph, error::Error},
 };
 pub(super) use model::Block;
@@ -14,9 +16,10 @@ use simplify::simplify_phis;
 /// Scalar blocks consumed by final identity allocation and emission.
 pub(super) struct SsaGraph {
     pub entry: BlockId,
-    pub blocks: Vec<Block>,
+    pub blocks: BTreeMap<BlockId, Block>,
     pub this_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
+    pub source_map: SourceMap,
 }
 
 /// Simplifies and materializes scalar phis into final SSA blocks.
@@ -27,6 +30,7 @@ pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
         phi_candidates,
         this_value,
         parameter_values,
+        source_map,
     } = graph;
     let simplified = simplify_phis(phi_candidates)
         .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
@@ -36,5 +40,6 @@ pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
         blocks,
         this_value,
         parameter_values,
+        source_map,
     })
 }

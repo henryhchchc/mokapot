@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{BlockId, InstructionId, ValueId};
+use super::{BlockId, InstructionLocation, ValueId};
 
 /// Describes where a scalar value is defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -12,7 +12,7 @@ pub enum ValueDefinition {
     /// The exception introduced at a synthetic handler-entry block.
     CaughtException(BlockId),
     /// A value produced by an ordinary instruction or phi.
-    Instruction(InstructionId),
+    Instruction(InstructionLocation),
 }
 
 /// One predecessor-selected incoming value of a phi node.
@@ -30,8 +30,6 @@ pub struct PhiInput {
 /// predecessor must therefore agree on the supplied value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
-    /// The method-local instruction identity of this phi.
-    pub id: InstructionId,
     /// The value defined by this phi.
     pub value: ValueId,
     /// The values selected by this phi.

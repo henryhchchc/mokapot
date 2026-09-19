@@ -80,8 +80,11 @@ fn branch_preserves_taken_then_fallthrough_guards() {
             Predicate::IsZero(PathValue::Variable(match_value)),
         )))
     );
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
     assert_eq!(
-        ir.source_map().origins_of(branch.id()).collect::<Vec<_>>(),
+        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
         [ProgramCounter::from(1)]
     );
 }
@@ -158,8 +161,11 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         switch.successors()[2].transfer(),
         ControlTransfer::Conditional(guard) if guard.predicate_count() == 2
     ));
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
     assert_eq!(
-        ir.source_map().origins_of(switch.id()).collect::<Vec<_>>(),
+        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
         [ProgramCounter::from(1)]
     );
 }
@@ -199,7 +205,10 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert_eq!(fallible.kind(), &TerminatorKind::Fallible);
-    assert_eq!(ir.source_map().origins_of(fallible.id()).count(), 0);
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
+    assert_eq!(ir.source_map().origins_of(entry_loc).count(), 0);
     assert!(matches!(
         fallible.successors()[0].transfer(),
         ControlTransfer::Unconditional
@@ -275,10 +284,11 @@ fn throw_is_a_source_backed_terminator() {
     let block = ir.block(ir.entry_block()).unwrap();
 
     assert!(matches!(block.terminator.kind(), TerminatorKind::Throw(_)));
+    let entry_loc = InstructionLocation::Terminator {
+        block: ir.entry_block(),
+    };
     assert_eq!(
-        ir.source_map()
-            .origins_of(block.terminator.id())
-            .collect::<Vec<_>>(),
+        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
         [ProgramCounter::from(1)]
     );
 }

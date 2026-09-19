@@ -1,6 +1,6 @@
 use mokapot::{
     ir::{
-        InstructionId, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
+        InstructionLocation, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
         expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
@@ -28,15 +28,21 @@ fn get_test_method() -> Method {
         .unwrap()
 }
 
-fn operation(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Operation> {
-    match method.instruction(id) {
+fn operation(
+    method: &MokaIRMethod,
+    location: InstructionLocation,
+) -> Option<&mokapot::ir::Operation> {
+    match method.instruction(location) {
         Some(InstructionRef::Operation(operation)) => Some(operation),
         Some(InstructionRef::Phi(_) | InstructionRef::Terminator(_)) | None => None,
     }
 }
 
-fn terminator(method: &MokaIRMethod, id: InstructionId) -> Option<&mokapot::ir::Terminator> {
-    match method.instruction(id) {
+fn terminator(
+    method: &MokaIRMethod,
+    location: InstructionLocation,
+) -> Option<&mokapot::ir::Terminator> {
+    match method.instruction(location) {
         Some(InstructionRef::Terminator(terminator)) => Some(terminator),
         Some(InstructionRef::Phi(_) | InstructionRef::Operation(_)) | None => None,
     }
@@ -83,8 +89,8 @@ fn builds_ir_blocks_and_provenance() {
         TerminatorKind::Return(Some(value)) if value == &ir.parameter_values()[1]
     ));
 
-    for block in ir.blocks() {
-        assert!(ir.block(block.id).is_some());
+    for (block_id, _) in ir.blocks() {
+        assert!(ir.block(block_id).is_some());
     }
 }
 
@@ -92,7 +98,7 @@ fn builds_ir_blocks_and_provenance() {
 #[cfg_attr(not(integration_test), ignore)]
 fn ssa_identities_and_phi_predecessors_are_well_formed() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    let mut instruction_ids = HashSet::new();
+    let mut instruction_locations = HashSet::new();
     let mut definitions = HashSet::new();
     let mut uses = HashSet::new();
 
@@ -100,23 +106,26 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
         definitions.insert(value);
     }
     definitions.extend(ir.parameter_values());
-    for block in ir.blocks() {
-        if let Some(value) = ir.caught_exception(block.id) {
+    for (block_id, block) in ir.blocks() {
+        if let Some(value) = ir.caught_exception(block_id) {
             definitions.insert(value);
         }
         let predecessors = ir
             .blocks()
-            .filter(|candidate| {
+            .filter(|(_, candidate)| {
                 candidate
                     .terminator
                     .successors()
                     .iter()
-                    .any(|successor| successor.target() == block.id)
+                    .any(|successor| successor.target() == block_id)
             })
-            .map(|block| block.id)
+            .map(|(candidate_id, _)| candidate_id)
             .collect::<BTreeSet<_>>();
-        for phi in &block.phis {
-            assert!(instruction_ids.insert(phi.id));
+        for (index, phi) in block.phis.iter().enumerate() {
+            assert!(instruction_locations.insert(InstructionLocation::Phi {
+                block: block_id,
+                index,
+            }));
             assert!(definitions.insert(phi.value));
             assert_eq!(
                 phi.inputs
@@ -127,14 +136,19 @@ fn ssa_identities_and_phi_predecessors_are_well_formed() {
             );
             uses.extend(phi.inputs.iter().map(|it| it.value));
         }
-        for instruction in &block.operations {
-            assert!(instruction_ids.insert(instruction.id()));
+        for (index, instruction) in block.operations.iter().enumerate() {
+            assert!(
+                instruction_locations.insert(InstructionLocation::Operation {
+                    block: block_id,
+                    index,
+                })
+            );
             if let Some(value) = instruction.def() {
                 assert!(definitions.insert(value));
             }
             uses.extend(instruction.uses());
         }
-        assert!(instruction_ids.insert(block.terminator.id()));
+        assert!(instruction_locations.insert(InstructionLocation::Terminator { block: block_id }));
         uses.extend(block.terminator.uses());
     }
 
@@ -168,8 +182,14 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
             .count(),
         0
     );
-    assert!(ir.blocks().flat_map(|block| &block.phis).all(|phi| {
-        ir.source_map().origins_of(phi.id).next().is_none() && !covered_nodes.contains(&phi.id)
+    let mut phis = ir.blocks().flat_map(|(block, bb)| {
+        bb.phis
+            .iter()
+            .enumerate()
+            .map(move |(index, _)| InstructionLocation::Phi { block, index })
+    });
+    assert!(phis.all(|location| {
+        ir.source_map().origins_of(location).next().is_none() && !covered_nodes.contains(&location)
     }));
 }
 
@@ -196,7 +216,7 @@ fn dominance() {
     assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);
     assert!(
         ir.blocks()
-            .filter(|block| block.id != ir.entry_block())
-            .all(|block| { dominance.immediate_dominator(block.id).is_some() })
+            .filter(|(block_id, _)| *block_id != ir.entry_block())
+            .all(|(block_id, _)| dominance.immediate_dominator(block_id).is_some())
     );
 }

@@ -3,19 +3,16 @@
 
 use std::collections::BTreeMap;
 
-use crate::{
-    ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
-    jvm::code::ProgramCounter,
+use crate::ir::{
+    BlockId, OperationKind, SourceMap, TerminatorKind, ValueId, control_flow::ControlTransfer,
 };
 
 /// A block whose JVM-frame operands have all been lowered to scalar values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ScalarBlock {
-    pub id: BlockId,
     pub caught_exception: Option<ValueId>,
-    pub operations: Vec<(ProgramCounter, OperationKind)>,
+    pub operations: Vec<OperationKind>,
     pub terminator: TerminatorKind,
-    pub terminator_source: Option<ProgramCounter>,
     pub successors: Vec<(BlockId, ControlTransfer)>,
 }
 
@@ -29,8 +26,9 @@ pub(crate) struct PhiCandidate {
 /// Frame-free scalar blocks and provisional phis produced by bytecode analysis.
 pub(crate) struct ScalarGraph {
     pub entry: BlockId,
-    pub blocks: Vec<ScalarBlock>,
+    pub blocks: BTreeMap<BlockId, ScalarBlock>,
     pub phi_candidates: BTreeMap<ValueId, PhiCandidate>,
     pub this_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
+    pub source_map: SourceMap,
 }

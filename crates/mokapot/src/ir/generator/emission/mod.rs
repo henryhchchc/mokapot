@@ -1,24 +1,31 @@
 //! Assigns final identities and assembles completed public `MokaIR`.
 
+use std::collections::BTreeMap;
+
 use crate::{
     ir::{
-        BasicBlock, EdgeId, InstructionId, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
-        Successor, Terminator, ValueDefinition, ValueId,
+        BasicBlock, EdgeId, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, Successor,
+        Terminator, ValueDefinition, ValueId,
         generator::{error::Error, remap::RemapValues, ssa},
-        method::{InstructionLocation, MokaIRMethodParts},
+        method::MokaIRMethodParts,
     },
     jvm::Method,
 };
 
 /// Emits final identities, blocks, and provenance from scalar SSA blocks.
 pub(super) fn emit(method: &Method, ssa: ssa::SsaGraph) -> Result<MokaIRMethod, Error> {
+    let ssa::SsaGraph {
+        entry,
+        blocks,
+        this_value,
+        parameter_values,
+        source_map,
+    } = ssa;
     let mut allocation = Allocation::default();
-    let this_value = ssa
-        .this_value
+    let this_value = this_value
         .map(|value| allocation.value(value, ValueDefinition::This))
         .transpose()?;
-    let parameter_values = ssa
-        .parameter_values
+    let parameter_values = parameter_values
         .into_iter()
         .enumerate()
         .map(|(index, value)| {
@@ -28,102 +35,97 @@ pub(super) fn emit(method: &Method, ssa: ssa::SsaGraph) -> Result<MokaIRMethod, 
         })
         .collect::<Result<_, _>>()?;
 
-    let mut block_ids = Vec::with_capacity(ssa.blocks.len());
-    for block in &ssa.blocks {
-        let ids = allocation.allocate_block(block)?;
-        block_ids.push(ids);
-    }
+    let mut block_allocations = blocks
+        .iter()
+        .map(|(&id, block)| {
+            allocation
+                .allocate_block(id, block)
+                .map(|state| (id, state))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
 
-    let mut source_map = SourceMap::default();
-    let mut blocks = Vec::with_capacity(ssa.blocks.len());
-    for (block, ids) in ssa.blocks.into_iter().zip(block_ids) {
-        blocks.push(materialize_block(
-            block,
-            ids,
-            &mut allocation,
-            &mut source_map,
-        )?);
-    }
+    let blocks = blocks
+        .into_iter()
+        .map(|(id, block)| {
+            let state = block_allocations
+                .remove(&id)
+                .ok_or_else(|| Error::internal("an SSA block has no instruction allocation"))?;
+            materialize_block(block, state, &mut allocation).map(|block| (id, block))
+        })
+        .collect::<Result<_, Error>>()?;
 
     let method = MokaIRMethod::new(
         method,
         MokaIRMethodParts {
-            entry_block: ssa.entry,
+            entry_block: entry,
             blocks,
             source_map,
             this_value,
             parameter_values,
             value_definitions: allocation.definitions,
-            instruction_locations: allocation.instruction_locations,
         },
     );
 
     Ok(method)
 }
 
-struct BlockInstructions {
+#[derive(Clone, Copy)]
+struct BlockAllocation {
     caught_exception: Option<ValueId>,
-    phis: Vec<InstructionId>,
-    operations: Vec<InstructionId>,
-    terminator: InstructionId,
 }
 
 impl Allocation {
-    fn allocate_block(&mut self, block: &ssa::Block) -> Result<BlockInstructions, Error> {
+    fn allocate_block(
+        &mut self,
+        block_id: crate::ir::BlockId,
+        block: &ssa::Block,
+    ) -> Result<BlockAllocation, Error> {
         let caught_exception = block
             .caught_exception
-            .map(|value| self.value(value, ValueDefinition::CaughtException(block.id)))
+            .map(|value| self.value(value, ValueDefinition::CaughtException(block_id)))
             .transpose()?;
-        let phis = block
+        block
             .phis
             .iter()
             .enumerate()
             .map(|(index, phi)| {
-                let id = self.instruction(InstructionLocation::Phi {
-                    block: block.id,
+                let location = InstructionLocation::Phi {
+                    block: block_id,
                     index,
-                })?;
-                self.value(phi.value, ValueDefinition::Instruction(id))?;
-                Ok(id)
+                };
+                self.value(phi.value, ValueDefinition::Instruction(location))?;
+                Ok(())
             })
-            .collect::<Result<_, Error>>()?;
-        let operations = block
+            .collect::<Result<Vec<_>, Error>>()?;
+        block
             .operations
             .iter()
             .enumerate()
-            .map(|(index, (_, kind))| {
-                let id = self.instruction(InstructionLocation::Operation {
-                    block: block.id,
+            .map(|(index, kind)| {
+                let location = InstructionLocation::Operation {
+                    block: block_id,
                     index,
-                })?;
+                };
                 if let Some(value) = kind.def() {
-                    self.value(value, ValueDefinition::Instruction(id))?;
+                    self.value(value, ValueDefinition::Instruction(location))?;
                 }
-                Ok(id)
+                Ok(())
             })
-            .collect::<Result<_, Error>>()?;
-        Ok(BlockInstructions {
-            caught_exception,
-            phis,
-            operations,
-            terminator: self.instruction(InstructionLocation::Terminator { block: block.id })?,
-        })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok(BlockAllocation { caught_exception })
     }
 }
 
 fn materialize_block(
     block: ssa::Block,
-    ids: BlockInstructions,
+    state: BlockAllocation,
     allocation: &mut Allocation,
-    source_map: &mut SourceMap,
 ) -> Result<BasicBlock, Error> {
     let phis = block
         .phis
         .into_iter()
-        .zip(ids.phis)
-        .map(|(phi, id)| {
+        .map(|phi| {
             Ok(Phi {
-                id,
                 value: allocation.resolve(phi.value)?,
                 inputs: phi
                     .inputs
@@ -139,11 +141,9 @@ fn materialize_block(
     let operations = block
         .operations
         .into_iter()
-        .zip(ids.operations)
-        .map(|((pc, mut kind), id)| {
-            source_map.insert(pc, id);
+        .map(|mut kind| {
             kind.try_remap_values(&mut |value| allocation.resolve(value))?;
-            Ok(Operation { id, kind })
+            Ok(Operation { kind })
         })
         .collect::<Result<_, Error>>()?;
     let successors = block
@@ -158,18 +158,13 @@ fn materialize_block(
             })
         })
         .collect::<Result<_, Error>>()?;
-    if let Some(pc) = block.terminator_source {
-        source_map.insert(pc, ids.terminator);
-    }
     let mut terminator = block.terminator;
     terminator.try_remap_values(&mut |value| allocation.resolve(value))?;
     Ok(BasicBlock {
-        id: block.id,
-        caught_exception: ids.caught_exception,
+        caught_exception: state.caught_exception,
         phis,
         operations,
         terminator: Terminator {
-            id: ids.terminator,
             kind: terminator,
             successors,
         },
@@ -178,24 +173,12 @@ fn materialize_block(
 
 #[derive(Default)]
 struct Allocation {
-    next_instruction: u32,
     next_edge: u32,
     values: Vec<Option<ValueId>>,
     definitions: Vec<ValueDefinition>,
-    instruction_locations: Vec<InstructionLocation>,
 }
 
 impl Allocation {
-    fn instruction(&mut self, location: InstructionLocation) -> Result<InstructionId, Error> {
-        let id = InstructionId::new(self.next_instruction);
-        self.next_instruction = self
-            .next_instruction
-            .checked_add(1)
-            .ok_or_else(|| Error::internal("the instruction identity space is exhausted"))?;
-        self.instruction_locations.push(location);
-        Ok(id)
-    }
-
     fn edge(&mut self) -> Result<EdgeId, Error> {
         let id = EdgeId::new(self.next_edge);
         self.next_edge = self

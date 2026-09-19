@@ -83,11 +83,7 @@ impl IntoNodeIdentifiers for &ControlFlowGraph<'_> {
     type NodeIdentifiers = <Vec<BlockId> as IntoIterator>::IntoIter;
 
     fn node_identifiers(self) -> Self::NodeIdentifiers {
-        self.blocks
-            .iter()
-            .map(|it| it.id)
-            .collect::<Vec<_>>()
-            .into_iter()
+        self.blocks.keys().copied().collect::<Vec<_>>().into_iter()
     }
 }
 
@@ -105,7 +101,7 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
     fn neighbors_directed(self, block: BlockId, direction: Direction) -> Self::NeighborsDirected {
         if direction == Direction::Outgoing {
             self.blocks
-                .get(usize::try_from(block.index()).unwrap_or(usize::MAX))
+                .get(&block)
                 .into_iter()
                 .flat_map(|block| block.terminator.successors())
                 .map(super::super::Successor::target)
@@ -114,13 +110,13 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
         } else {
             self.blocks
                 .iter()
-                .flat_map(|candidate| {
+                .flat_map(|(&candidate_id, candidate)| {
                     candidate
                         .terminator
                         .successors()
                         .iter()
                         .filter(move |successor| successor.target() == block)
-                        .map(move |_| candidate.id)
+                        .map(move |_| candidate_id)
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -134,11 +130,18 @@ impl NodeIndexable for ControlFlowGraph<'_> {
     }
 
     fn to_index(&self, block: Self::NodeId) -> usize {
-        usize::try_from(block.index()).expect("block identity must fit usize")
+        self.blocks
+            .keys()
+            .position(|&candidate| candidate == block)
+            .expect("indexed block must belong to the graph")
     }
 
     fn from_index(&self, index: usize) -> Self::NodeId {
-        BlockId::new(u32::try_from(index).expect("block index must fit u32"))
+        *self
+            .blocks
+            .keys()
+            .nth(index)
+            .expect("node index must be within the graph bound")
     }
 }
 

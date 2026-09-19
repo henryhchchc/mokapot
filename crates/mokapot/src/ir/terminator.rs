@@ -1,8 +1,6 @@
 use std::{collections::HashSet, fmt};
 
-use super::{
-    BlockId, EdgeId, InstructionId, ValueId, control_flow::ControlTransfer, expression::Predicate,
-};
+use super::{BlockId, EdgeId, ValueId, control_flow::ControlTransfer, expression::Predicate};
 /// One ordered outgoing arm of a terminator.
 ///
 /// Arms have independent identities, so parallel transfers between the same
@@ -61,20 +59,14 @@ pub enum TerminatorKind {
     Unwind,
 }
 
-/// An identified terminator and its ordered successor arms.
+/// A terminator and its ordered successor arms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Terminator {
-    pub(super) id: InstructionId,
     pub(super) kind: TerminatorKind,
     pub(super) successors: Vec<Successor>,
 }
 
 impl Terminator {
-    /// Returns this terminator's method-local identity.
-    #[must_use]
-    pub const fn id(&self) -> InstructionId {
-        self.id
-    }
     /// Returns the control-flow operation.
     #[must_use]
     pub const fn kind(&self) -> &TerminatorKind {

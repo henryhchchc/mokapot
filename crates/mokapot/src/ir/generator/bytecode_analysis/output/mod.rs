@@ -12,7 +12,8 @@ use super::analysis::{
     CompletedAnalysis, LiftedBlock, Location, PhiDefinition, PhiSite, Predecessor,
 };
 use crate::ir::{
-    BlockId, TerminatorKind, ValueId, control_flow::ControlTransfer, generator::error::Error,
+    BlockId, InstructionLocation, SourceMap, TerminatorKind, ValueId,
+    control_flow::ControlTransfer, generator::error::Error,
 };
 
 pub(super) fn materialize(
@@ -48,27 +49,25 @@ pub(super) fn materialize(
     let entry = preheader.unwrap_or(entry_block);
 
     let preheader_block = preheader.map(|id| {
-        Ok(ScalarBlock {
-            id,
+        let scalar_block = ScalarBlock {
             caught_exception: None,
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
-            terminator_source: None,
             successors: vec![(entry_block, ControlTransfer::Unconditional)],
-        })
+        };
+        Ok((id, scalar_block))
     });
+    let mut source_map = SourceMap::default();
     let location_blocks = analyzed_locations.iter().map(|location| {
         let analyzed = locations
             .get(location)
             .and_then(|state| state.execution.block().cloned())
             .ok_or_else(|| Error::internal("a reachable location was not executed"))?;
-        materialize_block(
-            analyzed,
-            *block_ids_by_location
-                .get(location)
-                .ok_or_else(|| Error::internal("an executed location has no scalar block"))?,
-            &block_ids_by_location,
-        )
+        let id = *block_ids_by_location
+            .get(location)
+            .ok_or_else(|| Error::internal("an executed location has no scalar block"))?;
+        materialize_block(id, analyzed, &block_ids_by_location, &mut source_map)
+            .map(|block| (id, block))
     });
     let blocks = preheader_block
         .into_iter()
@@ -82,6 +81,7 @@ pub(super) fn materialize(
         phi_candidates,
         this_value: receiver_value,
         parameter_values,
+        source_map,
     })
 }
 
@@ -129,11 +129,12 @@ fn materialize_phi(
 }
 
 fn materialize_block(
-    analyzed: LiftedBlock,
     id: BlockId,
+    lifted: LiftedBlock,
     block_ids_by_location: &BTreeMap<Location, BlockId>,
+    source_map: &mut SourceMap,
 ) -> Result<ScalarBlock, Error> {
-    let successors = analyzed
+    let successors = lifted
         .successors
         .edges
         .into_iter()
@@ -144,14 +145,23 @@ fn materialize_block(
             Ok((target, successor.transfer))
         })
         .collect::<Result<_, Error>>()?;
-    let operations = analyzed.operations;
-    let terminator = analyzed.terminator;
+    let operations = lifted
+        .operations
+        .into_iter()
+        .enumerate()
+        .map(|(index, (pc, operation))| {
+            source_map.insert(pc, InstructionLocation::Operation { block: id, index });
+            operation
+        })
+        .collect();
+    let terminator = lifted.terminator;
+    if let Some(pc) = lifted.terminator_source {
+        source_map.insert(pc, InstructionLocation::Terminator { block: id });
+    }
     Ok(ScalarBlock {
-        id,
-        caught_exception: analyzed.caught_exception,
+        caught_exception: lifted.caught_exception,
         operations,
         terminator,
-        terminator_source: analyzed.terminator_source,
         successors,
     })
 }

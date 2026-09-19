@@ -40,7 +40,8 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         ],
     );
     let ir = build(&method).unwrap();
-    let fallible = block_containing_instruction(&ir, instruction_at(&ir, 1.into()).id());
+    let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let fallible = block_containing_instruction(&ir, fallible_location);
     let transfers = fallible
         .terminator
         .successors()

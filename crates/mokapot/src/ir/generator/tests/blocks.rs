@@ -29,9 +29,13 @@ fn straight_line_instructions_coalesce_into_one_block() {
         .expect("the constant definition must retain its source");
     assert!(matches!(
         ir.instruction(definition),
-        Some(InstructionRef::Operation(operation)) if operation.id() == definition
+        Some(InstructionRef::Operation(_))
     ));
-    assert!(ir.instruction(InstructionId::new(u32::MAX)).is_none());
+    let large_block_id = InstructionLocation::Operation {
+        block: BlockId::new(u32::MAX),
+        index: 0,
+    };
+    assert!(ir.instruction(large_block_id).is_none());
 }
 
 #[test]
@@ -83,10 +87,10 @@ fn backward_target_starts_a_block_even_when_transfer_is_last() {
     let ir = build(&method).unwrap();
 
     assert_eq!(ir.blocks().len(), 2);
-    let loop_block = ir.blocks().nth(1).unwrap();
+    let (loop_block_id, loop_block) = ir.blocks().nth(1).unwrap();
     assert_eq!(
         loop_block.terminator.successors()[0].target(),
-        loop_block.id
+        loop_block_id
     );
 }
 
@@ -109,5 +113,10 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
 
     assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
     assert_eq!(ir.source_map().instructions_at(2.into()).count(), 0);
-    assert_eq!(ir.source_map().origins_of(synthetic.id()).count(), 0);
+    assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
+    let num_terminator = ir
+        .source_map()
+        .origins_of(InstructionLocation::Terminator { block: fallthrough })
+        .count();
+    assert_eq!(num_terminator, 0);
 }

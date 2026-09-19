@@ -28,11 +28,11 @@
 //! let class = Class::from_reader(&mut reader)?;
 //! for method in class.methods.iter().filter(|method| method.body.is_some()) {
 //!     let ir = MokaIRMethod::from_method(method)?;
-//!     for block in ir.blocks() {
-//!         for operation in &block.operations {
-//!             println!("{}: {operation}", operation.id());
+//!     for (block_id, block) in ir.blocks() {
+//!         for (index, operation) in block.operations.iter().enumerate() {
+//!             println!("{block_id}, operation {index}: {operation}");
 //!         }
-//!         println!("{}: {}", block.terminator.id(), block.terminator);
+//!         println!("{block_id}, terminator: {}", block.terminator);
 //!     }
 //! }
 //! # Ok(())
@@ -54,7 +54,7 @@ mod terminator;
 
 pub use basic_block::BasicBlock;
 pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
-pub use identity::{BlockId, EdgeId, InstructionId, ValueId};
+pub use identity::{BlockId, EdgeId, InstructionLocation, ValueId};
 pub use method::{InstructionRef, MokaIRMethod};
 pub use operation::{Operation, OperationKind};
 pub use phi::{Phi, PhiInput, ValueDefinition};

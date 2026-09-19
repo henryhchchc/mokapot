@@ -22,7 +22,15 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     );
     let ir = build(&method).unwrap();
     let unwind_targets = [1, 4].map(|pc| {
-        let block = block_containing_instruction(&ir, instruction_at(&ir, pc.into()).id());
+        let location = ir
+            .source_map()
+            .instructions_at(pc.into())
+            .find(|&loc| {
+                ir.instruction(loc)
+                    .is_some_and(|it| matches!(it, InstructionRef::Operation(_)))
+            })
+            .unwrap();
+        let block = block_containing_instruction(&ir, location);
         block
             .terminator
             .successors()
@@ -38,21 +46,13 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     assert!(unwind.phis.is_empty());
     assert!(unwind.operations.is_empty());
     assert!(unwind.terminator.successors().is_empty());
-    assert_eq!(
-        ir.source_map().origins_of(unwind.terminator.id()).count(),
-        0
-    );
+    let terminator_loc = InstructionLocation::Terminator {
+        block: unwind_targets[0],
+    };
+    assert_eq!(ir.source_map().origins_of(terminator_loc).count(), 0);
 
-    let mut instruction_ids = HashSet::new();
     let mut edge_ids = HashSet::new();
-    for block in ir.blocks() {
-        for phi in &block.phis {
-            assert!(instruction_ids.insert(phi.id));
-        }
-        for instruction in &block.operations {
-            assert!(instruction_ids.insert(instruction.id()));
-        }
-        assert!(instruction_ids.insert(block.terminator.id()));
+    for (_, block) in ir.blocks() {
         for successor in block.terminator.successors() {
             assert!(edge_ids.insert(successor.id()));
         }

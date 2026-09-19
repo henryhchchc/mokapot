@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt};
 
-use super::{InstructionId, ValueId, expression::Expression};
+use super::{ValueId, expression::Expression};
 
 /// The kind of an ordinary Moka IR operation.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
@@ -40,19 +40,13 @@ impl OperationKind {
     }
 }
 
-/// An identified ordinary non-phi, non-terminator operation.
+/// An ordinary non-phi, non-terminator operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Operation {
-    pub(super) id: InstructionId,
     pub(super) kind: OperationKind,
 }
 
 impl Operation {
-    /// Returns this operation's method-local instruction identity.
-    #[must_use]
-    pub const fn id(&self) -> InstructionId {
-        self.id
-    }
     /// Returns the kind of operation performed.
     #[must_use]
     pub const fn kind(&self) -> &OperationKind {
