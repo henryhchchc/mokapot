@@ -1,6 +1,37 @@
 use super::*;
 
 #[test]
+fn source_map_is_fixed_before_canonicalization() {
+    let method = method(
+        [(0, Instruction::IConst0), (1, Instruction::IReturn)],
+        "()I",
+        vec![],
+    );
+    let cfg = crate::ir::generator::bytecode_cfg::build(&method).unwrap();
+    let mut draft = crate::ir::generator::bytecode_analysis::analyze(&cfg).unwrap();
+
+    let operation = draft
+        .source_map
+        .instructions_at(0.into())
+        .next()
+        .expect("analysis must map the constant definition");
+    let terminator = draft
+        .source_map
+        .instructions_at(1.into())
+        .next()
+        .expect("analysis must map the fallible return");
+    assert!(matches!(operation, InstructionLocation::Operation { .. }));
+    assert!(matches!(terminator, InstructionLocation::Terminator { .. }));
+    let expected = draft.source_map.mappings().collect::<Vec<_>>();
+
+    crate::ir::generator::canonicalize::canonicalize(&mut draft).unwrap();
+    assert_eq!(draft.source_map.mappings().collect::<Vec<_>>(), expected);
+
+    let ir = crate::ir::generator::finish::finish(&method, draft).unwrap();
+    assert_eq!(ir.source_map().mappings().collect::<Vec<_>>(), expected);
+}
+
+#[test]
 fn straight_line_instructions_coalesce_into_one_block() {
     let method = method(
         [

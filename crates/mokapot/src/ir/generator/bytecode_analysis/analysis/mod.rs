@@ -14,13 +14,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        BlockId, SuccessorTarget, ValueId,
+        BlockId, SourceMap, SuccessorTarget, ValueId,
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
-            draft::{
-                self, DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter,
-                DraftTerminator,
-            },
+            draft::{DraftBlock, DraftEdge, DraftMethod, DraftParameter, DraftTerminator},
             error::Error,
         },
     },
@@ -156,13 +153,14 @@ impl CompletedAnalysis {
             receiver_value: this_value,
             parameter_values,
         } = self;
+        let mut source_map = SourceMap::default();
         let mut blocks = lifted_blocks
             .into_iter()
             .map(|(id, state)| {
                 let lifted = state.execution.into_block().ok_or_else(|| {
                     Error::internal("a normalized reachable block was not executed")
                 })?;
-                Ok((id, DraftBlock::from(lifted)))
+                Ok((id, materialize_block(id, lifted, &mut source_map)))
             })
             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
@@ -203,7 +201,7 @@ impl CompletedAnalysis {
             })
             .collect::<Result<_, _>>()?;
         for block in blocks.values_mut() {
-            for edge in block.terminator.shape.arms_mut() {
+            for edge in block.terminator.arms_mut() {
                 edge.arguments = match edge.target {
                     SuccessorTarget::Block(target) => target_parameters[&target]
                         .iter()
@@ -224,6 +222,7 @@ impl CompletedAnalysis {
             entry,
             entry_arguments,
             blocks,
+            source_map,
             this_value,
             parameter_values,
         })
@@ -239,24 +238,28 @@ impl BlockExecution {
     }
 }
 
-impl From<LiftedBlock> for DraftBlock {
-    fn from(lifted: LiftedBlock) -> Self {
-        Self {
-            kind: lifted.kind,
-            parameters: Vec::new(),
-            operations: lifted
-                .operations
-                .into_iter()
-                .map(|(origin, kind)| DraftOperation {
-                    kind,
-                    origin: Some(origin),
-                })
-                .collect(),
-            terminator: DraftTerminator {
-                shape: lifted.terminator.into(),
-                origin: lifted.terminator_source,
-            },
-        }
+/// Materializes the final addressable draft structure and its detached provenance.
+///
+/// Later phases may rewrite values, but must not insert, remove, or reorder
+/// operations or terminators because their source locations are fixed here.
+fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMap) -> DraftBlock {
+    if let Some(origin) = lifted.terminator_source {
+        source_map.record_terminator(origin, id);
+    }
+    let operations = lifted
+        .operations
+        .into_iter()
+        .enumerate()
+        .map(|(index, (origin, kind))| {
+            source_map.record_operation(origin, id, index);
+            kind
+        })
+        .collect();
+    DraftBlock {
+        kind: lifted.kind,
+        parameters: Vec::new(),
+        operations,
+        terminator: lifted.terminator.into(),
     }
 }
 
@@ -271,7 +274,7 @@ impl From<LiftedEdge> for DraftEdge {
     }
 }
 
-impl From<state::LiftedTerminator> for draft::DraftTerminatorShape {
+impl From<state::LiftedTerminator> for DraftTerminator {
     fn from(value: state::LiftedTerminator) -> Self {
         value.map_arms(|(edge, _)| edge.into())
     }

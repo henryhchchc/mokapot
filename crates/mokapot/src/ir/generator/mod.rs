@@ -8,6 +8,9 @@
 //! 3. [`canonicalize`] simplifies provisional block parameters in place.
 //! 4. [`finish`] constructs public wrappers and derived indexes.
 //!
+//! Analysis fixes addressable instruction positions and records their JVM
+//! origins in a detached source map. Later phases preserve those positions.
+//!
 //! The [`bytecode_analysis::lifting`] module contains the JVM opcode semantics
 //! used while analyzing structural blocks.
 

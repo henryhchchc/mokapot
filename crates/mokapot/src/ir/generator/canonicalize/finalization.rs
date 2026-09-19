@@ -58,10 +58,10 @@ fn finalize_block(
         parameter.value = canonical(parameter.value);
     }
     for operation in &mut block.operations {
-        apply_substitutions(&mut operation.kind, canonical);
+        apply_substitutions(operation, canonical);
     }
-    apply_substitutions(&mut block.terminator.shape, canonical);
-    block.terminator.shape.arms_mut().for_each(|edge| {
+    apply_substitutions(&mut block.terminator, canonical);
+    block.terminator.arms_mut().for_each(|edge| {
         edge.arguments = match edge.target {
             SuccessorTarget::Block(target) => retained[&target]
                 .iter()

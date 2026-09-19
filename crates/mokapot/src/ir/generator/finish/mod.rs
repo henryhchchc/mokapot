@@ -3,7 +3,7 @@
 use crate::{
     ir::{
         BasicBlock, BlockKind, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod,
-        Operation, SourceMap, Successor, ValueDefinition, ValueId,
+        Operation, Successor, ValueDefinition, ValueId,
         generator::{
             draft::{DraftBlock, DraftEdge, DraftMethod},
             error::Error,
@@ -19,6 +19,7 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
         entry,
         entry_arguments,
         blocks,
+        source_map,
         this_value,
         parameter_values,
     } = draft;
@@ -35,13 +36,9 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
         state.define_block_values(id, block)?;
     }
 
-    let mut source_map = SourceMap::default();
     let blocks = blocks
         .into_iter()
-        .map(|(id, block)| {
-            let block = materialize_block(id, block, &mut source_map);
-            (id, block)
-        })
+        .map(|(id, block)| (id, materialize_block(block)))
         .collect();
 
     let method = MokaIRMethod::new(
@@ -79,7 +76,7 @@ impl FinishState {
             self.define(parameter.value, ValueDefinition::Instruction(location))?;
         }
         for (index, operation) in block.operations.iter().enumerate() {
-            let Some(value) = operation.kind.def() else {
+            let Some(value) = operation.def() else {
                 continue;
             };
             let location = InstructionLocation::Operation {
@@ -88,7 +85,7 @@ impl FinishState {
             };
             self.define(value, ValueDefinition::Instruction(location))?;
         }
-        if let Some(value) = block.terminator.shape.def() {
+        if let Some(value) = block.terminator.def() {
             self.define(
                 value,
                 ValueDefinition::Instruction(InstructionLocation::Terminator { block: block_id }),
@@ -98,14 +95,7 @@ impl FinishState {
     }
 }
 
-fn materialize_block(
-    id: crate::ir::BlockId,
-    block: DraftBlock,
-    source_map: &mut SourceMap,
-) -> BasicBlock {
-    if let Some(origin) = block.terminator.origin {
-        source_map.record_terminator(origin, id);
-    }
+fn materialize_block(block: DraftBlock) -> BasicBlock {
     let parameters = block
         .parameters
         .into_iter()
@@ -114,19 +104,10 @@ fn materialize_block(
     let operations = block
         .operations
         .into_iter()
-        .enumerate()
-        .map(|(index, operation)| {
-            if let Some(origin) = operation.origin {
-                source_map.record_operation(origin, id, index);
-            }
-            Operation {
-                kind: operation.kind,
-            }
-        })
+        .map(|kind| Operation { kind })
         .collect();
     let terminator = block
         .terminator
-        .shape
         .map_arms(|successor: DraftEdge| Successor {
             id: successor.id,
             target: successor.target,
@@ -176,10 +157,7 @@ mod tests {
             expression::MathOperation,
             generator::{
                 canonicalize,
-                draft::{
-                    DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter,
-                    DraftTerminator, DraftTerminatorShape,
-                },
+                draft::{DraftBlock, DraftEdge, DraftMethod, DraftParameter, DraftTerminator},
             },
         },
         jvm::{code::Instruction, method::AccessFlags},
@@ -201,26 +179,21 @@ mod tests {
                     parameters: vec![DraftParameter {
                         value: eliminated_parameter,
                     }],
-                    operations: vec![DraftOperation {
-                        kind: OperationKind::Definition {
-                            value: result,
-                            expr: MathOperation::Increment(eliminated_parameter, 1).into(),
-                        },
-                        origin: None,
+                    operations: vec![OperationKind::Definition {
+                        value: result,
+                        expr: MathOperation::Increment(eliminated_parameter, 1).into(),
                     }],
-                    terminator: DraftTerminator {
-                        shape: DraftTerminatorShape::Goto {
-                            target: DraftEdge {
-                                id: EdgeId::new(0),
-                                target: crate::ir::SuccessorTarget::Block(block),
-                                arguments: vec![parameter],
-                                transfer: ControlTransfer::Unconditional,
-                            },
+                    terminator: DraftTerminator::Goto {
+                        target: DraftEdge {
+                            id: EdgeId::new(0),
+                            target: crate::ir::SuccessorTarget::Block(block),
+                            arguments: vec![parameter],
+                            transfer: ControlTransfer::Unconditional,
                         },
-                        origin: None,
                     },
                 },
             )]),
+            source_map: crate::ir::SourceMap::default(),
             this_value: None,
             parameter_values: vec![parameter],
         };

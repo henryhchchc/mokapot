@@ -346,7 +346,7 @@ mod tests {
         let incoming = draft
             .blocks
             .values()
-            .flat_map(|block| block.terminator.shape.arms())
+            .flat_map(|block| block.terminator.arms())
             .filter(|edge| edge.target == SuccessorTarget::Block(target))
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);

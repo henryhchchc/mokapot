@@ -2,12 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::{
-    ir::{
-        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, Terminator, ValueId,
-        control_flow::ControlTransfer,
-    },
-    jvm::code::ProgramCounter,
+use crate::ir::{
+    BlockId, BlockKind, EdgeId, OperationKind, SourceMap, SuccessorTarget, Terminator, ValueId,
+    control_flow::ControlTransfer,
 };
 
 /// A method under construction.
@@ -15,6 +12,7 @@ pub(super) struct DraftMethod {
     pub entry: BlockId,
     pub entry_arguments: Vec<ValueId>,
     pub blocks: BTreeMap<BlockId, DraftBlock>,
+    pub source_map: SourceMap,
     pub this_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }
@@ -24,7 +22,7 @@ pub(super) struct DraftMethod {
 pub(super) struct DraftBlock {
     pub kind: BlockKind,
     pub parameters: Vec<DraftParameter>,
-    pub operations: Vec<DraftOperation>,
+    pub operations: Vec<OperationKind>,
     pub terminator: DraftTerminator,
 }
 
@@ -34,22 +32,8 @@ pub(super) struct DraftParameter {
     pub value: ValueId,
 }
 
-/// An operation and its bytecode origin.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct DraftOperation {
-    pub kind: OperationKind,
-    pub origin: Option<ProgramCounter>,
-}
-
-/// A complete terminator and its bytecode origin.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct DraftTerminator {
-    pub shape: DraftTerminatorShape,
-    pub origin: Option<ProgramCounter>,
-}
-
 /// The structural shape of a terminator under construction.
-pub(super) type DraftTerminatorShape = Terminator<DraftEdge, OperationKind>;
+pub(super) type DraftTerminator = Terminator<DraftEdge, OperationKind>;
 
 /// A normalized successor under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
