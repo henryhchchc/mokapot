@@ -12,14 +12,14 @@ use super::analysis::{
     CompletedAnalysis, LiftedBlock, Location, PhiDefinition, PhiSite, Predecessor,
 };
 use crate::ir::{
-    BlockId, InstructionLocation, SourceMap, TerminatorKind, ValueId,
-    control_flow::ControlTransfer, generator::error::Error,
+    BlockId, SourceMap, TerminatorKind, ValueId, control_flow::ControlTransfer,
+    generator::error::Error,
 };
 
 pub(super) fn materialize(
     completed: CompletedAnalysis,
     entry_location: Location,
-) -> Result<ScalarGraph, Error> {
+) -> Result<(ScalarGraph, SourceMap), Error> {
     let CompletedAnalysis {
         locations,
         phi_definitions,
@@ -75,14 +75,16 @@ pub(super) fn materialize(
         .try_collect()?;
 
     let phi_candidates = materialize_phis(&phi_definitions, &block_ids_by_location, preheader)?;
-    Ok(ScalarGraph {
-        entry,
-        blocks,
-        phi_candidates,
-        this_value: receiver_value,
-        parameter_values,
+    Ok((
+        ScalarGraph {
+            entry,
+            blocks,
+            phi_candidates,
+            this_value: receiver_value,
+            parameter_values,
+        },
         source_map,
-    })
+    ))
 }
 
 fn materialize_phis(
@@ -150,13 +152,13 @@ fn materialize_block(
         .into_iter()
         .enumerate()
         .map(|(index, (pc, operation))| {
-            source_map.insert(pc, InstructionLocation::Operation { block: id, index });
+            source_map.record_operation(pc, id, index);
             operation
         })
         .collect();
     let terminator = lifted.terminator;
     if let Some(pc) = lifted.terminator_source {
-        source_map.insert(pc, InstructionLocation::Terminator { block: id });
+        source_map.record_terminator(pc, id);
     }
     Ok(ScalarBlock {
         caught_exception: lifted.caught_exception,

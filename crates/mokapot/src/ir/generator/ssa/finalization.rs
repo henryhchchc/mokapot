@@ -46,17 +46,11 @@ pub(super) fn finalize(
 }
 
 fn finalize_block(
-    block: ScalarBlock,
+    mut scalar: ScalarBlock,
     phis: Vec<Phi>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) -> model::Block {
-    let ScalarBlock {
-        caught_exception,
-        operations,
-        terminator,
-        successors,
-    } = block;
-    let caught_exception = caught_exception.map(canonical);
+    scalar.caught_exception = scalar.caught_exception.map(canonical);
     let phis = phis
         .into_iter()
         .map(|phi| Phi {
@@ -68,22 +62,18 @@ fn finalize_block(
                 .collect(),
         })
         .collect();
-    let operations = operations
+    scalar.operations = scalar
+        .operations
         .into_iter()
         .map(|operation| apply_substitutions(operation, canonical))
         .collect();
-    let terminator = apply_substitutions(terminator, canonical);
-    let successors = successors
+    scalar.terminator = apply_substitutions(scalar.terminator, canonical);
+    scalar.successors = scalar
+        .successors
         .into_iter()
         .map(|(target, transfer)| (target, apply_substitutions(transfer, canonical)))
         .collect();
-    model::Block {
-        caught_exception,
-        phis,
-        operations,
-        terminator,
-        successors,
-    }
+    model::Block { phis, scalar }
 }
 
 fn apply_substitutions<T: RemapValues>(mut value: T, canonical: &impl Fn(ValueId) -> ValueId) -> T {

@@ -49,7 +49,7 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
     let terminator_loc = InstructionLocation::Terminator {
         block: unwind_targets[0],
     };
-    assert_eq!(ir.source_map().origins_of(terminator_loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(terminator_loc), None);
 
     let mut edge_ids = HashSet::new();
     for (_, block) in ir.blocks() {

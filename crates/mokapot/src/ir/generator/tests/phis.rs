@@ -41,7 +41,7 @@ fn diamond_merge_uses_a_predecessor_indexed_phi() {
         block: join_id,
         index: 0,
     };
-    assert_eq!(ir.source_map().origins_of(join_loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(join_loc), None);
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
     let loc = InstructionLocation::Terminator {
         block: ir.entry_block(),
     };
-    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(loc), None);
     assert_eq!(phi.inputs.len(), 2);
     assert!(
         phi.inputs
@@ -138,7 +138,7 @@ fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
         ControlTransfer::Unconditional
     ));
     let loc = InstructionLocation::Terminator { block: blocks[0].0 };
-    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(loc), None);
     let [arm] = blocks[0].1.terminator.successors() else {
         panic!("the preheader must have exactly one successor")
     };
@@ -147,8 +147,8 @@ fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
     assert_eq!(header.terminator.successors()[0].target(), blocks[1].0);
     let loc = InstructionLocation::Terminator { block: blocks[1].0 };
     assert_eq!(
-        ir.source_map().origins_of(loc).collect::<Vec<_>>(),
-        [ProgramCounter::from(0)]
+        ir.source_map().origin_of(loc),
+        Some(ProgramCounter::from(0))
     );
 }
 

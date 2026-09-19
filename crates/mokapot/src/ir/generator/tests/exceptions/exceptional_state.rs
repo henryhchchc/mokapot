@@ -59,7 +59,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let loc = InstructionLocation::Terminator {
         block: handler_entry_id,
     };
-    assert_eq!(ir.source_map().origins_of(loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(loc), None);
 }
 
 #[test]

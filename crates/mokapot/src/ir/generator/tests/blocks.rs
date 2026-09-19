@@ -114,9 +114,9 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
     assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
     assert_eq!(ir.source_map().instructions_at(2.into()).count(), 0);
     assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
-    let num_terminator = ir
-        .source_map()
-        .origins_of(InstructionLocation::Terminator { block: fallthrough })
-        .count();
-    assert_eq!(num_terminator, 0);
+    assert_eq!(
+        ir.source_map()
+            .origin_of(InstructionLocation::Terminator { block: fallthrough }),
+        None
+    );
 }

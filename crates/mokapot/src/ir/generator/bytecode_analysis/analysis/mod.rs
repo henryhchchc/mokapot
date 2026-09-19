@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Frame, Position, ScalarGraph, ValueCategory, output, values::ValueContext};
 use crate::{
     ir::{
-        ValueId,
+        SourceMap, ValueId,
         generator::{
             bytecode_cfg::{JvmBlockGraph, JvmBlockId},
             error::Error,
@@ -78,7 +78,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     /// The worklist rests on the invariant documented on [`LocationState`]: a
     /// location's successor targets never change, so its predecessor set only
     /// grows. A changed input frame moves a completed location back to pending.
-    pub(super) fn run(mut self) -> Result<ScalarGraph, Error> {
+    pub(super) fn run(mut self) -> Result<(ScalarGraph, SourceMap), Error> {
         let entry = Location::Bytecode(self.cfg.entry_block());
         self.locations
             .entry(entry)

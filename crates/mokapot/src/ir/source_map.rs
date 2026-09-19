@@ -6,17 +6,26 @@ use crate::jvm::code::ProgramCounter;
 /// A sparse, bidirectional relation between JVM locations and `MokaIR` nodes.
 ///
 /// This is not a bijection. A JVM instruction may have zero, one, or several
-/// related IR nodes, and a synthetic IR node may have no JVM origin.
+/// related IR nodes, while each non-synthetic IR node has at most one JVM
+/// origin.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     by_pc: BTreeMap<ProgramCounter, BTreeSet<InstructionLocation>>,
-    by_location: BTreeMap<InstructionLocation, BTreeSet<ProgramCounter>>,
+    by_location: BTreeMap<InstructionLocation, ProgramCounter>,
 }
 
 impl SourceMap {
-    pub(crate) fn insert(&mut self, pc: ProgramCounter, instruction: InstructionLocation) {
-        self.by_pc.entry(pc).or_default().insert(instruction);
-        self.by_location.entry(instruction).or_default().insert(pc);
+    pub(crate) fn record_operation(
+        &mut self,
+        pc: ProgramCounter,
+        block: super::BlockId,
+        index: usize,
+    ) {
+        self.record(pc, InstructionLocation::Operation { block, index });
+    }
+
+    pub(crate) fn record_terminator(&mut self, pc: ProgramCounter, block: super::BlockId) {
+        self.record(pc, InstructionLocation::Terminator { block });
     }
 
     /// Returns every IR node directly related to a JVM instruction location.
@@ -34,18 +43,20 @@ impl SourceMap {
             .flat_map(|nodes| nodes.iter().copied())
     }
 
-    /// Returns every JVM instruction location directly related to an IR node.
+    /// Returns the JVM instruction location directly related to an IR node.
     ///
-    /// The iterator is empty for phis and other synthetic nodes. Consumers must
-    /// not infer source coverage for such nodes.
-    pub fn origins_of(
-        &self,
-        instruction: InstructionLocation,
-    ) -> impl Iterator<Item = ProgramCounter> + '_ {
-        self.by_location
-            .get(&instruction)
-            .into_iter()
-            .flat_map(|locations| locations.iter().copied())
+    /// Synthetic nodes, including phis, have no JVM origin.
+    #[must_use]
+    pub fn origin_of(&self, instruction: InstructionLocation) -> Option<ProgramCounter> {
+        self.by_location.get(&instruction).copied()
+    }
+
+    fn record(&mut self, pc: ProgramCounter, instruction: InstructionLocation) {
+        assert!(
+            self.by_location.insert(instruction, pc).is_none(),
+            "an IR instruction location cannot have multiple JVM origins"
+        );
+        self.by_pc.entry(pc).or_default().insert(instruction);
     }
 }
 

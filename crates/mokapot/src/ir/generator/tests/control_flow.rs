@@ -84,8 +84,8 @@ fn branch_preserves_taken_then_fallthrough_guards() {
         block: ir.entry_block(),
     };
     assert_eq!(
-        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
     );
 }
 
@@ -165,8 +165,8 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         block: ir.entry_block(),
     };
     assert_eq!(
-        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
     );
 }
 
@@ -208,7 +208,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     let entry_loc = InstructionLocation::Terminator {
         block: ir.entry_block(),
     };
-    assert_eq!(ir.source_map().origins_of(entry_loc).count(), 0);
+    assert_eq!(ir.source_map().origin_of(entry_loc), None);
     assert!(matches!(
         fallible.successors()[0].transfer(),
         ControlTransfer::Unconditional
@@ -288,7 +288,7 @@ fn throw_is_a_source_backed_terminator() {
         block: ir.entry_block(),
     };
     assert_eq!(
-        ir.source_map().origins_of(entry_loc).collect::<Vec<_>>(),
-        [ProgramCounter::from(1)]
+        ir.source_map().origin_of(entry_loc),
+        Some(ProgramCounter::from(1))
     );
 }

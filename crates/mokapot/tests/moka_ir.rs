@@ -189,7 +189,7 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
             .map(move |(index, _)| InstructionLocation::Phi { block, index })
     });
     assert!(phis.all(|location| {
-        ir.source_map().origins_of(location).next().is_none() && !covered_nodes.contains(&location)
+        ir.source_map().origin_of(location).is_none() && !covered_nodes.contains(&location)
     }));
 }
 
