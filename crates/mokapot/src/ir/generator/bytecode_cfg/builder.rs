@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 
 use super::{
-    BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId,
+    ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId,
     classification::{self, ControlFlow, InstructionDescription},
 };
 use crate::{
@@ -101,7 +101,7 @@ impl<'method> Builder<'method> {
             .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
     }
 
-    /// Builds every block, deriving each block's exit and exceptional
+    /// Builds every block, deriving each block's ordinary flow and exceptional
     /// successors from its final instruction alone.
     ///
     /// A block spans from its leader up to the instruction before the next
@@ -128,7 +128,13 @@ impl<'method> Builder<'method> {
                 let description = descriptions
                     .get(&end_pc)
                     .expect("a structural block PC comes from decoded bytecode");
-                let exit = self.build_exit(end_pc, &description.control_flow)?;
+                let flow = description.control_flow.clone();
+                let fallthrough = match &flow {
+                    ControlFlow::Fallthrough | ControlFlow::Branch(_) => {
+                        Some(self.require_next_pc(end_pc)?)
+                    }
+                    _ => None,
+                };
                 let exception_handlers = if description.can_throw {
                     self.exceptional_successors(end_pc)
                 } else {
@@ -137,44 +143,13 @@ impl<'method> Builder<'method> {
                 let block = JvmBlock {
                     start_pc,
                     end_pc,
-                    exit,
+                    flow,
+                    fallthrough,
                     exception_handlers,
                 };
                 Ok((start_pc.into(), block))
             })
             .collect()
-    }
-
-    fn build_exit(
-        &self,
-        pc: ProgramCounter,
-        control_flow: &ControlFlow,
-    ) -> Result<BlockExit, Error> {
-        let block_exit = match control_flow {
-            ControlFlow::Branch(target) => BlockExit::Branch {
-                taken: (*target).into(),
-                fallthrough: self.require_next_pc(pc)?.into(),
-            },
-            ControlFlow::Goto(target) => BlockExit::Goto {
-                target: (*target).into(),
-            },
-            ControlFlow::Switch(targets, default) => {
-                let cases = targets
-                    .iter()
-                    .map(|(&case, &target)| (case, target.into()))
-                    .collect();
-                BlockExit::Switch {
-                    cases,
-                    default: (*default).into(),
-                }
-            }
-            ControlFlow::Terminal => BlockExit::Terminal,
-            ControlFlow::Fallthrough => BlockExit::Fallthrough {
-                target: self.require_next_pc(pc)?.into(),
-            },
-            ControlFlow::Legacy => unreachable!("Rejected"),
-        };
-        Ok(block_exit)
     }
 
     fn exceptional_successors(&self, pc: ProgramCounter) -> Vec<ExceptionalTarget> {

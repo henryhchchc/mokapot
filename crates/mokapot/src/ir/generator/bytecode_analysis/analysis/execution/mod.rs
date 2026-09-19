@@ -9,7 +9,8 @@ use crate::ir::{
     control_flow::ControlTransfer,
     generator::{
         bytecode_cfg::{
-            BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge, NormalizedTarget,
+            ControlFlow, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge,
+            NormalizedTarget, control_flow,
         },
         error::Error,
     },
@@ -68,9 +69,7 @@ impl Analyzer<'_, '_> {
         id: JvmBlockId,
         input: Frame,
     ) -> Result<LiftedBlock, Error> {
-        let block = self.cfg.bytecode_block(id);
-        let final_pc = block.end_pc;
-        let has_explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
+        let final_pc = self.cfg.bytecode_block(id).end_pc;
         let mut frame = input;
         let mut operations = Vec::new();
         let mut instructions = self.cfg.block_instructions(id);
@@ -78,6 +77,13 @@ impl Analyzer<'_, '_> {
             .next_back()
             .expect("a structural block must contain its final instruction");
         debug_assert_eq!(actual_final_pc, final_pc);
+        let flow = control_flow(final_instruction);
+        let has_explicit_terminator = !matches!(flow, ControlFlow::Fallthrough);
+        let topology = self.cfg.block(block_id).successors.clone();
+        let (normal_edges, exceptional_edges): (Vec<_>, Vec<_>) = topology
+            .into_iter()
+            .partition(|edge| matches!(edge.kind, EdgeKind::Normal));
+        let has_exp_succ = !exceptional_edges.is_empty();
 
         for (pc, instruction) in instructions {
             let operation =
@@ -95,16 +101,12 @@ impl Analyzer<'_, '_> {
             lifting::lift_instruction(&mut self.values, final_instruction, final_pc, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?
         };
-        let lowered = terminator::lower(block, final_instruction, &mut frame)
+        let lowered = terminator::lower(&flow, has_exp_succ, final_instruction, &mut frame)
             .map_err(|error| error.at_instruction(final_pc))?;
         let fallible_operation = matches!(lowered, LoweredTerminator::Try(_));
         if !fallible_operation && let Some(operation) = final_operation.take() {
             operations.push((final_pc, operation));
         }
-        let topology = self.cfg.block(block_id).successors.clone();
-        let (normal_edges, exceptional_edges): (Vec<_>, Vec<_>) = topology
-            .into_iter()
-            .partition(|edge| matches!(edge.kind, EdgeKind::Normal));
         let mut normal_edges = normal_edges.into_iter();
         let mut normal = |transfer| {
             let edge = normal_edges.next().ok_or_else(|| {

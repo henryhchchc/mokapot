@@ -25,6 +25,7 @@ pub(super) fn build(method: &Method) -> Result<NormalizedCfg<'_>, Error> {
     normalized::normalize(bytecode)
 }
 
+pub(super) use classification::{ControlFlow, control_flow};
 pub(super) use normalized::{
     EdgeKind, NormalizedBlockKind, NormalizedCfg, NormalizedEdge, NormalizedTarget,
 };
@@ -85,8 +86,11 @@ pub(super) struct JvmBlock {
     pub start_pc: ProgramCounter,
     /// The final decoded instruction in the block.
     pub end_pc: ProgramCounter,
-    /// The ordinary control-flow topology after the final instruction.
-    pub exit: BlockExit,
+    /// The control-flow topology after the final instruction.
+    pub flow: ControlFlow,
+    /// The decoded successor of the final instruction when it falls through,
+    /// or `None` when the final instruction has no fallthrough successor.
+    pub fallthrough: Option<ProgramCounter>,
     /// Ordered exceptional successors of the final fallible instruction.
     pub exception_handlers: Vec<ExceptionalTarget>,
 }
@@ -108,25 +112,4 @@ pub(super) enum ExceptionalTarget {
     },
     /// The synthetic exit for an exception that escapes the method.
     Unwind,
-}
-
-/// The control-flow topology at the end of a structural block.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum BlockExit {
-    /// Ordinary execution continues at the following block.
-    Fallthrough { target: JvmBlockId },
-    /// An unconditional static jump.
-    Goto { target: JvmBlockId },
-    /// A conditional static jump and its required fallthrough.
-    Branch {
-        taken: JvmBlockId,
-        fallthrough: JvmBlockId,
-    },
-    /// A static switch dispatch. Each key is retained, including coincident targets.
-    Switch {
-        cases: BTreeMap<i32, JvmBlockId>,
-        default: JvmBlockId,
-    },
-    /// A return or explicit throw with no ordinary successor.
-    Terminal,
 }

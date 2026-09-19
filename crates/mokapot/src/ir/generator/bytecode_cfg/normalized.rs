@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
+use super::{ControlFlow, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
 use crate::{
     ir::{BlockId, EdgeId, generator::error::Error},
     jvm::{
@@ -174,7 +174,7 @@ fn successors(bytecode: &JvmBlockGraph<'_>, node: Node) -> Vec<(NodeTarget, Edge
     match node {
         Node::Bytecode(id) => {
             let block = bytecode.block(id);
-            ordinary_successors(&block.exit)
+            ordinary_successors(&block.flow, block.fallthrough)
                 .into_iter()
                 .map(|target| (NodeTarget::Block(Node::Bytecode(target)), EdgeKind::Normal))
                 .chain(block.exception_handlers.iter().map(|target| match target {
@@ -192,12 +192,28 @@ fn successors(bytecode: &JvmBlockGraph<'_>, node: Node) -> Vec<(NodeTarget, Edge
     }
 }
 
-fn ordinary_successors(exit: &BlockExit) -> Vec<JvmBlockId> {
-    match exit {
-        BlockExit::Fallthrough { target } | BlockExit::Goto { target } => vec![*target],
-        BlockExit::Branch { taken, fallthrough } => vec![*taken, *fallthrough],
-        BlockExit::Switch { cases, default } => cases.values().copied().chain([*default]).collect(),
-        BlockExit::Terminal => Vec::new(),
+fn ordinary_successors(flow: &ControlFlow, fallthrough: Option<ProgramCounter>) -> Vec<JvmBlockId> {
+    match flow {
+        ControlFlow::Fallthrough => vec![
+            fallthrough
+                .expect("a fallthrough block must resolve its fallthrough")
+                .into(),
+        ],
+        ControlFlow::Goto(target) => vec![(*target).into()],
+        ControlFlow::Branch(target) => vec![
+            (*target).into(),
+            fallthrough
+                .expect("a branch block must resolve its fallthrough")
+                .into(),
+        ],
+        ControlFlow::Switch(cases, default) => cases
+            .values()
+            .copied()
+            .chain([*default])
+            .map(Into::into)
+            .collect(),
+        ControlFlow::Terminal => Vec::new(),
+        ControlFlow::Legacy => unreachable!("legacy subroutines are rejected"),
     }
 }
 

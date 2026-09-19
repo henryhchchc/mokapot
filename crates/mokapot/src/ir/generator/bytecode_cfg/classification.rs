@@ -21,7 +21,7 @@ pub(super) struct InstructionDescription {
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum ControlFlow {
+pub(crate) enum ControlFlow {
     Fallthrough,
     Goto(ProgramCounter),
     Branch(ProgramCounter),
@@ -37,7 +37,7 @@ pub(super) fn describe(instruction: &Instruction) -> InstructionDescription {
     }
 }
 
-fn control_flow(instruction: &Instruction) -> ControlFlow {
+pub(crate) fn control_flow(instruction: &Instruction) -> ControlFlow {
     use Instruction::{
         AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq, IfGe,
         IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt, IfNe,

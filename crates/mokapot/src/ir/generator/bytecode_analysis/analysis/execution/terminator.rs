@@ -13,12 +13,9 @@ use crate::ir::{
         path_condition::{BooleanVariable, BranchGuard, PathValue},
     },
     expression::Predicate,
-    generator::{
-        bytecode_cfg::{self, BlockExit},
-        error::Error,
-    },
+    generator::{bytecode_cfg::ControlFlow, error::Error},
 };
-use crate::jvm::code::Instruction;
+use crate::jvm::code::{Instruction, ProgramCounter};
 
 pub(super) enum LoweredTerminator {
     Goto(ControlTransfer),
@@ -35,24 +32,27 @@ pub(super) enum LoweredTerminator {
     Throw(ValueId),
 }
 
-/// Lowers the structural terminator of `block`, appending its successors.
+/// Lowers the structural control flow at the end of a block, appending its
+/// successors.
 pub(super) fn lower(
-    block: &bytecode_cfg::JvmBlock,
+    flow: &ControlFlow,
+    has_exceptional_successors: bool,
     instruction: &Instruction,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
-    let result = match &block.exit {
-        BlockExit::Fallthrough { .. } => {
-            if block.exception_handlers.is_empty() {
-                LoweredTerminator::Goto(ControlTransfer::Unconditional)
-            } else {
+    let result = match flow {
+        ControlFlow::Fallthrough => {
+            if has_exceptional_successors {
                 LoweredTerminator::Try(ControlTransfer::Unconditional)
+            } else {
+                LoweredTerminator::Goto(ControlTransfer::Unconditional)
             }
         }
-        BlockExit::Goto { .. } => LoweredTerminator::Goto(ControlTransfer::Unconditional),
-        BlockExit::Branch { .. } => lower_branch(instruction, frame)?,
-        BlockExit::Switch { cases, .. } => lower_switch(cases, frame)?,
-        BlockExit::Terminal => lower_terminal(instruction, frame)?,
+        ControlFlow::Goto(_) => LoweredTerminator::Goto(ControlTransfer::Unconditional),
+        ControlFlow::Branch(_) => lower_branch(instruction, frame)?,
+        ControlFlow::Switch(cases, _) => lower_switch(cases, frame)?,
+        ControlFlow::Terminal => lower_terminal(instruction, frame)?,
+        ControlFlow::Legacy => return Err(Error::internal("legacy subroutines are rejected")),
     };
     Ok(result)
 }
@@ -66,7 +66,7 @@ fn lower_branch(instruction: &Instruction, frame: &mut Frame) -> Result<LoweredT
 }
 
 fn lower_switch(
-    cases: &BTreeMap<i32, bytecode_cfg::JvmBlockId>,
+    cases: &BTreeMap<i32, ProgramCounter>,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let match_value = frame.stack.pop(Category1)?;
