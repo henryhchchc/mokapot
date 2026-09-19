@@ -4,24 +4,23 @@ use crate::{
     ir::{
         BasicBlock, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{canonicalize, error::Error},
+        generator::{
+            draft::{DraftBlock, DraftMethod},
+            error::Error,
+        },
         method::MokaIRMethodParts,
     },
     jvm::Method,
 };
 
-/// Finishes blocks and provenance from canonical scalar SSA blocks.
-pub(super) fn finish(
-    method: &Method,
-    graph: canonicalize::CanonicalGraph,
-    source_map: SourceMap,
-) -> Result<MokaIRMethod, Error> {
-    let canonicalize::CanonicalGraph {
+/// Constructs public wrappers and indexes from canonical draft IR.
+pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod, Error> {
+    let DraftMethod {
         entry,
         blocks,
         this_value,
         parameter_values,
-    } = graph;
+    } = draft;
     let mut state = FinishState::default();
     if let Some(value) = this_value {
         state.define(value, ValueDefinition::This)?;
@@ -35,9 +34,13 @@ pub(super) fn finish(
         state.define_block_values(id, block)?;
     }
 
+    let mut source_map = SourceMap::default();
     let blocks = blocks
         .into_iter()
-        .map(|(id, block)| (id, materialize_block(block)))
+        .map(|(id, block)| {
+            let block = materialize_block(id, block, &mut source_map);
+            (id, block)
+        })
         .collect();
 
     let method = MokaIRMethod::new(
@@ -59,9 +62,9 @@ impl FinishState {
     fn define_block_values(
         &mut self,
         block_id: crate::ir::BlockId,
-        block: &canonicalize::Block,
+        block: &DraftBlock,
     ) -> Result<(), Error> {
-        if let Some(value) = block.scalar.caught_exception {
+        if let Some(value) = block.caught_exception {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
         }
         for (index, phi) in block.phis.iter().enumerate() {
@@ -71,8 +74,8 @@ impl FinishState {
             };
             self.define(phi.value, ValueDefinition::Instruction(location))?;
         }
-        for (index, kind) in block.scalar.operations.iter().enumerate() {
-            let Some(value) = kind.def() else {
+        for (index, operation) in block.operations.iter().enumerate() {
+            let Some(value) = operation.kind.def() else {
                 continue;
             };
             let location = InstructionLocation::Operation {
@@ -85,7 +88,14 @@ impl FinishState {
     }
 }
 
-fn materialize_block(block: canonicalize::Block) -> BasicBlock {
+fn materialize_block(
+    id: crate::ir::BlockId,
+    block: DraftBlock,
+    source_map: &mut SourceMap,
+) -> BasicBlock {
+    if let Some(origin) = block.terminator.origin {
+        source_map.record_terminator(origin, id);
+    }
     let phis = block
         .phis
         .into_iter()
@@ -99,13 +109,20 @@ fn materialize_block(block: canonicalize::Block) -> BasicBlock {
         })
         .collect();
     let operations = block
-        .scalar
         .operations
         .into_iter()
-        .map(|kind| Operation { kind })
+        .enumerate()
+        .map(|(index, operation)| {
+            if let Some(origin) = operation.origin {
+                source_map.record_operation(origin, id, index);
+            }
+            Operation {
+                kind: operation.kind,
+            }
+        })
         .collect();
     let successors = block
-        .scalar
+        .terminator
         .successors
         .into_iter()
         .map(|successor| Successor {
@@ -115,11 +132,11 @@ fn materialize_block(block: canonicalize::Block) -> BasicBlock {
         })
         .collect();
     BasicBlock {
-        caught_exception: block.scalar.caught_exception,
+        caught_exception: block.caught_exception,
         phis,
         operations,
         terminator: Terminator {
-            kind: block.scalar.terminator,
+            kind: block.terminator.kind,
             successors,
         },
     }
@@ -156,7 +173,10 @@ mod tests {
         ir::{
             BlockId, OperationKind, TerminatorKind,
             expression::MathOperation,
-            generator::bytecode_analysis::{PhiCandidate, ScalarBlock, ScalarGraph},
+            generator::{
+                canonicalize,
+                draft::{DraftBlock, DraftMethod, DraftOperation, DraftPhi, DraftTerminator},
+            },
         },
         jvm::{code::Instruction, method::AccessFlags},
     };
@@ -167,31 +187,35 @@ mod tests {
         let parameter = ValueId::new(0);
         let eliminated_phi = ValueId::new(1);
         let result = ValueId::new(2);
-        let scalar = ScalarGraph {
+        let draft = DraftMethod {
             entry: block,
             blocks: BTreeMap::from([(
                 block,
-                ScalarBlock {
+                DraftBlock {
                     caught_exception: None,
-                    operations: vec![OperationKind::Definition {
-                        value: result,
-                        expr: MathOperation::Increment(eliminated_phi, 1).into(),
+                    phis: vec![DraftPhi {
+                        value: eliminated_phi,
+                        inputs: vec![(block, parameter)],
                     }],
-                    terminator: TerminatorKind::Return(Some(result)),
-                    successors: vec![],
-                },
-            )]),
-            phi_candidates: BTreeMap::from([(
-                eliminated_phi,
-                PhiCandidate {
-                    placement: block,
-                    inputs: vec![(block, parameter)],
+                    operations: vec![DraftOperation {
+                        kind: OperationKind::Definition {
+                            value: result,
+                            expr: MathOperation::Increment(eliminated_phi, 1).into(),
+                        },
+                        origin: None,
+                    }],
+                    terminator: DraftTerminator {
+                        kind: TerminatorKind::Return(Some(result)),
+                        successors: vec![],
+                        origin: None,
+                    },
                 },
             )]),
             this_value: None,
             parameter_values: vec![parameter],
         };
-        let graph = canonicalize::canonicalize(scalar).unwrap();
+        let mut draft = draft;
+        canonicalize::canonicalize(&mut draft).unwrap();
         let method = crate::tests::method(
             [(0, Instruction::ILoad0), (1, Instruction::IReturn)],
             "(I)I",
@@ -199,7 +223,7 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
 
-        let ir = finish(&method, graph, SourceMap::default()).unwrap();
+        let ir = finish(&method, draft).unwrap();
         let completed_block = ir.block(block).unwrap();
         let operation = &completed_block.operations[0];
 

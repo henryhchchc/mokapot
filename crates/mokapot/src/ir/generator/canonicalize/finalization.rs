@@ -1,21 +1,20 @@
-//! Applies scalar substitutions and materializes retained phi nodes.
-use std::{collections::BTreeMap, convert::Infallible};
+//! Applies scalar substitutions and removes eliminated phi nodes.
+use std::convert::Infallible;
 
-use super::model;
 use crate::ir::{
-    BlockId, ValueId,
+    ValueId,
     generator::{
-        bytecode_analysis::{PhiCandidate, ScalarBlock},
-        canonicalize::{model::Phi, simplify::SimplifiedPhis},
+        canonicalize::simplify::SimplifiedPhis,
+        draft::{DraftBlock, DraftMethod, DraftPhi},
         error::Error,
         remap::RemapValues,
     },
 };
 
 pub(super) fn finalize(
-    blocks: BTreeMap<BlockId, ScalarBlock>,
-    simplified: SimplifiedPhis,
-) -> Result<BTreeMap<BlockId, model::Block>, Error> {
+    draft: &mut DraftMethod,
+    mut simplified: SimplifiedPhis,
+) -> Result<(), Error> {
     // `simplify_phis` returns substitutions whose targets are already canonical.
     let canonical = |value| {
         simplified
@@ -24,36 +23,28 @@ pub(super) fn finalize(
             .copied()
             .unwrap_or(value)
     };
-    let mut phis_by_block = BTreeMap::<BlockId, Vec<Phi>>::new();
-    for (value, PhiCandidate { placement, inputs }) in simplified.candidates {
-        phis_by_block
-            .entry(placement)
-            .or_default()
-            .push(Phi { value, inputs });
+    for block in draft.blocks.values_mut() {
+        let retained = std::mem::take(&mut block.phis)
+            .into_iter()
+            .filter_map(|phi| simplified.candidates.remove(&phi.value))
+            .collect();
+        finalize_block(block, retained, &canonical);
     }
-    let finalized = blocks
-        .into_iter()
-        .map(|(id, block)| {
-            let phis = phis_by_block.remove(&id).unwrap_or_default();
-            (id, finalize_block(block, phis, &canonical))
-        })
-        .collect();
-    if phis_by_block.is_empty() {
-        Ok(finalized)
-    } else {
-        Err(Error::internal("a retained phi targets no scalar block"))
+    if !simplified.candidates.is_empty() {
+        return Err(Error::internal("a retained phi targets no draft block"));
     }
+    Ok(())
 }
 
 fn finalize_block(
-    mut scalar: ScalarBlock,
-    phis: Vec<Phi>,
+    block: &mut DraftBlock,
+    phis: Vec<DraftPhi>,
     canonical: &impl Fn(ValueId) -> ValueId,
-) -> model::Block {
-    scalar.caught_exception = scalar.caught_exception.map(canonical);
-    let phis = phis
+) {
+    block.caught_exception = block.caught_exception.map(canonical);
+    block.phis = phis
         .into_iter()
-        .map(|phi| Phi {
+        .map(|phi| DraftPhi {
             value: canonical(phi.value),
             inputs: phi
                 .inputs
@@ -62,26 +53,19 @@ fn finalize_block(
                 .collect(),
         })
         .collect();
-    scalar.operations = scalar
-        .operations
-        .into_iter()
-        .map(|operation| apply_substitutions(operation, canonical))
-        .collect();
-    scalar.terminator = apply_substitutions(scalar.terminator, canonical);
-    scalar.successors = scalar
-        .successors
-        .into_iter()
-        .map(|mut successor| {
-            successor.transfer = apply_substitutions(successor.transfer, canonical);
-            successor
-        })
-        .collect();
-    model::Block { phis, scalar }
+    block.phis.sort_by_key(|phi| phi.value);
+    for operation in &mut block.operations {
+        apply_substitutions(&mut operation.kind, canonical);
+    }
+    apply_substitutions(&mut block.terminator.kind, canonical);
+    for successor in &mut block.terminator.successors {
+        apply_substitutions(&mut successor.transfer, canonical);
+    }
 }
 
-fn apply_substitutions<T: RemapValues>(mut value: T, canonical: &impl Fn(ValueId) -> ValueId) -> T {
+fn apply_substitutions<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {
     match value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value))) {
-        Ok(()) => value,
+        Ok(()) => {}
         Err(never) => match never {},
     }
 }

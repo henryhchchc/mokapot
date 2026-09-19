@@ -102,13 +102,6 @@ impl BlockExecution {
         }
     }
 
-    pub(crate) const fn block(&self) -> Option<&LiftedBlock> {
-        match self {
-            Self::Complete { block, .. } => Some(block),
-            Self::Uninitialized | Self::Pending { .. } => None,
-        }
-    }
-
     pub(crate) fn update_input(&mut self, input: Frame) -> bool {
         if self.input() == Some(&input) {
             return false;

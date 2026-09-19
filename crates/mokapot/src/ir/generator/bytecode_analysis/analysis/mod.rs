@@ -8,12 +8,15 @@ pub(super) use state::{CompletedAnalysis, LiftedBlock, PhiDefinition, PhiSite, P
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{Frame, Position, ScalarGraph, ValueCategory, output, values::ValueContext};
+use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        BlockId, SourceMap, ValueId,
+        BlockId, ValueId,
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
+            draft::{
+                DraftBlock, DraftMethod, DraftOperation, DraftPhi, DraftSuccessor, DraftTerminator,
+            },
             error::Error,
         },
     },
@@ -80,7 +83,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     ///
     /// A block's topology never changes; only frame contributions become
     /// available. A changed input frame moves a completed block back to pending.
-    pub(super) fn run(mut self) -> Result<(ScalarGraph, SourceMap), Error> {
+    pub(super) fn run(mut self) -> Result<DraftMethod, Error> {
         let entry = self.cfg.entry_block();
         self.blocks
             .get_mut(&entry)
@@ -122,12 +125,109 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             }
         }
 
-        let completed = CompletedAnalysis {
+        CompletedAnalysis {
             blocks: self.blocks,
             phi_definitions: self.phi_definitions,
             receiver_value: self.values.receiver_value,
             parameter_values: self.values.parameter_values,
-        };
-        output::materialize(completed, entry)
+        }
+        .into_draft(entry)
+    }
+}
+
+impl CompletedAnalysis {
+    fn into_draft(self, entry: BlockId) -> Result<DraftMethod, Error> {
+        let Self {
+            blocks,
+            phi_definitions,
+            receiver_value,
+            parameter_values,
+        } = self;
+        let mut draft_blocks = blocks
+            .into_iter()
+            .map(|(id, state)| {
+                let lifted = state.execution.into_block().ok_or_else(|| {
+                    Error::internal("a normalized reachable block was not executed")
+                })?;
+                Ok((id, DraftBlock::from(lifted)))
+            })
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+
+        for (site, definition) in phi_definitions {
+            let Some(block) = draft_blocks.get_mut(&site.block) else {
+                continue;
+            };
+            block.phis.push(DraftPhi::try_from(definition)?);
+        }
+
+        Ok(DraftMethod {
+            entry,
+            blocks: draft_blocks,
+            this_value: receiver_value,
+            parameter_values,
+        })
+    }
+}
+
+impl BlockExecution {
+    fn into_block(self) -> Option<LiftedBlock> {
+        match self {
+            Self::Complete { block, .. } => Some(block),
+            Self::Uninitialized | Self::Pending { .. } => None,
+        }
+    }
+}
+
+impl From<LiftedBlock> for DraftBlock {
+    fn from(lifted: LiftedBlock) -> Self {
+        Self {
+            caught_exception: lifted.caught_exception,
+            phis: Vec::new(),
+            operations: lifted
+                .operations
+                .into_iter()
+                .map(|(origin, kind)| DraftOperation {
+                    kind,
+                    origin: Some(origin),
+                })
+                .collect(),
+            terminator: DraftTerminator {
+                kind: lifted.terminator,
+                successors: lifted
+                    .successors
+                    .edges
+                    .into_iter()
+                    .map(|successor| DraftSuccessor {
+                        id: successor.id,
+                        target: successor.target,
+                        transfer: successor.transfer,
+                    })
+                    .collect(),
+                origin: lifted.terminator_source,
+            },
+        }
+    }
+}
+
+impl TryFrom<PhiDefinition> for DraftPhi {
+    type Error = Error;
+
+    fn try_from(definition: PhiDefinition) -> Result<Self, Self::Error> {
+        let inputs = definition
+            .inputs
+            .into_iter()
+            .map(|(predecessor, input)| {
+                let Predecessor::Block(predecessor) = predecessor else {
+                    return Err(Error::internal(
+                        "an entry contribution cannot be an active phi input",
+                    ));
+                };
+                Ok((predecessor, input))
+            })
+            .collect::<Result<_, Error>>()?;
+        Ok(Self {
+            value: definition.result,
+            inputs,
+        })
     }
 }
