@@ -3,9 +3,9 @@
 use crate::{
     ir::{
         BasicBlock, BlockKind, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod,
-        Operation, SourceMap, Successor, Terminator, ValueDefinition, ValueId,
+        Operation, SourceMap, Successor, ValueDefinition, ValueId,
         generator::{
-            draft::{DraftBlock, DraftMethod},
+            draft::{DraftBlock, DraftEdge, DraftMethod},
             error::Error,
         },
         method::MokaIRMethodParts,
@@ -118,25 +118,20 @@ fn materialize_block(
             }
         })
         .collect();
-    let successors = block
+    let terminator = block
         .terminator
-        .successors
-        .into_iter()
-        .map(|successor| Successor {
+        .shape
+        .map_arms(|successor: DraftEdge| Successor {
             id: successor.id,
             target: successor.target,
             arguments: successor.arguments,
             transfer: successor.transfer,
-        })
-        .collect();
+        });
     BasicBlock {
         kind: block.kind,
         parameters,
         operations,
-        terminator: Terminator {
-            kind: block.terminator.kind,
-            successors,
-        },
+        terminator,
     }
 }
 
@@ -169,14 +164,14 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            BlockId, EdgeId, OperationKind, TerminatorKind,
+            BlockId, EdgeId, OperationKind,
             control_flow::ControlTransfer,
             expression::MathOperation,
             generator::{
                 canonicalize,
                 draft::{
                     DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter,
-                    DraftTerminator,
+                    DraftTerminator, DraftTerminatorShape,
                 },
             },
         },
@@ -207,13 +202,14 @@ mod tests {
                         origin: None,
                     }],
                     terminator: DraftTerminator {
-                        kind: TerminatorKind::Goto,
-                        successors: vec![DraftEdge {
-                            id: EdgeId::new(0),
-                            target: crate::ir::SuccessorTarget::Block(block),
-                            arguments: vec![parameter],
-                            transfer: ControlTransfer::Unconditional,
-                        }],
+                        shape: DraftTerminatorShape::Goto {
+                            target: DraftEdge {
+                                id: EdgeId::new(0),
+                                target: crate::ir::SuccessorTarget::Block(block),
+                                arguments: vec![parameter],
+                                transfer: ControlTransfer::Unconditional,
+                            },
+                        },
                         origin: None,
                     },
                 },

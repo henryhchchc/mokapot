@@ -117,7 +117,6 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
                     candidate
                         .terminator
                         .successors()
-                        .iter()
                         .filter(move |successor| {
                             successor.target() == SuccessorTarget::Block(block)
                         })

@@ -60,8 +60,8 @@ fn finalize_block(
     for operation in &mut block.operations {
         apply_substitutions(&mut operation.kind, canonical);
     }
-    apply_substitutions(&mut block.terminator.kind, canonical);
-    for edge in &mut block.terminator.successors {
+    apply_substitutions(&mut block.terminator.shape, canonical);
+    block.terminator.shape.arms_mut().for_each(|edge| {
         edge.arguments = match edge.target {
             SuccessorTarget::Block(target) => retained[&target]
                 .iter()
@@ -70,7 +70,7 @@ fn finalize_block(
             SuccessorTarget::Unwind => Vec::new(),
         };
         apply_substitutions(&mut edge.transfer, canonical);
-    }
+    });
 }
 
 fn apply_substitutions<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {

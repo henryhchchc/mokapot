@@ -60,5 +60,5 @@ pub use identity::{BlockId, EdgeId, InstructionLocation, ValueId};
 pub use method::{InstructionRef, MethodEntry, MokaIRMethod};
 pub use operation::{Operation, OperationKind};
 pub use source_map::SourceMap;
-pub use terminator::{Successor, SuccessorTarget, Terminator, TerminatorKind};
+pub use terminator::{Successor, SuccessorTarget, Terminator};
 pub use value_definition::ValueDefinition;

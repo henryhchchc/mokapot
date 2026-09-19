@@ -18,8 +18,8 @@ fn straight_line_instructions_coalesce_into_one_block() {
     assert_eq!(ir.blocks().len(), 1);
     assert_eq!(block.operations.len(), 1);
     assert!(matches!(
-        block.terminator.kind(),
-        TerminatorKind::Return(Some(_))
+        block.terminator,
+        Terminator::Return { value: Some(_), .. }
     ));
 
     let definition = ir
@@ -93,12 +93,16 @@ fn backward_target_starts_a_block_even_when_transfer_is_last() {
             block
                 .terminator
                 .successors()
-                .iter()
                 .any(|successor| successor.block_target() == Some(*block_id))
         })
         .expect("the backward target must form a self-loop");
     assert_eq!(
-        loop_block.terminator.successors()[0].block_target(),
+        loop_block
+            .terminator
+            .successors()
+            .next()
+            .unwrap()
+            .block_target(),
         Some(loop_block_id)
     );
 }
@@ -117,12 +121,18 @@ fn diamond_has_an_unmapped_synthetic_fallthrough() {
     );
     let ir = build(&method).unwrap();
     let entry = ir.block(ir.entry_block()).unwrap();
-    let fallthrough = entry.terminator.successors()[1].block_target().unwrap();
+    let fallthrough = entry
+        .terminator
+        .successors()
+        .nth(1)
+        .unwrap()
+        .block_target()
+        .unwrap();
     let synthetic = &ir.block(fallthrough).unwrap().terminator;
 
-    assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
+    assert!(matches!(synthetic, Terminator::Goto { .. }));
     assert_eq!(ir.source_map().instructions_at(2.into()).count(), 0);
-    assert_eq!(synthetic.kind(), &TerminatorKind::Goto);
+    assert!(matches!(synthetic, Terminator::Goto { .. }));
     assert_eq!(
         ir.source_map()
             .origin_of(InstructionLocation::Terminator { block: fallthrough }),

@@ -35,7 +35,6 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
         block
             .terminator
             .successors()
-            .iter()
             .find(|successor| matches!(successor.transfer(), ControlTransfer::Unwind))
             .unwrap()
             .target()
@@ -72,11 +71,10 @@ fn throw_has_only_ordered_exceptional_outcomes() {
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
         .successors()
-        .iter()
         .map(Successor::transfer)
         .collect::<Vec<_>>();
 
-    assert!(matches!(throw.kind(), TerminatorKind::Throw(_)));
+    assert!(matches!(throw, Terminator::Throw { .. }));
     assert_eq!(transfers.len(), 2);
     assert!(matches!(transfers[0], ControlTransfer::Exception(Some(_))));
     assert!(matches!(transfers[1], ControlTransfer::Unwind));

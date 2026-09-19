@@ -3,15 +3,16 @@
 mod terminator;
 
 use super::super::lifting;
-use super::{Analyzer, Frame, LiftedBlock, LiftedEdge, LiftedSuccessors};
+use super::{Analyzer, Frame, LiftedArm, LiftedBlock, LiftedEdge, LiftedTerminator};
 use crate::ir::{
-    BlockId, BlockKind, SuccessorTarget, TerminatorKind,
+    BlockId, BlockKind, SuccessorTarget,
     control_flow::ControlTransfer,
     generator::{
         bytecode_cfg::{BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge},
         error::Error,
     },
 };
+use terminator::LoweredTerminator;
 
 impl Analyzer<'_, '_> {
     /// Executes one normalized block, producing its analyzed block.
@@ -38,21 +39,19 @@ impl Analyzer<'_, '_> {
                 "a normalized passthrough block must have one successor",
             ));
         };
-        let mut successors = LiftedSuccessors::default();
-        successors.push(
+        let target = (
             LiftedEdge {
                 id: edge.id,
                 target: edge.target,
                 transfer: ControlTransfer::Unconditional,
             },
-            input,
+            Some(input),
         );
         Ok(LiftedBlock {
             kind,
             operations: Vec::new(),
-            terminator: TerminatorKind::Goto,
+            terminator: LiftedTerminator::Goto { target },
             terminator_source: None,
-            successors,
         })
     }
 
@@ -95,50 +94,74 @@ impl Analyzer<'_, '_> {
                 operations.push((final_pc, operation));
             }
         }
-        let (terminator, transfers, terminator_operation) =
+        let (lowered, terminator_operation) =
             terminator::lower(block, final_instruction, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
         }
-        let mut successors = LiftedSuccessors::default();
         let topology = self.cfg.block(block_id).successors.clone();
         let (normal_edges, exceptional_edges): (Vec<_>, Vec<_>) = topology
             .into_iter()
             .partition(|edge| matches!(edge.kind, EdgeKind::Normal));
-        if normal_edges.len() != transfers.len() {
-            return Err(Error::internal(
-                "lowered successors do not match normalized topology",
-            ));
-        }
-        for (edge, transfer) in normal_edges.into_iter().zip(transfers) {
-            successors.push(
+        let mut normal_edges = normal_edges.into_iter();
+        let mut normal = |transfer| {
+            let edge = normal_edges.next().ok_or_else(|| {
+                Error::internal("lowered successors do not match normalized topology")
+            })?;
+            Ok::<LiftedArm, Error>((
                 LiftedEdge {
                     id: edge.id,
                     target: edge.target,
                     transfer,
                 },
-                frame.clone(),
-            );
-        }
-        for edge in exceptional_edges {
-            self.push_exception_successor(&edge, &pre_final_frame, &mut successors)?;
+                Some(frame.clone()),
+            ))
+        };
+        let exceptional = exceptional_edges
+            .iter()
+            .map(|edge| self.exception_successor(edge, &pre_final_frame))
+            .collect::<Result<Vec<_>, _>>()?;
+        let terminator = match lowered {
+            LoweredTerminator::Goto(transfer) => LiftedTerminator::Goto {
+                target: normal(transfer)?,
+            },
+            LoweredTerminator::Branch { taken, otherwise } => LiftedTerminator::Branch {
+                taken: normal(taken)?,
+                otherwise: normal(otherwise)?,
+            },
+            LoweredTerminator::Switch { cases, default } => LiftedTerminator::Switch {
+                cases: cases
+                    .into_iter()
+                    .map(&mut normal)
+                    .collect::<Result<_, _>>()?,
+                default: normal(default)?,
+            },
+            LoweredTerminator::Fallible(transfer) => LiftedTerminator::Fallible {
+                normal: Some(normal(transfer)?),
+                exceptional,
+            },
+            LoweredTerminator::Return(value) => LiftedTerminator::Return { value, exceptional },
+            LoweredTerminator::Throw(value) => LiftedTerminator::Throw { value, exceptional },
+        };
+        if normal_edges.next().is_some() {
+            return Err(Error::internal(
+                "lowered successors do not match normalized topology",
+            ));
         }
         Ok(LiftedBlock {
             kind: BlockKind::Code,
             operations,
             terminator,
             terminator_source: has_explicit_terminator.then_some(final_pc),
-            successors,
         })
     }
 
-    fn push_exception_successor(
+    fn exception_successor(
         &mut self,
         edge: &NormalizedEdge,
         input_frame: &Frame,
-        successors: &mut LiftedSuccessors,
-    ) -> Result<(), Error> {
+    ) -> Result<LiftedArm, Error> {
         match &edge.kind {
             EdgeKind::Exception(catch_type) => {
                 let SuccessorTarget::Block(target) = edge.target else {
@@ -146,32 +169,25 @@ impl Analyzer<'_, '_> {
                 };
                 let caught = self.caught_exception(target)?;
                 let frame = input_frame.clone().exception_handler_frame(caught)?;
-                successors.push(
-                    LiftedEdge {
-                        id: edge.id,
-                        target: edge.target,
-                        transfer: ControlTransfer::Exception(catch_type.clone()),
-                    },
-                    frame,
-                );
+                let lifted = LiftedEdge {
+                    id: edge.id,
+                    target: edge.target,
+                    transfer: ControlTransfer::Exception(catch_type.clone()),
+                };
+                Ok((lifted, Some(frame)))
             }
             EdgeKind::Unwind => {
                 debug_assert_eq!(edge.target, SuccessorTarget::Unwind);
-                successors.push_optional(
-                    LiftedEdge {
-                        id: edge.id,
-                        target: edge.target,
-                        transfer: ControlTransfer::Unwind,
-                    },
-                    None,
-                );
+                let lifted = LiftedEdge {
+                    id: edge.id,
+                    target: edge.target,
+                    transfer: ControlTransfer::Unwind,
+                };
+                Ok((lifted, None))
             }
-            EdgeKind::Normal => {
-                return Err(Error::internal(
-                    "an ordinary edge was treated as an exceptional successor",
-                ));
-            }
+            EdgeKind::Normal => Err(Error::internal(
+                "an ordinary edge was treated as an exceptional successor",
+            )),
         }
-        Ok(())
     }
 }

@@ -95,7 +95,6 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .iter()
                 .filter_map(move |successor| match successor.target() {
                     SuccessorTarget::Block(target) => Some(Edge {
                         id: successor.id(),
@@ -114,7 +113,6 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .iter()
                 .all(|successor| matches!(successor.target(), SuccessorTarget::Unwind))
                 .then_some(id)
         })
@@ -128,7 +126,6 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .iter()
                 .filter_map(move |successor| match successor.target() {
                     SuccessorTarget::Block(target) => Some(Edge {
                         id: successor.id(),

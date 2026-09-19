@@ -20,7 +20,7 @@ pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
         inputs.entry(parameter.value).or_default().push(argument);
     }
     for block in draft.blocks.values() {
-        for edge in &block.terminator.successors {
+        for edge in block.terminator.shape.arms() {
             let target = draft
                 .blocks
                 .get(&match edge.target {

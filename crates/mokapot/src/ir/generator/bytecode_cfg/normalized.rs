@@ -282,7 +282,6 @@ mod tests {
             .unwrap()
             .terminator
             .successors()
-            .iter()
             .map(Successor::id)
             .collect::<Vec<_>>();
         assert_eq!(finished_edge_ids, normalized_edge_ids);
@@ -347,7 +346,7 @@ mod tests {
         let incoming = draft
             .blocks
             .values()
-            .flat_map(|block| &block.terminator.successors)
+            .flat_map(|block| block.terminator.shape.arms())
             .filter(|edge| edge.target == SuccessorTarget::Block(target))
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);

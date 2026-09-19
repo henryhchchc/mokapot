@@ -7,7 +7,7 @@ use super::super::{
     ValueCategory::{Category1, Category2},
 };
 use crate::ir::{
-    OperationKind, TerminatorKind,
+    OperationKind, ValueId,
     control_flow::{
         ControlTransfer,
         path_condition::{BooleanVariable, BranchGuard, PathValue},
@@ -20,45 +20,53 @@ use crate::ir::{
 };
 use crate::jvm::code::Instruction;
 
-type LoweredTerminator = (TerminatorKind, Vec<ControlTransfer>, Option<OperationKind>);
+pub(super) enum LoweredTerminator {
+    Goto(ControlTransfer),
+    Branch {
+        taken: ControlTransfer,
+        otherwise: ControlTransfer,
+    },
+    Switch {
+        cases: Vec<ControlTransfer>,
+        default: ControlTransfer,
+    },
+    Fallible(ControlTransfer),
+    Return(Option<ValueId>),
+    Throw(ValueId),
+}
 
 /// Lowers the structural terminator of `block`, appending its successors.
 pub(super) fn lower(
     block: &bytecode_cfg::JvmBlock,
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<LoweredTerminator, Error> {
+) -> Result<(LoweredTerminator, Option<OperationKind>), Error> {
     let result = match &block.exit {
         BlockExit::Fallthrough { .. } => {
-            let terminator_kind = if block.exception_handlers.is_empty() {
-                TerminatorKind::Goto
+            let terminator = if block.exception_handlers.is_empty() {
+                LoweredTerminator::Goto(ControlTransfer::Unconditional)
             } else {
-                TerminatorKind::Fallible
+                LoweredTerminator::Fallible(ControlTransfer::Unconditional)
             };
-            (terminator_kind, vec![ControlTransfer::Unconditional], None)
+            (terminator, None)
         }
         BlockExit::Goto { .. } => (
-            TerminatorKind::Goto,
-            vec![ControlTransfer::Unconditional],
+            LoweredTerminator::Goto(ControlTransfer::Unconditional),
             None,
         ),
-        BlockExit::Branch { .. } => lower_branch(instruction, frame)?,
-        BlockExit::Switch { cases, .. } => lower_switch(cases, frame)?,
-        BlockExit::Terminal => lower_terminal(instruction, frame)?,
+        BlockExit::Branch { .. } => (lower_branch(instruction, frame)?, None),
+        BlockExit::Switch { cases, .. } => (lower_switch(cases, frame)?, None),
+        BlockExit::Terminal => (lower_terminal(instruction, frame)?, None),
     };
     Ok(result)
 }
 
 fn lower_branch(instruction: &Instruction, frame: &mut Frame) -> Result<LoweredTerminator, Error> {
     let condition: BooleanVariable<_> = pop_condition(frame, instruction)?.into();
-    Ok((
-        TerminatorKind::Branch,
-        vec![
-            ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-            ControlTransfer::Conditional(BranchGuard::of(!condition)),
-        ],
-        None,
-    ))
+    Ok(LoweredTerminator::Branch {
+        taken: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
+        otherwise: ControlTransfer::Conditional(BranchGuard::of(!condition)),
+    })
 }
 
 fn lower_switch(
@@ -66,9 +74,12 @@ fn lower_switch(
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let match_value = frame.stack.pop(Category1)?;
-    let mut successors = cases
-        .iter()
-        .map(|(&case, _)| {
+    if cases.is_empty() {
+        return Ok(LoweredTerminator::Goto(ControlTransfer::Unconditional));
+    }
+    let successors = cases
+        .keys()
+        .map(|&case| {
             ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
                 Predicate::Equal(
                     match_value.into(),
@@ -86,8 +97,10 @@ fn lower_switch(
             ))
         })
         .collect();
-    successors.push(ControlTransfer::Conditional(default_guard));
-    Ok((TerminatorKind::Switch { match_value }, successors, None))
+    Ok(LoweredTerminator::Switch {
+        cases: successors,
+        default: ControlTransfer::Conditional(default_guard),
+    })
 }
 
 fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, Error> {
@@ -143,19 +156,19 @@ fn lower_terminal(
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let kind = match instruction {
-        Instruction::Return => TerminatorKind::Return(None),
+        Instruction::Return => LoweredTerminator::Return(None),
         Instruction::IReturn | Instruction::FReturn | Instruction::AReturn => {
-            TerminatorKind::Return(Some(frame.stack.pop(Category1)?))
+            LoweredTerminator::Return(Some(frame.stack.pop(Category1)?))
         }
         Instruction::LReturn | Instruction::DReturn => {
-            TerminatorKind::Return(Some(frame.stack.pop(Category2)?))
+            LoweredTerminator::Return(Some(frame.stack.pop(Category2)?))
         }
-        Instruction::AThrow => TerminatorKind::Throw(frame.stack.pop(Category1)?),
+        Instruction::AThrow => LoweredTerminator::Throw(frame.stack.pop(Category1)?),
         _ => {
             return Err(Error::internal(
                 "a terminal block ends in a non-terminal instruction",
             ));
         }
     };
-    Ok((kind, Vec::new(), None))
+    Ok(kind)
 }

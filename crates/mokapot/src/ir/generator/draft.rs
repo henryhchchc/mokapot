@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     ir::{
-        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, TerminatorKind, ValueId,
+        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, Terminator, ValueId,
         control_flow::ControlTransfer,
     },
     jvm::code::ProgramCounter,
@@ -41,13 +41,15 @@ pub(super) struct DraftOperation {
     pub origin: Option<ProgramCounter>,
 }
 
-/// A terminator, its successors, and its bytecode origin.
+/// A complete terminator and its bytecode origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DraftTerminator {
-    pub kind: TerminatorKind,
-    pub successors: Vec<DraftEdge>,
+    pub shape: DraftTerminatorShape,
     pub origin: Option<ProgramCounter>,
 }
+
+/// The structural shape of a terminator under construction.
+pub(super) type DraftTerminatorShape = Terminator<DraftEdge>;
 
 /// A normalized successor under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]

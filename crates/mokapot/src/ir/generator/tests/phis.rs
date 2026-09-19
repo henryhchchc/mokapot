@@ -17,7 +17,7 @@ fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     let ir = build(&method).unwrap();
     let (join_id, join) = ir
         .blocks()
-        .find(|(_, block)| matches!(block.terminator.kind(), TerminatorKind::Return(Some(_))))
+        .find(|(_, block)| matches!(block.terminator, Terminator::Return { value: Some(_), .. }))
         .unwrap();
     let [parameter] = join.parameters.as_slice() else {
         panic!("the join must contain one parameter")
@@ -31,8 +31,8 @@ fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     assert_eq!(incoming.len(), 2);
     assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
     assert!(matches!(
-        join.terminator.kind(),
-        TerminatorKind::Return(Some(value)) if *value == parameter.value
+        join.terminator,
+        Terminator::Return { value: Some(value), .. } if value == parameter.value
     ));
     let join_loc = InstructionLocation::BlockParameter {
         block: join_id,
@@ -130,13 +130,18 @@ fn entry_self_loop_needs_no_synthetic_block_or_redundant_parameters() {
     assert_eq!(ir.blocks().len(), 1);
     assert!(header.parameters.is_empty());
     assert!(ir.entry().arguments().is_empty());
-    assert_eq!(header.terminator.successors().len(), 1);
+    assert_eq!(header.terminator.successors().count(), 1);
     assert!(matches!(
-        header.terminator.successors()[0].transfer(),
+        header.terminator.successors().next().unwrap().transfer(),
         ControlTransfer::Unconditional
     ));
     assert_eq!(
-        header.terminator.successors()[0].block_target(),
+        header
+            .terminator
+            .successors()
+            .next()
+            .unwrap()
+            .block_target(),
         Some(header_id)
     );
     let loc = InstructionLocation::Terminator { block: header_id };
@@ -172,15 +177,17 @@ fn mutually_recursive_trivial_phis_collapse_in_a_loop() {
     let header = ir
         .blocks()
         .map(|(_, block)| block)
-        .find(|block| matches!(block.terminator.kind(), TerminatorKind::Branch))
+        .find(|block| matches!(block.terminator, Terminator::Branch { .. }))
         .unwrap();
 
     assert_eq!(header.parameters.len(), 1);
     let returned = ir
         .blocks()
         .map(|(_, block)| block)
-        .find_map(|block| match block.terminator.kind() {
-            TerminatorKind::Return(Some(value)) => Some(value),
+        .find_map(|block| match &block.terminator {
+            Terminator::Return {
+                value: Some(value), ..
+            } => Some(value),
             _ => None,
         })
         .unwrap();

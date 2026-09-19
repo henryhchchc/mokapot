@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use super::{Frame, Position};
 use crate::{
     ir::{
-        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, TerminatorKind, ValueId,
+        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, Terminator, ValueId,
         control_flow::ControlTransfer,
     },
     jvm::code::ProgramCounter,
@@ -40,31 +40,13 @@ pub(crate) struct LiftedEdge {
 pub(crate) struct LiftedBlock {
     pub kind: BlockKind,
     pub operations: Vec<(ProgramCounter, OperationKind)>,
-    pub terminator: TerminatorKind,
+    pub terminator: LiftedTerminator,
     pub terminator_source: Option<ProgramCounter>,
-    pub successors: LiftedSuccessors,
 }
 
-/// Successor transfers coupled to the frame contributed to each target.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct LiftedSuccessors {
-    pub edges: Vec<(LiftedEdge, Option<Frame>)>,
-}
+pub(crate) type LiftedArm = (LiftedEdge, Option<Frame>);
 
-impl LiftedSuccessors {
-    pub(crate) fn push(&mut self, edge: LiftedEdge, frame: Frame) {
-        self.push_optional(edge, Some(frame));
-    }
-
-    pub(crate) fn push_optional(&mut self, edge: LiftedEdge, frame: Option<Frame>) {
-        debug_assert!(
-            self.edges
-                .iter()
-                .all(|(existing, _)| existing.id != edge.id)
-        );
-        self.edges.push((edge, frame));
-    }
-}
+pub(crate) type LiftedTerminator = Terminator<LiftedArm>;
 
 /// Analysis state for one normalized block.
 ///
@@ -85,7 +67,10 @@ pub(crate) enum BlockExecution {
     /// The input frame changed and the block must be executed.
     Pending { input: Frame },
     /// The block was executed with the current input frame.
-    Complete { input: Frame, block: LiftedBlock },
+    Complete {
+        input: Frame,
+        block: Box<LiftedBlock>,
+    },
 }
 
 /// The complete analysis state passed to draft-IR materialization.
@@ -116,6 +101,9 @@ impl BlockExecution {
         let Self::Pending { input } = std::mem::take(self) else {
             unreachable!("only a pending block can finish execution");
         };
-        *self = Self::Complete { input, block };
+        *self = Self::Complete {
+            input,
+            block: Box::new(block),
+        };
     }
 }

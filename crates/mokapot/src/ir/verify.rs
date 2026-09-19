@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::{
-    BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, SuccessorTarget, TerminatorKind,
+    BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, SuccessorTarget, Terminator,
     ValueDefinition, ValueId, control_flow::ControlTransfer,
 };
 
@@ -346,22 +346,11 @@ fn collect_edge_sensitive_definitions(
     method
         .blocks()
         .filter_map(|(block_id, block)| {
-            if !matches!(block.terminator.kind(), TerminatorKind::Fallible) {
+            let Terminator::Fallible { normal, .. } = &block.terminator else {
                 return None;
-            }
+            };
             let value = block.operations.last()?.def()?;
-            let normal_edges = block
-                .terminator
-                .successors()
-                .iter()
-                .filter(|successor| {
-                    !matches!(
-                        successor.transfer(),
-                        ControlTransfer::Exception(_) | ControlTransfer::Unwind
-                    )
-                })
-                .map(super::Successor::id)
-                .collect();
+            let normal_edges = normal.iter().map(super::Successor::id).collect();
             Some((
                 value,
                 EdgeSensitiveDefinition {
@@ -496,7 +485,6 @@ fn verify_edge_sensitive_use(
             .expect("the predecessor is a defined block")
             .terminator
             .successors()
-            .iter()
             .find(|successor| successor.id() == edge)
             .is_some_and(|successor| definition.normal_edges.contains(&successor.id()));
         if normal {
@@ -593,8 +581,11 @@ mod tests {
         let successor = method
             .blocks_mut()
             .values_mut()
-            .flat_map(|block| &mut block.terminator.successors)
-            .find(|successor| successor.target == SuccessorTarget::Block(entry))
+            .find_map(|block| {
+                block
+                    .terminator
+                    .successor_mut(|successor| successor.target == SuccessorTarget::Block(entry))
+            })
             .unwrap();
         successor.arguments.clear();
 
@@ -630,8 +621,11 @@ mod tests {
         method
             .blocks_mut()
             .values_mut()
-            .flat_map(|block| &mut block.terminator.successors)
-            .find(|successor| successor.target == SuccessorTarget::Unwind)
+            .find_map(|block| {
+                block
+                    .terminator
+                    .successor_mut(|successor| successor.target == SuccessorTarget::Unwind)
+            })
             .unwrap()
             .arguments
             .push(value);
@@ -649,8 +643,11 @@ mod tests {
         method
             .blocks_mut()
             .values_mut()
-            .flat_map(|block| &mut block.terminator.successors)
-            .find(|successor| successor.target == SuccessorTarget::Unwind)
+            .find_map(|block| {
+                block
+                    .terminator
+                    .successor_mut(|successor| successor.target == SuccessorTarget::Unwind)
+            })
             .unwrap()
             .transfer = ControlTransfer::Unconditional;
 

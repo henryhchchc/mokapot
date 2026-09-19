@@ -5,7 +5,8 @@ mod merge;
 mod state;
 
 pub(super) use state::{
-    CompletedAnalysis, Contribution, LiftedBlock, ParameterDefinition, ParameterSite,
+    CompletedAnalysis, Contribution, LiftedArm, LiftedBlock, LiftedTerminator, ParameterDefinition,
+    ParameterSite,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,14 +18,15 @@ use crate::{
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
             draft::{
-                DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter, DraftTerminator,
+                self, DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter,
+                DraftTerminator,
             },
             error::Error,
         },
     },
     jvm::code::ProgramCounter,
 };
-use state::{BlockExecution, BlockState, LiftedEdge, LiftedSuccessors};
+use state::{BlockExecution, BlockState, LiftedEdge};
 
 pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) cfg: &'cfg NormalizedCfg<'method>,
@@ -105,9 +107,8 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             let input = input.clone();
             let block = self.execute(block_id, input)?;
             let outputs = block
-                .successors
-                .edges
-                .iter()
+                .terminator
+                .arms()
                 .filter_map(|(edge, frame)| match (edge.target, frame) {
                     (SuccessorTarget::Block(target), Some(frame)) => {
                         Some((edge.id, target, frame.clone()))
@@ -150,12 +151,12 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
 impl CompletedAnalysis {
     fn into_draft(self, entry: BlockId) -> Result<DraftMethod, Error> {
         let Self {
-            blocks,
+            blocks: lifted_blocks,
             parameter_definitions,
-            receiver_value,
+            receiver_value: this_value,
             parameter_values,
         } = self;
-        let mut draft_blocks = blocks
+        let mut blocks = lifted_blocks
             .into_iter()
             .map(|(id, state)| {
                 let lifted = state.execution.into_block().ok_or_else(|| {
@@ -166,7 +167,7 @@ impl CompletedAnalysis {
             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
         for (site, definition) in &parameter_definitions {
-            let Some(block) = draft_blocks.get_mut(&site.block) else {
+            let Some(block) = blocks.get_mut(&site.block) else {
                 continue;
             };
             block.parameters.push(DraftParameter {
@@ -174,7 +175,7 @@ impl CompletedAnalysis {
             });
         }
 
-        let target_parameters = draft_blocks
+        let target_parameters = blocks
             .iter()
             .map(|(&id, block)| {
                 (
@@ -201,8 +202,8 @@ impl CompletedAnalysis {
                     .ok_or_else(|| Error::internal("an entry parameter lacks an entry argument"))
             })
             .collect::<Result<_, _>>()?;
-        for block in draft_blocks.values_mut() {
-            for edge in &mut block.terminator.successors {
+        for block in blocks.values_mut() {
+            for edge in block.terminator.shape.arms_mut() {
                 edge.arguments = match edge.target {
                     SuccessorTarget::Block(target) => target_parameters[&target]
                         .iter()
@@ -211,11 +212,9 @@ impl CompletedAnalysis {
                                 .get(parameter)
                                 .and_then(|def| def.inputs.get(&Contribution::Edge(edge.id)))
                                 .copied()
-                                .ok_or_else(|| {
-                                    Error::internal("a block parameter lacks an edge argument")
-                                })
+                                .expect("a block parameter must have an edge argument")
                         })
-                        .collect::<Result<_, _>>()?,
+                        .collect(),
                     SuccessorTarget::Unwind => Vec::new(),
                 };
             }
@@ -224,8 +223,8 @@ impl CompletedAnalysis {
         Ok(DraftMethod {
             entry,
             entry_arguments,
-            blocks: draft_blocks,
-            this_value: receiver_value,
+            blocks,
+            this_value,
             parameter_values,
         })
     }
@@ -234,7 +233,7 @@ impl CompletedAnalysis {
 impl BlockExecution {
     fn into_block(self) -> Option<LiftedBlock> {
         match self {
-            Self::Complete { block, .. } => Some(block),
+            Self::Complete { block, .. } => Some(*block),
             Self::Uninitialized | Self::Pending { .. } => None,
         }
     }
@@ -254,20 +253,26 @@ impl From<LiftedBlock> for DraftBlock {
                 })
                 .collect(),
             terminator: DraftTerminator {
-                kind: lifted.terminator,
-                successors: lifted
-                    .successors
-                    .edges
-                    .into_iter()
-                    .map(|(successor, _)| DraftEdge {
-                        id: successor.id,
-                        target: successor.target,
-                        arguments: Vec::new(),
-                        transfer: successor.transfer,
-                    })
-                    .collect(),
+                shape: lifted.terminator.into(),
                 origin: lifted.terminator_source,
             },
         }
+    }
+}
+
+impl From<LiftedEdge> for DraftEdge {
+    fn from(edge: LiftedEdge) -> Self {
+        Self {
+            id: edge.id,
+            target: edge.target,
+            arguments: Vec::new(),
+            transfer: edge.transfer,
+        }
+    }
+}
+
+impl From<state::LiftedTerminator> for draft::DraftTerminatorShape {
+    fn from(value: state::LiftedTerminator) -> Self {
+        value.map_arms(|(edge, _)| edge.into())
     }
 }

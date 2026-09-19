@@ -1,6 +1,6 @@
 use mokapot::{
     ir::{
-        InstructionLocation, InstructionRef, MokaIRMethod, OperationKind, TerminatorKind,
+        InstructionLocation, InstructionRef, MokaIRMethod, OperationKind, Terminator,
         expression::Expression,
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
@@ -85,8 +85,8 @@ fn builds_ir_blocks_and_provenance() {
         .find_map(|id| terminator(&ir, id))
         .unwrap();
     assert!(matches!(
-        returned.kind(),
-        TerminatorKind::Return(Some(value)) if value == &ir.parameter_values()[1]
+        returned,
+        Terminator::Return { value: Some(value), .. } if value == &ir.parameter_values()[1]
     ));
 
     for (block_id, _) in ir.blocks() {

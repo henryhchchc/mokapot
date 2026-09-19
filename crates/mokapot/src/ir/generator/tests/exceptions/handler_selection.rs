@@ -45,7 +45,6 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let transfers = fallible
         .terminator
         .successors()
-        .iter()
         .map(Successor::transfer)
         .collect::<Vec<_>>();
 
@@ -84,10 +83,13 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
 
     assert_eq!(ir.blocks().len(), 1);
     let entry = ir.block(ir.entry_block()).unwrap();
-    assert_eq!(entry.terminator.kind(), &TerminatorKind::Return(None));
-    assert_eq!(entry.terminator.successors().len(), 1);
     assert!(matches!(
-        entry.terminator.successors()[0].transfer(),
+        entry.terminator,
+        Terminator::Return { value: None, .. }
+    ));
+    assert_eq!(entry.terminator.successors().count(), 1);
+    assert!(matches!(
+        entry.terminator.successors().next().unwrap().transfer(),
         ControlTransfer::Unwind
     ));
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);

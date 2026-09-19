@@ -9,7 +9,7 @@ use petgraph::{
 };
 
 use super::*;
-use crate::ir::{BlockKind, Successor, SuccessorTarget, Terminator, TerminatorKind, ValueId};
+use crate::ir::{BlockKind, Successor, SuccessorTarget, Terminator};
 
 #[test]
 fn sparse_nodes_and_parallel_edges_are_preserved() {
@@ -19,27 +19,29 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
         kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            kind: TerminatorKind::Switch {
-                match_value: ValueId::new(0),
-            },
-            successors: (0..3)
+        terminator: {
+            let mut arms = (0..3)
                 .map(|id| Successor {
                     id: EdgeId::new(id),
                     target: SuccessorTarget::Block(target),
                     arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 })
-                .collect(),
+                .collect::<Vec<_>>();
+            let default = arms.pop().unwrap();
+            Terminator::Switch {
+                cases: arms,
+                default,
+            }
         },
     };
     let exit = BasicBlock {
         kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            kind: TerminatorKind::Return(None),
-            successors: vec![],
+        terminator: Terminator::Return {
+            value: None,
+            exceptional: vec![],
         },
     };
     let blocks = BTreeMap::from([(source_id, source), (target, exit)]);
@@ -67,9 +69,8 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
         kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
-        terminator: Terminator {
-            kind: TerminatorKind::Fallible,
-            successors: vec![
+        terminator: {
+            let mut arms = vec![
                 Successor {
                     id: EdgeId::new(0),
                     target: SuccessorTarget::Block(BlockId::new(1)),
@@ -90,15 +91,18 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                     arguments: vec![],
                     transfer: ControlTransfer::Unwind,
                 },
-            ],
+            ];
+            Terminator::Fallible {
+                normal: Some(arms.remove(0)),
+                exceptional: arms,
+            }
         },
     };
     let exits = (1..=2)
         .map(|id| {
-            let kind = TerminatorKind::Return(None);
-            let terminator = Terminator {
-                kind,
-                successors: vec![],
+            let terminator = Terminator::Return {
+                value: None,
+                exceptional: vec![],
             };
             let basic_block = BasicBlock {
                 kind: BlockKind::Code,
@@ -131,6 +135,5 @@ fn source_has_explicit_unwind(blocks: &BTreeMap<BlockId, BasicBlock>) -> bool {
     blocks[&BlockId::new(0)]
         .terminator
         .successors()
-        .iter()
         .any(|successor| successor.target() == SuccessorTarget::Unwind)
 }
