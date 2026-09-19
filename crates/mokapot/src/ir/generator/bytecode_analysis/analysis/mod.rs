@@ -121,7 +121,14 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 .complete(block);
             for (edge, target, frame) in outputs {
                 debug_assert!(
-                    self.cfg.block(target).predecessors.contains(&block_id),
+                    self.cfg
+                        .block(block_id)
+                        .successors
+                        .iter()
+                        .any(|normalized| {
+                            normalized.id == edge
+                                && normalized.target == SuccessorTarget::Block(target)
+                        }),
                     "frame propagation must follow normalized topology"
                 );
                 self.blocks

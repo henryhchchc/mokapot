@@ -55,11 +55,9 @@ impl<'method> NormalizedCfg<'method> {
     }
 }
 
-/// One normalized block, including its immutable predecessor and successor
-/// topology.
+/// One normalized block, including its immutable successor topology.
 pub(crate) struct NormalizedBlock {
     pub kind: NormalizedBlockKind,
-    pub predecessors: BTreeSet<BlockId>,
     pub successors: Vec<NormalizedEdge>,
 }
 
@@ -138,32 +136,11 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
             id,
             NormalizedBlock {
                 kind,
-                predecessors: BTreeSet::new(),
                 successors: edges,
             },
         ))
     });
-    let mut blocks: BTreeMap<_, _> = normalized.collect::<Result<_, Error>>()?;
-
-    let predecessors = blocks
-        .iter()
-        .flat_map(|(&source, block)| {
-            block
-                .successors
-                .iter()
-                .filter_map(move |edge| match edge.target {
-                    SuccessorTarget::Block(target) => Some((source, target)),
-                    SuccessorTarget::Unwind => None,
-                })
-        })
-        .collect::<Vec<_>>();
-    for (source, target) in predecessors {
-        blocks
-            .get_mut(&target)
-            .expect("a normalized edge target must belong to its graph")
-            .predecessors
-            .insert(source);
-    }
+    let blocks: BTreeMap<_, _> = normalized.collect::<Result<_, Error>>()?;
 
     Ok(NormalizedCfg {
         bytecode,
@@ -267,15 +244,6 @@ mod tests {
                 .windows(2)
                 .all(|pair| pair[0].target == pair[1].target)
         );
-        assert_eq!(
-            cfg.block(match successors[0].target {
-                SuccessorTarget::Block(target) => target,
-                SuccessorTarget::Unwind => panic!("expected a block target"),
-            })
-            .predecessors,
-            BTreeSet::from([entry])
-        );
-
         let ir = MokaIRMethod::from_method(&method).unwrap();
         let finished_edge_ids = ir
             .block(ir.entry_block())
@@ -306,7 +274,6 @@ mod tests {
         };
 
         assert_eq!(backedge.target, SuccessorTarget::Block(header));
-        assert_eq!(cfg.block(header).predecessors, BTreeSet::from([header]));
     }
 
     #[test]
