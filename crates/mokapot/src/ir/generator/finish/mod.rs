@@ -53,6 +53,11 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
     Ok(method)
 }
 
+#[derive(Default)]
+struct FinishState {
+    definitions: HashMap<ValueId, ValueDefinition>,
+}
+
 impl FinishState {
     fn define_block_values(
         &mut self,
@@ -87,14 +92,7 @@ impl FinishState {
         }
         Ok(())
     }
-}
 
-#[derive(Default)]
-struct FinishState {
-    definitions: HashMap<ValueId, ValueDefinition>,
-}
-
-impl FinishState {
     fn define(&mut self, value: ValueId, definition: ValueDefinition) -> Result<(), Error> {
         if self.definitions.insert(value, definition).is_some() {
             return Err(Error::internal("a value identity has multiple definitions"));

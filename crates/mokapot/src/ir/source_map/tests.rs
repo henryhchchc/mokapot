@@ -1,6 +1,16 @@
 use super::*;
 use crate::ir::BlockId;
 
+impl SourceMap {
+    pub(crate) fn mappings(
+        &self,
+    ) -> impl Iterator<Item = (InstructionLocation, ProgramCounter)> + '_ {
+        self.by_location
+            .iter()
+            .map(|(&location, &pc)| (location, pc))
+    }
+}
+
 #[test]
 fn source_map_is_sparse_and_one_to_many() {
     let pc0 = ProgramCounter::from(0);

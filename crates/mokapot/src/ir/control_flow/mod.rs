@@ -63,15 +63,11 @@ impl<'method> Edge<'method> {
 /// A borrowed control-flow graph derived solely from block terminators.
 #[derive(Debug, Clone, Copy)]
 pub struct ControlFlowGraph<'method> {
-    pub(crate) blocks: &'method BTreeMap<BlockId, BasicBlock>,
+    pub(super) blocks: &'method BTreeMap<BlockId, BasicBlock>,
     entry: BlockId,
 }
 
 impl<'m> ControlFlowGraph<'m> {
-    pub(crate) const fn new(blocks: &'m BTreeMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
-        Self { blocks, entry }
-    }
-
     /// Returns the entry block.
     #[must_use]
     pub const fn entry_block(self) -> BlockId {
@@ -159,6 +155,12 @@ impl<'m> ControlFlowGraph<'m> {
         budget: SolvingBudget,
     ) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
         path_condition::analyze(self, budget)
+    }
+}
+
+impl<'m> ControlFlowGraph<'m> {
+    pub(super) const fn new(blocks: &'m BTreeMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
+        Self { blocks, entry }
     }
 }
 

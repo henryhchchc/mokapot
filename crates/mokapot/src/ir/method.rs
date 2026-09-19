@@ -43,13 +43,13 @@ pub enum InstructionRef<'method> {
     Terminator(&'method Terminator),
 }
 
-pub(crate) struct MokaIRMethodParts {
-    pub(crate) entry: MethodEntry,
-    pub(crate) blocks: BTreeMap<BlockId, BasicBlock>,
-    pub(crate) source_map: SourceMap,
-    pub(crate) this_value: Option<ValueId>,
-    pub(crate) parameter_values: Vec<ValueId>,
-    pub(crate) value_definitions: HashMap<ValueId, ValueDefinition>,
+pub(super) struct MokaIRMethodParts {
+    pub(super) entry: MethodEntry,
+    pub(super) blocks: BTreeMap<BlockId, BasicBlock>,
+    pub(super) source_map: SourceMap,
+    pub(super) this_value: Option<ValueId>,
+    pub(super) parameter_values: Vec<ValueId>,
+    pub(super) value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// The invocation boundary that supplies arguments to the method's entry block.
@@ -191,7 +191,17 @@ impl MokaIRMethod {
         self.value_definitions.get(&value).copied()
     }
 
-    pub(crate) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
+    /// Returns a borrowed control-flow view derived from block terminators.
+    ///
+    /// The returned view does not store an independent edge set.
+    #[must_use]
+    pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
+        ControlFlowGraph::new(&self.blocks, self.entry.target)
+    }
+}
+
+impl MokaIRMethod {
+    pub(super) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
         Self {
             access_flags: method.access_flags,
             name: method.name.clone(),
@@ -205,27 +215,19 @@ impl MokaIRMethod {
             value_definitions: parts.value_definitions,
         }
     }
+}
 
-    #[cfg(test)]
-    pub(crate) const fn value_definitions(&self) -> &HashMap<ValueId, ValueDefinition> {
+#[cfg(test)]
+impl MokaIRMethod {
+    pub(super) const fn value_definitions(&self) -> &HashMap<ValueId, ValueDefinition> {
         &self.value_definitions
     }
 
-    #[cfg(test)]
-    pub(crate) const fn entry_mut(&mut self) -> &mut MethodEntry {
+    pub(super) const fn entry_mut(&mut self) -> &mut MethodEntry {
         &mut self.entry
     }
 
-    #[cfg(test)]
-    pub(crate) const fn blocks_mut(&mut self) -> &mut BTreeMap<BlockId, BasicBlock> {
+    pub(super) const fn blocks_mut(&mut self) -> &mut BTreeMap<BlockId, BasicBlock> {
         &mut self.blocks
-    }
-
-    /// Returns a borrowed control-flow view derived from block terminators.
-    ///
-    /// The returned view does not store an independent edge set.
-    #[must_use]
-    pub const fn control_flow_graph(&self) -> ControlFlowGraph<'_> {
-        ControlFlowGraph::new(&self.blocks, self.entry.target)
     }
 }

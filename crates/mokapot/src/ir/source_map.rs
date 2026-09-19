@@ -15,19 +15,6 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
-    pub(crate) fn record_operation(
-        &mut self,
-        pc: ProgramCounter,
-        block: super::BlockId,
-        index: usize,
-    ) {
-        self.record(pc, InstructionLocation::Operation { block, index });
-    }
-
-    pub(crate) fn record_terminator(&mut self, pc: ProgramCounter, block: super::BlockId) {
-        self.record(pc, InstructionLocation::Terminator { block });
-    }
-
     /// Returns every IR node directly related to a JVM instruction location.
     ///
     /// The iterator is empty when lifting erased the instruction without
@@ -50,6 +37,21 @@ impl SourceMap {
     pub fn origin_of(&self, instruction: InstructionLocation) -> Option<ProgramCounter> {
         self.by_location.get(&instruction).copied()
     }
+}
+
+impl SourceMap {
+    pub(super) fn record_operation(
+        &mut self,
+        pc: ProgramCounter,
+        block: super::BlockId,
+        index: usize,
+    ) {
+        self.record(pc, InstructionLocation::Operation { block, index });
+    }
+
+    pub(super) fn record_terminator(&mut self, pc: ProgramCounter, block: super::BlockId) {
+        self.record(pc, InstructionLocation::Terminator { block });
+    }
 
     fn record(&mut self, pc: ProgramCounter, instruction: InstructionLocation) {
         assert!(
@@ -57,15 +59,6 @@ impl SourceMap {
             "an IR instruction location cannot have multiple JVM origins"
         );
         self.by_pc.entry(pc).or_default().insert(instruction);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn mappings(
-        &self,
-    ) -> impl Iterator<Item = (InstructionLocation, ProgramCounter)> + '_ {
-        self.by_location
-            .iter()
-            .map(|(&location, &pc)| (location, pc))
     }
 }
 

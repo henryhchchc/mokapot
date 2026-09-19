@@ -1,8 +1,30 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use proptest::{collection::hash_set, prelude::*};
 
-use super::{BooleanVariable, BranchGuard, PathCondition, SolvingBudget};
+use super::cover::Cover;
+use super::{BooleanVariable, BranchGuard, PathCondition, PathConditionTerm, SolvingBudget};
+
+impl<P> PathConditionTerm<'_, P> {
+    /// Iterates over this term's literals.
+    ///
+    /// The iteration order is unspecified.
+    pub fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
+        self.0.literals()
+    }
+}
+
+impl<P> PathCondition<P> {
+    fn from_branch_guards(branch_guards: impl IntoIterator<Item = BranchGuard<P>>) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        Self::with_cover(Cover::from_branch_guards(branch_guards))
+    }
+}
 
 impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
     type Parameters = (u32, bool);

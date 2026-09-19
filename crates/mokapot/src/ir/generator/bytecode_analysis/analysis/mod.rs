@@ -4,8 +4,9 @@ mod execution;
 mod merge;
 mod state;
 
-pub(super) use state::{
-    CompletedAnalysis, Contribution, LiftedArm, LiftedBlock, LiftedTerminator, ParameterSite,
+use state::{
+    BlockExecution, BlockState, CompletedAnalysis, Contribution, LiftedArm, LiftedBlock,
+    LiftedEdge, LiftedTerminator, ParameterSite,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,18 +23,17 @@ use crate::{
     },
     jvm::code::ProgramCounter,
 };
-use state::{BlockExecution, BlockState, LiftedEdge};
 
 pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) cfg: &'cfg NormalizedCfg<'method>,
     pub(super) values: ValueContext,
     pub(super) initial_frame: Frame,
-    pub(super) blocks: BTreeMap<BlockId, BlockState>,
-    pub(super) parameter_definitions: BTreeMap<ParameterSite, ValueId>,
+    blocks: BTreeMap<BlockId, BlockState>,
+    parameter_definitions: BTreeMap<ParameterSite, ValueId>,
     pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
 }
 
-impl Analyzer<'_, '_> {
+impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     /// Interns the identity of the value caught by handler-entry `block`.
     ///
     /// Every exceptional arm into one handler-entry location must carry the
@@ -59,9 +59,7 @@ impl Analyzer<'_, '_> {
             }
         }
     }
-}
 
-impl<'method, 'cfg> Analyzer<'method, 'cfg> {
     pub(super) fn new(cfg: &'cfg NormalizedCfg<'method>) -> Result<Self, Error> {
         let (values, initial_frame) = ValueContext::for_cfg(cfg)?;
         let blocks = cfg

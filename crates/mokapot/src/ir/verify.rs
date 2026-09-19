@@ -39,7 +39,7 @@ struct DefinitionIndex {
 }
 
 /// Verifies the invariants promised by a completed generated method.
-pub(crate) fn verify(method: &MokaIRMethod) -> VerificationResult {
+pub(super) fn verify(method: &MokaIRMethod) -> VerificationResult {
     let blocks = collect_blocks(method)?;
     let predecessors = verify_edges(method, &blocks)?;
     verify_reachability(method, &blocks)?;

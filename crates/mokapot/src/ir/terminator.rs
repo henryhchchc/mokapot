@@ -125,7 +125,7 @@ pub enum Terminator<Arm = Successor> {
 
 impl<Arm> Terminator<Arm> {
     /// Maps every outgoing arm while preserving the terminator's structure.
-    pub(crate) fn map_arms<MappedArm>(
+    pub(super) fn map_arms<MappedArm>(
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
     ) -> Terminator<MappedArm> {
@@ -163,7 +163,7 @@ impl<Arm> Terminator<Arm> {
     }
 
     /// Iterates over outgoing arms in semantic order.
-    pub(crate) fn arms(&self) -> impl Iterator<Item = &Arm> {
+    pub(super) fn arms(&self) -> impl Iterator<Item = &Arm> {
         let (head, tail): (&[_], &[_]) = match self {
             Self::Goto { target } => (slice::from_ref(target), &[]),
             Self::Branch { taken, otherwise } => {
@@ -184,7 +184,7 @@ impl<Arm> Terminator<Arm> {
     }
 
     /// Iterates mutably over outgoing arms in semantic order.
-    pub(crate) fn arms_mut(&mut self) -> impl Iterator<Item = &mut Arm> {
+    pub(super) fn arms_mut(&mut self) -> impl Iterator<Item = &mut Arm> {
         let (head, tail): (&mut [_], &mut [_]) = match self {
             Self::Goto { target } => (slice::from_mut(target), &mut []),
             Self::Branch { taken, otherwise } => {
@@ -206,14 +206,6 @@ impl<Arm> Terminator<Arm> {
 }
 
 impl Terminator<Successor> {
-    #[cfg(test)]
-    pub(crate) fn successor_mut(
-        &mut self,
-        mut predicate: impl FnMut(&Successor) -> bool,
-    ) -> Option<&mut Successor> {
-        self.arms_mut().find(|arm| predicate(arm))
-    }
-
     /// Iterates over outgoing arms in semantic order.
     pub fn successors(&self) -> impl Iterator<Item = &Successor> {
         self.arms()
@@ -240,8 +232,19 @@ impl Terminator<Successor> {
             .collect()
     }
 
+    /// Returns the value defined by a successful attempted operation.
+    #[must_use]
+    pub const fn def(&self) -> Option<ValueId> {
+        match self {
+            Self::Try { operation, .. } => operation.def(),
+            _ => None,
+        }
+    }
+}
+
+impl Terminator<Successor> {
     /// Returns the values this terminator uses, excluding successor arguments.
-    pub(crate) fn local_uses(&self) -> HashSet<ValueId> {
+    pub(super) fn local_uses(&self) -> HashSet<ValueId> {
         let value = match self {
             Self::Throw { value, .. }
             | Self::Return { value: Some(value) }
@@ -268,15 +271,6 @@ impl Terminator<Successor> {
             .chain(guard_uses)
             .collect()
     }
-
-    /// Returns the value defined by a successful attempted operation.
-    #[must_use]
-    pub const fn def(&self) -> Option<ValueId> {
-        match self {
-            Self::Try { operation, .. } => operation.def(),
-            _ => None,
-        }
-    }
 }
 
 impl<Arm> fmt::Display for Terminator<Arm> {
@@ -300,6 +294,15 @@ impl<Arm> fmt::Display for Terminator<Arm> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl Terminator<Successor> {
+        pub(crate) fn successor_mut(
+            &mut self,
+            mut predicate: impl FnMut(&Successor) -> bool,
+        ) -> Option<&mut Successor> {
+            self.arms_mut().find(|arm| predicate(arm))
+        }
+    }
 
     fn arm(id: u32) -> Successor {
         Successor::Block {

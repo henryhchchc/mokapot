@@ -5,7 +5,7 @@
 pub struct BlockId(u32);
 
 impl BlockId {
-    pub(crate) const fn new(index: u32) -> Self {
+    pub(super) const fn new(index: u32) -> Self {
         Self(index)
     }
 }
@@ -41,7 +41,7 @@ pub enum InstructionLocation {
 pub struct EdgeId(u32);
 
 impl EdgeId {
-    pub(crate) const fn new(index: u32) -> Self {
+    pub(super) const fn new(index: u32) -> Self {
         Self(index)
     }
 }
@@ -57,7 +57,7 @@ impl EdgeId {
 pub struct ValueId(u32);
 
 impl ValueId {
-    pub(crate) const fn new(index: u32) -> Self {
+    pub(super) const fn new(index: u32) -> Self {
         Self(index)
     }
 }

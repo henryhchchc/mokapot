@@ -70,14 +70,14 @@ pub(super) struct PathConditionFact<P> {
 }
 
 impl<P> PathConditionFact<P> {
-    pub(crate) fn one(budget: SolvingBudget) -> Self
+    pub(super) fn one(budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self::new(PathCondition::one(), budget)
     }
 
-    pub(crate) fn new(inner: PathCondition<P>, budget: SolvingBudget) -> Self
+    pub(super) fn new(inner: PathCondition<P>, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -85,18 +85,18 @@ impl<P> PathConditionFact<P> {
         Self { inner, budget }
     }
 
-    pub(crate) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
+    pub(super) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self::new(self.inner.clone() & branch_guard, self.budget)
     }
 
-    pub(crate) fn is_contradiction(&self) -> bool {
+    pub(super) fn is_contradiction(&self) -> bool {
         self.inner.is_contradiction()
     }
 
-    pub(crate) fn into_inner(self) -> PathCondition<P> {
+    pub(super) fn into_inner(self) -> PathCondition<P> {
         self.inner
     }
 }

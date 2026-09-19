@@ -94,7 +94,9 @@ impl<P> BranchGuard<P> {
             .unique()
             .count()
     }
+}
 
+impl<P> BranchGuard<P> {
     pub(crate) fn predicates(&self) -> impl Iterator<Item = &P> {
         self.literals().map(|literal| match literal {
             BooleanVariable::Positive(predicate) | BooleanVariable::Negative(predicate) => {
