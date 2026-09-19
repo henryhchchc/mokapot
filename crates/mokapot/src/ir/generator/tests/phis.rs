@@ -26,7 +26,7 @@ fn diamond_merge_uses_a_block_parameter_and_edge_arguments() {
     let incoming = ir
         .blocks()
         .flat_map(|(_, bb)| bb.terminator.successors())
-        .filter(|it| it.target() == join_id)
+        .filter(|it| it.block_target() == Some(join_id))
         .collect::<Vec<_>>();
     assert_eq!(incoming.len(), 2);
     assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
@@ -104,7 +104,7 @@ fn entry_backedge_uses_method_entry_arguments_and_a_loop_parameter() {
     let backedge_value = ir
         .blocks()
         .flat_map(|(_, bb)| bb.terminator.successors())
-        .filter(|it| it.target() == header_id)
+        .filter(|it| it.block_target() == Some(header_id))
         .flat_map(Successor::arguments)
         .copied()
         .find(|&value| value != ir.entry().arguments()[0])
@@ -135,7 +135,10 @@ fn entry_self_loop_needs_no_synthetic_block_or_redundant_parameters() {
         header.terminator.successors()[0].transfer(),
         ControlTransfer::Unconditional
     ));
-    assert_eq!(header.terminator.successors()[0].target(), header_id);
+    assert_eq!(
+        header.terminator.successors()[0].block_target(),
+        Some(header_id)
+    );
     let loc = InstructionLocation::Terminator { block: header_id };
     assert_eq!(
         ir.source_map().origin_of(loc),

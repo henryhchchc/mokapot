@@ -156,11 +156,6 @@ impl OperandStack {
         self.max_slots
     }
 
-    pub(super) fn clear(&mut self) {
-        self.values.clear();
-        self.slot_count = 0;
-    }
-
     pub(super) fn has_same_shape(&self, other: &Self) -> bool {
         self.max_slots == other.max_slots
             && self

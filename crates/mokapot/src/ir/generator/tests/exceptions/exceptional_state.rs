@@ -29,18 +29,22 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
-        .target();
+        .block_target()
+        .unwrap();
     let handler_entry_id = fallible
         .terminator
         .successors()
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(None)))
         .unwrap()
-        .target();
+        .block_target()
+        .unwrap();
 
     assert_ne!(normal_target, handler_entry_id);
     let handler_entry = ir.block(handler_entry_id).unwrap();
-    let caught = ir.caught_exception(handler_entry_id).unwrap();
+    let crate::ir::BlockKind::LandingPad { exception: caught } = handler_entry.kind else {
+        panic!("exceptional successor must target a landing pad");
+    };
     assert_eq!(
         ir.definition_of(caught),
         Some(ValueDefinition::CaughtException(handler_entry_id))
@@ -53,8 +57,8 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
         ControlTransfer::Unconditional
     ));
     assert_eq!(
-        handler_entry.terminator.successors()[0].target(),
-        normal_target
+        handler_entry.terminator.successors()[0].block_target(),
+        Some(normal_target)
     );
     let loc = InstructionLocation::Terminator {
         block: handler_entry_id,
@@ -100,16 +104,22 @@ fn exceptional_state_excludes_the_fallible_result() {
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
-        .target();
+        .block_target()
+        .unwrap();
     let handler_entry = fallible
         .terminator
         .successors()
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(None)))
-        .and_then(|successor| ir.block(successor.target()))
+        .and_then(Successor::block_target)
+        .and_then(|target| ir.block(target))
         .expect("the exceptional outcome must enter the handler");
     let handler_body = ir
-        .block(handler_entry.terminator.successors()[0].target())
+        .block(
+            handler_entry.terminator.successors()[0]
+                .block_target()
+                .unwrap(),
+        )
         .unwrap();
 
     assert!(matches!(
@@ -172,11 +182,14 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
         exceptional[1].transfer(),
         ControlTransfer::Exception(None)
     ));
-    let handler = ir.block(exceptional[0].target()).unwrap();
-    assert!(handler.caught_exception.is_some());
+    let handler = ir.block(exceptional[0].block_target().unwrap()).unwrap();
+    assert!(matches!(
+        handler.kind,
+        crate::ir::BlockKind::LandingPad { .. }
+    ));
     assert_eq!(
         ir.blocks()
-            .filter(|(_, block)| block.caught_exception.is_some())
+            .filter(|(_, block)| matches!(block.kind, crate::ir::BlockKind::LandingPad { .. }))
             .count(),
         1
     );

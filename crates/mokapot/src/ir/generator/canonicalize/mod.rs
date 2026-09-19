@@ -23,7 +23,10 @@ pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
         for edge in &block.terminator.successors {
             let target = draft
                 .blocks
-                .get(&edge.target)
+                .get(&match edge.target {
+                    crate::ir::SuccessorTarget::Block(target) => target,
+                    crate::ir::SuccessorTarget::Unwind => continue,
+                })
                 .expect("a draft edge target must belong to the method");
             assert_eq!(target.parameters.len(), edge.arguments.len());
             for (parameter, &argument) in target.parameters.iter().zip(&edge.arguments) {

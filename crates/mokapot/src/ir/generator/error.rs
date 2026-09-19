@@ -103,13 +103,6 @@ impl Error {
             error => error,
         }
     }
-
-    pub(crate) const fn at_instruction_if_present(self, pc: Option<ProgramCounter>) -> Self {
-        match pc {
-            Some(pc) => self.at_instruction(pc),
-            None => self,
-        }
-    }
 }
 
 impl From<FrameError> for Error {

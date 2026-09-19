@@ -5,7 +5,7 @@ pub mod path_condition;
 use std::collections::{BTreeMap, HashMap};
 
 use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
-use super::{BasicBlock, BlockId, EdgeId};
+use super::{BasicBlock, BlockId, EdgeId, SuccessorTarget};
 use crate::{ir::expression::Predicate, jvm::references::ClassRef};
 
 /// The semantics of one control-flow successor arm.
@@ -86,27 +86,38 @@ impl<'m> ControlFlowGraph<'m> {
         self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
-    /// Returns every successor arm, retaining parallel edges.
+    /// Returns every block-to-block successor arm, retaining parallel edges.
+    ///
+    /// Method-exiting unwind arms remain available on terminators but are not
+    /// graph edges because they have no basic-block target.
     pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
         self.blocks.iter().flat_map(|(&source, block)| {
             block
                 .terminator
                 .successors()
                 .iter()
-                .map(move |successor| Edge {
-                    id: successor.id(),
-                    source,
-                    target: successor.target(),
-                    data: successor.transfer(),
+                .filter_map(move |successor| match successor.target() {
+                    SuccessorTarget::Block(target) => Some(Edge {
+                        id: successor.id(),
+                        source,
+                        target,
+                        data: successor.transfer(),
+                    }),
+                    SuccessorTarget::Unwind => None,
                 })
         })
     }
 
     /// Returns blocks with no outgoing successor arms.
     pub fn exits(self) -> impl Iterator<Item = BlockId> + 'm {
-        self.blocks
-            .iter()
-            .filter_map(|(&id, block)| block.terminator.successors().is_empty().then_some(id))
+        self.blocks.iter().filter_map(|(&id, block)| {
+            block
+                .terminator
+                .successors()
+                .iter()
+                .all(|successor| matches!(successor.target(), SuccessorTarget::Unwind))
+                .then_some(id)
+        })
     }
 
     /// Returns all outgoing arms from `source`.
@@ -118,11 +129,14 @@ impl<'m> ControlFlowGraph<'m> {
                 .terminator
                 .successors()
                 .iter()
-                .map(move |successor| Edge {
-                    id: successor.id(),
-                    source,
-                    target: successor.target(),
-                    data: successor.transfer(),
+                .filter_map(move |successor| match successor.target() {
+                    SuccessorTarget::Block(target) => Some(Edge {
+                        id: successor.id(),
+                        source,
+                        target,
+                        data: successor.transfer(),
+                    }),
+                    SuccessorTarget::Unwind => None,
                 })
         })
     }

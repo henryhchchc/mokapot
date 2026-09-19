@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::{
-    BlockId, EdgeId, InstructionLocation, MokaIRMethod, TerminatorKind, ValueDefinition, ValueId,
-    control_flow::ControlTransfer,
+    BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, SuccessorTarget, TerminatorKind,
+    ValueDefinition, ValueId, control_flow::ControlTransfer,
 };
 
 type VerificationResult = Result<(), String>;
@@ -98,15 +98,32 @@ fn verify_edges(
             if !edge_ids.insert(successor.id()) {
                 return Err(format!("edge {} is defined more than once", successor.id()));
             }
-            let Some(target_predecessors) = predecessors.get_mut(&successor.target()) else {
+            let exits_method = matches!(successor.target(), SuccessorTarget::Unwind);
+            let is_unwind = matches!(successor.transfer(), ControlTransfer::Unwind);
+            if exits_method != is_unwind {
+                return Err(format!(
+                    "edge {} has inconsistent unwind target and transfer",
+                    successor.id()
+                ));
+            }
+            let SuccessorTarget::Block(target) = successor.target() else {
+                if !successor.arguments().is_empty() {
+                    return Err(format!(
+                        "unwind edge {} carries block arguments",
+                        successor.id()
+                    ));
+                }
+                continue;
+            };
+            let Some(target_predecessors) = predecessors.get_mut(&target) else {
                 return Err(format!(
                     "edge {} targets undefined block {}",
                     successor.id(),
-                    successor.target()
+                    target
                 ));
             };
             let expected = method
-                .block(successor.target())
+                .block(target)
                 .expect("the successor target was checked above")
                 .parameters
                 .len();
@@ -144,8 +161,11 @@ fn reachable_blocks(method: &MokaIRMethod, excluded_edges: &BTreeSet<EdgeId>) ->
             .block(block_id)
             .expect("the verifier only enqueues defined blocks");
         for successor in block.terminator.successors() {
-            if !excluded_edges.contains(&successor.id()) && reachable.insert(successor.target()) {
-                pending.push_back(successor.target());
+            let SuccessorTarget::Block(target) = successor.target() else {
+                continue;
+            };
+            if !excluded_edges.contains(&successor.id()) && reachable.insert(target) {
+                pending.push_back(target);
             }
         }
     }
@@ -218,7 +238,7 @@ fn collect_definitions(method: &MokaIRMethod) -> Result<DefinitionIndex, String>
         )?;
     }
     for (block_id, block) in method.blocks() {
-        if let Some(value) = block.caught_exception {
+        if let BlockKind::LandingPad { exception: value } = block.kind {
             insert_definition(
                 &mut definitions,
                 &mut sites,
@@ -544,6 +564,16 @@ mod tests {
         MokaIRMethod::from_method(&method).unwrap()
     }
 
+    fn method_with_unwind() -> MokaIRMethod {
+        let method = crate::tests::method(
+            [(0, Instruction::Return)],
+            "()V",
+            vec![],
+            AccessFlags::PUBLIC | AccessFlags::STATIC,
+        );
+        MokaIRMethod::from_method(&method).unwrap()
+    }
+
     #[test]
     fn rejects_method_entry_argument_arity_mismatch() {
         let mut method = entry_loop();
@@ -564,7 +594,7 @@ mod tests {
             .blocks_mut()
             .values_mut()
             .flat_map(|block| &mut block.terminator.successors)
-            .find(|successor| successor.target == entry)
+            .find(|successor| successor.target == SuccessorTarget::Block(entry))
             .unwrap();
         successor.arguments.clear();
 
@@ -587,5 +617,43 @@ mod tests {
                 .unwrap_err()
                 .contains("multiple definitions")
         );
+    }
+
+    #[test]
+    fn rejects_arguments_on_an_unwind_exit() {
+        let mut method = method_with_unwind();
+        let value = method
+            .parameter_values()
+            .first()
+            .copied()
+            .unwrap_or(ValueId::new(0));
+        method
+            .blocks_mut()
+            .values_mut()
+            .flat_map(|block| &mut block.terminator.successors)
+            .find(|successor| successor.target == SuccessorTarget::Unwind)
+            .unwrap()
+            .arguments
+            .push(value);
+
+        assert!(
+            verify(&method)
+                .unwrap_err()
+                .contains("carries block arguments")
+        );
+    }
+
+    #[test]
+    fn rejects_a_non_unwind_transfer_to_the_unwind_exit() {
+        let mut method = method_with_unwind();
+        method
+            .blocks_mut()
+            .values_mut()
+            .flat_map(|block| &mut block.terminator.successors)
+            .find(|successor| successor.target == SuccessorTarget::Unwind)
+            .unwrap()
+            .transfer = ControlTransfer::Unconditional;
+
+        assert!(verify(&method).unwrap_err().contains("inconsistent unwind"));
     }
 }

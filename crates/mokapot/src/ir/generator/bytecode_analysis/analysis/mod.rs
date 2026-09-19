@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        BlockId, ValueId,
+        BlockId, SuccessorTarget, ValueId,
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
             draft::{
@@ -53,13 +53,12 @@ impl Analyzer<'_, '_> {
     /// The PC to attribute a diagnostic for `block` to, if it has one.
     ///
     /// A bytecode and its handler entry both point at the bytecode block's
-    /// start; the synthetic entry and unwind blocks have no PC.
-    pub(super) fn block_pc(&self, block: BlockId) -> Option<ProgramCounter> {
+    /// start.
+    pub(super) fn block_pc(&self, block: BlockId) -> ProgramCounter {
         match self.cfg.block(block).kind {
             NormalizedBlockKind::Bytecode(id) | NormalizedBlockKind::HandlerEntry(id) => {
-                Some(self.cfg.bytecode_block(id).start_pc)
+                self.cfg.bytecode_block(id).start_pc
             }
-            NormalizedBlockKind::Unwind => None,
         }
     }
 }
@@ -109,7 +108,13 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 .successors
                 .edges
                 .iter()
-                .map(|(edge, frame)| (edge.id, edge.target, frame.clone()))
+                .filter_map(|(edge, frame)| match (edge.target, frame) {
+                    (SuccessorTarget::Block(target), Some(frame)) => {
+                        Some((edge.id, target, frame.clone()))
+                    }
+                    (SuccessorTarget::Unwind, None) => None,
+                    _ => unreachable!("only block successors contribute frames"),
+                })
                 .collect::<Vec<_>>();
             self.blocks
                 .get_mut(&block_id)
@@ -198,21 +203,21 @@ impl CompletedAnalysis {
             .collect::<Result<_, _>>()?;
         for block in draft_blocks.values_mut() {
             for edge in &mut block.terminator.successors {
-                let parameters = target_parameters
-                    .get(&edge.target)
-                    .expect("a draft edge target must belong to the method");
-                edge.arguments = parameters
-                    .iter()
-                    .map(|parameter| {
-                        definitions_by_value
-                            .get(parameter)
-                            .and_then(|def| def.inputs.get(&Contribution::Edge(edge.id)))
-                            .copied()
-                            .ok_or_else(|| {
-                                Error::internal("a block parameter lacks an edge argument")
-                            })
-                    })
-                    .collect::<Result<_, _>>()?;
+                edge.arguments = match edge.target {
+                    SuccessorTarget::Block(target) => target_parameters[&target]
+                        .iter()
+                        .map(|parameter| {
+                            definitions_by_value
+                                .get(parameter)
+                                .and_then(|def| def.inputs.get(&Contribution::Edge(edge.id)))
+                                .copied()
+                                .ok_or_else(|| {
+                                    Error::internal("a block parameter lacks an edge argument")
+                                })
+                        })
+                        .collect::<Result<_, _>>()?,
+                    SuccessorTarget::Unwind => Vec::new(),
+                };
             }
         }
 
@@ -238,7 +243,7 @@ impl BlockExecution {
 impl From<LiftedBlock> for DraftBlock {
     fn from(lifted: LiftedBlock) -> Self {
         Self {
-            caught_exception: lifted.caught_exception,
+            kind: lifted.kind,
             parameters: Vec::new(),
             operations: lifted
                 .operations

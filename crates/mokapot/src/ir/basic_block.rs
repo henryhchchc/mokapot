@@ -13,12 +13,24 @@ pub struct BlockParameter {
 /// order, and its single terminator defines every outgoing control-flow arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicBlock {
-    /// The caught exception introduced at this synthetic handler entry.
-    pub caught_exception: Option<ValueId>,
+    /// The semantic role of this block.
+    pub kind: BlockKind,
     /// The scalar parameters bound at block entry.
     pub parameters: Vec<BlockParameter>,
     /// The ordinary operations in execution order.
     pub operations: Vec<Operation>,
     /// The block terminator.
     pub terminator: Terminator,
+}
+
+/// The semantic role of a basic block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BlockKind {
+    /// An ordinary code block.
+    Code,
+    /// An exception-handler landing pad defining the caught exception.
+    LandingPad {
+        /// The caught exception available on entry.
+        exception: ValueId,
+    },
 }

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
 use crate::{
-    ir::{BlockId, EdgeId, generator::error::Error},
+    ir::{BlockId, EdgeId, SuccessorTarget, generator::error::Error},
     jvm::{
         Method,
         code::{Instruction, MethodBody, ProgramCounter},
@@ -68,14 +68,13 @@ pub(crate) struct NormalizedBlock {
 pub(crate) enum NormalizedBlockKind {
     Bytecode(JvmBlockId),
     HandlerEntry(JvmBlockId),
-    Unwind,
 }
 
 /// A fixed edge in the normalized topology.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NormalizedEdge {
     pub id: EdgeId,
-    pub target: BlockId,
+    pub target: SuccessorTarget,
     pub kind: EdgeKind,
 }
 
@@ -91,7 +90,6 @@ pub(crate) enum EdgeKind {
 enum Node {
     Bytecode(JvmBlockId),
     Handler(JvmBlockId),
-    Unwind,
 }
 
 pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>, Error> {
@@ -102,11 +100,12 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
         if !reachable.insert(node) {
             continue;
         }
-        pending.extend(
-            successors(&bytecode, node)
-                .into_iter()
-                .map(|(target, _)| target),
-        );
+        pending.extend(successors(&bytecode, node).into_iter().filter_map(
+            |(target, _)| match target {
+                NodeTarget::Block(target) => Some(target),
+                NodeTarget::Unwind => None,
+            },
+        ));
     }
 
     let ids = reachable
@@ -123,12 +122,17 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
         let id = ids[&node];
         let edges = successors(&bytecode, node)
             .into_iter()
-            .map(|(target, kind)| allocate_edge(&mut next_edge, ids[&target], kind))
+            .map(|(target, kind)| {
+                let target = match target {
+                    NodeTarget::Block(target) => SuccessorTarget::Block(ids[&target]),
+                    NodeTarget::Unwind => SuccessorTarget::Unwind,
+                };
+                allocate_edge(&mut next_edge, target, kind)
+            })
             .collect::<Result<_, _>>()?;
         let kind = match node {
             Node::Bytecode(block) => NormalizedBlockKind::Bytecode(block),
             Node::Handler(target) => NormalizedBlockKind::HandlerEntry(target),
-            Node::Unwind => NormalizedBlockKind::Unwind,
         };
         Ok((
             id,
@@ -147,7 +151,10 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
             block
                 .successors
                 .iter()
-                .map(move |edge| (source, edge.target))
+                .filter_map(move |edge| match edge.target {
+                    SuccessorTarget::Block(target) => Some((source, target)),
+                    SuccessorTarget::Unwind => None,
+                })
         })
         .collect::<Vec<_>>();
     for (source, target) in predecessors {
@@ -165,24 +172,31 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
     })
 }
 
-fn successors(bytecode: &JvmBlockGraph<'_>, node: Node) -> Vec<(Node, EdgeKind)> {
+#[derive(Debug, Clone, Copy)]
+enum NodeTarget {
+    Block(Node),
+    Unwind,
+}
+
+fn successors(bytecode: &JvmBlockGraph<'_>, node: Node) -> Vec<(NodeTarget, EdgeKind)> {
     match node {
         Node::Bytecode(id) => {
             let block = bytecode.block(id);
             ordinary_successors(&block.exit)
                 .into_iter()
-                .map(|target| (Node::Bytecode(target), EdgeKind::Normal))
+                .map(|target| (NodeTarget::Block(Node::Bytecode(target)), EdgeKind::Normal))
                 .chain(block.exception_handlers.iter().map(|target| match target {
                     ExceptionalTarget::Handler { block, catch_type } => (
-                        Node::Handler(*block),
+                        NodeTarget::Block(Node::Handler(*block)),
                         EdgeKind::Exception(catch_type.clone()),
                     ),
-                    ExceptionalTarget::Unwind => (Node::Unwind, EdgeKind::Unwind),
+                    ExceptionalTarget::Unwind => (NodeTarget::Unwind, EdgeKind::Unwind),
                 }))
                 .collect()
         }
-        Node::Handler(target) => vec![(Node::Bytecode(target), EdgeKind::Normal)],
-        Node::Unwind => Vec::new(),
+        Node::Handler(target) => {
+            vec![(NodeTarget::Block(Node::Bytecode(target)), EdgeKind::Normal)]
+        }
     }
 }
 
@@ -201,7 +215,11 @@ fn block_id(index: usize) -> Result<BlockId, Error> {
         .map_err(|_| Error::internal("the block identity space is exhausted"))
 }
 
-fn allocate_edge(next: &mut u32, target: BlockId, kind: EdgeKind) -> Result<NormalizedEdge, Error> {
+fn allocate_edge(
+    next: &mut u32,
+    target: SuccessorTarget,
+    kind: EdgeKind,
+) -> Result<NormalizedEdge, Error> {
     let id = EdgeId::new(*next);
     *next = next
         .checked_add(1)
@@ -215,7 +233,7 @@ mod tests {
 
     use super::NormalizedBlockKind;
     use crate::{
-        ir::{MokaIRMethod, Successor, generator::bytecode_cfg},
+        ir::{MokaIRMethod, Successor, SuccessorTarget, generator::bytecode_cfg},
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -250,7 +268,11 @@ mod tests {
                 .all(|pair| pair[0].target == pair[1].target)
         );
         assert_eq!(
-            cfg.block(successors[0].target).predecessors,
+            cfg.block(match successors[0].target {
+                SuccessorTarget::Block(target) => target,
+                SuccessorTarget::Unwind => panic!("expected a block target"),
+            })
+            .predecessors,
             BTreeSet::from([entry])
         );
 
@@ -284,7 +306,7 @@ mod tests {
             panic!("the self-loop header must have one successor");
         };
 
-        assert_eq!(backedge.target, header);
+        assert_eq!(backedge.target, SuccessorTarget::Block(header));
         assert_eq!(cfg.block(header).predecessors, BTreeSet::from([header]));
     }
 
@@ -326,7 +348,7 @@ mod tests {
             .blocks
             .values()
             .flat_map(|block| &block.terminator.successors)
-            .filter(|edge| edge.target == target)
+            .filter(|edge| edge.target == SuccessorTarget::Block(target))
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);
         assert!(incoming.iter().all(|edge| edge.arguments.len() == 1));
@@ -348,7 +370,7 @@ mod tests {
         let public_incoming = ir
             .blocks()
             .flat_map(|(_, block)| block.terminator.successors())
-            .filter(|edge| edge.target() == target)
+            .filter(|edge| edge.block_target() == Some(target))
             .collect::<Vec<_>>();
         assert_eq!(public_incoming.len(), 3);
         assert!(public_incoming.iter().all(|it| it.arguments().len() == 1));

@@ -1,7 +1,8 @@
 use super::*;
+use crate::ir::SuccessorTarget;
 
 #[test]
-fn unhandled_exceptions_share_one_synthetic_unwind_block() {
+fn unhandled_exceptions_target_the_method_unwind_exit() {
     let method = method(
         [
             (0, Instruction::ALoad0),
@@ -40,16 +41,8 @@ fn unhandled_exceptions_share_one_synthetic_unwind_block() {
             .target()
     });
 
-    assert_eq!(unwind_targets[0], unwind_targets[1]);
-    let unwind = ir.block(unwind_targets[0]).unwrap();
-    assert_eq!(unwind.terminator.kind(), &TerminatorKind::Unwind);
-    assert!(unwind.parameters.is_empty());
-    assert!(unwind.operations.is_empty());
-    assert!(unwind.terminator.successors().is_empty());
-    let terminator_loc = InstructionLocation::Terminator {
-        block: unwind_targets[0],
-    };
-    assert_eq!(ir.source_map().origin_of(terminator_loc), None);
+    assert_eq!(unwind_targets, [SuccessorTarget::Unwind; 2]);
+    assert_eq!(ir.blocks().len(), 3);
 
     let mut edge_ids = HashSet::new();
     for (_, block) in ir.blocks() {

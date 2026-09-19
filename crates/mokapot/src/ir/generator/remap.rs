@@ -52,9 +52,7 @@ impl RemapValues for TerminatorKind {
                 remap_value(match_value, remap)
             }
             Self::Return(Some(value)) => remap_value(value, remap),
-            Self::Goto | Self::Branch | Self::Return(None) | Self::Fallible | Self::Unwind => {
-                Ok(())
-            }
+            Self::Goto | Self::Branch | Self::Return(None) | Self::Fallible => Ok(()),
         }
     }
 }

@@ -37,12 +37,12 @@ impl Analyzer<'_, '_> {
                         values,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(block_pc))?;
+                .map_err(|error| error.at_instruction(block_pc))?;
         }
 
         let parameter_definitions =
             synchronize_parameter_definitions(&merged, &contributions, active_parameters)
-                .map_err(|error| error.at_instruction_if_present(block_pc))?;
+                .map_err(|error| error.at_instruction(block_pc))?;
 
         self.parameter_definitions
             .retain(|site, _| site.block != block);

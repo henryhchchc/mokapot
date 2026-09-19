@@ -54,11 +54,11 @@ mod value_definition;
 #[cfg(test)]
 mod verify;
 
-pub use basic_block::{BasicBlock, BlockParameter};
+pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
 pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
 pub use identity::{BlockId, EdgeId, InstructionLocation, ValueId};
 pub use method::{InstructionRef, MethodEntry, MokaIRMethod};
 pub use operation::{Operation, OperationKind};
 pub use source_map::SourceMap;
-pub use terminator::{Successor, Terminator, TerminatorKind};
+pub use terminator::{Successor, SuccessorTarget, Terminator, TerminatorKind};
 pub use value_definition::ValueDefinition;

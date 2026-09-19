@@ -34,7 +34,12 @@ fn synchronized_return_has_only_exceptional_successors() {
             .iter()
             .all(|successor| !matches!(successor.transfer(), ControlTransfer::Unconditional))
     );
-    assert!(ir.caught_exception(successors[0].target()).is_some());
+    assert!(matches!(
+        ir.block(successors[0].block_target().unwrap())
+            .unwrap()
+            .kind,
+        crate::ir::BlockKind::LandingPad { .. }
+    ));
 }
 
 #[test]
@@ -51,11 +56,8 @@ fn unhandled_synchronized_return_reaches_unwind() {
         ControlTransfer::Unwind
     ));
     assert_eq!(
-        ir.block(return_terminator.successors()[0].target())
-            .unwrap()
-            .terminator
-            .kind(),
-        &TerminatorKind::Unwind
+        return_terminator.successors()[0].target(),
+        crate::ir::SuccessorTarget::Unwind
     );
 }
 

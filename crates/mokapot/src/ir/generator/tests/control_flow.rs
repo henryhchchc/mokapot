@@ -47,7 +47,7 @@ fn switch_retains_parallel_successor_arms() {
             .windows(2)
             .all(|pair| pair[0].target() == pair[1].target())
     );
-    assert_eq!(ir.control_flow_graph().edges().count(), 4);
+    assert_eq!(ir.control_flow_graph().edges().count(), 3);
 }
 
 #[test]
@@ -253,24 +253,29 @@ fn normally_reachable_handler_still_starts_a_block() {
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
         .unwrap()
-        .target();
+        .block_target()
+        .unwrap();
     let handler = entry
         .terminator
         .successors()
         .iter()
         .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
         .unwrap()
-        .target();
+        .block_target()
+        .unwrap();
 
-    assert_eq!(ir.blocks().len(), 4);
+    assert_eq!(ir.blocks().len(), 3);
     assert_ne!(handler, ir.entry_block());
     assert_ne!(handler, normal);
     assert_eq!(
-        ir.block(handler).unwrap().terminator.successors()[0].target(),
-        normal
+        ir.block(handler).unwrap().terminator.successors()[0].block_target(),
+        Some(normal)
     );
     assert_eq!(ir.block(handler).unwrap().operations.len(), 0);
-    assert!(ir.caught_exception(handler).is_some());
+    assert!(matches!(
+        ir.block(handler).unwrap().kind,
+        crate::ir::BlockKind::LandingPad { .. }
+    ));
 }
 
 #[test]

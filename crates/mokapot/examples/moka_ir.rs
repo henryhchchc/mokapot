@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  {:?}: {}", loc, bb.terminator);
             for successor in bb.terminator.successors() {
                 println!(
-                    "    {} -> {} {:?} ({:?})",
+                    "    {} -> {:?} {:?} ({:?})",
                     successor.id(),
                     successor.target(),
                     successor.arguments(),

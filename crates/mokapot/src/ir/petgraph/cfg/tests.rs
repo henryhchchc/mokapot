@@ -9,14 +9,14 @@ use petgraph::{
 };
 
 use super::*;
-use crate::ir::{Successor, Terminator, TerminatorKind, ValueId};
+use crate::ir::{BlockKind, Successor, SuccessorTarget, Terminator, TerminatorKind, ValueId};
 
 #[test]
 fn sparse_nodes_and_parallel_edges_are_preserved() {
     let source_id = BlockId::new(7);
     let target = BlockId::new(42);
     let source = BasicBlock {
-        caught_exception: None,
+        kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -26,7 +26,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
             successors: (0..3)
                 .map(|id| Successor {
                     id: EdgeId::new(id),
-                    target,
+                    target: SuccessorTarget::Block(target),
                     arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 })
@@ -34,7 +34,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
         },
     };
     let exit = BasicBlock {
-        caught_exception: None,
+        kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -64,7 +64,7 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
 #[test]
 fn exceptional_edge_kinds_and_identities_are_preserved() {
     let source = BasicBlock {
-        caught_exception: None,
+        kind: BlockKind::Code,
         parameters: vec![],
         operations: vec![],
         terminator: Terminator {
@@ -72,13 +72,13 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
             successors: vec![
                 Successor {
                     id: EdgeId::new(0),
-                    target: BlockId::new(1),
+                    target: SuccessorTarget::Block(BlockId::new(1)),
                     arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
                 Successor {
                     id: EdgeId::new(1),
-                    target: BlockId::new(2),
+                    target: SuccessorTarget::Block(BlockId::new(2)),
                     arguments: vec![],
                     transfer: ControlTransfer::Exception(Some(
                         "java/lang/RuntimeException".parse().unwrap(),
@@ -86,25 +86,22 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                 },
                 Successor {
                     id: EdgeId::new(2),
-                    target: BlockId::new(3),
+                    target: SuccessorTarget::Unwind,
                     arguments: vec![],
                     transfer: ControlTransfer::Unwind,
                 },
             ],
         },
     };
-    let exits = (1..=3)
+    let exits = (1..=2)
         .map(|id| {
-            let kind = match id {
-                3 => TerminatorKind::Unwind,
-                _ => TerminatorKind::Return(None),
-            };
+            let kind = TerminatorKind::Return(None);
             let terminator = Terminator {
                 kind,
                 successors: vec![],
             };
             let basic_block = BasicBlock {
-                caught_exception: None,
+                kind: BlockKind::Code,
                 parameters: vec![],
                 operations: vec![],
                 terminator,
@@ -120,18 +117,20 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
 
     assert_eq!(
         edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
-        3
+        2
     );
     assert!(matches!(edges[0].weight(), ControlTransfer::Unconditional));
     assert!(matches!(
         edges[1].weight(),
         ControlTransfer::Exception(Some(_))
     ));
-    assert!(matches!(edges[2].weight(), ControlTransfer::Unwind));
-    assert_eq!(
-        (&cfg)
-            .neighbors_directed(BlockId::new(3), Direction::Incoming)
-            .collect::<Vec<_>>(),
-        [BlockId::new(0)]
-    );
+    assert!(source_has_explicit_unwind(&blocks));
+}
+
+fn source_has_explicit_unwind(blocks: &BTreeMap<BlockId, BasicBlock>) -> bool {
+    blocks[&BlockId::new(0)]
+        .terminator
+        .successors()
+        .iter()
+        .any(|successor| successor.target() == SuccessorTarget::Unwind)
 }

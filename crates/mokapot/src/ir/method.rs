@@ -182,15 +182,6 @@ impl MokaIRMethod {
         &self.parameter_values
     }
 
-    /// Returns the caught-exception value introduced by a synthetic handler-entry block.
-    ///
-    /// Handler-entry blocks and their caught values are synthetic and therefore
-    /// need not have JVM source provenance.
-    #[must_use]
-    pub fn caught_exception(&self, block: BlockId) -> Option<ValueId> {
-        self.block(block)?.caught_exception
-    }
-
     /// Returns the unique definition of a method-local SSA value.
     ///
     /// Value identities are opaque and may be sparse. An identity with no

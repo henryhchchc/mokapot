@@ -112,7 +112,7 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
     );
     uses.extend(ir.entry().arguments());
     for (block_id, block) in ir.blocks() {
-        if let Some(value) = ir.caught_exception(block_id) {
+        if let mokapot::ir::BlockKind::LandingPad { exception: value } = block.kind {
             definitions.insert(value);
         }
         for (index, parameter) in block.parameters.iter().enumerate() {
@@ -140,7 +140,10 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
         for successor in block.terminator.successors() {
             assert_eq!(
                 successor.arguments().len(),
-                ir.block(successor.target()).unwrap().parameters.len()
+                successor
+                    .block_target()
+                    .and_then(|target| ir.block(target))
+                    .map_or(0, |target| target.parameters.len())
             );
         }
         uses.extend(block.terminator.uses());

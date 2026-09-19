@@ -7,7 +7,7 @@ pub enum ValueDefinition {
     This,
     /// A method parameter at the given parameter index.
     Parameter(u16),
-    /// The exception introduced at a synthetic handler-entry block.
+    /// The exception introduced by a landing-pad block.
     CaughtException(BlockId),
     /// A value produced by an ordinary instruction or block parameter.
     Instruction(InstructionLocation),

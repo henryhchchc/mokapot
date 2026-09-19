@@ -4,7 +4,10 @@ use std::collections::BTreeMap;
 
 use super::{Frame, Position};
 use crate::{
-    ir::{BlockId, EdgeId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
+    ir::{
+        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, TerminatorKind, ValueId,
+        control_flow::ControlTransfer,
+    },
     jvm::code::ProgramCounter,
 };
 
@@ -29,13 +32,13 @@ pub(crate) struct ParameterDefinition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiftedEdge {
     pub id: EdgeId,
-    pub target: BlockId,
+    pub target: SuccessorTarget,
     pub transfer: ControlTransfer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiftedBlock {
-    pub caught_exception: Option<ValueId>,
+    pub kind: BlockKind,
     pub operations: Vec<(ProgramCounter, OperationKind)>,
     pub terminator: TerminatorKind,
     pub terminator_source: Option<ProgramCounter>,
@@ -45,11 +48,15 @@ pub(crate) struct LiftedBlock {
 /// Successor transfers coupled to the frame contributed to each target.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LiftedSuccessors {
-    pub edges: Vec<(LiftedEdge, Frame)>,
+    pub edges: Vec<(LiftedEdge, Option<Frame>)>,
 }
 
 impl LiftedSuccessors {
     pub(crate) fn push(&mut self, edge: LiftedEdge, frame: Frame) {
+        self.push_optional(edge, Some(frame));
+    }
+
+    pub(crate) fn push_optional(&mut self, edge: LiftedEdge, frame: Option<Frame>) {
         debug_assert!(
             self.edges
                 .iter()

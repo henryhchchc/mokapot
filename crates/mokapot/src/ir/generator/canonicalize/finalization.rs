@@ -2,7 +2,7 @@
 use std::{collections::BTreeMap, convert::Infallible};
 
 use crate::ir::{
-    BlockId, ValueId,
+    BlockId, BlockKind, SuccessorTarget, ValueId,
     generator::{
         canonicalize::simplify::SimplifiedParameters,
         draft::{DraftBlock, DraftMethod},
@@ -51,7 +51,9 @@ fn finalize_block(
     retained: &BTreeMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {
-    block.caught_exception = block.caught_exception.map(canonical);
+    if let BlockKind::LandingPad { exception } = &mut block.kind {
+        *exception = canonical(*exception);
+    }
     for parameter in &mut block.parameters {
         parameter.value = canonical(parameter.value);
     }
@@ -60,10 +62,13 @@ fn finalize_block(
     }
     apply_substitutions(&mut block.terminator.kind, canonical);
     for edge in &mut block.terminator.successors {
-        edge.arguments = retained[&edge.target]
-            .iter()
-            .map(|&index| canonical(edge.arguments[index]))
-            .collect();
+        edge.arguments = match edge.target {
+            SuccessorTarget::Block(target) => retained[&target]
+                .iter()
+                .map(|&index| canonical(edge.arguments[index]))
+                .collect(),
+            SuccessorTarget::Unwind => Vec::new(),
+        };
         apply_substitutions(&mut edge.transfer, canonical);
     }
 }

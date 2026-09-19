@@ -5,7 +5,7 @@ mod terminator;
 use super::super::lifting;
 use super::{Analyzer, Frame, LiftedBlock, LiftedEdge, LiftedSuccessors};
 use crate::ir::{
-    BlockId, TerminatorKind,
+    BlockId, BlockKind, SuccessorTarget, TerminatorKind,
     control_flow::ControlTransfer,
     generator::{
         bytecode_cfg::{BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge},
@@ -22,15 +22,8 @@ impl Analyzer<'_, '_> {
             NormalizedBlockKind::Bytecode(id) => self.execute_bytecode(block, id, input),
             NormalizedBlockKind::HandlerEntry(_) => {
                 let caught = *input.handler_exception().map_err(Error::from)?;
-                self.execute_passthrough(block, input, Some(caught))
+                self.execute_passthrough(block, input, BlockKind::LandingPad { exception: caught })
             }
-            NormalizedBlockKind::Unwind => Ok(LiftedBlock {
-                caught_exception: None,
-                operations: Vec::new(),
-                terminator: TerminatorKind::Unwind,
-                terminator_source: None,
-                successors: LiftedSuccessors::default(),
-            }),
         }
     }
 
@@ -38,7 +31,7 @@ impl Analyzer<'_, '_> {
         &self,
         block: BlockId,
         input: Frame,
-        caught_exception: Option<crate::ir::ValueId>,
+        kind: BlockKind,
     ) -> Result<LiftedBlock, Error> {
         let [edge] = self.cfg.block(block).successors.as_slice() else {
             return Err(Error::internal(
@@ -55,7 +48,7 @@ impl Analyzer<'_, '_> {
             input,
         );
         Ok(LiftedBlock {
-            caught_exception,
+            kind,
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
@@ -132,7 +125,7 @@ impl Analyzer<'_, '_> {
             self.push_exception_successor(&edge, &pre_final_frame, &mut successors)?;
         }
         Ok(LiftedBlock {
-            caught_exception: None,
+            kind: BlockKind::Code,
             operations,
             terminator,
             terminator_source: has_explicit_terminator.then_some(final_pc),
@@ -148,7 +141,10 @@ impl Analyzer<'_, '_> {
     ) -> Result<(), Error> {
         match &edge.kind {
             EdgeKind::Exception(catch_type) => {
-                let caught = self.caught_exception(edge.target)?;
+                let SuccessorTarget::Block(target) = edge.target else {
+                    return Err(Error::internal("an exception handler must target a block"));
+                };
+                let caught = self.caught_exception(target)?;
                 let frame = input_frame.clone().exception_handler_frame(caught)?;
                 successors.push(
                     LiftedEdge {
@@ -160,13 +156,14 @@ impl Analyzer<'_, '_> {
                 );
             }
             EdgeKind::Unwind => {
-                successors.push(
+                debug_assert_eq!(edge.target, SuccessorTarget::Unwind);
+                successors.push_optional(
                     LiftedEdge {
                         id: edge.id,
                         target: edge.target,
                         transfer: ControlTransfer::Unwind,
                     },
-                    input_frame.clone().into_unwind_frame(),
+                    None,
                 );
             }
             EdgeKind::Normal => {

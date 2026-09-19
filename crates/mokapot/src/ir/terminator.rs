@@ -8,7 +8,7 @@ use super::{BlockId, EdgeId, ValueId, control_flow::ControlTransfer, expression:
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Successor {
     pub(super) id: EdgeId,
-    pub(super) target: BlockId,
+    pub(super) target: SuccessorTarget,
     pub(super) arguments: Vec<ValueId>,
     pub(super) transfer: ControlTransfer,
 }
@@ -19,10 +19,18 @@ impl Successor {
     pub const fn id(&self) -> EdgeId {
         self.id
     }
-    /// Returns the target block.
+    /// Returns the control-flow destination.
     #[must_use]
-    pub const fn target(&self) -> BlockId {
+    pub const fn target(&self) -> SuccessorTarget {
         self.target
+    }
+    /// Returns the target block, or `None` when this arm exits by unwinding.
+    #[must_use]
+    pub const fn block_target(&self) -> Option<BlockId> {
+        match self.target {
+            SuccessorTarget::Block(block) => Some(block),
+            SuccessorTarget::Unwind => None,
+        }
     }
     /// Returns the values supplied to the target block's parameters.
     #[must_use]
@@ -34,6 +42,15 @@ impl Successor {
     pub const fn transfer(&self) -> &ControlTransfer {
         &self.transfer
     }
+}
+
+/// The destination of a successor arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SuccessorTarget {
+    /// Continues execution in a basic block.
+    Block(BlockId),
+    /// Propagates an exception out of the method.
+    Unwind,
 }
 
 /// The control-flow operation ending a basic block.
@@ -60,9 +77,6 @@ pub enum TerminatorKind {
     /// Selects the normal or an exceptional outcome of a fallible operation.
     #[display("fallible")]
     Fallible,
-    /// Propagates an exception out of the method.
-    #[display("unwind")]
-    Unwind,
 }
 
 /// A terminator and its ordered successor arms.
@@ -103,8 +117,7 @@ impl Terminator {
             TerminatorKind::Goto
             | TerminatorKind::Branch
             | TerminatorKind::Return(None)
-            | TerminatorKind::Fallible
-            | TerminatorKind::Unwind => HashSet::new(),
+            | TerminatorKind::Fallible => HashSet::new(),
         };
         for successor in &self.successors {
             match successor.transfer() {

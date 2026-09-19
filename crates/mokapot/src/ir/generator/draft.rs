@@ -3,7 +3,10 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ir::{BlockId, EdgeId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer},
+    ir::{
+        BlockId, BlockKind, EdgeId, OperationKind, SuccessorTarget, TerminatorKind, ValueId,
+        control_flow::ControlTransfer,
+    },
     jvm::code::ProgramCounter,
 };
 
@@ -19,7 +22,7 @@ pub(super) struct DraftMethod {
 /// A block under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DraftBlock {
-    pub caught_exception: Option<ValueId>,
+    pub kind: BlockKind,
     pub parameters: Vec<DraftParameter>,
     pub operations: Vec<DraftOperation>,
     pub terminator: DraftTerminator,
@@ -50,7 +53,7 @@ pub(super) struct DraftTerminator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DraftEdge {
     pub id: EdgeId,
-    pub target: BlockId,
+    pub target: SuccessorTarget,
     pub arguments: Vec<ValueId>,
     pub transfer: ControlTransfer,
 }

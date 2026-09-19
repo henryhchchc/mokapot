@@ -2,8 +2,8 @@
 
 use crate::{
     ir::{
-        BasicBlock, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod, Operation,
-        SourceMap, Successor, Terminator, ValueDefinition, ValueId,
+        BasicBlock, BlockKind, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod,
+        Operation, SourceMap, Successor, Terminator, ValueDefinition, ValueId,
         generator::{
             draft::{DraftBlock, DraftMethod},
             error::Error,
@@ -68,7 +68,7 @@ impl FinishState {
         block_id: crate::ir::BlockId,
         block: &DraftBlock,
     ) -> Result<(), Error> {
-        if let Some(value) = block.caught_exception {
+        if let BlockKind::LandingPad { exception: value } = block.kind {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
         }
         for (index, parameter) in block.parameters.iter().enumerate() {
@@ -130,7 +130,7 @@ fn materialize_block(
         })
         .collect();
     BasicBlock {
-        caught_exception: block.caught_exception,
+        kind: block.kind,
         parameters,
         operations,
         terminator: Terminator {
@@ -195,7 +195,7 @@ mod tests {
             blocks: BTreeMap::from([(
                 block,
                 DraftBlock {
-                    caught_exception: None,
+                    kind: BlockKind::Code,
                     parameters: vec![DraftParameter {
                         value: eliminated_parameter,
                     }],
@@ -210,7 +210,7 @@ mod tests {
                         kind: TerminatorKind::Goto,
                         successors: vec![DraftEdge {
                             id: EdgeId::new(0),
-                            target: block,
+                            target: crate::ir::SuccessorTarget::Block(block),
                             arguments: vec![parameter],
                             transfer: ControlTransfer::Unconditional,
                         }],
