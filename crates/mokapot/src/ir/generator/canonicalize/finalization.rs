@@ -6,9 +6,9 @@ use crate::ir::{
     BlockId, ValueId,
     generator::{
         bytecode_analysis::{PhiCandidate, ScalarBlock},
+        canonicalize::{model::Phi, simplify::SimplifiedPhis},
         error::Error,
         remap::RemapValues,
-        ssa::{model::Phi, simplify::SimplifiedPhis},
     },
 };
 

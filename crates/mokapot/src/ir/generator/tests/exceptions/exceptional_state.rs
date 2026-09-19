@@ -84,11 +84,43 @@ fn exceptional_state_excludes_the_fallible_result() {
         }],
     );
     let ir = build(&method).unwrap();
-    assert!(
-        ir.blocks()
-            .filter_map(|(block_id, _)| ir.caught_exception(block_id))
-            .all(|caught| ir.definition_of(caught).is_some())
-    );
+    let fallible_result = ir
+        .source_map()
+        .instructions_at(1.into())
+        .find_map(|location| match ir.instruction(location) {
+            Some(InstructionRef::Operation(operation)) => operation.def(),
+            Some(InstructionRef::Phi(_) | InstructionRef::Terminator(_)) | None => None,
+        })
+        .expect("checkcast must define a result");
+    let fallible_location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let fallible = block_containing_instruction(&ir, fallible_location);
+    let normal_target = fallible
+        .terminator
+        .successors()
+        .iter()
+        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
+        .unwrap()
+        .target();
+    let handler_entry = fallible
+        .terminator
+        .successors()
+        .iter()
+        .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(None)))
+        .and_then(|successor| ir.block(successor.target()))
+        .expect("the exceptional outcome must enter the handler");
+    let handler_body = ir
+        .block(handler_entry.terminator.successors()[0].target())
+        .unwrap();
+
+    assert!(matches!(
+        ir.block(normal_target).unwrap().terminator.kind(),
+        TerminatorKind::Return(Some(value)) if *value == fallible_result
+    ));
+    assert!(matches!(
+        handler_body.terminator.kind(),
+        TerminatorKind::Return(Some(value))
+            if *value == ir.parameter_values()[0] && *value != fallible_result
+    ));
 }
 
 #[test]

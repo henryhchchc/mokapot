@@ -87,7 +87,16 @@ fn backward_target_starts_a_block_even_when_transfer_is_last() {
     let ir = build(&method).unwrap();
 
     assert_eq!(ir.blocks().len(), 2);
-    let (loop_block_id, loop_block) = ir.blocks().nth(1).unwrap();
+    let (loop_block_id, loop_block) = ir
+        .blocks()
+        .find(|(block_id, block)| {
+            block
+                .terminator
+                .successors()
+                .iter()
+                .any(|successor| successor.target() == *block_id)
+        })
+        .expect("the backward target must form a self-loop");
     assert_eq!(
         loop_block.terminator.successors()[0].target(),
         loop_block_id

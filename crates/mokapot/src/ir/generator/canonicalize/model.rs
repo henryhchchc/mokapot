@@ -3,7 +3,7 @@ use crate::{
     ir::{BlockId, ValueId},
 };
 
-/// A scalar SSA block ready for final IR emission.
+/// A canonical scalar SSA block ready for final IR assembly.
 pub(crate) struct Block {
     pub phis: Vec<Phi>,
     pub scalar: ScalarBlock,

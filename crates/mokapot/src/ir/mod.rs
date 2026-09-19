@@ -51,6 +51,8 @@ pub mod petgraph;
 mod phi;
 mod source_map;
 mod terminator;
+#[cfg(test)]
+mod verify;
 
 pub use basic_block::BasicBlock;
 pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};

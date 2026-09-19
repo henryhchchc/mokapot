@@ -1,4 +1,4 @@
-//! Simplifies scalar phis and materializes them in semantic SSA blocks.
+//! Canonicalizes the provisional SSA produced by bytecode analysis.
 
 mod finalization;
 mod model;
@@ -13,8 +13,8 @@ use crate::ir::{
 pub(super) use model::Block;
 use simplify::simplify_phis;
 
-/// Scalar blocks with materialized phis, ready for emission.
-pub(super) struct SsaGraph {
+/// Canonical SSA blocks with materialized phis, ready to finish.
+pub(super) struct CanonicalGraph {
     pub entry: BlockId,
     pub blocks: BTreeMap<BlockId, Block>,
     pub this_value: Option<ValueId>,
@@ -22,7 +22,7 @@ pub(super) struct SsaGraph {
 }
 
 /// Simplifies and materializes scalar phis into final SSA blocks.
-pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
+pub(super) fn canonicalize(graph: ScalarGraph) -> Result<CanonicalGraph, Error> {
     let ScalarGraph {
         entry,
         blocks,
@@ -33,7 +33,7 @@ pub(super) fn construct(graph: ScalarGraph) -> Result<SsaGraph, Error> {
     let simplified = simplify_phis(phi_candidates)
         .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
     let blocks = finalization::finalize(blocks, simplified)?;
-    Ok(SsaGraph {
+    Ok(CanonicalGraph {
         entry,
         blocks,
         this_value,

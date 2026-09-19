@@ -1,4 +1,4 @@
-//! Assembles completed public `MokaIR` from SSA blocks.
+//! Finishes canonical SSA blocks into completed public `MokaIR`.
 
 use std::collections::BTreeMap;
 
@@ -6,25 +6,25 @@ use crate::{
     ir::{
         BasicBlock, EdgeId, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
-        generator::{error::Error, remap::RemapValues, ssa},
+        generator::{canonicalize, error::Error, remap::RemapValues},
         method::MokaIRMethodParts,
     },
     jvm::Method,
 };
 
-/// Emits blocks and provenance from scalar SSA blocks.
-pub(super) fn emit(
+/// Finishes blocks and provenance from canonical scalar SSA blocks.
+pub(super) fn finish(
     method: &Method,
-    ssa: ssa::SsaGraph,
+    graph: canonicalize::CanonicalGraph,
     source_map: SourceMap,
 ) -> Result<MokaIRMethod, Error> {
-    let ssa::SsaGraph {
+    let canonicalize::CanonicalGraph {
         entry,
         blocks,
         this_value,
         parameter_values,
-    } = ssa;
-    let mut state = EmissionState::default();
+    } = graph;
+    let mut state = FinishState::default();
     let this_value = this_value
         .map(|value| state.value(value, ValueDefinition::This))
         .transpose()?;
@@ -73,11 +73,11 @@ struct BlockAllocation {
     caught_exception: Option<ValueId>,
 }
 
-impl EmissionState {
+impl FinishState {
     fn allocate_block(
         &mut self,
         block_id: crate::ir::BlockId,
-        block: &ssa::Block,
+        block: &canonicalize::Block,
     ) -> Result<BlockAllocation, Error> {
         let caught_exception = block
             .scalar
@@ -118,9 +118,9 @@ impl EmissionState {
 }
 
 fn materialize_block(
-    block: ssa::Block,
+    block: canonicalize::Block,
     allocation: BlockAllocation,
-    state: &mut EmissionState,
+    state: &mut FinishState,
 ) -> Result<BasicBlock, Error> {
     let phis = block
         .phis
@@ -175,13 +175,13 @@ fn materialize_block(
 }
 
 #[derive(Default)]
-struct EmissionState {
+struct FinishState {
     next_edge: u32,
     values: Vec<Option<ValueId>>,
     definitions: Vec<ValueDefinition>,
 }
 
-impl EmissionState {
+impl FinishState {
     fn edge(&mut self) -> Result<EdgeId, Error> {
         let id = EdgeId::new(self.next_edge);
         self.next_edge = self
@@ -192,7 +192,7 @@ impl EmissionState {
     }
 
     fn value(&mut self, temporary: ValueId, definition: ValueDefinition) -> Result<ValueId, Error> {
-        let emitted_index = u32::try_from(self.definitions.len())
+        let finished_index = u32::try_from(self.definitions.len())
             .ok()
             .filter(|index| *index < u32::MAX)
             .ok_or_else(|| Error::internal("the value identity space is exhausted"))?;
@@ -208,7 +208,7 @@ impl EmissionState {
                 "a temporary value identity has multiple definitions",
             ));
         }
-        let value = ValueId::new(emitted_index);
+        let value = ValueId::new(finished_index);
         self.values[temporary] = Some(value);
         self.definitions.push(definition);
         Ok(value)
@@ -218,7 +218,7 @@ impl EmissionState {
         self.values
             .get(value_index(value)?)
             .and_then(|value| *value)
-            .ok_or_else(|| Error::internal("a temporary value has no emitted definition"))
+            .ok_or_else(|| Error::internal("a temporary value has no finished definition"))
     }
 }
 

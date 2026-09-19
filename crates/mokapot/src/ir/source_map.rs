@@ -58,6 +58,15 @@ impl SourceMap {
         );
         self.by_pc.entry(pc).or_default().insert(instruction);
     }
+
+    #[cfg(test)]
+    pub(crate) fn mappings(
+        &self,
+    ) -> impl Iterator<Item = (InstructionLocation, ProgramCounter)> + '_ {
+        self.by_location
+            .iter()
+            .map(|(&location, &pc)| (location, pc))
+    }
 }
 
 #[cfg(test)]

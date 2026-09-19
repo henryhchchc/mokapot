@@ -1,4 +1,4 @@
-//! Rewrites the single IR value identity space during SSA finalization and emission.
+//! Rewrites the single IR value identity space during canonicalization and finishing.
 
 use crate::ir::{
     OperationKind, TerminatorKind, ValueId,

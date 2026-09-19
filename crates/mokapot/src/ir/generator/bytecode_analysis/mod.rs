@@ -1,4 +1,4 @@
-//! Constructs a reachable register-form graph from JVM instructions.
+//! Constructs provisional SSA while analyzing reachable JVM bytecode.
 
 mod analysis;
 mod frame;

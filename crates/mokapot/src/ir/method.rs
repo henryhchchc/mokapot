@@ -185,6 +185,11 @@ impl MokaIRMethod {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn value_definitions(&self) -> &[ValueDefinition] {
+        &self.value_definitions
+    }
+
     /// Returns a borrowed control-flow view derived from block terminators.
     ///
     /// The returned view does not store an independent edge set.

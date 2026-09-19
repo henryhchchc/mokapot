@@ -124,28 +124,31 @@ fn entry_backedge_gets_a_synthetic_preheader_and_loop_phi() {
 }
 
 #[test]
-fn entry_self_loop_gets_block_zero_preheader_without_redundant_phis() {
+fn entry_self_loop_gets_a_preheader_without_redundant_phis() {
     let method = method([(0, Instruction::Goto(0.into()))], "()V", vec![]);
     let ir = build(&method).unwrap();
-    let blocks = ir.blocks().collect::<Vec<_>>();
+    let preheader_id = ir.entry_block();
+    let preheader = ir.block(preheader_id).unwrap();
 
-    assert_eq!(blocks.len(), 2);
-    assert!(blocks.iter().all(|(_, block)| block.phis.is_empty()));
-    assert!(blocks[0].1.operations.is_empty());
-    assert_eq!(blocks[0].1.terminator.successors().len(), 1);
+    assert_eq!(ir.blocks().len(), 2);
+    assert!(ir.blocks().all(|(_, block)| block.phis.is_empty()));
+    assert!(preheader.operations.is_empty());
+    assert_eq!(preheader.terminator.successors().len(), 1);
     assert!(matches!(
-        blocks[0].1.terminator.successors()[0].transfer(),
+        preheader.terminator.successors()[0].transfer(),
         ControlTransfer::Unconditional
     ));
-    let loc = InstructionLocation::Terminator { block: blocks[0].0 };
+    let loc = InstructionLocation::Terminator {
+        block: preheader_id,
+    };
     assert_eq!(ir.source_map().origin_of(loc), None);
-    let [arm] = blocks[0].1.terminator.successors() else {
+    let [arm] = preheader.terminator.successors() else {
         panic!("the preheader must have exactly one successor")
     };
-    let header = ir.block(arm.target()).unwrap();
-    assert_eq!(header, blocks[1].1);
-    assert_eq!(header.terminator.successors()[0].target(), blocks[1].0);
-    let loc = InstructionLocation::Terminator { block: blocks[1].0 };
+    let header_id = arm.target();
+    let header = ir.block(header_id).unwrap();
+    assert_eq!(header.terminator.successors()[0].target(), header_id);
+    let loc = InstructionLocation::Terminator { block: header_id };
     assert_eq!(
         ir.source_map().origin_of(loc),
         Some(ProgramCounter::from(0))
