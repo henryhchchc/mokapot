@@ -2,7 +2,7 @@
 use std::{collections::BTreeMap, convert::Infallible};
 
 use crate::ir::{
-    BasicBlock, BlockId, BlockKind, SuccessorTarget, ValueId,
+    BasicBlock, BlockId, BlockKind, Successor, ValueId,
     generator::{
         canonicalize::simplify::SimplifiedParameters, draft::DraftMethod, remap::RemapValues,
     },
@@ -57,14 +57,19 @@ fn finalize_block(
     }
     apply_substitutions(&mut block.terminator, canonical);
     block.terminator.arms_mut().for_each(|edge| {
-        edge.arguments = match edge.target {
-            SuccessorTarget::Block(target) => retained[&target]
+        if let Successor::Block {
+            target,
+            arguments,
+            transfer,
+            ..
+        } = edge
+        {
+            *arguments = retained[target]
                 .iter()
-                .map(|&index| canonical(edge.arguments[index]))
-                .collect(),
-            SuccessorTarget::Unwind => Vec::new(),
-        };
-        apply_substitutions(&mut edge.transfer, canonical);
+                .map(|&index| canonical(arguments[index]))
+                .collect();
+            apply_substitutions(transfer, canonical);
+        }
     });
 }
 

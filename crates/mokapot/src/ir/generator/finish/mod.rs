@@ -116,8 +116,7 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            BasicBlock, BlockId, BlockParameter, EdgeId, Operation, Successor, SuccessorTarget,
-            Terminator,
+            BasicBlock, BlockId, BlockParameter, EdgeId, Operation, Successor, Terminator,
             control_flow::ControlTransfer,
             expression::MathOperation,
             generator::{canonicalize, draft::DraftMethod},
@@ -146,9 +145,9 @@ mod tests {
                         expr: MathOperation::Increment(eliminated_parameter, 1).into(),
                     }],
                     terminator: Terminator::Goto {
-                        target: Successor {
+                        target: Successor::Block {
                             id: EdgeId::new(0),
-                            target: SuccessorTarget::Block(block),
+                            target: block,
                             arguments: vec![parameter],
                             transfer: ControlTransfer::Unconditional,
                         },

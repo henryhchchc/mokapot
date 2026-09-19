@@ -1,6 +1,4 @@
 use super::*;
-use crate::ir::SuccessorTarget;
-
 #[test]
 fn unhandled_exceptions_target_the_method_unwind_exit() {
     let method = method(
@@ -35,12 +33,12 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
         block
             .terminator
             .successors()
-            .find(|successor| matches!(successor.transfer(), ControlTransfer::Unwind))
+            .find(|successor| successor.block_target().is_none())
             .unwrap()
-            .target()
+            .block_target()
     });
 
-    assert_eq!(unwind_targets, [SuccessorTarget::Unwind; 2]);
+    assert_eq!(unwind_targets, [None; 2]);
     assert_eq!(ir.blocks().len(), 3);
 
     let mut edge_ids = HashSet::new();
@@ -76,11 +74,14 @@ fn throw_has_only_ordered_exceptional_outcomes() {
 
     assert!(matches!(throw, Terminator::Throw { .. }));
     assert_eq!(transfers.len(), 2);
-    assert!(matches!(transfers[0], ControlTransfer::Exception(Some(_))));
-    assert!(matches!(transfers[1], ControlTransfer::Unwind));
+    assert!(matches!(
+        transfers[0],
+        Some(ControlTransfer::Exception(Some(_)))
+    ));
+    assert_eq!(transfers[1], None);
     assert!(
         !transfers
             .iter()
-            .any(|transfer| matches!(transfer, ControlTransfer::Unconditional))
+            .any(|transfer| matches!(transfer, Some(ControlTransfer::Unconditional)))
     );
 }

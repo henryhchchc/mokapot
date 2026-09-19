@@ -28,14 +28,14 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let normal_target = fallible
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
         .unwrap()
         .block_target()
         .unwrap();
     let handler_bb_id = fallible
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(None)))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Exception(None))))
         .unwrap()
         .block_target()
         .unwrap();
@@ -59,7 +59,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
             .next()
             .unwrap()
             .transfer(),
-        ControlTransfer::Unconditional
+        Some(&ControlTransfer::Unconditional)
     ));
     assert_eq!(
         handler_bb
@@ -115,14 +115,14 @@ fn exceptional_state_excludes_the_fallible_result() {
     let normal_target = fallible
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
         .unwrap()
         .block_target()
         .unwrap();
     let handler_entry = fallible
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(None)))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Exception(None))))
         .and_then(Successor::block_target)
         .and_then(|target| ir.block(target))
         .expect("the exceptional outcome must enter the handler");
@@ -180,18 +180,18 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
     let exceptional = fallible
         .terminator
         .successors()
-        .filter(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
+        .filter(|successor| matches!(successor.transfer(), Some(ControlTransfer::Exception(_))))
         .collect::<Vec<_>>();
 
     assert_eq!(exceptional.len(), 2);
-    assert_eq!(exceptional[0].target(), exceptional[1].target());
+    assert_eq!(exceptional[0].block_target(), exceptional[1].block_target());
     assert!(matches!(
         exceptional[0].transfer(),
-        ControlTransfer::Exception(Some(caught)) if caught == &runtime_exception
+        Some(ControlTransfer::Exception(Some(caught))) if caught == &runtime_exception
     ));
     assert!(matches!(
         exceptional[1].transfer(),
-        ControlTransfer::Exception(None)
+        Some(ControlTransfer::Exception(None))
     ));
     let handler = ir.block(exceptional[0].block_target().unwrap()).unwrap();
     assert!(matches!(handler.kind, BlockKind::LandingPad { .. }));

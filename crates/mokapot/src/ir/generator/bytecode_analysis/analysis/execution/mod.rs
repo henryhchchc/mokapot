@@ -5,10 +5,12 @@ mod terminator;
 use super::super::lifting;
 use super::{Analyzer, Frame, LiftedArm, LiftedBlock, LiftedEdge, LiftedTerminator};
 use crate::ir::{
-    BlockId, BlockKind, SuccessorTarget,
+    BlockId, BlockKind,
     control_flow::ControlTransfer,
     generator::{
-        bytecode_cfg::{BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge},
+        bytecode_cfg::{
+            BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge, NormalizedTarget,
+        },
         error::Error,
     },
 };
@@ -39,10 +41,15 @@ impl Analyzer<'_, '_> {
                 "a normalized passthrough block must have one successor",
             ));
         };
+        let NormalizedTarget::Block(target) = edge.target else {
+            return Err(Error::internal(
+                "a normalized passthrough must target a block",
+            ));
+        };
         let target = (
-            LiftedEdge {
+            LiftedEdge::Block {
                 id: edge.id,
-                target: edge.target,
+                target,
                 transfer: ControlTransfer::Unconditional,
             },
             Some(input),
@@ -104,9 +111,11 @@ impl Analyzer<'_, '_> {
                 Error::internal("lowered successors do not match normalized topology")
             })?;
             Ok::<LiftedArm, Error>((
-                LiftedEdge {
+                LiftedEdge::Block {
                     id: edge.id,
-                    target: edge.target,
+                    target: edge.block_target().ok_or_else(|| {
+                        Error::internal("an ordinary successor must target a block")
+                    })?,
                     transfer,
                 },
                 Some(frame.clone()),
@@ -165,28 +174,19 @@ impl Analyzer<'_, '_> {
         input_frame: &Frame,
     ) -> Result<LiftedArm, Error> {
         match &edge.kind {
-            EdgeKind::Exception(catch_type) => {
-                let SuccessorTarget::Block(target) = edge.target else {
-                    return Err(Error::internal("an exception handler must target a block"));
-                };
-                let caught = self.caught_exception(target)?;
-                let frame = input_frame.clone().exception_handler_frame(caught)?;
-                let lifted = LiftedEdge {
-                    id: edge.id,
-                    target: edge.target,
-                    transfer: ControlTransfer::Exception(catch_type.clone()),
-                };
-                Ok((lifted, Some(frame)))
-            }
-            EdgeKind::Unwind => {
-                debug_assert_eq!(edge.target, SuccessorTarget::Unwind);
-                let lifted = LiftedEdge {
-                    id: edge.id,
-                    target: edge.target,
-                    transfer: ControlTransfer::Unwind,
-                };
-                Ok((lifted, None))
-            }
+            EdgeKind::Exception(catch_type) => match edge.target {
+                NormalizedTarget::Block(target) => {
+                    let caught = self.caught_exception(target)?;
+                    let frame = input_frame.clone().exception_handler_frame(caught)?;
+                    let lifted = LiftedEdge::Block {
+                        id: edge.id,
+                        target,
+                        transfer: ControlTransfer::Exception(catch_type.clone()),
+                    };
+                    Ok((lifted, Some(frame)))
+                }
+                NormalizedTarget::Unwind => Ok((LiftedEdge::Unwind { id: edge.id }, None)),
+            },
             EdgeKind::Normal => Err(Error::internal(
                 "an ordinary edge was treated as an exceptional successor",
             )),

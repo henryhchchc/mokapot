@@ -5,8 +5,7 @@ use std::collections::BTreeMap;
 use super::{Frame, Position};
 use crate::{
     ir::{
-        BlockId, BlockKind, EdgeId, Operation, SuccessorTarget, Terminator, ValueId,
-        control_flow::ControlTransfer,
+        BlockId, BlockKind, EdgeId, Operation, Terminator, ValueId, control_flow::ControlTransfer,
     },
     jvm::code::ProgramCounter,
 };
@@ -24,10 +23,30 @@ pub(crate) struct ParameterSite {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LiftedEdge {
-    pub id: EdgeId,
-    pub target: SuccessorTarget,
-    pub transfer: ControlTransfer,
+pub(crate) enum LiftedEdge {
+    Block {
+        id: EdgeId,
+        target: BlockId,
+        transfer: ControlTransfer,
+    },
+    Unwind {
+        id: EdgeId,
+    },
+}
+
+impl LiftedEdge {
+    pub(crate) const fn id(&self) -> EdgeId {
+        match self {
+            Self::Block { id, .. } | Self::Unwind { id } => *id,
+        }
+    }
+
+    pub(crate) const fn block_target(&self) -> Option<BlockId> {
+        match self {
+            Self::Block { target, .. } => Some(*target),
+            Self::Unwind { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

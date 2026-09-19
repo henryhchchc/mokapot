@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::{BlockExit, ExceptionalTarget, JvmBlock, JvmBlockGraph, JvmBlockId};
 use crate::{
-    ir::{BlockId, EdgeId, SuccessorTarget, generator::error::Error},
+    ir::{BlockId, EdgeId, generator::error::Error},
     jvm::{
         Method,
         code::{Instruction, MethodBody, ProgramCounter},
@@ -72,8 +72,24 @@ pub(crate) enum NormalizedBlockKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NormalizedEdge {
     pub id: EdgeId,
-    pub target: SuccessorTarget,
+    pub target: NormalizedTarget,
     pub kind: EdgeKind,
+}
+
+/// A successor destination in the fixed, internal normalized topology.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NormalizedTarget {
+    Block(BlockId),
+    Unwind,
+}
+
+impl NormalizedEdge {
+    pub const fn block_target(&self) -> Option<BlockId> {
+        match self.target {
+            NormalizedTarget::Block(target) => Some(target),
+            NormalizedTarget::Unwind => None,
+        }
+    }
 }
 
 /// The part of an edge transfer known without executing bytecode.
@@ -81,7 +97,6 @@ pub(crate) struct NormalizedEdge {
 pub(crate) enum EdgeKind {
     Normal,
     Exception(Option<ClassRef>),
-    Unwind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -122,8 +137,8 @@ pub(super) fn normalize(bytecode: JvmBlockGraph<'_>) -> Result<NormalizedCfg<'_>
             .into_iter()
             .map(|(target, kind)| {
                 let target = match target {
-                    NodeTarget::Block(target) => SuccessorTarget::Block(ids[&target]),
-                    NodeTarget::Unwind => SuccessorTarget::Unwind,
+                    NodeTarget::Block(target) => NormalizedTarget::Block(ids[&target]),
+                    NodeTarget::Unwind => NormalizedTarget::Unwind,
                 };
                 allocate_edge(&mut next_edge, target, kind)
             })
@@ -167,7 +182,7 @@ fn successors(bytecode: &JvmBlockGraph<'_>, node: Node) -> Vec<(NodeTarget, Edge
                         NodeTarget::Block(Node::Handler(*block)),
                         EdgeKind::Exception(catch_type.clone()),
                     ),
-                    ExceptionalTarget::Unwind => (NodeTarget::Unwind, EdgeKind::Unwind),
+                    ExceptionalTarget::Unwind => (NodeTarget::Unwind, EdgeKind::Exception(None)),
                 }))
                 .collect()
         }
@@ -194,7 +209,7 @@ fn block_id(index: usize) -> Result<BlockId, Error> {
 
 fn allocate_edge(
     next: &mut u32,
-    target: SuccessorTarget,
+    target: NormalizedTarget,
     kind: EdgeKind,
 ) -> Result<NormalizedEdge, Error> {
     let id = EdgeId::new(*next);
@@ -208,9 +223,9 @@ fn allocate_edge(
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use super::NormalizedBlockKind;
+    use super::{NormalizedBlockKind, NormalizedTarget};
     use crate::{
-        ir::{MokaIRMethod, Successor, SuccessorTarget, generator::bytecode_cfg},
+        ir::{MokaIRMethod, Successor, generator::bytecode_cfg},
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -273,7 +288,7 @@ mod tests {
             panic!("the self-loop header must have one successor");
         };
 
-        assert_eq!(backedge.target, SuccessorTarget::Block(header));
+        assert_eq!(backedge.target, NormalizedTarget::Block(header));
     }
 
     #[test]
@@ -314,14 +329,14 @@ mod tests {
             .blocks
             .values()
             .flat_map(|block| block.terminator.arms())
-            .filter(|edge| edge.target == SuccessorTarget::Block(target))
+            .filter(|edge| edge.block_target() == Some(target))
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);
-        assert!(incoming.iter().all(|edge| edge.arguments.len() == 1));
+        assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
         assert_eq!(
             incoming
                 .iter()
-                .map(|edge| edge.id)
+                .map(|edge| edge.id())
                 .collect::<BTreeSet<_>>()
                 .len(),
             3

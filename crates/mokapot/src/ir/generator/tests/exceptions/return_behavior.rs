@@ -28,13 +28,13 @@ fn synchronized_return_has_only_exceptional_successors() {
 
     assert_eq!(exceptional.len(), 2);
     assert!(
-        matches!(exceptional[0].transfer(), ControlTransfer::Exception(Some(caught)) if caught == &illegal_monitor_state)
+        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(caught))) if caught == &illegal_monitor_state)
     );
-    assert!(matches!(exceptional[1].transfer(), ControlTransfer::Unwind));
+    assert_eq!(exceptional[1].transfer(), None);
     assert!(
         exceptional
             .iter()
-            .all(|successor| !matches!(successor.transfer(), ControlTransfer::Unconditional))
+            .all(|successor| !matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
     );
     assert!(matches!(
         ir.block(exceptional[0].block_target().unwrap())
@@ -56,14 +56,8 @@ fn unhandled_synchronized_return_reaches_unwind() {
         Terminator::TryReturn { value: None, .. }
     ));
     assert_eq!(ret_term.successors().count(), 1);
-    assert!(matches!(
-        ret_term.successors().next().unwrap().transfer(),
-        ControlTransfer::Unwind
-    ));
-    assert_eq!(
-        ret_term.successors().next().unwrap().target(),
-        crate::ir::SuccessorTarget::Unwind
-    );
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
+    assert_eq!(ret_term.successors().next().unwrap().block_target(), None);
 }
 
 #[test]
@@ -77,10 +71,7 @@ fn explicit_monitor_operations_have_fallible_returns() {
     let ir = build(&method).unwrap();
     let ret_term = terminator_at(&ir, 2.into());
     assert_eq!(ret_term.successors().count(), 1);
-    assert!(matches!(
-        ret_term.successors().next().unwrap().transfer(),
-        ControlTransfer::Unwind
-    ));
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
 }
 
 #[test]
@@ -89,8 +80,5 @@ fn monitor_free_nonsynchronized_return_is_conservatively_fallible() {
     let ir = build(&method).unwrap();
     let ret_term = terminator_at(&ir, 0.into());
     assert_eq!(ret_term.successors().count(), 1);
-    assert!(matches!(
-        ret_term.successors().next().unwrap().transfer(),
-        ControlTransfer::Unwind
-    ));
+    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
 }

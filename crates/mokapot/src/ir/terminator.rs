@@ -8,51 +8,59 @@ use super::{
 
 /// One outgoing arm of a terminator.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Successor {
-    pub(super) id: EdgeId,
-    pub(super) target: SuccessorTarget,
-    pub(super) arguments: Vec<ValueId>,
-    pub(super) transfer: ControlTransfer,
+pub enum Successor {
+    /// Continues execution in a basic block.
+    Block {
+        /// This arm's identity.
+        id: EdgeId,
+        /// The destination block.
+        target: BlockId,
+        /// Values supplied to the target block's parameters.
+        arguments: Vec<ValueId>,
+        /// The state transfer associated with this arm.
+        transfer: ControlTransfer,
+    },
+    /// Propagates an exception out of the method.
+    Unwind {
+        /// This arm's identity.
+        id: EdgeId,
+    },
 }
 
 impl Successor {
     /// Returns this arm's identity.
     #[must_use]
     pub const fn id(&self) -> EdgeId {
-        self.id
-    }
-    /// Returns the control-flow destination.
-    #[must_use]
-    pub const fn target(&self) -> SuccessorTarget {
-        self.target
+        match self {
+            Self::Block { id, .. } | Self::Unwind { id } => *id,
+        }
     }
     /// Returns the target block, or `None` when this arm exits by unwinding.
     #[must_use]
     pub const fn block_target(&self) -> Option<BlockId> {
-        match self.target {
-            SuccessorTarget::Block(block) => Some(block),
-            SuccessorTarget::Unwind => None,
+        match self {
+            Self::Block { target, .. } => Some(*target),
+            Self::Unwind { .. } => None,
         }
     }
     /// Returns the values supplied to the target block's parameters.
     #[must_use]
     pub fn arguments(&self) -> &[ValueId] {
-        &self.arguments
+        match self {
+            Self::Block { arguments, .. } => arguments,
+            Self::Unwind { .. } => &[],
+        }
     }
-    /// Returns the state transfer associated with this arm.
+    /// Returns the state transfer associated with a block arm.
+    ///
+    /// Unwind arms have no block transfer.
     #[must_use]
-    pub const fn transfer(&self) -> &ControlTransfer {
-        &self.transfer
+    pub const fn transfer(&self) -> Option<&ControlTransfer> {
+        match self {
+            Self::Block { transfer, .. } => Some(transfer),
+            Self::Unwind { .. } => None,
+        }
     }
-}
-
-/// The destination of a successor arm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SuccessorTarget {
-    /// Continues execution in a basic block.
-    Block(BlockId),
-    /// Propagates an exception out of the method.
-    Unwind,
 }
 
 /// A structurally valid control-flow operation ending a basic block.
@@ -225,7 +233,7 @@ impl Terminator<Successor> {
     pub fn uses(&self) -> HashSet<ValueId> {
         let successor_values = self
             .successors()
-            .flat_map(|successor| successor.arguments.iter().copied());
+            .flat_map(|successor| successor.arguments().iter().copied());
         self.local_uses()
             .into_iter()
             .chain(successor_values)
@@ -245,7 +253,7 @@ impl Terminator<Successor> {
         let guard_uses = self
             .successors()
             .filter_map(|it| match it.transfer() {
-                ControlTransfer::Conditional(guard) => Some(guard),
+                Some(ControlTransfer::Conditional(guard)) => Some(guard),
                 _ => None,
             })
             .flat_map(BranchGuard::predicates)
@@ -294,9 +302,9 @@ mod tests {
     use super::*;
 
     fn arm(id: u32) -> Successor {
-        Successor {
+        Successor::Block {
             id: EdgeId::new(id),
-            target: SuccessorTarget::Block(BlockId::new(0)),
+            target: BlockId::new(0),
             arguments: vec![],
             transfer: ControlTransfer::Unconditional,
         }

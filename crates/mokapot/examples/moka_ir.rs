@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "    {} -> {:?} {:?} ({:?})",
                     successor.id(),
-                    successor.target(),
+                    successor.block_target(),
                     successor.arguments(),
                     successor.transfer(),
                 );

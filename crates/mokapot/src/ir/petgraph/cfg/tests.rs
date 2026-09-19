@@ -9,7 +9,7 @@ use petgraph::{
 };
 
 use super::*;
-use crate::ir::{BlockKind, Successor, SuccessorTarget, Terminator};
+use crate::ir::{BlockKind, Successor, Terminator};
 
 #[test]
 fn sparse_nodes_and_parallel_edges_are_preserved() {
@@ -21,9 +21,9 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
         operations: vec![],
         terminator: {
             let mut arms = (0..3)
-                .map(|id| Successor {
+                .map(|id| Successor::Block {
                     id: EdgeId::new(id),
-                    target: SuccessorTarget::Block(target),
+                    target,
                     arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 })
@@ -68,26 +68,21 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
         operations: vec![],
         terminator: {
             let mut arms = vec![
-                Successor {
+                Successor::Block {
                     id: EdgeId::new(0),
-                    target: SuccessorTarget::Block(BlockId::new(1)),
+                    target: BlockId::new(1),
                     arguments: vec![],
                     transfer: ControlTransfer::Unconditional,
                 },
-                Successor {
+                Successor::Block {
                     id: EdgeId::new(1),
-                    target: SuccessorTarget::Block(BlockId::new(2)),
+                    target: BlockId::new(2),
                     arguments: vec![],
                     transfer: ControlTransfer::Exception(Some(
                         "java/lang/RuntimeException".parse().unwrap(),
                     )),
                 },
-                Successor {
-                    id: EdgeId::new(2),
-                    target: SuccessorTarget::Unwind,
-                    arguments: vec![],
-                    transfer: ControlTransfer::Unwind,
-                },
+                Successor::Unwind { id: EdgeId::new(2) },
             ];
             Terminator::Try {
                 operation: crate::ir::Operation::Effect {
@@ -132,5 +127,5 @@ fn source_has_explicit_unwind(blocks: &BTreeMap<BlockId, BasicBlock>) -> bool {
     blocks[&BlockId::new(0)]
         .terminator
         .successors()
-        .any(|successor| successor.target() == SuccessorTarget::Unwind)
+        .any(|successor| successor.block_target().is_none())
 }

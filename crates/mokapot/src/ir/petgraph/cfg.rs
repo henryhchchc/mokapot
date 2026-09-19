@@ -11,7 +11,7 @@ use petgraph::{
 };
 
 use crate::ir::{
-    BasicBlock, BlockId, EdgeId, SuccessorTarget,
+    BasicBlock, BlockId, EdgeId,
     control_flow::{ControlFlowGraph, ControlTransfer, Edge},
 };
 
@@ -104,10 +104,7 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
                 .get(&block)
                 .into_iter()
                 .flat_map(|block| block.terminator.successors())
-                .filter_map(|successor| match successor.target() {
-                    SuccessorTarget::Block(target) => Some(target),
-                    SuccessorTarget::Unwind => None,
-                })
+                .filter_map(crate::ir::Successor::block_target)
                 .collect::<Vec<_>>()
                 .into_iter()
         } else {
@@ -117,9 +114,7 @@ impl IntoNeighborsDirected for &ControlFlowGraph<'_> {
                     candidate
                         .terminator
                         .successors()
-                        .filter(move |successor| {
-                            successor.target() == SuccessorTarget::Block(block)
-                        })
+                        .filter(move |successor| successor.block_target() == Some(block))
                         .map(move |_| candidate_id)
                 })
                 .collect::<Vec<_>>()

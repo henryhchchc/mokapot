@@ -13,8 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Frame, Position, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
-        BasicBlock, BlockId, BlockParameter, SourceMap, Successor, SuccessorTarget, Terminator,
-        ValueId,
+        BasicBlock, BlockId, BlockParameter, SourceMap, Successor, Terminator, ValueId,
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
             draft::DraftMethod,
@@ -106,11 +105,9 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             let outputs = block
                 .terminator
                 .arms()
-                .filter_map(|(edge, frame)| match (edge.target, frame) {
-                    (SuccessorTarget::Block(target), Some(frame)) => {
-                        Some((edge.id, target, frame.clone()))
-                    }
-                    (SuccessorTarget::Unwind, None) => None,
+                .filter_map(|(edge, frame)| match (edge.block_target(), frame) {
+                    (Some(target), Some(frame)) => Some((edge.id(), target, frame.clone())),
+                    (None, None) => None,
                     _ => unreachable!("only block successors contribute frames"),
                 })
                 .collect::<Vec<_>>();
@@ -127,7 +124,10 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                         .iter()
                         .any(|normalized| {
                             normalized.id == edge
-                                && normalized.target == SuccessorTarget::Block(target)
+                                && normalized.target
+                                    == crate::ir::generator::bytecode_cfg::NormalizedTarget::Block(
+                                        target,
+                                    )
                         }),
                     "frame propagation must follow normalized topology"
                 );
@@ -189,10 +189,7 @@ impl CompletedAnalysis {
                     unreachable!("a normalized reachable block was not executed")
                 }
             })
-            .filter_map(|(edge, _)| match edge.target {
-                SuccessorTarget::Block(target) => Some((edge.id, target)),
-                SuccessorTarget::Unwind => None,
-            })
+            .filter_map(|(edge, _)| edge.block_target().map(|target| (edge.id(), target)))
             .map(|(edge, target)| {
                 let arguments = parameters_by_block
                     .get(&target)
@@ -225,12 +222,11 @@ impl CompletedAnalysis {
 
         for block in blocks.values_mut() {
             for edge in block.terminator.arms_mut() {
-                edge.arguments = match edge.target {
-                    SuccessorTarget::Block(_) => edge_arguments
-                        .remove(&edge.id)
-                        .ok_or_else(|| Error::internal("a block successor lacks its arguments"))?,
-                    SuccessorTarget::Unwind => Vec::new(),
-                };
+                if let Successor::Block { id, arguments, .. } = edge {
+                    *arguments = edge_arguments
+                        .remove(id)
+                        .ok_or_else(|| Error::internal("a block successor lacks its arguments"))?;
+                }
             }
         }
 
@@ -295,11 +291,18 @@ fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMa
 
 impl From<LiftedEdge> for Successor {
     fn from(edge: LiftedEdge) -> Self {
-        Self {
-            id: edge.id,
-            target: edge.target,
-            arguments: Vec::new(),
-            transfer: edge.transfer,
+        match edge {
+            LiftedEdge::Block {
+                id,
+                target,
+                transfer,
+            } => Self::Block {
+                id,
+                target,
+                arguments: Vec::new(),
+                transfer,
+            },
+            LiftedEdge::Unwind { id } => Self::Unwind { id },
         }
     }
 }

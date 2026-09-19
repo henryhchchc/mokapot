@@ -25,7 +25,9 @@ pub(super) fn build(method: &Method) -> Result<NormalizedCfg<'_>, Error> {
     normalized::normalize(bytecode)
 }
 
-pub(super) use normalized::{EdgeKind, NormalizedBlockKind, NormalizedCfg, NormalizedEdge};
+pub(super) use normalized::{
+    EdgeKind, NormalizedBlockKind, NormalizedCfg, NormalizedEdge, NormalizedTarget,
+};
 
 /// A block-first CFG that preserves decoded JVM bytecode structure.
 #[derive(Debug, Clone)]

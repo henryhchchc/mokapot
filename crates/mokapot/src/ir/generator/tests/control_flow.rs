@@ -43,8 +43,8 @@ fn switch_retains_parallel_successor_arms() {
     assert!(
         switch
             .successors()
-            .map(Successor::target)
-            .all(|target| target == switch.successors().next().unwrap().target())
+            .map(Successor::block_target)
+            .all(|target| target == switch.successors().next().unwrap().block_target())
     );
     assert_eq!(ir.control_flow_graph().edges().count(), 3);
 }
@@ -69,14 +69,14 @@ fn branch_preserves_taken_then_fallthrough_guards() {
     assert_eq!(branch.successors().count(), 2);
     assert_eq!(
         branch.successors().next().unwrap().transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Predicate::IsZero(PathValue::Variable(match_value)),
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Positive(Predicate::IsZero(PathValue::Variable(match_value)),)
         )))
     );
     assert_eq!(
         branch.successors().nth(1).unwrap().transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Negative(
-            Predicate::IsZero(PathValue::Variable(match_value)),
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Negative(Predicate::IsZero(PathValue::Variable(match_value)),)
         )))
     );
     let entry_loc = InstructionLocation::Terminator {
@@ -107,11 +107,11 @@ fn comparison_branch_preserves_operand_order() {
 
     assert_eq!(
         branch.successors().next().unwrap().transfer(),
-        &ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
-            Predicate::LessThan(
+        Some(&ControlTransfer::Conditional(BranchGuard::of(
+            BooleanVariable::Positive(Predicate::LessThan(
                 PathValue::Variable(parameters[0]),
                 PathValue::Variable(parameters[1]),
-            ),
+            ),)
         )))
     );
 }
@@ -151,20 +151,20 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     assert!(
         switch
             .successors()
-            .map(Successor::target)
-            .all(|target| target == switch.successors().next().unwrap().target())
+            .map(Successor::block_target)
+            .all(|target| target == switch.successors().next().unwrap().block_target())
     );
     assert_eq!(
         switch.successors().next().unwrap().transfer(),
-        &case_guard(3)
+        Some(&case_guard(3))
     );
     assert_eq!(
         switch.successors().nth(1).unwrap().transfer(),
-        &case_guard(4)
+        Some(&case_guard(4))
     );
     assert!(matches!(
         switch.successors().nth(2).unwrap().transfer(),
-        ControlTransfer::Conditional(guard) if guard.predicate_count() == 2
+        Some(ControlTransfer::Conditional(guard)) if guard.predicate_count() == 2
     ));
     let entry_loc = InstructionLocation::Terminator {
         block: ir.entry_block(),
@@ -247,13 +247,13 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     assert_eq!(ir.source_map().origin_of(entry_loc), Some(1.into()));
     assert!(matches!(
         fallible.successors().next().unwrap().transfer(),
-        ControlTransfer::Unconditional
+        Some(ControlTransfer::Unconditional)
     ));
     let handler_types = fallible
         .successors()
         .skip(1)
         .map(|successor| match successor.transfer() {
-            ControlTransfer::Exception(Some(caught)) => caught.0.as_ref(),
+            Some(ControlTransfer::Exception(Some(caught))) => caught.0.as_ref(),
             _ => unreachable!(),
         })
         .collect::<Vec<_>>();
@@ -287,14 +287,14 @@ fn normally_reachable_handler_still_starts_a_block() {
     let normal = entry
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Unconditional))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Unconditional)))
         .unwrap()
         .block_target()
         .unwrap();
     let handler = entry
         .terminator
         .successors()
-        .find(|successor| matches!(successor.transfer(), ControlTransfer::Exception(_)))
+        .find(|successor| matches!(successor.transfer(), Some(ControlTransfer::Exception(_))))
         .unwrap()
         .block_target()
         .unwrap();

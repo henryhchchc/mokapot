@@ -138,7 +138,7 @@ fn entry_self_loop_needs_no_synthetic_block_or_redundant_parameters() {
     assert_eq!(header.terminator.successors().count(), 1);
     assert!(matches!(
         header.terminator.successors().next().unwrap().transfer(),
-        ControlTransfer::Unconditional
+        Some(&ControlTransfer::Unconditional)
     ));
     assert_eq!(
         header

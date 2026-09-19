@@ -1,6 +1,6 @@
 use super::*;
 use crate::ir::{
-    BasicBlock, BlockKind, EdgeId, Successor, SuccessorTarget, Terminator,
+    BasicBlock, BlockKind, EdgeId, Successor, Terminator,
     control_flow::path_condition::BooleanVariable, expression::Predicate,
 };
 
@@ -21,23 +21,23 @@ fn path_conditions_prune_contradictory_arms_at_block_locations() {
     let negative = !positive.clone();
 
     let goto = Terminator::Goto {
-        target: Successor {
+        target: Successor::Block {
             id: EdgeId::new(0),
-            target: SuccessorTarget::Block(BlockId::new(1)),
+            target: BlockId::new(1),
             arguments: vec![],
             transfer: ControlTransfer::Conditional(BranchGuard::of(positive.clone())),
         },
     };
     let branch = Terminator::Branch {
-        taken: Successor {
+        taken: Successor::Block {
             id: EdgeId::new(1),
-            target: SuccessorTarget::Block(BlockId::new(2)),
+            target: BlockId::new(2),
             arguments: vec![],
             transfer: ControlTransfer::Conditional(BranchGuard::of(negative)),
         },
-        otherwise: Successor {
+        otherwise: Successor::Block {
             id: EdgeId::new(2),
-            target: SuccessorTarget::Block(BlockId::new(3)),
+            target: BlockId::new(3),
             arguments: vec![],
             transfer: ControlTransfer::Unconditional,
         },
@@ -65,15 +65,15 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
     let negative = !positive.clone();
 
     let branch = Terminator::Branch {
-        taken: Successor {
+        taken: Successor::Block {
             id: EdgeId::new(0),
-            target: SuccessorTarget::Block(BlockId::new(1)),
+            target: BlockId::new(1),
             arguments: vec![],
             transfer: ControlTransfer::Conditional(BranchGuard::of(positive)),
         },
-        otherwise: Successor {
+        otherwise: Successor::Block {
             id: EdgeId::new(1),
-            target: SuccessorTarget::Block(BlockId::new(5)),
+            target: BlockId::new(5),
             arguments: vec![],
             transfer: ControlTransfer::Conditional(BranchGuard::of(negative)),
         },
@@ -83,25 +83,20 @@ fn exceptional_outcomes_preserve_the_incoming_path_condition() {
         operation: crate::ir::Operation::Effect {
             expr: crate::ir::expression::Expression::Const(crate::jvm::ConstantValue::Null),
         },
-        normal: Successor {
+        normal: Successor::Block {
             id: EdgeId::new(2),
-            target: SuccessorTarget::Block(BlockId::new(2)),
+            target: BlockId::new(2),
             arguments: vec![],
             transfer: ControlTransfer::Unconditional,
         },
         exceptional: vec![
-            Successor {
+            Successor::Block {
                 id: EdgeId::new(3),
-                target: SuccessorTarget::Block(BlockId::new(3)),
+                target: BlockId::new(3),
                 arguments: vec![],
                 transfer: ControlTransfer::Exception(Some(exception_type)),
             },
-            Successor {
-                id: EdgeId::new(4),
-                target: SuccessorTarget::Unwind,
-                arguments: vec![],
-                transfer: ControlTransfer::Unwind,
-            },
+            Successor::Unwind { id: EdgeId::new(4) },
         ],
     };
     let exit = Terminator::Return { value: None };

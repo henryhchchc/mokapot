@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::{
-    BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, SuccessorTarget, Terminator,
-    ValueDefinition, ValueId, control_flow::ControlTransfer,
+    BlockId, BlockKind, EdgeId, InstructionLocation, MokaIRMethod, Terminator, ValueDefinition,
+    ValueId,
 };
 
 type VerificationResult = Result<(), String>;
@@ -92,21 +92,7 @@ fn verify_edges(
             if !edge_ids.insert(successor.id()) {
                 return Err(format!("edge {} is defined more than once", successor.id()));
             }
-            let exits_method = matches!(successor.target(), SuccessorTarget::Unwind);
-            let is_unwind = matches!(successor.transfer(), ControlTransfer::Unwind);
-            if exits_method != is_unwind {
-                return Err(format!(
-                    "edge {} has inconsistent unwind target and transfer",
-                    successor.id()
-                ));
-            }
-            let SuccessorTarget::Block(target) = successor.target() else {
-                if !successor.arguments().is_empty() {
-                    return Err(format!(
-                        "unwind edge {} carries block arguments",
-                        successor.id()
-                    ));
-                }
+            let Some(target) = successor.block_target() else {
                 continue;
             };
             let Some(target_predecessors) = predecessors.get_mut(&target) else {
@@ -155,7 +141,7 @@ fn reachable_blocks(method: &MokaIRMethod, excluded_edges: &BTreeSet<EdgeId>) ->
             .block(block_id)
             .expect("the verifier only enqueues defined blocks");
         for successor in block.terminator.successors() {
-            let SuccessorTarget::Block(target) = successor.target() else {
+            let Some(target) = successor.block_target() else {
                 continue;
             };
             if !excluded_edges.contains(&successor.id()) && reachable.insert(target) {
@@ -503,7 +489,7 @@ fn verify_source_map(method: &MokaIRMethod) -> VerificationResult {
 mod tests {
     use super::*;
     use crate::{
-        ir::MokaIRMethod,
+        ir::{MokaIRMethod, Successor, control_flow::ControlTransfer},
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -520,16 +506,6 @@ mod tests {
                 (8, Instruction::Return),
             ],
             "(I)V",
-            vec![],
-            AccessFlags::PUBLIC | AccessFlags::STATIC,
-        );
-        MokaIRMethod::from_method(&method).unwrap()
-    }
-
-    fn method_with_unwind() -> MokaIRMethod {
-        let method = crate::tests::method(
-            [(0, Instruction::Return)],
-            "()V",
             vec![],
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
@@ -616,10 +592,13 @@ mod tests {
             .find_map(|block| {
                 block
                     .terminator
-                    .successor_mut(|successor| successor.target == SuccessorTarget::Block(entry))
+                    .successor_mut(|successor| successor.block_target() == Some(entry))
             })
             .unwrap();
-        successor.arguments.clear();
+        let Successor::Block { arguments, .. } = successor else {
+            panic!("the selected successor must target a block");
+        };
+        arguments.clear();
 
         assert!(
             verify(&method)
@@ -643,54 +622,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_arguments_on_an_unwind_exit() {
-        let mut method = method_with_unwind();
-        let value = method
-            .parameter_values()
-            .first()
-            .copied()
-            .unwrap_or(ValueId::new(0));
-        method
-            .blocks_mut()
-            .values_mut()
-            .find_map(|block| {
-                block
-                    .terminator
-                    .successor_mut(|successor| successor.target == SuccessorTarget::Unwind)
-            })
-            .unwrap()
-            .arguments
-            .push(value);
-
-        assert!(
-            verify(&method)
-                .unwrap_err()
-                .contains("carries block arguments")
-        );
-    }
-
-    #[test]
-    fn rejects_a_non_unwind_transfer_to_the_unwind_exit() {
-        let mut method = method_with_unwind();
-        method
-            .blocks_mut()
-            .values_mut()
-            .find_map(|block| {
-                block
-                    .terminator
-                    .successor_mut(|successor| successor.target == SuccessorTarget::Unwind)
-            })
-            .unwrap()
-            .transfer = ControlTransfer::Unconditional;
-
-        assert!(verify(&method).unwrap_err().contains("inconsistent unwind"));
-    }
-
-    #[test]
     fn accepts_a_try_result_on_its_normal_edge() {
         let method = method_with_fallible_result();
         verify_fallible_result_on_edge(&method, |edge| {
-            matches!(edge.transfer(), ControlTransfer::Unconditional)
+            matches!(edge.transfer(), Some(ControlTransfer::Unconditional))
         })
         .unwrap();
     }
@@ -699,7 +634,7 @@ mod tests {
     fn rejects_a_try_result_on_an_exceptional_edge() {
         let method = method_with_fallible_result();
         let error = verify_fallible_result_on_edge(&method, |edge| {
-            matches!(edge.transfer(), ControlTransfer::Exception(_))
+            matches!(edge.transfer(), Some(ControlTransfer::Exception(_)))
         })
         .unwrap_err();
         assert!(error.contains("non-normal edge"), "{error}");

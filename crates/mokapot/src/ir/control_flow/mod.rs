@@ -5,7 +5,7 @@ pub mod path_condition;
 use std::collections::{BTreeMap, HashMap};
 
 use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
-use super::{BasicBlock, BlockId, EdgeId, SuccessorTarget};
+use super::{BasicBlock, BlockId, EdgeId, Successor};
 use crate::{ir::expression::Predicate, jvm::references::ClassRef};
 
 /// The semantics of one control-flow successor arm.
@@ -23,8 +23,6 @@ pub enum ControlTransfer {
     /// `None` denotes a catch-all exception-table entry. Arm order retains
     /// JVM exception-handler precedence.
     Exception(Option<ClassRef>),
-    /// An exceptional outcome that leaves the method.
-    Unwind,
 }
 
 /// A borrowed edge from a block terminator.
@@ -95,14 +93,19 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .filter_map(move |successor| match successor.target() {
-                    SuccessorTarget::Block(target) => Some(Edge {
-                        id: successor.id(),
-                        source,
+                .filter_map(move |successor| match successor {
+                    Successor::Block {
+                        id,
                         target,
-                        data: successor.transfer(),
+                        transfer,
+                        ..
+                    } => Some(Edge {
+                        id: *id,
+                        source,
+                        target: *target,
+                        data: transfer,
                     }),
-                    SuccessorTarget::Unwind => None,
+                    Successor::Unwind { .. } => None,
                 })
         })
     }
@@ -113,7 +116,7 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .all(|successor| matches!(successor.target(), SuccessorTarget::Unwind))
+                .all(|successor| successor.block_target().is_none())
                 .then_some(id)
         })
     }
@@ -126,14 +129,19 @@ impl<'m> ControlFlowGraph<'m> {
             block
                 .terminator
                 .successors()
-                .filter_map(move |successor| match successor.target() {
-                    SuccessorTarget::Block(target) => Some(Edge {
-                        id: successor.id(),
-                        source,
+                .filter_map(move |successor| match successor {
+                    Successor::Block {
+                        id,
                         target,
-                        data: successor.transfer(),
+                        transfer,
+                        ..
+                    } => Some(Edge {
+                        id: *id,
+                        source,
+                        target: *target,
+                        data: transfer,
                     }),
-                    SuccessorTarget::Unwind => None,
+                    Successor::Unwind { .. } => None,
                 })
         })
     }
