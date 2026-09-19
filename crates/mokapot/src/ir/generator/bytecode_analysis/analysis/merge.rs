@@ -3,16 +3,16 @@
 use std::collections::BTreeMap;
 
 use super::super::values::ValueContext;
-use super::{Analyzer, Frame, Location, PhiDefinition, PhiSite, Predecessor};
-use crate::ir::{ValueId, generator::error::Error};
+use super::{Analyzer, Frame, PhiDefinition, PhiSite, Predecessor};
+use crate::ir::{BlockId, ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
-    pub(super) fn recompute_entry(&mut self, location: Location) -> Result<bool, Error> {
-        let location_pc = self.location_pc(location);
+    pub(super) fn recompute_entry(&mut self, block: BlockId) -> Result<bool, Error> {
+        let block_pc = self.block_pc(block);
         let contributions = self
-            .locations
-            .get(&location)
-            .ok_or_else(|| Error::internal("a reachable block has no location state"))?
+            .blocks
+            .get(&block)
+            .ok_or_else(|| Error::internal("a reachable block has no analysis state"))?
             .contributions
             .iter()
             .map(|(&predecessor, frame)| (predecessor, frame.clone()))
@@ -29,7 +29,7 @@ impl Analyzer<'_, '_> {
             merged
                 .merge_from_with(contribution, |position, lhs, rhs| {
                     merge_value(
-                        PhiSite { location, position },
+                        PhiSite { block, position },
                         lhs,
                         rhs,
                         existing_phis,
@@ -37,20 +37,19 @@ impl Analyzer<'_, '_> {
                         values,
                     )
                 })
-                .map_err(|error| error.at_instruction_if_present(location_pc))?;
+                .map_err(|error| error.at_instruction_if_present(block_pc))?;
         }
 
         let phi_definitions = synchronize_phi_definitions(&merged, &contributions, active_phis)
-            .map_err(|error| error.at_instruction_if_present(location_pc))?;
+            .map_err(|error| error.at_instruction_if_present(block_pc))?;
 
-        self.phi_definitions
-            .retain(|site, _| site.location != location);
+        self.phi_definitions.retain(|site, _| site.block != block);
         self.phi_definitions.extend(phi_definitions);
 
         let execution = &mut self
-            .locations
-            .get_mut(&location)
-            .ok_or_else(|| Error::internal("a reachable block has no location state"))?
+            .blocks
+            .get_mut(&block)
+            .ok_or_else(|| Error::internal("a reachable block has no analysis state"))?
             .execution;
         Ok(execution.update_input(merged))
     }

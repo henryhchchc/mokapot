@@ -14,7 +14,7 @@ use crate::ir::{SourceMap, generator::error::Error};
 use frame::{EntrySlots, Frame, Position, StackOperation, ValueCategory};
 
 pub(super) fn analyze(
-    cfg: &super::bytecode_cfg::JvmBlockGraph<'_>,
+    cfg: &super::bytecode_cfg::NormalizedCfg<'_>,
 ) -> Result<(ScalarGraph, SourceMap), Error> {
     Analyzer::new(cfg)?.run()
 }

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     ir::{
-        BasicBlock, EdgeId, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
+        BasicBlock, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
         Successor, Terminator, ValueDefinition, ValueId,
         generator::{canonicalize, error::Error, remap::RemapValues},
         method::MokaIRMethodParts,
@@ -152,12 +152,14 @@ fn materialize_block(
         .scalar
         .successors
         .into_iter()
-        .map(|(target, mut transfer)| {
-            transfer.try_remap_values(&mut |value| state.resolve(value))?;
+        .map(|mut successor| {
+            successor
+                .transfer
+                .try_remap_values(&mut |value| state.resolve(value))?;
             Ok(Successor {
-                id: state.edge()?,
-                target,
-                transfer,
+                id: successor.id,
+                target: successor.target,
+                transfer: successor.transfer,
             })
         })
         .collect::<Result<_, Error>>()?;
@@ -176,21 +178,11 @@ fn materialize_block(
 
 #[derive(Default)]
 struct FinishState {
-    next_edge: u32,
     values: Vec<Option<ValueId>>,
     definitions: Vec<ValueDefinition>,
 }
 
 impl FinishState {
-    fn edge(&mut self) -> Result<EdgeId, Error> {
-        let id = EdgeId::new(self.next_edge);
-        self.next_edge = self
-            .next_edge
-            .checked_add(1)
-            .ok_or_else(|| Error::internal("the edge identity space is exhausted"))?;
-        Ok(id)
-    }
-
     fn value(&mut self, temporary: ValueId, definition: ValueDefinition) -> Result<ValueId, Error> {
         let finished_index = u32::try_from(self.definitions.len())
             .ok()

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::super::{
-    Frame, LiftedEdge, Location,
+    Frame,
     ValueCategory::{Category1, Category2},
 };
 use crate::ir::{
@@ -14,13 +14,13 @@ use crate::ir::{
     },
     expression::Predicate,
     generator::{
-        bytecode_cfg::{self, BlockExit, JvmBlockId},
+        bytecode_cfg::{self, BlockExit},
         error::Error,
     },
 };
 use crate::jvm::code::Instruction;
 
-type LoweredTerminator = (TerminatorKind, Vec<LiftedEdge>, Option<OperationKind>);
+type LoweredTerminator = (TerminatorKind, Vec<ControlTransfer>, Option<OperationKind>);
 
 /// Lowers the structural terminator of `block`, appending its successors.
 pub(super) fn lower(
@@ -29,63 +29,52 @@ pub(super) fn lower(
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let result = match &block.exit {
-        BlockExit::Fallthrough { target } => {
+        BlockExit::Fallthrough { .. } => {
             let terminator_kind = if block.exception_handlers.is_empty() {
                 TerminatorKind::Goto
             } else {
                 TerminatorKind::Fallible
             };
-            (terminator_kind, vec![unconditional(*target)], None)
+            (terminator_kind, vec![ControlTransfer::Unconditional], None)
         }
-        BlockExit::Goto { target } => (TerminatorKind::Goto, vec![unconditional(*target)], None),
-        BlockExit::Branch { taken, fallthrough } => {
-            lower_branch(instruction, *taken, *fallthrough, frame)?
-        }
-        BlockExit::Switch { cases, default } => lower_switch(cases, *default, frame)?,
+        BlockExit::Goto { .. } => (
+            TerminatorKind::Goto,
+            vec![ControlTransfer::Unconditional],
+            None,
+        ),
+        BlockExit::Branch { .. } => lower_branch(instruction, frame)?,
+        BlockExit::Switch { cases, .. } => lower_switch(cases, frame)?,
         BlockExit::Terminal => lower_terminal(instruction, frame)?,
     };
     Ok(result)
 }
 
-fn lower_branch(
-    instruction: &Instruction,
-    taken: JvmBlockId,
-    fallthrough: JvmBlockId,
-    frame: &mut Frame,
-) -> Result<LoweredTerminator, Error> {
+fn lower_branch(instruction: &Instruction, frame: &mut Frame) -> Result<LoweredTerminator, Error> {
     let condition: BooleanVariable<_> = pop_condition(frame, instruction)?.into();
     Ok((
         TerminatorKind::Branch,
         vec![
-            LiftedEdge {
-                target: Location::Bytecode(taken),
-                transfer: ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-            },
-            LiftedEdge {
-                target: Location::Bytecode(fallthrough),
-                transfer: ControlTransfer::Conditional(BranchGuard::of(!condition)),
-            },
+            ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
+            ControlTransfer::Conditional(BranchGuard::of(!condition)),
         ],
         None,
     ))
 }
 
 fn lower_switch(
-    cases: &BTreeMap<i32, JvmBlockId>,
-    default: JvmBlockId,
+    cases: &BTreeMap<i32, bytecode_cfg::JvmBlockId>,
     frame: &mut Frame,
 ) -> Result<LoweredTerminator, Error> {
     let match_value = frame.stack.pop(Category1)?;
     let mut successors = cases
         .iter()
-        .map(|(&case, &target)| LiftedEdge {
-            target: Location::Bytecode(target),
-            transfer: ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
+        .map(|(&case, _)| {
+            ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(
                 Predicate::Equal(
                     match_value.into(),
                     PathValue::Constant(crate::jvm::ConstantValue::Integer(case)),
                 ),
-            ))),
+            )))
         })
         .collect::<Vec<_>>();
     let default_guard = cases
@@ -97,10 +86,7 @@ fn lower_switch(
             ))
         })
         .collect();
-    successors.push(LiftedEdge {
-        target: Location::Bytecode(default),
-        transfer: ControlTransfer::Conditional(default_guard),
-    });
+    successors.push(ControlTransfer::Conditional(default_guard));
     Ok((TerminatorKind::Switch { match_value }, successors, None))
 }
 
@@ -172,11 +158,4 @@ fn lower_terminal(
         }
     };
     Ok((kind, Vec::new(), None))
-}
-
-const fn unconditional(target: JvmBlockId) -> LiftedEdge {
-    LiftedEdge {
-        target: Location::Bytecode(target),
-        transfer: ControlTransfer::Unconditional,
-    }
 }

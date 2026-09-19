@@ -71,7 +71,10 @@ fn finalize_block(
     scalar.successors = scalar
         .successors
         .into_iter()
-        .map(|(target, transfer)| (target, apply_substitutions(transfer, canonical)))
+        .map(|mut successor| {
+            successor.transfer = apply_substitutions(successor.transfer, canonical);
+            successor
+        })
         .collect();
     model::Block { phis, scalar }
 }

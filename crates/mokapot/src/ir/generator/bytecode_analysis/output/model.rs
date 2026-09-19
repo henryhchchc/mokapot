@@ -3,7 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::ir::{BlockId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer};
+use crate::ir::{
+    BlockId, EdgeId, OperationKind, TerminatorKind, ValueId, control_flow::ControlTransfer,
+};
 
 /// A block whose JVM-frame operands have all been lowered to scalar values.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,7 +13,15 @@ pub(crate) struct ScalarBlock {
     pub caught_exception: Option<ValueId>,
     pub operations: Vec<OperationKind>,
     pub terminator: TerminatorKind,
-    pub successors: Vec<(BlockId, ControlTransfer)>,
+    pub successors: Vec<ScalarSuccessor>,
+}
+
+/// A normalized edge with its frame-dependent transfer attached.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScalarSuccessor {
+    pub id: EdgeId,
+    pub target: BlockId,
+    pub transfer: ControlTransfer,
 }
 
 /// A predecessor-indexed scalar phi candidate and its placement.

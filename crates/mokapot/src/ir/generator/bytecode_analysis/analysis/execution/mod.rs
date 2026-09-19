@@ -3,29 +3,29 @@
 mod terminator;
 
 use super::super::lifting;
-use super::{Analyzer, Frame, LiftedBlock, LiftedEdge, LiftedSuccessors, Location};
-use crate::{
-    ir::generator::{
-        bytecode_cfg::{self, BlockExit, JvmBlockId},
+use super::{Analyzer, Frame, LiftedBlock, LiftedEdge, LiftedSuccessors};
+use crate::ir::{
+    BlockId, TerminatorKind,
+    control_flow::ControlTransfer,
+    generator::{
+        bytecode_cfg::{BlockExit, EdgeKind, JvmBlockId, NormalizedBlockKind, NormalizedEdge},
         error::Error,
     },
-    ir::{TerminatorKind, control_flow::ControlTransfer},
 };
 
 impl Analyzer<'_, '_> {
-    /// Executes one location, producing its analyzed block.
+    /// Executes one normalized block, producing its analyzed block.
     ///
-    /// The structural CFG fixes the successor target set independently of the
-    /// input frame, allowing `Analyzer::run` to grow predecessor sets monotonically.
-    pub(super) fn execute(
-        &mut self,
-        location: Location,
-        input: Frame,
-    ) -> Result<LiftedBlock, Error> {
-        match location {
-            Location::Bytecode(id) => self.execute_bytecode(id, input),
-            Location::Handler(block) => Self::execute_handler(block, input),
-            Location::Unwind => Ok(LiftedBlock {
+    /// Its successor identities and targets were fixed before frame analysis.
+    pub(super) fn execute(&mut self, block: BlockId, input: Frame) -> Result<LiftedBlock, Error> {
+        match self.cfg.block(block).kind {
+            NormalizedBlockKind::EntryPreheader => self.execute_passthrough(block, input, None),
+            NormalizedBlockKind::Bytecode(id) => self.execute_bytecode(block, id, input),
+            NormalizedBlockKind::HandlerEntry(_) => {
+                let caught = *input.handler_exception().map_err(Error::from)?;
+                self.execute_passthrough(block, input, Some(caught))
+            }
+            NormalizedBlockKind::Unwind => Ok(LiftedBlock {
                 caught_exception: None,
                 operations: Vec::new(),
                 terminator: TerminatorKind::Unwind,
@@ -35,19 +35,28 @@ impl Analyzer<'_, '_> {
         }
     }
 
-    fn execute_handler(block: JvmBlockId, input: Frame) -> Result<LiftedBlock, Error> {
-        let caught = *input.handler_exception().map_err(Error::from)?;
-        let target = Location::Bytecode(block);
+    fn execute_passthrough(
+        &self,
+        block: BlockId,
+        input: Frame,
+        caught_exception: Option<crate::ir::ValueId>,
+    ) -> Result<LiftedBlock, Error> {
+        let [edge] = self.cfg.block(block).successors.as_slice() else {
+            return Err(Error::internal(
+                "a normalized passthrough block must have one successor",
+            ));
+        };
         let mut successors = LiftedSuccessors::default();
         successors.push(
             LiftedEdge {
-                target,
+                id: edge.id,
+                target: edge.target,
                 transfer: ControlTransfer::Unconditional,
             },
             input,
         );
         Ok(LiftedBlock {
-            caught_exception: Some(caught),
+            caught_exception,
             operations: Vec::new(),
             terminator: TerminatorKind::Goto,
             terminator_source: None,
@@ -55,8 +64,13 @@ impl Analyzer<'_, '_> {
         })
     }
 
-    fn execute_bytecode(&mut self, id: JvmBlockId, input: Frame) -> Result<LiftedBlock, Error> {
-        let block = self.cfg.block(id);
+    fn execute_bytecode(
+        &mut self,
+        block_id: BlockId,
+        id: JvmBlockId,
+        input: Frame,
+    ) -> Result<LiftedBlock, Error> {
+        let block = self.cfg.bytecode_block(id);
         let final_pc = block.end_pc;
         let has_explicit_terminator = !matches!(block.exit, BlockExit::Fallthrough { .. });
         let mut frame = input;
@@ -89,18 +103,34 @@ impl Analyzer<'_, '_> {
                 operations.push((final_pc, operation));
             }
         }
-        let (terminator, edges, terminator_operation) =
+        let (terminator, transfers, terminator_operation) =
             terminator::lower(block, final_instruction, &mut frame)
                 .map_err(|error| error.at_instruction(final_pc))?;
         if let Some(operation) = terminator_operation {
             operations.push((final_pc, operation));
         }
         let mut successors = LiftedSuccessors::default();
-        for edge in edges {
-            successors.push(edge, frame.clone());
+        let topology = self.cfg.block(block_id).successors.clone();
+        let (normal_edges, exceptional_edges): (Vec<_>, Vec<_>) = topology
+            .into_iter()
+            .partition(|edge| matches!(edge.kind, EdgeKind::Normal));
+        if normal_edges.len() != transfers.len() {
+            return Err(Error::internal(
+                "lowered successors do not match normalized topology",
+            ));
         }
-        for exceptional_target in &block.exception_handlers {
-            self.push_exception_successor(exceptional_target, &pre_final_frame, &mut successors)?;
+        for (edge, transfer) in normal_edges.into_iter().zip(transfers) {
+            successors.push(
+                LiftedEdge {
+                    id: edge.id,
+                    target: edge.target,
+                    transfer,
+                },
+                frame.clone(),
+            );
+        }
+        for edge in exceptional_edges {
+            self.push_exception_successor(&edge, &pre_final_frame, &mut successors)?;
         }
         Ok(LiftedBlock {
             caught_exception: None,
@@ -113,31 +143,37 @@ impl Analyzer<'_, '_> {
 
     fn push_exception_successor(
         &mut self,
-        exceptional_target: &bytecode_cfg::ExceptionalTarget,
+        edge: &NormalizedEdge,
         input_frame: &Frame,
         successors: &mut LiftedSuccessors,
     ) -> Result<(), Error> {
-        match exceptional_target {
-            bytecode_cfg::ExceptionalTarget::Handler { block, catch_type } => {
-                let location = Location::Handler(*block);
-                let caught = self.caught_exception(*block)?;
+        match &edge.kind {
+            EdgeKind::Exception(catch_type) => {
+                let caught = self.caught_exception(edge.target)?;
                 let frame = input_frame.clone().exception_handler_frame(caught)?;
                 successors.push(
                     LiftedEdge {
-                        target: location,
+                        id: edge.id,
+                        target: edge.target,
                         transfer: ControlTransfer::Exception(catch_type.clone()),
                     },
                     frame,
                 );
             }
-            bytecode_cfg::ExceptionalTarget::Unwind => {
+            EdgeKind::Unwind => {
                 successors.push(
                     LiftedEdge {
-                        target: Location::Unwind,
+                        id: edge.id,
+                        target: edge.target,
                         transfer: ControlTransfer::Unwind,
                     },
                     input_frame.clone().into_unwind_frame(),
                 );
+            }
+            EdgeKind::Normal => {
+                return Err(Error::internal(
+                    "an ordinary edge was treated as an exceptional successor",
+                ));
             }
         }
         Ok(())

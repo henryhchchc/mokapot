@@ -1,9 +1,67 @@
-//! Classifies the fallibility of JVM instructions.
+//! Structural classification of decoded JVM instructions.
+
+use std::collections::BTreeMap;
 
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{ConstantValue, code::Instruction},
+    jvm::{
+        ConstantValue,
+        code::{Instruction, ProgramCounter, WideInstruction},
+    },
 };
+
+/// All information about an instruction needed to construct bytecode blocks.
+///
+/// Opcode execution remains in `bytecode_analysis::lifting`; this description
+/// contains only topology that can be known before frame propagation.
+#[derive(Debug, Clone)]
+pub(super) struct InstructionDescription {
+    pub control_flow: ControlFlow,
+    pub can_throw: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum ControlFlow {
+    Fallthrough,
+    Goto(ProgramCounter),
+    Branch(ProgramCounter),
+    Switch(BTreeMap<i32, ProgramCounter>, ProgramCounter),
+    Terminal,
+    Legacy,
+}
+
+pub(super) fn describe(instruction: &Instruction) -> InstructionDescription {
+    InstructionDescription {
+        control_flow: control_flow(instruction),
+        can_throw: can_throw(instruction),
+    }
+}
+
+fn control_flow(instruction: &Instruction) -> ControlFlow {
+    use Instruction::{
+        AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq, IfGe,
+        IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt, IfNe,
+        IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
+    };
+    match instruction {
+        IReturn | LReturn | FReturn | DReturn | AReturn | Return | AThrow => ControlFlow::Terminal,
+        Goto(target) | GotoW(target) => ControlFlow::Goto(*target),
+        IfEq(pc) | IfNe(pc) | IfLt(pc) | IfGe(pc) | IfGt(pc) | IfLe(pc) | IfICmpEq(pc)
+        | IfICmpNe(pc) | IfICmpLt(pc) | IfICmpGe(pc) | IfICmpGt(pc) | IfICmpLe(pc)
+        | IfACmpEq(pc) | IfACmpNe(pc) | IfNull(pc) | IfNonNull(pc) => ControlFlow::Branch(*pc),
+        Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => ControlFlow::Legacy,
+        Instruction::TableSwitch {
+            jump_targets,
+            default,
+            range,
+        } => ControlFlow::Switch(range.clone().zip(jump_targets.clone()).collect(), *default),
+        Instruction::LookupSwitch {
+            default,
+            match_targets,
+        } => ControlFlow::Switch(match_targets.clone(), *default),
+        _ => ControlFlow::Fallthrough,
+    }
+}
 
 /// Returns whether executing `instruction` can synchronously transfer control
 /// to a JVM exception handler.
@@ -12,7 +70,7 @@ use crate::{
 /// resolution, initialization, allocation, bootstrap, and method-exit failures
 /// in addition to the instruction's most obvious runtime exception. Returns are
 /// conservatively fallible because a JVM may enforce structured locking.
-pub(super) const fn can_throw(instruction: &Instruction) -> bool {
+const fn can_throw(instruction: &Instruction) -> bool {
     use Instruction::{
         AALoad, AAStore, ANewArray, AReturn, AThrow, ArrayLength, BALoad, BAStore, CALoad, CAStore,
         CheckCast, DALoad, DAStore, DReturn, FALoad, FAStore, FReturn, GetField, GetStatic, IALoad,
@@ -78,15 +136,8 @@ pub(super) const fn can_throw(instruction: &Instruction) -> bool {
 ///
 /// Numeric constants are read straight out of the run-time constant pool, and
 /// `Null` never reaches it (`aconst_null` pushes it instead), so neither can
-/// fail.
+/// fail. Every other entry may require resolution or materialization.
 #[doc = see_jvm_spec!(6, 5)]
-///
-/// Every other entry must be resolved before use, and
-/// resolution can fail: class, method handle, and method type references may
-/// throw any `LinkageError`, while a dynamically-computed constant additionally
-/// invokes its bootstrap method, which may throw any `Throwable`. String
-/// constants need no resolution, but the virtual machine must still materialize
-/// the interned instance, so they are conservatively treated as fallible too.
 #[doc = see_jvm_spec!(5, 4, 3)]
 const fn constant_resolution_is_fallible(value: &ConstantValue) -> bool {
     !matches!(

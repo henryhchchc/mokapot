@@ -2,79 +2,35 @@
 
 mod model;
 
-pub(crate) use model::{PhiCandidate, ScalarBlock, ScalarGraph};
+pub(crate) use model::{PhiCandidate, ScalarBlock, ScalarGraph, ScalarSuccessor};
 
 use std::collections::BTreeMap;
 
-use itertools::Itertools;
-
-use super::analysis::{
-    CompletedAnalysis, LiftedBlock, Location, PhiDefinition, PhiSite, Predecessor,
-};
-use crate::ir::{
-    BlockId, SourceMap, TerminatorKind, ValueId, control_flow::ControlTransfer,
-    generator::error::Error,
-};
+use super::analysis::{CompletedAnalysis, LiftedBlock, PhiDefinition, PhiSite, Predecessor};
+use crate::ir::{BlockId, SourceMap, ValueId, generator::error::Error};
 
 pub(super) fn materialize(
     completed: CompletedAnalysis,
-    entry_location: Location,
+    entry: BlockId,
 ) -> Result<(ScalarGraph, SourceMap), Error> {
     let CompletedAnalysis {
-        locations,
+        blocks,
         phi_definitions,
         receiver_value,
         parameter_values,
     } = completed;
-    let has_preheader = locations.get(&entry_location).is_some_and(|state| {
-        state
-            .contributions
-            .keys()
-            .any(|predecessor| *predecessor != Predecessor::Entry)
-    });
-    let analyzed_locations = locations
-        .iter()
-        .filter_map(|(&location, state)| state.execution.block().map(|_| location))
-        .collect::<Vec<_>>();
-    let offset = usize::from(has_preheader);
-    let block_ids_by_location = analyzed_locations
-        .iter()
-        .enumerate()
-        .map(|(index, &location)| scalar_block_id(index + offset).map(|id| (location, id)))
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
-    let entry_block = *block_ids_by_location
-        .get(&entry_location)
-        .ok_or_else(|| Error::internal("the entry location has no scalar block"))?;
-    let preheader = has_preheader.then(|| BlockId::new(0));
-    let entry = preheader.unwrap_or(entry_block);
-
-    let preheader_block = preheader.map(|id| {
-        let scalar_block = ScalarBlock {
-            caught_exception: None,
-            operations: Vec::new(),
-            terminator: TerminatorKind::Goto,
-            successors: vec![(entry_block, ControlTransfer::Unconditional)],
-        };
-        Ok((id, scalar_block))
-    });
     let mut source_map = SourceMap::default();
-    let location_blocks = analyzed_locations.iter().map(|location| {
-        let analyzed = locations
-            .get(location)
-            .and_then(|state| state.execution.block().cloned())
-            .ok_or_else(|| Error::internal("a reachable location was not executed"))?;
-        let id = *block_ids_by_location
-            .get(location)
-            .ok_or_else(|| Error::internal("an executed location has no scalar block"))?;
-        materialize_block(id, analyzed, &block_ids_by_location, &mut source_map)
-            .map(|block| (id, block))
+    let scalar_blocks = blocks.iter().map(|(&id, state)| {
+        let analyzed = state
+            .execution
+            .block()
+            .cloned()
+            .ok_or_else(|| Error::internal("a normalized reachable block was not executed"))?;
+        Ok((id, materialize_block(id, analyzed, &mut source_map)))
     });
-    let blocks = preheader_block
-        .into_iter()
-        .chain(location_blocks)
-        .try_collect()?;
+    let blocks = scalar_blocks.collect::<Result<BTreeMap<_, _>, Error>>()?;
 
-    let phi_candidates = materialize_phis(&phi_definitions, &block_ids_by_location, preheader)?;
+    let phi_candidates = materialize_phis(&phi_definitions, &blocks)?;
     Ok((
         ScalarGraph {
             entry,
@@ -89,64 +45,47 @@ pub(super) fn materialize(
 
 fn materialize_phis(
     phi_definitions: &BTreeMap<PhiSite, PhiDefinition>,
-    block_ids_by_location: &BTreeMap<Location, BlockId>,
-    preheader: Option<BlockId>,
+    blocks: &BTreeMap<BlockId, ScalarBlock>,
 ) -> Result<BTreeMap<ValueId, PhiCandidate>, Error> {
     phi_definitions
         .iter()
-        .filter(|(site, _)| block_ids_by_location.contains_key(&site.location))
+        .filter(|(site, _)| blocks.contains_key(&site.block))
         .map(|(site, definition)| {
-            materialize_phi(site.location, definition, block_ids_by_location, preheader)
-                .map(|candidate| (definition.result, candidate))
+            materialize_phi(site.block, definition).map(|candidate| (definition.result, candidate))
         })
         .collect()
 }
 
-fn materialize_phi(
-    location: Location,
-    definition: &PhiDefinition,
-    block_ids_by_location: &BTreeMap<Location, BlockId>,
-    preheader: Option<BlockId>,
-) -> Result<PhiCandidate, Error> {
+fn materialize_phi(block: BlockId, definition: &PhiDefinition) -> Result<PhiCandidate, Error> {
     let inputs = definition
         .inputs
         .iter()
         .map(|(predecessor, &input)| {
-            let predecessor = match predecessor {
-                Predecessor::Entry => preheader
-                    .ok_or_else(|| Error::internal("an entry phi has no synthetic predecessor"))?,
-                Predecessor::Location(location) => {
-                    *block_ids_by_location.get(location).ok_or_else(|| {
-                        Error::internal("a phi input predecessor has no scalar block")
-                    })?
-                }
+            let Predecessor::Block(predecessor) = predecessor else {
+                return Err(Error::internal(
+                    "an entry contribution cannot be an active phi input",
+                ));
             };
-            Ok((predecessor, input))
+            Ok((*predecessor, input))
         })
         .collect::<Result<_, Error>>()?;
-    let placement = *block_ids_by_location
-        .get(&location)
-        .ok_or_else(|| Error::internal("a phi definition has no scalar block"))?;
-    Ok(PhiCandidate { placement, inputs })
+    Ok(PhiCandidate {
+        placement: block,
+        inputs,
+    })
 }
 
-fn materialize_block(
-    id: BlockId,
-    lifted: LiftedBlock,
-    block_ids_by_location: &BTreeMap<Location, BlockId>,
-    source_map: &mut SourceMap,
-) -> Result<ScalarBlock, Error> {
+fn materialize_block(id: BlockId, lifted: LiftedBlock, source_map: &mut SourceMap) -> ScalarBlock {
     let successors = lifted
         .successors
         .edges
         .into_iter()
-        .map(|successor| {
-            let target = *block_ids_by_location
-                .get(&successor.target)
-                .ok_or_else(|| Error::internal("a successor target has no scalar block"))?;
-            Ok((target, successor.transfer))
+        .map(|successor| ScalarSuccessor {
+            id: successor.id,
+            target: successor.target,
+            transfer: successor.transfer,
         })
-        .collect::<Result<_, Error>>()?;
+        .collect();
     let operations = lifted
         .operations
         .into_iter()
@@ -160,16 +99,10 @@ fn materialize_block(
     if let Some(pc) = lifted.terminator_source {
         source_map.record_terminator(pc, id);
     }
-    Ok(ScalarBlock {
+    ScalarBlock {
         caught_exception: lifted.caught_exception,
         operations,
         terminator,
         successors,
-    })
-}
-
-fn scalar_block_id(index: usize) -> Result<BlockId, Error> {
-    u32::try_from(index)
-        .map(BlockId::new)
-        .map_err(|_| Error::internal("the block identity space is exhausted"))
+    }
 }
