@@ -7,7 +7,7 @@ use ValueCategory::Category1;
 
 impl LiftContext<'_, '_> {
     pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         self.frame
             .stack
             .push(value, ValueCategory::of_field_type(&field.field_type))?;
@@ -21,7 +21,7 @@ impl LiftContext<'_, '_> {
     }
 
     pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
             .stack

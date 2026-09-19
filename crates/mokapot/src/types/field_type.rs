@@ -340,10 +340,8 @@ mod tests {
     #[test]
     fn field_type_display() {
         use FieldType::Object;
-        assert_eq!(
-            Object("java/lang/Object".parse().unwrap()).to_string(),
-            "java/lang/Object"
-        );
+        let object = "java/lang/Object".parse::<ClassRef>().unwrap();
+        assert_eq!(Object(object.clone()).to_string(), "java/lang/Object");
         assert_eq!(
             FieldType::Base(PrimitiveType::Int)
                 .into_array_type()
@@ -351,9 +349,7 @@ mod tests {
             "int[]"
         );
         assert_eq!(
-            Object("java/lang/Object".parse::<ClassRef>().unwrap())
-                .into_array_type()
-                .to_string(),
+            Object(object).into_array_type().to_string(),
             "java/lang/Object[]"
         );
     }

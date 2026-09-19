@@ -27,14 +27,13 @@ pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecod
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 
-pub(crate) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = bytecode_cfg::build(method)?;
     let mut draft = bytecode_analysis::analyze(&cfg)?;
     canonicalize::canonicalize(&mut draft)?;
     let ir = finish::finish(method, draft)?;
     #[cfg(test)]
-    crate::ir::verify::verify(&ir)
-        .unwrap_or_else(|error| panic!("generated invalid Moka IR: {error}"));
+    ir.verify();
     Ok(ir)
 }
 

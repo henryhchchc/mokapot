@@ -41,7 +41,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
     ) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value, Category2)?;
@@ -50,7 +50,7 @@ impl LiftContext<'_, '_> {
     }
 
     pub(super) fn compare_long(&mut self) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value, Category1)?;
@@ -63,7 +63,7 @@ impl LiftContext<'_, '_> {
         nan_treatment: NaNTreatment,
         category: ValueCategory,
     ) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;
         self.frame.stack.push(value, Category1)?;

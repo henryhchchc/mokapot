@@ -1,79 +1,72 @@
 //! Internal state shared by block analysis stages.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::{Frame, Position};
 use crate::{
     ir::{
-        BlockId, BlockKind, EdgeId, Operation, Terminator, ValueId, control_flow::ControlTransfer,
+        BlockId, BlockKind, Operation, Terminator, ValueId, control_flow::ControlTransfer,
+        generator::bytecode_cfg::ArmId,
     },
     jvm::code::ProgramCounter,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Contribution {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum Contribution {
     Entry,
-    Edge(EdgeId),
+    Edge { source: BlockId, arm: ArmId },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct ParameterSite {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct ParameterSite {
     pub block: BlockId,
     pub position: Position,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LiftedEdge {
-    Block {
-        id: EdgeId,
-        target: BlockId,
-        transfer: ControlTransfer,
-    },
-    Unwind {
-        id: EdgeId,
-    },
-}
-
-impl LiftedEdge {
-    pub(crate) const fn id(&self) -> EdgeId {
-        match self {
-            Self::Block { id, .. } | Self::Unwind { id } => *id,
-        }
-    }
-
-    pub(crate) const fn block_target(&self) -> Option<BlockId> {
-        match self {
-            Self::Block { target, .. } => Some(*target),
-            Self::Unwind { .. } => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LiftedBlock {
+pub(super) struct LiftedBlock {
     pub kind: BlockKind,
     pub operations: Vec<(ProgramCounter, Operation)>,
     pub terminator: LiftedTerminator,
     pub terminator_source: Option<ProgramCounter>,
 }
 
-pub(crate) type LiftedArm = (LiftedEdge, Option<Frame>);
+/// One analyzed outgoing arm of a lifted terminator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum LiftedArm {
+    /// A continuation into `target`, carrying the frame delivered there.
+    Block {
+        /// The arm's structural identity within its source.
+        arm: ArmId,
+        /// The destination block.
+        target: BlockId,
+        /// The state transfer associated with this arm.
+        transfer: ControlTransfer,
+        /// The frame delivered to the destination.
+        frame: Frame,
+    },
+    /// An exception escaping the method.
+    Unwind {
+        /// The arm's structural identity within its source.
+        arm: ArmId,
+    },
+}
 
-pub(crate) type LiftedTerminator = Terminator<LiftedArm>;
+pub(super) type LiftedTerminator = Terminator<LiftedArm>;
 
-/// Analysis state for one normalized block.
+/// Analysis state for one block.
 ///
 /// The structural CFG fixes predecessor and successor membership. The analyzer
 /// only fills frame `contributions`; it never changes topology.
 #[derive(Debug, Default)]
-pub(crate) struct BlockState {
-    pub contributions: BTreeMap<Contribution, Frame>,
+pub(super) struct BlockState {
+    pub contributions: HashMap<Contribution, Frame>,
     pub execution: BlockExecution,
 }
 
-/// Execution lifecycle of a reachable normalized block.
+/// Execution lifecycle of a reachable block.
 #[derive(Debug, Default)]
-pub(crate) enum BlockExecution {
+pub(super) enum BlockExecution {
     /// No input frame has yet been computed.
     #[default]
     Uninitialized,
@@ -87,22 +80,22 @@ pub(crate) enum BlockExecution {
 }
 
 /// The complete analysis state passed to draft-IR materialization.
-pub(crate) struct CompletedAnalysis {
-    pub blocks: BTreeMap<BlockId, BlockState>,
-    pub parameter_definitions: BTreeMap<ParameterSite, ValueId>,
+pub(super) struct CompletedAnalysis {
+    pub blocks: HashMap<BlockId, BlockState>,
+    pub parameter_definitions: HashMap<ParameterSite, ValueId>,
     pub receiver_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }
 
 impl BlockExecution {
-    pub(crate) const fn input(&self) -> Option<&Frame> {
+    pub(super) const fn input(&self) -> Option<&Frame> {
         match self {
             Self::Uninitialized => None,
             Self::Pending { input } | Self::Complete { input, .. } => Some(input),
         }
     }
 
-    pub(crate) fn update_input(&mut self, input: Frame) -> bool {
+    pub(super) fn update_input(&mut self, input: Frame) -> bool {
         if self.input() == Some(&input) {
             return false;
         }
@@ -110,7 +103,7 @@ impl BlockExecution {
         true
     }
 
-    pub(crate) fn complete(&mut self, block: LiftedBlock) {
+    pub(super) fn complete(&mut self, block: LiftedBlock) {
         let Self::Pending { input } = std::mem::take(self) else {
             unreachable!("only a pending block can finish execution");
         };

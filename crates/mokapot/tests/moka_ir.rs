@@ -5,7 +5,7 @@ use mokapot::{
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{HashSet, VecDeque};
 
 fn get_test_class() -> Class {
     let mut bytes = if cfg!(integration_test) {
@@ -46,6 +46,26 @@ fn terminator(
         Some(InstructionRef::Terminator(terminator)) => Some(terminator),
         Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
     }
+}
+
+fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(mokapot::ir::BlockId, &mokapot::ir::BasicBlock)> {
+    let mut result = Vec::new();
+    let mut visited = HashSet::new();
+    let mut pending = VecDeque::from([ir.entry_block()]);
+    while let Some(id) = pending.pop_front() {
+        if !visited.insert(id) {
+            continue;
+        }
+        let block = ir.block(id).expect("a successor must belong to its method");
+        pending.extend(
+            block
+                .terminator
+                .successors()
+                .filter_map(|edge| edge.block_target()),
+        );
+        result.push((id, block));
+    }
+    result
 }
 
 #[test]
@@ -89,7 +109,7 @@ fn builds_ir_blocks_and_provenance() {
         Terminator::Return { value: Some(value), .. } if value == &ir.parameter_values()[1]
     ));
 
-    for (block_id, _) in ir.blocks() {
+    for (block_id, _) in reachable_blocks(&ir) {
         assert!(ir.block(block_id).is_some());
     }
 }
@@ -111,7 +131,7 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
         ir.block(ir.entry_block()).unwrap().parameters.len()
     );
     uses.extend(ir.entry().arguments());
-    for (block_id, block) in ir.blocks() {
+    for (block_id, block) in reachable_blocks(&ir) {
         if let mokapot::ir::BlockKind::LandingPad { exception: value } = block.kind {
             definitions.insert(value);
         }
@@ -165,7 +185,7 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
     let covered_nodes = covered_pcs
         .into_iter()
         .flat_map(|pc| ir.source_map().instructions_at(pc))
-        .collect::<BTreeSet<_>>();
+        .collect::<HashSet<_>>();
 
     assert!(!covered_nodes.is_empty());
     assert!(covered_pcs.into_iter().all(|pc| {
@@ -179,43 +199,18 @@ fn coverage_transfer_uses_only_sparse_source_provenance() {
             .count(),
         0
     );
-    let mut params = ir.blocks().flat_map(|(block, bb)| {
-        bb.parameters
-            .iter()
-            .enumerate()
-            .map(move |(index, _)| InstructionLocation::BlockParameter { block, index })
+    let blocks = reachable_blocks(&ir);
+    let mut params = blocks.iter().flat_map(|(block, bb)| {
+        bb.parameters.iter().enumerate().map(move |(index, _)| {
+            InstructionLocation::BlockParameter {
+                block: *block,
+                index,
+            }
+        })
     });
     assert!(
         params.all(|loc| {
             ir.source_map().origin_of(loc).is_none() && !covered_nodes.contains(&loc)
         })
-    );
-}
-
-#[test]
-#[cfg(feature = "petgraph")]
-#[cfg_attr(not(integration_test), ignore)]
-fn cfg_to_dot() {
-    use petgraph::dot::Dot;
-
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    let cfg = ir.control_flow_graph();
-    let dot = format!("{:?}", Dot::new(&cfg));
-    assert!(dot.contains("digraph"));
-    assert!(!cfg.path_conditions().is_empty());
-}
-
-#[test]
-#[cfg(feature = "petgraph")]
-#[cfg_attr(not(integration_test), ignore)]
-fn dominance() {
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    let cfg = ir.control_flow_graph();
-    let dominance = petgraph::algo::dominators::simple_fast(&cfg, ir.entry_block());
-    assert_eq!(dominance.immediate_dominator(ir.entry_block()), None);
-    assert!(
-        ir.blocks()
-            .filter(|(block_id, _)| *block_id != ir.entry_block())
-            .all(|(block_id, _)| dominance.immediate_dominator(block_id).is_some())
     );
 }

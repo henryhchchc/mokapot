@@ -1,31 +1,25 @@
 use super::*;
+
 #[test]
 fn unhandled_exceptions_target_the_method_unwind_exit() {
-    let method = method(
-        [
-            (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/String".parse().unwrap()),
-            ),
-            (2, Instruction::Pop),
-            (3, Instruction::ALoad0),
-            (
-                4,
-                Instruction::CheckCast("java/lang/Integer".parse().unwrap()),
-            ),
-            (5, Instruction::AReturn),
-        ],
-        "(Ljava/lang/Object;)Ljava/lang/Object;",
-        vec![],
-    );
+    let str_type = "java/lang/String".parse().unwrap();
+    let int_type = "java/lang/Integer".parse().unwrap();
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::CheckCast(str_type)),
+        (2, Instruction::Pop),
+        (3, Instruction::ALoad0),
+        (4, Instruction::CheckCast(int_type)),
+        (5, Instruction::AReturn),
+    ];
+    let method = method(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
     let ir = build(&method).unwrap();
-    let unwind_targets = [1, 4].map(|pc| {
+    let unwind_targets = [1, 4].map(|it| {
         let location = ir
             .source_map()
-            .instructions_at(pc.into())
-            .find(|&loc| {
-                ir.instruction(loc)
+            .instructions_at(it.into())
+            .find(|&it| {
+                ir.instruction(it)
                     .is_some_and(|it| matches!(it, InstructionRef::Terminator(_)))
             })
             .unwrap();
@@ -33,38 +27,26 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
         block
             .terminator
             .successors()
-            .find(|successor| successor.block_target().is_none())
+            .find(|it| it.block_target().is_none())
             .unwrap()
             .block_target()
     });
 
     assert_eq!(unwind_targets, [None; 2]);
-    assert_eq!(ir.blocks().len(), 3);
-
-    let mut edge_ids = HashSet::new();
-    for (_, block) in ir.blocks() {
-        for successor in block.terminator.successors() {
-            assert!(edge_ids.insert(successor.id()));
-        }
-    }
+    assert_eq!(reachable_blocks(&ir).len(), 3);
 }
 
 #[test]
 fn throw_has_only_ordered_exceptional_outcomes() {
-    let method = method(
-        [
-            (0, Instruction::ALoad0),
-            (1, Instruction::AThrow),
-            (10, Instruction::AStore1),
-            (11, Instruction::Return),
-        ],
-        "(Ljava/lang/Throwable;)V",
-        vec![ExceptionTableEntry {
-            covered_pc: 1.into()..2.into(),
-            handler_pc: 10.into(),
-            catch_type: Some("java/lang/RuntimeException".parse().unwrap()),
-        }],
-    );
+    let runtime = "java/lang/RuntimeException".parse().unwrap();
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::AThrow),
+        (10, Instruction::AStore1),
+        (11, Instruction::Return),
+    ];
+    let table = vec![handler(1.into()..2.into(), 10.into(), Some(runtime))];
+    let method = method(body, "(Ljava/lang/Throwable;)V", table);
     let ir = build(&method).unwrap();
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
@@ -82,6 +64,6 @@ fn throw_has_only_ordered_exceptional_outcomes() {
     assert!(
         !transfers
             .iter()
-            .any(|transfer| matches!(transfer, Some(ControlTransfer::Unconditional)))
+            .any(|it| matches!(it, Some(ControlTransfer::Unconditional)))
     );
 }

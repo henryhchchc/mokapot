@@ -6,9 +6,9 @@ mod operand_stack;
 mod value_category;
 
 pub use error::Error as FrameError;
-pub(crate) use local_variables::EntrySlots;
-pub(crate) use operand_stack::StackOperation;
-pub(crate) use value_category::ValueCategory;
+pub(super) use local_variables::EntrySlots;
+pub(super) use operand_stack::StackOperation;
+pub(super) use value_category::ValueCategory;
 
 use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
 use local_variables::LocalVariables;
@@ -16,30 +16,30 @@ use operand_stack::OperandStack;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) enum Position {
+pub(super) enum Position {
     Local(usize),
     Stack(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Frame {
-    pub(crate) locals: LocalVariables,
-    pub(crate) stack: OperandStack,
+pub(super) struct Frame {
+    pub(super) locals: LocalVariables,
+    pub(super) stack: OperandStack,
 }
 
 impl Frame {
-    pub(crate) fn value_at(&self, position: Position) -> Option<&ValueId> {
+    pub(super) fn value_at(&self, position: Position) -> Option<&ValueId> {
         match position {
             Position::Local(index) => self.locals.slot_values().nth(index).flatten(),
             Position::Stack(index) => self.stack.slot_values().nth(index).flatten(),
         }
     }
 
-    pub(crate) fn handler_exception(&self) -> Result<&ValueId, FrameError> {
+    pub(super) fn handler_exception(&self) -> Result<&ValueId, FrameError> {
         self.stack.single_value(ValueCategory::Category1)
     }
 
-    pub(crate) fn merge_from_with<E>(
+    pub(super) fn merge_from_with<E>(
         &mut self,
         other: Self,
         mut merge_values: impl FnMut(Position, &mut ValueId, ValueId) -> Result<(), E>,
@@ -69,7 +69,7 @@ impl Frame {
     /// The parameters follow the receiver in descriptor order, with a category-2
     /// parameter occupying two slots; the callers of this constructor rely on
     /// that convention to map parameter identities to slots.
-    pub(crate) fn for_method_entry(
+    pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
@@ -88,7 +88,7 @@ impl Frame {
         ))
     }
 
-    pub(crate) fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
+    pub(super) fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
         let locals = self.locals.clone();
         let stack = OperandStack::with_max_slots(self.stack.max_slots());
         let mut frame = Self { locals, stack };

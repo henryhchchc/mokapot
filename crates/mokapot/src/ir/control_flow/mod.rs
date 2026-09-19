@@ -2,10 +2,10 @@
 
 pub mod path_condition;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use self::path_condition::{BranchGuard, PathCondition, SolvingBudget};
-use super::{BasicBlock, BlockId, EdgeId, Successor};
+use self::path_condition::BranchGuard;
+use super::{BasicBlock, BlockId, Successor};
 use crate::{ir::expression::Predicate, jvm::references::ClassRef};
 
 /// The semantics of one control-flow successor arm.
@@ -28,19 +28,12 @@ pub enum ControlTransfer {
 /// A borrowed edge from a block terminator.
 #[derive(Debug, Clone, Copy)]
 pub struct Edge<'method> {
-    id: EdgeId,
     source: BlockId,
     target: BlockId,
     data: &'method ControlTransfer,
 }
 
 impl<'method> Edge<'method> {
-    /// Returns this arm's identity.
-    #[must_use]
-    pub const fn id(self) -> EdgeId {
-        self.id
-    }
-
     /// Returns the source block.
     #[must_use]
     pub const fn source(self) -> BlockId {
@@ -60,106 +53,25 @@ impl<'method> Edge<'method> {
     }
 }
 
-/// A borrowed control-flow graph derived solely from block terminators.
-#[derive(Debug, Clone, Copy)]
-pub struct ControlFlowGraph<'method> {
-    pub(crate) blocks: &'method BTreeMap<BlockId, BasicBlock>,
-    entry: BlockId,
-}
-
-impl<'m> ControlFlowGraph<'m> {
-    pub(crate) const fn new(blocks: &'m BTreeMap<BlockId, BasicBlock>, entry: BlockId) -> Self {
-        Self { blocks, entry }
-    }
-
-    /// Returns the entry block.
-    #[must_use]
-    pub const fn entry_block(self) -> BlockId {
-        self.entry
-    }
-
-    /// Returns the blocks in deterministic identity order.
-    #[must_use]
-    pub fn nodes(self) -> impl ExactSizeIterator<Item = (BlockId, &'m BasicBlock)> {
-        self.blocks.iter().map(|(&id, block)| (id, block))
-    }
-
-    /// Returns every block-to-block successor arm, retaining parallel edges.
-    ///
-    /// Method-exiting unwind arms remain available on terminators but are not
-    /// graph edges because they have no basic-block target.
-    pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
-        self.blocks.iter().flat_map(|(&source, block)| {
-            block
-                .terminator
-                .successors()
-                .filter_map(move |successor| match successor {
-                    Successor::Block {
-                        id,
-                        target,
-                        transfer,
-                        ..
-                    } => Some(Edge {
-                        id: *id,
-                        source,
-                        target: *target,
-                        data: transfer,
-                    }),
-                    Successor::Unwind { .. } => None,
-                })
-        })
-    }
-
-    /// Returns blocks with no outgoing successor arms.
-    pub fn exits(self) -> impl Iterator<Item = BlockId> + 'm {
-        self.blocks.iter().filter_map(|(&id, block)| {
-            block
-                .terminator
-                .successors()
-                .all(|successor| successor.block_target().is_none())
-                .then_some(id)
-        })
-    }
-
-    /// Returns all outgoing arms from `source`.
-    ///
-    /// An identity outside this graph yields no arms.
-    pub fn outgoing_edges(self, source: BlockId) -> impl Iterator<Item = Edge<'m>> {
-        self.blocks.get(&source).into_iter().flat_map(move |block| {
-            block
-                .terminator
-                .successors()
-                .filter_map(move |successor| match successor {
-                    Successor::Block {
-                        id,
-                        target,
-                        transfer,
-                        ..
-                    } => Some(Edge {
-                        id: *id,
-                        source,
-                        target: *target,
-                        data: transfer,
-                    }),
-                    Successor::Unwind { .. } => None,
-                })
-        })
-    }
-
-    /// Computes path conditions at reachable blocks.
-    #[must_use]
-    pub fn path_conditions(self) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
-        self.path_conditions_with_budget(SolvingBudget::default())
-    }
-
-    /// Computes path conditions with a custom minimization budget.
-    #[must_use]
-    pub fn path_conditions_with_budget(
-        self,
-        budget: SolvingBudget,
-    ) -> HashMap<BlockId, PathCondition<&'m Predicate>> {
-        path_condition::analyze(self, budget)
-    }
+pub(super) fn outgoing_edges(
+    blocks: &HashMap<BlockId, BasicBlock>,
+    source: BlockId,
+) -> impl Iterator<Item = Edge<'_>> {
+    blocks.get(&source).into_iter().flat_map(move |block| {
+        block
+            .terminator
+            .successors()
+            .filter_map(move |successor| match successor {
+                Successor::Block {
+                    target, transfer, ..
+                } => Some(Edge {
+                    source,
+                    target: *target,
+                    data: transfer,
+                }),
+                Successor::Unwind => None,
+            })
+    })
 }
 
 #[cfg(test)]

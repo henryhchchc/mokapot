@@ -38,9 +38,8 @@ fn create_test_dir_class_path() -> DirectoryClassPath {
 fn load_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
-    let class = class_loader
-        .load_class(&"org/mokapot/test/MyClass".parse().unwrap())
-        .unwrap();
+    let my_class = "org/mokapot/test/MyClass".parse().unwrap();
+    let class = class_loader.load_class(&my_class).unwrap();
     assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
 }
 
@@ -78,9 +77,8 @@ fn caching_class_loader_load_once() {
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
     (0..100).into_par_iter().for_each(|_| {
-        let class = class_loader
-            .load_class(&"org/mokapot/test/MyClass".parse().unwrap())
-            .unwrap();
+        let my_class = "org/mokapot/test/MyClass".parse().unwrap();
+        let class = class_loader.load_class(&my_class).unwrap();
         assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
     });
     assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
@@ -96,11 +94,8 @@ fn jar_class_path() {
     let jar_cp = JarClassPath::new(jar_path);
     let class_loader = ClassLoader::new([jar_cp]);
 
-    assert!(
-        class_loader
-            .load_class(&"jdk/internal/jimage/ImageReader".parse().unwrap())
-            .is_ok()
-    );
+    let image_reader = "jdk/internal/jimage/ImageReader".parse().unwrap();
+    assert!(class_loader.load_class(&image_reader).is_ok());
 }
 
 #[test]

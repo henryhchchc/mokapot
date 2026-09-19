@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::ir::ValueId;
 
@@ -12,20 +12,17 @@ pub(super) struct ParameterCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SimplifiedParameters {
     /// Canonical replacements for eliminated parameter results.
-    pub(super) substitutions: BTreeMap<ValueId, ValueId>,
-    /// Parameters that represent genuine choices after rewriting.
-    pub(super) candidates: BTreeMap<ValueId, ParameterCandidate>,
+    pub(super) substitutions: HashMap<ValueId, ValueId>,
+    /// Results of parameters that represent genuine choices after rewriting.
+    pub(super) retained: HashSet<ValueId>,
 }
 
 /// An inconsistency found while simplifying provisional block parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub(super) enum ParameterSimplificationError {
     /// A reachable parameter cycle has no value entering it from outside the cycle.
-    #[error("reachable parameter cycle containing {representative} has no external value")]
-    ClosedCycle {
-        /// The lowest-numbered result in the remaining canonical cycle.
-        representative: ValueId,
-    },
+    #[error("reachable parameter cycle has no external value")]
+    ClosedCycle,
 }
 
 /// Eliminates trivial acyclic and cyclic block parameters.
@@ -34,9 +31,9 @@ pub(super) enum ParameterSimplificationError {
 /// returned as fully canonical substitutions, and every retained input is
 /// rewritten through those substitutions.
 pub(super) fn simplify_parameters(
-    mut candidates: BTreeMap<ValueId, ParameterCandidate>,
+    mut candidates: HashMap<ValueId, ParameterCandidate>,
 ) -> Result<SimplifiedParameters, ParameterSimplificationError> {
-    let mut substitutions = BTreeMap::new();
+    let mut substitutions = HashMap::new();
 
     loop {
         rewrite_candidates(&mut candidates, &substitutions);
@@ -47,11 +44,11 @@ pub(super) fn simplify_parameters(
                 .iter()
                 .map(|value| canonical(*value, &substitutions))
                 .filter(|&value| value != result)
-                .collect::<BTreeSet<_>>();
+                .collect::<HashSet<_>>();
             (external.len() == 1).then(|| {
                 (
                     result,
-                    *external.first().expect("the set contains one value"),
+                    *external.iter().next().expect("the set contains one value"),
                 )
             })
         });
@@ -75,18 +72,14 @@ pub(super) fn simplify_parameters(
                 })
                 .map(|value| canonical(*value, &substitutions))
                 .filter(|value| !component.contains(value))
-                .collect::<BTreeSet<_>>();
+                .collect::<HashSet<_>>();
 
             match external.len() {
                 0 => {
-                    return Err(ParameterSimplificationError::ClosedCycle {
-                        representative: *component
-                            .first()
-                            .expect("an SCC contains at least one result"),
-                    });
+                    return Err(ParameterSimplificationError::ClosedCycle);
                 }
                 1 => {
-                    let replacement = *external.first().expect("the set contains one value");
+                    let replacement = *external.iter().next().expect("the set contains one value");
                     for result in component {
                         candidates.remove(&result);
                         substitutions.insert(result, replacement);
@@ -111,11 +104,11 @@ pub(super) fn simplify_parameters(
 
     Ok(SimplifiedParameters {
         substitutions,
-        candidates,
+        retained: candidates.into_keys().collect(),
     })
 }
 
-fn canonical(mut value: ValueId, substitutions: &BTreeMap<ValueId, ValueId>) -> ValueId {
+fn canonical(mut value: ValueId, substitutions: &HashMap<ValueId, ValueId>) -> ValueId {
     while let Some(&replacement) = substitutions.get(&value) {
         debug_assert_ne!(value, replacement, "a substitution must make progress");
         value = replacement;
@@ -124,8 +117,8 @@ fn canonical(mut value: ValueId, substitutions: &BTreeMap<ValueId, ValueId>) -> 
 }
 
 fn rewrite_candidates(
-    candidates: &mut BTreeMap<ValueId, ParameterCandidate>,
-    substitutions: &BTreeMap<ValueId, ValueId>,
+    candidates: &mut HashMap<ValueId, ParameterCandidate>,
+    substitutions: &HashMap<ValueId, ValueId>,
 ) {
     for candidate in candidates.values_mut() {
         for value in &mut candidate.inputs {
@@ -135,9 +128,9 @@ fn rewrite_candidates(
 }
 
 fn strongly_connected_components(
-    candidates: &BTreeMap<ValueId, ParameterCandidate>,
-) -> Vec<BTreeSet<ValueId>> {
-    let nodes = candidates.keys().copied().collect::<BTreeSet<_>>();
+    candidates: &HashMap<ValueId, ParameterCandidate>,
+) -> Vec<HashSet<ValueId>> {
+    let nodes = candidates.keys().copied().collect::<HashSet<_>>();
     let adjacency = candidates
         .iter()
         .map(|(&result, candidate)| {
@@ -146,17 +139,17 @@ fn strongly_connected_components(
                 .iter()
                 .copied()
                 .filter(|value| nodes.contains(value))
-                .collect::<BTreeSet<_>>()
+                .collect::<HashSet<_>>()
                 .into_iter()
                 .collect::<Vec<_>>();
             (result, dependencies)
         })
-        .collect::<BTreeMap<_, _>>();
+        .collect::<HashMap<_, _>>();
 
     let mut reverse = nodes
         .iter()
         .map(|&node| (node, Vec::new()))
-        .collect::<BTreeMap<_, _>>();
+        .collect::<HashMap<_, _>>();
     for (&source, targets) in &adjacency {
         for target in targets {
             reverse
@@ -166,7 +159,7 @@ fn strongly_connected_components(
         }
     }
 
-    let mut visited = BTreeSet::new();
+    let mut visited = HashSet::new();
     let mut finished = Vec::with_capacity(nodes.len());
     for &start in &nodes {
         if !visited.insert(start) {
@@ -195,7 +188,7 @@ fn strongly_connected_components(
         if !visited.insert(start) {
             continue;
         }
-        let mut component = BTreeSet::new();
+        let mut component = HashSet::new();
         let mut stack = vec![start];
         while let Some(node) = stack.pop() {
             component.insert(node);
@@ -212,10 +205,5 @@ fn strongly_connected_components(
         }
         components.push(component);
     }
-    components.sort_by_key(|component| {
-        *component
-            .first()
-            .expect("a strongly connected component is non-empty")
-    });
     components
 }

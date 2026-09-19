@@ -1,29 +1,39 @@
 use std::{cmp, convert::Infallible, hash::Hash};
 
+use std::collections::HashMap;
+
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
-    ir::control_flow::ControlFlowGraph,
     ir::{
-        BlockId,
-        control_flow::{ControlTransfer, PathCondition, SolvingBudget},
+        BasicBlock, BlockId,
+        control_flow::{ControlTransfer, outgoing_edges},
         expression::Predicate,
     },
 };
 
-use super::BranchGuard;
+use super::{BranchGuard, PathCondition, SolvingBudget};
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
 pub(super) struct PathConditionProblem<'method> {
-    cfg: ControlFlowGraph<'method>,
+    blocks: &'method HashMap<BlockId, BasicBlock>,
+    entry: BlockId,
     budget: SolvingBudget,
 }
 
 impl<'method> PathConditionProblem<'method> {
-    /// Creates a path-condition analysis over `cfg`.
+    /// Creates a path-condition analysis over the given method blocks.
     #[must_use]
-    pub(super) const fn new(cfg: ControlFlowGraph<'method>, budget: SolvingBudget) -> Self {
-        Self { cfg, budget }
+    pub(super) const fn new(
+        blocks: &'method HashMap<BlockId, BasicBlock>,
+        entry: BlockId,
+        budget: SolvingBudget,
+    ) -> Self {
+        Self {
+            blocks,
+            entry,
+            budget,
+        }
     }
 }
 
@@ -37,7 +47,7 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
     type Output = Vec<(Self::Location, Self::Fact)>;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        [(self.cfg.entry_block(), PathConditionFact::one(self.budget))]
+        [(self.entry, PathConditionFact::one(self.budget))]
     }
 
     fn flow(
@@ -45,9 +55,7 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::Output, Self::Err> {
-        Ok(self
-            .cfg
-            .outgoing_edges(*location)
+        Ok(outgoing_edges(self.blocks, *location)
             .filter_map(|edge| {
                 let propagated = match edge.transfer() {
                     ControlTransfer::Conditional(guard) => {
@@ -70,14 +78,14 @@ pub(super) struct PathConditionFact<P> {
 }
 
 impl<P> PathConditionFact<P> {
-    pub(crate) fn one(budget: SolvingBudget) -> Self
+    pub(super) fn one(budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self::new(PathCondition::one(), budget)
     }
 
-    pub(crate) fn new(inner: PathCondition<P>, budget: SolvingBudget) -> Self
+    pub(super) fn new(inner: PathCondition<P>, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -85,18 +93,18 @@ impl<P> PathConditionFact<P> {
         Self { inner, budget }
     }
 
-    pub(crate) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
+    pub(super) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
     where
         P: Hash + Eq + Clone,
     {
         Self::new(self.inner.clone() & branch_guard, self.budget)
     }
 
-    pub(crate) fn is_contradiction(&self) -> bool {
+    pub(super) fn is_contradiction(&self) -> bool {
         self.inner.is_contradiction()
     }
 
-    pub(crate) fn into_inner(self) -> PathCondition<P> {
+    pub(super) fn into_inner(self) -> PathCondition<P> {
         self.inner
     }
 }

@@ -10,7 +10,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         category: ValueCategory,
     ) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, category)?;
@@ -38,7 +38,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         element_type: FieldType,
     ) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
         let expr = ArrayOperation::New {
@@ -54,7 +54,7 @@ impl LiftContext<'_, '_> {
         element_type: FieldType,
         dimension: u8,
     ) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let dimensions = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
             .collect::<Result<_, _>>()?;
@@ -68,7 +68,7 @@ impl LiftContext<'_, '_> {
     }
 
     pub(super) fn array_length(&mut self) -> Result<Option<Operation>, Error> {
-        let value = self.definition_id()?;
+        let value = self.definition_id();
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
         let expr = ArrayOperation::Length { array_ref }.into();
