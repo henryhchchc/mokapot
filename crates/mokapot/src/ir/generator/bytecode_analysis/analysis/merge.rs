@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::super::values::ValueContext;
-use super::{Analyzer, Contribution, Frame, ParameterDefinition, ParameterSite};
+use super::{Analyzer, ParameterSite};
 use crate::ir::{BlockId, ValueId, generator::error::Error};
 
 impl Analyzer<'_, '_> {
@@ -40,9 +40,10 @@ impl Analyzer<'_, '_> {
                 .map_err(|error| error.at_instruction(block_pc))?;
         }
 
-        let parameter_definitions =
-            synchronize_parameter_definitions(&merged, &contributions, active_parameters)
-                .map_err(|error| error.at_instruction(block_pc))?;
+        let parameter_definitions = active_parameters
+            .into_iter()
+            .filter(|(site, result)| merged.value_at(site.position) == Some(result))
+            .collect::<BTreeMap<_, _>>();
 
         self.parameter_definitions
             .retain(|site, _| site.block != block);
@@ -61,7 +62,7 @@ fn merge_value(
     site: ParameterSite,
     lhs: &mut ValueId,
     rhs: ValueId,
-    existing_parameters: &BTreeMap<ParameterSite, ParameterDefinition>,
+    existing_parameters: &BTreeMap<ParameterSite, ValueId>,
     active_parameters: &mut BTreeMap<ParameterSite, ValueId>,
     values: &mut ValueContext,
 ) -> Result<(), Error> {
@@ -73,47 +74,12 @@ fn merge_value(
     } else {
         let result = existing_parameters
             .get(&site)
-            .map_or_else(|| values.fresh(), |definition| Ok(definition.result))?;
+            .copied()
+            .map_or_else(|| values.fresh(), Ok)?;
         active_parameters.insert(site, result);
         result
     };
 
     *lhs = result;
     Ok(())
-}
-
-fn edge_arguments(
-    site: ParameterSite,
-    contributions: &[(Contribution, Frame)],
-) -> Result<BTreeMap<Contribution, ValueId>, Error> {
-    contributions
-        .iter()
-        .map(|(contribution, frame)| {
-            let value = frame
-                .value_at(site.position)
-                .copied()
-                .ok_or_else(|| Error::internal("an edge argument frame lacks its merged slot"))?;
-            Ok((*contribution, value))
-        })
-        .collect()
-}
-
-fn synchronize_parameter_definitions(
-    merged: &Frame,
-    contributions: &[(Contribution, Frame)],
-    active_parameters: BTreeMap<ParameterSite, ValueId>,
-) -> Result<BTreeMap<ParameterSite, ParameterDefinition>, Error> {
-    active_parameters
-        .into_iter()
-        .filter_map(|(site, result)| {
-            let merged_value = merged.value_at(site.position).copied();
-            (merged_value == Some(result)).then_some((site, result))
-        })
-        .map(|(site, result)| {
-            edge_arguments(site, contributions).map(|inputs| {
-                let definition = ParameterDefinition { result, inputs };
-                (site, definition)
-            })
-        })
-        .collect()
 }

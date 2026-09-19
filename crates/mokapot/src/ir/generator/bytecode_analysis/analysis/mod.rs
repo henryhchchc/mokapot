@@ -5,8 +5,7 @@ mod merge;
 mod state;
 
 pub(super) use state::{
-    CompletedAnalysis, Contribution, LiftedArm, LiftedBlock, LiftedTerminator, ParameterDefinition,
-    ParameterSite,
+    CompletedAnalysis, Contribution, LiftedArm, LiftedBlock, LiftedTerminator, ParameterSite,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -31,7 +30,7 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) values: ValueContext,
     pub(super) initial_frame: Frame,
     pub(super) blocks: BTreeMap<BlockId, BlockState>,
-    pub(super) parameter_definitions: BTreeMap<ParameterSite, ParameterDefinition>,
+    pub(super) parameter_definitions: BTreeMap<ParameterSite, ValueId>,
     pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
 }
 
@@ -154,6 +153,51 @@ impl CompletedAnalysis {
             receiver_value: this_value,
             parameter_values,
         } = self;
+        // Keep this index local to materialization; contribution frames remain
+        // the only source of incoming argument values during analysis.
+        let parameters_by_block = parameter_definitions.iter().fold(
+            BTreeMap::<BlockId, Vec<(ParameterSite, ValueId)>>::new(),
+            |mut parameters, (&site, &value)| {
+                parameters
+                    .entry(site.block)
+                    .or_default()
+                    .push((site, value));
+                parameters
+            },
+        );
+
+        let entry_arguments = parameters_by_block
+            .get(&entry)
+            .into_iter()
+            .flatten()
+            .map(|(site, _)| contribution_value(&lifted_blocks, entry, Contribution::Entry, *site))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Derive each edge's final arguments before consuming the analysis
+        // states. This view is discarded after successor construction.
+        let mut edge_arguments = lifted_blocks
+            .values()
+            .flat_map(|state| match &state.execution {
+                BlockExecution::Complete { block, .. } => block.terminator.arms(),
+                BlockExecution::Uninitialized | BlockExecution::Pending { .. } => {
+                    unreachable!("a normalized reachable block was not executed")
+                }
+            })
+            .filter_map(|(edge, _)| match edge.target {
+                SuccessorTarget::Block(target) => Some((edge.id, target)),
+                SuccessorTarget::Unwind => None,
+            })
+            .map(|(edge, target)| {
+                let arguments = parameters_by_block
+                    .get(&target)
+                    .into_iter()
+                    .flatten()
+                    .map(|(site, _)| {
+                        contribution_value(&lifted_blocks, target, Contribution::Edge(edge), *site)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((edge, arguments))
+            })
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
         let mut source_map = SourceMap::default();
         let mut blocks = lifted_blocks
             .into_iter()
@@ -165,55 +209,19 @@ impl CompletedAnalysis {
             })
             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
-        for (site, definition) in &parameter_definitions {
+        for (site, value) in &parameter_definitions {
             let Some(block) = blocks.get_mut(&site.block) else {
                 continue;
             };
-            block.parameters.push(BlockParameter {
-                value: definition.result,
-            });
+            block.parameters.push(BlockParameter { value: *value });
         }
 
-        let target_parameters = blocks
-            .iter()
-            .map(|(&id, block)| {
-                (
-                    id,
-                    block
-                        .parameters
-                        .iter()
-                        .map(|parameter| parameter.value)
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let definitions_by_value = parameter_definitions
-            .values()
-            .map(|definition| (definition.result, definition))
-            .collect::<BTreeMap<_, _>>();
-        let entry_arguments = target_parameters[&entry]
-            .iter()
-            .map(|parameter| {
-                definitions_by_value
-                    .get(parameter)
-                    .and_then(|definition| definition.inputs.get(&Contribution::Entry))
-                    .copied()
-                    .ok_or_else(|| Error::internal("an entry parameter lacks an entry argument"))
-            })
-            .collect::<Result<_, _>>()?;
         for block in blocks.values_mut() {
             for edge in block.terminator.arms_mut() {
                 edge.arguments = match edge.target {
-                    SuccessorTarget::Block(target) => target_parameters[&target]
-                        .iter()
-                        .map(|parameter| {
-                            definitions_by_value
-                                .get(parameter)
-                                .and_then(|def| def.inputs.get(&Contribution::Edge(edge.id)))
-                                .copied()
-                                .expect("a block parameter must have an edge argument")
-                        })
-                        .collect(),
+                    SuccessorTarget::Block(_) => edge_arguments
+                        .remove(&edge.id)
+                        .ok_or_else(|| Error::internal("a block successor lacks its arguments"))?,
                     SuccessorTarget::Unwind => Vec::new(),
                 };
             }
@@ -228,6 +236,20 @@ impl CompletedAnalysis {
             parameter_values,
         })
     }
+}
+
+fn contribution_value(
+    blocks: &BTreeMap<BlockId, BlockState>,
+    block: BlockId,
+    contribution: Contribution,
+    site: ParameterSite,
+) -> Result<ValueId, Error> {
+    blocks
+        .get(&block)
+        .and_then(|state| state.contributions.get(&contribution))
+        .and_then(|frame| frame.value_at(site.position))
+        .copied()
+        .ok_or_else(|| Error::internal("a block parameter lacks its contribution value"))
 }
 
 impl BlockExecution {

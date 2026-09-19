@@ -24,12 +24,6 @@ pub(crate) struct ParameterSite {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ParameterDefinition {
-    pub result: ValueId,
-    pub inputs: BTreeMap<Contribution, ValueId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiftedEdge {
     pub id: EdgeId,
     pub target: SuccessorTarget,
@@ -76,7 +70,7 @@ pub(crate) enum BlockExecution {
 /// The complete analysis state passed to draft-IR materialization.
 pub(crate) struct CompletedAnalysis {
     pub blocks: BTreeMap<BlockId, BlockState>,
-    pub parameter_definitions: BTreeMap<ParameterSite, ParameterDefinition>,
+    pub parameter_definitions: BTreeMap<ParameterSite, ValueId>,
     pub receiver_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }
