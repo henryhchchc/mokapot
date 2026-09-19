@@ -1,5 +1,7 @@
 //! Finishes canonical SSA blocks into completed public `MokaIR`.
 
+use std::collections::BTreeMap;
+
 use crate::{
     ir::{
         BasicBlock, InstructionLocation, MokaIRMethod, Operation, Phi, PhiInput, SourceMap,
@@ -34,11 +36,17 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
         state.define_block_values(id, block)?;
     }
 
+    let phi_inputs = public_phi_inputs(&blocks)?;
     let mut source_map = SourceMap::default();
     let blocks = blocks
         .into_iter()
         .map(|(id, block)| {
-            let block = materialize_block(id, block, &mut source_map);
+            let block = materialize_block(
+                id,
+                block,
+                phi_inputs.get(&id).map(Vec::as_slice).unwrap_or_default(),
+                &mut source_map,
+            );
             (id, block)
         })
         .collect();
@@ -67,12 +75,12 @@ impl FinishState {
         if let Some(value) = block.caught_exception {
             self.define(value, ValueDefinition::CaughtException(block_id))?;
         }
-        for (index, phi) in block.phis.iter().enumerate() {
+        for (index, parameter) in block.parameters.iter().enumerate() {
             let location = InstructionLocation::Phi {
                 block: block_id,
                 index,
             };
-            self.define(phi.value, ValueDefinition::Instruction(location))?;
+            self.define(parameter.value, ValueDefinition::Instruction(location))?;
         }
         for (index, operation) in block.operations.iter().enumerate() {
             let Some(value) = operation.kind.def() else {
@@ -91,21 +99,20 @@ impl FinishState {
 fn materialize_block(
     id: crate::ir::BlockId,
     block: DraftBlock,
+    phi_inputs: &[Vec<PhiInput>],
     source_map: &mut SourceMap,
 ) -> BasicBlock {
     if let Some(origin) = block.terminator.origin {
         source_map.record_terminator(origin, id);
     }
+    assert_eq!(block.parameters.len(), phi_inputs.len());
     let phis = block
-        .phis
+        .parameters
         .into_iter()
-        .map(|phi| Phi {
-            value: phi.value,
-            inputs: phi
-                .inputs
-                .into_iter()
-                .map(|(predecessor, value)| PhiInput { predecessor, value })
-                .collect(),
+        .zip(phi_inputs)
+        .map(|(parameter, inputs)| Phi {
+            value: parameter.value,
+            inputs: inputs.clone(),
         })
         .collect();
     let operations = block
@@ -142,6 +149,52 @@ fn materialize_block(
     }
 }
 
+/// Adapts edge arguments to the predecessor-indexed public phi model.
+fn public_phi_inputs(
+    blocks: &BTreeMap<crate::ir::BlockId, DraftBlock>,
+) -> Result<BTreeMap<crate::ir::BlockId, Vec<Vec<PhiInput>>>, Error> {
+    let mut incoming = blocks
+        .iter()
+        .map(|(&id, block)| (id, vec![BTreeMap::new(); block.parameters.len()]))
+        .collect::<BTreeMap<_, Vec<BTreeMap<_, _>>>>();
+    for (&predecessor, block) in blocks {
+        for edge in &block.terminator.successors {
+            let target = incoming
+                .get_mut(&edge.target)
+                .expect("a draft edge target must belong to the method");
+            if target.len() != edge.arguments.len() {
+                return Err(Error::internal(
+                    "a draft edge argument count differs from its target parameter count",
+                ));
+            }
+            for (inputs, &value) in target.iter_mut().zip(&edge.arguments) {
+                if let Some(existing) = inputs.insert(predecessor, value)
+                    && existing != value
+                {
+                    return Err(Error::internal(
+                        "parallel edges cannot be represented by a public phi",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(incoming
+        .into_iter()
+        .map(|(block, parameters)| {
+            let parameters = parameters
+                .into_iter()
+                .map(|inputs| {
+                    inputs
+                        .into_iter()
+                        .map(|(predecessor, value)| PhiInput { predecessor, value })
+                        .collect()
+                })
+                .collect();
+            (block, parameters)
+        })
+        .collect())
+}
+
 #[derive(Default)]
 struct FinishState {
     definitions: Vec<Option<ValueDefinition>>,
@@ -171,11 +224,15 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            BlockId, OperationKind, TerminatorKind,
+            BlockId, EdgeId, OperationKind, TerminatorKind,
+            control_flow::ControlTransfer,
             expression::MathOperation,
             generator::{
                 canonicalize,
-                draft::{DraftBlock, DraftMethod, DraftOperation, DraftPhi, DraftTerminator},
+                draft::{
+                    DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter,
+                    DraftTerminator,
+                },
             },
         },
         jvm::{code::Instruction, method::AccessFlags},
@@ -193,9 +250,8 @@ mod tests {
                 block,
                 DraftBlock {
                     caught_exception: None,
-                    phis: vec![DraftPhi {
+                    parameters: vec![DraftParameter {
                         value: eliminated_phi,
-                        inputs: vec![(block, parameter)],
                     }],
                     operations: vec![DraftOperation {
                         kind: OperationKind::Definition {
@@ -205,8 +261,13 @@ mod tests {
                         origin: None,
                     }],
                     terminator: DraftTerminator {
-                        kind: TerminatorKind::Return(Some(result)),
-                        successors: vec![],
+                        kind: TerminatorKind::Goto,
+                        successors: vec![DraftEdge {
+                            id: EdgeId::new(0),
+                            target: block,
+                            arguments: vec![parameter],
+                            transfer: ControlTransfer::Unconditional,
+                        }],
                         origin: None,
                     },
                 },

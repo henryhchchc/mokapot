@@ -19,16 +19,15 @@ pub(super) struct DraftMethod {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DraftBlock {
     pub caught_exception: Option<ValueId>,
-    pub phis: Vec<DraftPhi>,
+    pub parameters: Vec<DraftParameter>,
     pub operations: Vec<DraftOperation>,
     pub terminator: DraftTerminator,
 }
 
-/// A predecessor-indexed phi under construction.
+/// A block parameter under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct DraftPhi {
+pub(super) struct DraftParameter {
     pub value: ValueId,
-    pub inputs: Vec<(BlockId, ValueId)>,
 }
 
 /// An operation and its bytecode origin.
@@ -42,14 +41,15 @@ pub(super) struct DraftOperation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DraftTerminator {
     pub kind: TerminatorKind,
-    pub successors: Vec<DraftSuccessor>,
+    pub successors: Vec<DraftEdge>,
     pub origin: Option<ProgramCounter>,
 }
 
 /// A normalized successor under construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct DraftSuccessor {
+pub(super) struct DraftEdge {
     pub id: EdgeId,
     pub target: BlockId,
+    pub arguments: Vec<ValueId>,
     pub transfer: ControlTransfer,
 }

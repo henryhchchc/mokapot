@@ -4,7 +4,9 @@ mod execution;
 mod merge;
 mod state;
 
-pub(super) use state::{CompletedAnalysis, LiftedBlock, PhiDefinition, PhiSite, Predecessor};
+pub(super) use state::{
+    CompletedAnalysis, Contribution, LiftedBlock, ParameterDefinition, ParameterSite,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,7 +17,7 @@ use crate::{
         generator::{
             bytecode_cfg::{NormalizedBlockKind, NormalizedCfg},
             draft::{
-                DraftBlock, DraftMethod, DraftOperation, DraftPhi, DraftSuccessor, DraftTerminator,
+                DraftBlock, DraftEdge, DraftMethod, DraftOperation, DraftParameter, DraftTerminator,
             },
             error::Error,
         },
@@ -29,7 +31,7 @@ pub(super) struct Analyzer<'method, 'cfg> {
     pub(super) values: ValueContext,
     pub(super) initial_frame: Frame,
     pub(super) blocks: BTreeMap<BlockId, BlockState>,
-    pub(super) phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
+    pub(super) parameter_definitions: BTreeMap<ParameterSite, ParameterDefinition>,
     pub(super) caught_exceptions: BTreeMap<BlockId, ValueId>,
 }
 
@@ -74,7 +76,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             values,
             initial_frame,
             blocks,
-            phi_definitions: BTreeMap::new(),
+            parameter_definitions: BTreeMap::new(),
             caught_exceptions: BTreeMap::new(),
         })
     }
@@ -89,7 +91,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
             .get_mut(&entry)
             .expect("the normalized entry must have analysis state")
             .contributions
-            .insert(Predecessor::Entry, self.initial_frame.clone());
+            .insert(Contribution::Entry, self.initial_frame.clone());
         self.recompute_entry(entry)?;
 
         let mut pending = BTreeSet::from([entry]);
@@ -102,14 +104,19 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                 unreachable!("a worklist block must be pending");
             };
             let input = input.clone();
-            let mut block = self.execute(block_id, input)?;
-            let outputs = block.successors.take_output_frames();
+            let block = self.execute(block_id, input)?;
+            let outputs = block
+                .successors
+                .edges
+                .iter()
+                .map(|(edge, frame)| (edge.id, edge.target, frame.clone()))
+                .collect::<Vec<_>>();
             self.blocks
                 .get_mut(&block_id)
                 .expect("an executed block must have analysis state")
                 .execution
                 .complete(block);
-            for (target, frame) in outputs {
+            for (edge, target, frame) in outputs {
                 debug_assert!(
                     self.cfg.block(target).predecessors.contains(&block_id),
                     "frame propagation must follow normalized topology"
@@ -118,7 +125,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
                     .get_mut(&target)
                     .expect("a normalized successor must have analysis state")
                     .contributions
-                    .insert(Predecessor::Block(block_id), frame);
+                    .insert(Contribution::Edge(edge), frame);
                 if self.recompute_entry(target)? {
                     pending.insert(target);
                 }
@@ -127,7 +134,7 @@ impl<'method, 'cfg> Analyzer<'method, 'cfg> {
 
         CompletedAnalysis {
             blocks: self.blocks,
-            phi_definitions: self.phi_definitions,
+            parameter_definitions: self.parameter_definitions,
             receiver_value: self.values.receiver_value,
             parameter_values: self.values.parameter_values,
         }
@@ -139,7 +146,7 @@ impl CompletedAnalysis {
     fn into_draft(self, entry: BlockId) -> Result<DraftMethod, Error> {
         let Self {
             blocks,
-            phi_definitions,
+            parameter_definitions,
             receiver_value,
             parameter_values,
         } = self;
@@ -153,11 +160,50 @@ impl CompletedAnalysis {
             })
             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
-        for (site, definition) in phi_definitions {
+        for (site, definition) in &parameter_definitions {
             let Some(block) = draft_blocks.get_mut(&site.block) else {
                 continue;
             };
-            block.phis.push(DraftPhi::try_from(definition)?);
+            block.parameters.push(DraftParameter {
+                value: definition.result,
+            });
+        }
+
+        let target_parameters = draft_blocks
+            .iter()
+            .map(|(&id, block)| {
+                (
+                    id,
+                    block
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.value)
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let definitions_by_value = parameter_definitions
+            .values()
+            .map(|definition| (definition.result, definition))
+            .collect::<BTreeMap<_, _>>();
+        for block in draft_blocks.values_mut() {
+            for edge in &mut block.terminator.successors {
+                let parameters = target_parameters
+                    .get(&edge.target)
+                    .expect("a draft edge target must belong to the method");
+                edge.arguments = parameters
+                    .iter()
+                    .map(|parameter| {
+                        definitions_by_value
+                            .get(parameter)
+                            .and_then(|definition| definition.inputs.get(&edge.id))
+                            .copied()
+                            .ok_or_else(|| {
+                                Error::internal("a block parameter lacks an edge argument")
+                            })
+                    })
+                    .collect::<Result<_, _>>()?;
+            }
         }
 
         Ok(DraftMethod {
@@ -182,7 +228,7 @@ impl From<LiftedBlock> for DraftBlock {
     fn from(lifted: LiftedBlock) -> Self {
         Self {
             caught_exception: lifted.caught_exception,
-            phis: Vec::new(),
+            parameters: Vec::new(),
             operations: lifted
                 .operations
                 .into_iter()
@@ -197,37 +243,15 @@ impl From<LiftedBlock> for DraftBlock {
                     .successors
                     .edges
                     .into_iter()
-                    .map(|successor| DraftSuccessor {
+                    .map(|(successor, _)| DraftEdge {
                         id: successor.id,
                         target: successor.target,
+                        arguments: Vec::new(),
                         transfer: successor.transfer,
                     })
                     .collect(),
                 origin: lifted.terminator_source,
             },
         }
-    }
-}
-
-impl TryFrom<PhiDefinition> for DraftPhi {
-    type Error = Error;
-
-    fn try_from(definition: PhiDefinition) -> Result<Self, Self::Error> {
-        let inputs = definition
-            .inputs
-            .into_iter()
-            .map(|(predecessor, input)| {
-                let Predecessor::Block(predecessor) = predecessor else {
-                    return Err(Error::internal(
-                        "an entry contribution cannot be an active phi input",
-                    ));
-                };
-                Ok((predecessor, input))
-            })
-            .collect::<Result<_, Error>>()?;
-        Ok(Self {
-            value: definition.result,
-            inputs,
-        })
     }
 }

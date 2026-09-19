@@ -9,21 +9,21 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Predecessor {
+pub(crate) enum Contribution {
     Entry,
-    Block(BlockId),
+    Edge(EdgeId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct PhiSite {
+pub(crate) struct ParameterSite {
     pub block: BlockId,
     pub position: Position,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PhiDefinition {
+pub(crate) struct ParameterDefinition {
     pub result: ValueId,
-    pub inputs: BTreeMap<Predecessor, ValueId>,
+    pub inputs: BTreeMap<EdgeId, ValueId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,22 +45,17 @@ pub(crate) struct LiftedBlock {
 /// Successor transfers coupled to the frame contributed to each target.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LiftedSuccessors {
-    pub edges: Vec<LiftedEdge>,
-    output_frames: BTreeMap<BlockId, Frame>,
+    pub edges: Vec<(LiftedEdge, Frame)>,
 }
 
 impl LiftedSuccessors {
     pub(crate) fn push(&mut self, edge: LiftedEdge, frame: Frame) {
-        if let Some(existing) = self.output_frames.get(&edge.target) {
-            assert_eq!(existing, &frame, "parallel edges must contribute one frame");
-        } else {
-            self.output_frames.insert(edge.target, frame);
-        }
-        self.edges.push(edge);
-    }
-
-    pub(crate) fn take_output_frames(&mut self) -> BTreeMap<BlockId, Frame> {
-        std::mem::take(&mut self.output_frames)
+        debug_assert!(
+            self.edges
+                .iter()
+                .all(|(existing, _)| existing.id != edge.id)
+        );
+        self.edges.push((edge, frame));
     }
 }
 
@@ -70,7 +65,7 @@ impl LiftedSuccessors {
 /// only fills frame `contributions`; it never changes topology.
 #[derive(Debug, Default)]
 pub(crate) struct BlockState {
-    pub contributions: BTreeMap<Predecessor, Frame>,
+    pub contributions: BTreeMap<Contribution, Frame>,
     pub execution: BlockExecution,
 }
 
@@ -86,10 +81,10 @@ pub(crate) enum BlockExecution {
     Complete { input: Frame, block: LiftedBlock },
 }
 
-/// The complete analysis state passed to scalar-graph materialization.
+/// The complete analysis state passed to draft-IR materialization.
 pub(crate) struct CompletedAnalysis {
     pub blocks: BTreeMap<BlockId, BlockState>,
-    pub phi_definitions: BTreeMap<PhiSite, PhiDefinition>,
+    pub parameter_definitions: BTreeMap<ParameterSite, ParameterDefinition>,
     pub receiver_value: Option<ValueId>,
     pub parameter_values: Vec<ValueId>,
 }

@@ -320,4 +320,63 @@ mod tests {
         );
         assert_ne!(entry_edge.id, backedge.id);
     }
+
+    #[test]
+    fn parallel_edges_keep_distinct_internal_parameter_arguments() {
+        let method = crate::tests::method(
+            [
+                (0, Instruction::IConst0),
+                (1, Instruction::IStore1),
+                (2, Instruction::ILoad0),
+                (
+                    3,
+                    Instruction::LookupSwitch {
+                        default: 8.into(),
+                        match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
+                    },
+                ),
+                (8, Instruction::IConst1),
+                (9, Instruction::IStore1),
+                (10, Instruction::Goto(12.into())),
+                (12, Instruction::ILoad1),
+                (13, Instruction::IReturn),
+            ],
+            "(I)I",
+            vec![],
+            AccessFlags::PUBLIC | AccessFlags::STATIC,
+        );
+        let cfg = bytecode_cfg::build(&method).unwrap();
+        let mut draft = crate::ir::generator::bytecode_analysis::analyze(&cfg).unwrap();
+        let (&target, target_block) = draft
+            .blocks
+            .iter()
+            .find(|(_, block)| !block.parameters.is_empty())
+            .expect("the local-variable join must have a block parameter");
+        assert_eq!(target_block.parameters.len(), 1);
+
+        let incoming = draft
+            .blocks
+            .values()
+            .flat_map(|block| &block.terminator.successors)
+            .filter(|edge| edge.target == target)
+            .collect::<Vec<_>>();
+        assert_eq!(incoming.len(), 3);
+        assert!(incoming.iter().all(|edge| edge.arguments.len() == 1));
+        assert_eq!(
+            incoming
+                .iter()
+                .map(|edge| edge.id)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3
+        );
+
+        crate::ir::generator::canonicalize::canonicalize(&mut draft).unwrap();
+        let ir = crate::ir::generator::finish::finish(&method, draft).unwrap();
+        let [phi] = ir.block(target).unwrap().phis.as_slice() else {
+            panic!("the public join must contain one phi");
+        };
+        assert_eq!(phi.inputs.len(), 2);
+        crate::ir::verify::verify(&ir).unwrap();
+    }
 }

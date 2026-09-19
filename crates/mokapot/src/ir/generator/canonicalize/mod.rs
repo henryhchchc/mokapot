@@ -9,17 +9,36 @@ use crate::ir::{
     ValueId,
     generator::{draft::DraftMethod, error::Error},
 };
-use simplify::simplify_phis;
+use simplify::{ParameterCandidate, simplify_parameters};
 
-/// Simplifies provisional phis and rewrites the draft to canonical SSA.
+/// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
 pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
+    let mut inputs = BTreeMap::<ValueId, Vec<ValueId>>::new();
+    for block in draft.blocks.values() {
+        for edge in &block.terminator.successors {
+            let target = draft
+                .blocks
+                .get(&edge.target)
+                .expect("a draft edge target must belong to the method");
+            assert_eq!(target.parameters.len(), edge.arguments.len());
+            for (parameter, &argument) in target.parameters.iter().zip(&edge.arguments) {
+                inputs.entry(parameter.value).or_default().push(argument);
+            }
+        }
+    }
     let candidates = draft
         .blocks
         .values()
-        .flat_map(|block| block.phis.iter().cloned())
-        .map(|phi| (phi.value, phi))
+        .flat_map(|block| &block.parameters)
+        .map(|parameter| {
+            let candidate = ParameterCandidate {
+                inputs: inputs.remove(&parameter.value).unwrap_or_default(),
+            };
+            (parameter.value, candidate)
+        })
         .collect::<BTreeMap<ValueId, _>>();
-    let simplified = simplify_phis(candidates)
-        .map_err(|_| Error::internal("reachable phi definitions form a closed cycle"))?;
-    finalization::finalize(draft, simplified)
+    let simplified = simplify_parameters(candidates)
+        .map_err(|_| Error::internal("reachable block parameters form a closed cycle"))?;
+    finalization::finalize(draft, &simplified);
+    Ok(())
 }

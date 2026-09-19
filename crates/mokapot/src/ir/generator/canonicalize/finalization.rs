@@ -1,21 +1,16 @@
-//! Applies scalar substitutions and removes eliminated phi nodes.
-use std::convert::Infallible;
+//! Applies scalar substitutions and removes eliminated block parameters.
+use std::{collections::BTreeMap, convert::Infallible};
 
 use crate::ir::{
-    ValueId,
+    BlockId, ValueId,
     generator::{
-        canonicalize::simplify::SimplifiedPhis,
-        draft::{DraftBlock, DraftMethod, DraftPhi},
-        error::Error,
+        canonicalize::simplify::SimplifiedParameters,
+        draft::{DraftBlock, DraftMethod},
         remap::RemapValues,
     },
 };
 
-pub(super) fn finalize(
-    draft: &mut DraftMethod,
-    mut simplified: SimplifiedPhis,
-) -> Result<(), Error> {
-    // `simplify_phis` returns substitutions whose targets are already canonical.
+pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameters) {
     let canonical = |value| {
         simplified
             .substitutions
@@ -23,43 +18,48 @@ pub(super) fn finalize(
             .copied()
             .unwrap_or(value)
     };
+    let retained = draft
+        .blocks
+        .iter_mut()
+        .map(|(&id, block)| {
+            let mut positions = std::mem::take(&mut block.parameters)
+                .into_iter()
+                .enumerate()
+                .filter(|(_, parameter)| simplified.candidates.contains_key(&parameter.value))
+                .collect::<Vec<_>>();
+            positions.sort_by_key(|(_, parameter)| parameter.value);
+            block.parameters = positions
+                .iter()
+                .map(|(_, parameter)| parameter.clone())
+                .collect();
+            (id, positions.into_iter().map(|(index, _)| index).collect())
+        })
+        .collect::<BTreeMap<BlockId, Vec<usize>>>();
+
     for block in draft.blocks.values_mut() {
-        let retained = std::mem::take(&mut block.phis)
-            .into_iter()
-            .filter_map(|phi| simplified.candidates.remove(&phi.value))
-            .collect();
-        finalize_block(block, retained, &canonical);
+        finalize_block(block, &retained, &canonical);
     }
-    if !simplified.candidates.is_empty() {
-        return Err(Error::internal("a retained phi targets no draft block"));
-    }
-    Ok(())
 }
 
 fn finalize_block(
     block: &mut DraftBlock,
-    phis: Vec<DraftPhi>,
+    retained: &BTreeMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {
     block.caught_exception = block.caught_exception.map(canonical);
-    block.phis = phis
-        .into_iter()
-        .map(|phi| DraftPhi {
-            value: canonical(phi.value),
-            inputs: phi
-                .inputs
-                .into_iter()
-                .map(|(predecessor, value)| (predecessor, canonical(value)))
-                .collect(),
-        })
-        .collect();
-    block.phis.sort_by_key(|phi| phi.value);
+    for parameter in &mut block.parameters {
+        parameter.value = canonical(parameter.value);
+    }
     for operation in &mut block.operations {
         apply_substitutions(&mut operation.kind, canonical);
     }
     apply_substitutions(&mut block.terminator.kind, canonical);
-    for successor in &mut block.terminator.successors {
-        apply_substitutions(&mut successor.transfer, canonical);
+    for edge in &mut block.terminator.successors {
+        edge.arguments = retained[&edge.target]
+            .iter()
+            .map(|&index| canonical(edge.arguments[index]))
+            .collect();
+        apply_substitutions(&mut edge.transfer, canonical);
     }
 }
 
