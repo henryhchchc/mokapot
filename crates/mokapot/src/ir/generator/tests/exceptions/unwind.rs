@@ -1,19 +1,16 @@
 use super::*;
+
 #[test]
 fn unhandled_exceptions_target_the_method_unwind_exit() {
+    let str_type = "java/lang/String".parse().unwrap();
+    let int_type = "java/lang/Integer".parse().unwrap();
     let method = method(
         [
             (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/String".parse().unwrap()),
-            ),
+            (1, Instruction::CheckCast(str_type)),
             (2, Instruction::Pop),
             (3, Instruction::ALoad0),
-            (
-                4,
-                Instruction::CheckCast("java/lang/Integer".parse().unwrap()),
-            ),
+            (4, Instruction::CheckCast(int_type)),
             (5, Instruction::AReturn),
         ],
         "(Ljava/lang/Object;)Ljava/lang/Object;",

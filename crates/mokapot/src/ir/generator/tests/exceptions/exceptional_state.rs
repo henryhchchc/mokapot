@@ -4,13 +4,11 @@ use super::*;
 
 #[test]
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
+    let str_type = "java/lang/String".parse().unwrap();
     let method = method(
         [
             (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/String".parse().unwrap()),
-            ),
+            (1, Instruction::CheckCast(str_type)),
             (2, Instruction::AStore1),
             (3, Instruction::Return),
         ],
@@ -52,24 +50,12 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     assert!(handler_bb.parameters.is_empty());
     assert!(handler_bb.operations.is_empty());
     assert_eq!(handler_bb.terminator.successors().count(), 1);
+    let successor = handler_bb.terminator.successors().next().unwrap();
     assert!(matches!(
-        handler_bb
-            .terminator
-            .successors()
-            .next()
-            .unwrap()
-            .transfer(),
+        successor.transfer(),
         Some(&ControlTransfer::Unconditional)
     ));
-    assert_eq!(
-        handler_bb
-            .terminator
-            .successors()
-            .next()
-            .unwrap()
-            .block_target(),
-        Some(normal_target)
-    );
+    assert_eq!(successor.block_target(), Some(normal_target));
     let loc = InstructionLocation::Terminator {
         block: handler_bb_id,
     };
@@ -126,17 +112,14 @@ fn exceptional_state_excludes_the_fallible_result() {
         .and_then(Successor::block_target)
         .and_then(|target| ir.block(target))
         .expect("the exceptional outcome must enter the handler");
-    let handler_bb = ir
-        .block(
-            handler_entry
-                .terminator
-                .successors()
-                .next()
-                .unwrap()
-                .block_target()
-                .unwrap(),
-        )
+    let handler_id = handler_entry
+        .terminator
+        .successors()
+        .next()
+        .unwrap()
+        .block_target()
         .unwrap();
+    let handler_bb = ir.block(handler_id).unwrap();
 
     assert!(matches!(
         ir.block(normal_target).unwrap().terminator,

@@ -44,14 +44,10 @@ fn test_parse_my_class() {
         my_class.access_flags
     );
     assert_eq!("org/mokapot/test/MyClass", my_class.binary_name);
-    assert_eq!(
-        Some("java/lang/Object".parse().unwrap()),
-        my_class.super_class
-    );
-    assert_eq!(
-        Some(&"java/io/Closeable".parse::<ClassRef>().unwrap()),
-        my_class.interfaces.first()
-    );
+    let object: ClassRef = "java/lang/Object".parse().unwrap();
+    assert_eq!(Some(object), my_class.super_class);
+    let closeable: ClassRef = "java/io/Closeable".parse().unwrap();
+    assert_eq!(Some(&closeable), my_class.interfaces.first());
     assert_eq!(2, my_class.fields.len());
     assert!(
         my_class

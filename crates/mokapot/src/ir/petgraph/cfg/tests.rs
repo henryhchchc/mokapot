@@ -48,10 +48,8 @@ fn sparse_nodes_and_parallel_edges_are_preserved() {
     assert_eq!(cfg.from_index(cfg.to_index(target)), target);
     let edges = (&cfg).edge_references().collect::<Vec<_>>();
     assert_eq!(edges.len(), 3);
-    assert_eq!(
-        edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
-        3
-    );
+    let ids = edges.iter().map(EdgeRef::id).collect::<HashSet<_>>();
+    assert_eq!(ids.len(), 3);
     assert_eq!(
         (&cfg)
             .neighbors_directed(target, Direction::Incoming)
@@ -67,6 +65,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
         parameters: vec![],
         operations: vec![],
         terminator: {
+            let runtime_exception = "java/lang/RuntimeException".parse().unwrap();
             let mut arms = vec![
                 Successor::Block {
                     id: EdgeId::new(0),
@@ -78,9 +77,7 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
                     id: EdgeId::new(1),
                     target: BlockId::new(2),
                     arguments: vec![],
-                    transfer: ControlTransfer::Exception(Some(
-                        "java/lang/RuntimeException".parse().unwrap(),
-                    )),
+                    transfer: ControlTransfer::Exception(Some(runtime_exception)),
                 },
                 Successor::Unwind { id: EdgeId::new(2) },
             ];
@@ -111,10 +108,8 @@ fn exceptional_edge_kinds_and_identities_are_preserved() {
     let cfg = ControlFlowGraph::new(&blocks, BlockId::new(0));
     let edges = (&cfg).edge_references().collect::<Vec<_>>();
 
-    assert_eq!(
-        edges.iter().map(EdgeRef::id).collect::<HashSet<_>>().len(),
-        2
-    );
+    let ids = edges.iter().map(EdgeRef::id).collect::<HashSet<_>>();
+    assert_eq!(ids.len(), 2);
     assert!(matches!(edges[0].weight(), ControlTransfer::Unconditional));
     assert!(matches!(
         edges[1].weight(),

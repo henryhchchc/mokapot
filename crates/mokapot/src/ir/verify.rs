@@ -513,13 +513,11 @@ mod tests {
     }
 
     fn method_with_fallible_result() -> MokaIRMethod {
+        let str_type = "java/lang/String".parse().unwrap();
         let method = crate::tests::method(
             [
                 (0, Instruction::ALoad0),
-                (
-                    1,
-                    Instruction::CheckCast("java/lang/String".parse().unwrap()),
-                ),
+                (1, Instruction::CheckCast(str_type)),
                 (2, Instruction::AReturn),
                 (10, Instruction::AStore1),
                 (11, Instruction::ALoad0),

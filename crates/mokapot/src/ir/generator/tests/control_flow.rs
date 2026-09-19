@@ -12,16 +12,14 @@ use crate::{
 
 #[test]
 fn switch_retains_parallel_successor_arms() {
+    let instruction = Instruction::LookupSwitch {
+        default: 10.into(),
+        match_targets: BTreeMap::from([(1, 10.into()), (2, 10.into())]),
+    };
     let method = method(
         [
             (0, Instruction::ILoad0),
-            (
-                1,
-                Instruction::LookupSwitch {
-                    default: 10.into(),
-                    match_targets: BTreeMap::from([(1, 10.into()), (2, 10.into())]),
-                },
-            ),
+            (1, instruction),
             (10, Instruction::Return),
         ],
         "(I)V",
@@ -32,20 +30,13 @@ fn switch_retains_parallel_successor_arms() {
 
     assert!(matches!(switch, Terminator::Switch { .. }));
     assert_eq!(switch.successors().count(), 3);
-    assert_eq!(
-        switch
-            .successors()
-            .map(Successor::id)
-            .collect::<HashSet<_>>()
-            .len(),
-        3
-    );
-    assert!(
-        switch
-            .successors()
-            .map(Successor::block_target)
-            .all(|target| target == switch.successors().next().unwrap().block_target())
-    );
+    let ids = switch
+        .successors()
+        .map(Successor::id)
+        .collect::<HashSet<_>>();
+    assert_eq!(ids.len(), 3);
+    let check = |it| it == switch.successors().next().unwrap().block_target();
+    assert!(switch.successors().map(Successor::block_target).all(check));
     assert_eq!(ir.control_flow_graph().edges().count(), 3);
 }
 
@@ -118,17 +109,15 @@ fn comparison_branch_preserves_operand_order() {
 
 #[test]
 fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
+    let switch = Instruction::TableSwitch {
+        range: 3..=4,
+        jump_targets: vec![10.into(), 10.into()],
+        default: 10.into(),
+    };
     let method = method(
         [
             (0, Instruction::ILoad0),
-            (
-                1,
-                Instruction::TableSwitch {
-                    range: 3..=4,
-                    jump_targets: vec![10.into(), 10.into()],
-                    default: 10.into(),
-                },
-            ),
+            (1, switch),
             (10, Instruction::Return),
         ],
         "(I)V",
@@ -147,23 +136,14 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     };
 
     assert!(matches!(switch, Terminator::Switch { .. }));
-    assert_eq!(switch.successors().count(), 3);
-    assert!(
-        switch
-            .successors()
-            .map(Successor::block_target)
-            .all(|target| target == switch.successors().next().unwrap().block_target())
-    );
-    assert_eq!(
-        switch.successors().next().unwrap().transfer(),
-        Some(&case_guard(3))
-    );
-    assert_eq!(
-        switch.successors().nth(1).unwrap().transfer(),
-        Some(&case_guard(4))
-    );
+    let arms = switch.successors().collect::<Vec<_>>();
+    assert_eq!(arms.len(), 3);
+    let check = |it| it == arms[0].block_target();
+    assert!(arms.iter().map(|arm| arm.block_target()).all(check));
+    assert_eq!(arms[0].transfer(), Some(&case_guard(3)));
+    assert_eq!(arms[1].transfer(), Some(&case_guard(4)));
     assert!(matches!(
-        switch.successors().nth(2).unwrap().transfer(),
+        arms[2].transfer(),
         Some(ControlTransfer::Conditional(guard)) if guard.predicate_count() == 2
     ));
     let entry_loc = InstructionLocation::Terminator {
@@ -177,16 +157,14 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
 
 #[test]
 fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
+    let switch = Instruction::LookupSwitch {
+        default: 10.into(),
+        match_targets: BTreeMap::new(),
+    };
     let method = method(
         [
             (0, Instruction::ILoad0),
-            (
-                1,
-                Instruction::LookupSwitch {
-                    default: 10.into(),
-                    match_targets: BTreeMap::new(),
-                },
-            ),
+            (1, switch),
             (10, Instruction::Return),
         ],
         "(I)V",
@@ -198,18 +176,15 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
 
     let successors = terminator.successors().collect::<Vec<_>>();
     assert_eq!(successors.len(), 1);
-    assert_eq!(
-        successors[0].block_target(),
+    let default_target =
         ir.source_map()
             .instructions_at(10.into())
             .find_map(|location| match location {
                 InstructionLocation::Terminator { block } => Some(block),
                 InstructionLocation::BlockParameter { .. }
-                | InstructionLocation::Operation { .. } => {
-                    None
-                }
-            })
-    );
+                | InstructionLocation::Operation { .. } => None,
+            });
+    assert_eq!(successors[0].block_target(), default_target);
     assert!(!terminator.uses().contains(&match_value));
     assert_eq!(
         ir.source_map().origin_of(InstructionLocation::Terminator {
@@ -233,13 +208,11 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
             catch_type: Some("java/lang/Throwable".parse().unwrap()),
         },
     ];
+    let str_type = "java/lang/String".parse().unwrap();
     let method = method(
         [
             (0, Instruction::AConstNull),
-            (
-                1,
-                Instruction::CheckCast("java/lang/String".parse().unwrap()),
-            ),
+            (1, Instruction::CheckCast(str_type)),
             (2, Instruction::Pop),
             (3, Instruction::Return),
             (10, Instruction::AStore0),

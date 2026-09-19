@@ -231,16 +231,14 @@ mod tests {
 
     #[test]
     fn normalization_assigns_parallel_edges_before_analysis() {
+        let switch = Instruction::LookupSwitch {
+            default: 10.into(),
+            match_targets: BTreeMap::from([(1, 10.into()), (2, 10.into())]),
+        };
         let method = crate::tests::method(
             [
                 (0, Instruction::ILoad0),
-                (
-                    1,
-                    Instruction::LookupSwitch {
-                        default: 10.into(),
-                        match_targets: BTreeMap::from([(1, 10.into()), (2, 10.into())]),
-                    },
-                ),
+                (1, switch),
                 (10, Instruction::Return),
             ],
             "(I)V",
@@ -293,18 +291,16 @@ mod tests {
 
     #[test]
     fn parallel_edges_keep_distinct_internal_parameter_arguments() {
+        let switch = Instruction::LookupSwitch {
+            default: 8.into(),
+            match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
+        };
         let method = crate::tests::method(
             [
                 (0, Instruction::IConst0),
                 (1, Instruction::IStore1),
                 (2, Instruction::ILoad0),
-                (
-                    3,
-                    Instruction::LookupSwitch {
-                        default: 8.into(),
-                        match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
-                    },
-                ),
+                (3, switch),
                 (8, Instruction::IConst1),
                 (9, Instruction::IStore1),
                 (10, Instruction::Goto(12.into())),
@@ -333,14 +329,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);
         assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
-        assert_eq!(
-            incoming
-                .iter()
-                .map(|edge| edge.id())
-                .collect::<BTreeSet<_>>()
-                .len(),
-            3
-        );
+        let incoming_ids = incoming
+            .iter()
+            .map(|edge| edge.id())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(incoming_ids.len(), 3);
 
         crate::ir::generator::canonicalize::canonicalize(&mut draft).unwrap();
         let ir = crate::ir::generator::finish::finish(&method, draft).unwrap();

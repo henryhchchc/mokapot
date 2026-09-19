@@ -4,13 +4,11 @@ use super::*;
 fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let runtime_exception: ClassRef = "java/lang/RuntimeException".parse().unwrap();
     let exception: ClassRef = "java/lang/Exception".parse().unwrap();
+    let str_type = "java/lang/String".parse().unwrap();
     let method = method(
         [
             (0, Instruction::ALoad0),
-            (
-                1,
-                Instruction::CheckCast("java/lang/String".parse().unwrap()),
-            ),
+            (1, Instruction::CheckCast(str_type)),
             (2, Instruction::Pop),
             (3, Instruction::Return),
             (10, Instruction::AStore1),
