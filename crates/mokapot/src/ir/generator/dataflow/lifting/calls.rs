@@ -6,13 +6,18 @@ use crate::{
 };
 use ValueCategory::Category1;
 
+enum CallResult {
+    Value(ValueId, ValueCategory),
+    Void,
+}
+
 impl LiftContext<'_, '_> {
     pub(super) fn invoke(
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
     ) -> Result<Option<Operation>, Error> {
-        let definition = self.definition_id_for_return(&method.descriptor.return_type);
+        let result = self.call_result(&method.descriptor.return_type);
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
             .then(|| self.frame.stack.pop(Category1))
@@ -22,7 +27,7 @@ impl LiftContext<'_, '_> {
             this,
             args,
         };
-        self.finish_call(&method.descriptor, definition, expr)
+        self.finish_call(result, expr)
     }
 
     pub(super) fn invoke_dynamic(
@@ -31,32 +36,41 @@ impl LiftContext<'_, '_> {
         bootstrap_method_index: u16,
         name: &str,
     ) -> Result<Option<Operation>, Error> {
-        let definition = self.definition_id_for_return(&descriptor.return_type);
+        let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,
             name: name.to_owned(),
             closure_descriptor: descriptor.clone(),
         };
-        self.finish_call(descriptor, definition, expr)
+        self.finish_call(result, expr)
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a call result is consumed exactly once"
+    )]
     fn finish_call(
         &mut self,
-        descriptor: &MethodDescriptor,
-        definition: Option<ValueId>,
+        result: CallResult,
         expr: Expression,
     ) -> Result<Option<Operation>, Error> {
-        match &descriptor.return_type {
-            ReturnType::Some(return_type) => {
-                let value = definition
-                    .ok_or_else(|| Error::internal("a non-void call has no result identity"))?;
-                self.frame
-                    .stack
-                    .push(value, ValueCategory::of_field_type(return_type))?;
+        match result {
+            CallResult::Value(value, category) => {
+                self.frame.stack.push(value, category)?;
                 Ok(Some(definition_operation(value, expr)))
             }
-            ReturnType::Void => Ok(Some(Operation::Effect { expr })),
+            CallResult::Void => Ok(Some(Operation::Effect { expr })),
+        }
+    }
+
+    fn call_result(&mut self, return_type: &ReturnType) -> CallResult {
+        match return_type {
+            ReturnType::Some(return_type) => CallResult::Value(
+                self.definition_id(),
+                ValueCategory::of_field_type(return_type),
+            ),
+            ReturnType::Void => CallResult::Void,
         }
     }
 }

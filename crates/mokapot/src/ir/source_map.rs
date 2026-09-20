@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::InstructionLocation;
+use super::{BlockId, InstructionLocation};
 use crate::jvm::code::ProgramCounter;
 
 /// A sparse, bidirectional relation between JVM locations and `MokaIR` nodes.
@@ -8,7 +8,7 @@ use crate::jvm::code::ProgramCounter;
 /// This is not a bijection. A JVM instruction may have zero, one, or several
 /// related IR nodes, while each non-synthetic IR node has at most one JVM
 /// origin.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SourceMap {
     by_pc: HashMap<ProgramCounter, Vec<InstructionLocation>>,
     by_location: HashMap<InstructionLocation, ProgramCounter>,
@@ -40,16 +40,18 @@ impl SourceMap {
 }
 
 impl SourceMap {
-    pub(super) fn record_operation(
-        &mut self,
-        pc: ProgramCounter,
-        block: super::BlockId,
-        index: usize,
-    ) {
+    pub(super) fn new() -> Self {
+        Self {
+            by_pc: HashMap::new(),
+            by_location: HashMap::new(),
+        }
+    }
+
+    pub(super) fn record_operation(&mut self, pc: ProgramCounter, block: BlockId, index: usize) {
         self.record(pc, InstructionLocation::Operation { block, index });
     }
 
-    pub(super) fn record_terminator(&mut self, pc: ProgramCounter, block: super::BlockId) {
+    pub(super) fn record_terminator(&mut self, pc: ProgramCounter, block: BlockId) {
         self.record(pc, InstructionLocation::Terminator { block });
     }
 
@@ -91,4 +93,59 @@ impl SourceMap {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use crate::ir::{BlockId, NumericalId};
+    use std::collections::HashSet;
+
+    #[test]
+    fn source_map_is_sparse_and_one_to_many() {
+        let pc0 = ProgramCounter::from(0);
+        let pc1 = ProgramCounter::from(100);
+        let pc2 = ProgramCounter::from(200);
+        let instruction0 = InstructionLocation::Operation {
+            block: BlockId::from_raw(0),
+            index: 0,
+        };
+        let instruction1 = InstructionLocation::Operation {
+            block: BlockId::from_raw(0),
+            index: 1,
+        };
+        let instruction2 = InstructionLocation::Operation {
+            block: BlockId::from_raw(1),
+            index: 0,
+        };
+        let instruction3 = InstructionLocation::Terminator {
+            block: BlockId::from_raw(1),
+        };
+        let synthetic = InstructionLocation::BlockParameter {
+            block: BlockId::from_raw(1),
+            index: 0,
+        };
+        let mut map = SourceMap::new();
+        map.record_operation(pc0, BlockId::from_raw(0), 0);
+        map.record_operation(pc0, BlockId::from_raw(0), 1);
+        map.record_operation(pc1, BlockId::from_raw(1), 0);
+        map.record_terminator(pc2, BlockId::from_raw(1));
+
+        assert_eq!(
+            map.instructions_at(pc0).collect::<Vec<_>>(),
+            [instruction0, instruction1]
+        );
+        assert_eq!(map.origin_of(instruction0), Some(pc0));
+        assert_eq!(map.origin_of(instruction1), Some(pc0));
+        assert_eq!(map.origin_of(instruction2), Some(pc1));
+        assert_eq!(map.origin_of(instruction3), Some(pc2));
+        assert_eq!(map.instructions_at(pc2).collect::<Vec<_>>(), [instruction3]);
+        assert_eq!(map.instructions_at(50.into()).count(), 0);
+        assert_eq!(map.origin_of(synthetic), None);
+
+        let covered_nodes = HashSet::from([pc0])
+            .into_iter()
+            .flat_map(|pc| map.instructions_at(pc))
+            .collect::<HashSet<_>>();
+        assert_eq!(covered_nodes, HashSet::from([instruction0, instruction1]));
+        assert!(!covered_nodes.contains(&instruction2));
+        assert!(!covered_nodes.contains(&synthetic));
+    }
+}

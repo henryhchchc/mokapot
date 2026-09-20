@@ -189,7 +189,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         .skip(1)
         .map(|it| match it.transfer() {
             Some(ControlTransfer::Exception(Some(caught))) => caught.0.as_ref(),
-            _ => unreachable!(),
+            _ => panic!(),
         })
         .collect::<Vec<_>>();
     assert_eq!(

@@ -51,19 +51,6 @@ pub(crate) struct LocalVariables {
     slots: Box<[LocalSlot]>,
 }
 
-/// Slots assigned to the method-entry values in a fresh local-variable table.
-///
-/// This is the observable form of the convention that parameters follow the
-/// receiver in descriptor order, with a category-2 parameter occupying two
-/// slots.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct EntrySlots {
-    /// The slot holding the receiver, if the method is an instance method.
-    pub(crate) this: Option<u16>,
-    /// The slot holding each parameter, in descriptor order.
-    pub(crate) parameters: Vec<u16>,
-}
-
 impl LocalVariables {
     fn invalidate_overlapping_category_2(&mut self, index: usize) {
         if index > 0
@@ -127,44 +114,35 @@ impl LocalVariables {
         Ok(())
     }
 
-    /// Builds the locals of a method entry frame, also reporting the slot each
-    /// entry value was assigned.
+    /// Builds the locals of a method entry frame.
     pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_slots: u16,
         this_value: Option<ValueId>,
         parameters: &[ValueId],
-    ) -> Result<(Self, EntrySlots), Error> {
+    ) -> Result<Self, Error> {
         if parameters.len() != descriptor.parameters_types.len() {
             return Err(Error::ParameterCountMismatch);
         }
         let mut locals = Self {
             slots: vec![LocalSlot::Unset; max_slots.into()].into_boxed_slice(),
         };
-        let mut index = 0;
-        let this = if let Some(this_value) = this_value {
-            locals.set(index, this_value, ValueCategory::Category1)?;
-            let slot = index;
-            index += 1;
-            Some(slot)
-        } else {
-            None
-        };
-        let mut parameter_slots = Vec::with_capacity(parameters.len());
-        for (value_type, value) in descriptor.parameters_types.iter().zip(parameters) {
-            let category = ValueCategory::of_field_type(value_type);
-            locals.set(index, *value, category)?;
-            parameter_slots.push(index);
-            index += u16::try_from(category.slot_count())
+        let params = descriptor
+            .parameters_types
+            .iter()
+            .zip(parameters)
+            .map(|(ty, value)| (*value, ValueCategory::of_field_type(ty)));
+        let mut entries = this_value
+            .map(|value| (value, ValueCategory::Category1))
+            .into_iter()
+            .chain(params);
+        entries.try_fold(0_u16, |index, (value, category)| {
+            locals.set(index, value, category)?;
+            let slots = u16::try_from(category.slot_count())
                 .expect("JVM categories occupy at most two slots");
-        }
-        Ok((
-            locals,
-            EntrySlots {
-                this,
-                parameters: parameter_slots,
-            },
-        ))
+            Ok(index + slots)
+        })?;
+        Ok(locals)
     }
 
     pub(super) fn merge_from_with<E>(

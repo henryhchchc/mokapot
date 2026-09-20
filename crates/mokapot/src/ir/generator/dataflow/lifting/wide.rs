@@ -24,10 +24,7 @@ impl LiftContext<'_, '_> {
                 self.store(*idx, Category2)
             }
             WideInstruction::IInc(idx, constant) => self.increment(*idx, *constant),
-            WideInstruction::Ret(_) => Err(Error::internal_at(
-                self.pc,
-                "a wide ret reached non-control lifting",
-            )),
+            WideInstruction::Ret(_) => panic!("wide ret reached non-control lifting"),
         }
     }
 }

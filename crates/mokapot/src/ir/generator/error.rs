@@ -1,4 +1,4 @@
-use crate::{ir::generator::bytecode_analysis::FrameError, jvm::code::ProgramCounter};
+use crate::{ir::generator::dataflow::FrameError, jvm::code::ProgramCounter};
 
 /// Why JVM bytecode cannot be converted to Moka IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
@@ -59,32 +59,11 @@ pub enum Error {
         /// The unsupported bytecode feature.
         kind: UnsupportedBytecode,
     },
-    /// Private construction phases disagreed about an intermediate invariant.
-    ///
-    /// This indicates a generator defect rather than malformed bytecode.
-    #[error("internal IR construction invariant failed{location}: {message}", location = display_location(*pc))]
-    InternalInvariant {
-        /// The nearest source instruction, when one exists.
-        pc: Option<ProgramCounter>,
-        /// A stable description suitable for a bug report.
-        message: &'static str,
-    },
 }
 
 impl Error {
     pub(super) const fn malformed(pc: Option<ProgramCounter>, kind: MalformedBytecode) -> Self {
         Self::MalformedBytecode { pc, kind }
-    }
-
-    pub(super) const fn internal(message: &'static str) -> Self {
-        Self::InternalInvariant { pc: None, message }
-    }
-
-    pub(super) const fn internal_at(pc: ProgramCounter, message: &'static str) -> Self {
-        Self::InternalInvariant {
-            pc: Some(pc),
-            message,
-        }
     }
 
     pub(super) const fn at_instruction(self, pc: ProgramCounter) -> Self {
@@ -96,10 +75,6 @@ impl Error {
             Self::MalformedBytecode { pc: None, kind } => {
                 Self::MalformedBytecode { pc: Some(pc), kind }
             }
-            Self::InternalInvariant { pc: None, message } => Self::InternalInvariant {
-                pc: Some(pc),
-                message,
-            },
             error => error,
         }
     }

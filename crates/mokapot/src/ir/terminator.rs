@@ -112,6 +112,15 @@ pub enum Terminator<Arm = Successor> {
 }
 
 impl<Arm> Terminator<Arm> {
+    /// Maps every outgoing arm while preserving the terminator's structure.
+    pub(super) fn map_arms<MappedArm>(
+        self,
+        mut map: impl FnMut(Arm) -> MappedArm,
+    ) -> Terminator<MappedArm> {
+        self.try_map_arms(|arm| Ok::<_, std::convert::Infallible>(map(arm)))
+            .unwrap_or_else(|never| match never {})
+    }
+
     /// Maps every outgoing arm fallibly while preserving the terminator's
     /// structure.
     pub(super) fn try_map_arms<MappedArm, E>(

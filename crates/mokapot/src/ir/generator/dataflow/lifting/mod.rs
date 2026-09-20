@@ -15,7 +15,7 @@ use crate::{
         generator::error::Error,
     },
     jvm::{ConstantValue, code::Instruction as JVM},
-    types::{field_type::FieldType, method_descriptor::ReturnType},
+    types::field_type::FieldType,
 };
 use ValueCategory::{Category1, Category2};
 
@@ -187,11 +187,8 @@ pub(super) fn lift_instruction(
         ),
         MonitorEnter => cx.monitor(LockOperation::Acquire),
         MonitorExit => cx.monitor(LockOperation::Release),
-        // All the remainders are control flow instructions
-        _ => Err(Error::internal_at(
-            pc,
-            "a control-transfer instruction reached non-control lifting",
-        )),
+        // All the remainders are control flow instructions.
+        _ => panic!("control-transfer instruction reached non-control lifting"),
     }
 }
 
@@ -254,12 +251,5 @@ impl LiftContext<'_, '_> {
         self.with_def(|value, frame| {
             operations::lift_conversion(frame, value, conversion, operand_category, result_category)
         })
-    }
-
-    fn definition_id_for_return(&mut self, return_type: &ReturnType) -> Option<ValueId> {
-        match return_type {
-            ReturnType::Some(_) => Some(self.definition_id()),
-            ReturnType::Void => None,
-        }
     }
 }

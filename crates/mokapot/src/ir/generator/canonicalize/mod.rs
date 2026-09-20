@@ -1,18 +1,15 @@
-//! Canonicalizes the provisional SSA produced by bytecode analysis.
+//! Canonicalizes the provisional SSA produced by dataflow analysis.
 
 mod finalization;
 mod simplify;
 
 use std::collections::HashMap;
 
-use crate::ir::{
-    ValueId,
-    generator::{draft::DraftMethod, error::Error},
-};
+use crate::ir::{ValueId, generator::draft::DraftMethod};
 use simplify::{ParameterCandidate, simplify_parameters};
 
 /// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
-pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
+pub(super) fn canonicalize(draft: &mut DraftMethod) {
     let mut inputs = HashMap::<ValueId, Vec<ValueId>>::new();
     let entry = &draft.blocks[&draft.entry];
     assert_eq!(entry.parameters.len(), draft.entry_arguments.len());
@@ -45,8 +42,6 @@ pub(super) fn canonicalize(draft: &mut DraftMethod) -> Result<(), Error> {
             (parameter.value, candidate)
         })
         .collect::<HashMap<ValueId, _>>();
-    let simplified = simplify_parameters(candidates)
-        .map_err(|_| Error::internal("reachable block parameters form a closed cycle"))?;
+    let simplified = simplify_parameters(candidates);
     finalization::finalize(draft, &simplified);
-    Ok(())
 }

@@ -9,7 +9,7 @@ fn terminator_at(method: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
             matches!(method.instruction(it), Some(InstructionRef::Terminator(_))).then(|| {
                 match method.instruction(it) {
                     Some(InstructionRef::Terminator(terminator)) => terminator,
-                    _ => unreachable!(),
+                    _ => panic!(),
                 }
             })
         })

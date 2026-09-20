@@ -17,14 +17,6 @@ pub(super) struct SimplifiedParameters {
     pub(super) retained: HashSet<ValueId>,
 }
 
-/// An inconsistency found while simplifying provisional block parameters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub(super) enum ParameterSimplificationError {
-    /// A reachable parameter cycle has no value entering it from outside the cycle.
-    #[error("reachable parameter cycle has no external value")]
-    ClosedCycle,
-}
-
 /// Eliminates trivial acyclic and cyclic block parameters.
 ///
 /// Inputs retain their caller-provided edge order. Eliminated results are
@@ -32,7 +24,7 @@ pub(super) enum ParameterSimplificationError {
 /// rewritten through those substitutions.
 pub(super) fn simplify_parameters(
     mut candidates: HashMap<ValueId, ParameterCandidate>,
-) -> Result<SimplifiedParameters, ParameterSimplificationError> {
+) -> SimplifiedParameters {
     let mut substitutions = HashMap::new();
 
     loop {
@@ -76,7 +68,7 @@ pub(super) fn simplify_parameters(
 
             match external.len() {
                 0 => {
-                    return Err(ParameterSimplificationError::ClosedCycle);
+                    debug_assert!(false, "reachable block parameters form a closed cycle");
                 }
                 1 => {
                     let replacement = *external.iter().next().expect("the set contains one value");
@@ -102,10 +94,10 @@ pub(super) fn simplify_parameters(
         substitutions.insert(value, replacement);
     }
 
-    Ok(SimplifiedParameters {
+    SimplifiedParameters {
         substitutions,
         retained: candidates.into_keys().collect(),
-    })
+    }
 }
 
 fn canonical(mut value: ValueId, substitutions: &HashMap<ValueId, ValueId>) -> ValueId {
