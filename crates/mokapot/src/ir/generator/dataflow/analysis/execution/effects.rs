@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::super::{
+use super::super::super::{
     Frame,
     ValueCategory::{Category1, Category2},
 };
@@ -32,7 +32,7 @@ pub(super) fn branch_transfers(
 
 /// Pops the switch selector.
 ///
-/// The selector is popped even when `cases` is empty, so a caller lowering an
+/// The selector is popped even when `cases` is empty, so a caller executing an
 /// empty switch to a goto still pops it.
 pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, Error> {
     Ok(frame.stack.pop(Category1)?)
@@ -73,11 +73,7 @@ pub(super) fn return_operand(
             Some(frame.stack.pop(Category1)?)
         }
         Instruction::LReturn | Instruction::DReturn => Some(frame.stack.pop(Category2)?),
-        _ => {
-            return Err(Error::internal(
-                "a return block ends in a non-return instruction",
-            ));
-        }
+        _ => panic!("return block ends in a non-return instruction"),
     })
 }
 
@@ -88,9 +84,7 @@ pub(super) fn throw_operand(
 ) -> Result<ValueId, Error> {
     match instruction {
         Instruction::AThrow => Ok(frame.stack.pop(Category1)?),
-        _ => Err(Error::internal(
-            "a throw block ends in a non-throw instruction",
-        )),
+        _ => panic!("throw block ends in a non-throw instruction"),
     }
 }
 
@@ -134,10 +128,6 @@ fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predica
             let (lhs, rhs) = binary(frame)?;
             Predicate::LessThanOrEqual(lhs, rhs)
         }
-        _ => {
-            return Err(Error::internal(
-                "a branch block ends in a non-branch instruction",
-            ));
-        }
+        _ => panic!("branch block ends in a non-branch instruction"),
     })
 }

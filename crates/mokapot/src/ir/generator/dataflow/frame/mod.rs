@@ -5,8 +5,10 @@ mod local_variables;
 mod operand_stack;
 mod value_category;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::Error as FrameError;
-pub(super) use local_variables::EntrySlots;
 pub(super) use operand_stack::StackOperation;
 pub(super) use value_category::ValueCategory;
 
@@ -23,8 +25,8 @@ pub(super) enum Position {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct Frame {
-    pub(super) locals: LocalVariables,
-    pub(super) stack: OperandStack,
+    pub locals: LocalVariables,
+    pub stack: OperandStack,
 }
 
 impl Frame {
@@ -63,29 +65,17 @@ impl Frame {
         }
         Ok(())
     }
-    /// Builds the entry frame of a method, also reporting the slots it assigned
-    /// to the receiver and to the parameters.
-    ///
-    /// The parameters follow the receiver in descriptor order, with a category-2
-    /// parameter occupying two slots; the callers of this constructor rely on
-    /// that convention to map parameter identities to slots.
     pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,
         max_operand_stack: u16,
         this_value: Option<ValueId>,
         parameters: &[ValueId],
-    ) -> Result<(Self, EntrySlots), FrameError> {
-        let (locals, entry_slots) =
+    ) -> Result<Self, FrameError> {
+        let locals =
             LocalVariables::for_method_entry(descriptor, max_locals, this_value, parameters)?;
-        let operand_stack = OperandStack::with_max_slots(max_operand_stack);
-        Ok((
-            Self {
-                locals,
-                stack: operand_stack,
-            },
-            entry_slots,
-        ))
+        let stack = OperandStack::with_max_slots(max_operand_stack);
+        Ok(Self { locals, stack })
     }
 
     pub(super) fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {

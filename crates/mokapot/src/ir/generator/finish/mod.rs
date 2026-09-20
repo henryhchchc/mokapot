@@ -4,38 +4,35 @@ use std::collections::HashMap;
 
 use crate::{
     ir::{
-        BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, ValueDefinition,
-        ValueId,
-        generator::{draft::DraftMethod, error::Error},
-        method::MokaIRMethodParts,
+        BasicBlock, BlockKind, InstructionLocation, MethodEntry, MokaIRMethod, SourceMap,
+        ValueDefinition, ValueId, generator::draft::DraftMethod, method::MokaIRMethodParts,
     },
     jvm::Method,
 };
 
 /// Constructs a completed method and its value-definition index.
-pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod, Error> {
+pub(super) fn finish(method: &Method, draft: DraftMethod, source_map: SourceMap) -> MokaIRMethod {
     let DraftMethod {
         entry,
         entry_arguments,
         blocks,
-        source_map,
         this_value,
         parameter_values,
     } = draft;
     let mut state = FinishState::default();
     if let Some(value) = this_value {
-        state.define(value, ValueDefinition::This)?;
+        state.define(value, ValueDefinition::This);
     }
     for (index, &value) in parameter_values.iter().enumerate() {
-        let index = u16::try_from(index)
-            .map_err(|_| Error::internal("the method parameter index cannot be represented"))?;
-        state.define(value, ValueDefinition::Parameter(index))?;
+        let index =
+            u16::try_from(index).expect("the number of method parameters should be within u16");
+        state.define(value, ValueDefinition::Parameter(index));
     }
     for (&id, block) in &blocks {
-        state.define_block_values(id, block)?;
+        state.define_block_values(id, block);
     }
 
-    let method = MokaIRMethod::new(
+    MokaIRMethod::new(
         method,
         MokaIRMethodParts {
             entry: MethodEntry {
@@ -48,9 +45,7 @@ pub(super) fn finish(method: &Method, draft: DraftMethod) -> Result<MokaIRMethod
             parameter_values,
             value_definitions: state.definitions,
         },
-    );
-
-    Ok(method)
+    )
 }
 
 #[derive(Default)]
@@ -59,20 +54,16 @@ struct FinishState {
 }
 
 impl FinishState {
-    fn define_block_values(
-        &mut self,
-        block_id: crate::ir::BlockId,
-        block: &BasicBlock,
-    ) -> Result<(), Error> {
+    fn define_block_values(&mut self, block_id: crate::ir::BlockId, block: &BasicBlock) {
         if let BlockKind::LandingPad { exception: value } = block.kind {
-            self.define(value, ValueDefinition::CaughtException(block_id))?;
+            self.define(value, ValueDefinition::CaughtException(block_id));
         }
         for (index, parameter) in block.parameters.iter().enumerate() {
             let location = InstructionLocation::BlockParameter {
                 block: block_id,
                 index,
             };
-            self.define(parameter.value, ValueDefinition::Instruction(location))?;
+            self.define(parameter.value, ValueDefinition::Instruction(location));
         }
         for (index, operation) in block.operations.iter().enumerate() {
             let Some(value) = operation.def() else {
@@ -82,22 +73,20 @@ impl FinishState {
                 block: block_id,
                 index,
             };
-            self.define(value, ValueDefinition::Instruction(location))?;
+            self.define(value, ValueDefinition::Instruction(location));
         }
         if let Some(value) = block.terminator.def() {
             self.define(
                 value,
                 ValueDefinition::Instruction(InstructionLocation::Terminator { block: block_id }),
-            )?;
+            );
         }
-        Ok(())
     }
 
-    fn define(&mut self, value: ValueId, definition: ValueDefinition) -> Result<(), Error> {
+    fn define(&mut self, value: ValueId, definition: ValueDefinition) {
         if self.definitions.insert(value, definition).is_some() {
-            return Err(Error::internal("a value identity has multiple definitions"));
+            debug_assert!(false, "a value identity has multiple definitions");
         }
-        Ok(())
     }
 }
 
@@ -145,12 +134,11 @@ mod tests {
                     },
                 },
             )]),
-            source_map: crate::ir::SourceMap::default(),
             this_value: None,
             parameter_values: vec![parameter],
         };
         let mut draft = draft;
-        canonicalize::canonicalize(&mut draft).unwrap();
+        canonicalize::canonicalize(&mut draft);
         let method = crate::tests::method(
             [(0, Instruction::ILoad0), (1, Instruction::IReturn)],
             "(I)I",
@@ -158,7 +146,7 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
 
-        let ir = finish(&method, draft).unwrap();
+        let ir = finish(&method, draft, SourceMap::new());
         let completed_block = ir.block(block).unwrap();
         let operation = &completed_block.operations[0];
 
