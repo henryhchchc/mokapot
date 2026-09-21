@@ -247,8 +247,8 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = cfg::build(&method).unwrap();
-        let mut draft = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
-        let (&target, target_block) = draft
+        let mut parts = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
+        let (&target, target_block) = parts
             .blocks
             .iter()
             .find(|(_, block)| !block.parameters.is_empty())
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(target_block.parameters.len(), 1);
         let parameter_value = target_block.parameters[0].value;
 
-        let incoming = draft
+        let incoming = parts
             .blocks
             .values()
             .flat_map(|block| block.terminator.arms())
@@ -265,12 +265,12 @@ mod tests {
         assert_eq!(incoming.len(), 3);
         assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
 
-        crate::ir::generator::canonicalize::canonicalize(&mut draft);
-        let [parameter] = draft.blocks[&target].parameters.as_slice() else {
+        crate::ir::generator::canonicalize::canonicalize(&mut parts);
+        let [parameter] = parts.blocks[&target].parameters.as_slice() else {
             panic!("the public join does not hold exactly one parameter");
         };
         assert_eq!(parameter.value, parameter_value);
-        let public_incoming = reachable_of(&draft.blocks, draft.entry.target)
+        let public_incoming = reachable_of(&parts.blocks, parts.entry.target)
             .into_iter()
             .map(|(_, block)| block)
             .flat_map(|block| block.terminator.successors())

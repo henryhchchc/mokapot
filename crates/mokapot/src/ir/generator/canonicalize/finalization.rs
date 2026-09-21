@@ -3,14 +3,12 @@ use std::{collections::HashMap, convert::Infallible};
 
 use crate::ir::{
     BasicBlock, BlockId, BlockKind, Successor, ValueId,
-    generator::{
-        canonicalize::simplify::SimplifiedParameters, draft::DraftMethod, remap::RemapValues,
-    },
+    generator::{canonicalize::simplify::SimplifiedParameters, parts::IrParts, remap::RemapValues},
 };
 
-pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameters) {
+pub(super) fn finalize(parts: &mut IrParts, simplified: &SimplifiedParameters) {
     let canonical = |it| simplified.substitutions.get(&it).copied().unwrap_or(it);
-    let retained = draft
+    let retained = parts
         .blocks
         .iter_mut()
         .map(|(&id, block)| {
@@ -24,12 +22,12 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
         })
         .collect::<HashMap<BlockId, Vec<usize>>>();
 
-    draft.entry.arguments = retained[&draft.entry.target]
+    parts.entry.arguments = retained[&parts.entry.target]
         .iter()
-        .map(|&index| canonical(draft.entry.arguments[index]))
+        .map(|&index| canonical(parts.entry.arguments[index]))
         .collect();
 
-    for block in draft.blocks.values_mut() {
+    for block in parts.blocks.values_mut() {
         finalize_block(block, &retained, &canonical);
     }
 }
