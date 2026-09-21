@@ -46,6 +46,23 @@ pub(crate) enum FrameArm {
     },
 }
 
+impl FrameArm {
+    /// Builds a continuation into `target` carrying `frame`.
+    pub(super) const fn block(
+        arm: ArmKey,
+        target: BlockId,
+        transfer: ControlTransfer,
+        frame: Frame,
+    ) -> Self {
+        Self::Block {
+            arm,
+            target,
+            transfer,
+            frame,
+        }
+    }
+}
+
 pub(super) type FrameTerminator = Terminator<FrameArm>;
 
 impl FrameBlock {
