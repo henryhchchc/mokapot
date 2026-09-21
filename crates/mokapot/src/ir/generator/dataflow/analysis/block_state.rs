@@ -16,6 +16,13 @@ use crate::{
 pub(super) struct BlockState {
     incoming_frames: HashMap<FrameSource, Frame>,
     parameters: BTreeMap<Position, ValueId>,
+    /// Every parameter identity ever allocated at this block, keyed by site.
+    ///
+    /// Identities are retained across merges so that a site which stops and then
+    /// resumes conflicting reuses the same value instead of allocating a fresh
+    /// one; otherwise merging a cyclic block churns through new identities
+    /// without ever reaching a fixed point.
+    parameter_ids: BTreeMap<Position, ValueId>,
     /// The most recently merged input frame.
     input: Frame,
     execution: ExecutionState,
@@ -26,6 +33,7 @@ impl BlockState {
         Self {
             incoming_frames: HashMap::from([(source, frame.clone())]),
             parameters: BTreeMap::new(),
+            parameter_ids: BTreeMap::new(),
             input: frame,
             execution: ExecutionState::Ready,
         }
@@ -42,6 +50,7 @@ impl BlockState {
         let (input, parameters) = merge_frames(
             self.incoming_frames.values(),
             &self.parameters,
+            &mut self.parameter_ids,
             block_pc,
             values,
         )?;
@@ -128,7 +137,8 @@ impl ExecutionState {
 
 fn merge_frames<'frames>(
     frames: impl Iterator<Item = &'frames Frame>,
-    existing_parameters: &BTreeMap<Position, ValueId>,
+    previous_parameters: &BTreeMap<Position, ValueId>,
+    parameter_ids: &mut BTreeMap<Position, ValueId>,
     block_pc: Option<ProgramCounter>,
     values: &mut ValueContext,
 ) -> Result<(Frame, BTreeMap<Position, ValueId>), Error> {
@@ -137,7 +147,12 @@ fn merge_frames<'frames>(
         .next()
         .expect("a block must be created with its first incoming frame")
         .clone();
-    let mut active_parameters = BTreeMap::new();
+    // A site that is already a parameter stays one and keeps its identity, even
+    // while every incoming frame transiently agrees. Making the parameter set
+    // monotone is what lets a cyclic block reach a fixed point instead of
+    // flipping between a parameter and a narrower frame. `canonicalize`
+    // eliminates the parameters a block does not end up needing.
+    let mut active_parameters = previous_parameters.clone();
 
     for incoming in frames {
         merged
@@ -146,7 +161,7 @@ fn merge_frames<'frames>(
                     position,
                     lhs,
                     rhs,
-                    existing_parameters,
+                    parameter_ids,
                     &mut active_parameters,
                     values,
                 );
@@ -158,35 +173,35 @@ fn merge_frames<'frames>(
             })?;
     }
 
-    let parameters = active_parameters
+    // A site is declared a parameter only while the merged frame still holds
+    // its identity; the identity itself is retained in `parameter_ids` for
+    // later merges.
+    let declared = active_parameters
         .into_iter()
         .filter(|(position, result)| merged.value_at(*position) == Some(result))
         .collect();
 
-    Ok((merged, parameters))
+    Ok((merged, declared))
 }
 
 fn merge_value(
     position: Position,
     lhs: &mut ValueId,
     rhs: ValueId,
-    existing_parameters: &BTreeMap<Position, ValueId>,
+    parameter_ids: &mut BTreeMap<Position, ValueId>,
     active_parameters: &mut BTreeMap<Position, ValueId>,
     values: &mut ValueContext,
 ) {
+    if let Some(&result) = active_parameters.get(&position) {
+        *lhs = result;
+        return;
+    }
     if *lhs == rhs {
         return;
     }
-    let result = if let Some(&result) = active_parameters.get(&position) {
-        result
-    } else {
-        let result = existing_parameters
-            .get(&position)
-            .copied()
-            .unwrap_or_else(|| values.fresh());
-        active_parameters.insert(position, result);
-        result
-    };
-
+    let result = *parameter_ids
+        .entry(position)
+        .or_insert_with(|| values.fresh());
+    active_parameters.insert(position, result);
     *lhs = result;
 }
