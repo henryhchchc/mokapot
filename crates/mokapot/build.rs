@@ -1,3 +1,5 @@
+//! Build script for the mokapot crate
+
 use std::{env, path::PathBuf, process::Command};
 
 fn main() {

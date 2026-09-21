@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use std::{
     path::PathBuf,
     sync::atomic::{self, AtomicUsize},
@@ -34,7 +36,7 @@ fn create_test_dir_class_path() -> DirectoryClassPath {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn load_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
@@ -44,7 +46,7 @@ fn load_class() {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn load_absent_class() {
     let dir_cp = create_test_dir_class_path();
     let class_loader = ClassLoader::new([dir_cp]);
@@ -57,7 +59,7 @@ struct MockClassPath<'a> {
 }
 
 impl<'a> MockClassPath<'a> {
-    fn new(counter: &'a AtomicUsize) -> Self {
+    const fn new(counter: &'a AtomicUsize) -> Self {
         Self { counter }
     }
 }
@@ -71,7 +73,7 @@ impl ClassPath for MockClassPath<'_> {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn caching_class_loader_load_once() {
     let counter = AtomicUsize::new(0);
     let test_cp = MockClassPath::new(&counter);
@@ -85,7 +87,7 @@ fn caching_class_loader_load_once() {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn jar_class_path() {
     let Ok(java_home) = std::env::var("JAVA_HOME") else {
         return;
@@ -99,7 +101,7 @@ fn jar_class_path() {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn jar_class_path_not_found() {
     let Ok(java_home) = std::env::var("JAVA_HOME") else {
         return;
@@ -115,7 +117,7 @@ fn jar_class_path_not_found() {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
+#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn jar_class_path_not_jar() {
     let jar_path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
     let jar_cp = JarClassPath::new(jar_path);

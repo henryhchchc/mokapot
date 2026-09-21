@@ -1,3 +1,5 @@
+#![allow(missing_docs, clippy::ignore_without_reason)]
+
 use std::{collections::HashSet, env, fs, path::PathBuf};
 
 use mokapot::{
@@ -16,7 +18,7 @@ fn works_with_jdk_classes() {
         .into_iter()
         .filter_map(Result::ok)
         .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
-        .map(|it| it.into_path())
+        .map(walkdir::DirEntry::into_path)
         .collect();
 
     assert!(

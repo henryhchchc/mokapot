@@ -59,7 +59,7 @@ fn main() {
     let args = Args::parse();
 
     // Process all specified class files with the given verbosity setting
-    process_class_files(&args.class_files, args.verbose)
+    process_class_files(&args.class_files, args.verbose);
 }
 
 /// Formatters for Java class components
@@ -89,7 +89,7 @@ mod printer;
 ///
 /// # Returns
 ///
-/// An IoResult indicating success or any I/O errors that occurred
+/// An `IoResult` indicating success or any I/O errors that occurred
 fn process_class_files(class_files: &[PathBuf], verbose: bool) {
     // Flag to determine if we need file headers and separators
     let multiple_files = class_files.len() > 1;
@@ -131,13 +131,13 @@ fn process_class_files(class_files: &[PathBuf], verbose: bool) {
 ///
 /// # Returns
 ///
-/// A Result containing either the parsed Class or a DisassemblerError
+/// A Result containing either the parsed Class or a `DisassemblerError`
 ///
 /// # Error Handling
 ///
 /// This function will automatically convert I/O errors or parsing errors
-/// into the appropriate DisassemblerError variant through the ? operator
-/// and the From trait implementations on DisassemblerError.
+/// into the appropriate [`DisassemblerError`] variant through the ? operator
+/// and the From trait implementations on [`DisassemblerError`].
 fn parse_class_file(path: &PathBuf) -> Result<Class, DisassemblerError> {
     // Open the file (may fail with IoError)
     let file = File::open(path)?;
