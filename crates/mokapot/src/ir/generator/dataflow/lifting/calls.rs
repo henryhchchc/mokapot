@@ -1,6 +1,6 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory, definition_operation};
+use super::{LiftContext, ValueCategory};
 use crate::{
     ir::{Operation, ValueId, expression::Expression, generator::error::Error},
     jvm::references::MethodRef,
@@ -56,7 +56,7 @@ impl LiftContext<'_, '_> {
         match result {
             CallResult::Value(value, category) => {
                 self.frame.stack.push(value, category)?;
-                Ok(Some(definition_operation(value, expr)))
+                Ok(Some(Operation::Definition { value, expr }))
             }
             CallResult::Void => Ok(Some(Operation::Effect { expr })),
         }
