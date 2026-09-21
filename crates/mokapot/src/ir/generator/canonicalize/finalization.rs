@@ -24,9 +24,9 @@ pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameter
         })
         .collect::<HashMap<BlockId, Vec<usize>>>();
 
-    draft.entry_arguments = retained[&draft.entry]
+    draft.entry.arguments = retained[&draft.entry.target]
         .iter()
-        .map(|&index| canonical(draft.entry_arguments[index]))
+        .map(|&index| canonical(draft.entry.arguments[index]))
         .collect();
 
     for block in draft.blocks.values_mut() {

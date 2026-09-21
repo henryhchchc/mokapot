@@ -26,37 +26,32 @@ pub use dataflow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
 use crate::{
-    ir::{MethodEntry, MokaIRMethod, generator::draft::DraftMethod},
+    ir::{MokaIRMethod, generator::draft::DraftMethod},
     jvm::Method,
 };
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = cfg::build(method)?;
-    let (mut draft, source_map) = dataflow::analyze(&cfg)?;
+    let mut draft = dataflow::analyze(&cfg)?;
     canonicalize::canonicalize(&mut draft);
     let DraftMethod {
         entry,
-        entry_arguments,
         blocks,
         this,
         parameters,
+        source_map,
     } = draft;
-    let entry = MethodEntry {
-        target: entry,
-        arguments: entry_arguments,
-    };
-    let value_definitions = definitions::index_definitions(this, &parameters, &blocks);
     let ir = MokaIRMethod {
         access_flags: method.access_flags,
         name: method.name.clone(),
         descriptor: method.descriptor.clone(),
         owner: method.owner.clone(),
-        entry,
-        blocks,
         source_map,
+        entry,
+        value_definitions: definitions::index_definitions(this, &parameters, &blocks),
         this,
         parameters,
-        value_definitions,
+        blocks,
     };
     Ok(ir)
 }

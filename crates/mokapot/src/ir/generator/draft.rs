@@ -2,13 +2,13 @@
 
 use std::collections::HashMap;
 
-use crate::ir::{BasicBlock, BlockId, ValueId};
+use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId};
 
 /// A method under construction.
 pub(super) struct DraftMethod {
-    pub entry: BlockId,
-    pub entry_arguments: Vec<ValueId>,
+    pub entry: MethodEntry,
     pub blocks: HashMap<BlockId, BasicBlock>,
     pub this: Option<ValueId>,
     pub parameters: Vec<ValueId>,
+    pub source_map: SourceMap,
 }
