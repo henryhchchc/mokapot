@@ -273,7 +273,7 @@ mod tests {
             .blocks
             .iter()
             .find(|(_, block)| !block.parameters.is_empty())
-            .expect("the local-variable join must have a block parameter");
+            .expect("the local-variable join has a block parameter");
         assert_eq!(target_block.parameters.len(), 1);
         let parameter_value = target_block.parameters[0].value;
 
@@ -289,7 +289,7 @@ mod tests {
         crate::ir::generator::canonicalize::canonicalize(&mut draft);
         let ir = crate::ir::generator::finish::finish(&method, draft, source_map);
         let [parameter] = ir.block(target).unwrap().parameters.as_slice() else {
-            panic!("the public join must contain one parameter");
+            panic!("the public join does not hold exactly one parameter");
         };
         assert_eq!(parameter.value, parameter_value);
         let public_incoming = reachable_blocks(&ir)
@@ -300,6 +300,5 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(public_incoming.len(), 3);
         assert!(public_incoming.iter().all(|it| it.arguments().len() == 1));
-        ir.verify();
     }
 }

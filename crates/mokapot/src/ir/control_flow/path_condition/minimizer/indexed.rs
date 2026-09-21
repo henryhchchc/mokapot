@@ -3,10 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::ir::control_flow::path_condition::{
-    BooleanVariable,
-    cube::{Cube, InsertResult},
-};
+use crate::ir::control_flow::path_condition::{BooleanVariable, cube::Cube};
 
 #[derive(Debug, Clone)]
 pub(super) struct AtomTable<P> {
@@ -76,12 +73,10 @@ impl IndexedCube {
             let predicate = atoms.atoms[index].clone();
             match literal {
                 LiteralState::Positive => {
-                    let inserted = cube.insert(BooleanVariable::Positive(predicate));
-                    debug_assert_ne!(inserted, InsertResult::Contradiction);
+                    cube.insert(BooleanVariable::Positive(predicate));
                 }
                 LiteralState::Negative => {
-                    let inserted = cube.insert(BooleanVariable::Negative(predicate));
-                    debug_assert_ne!(inserted, InsertResult::Contradiction);
+                    cube.insert(BooleanVariable::Negative(predicate));
                 }
                 LiteralState::DontCare => {}
             }

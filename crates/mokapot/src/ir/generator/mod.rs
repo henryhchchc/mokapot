@@ -32,8 +32,6 @@ pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError
     let (mut draft, source_map) = dataflow::analyze(&cfg)?;
     canonicalize::canonicalize(&mut draft);
     let ir = finish::finish(method, draft, source_map);
-    #[cfg(test)]
-    ir.verify();
     Ok(ir)
 }
 

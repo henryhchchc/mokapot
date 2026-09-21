@@ -9,13 +9,7 @@ use crate::ir::{
 };
 
 pub(super) fn finalize(draft: &mut DraftMethod, simplified: &SimplifiedParameters) {
-    let canonical = |value| {
-        simplified
-            .substitutions
-            .get(&value)
-            .copied()
-            .unwrap_or(value)
-    };
+    let canonical = |it| simplified.substitutions.get(&it).copied().unwrap_or(it);
     let retained = draft
         .blocks
         .iter_mut()

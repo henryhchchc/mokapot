@@ -42,6 +42,10 @@ impl BlockState {
         values: &mut ValueContext,
     ) -> Result<bool, Error> {
         self.incoming_frames.insert(source, frame);
+        debug_assert!(
+            self.parameters.declared.is_empty() || self.incoming_frames.len() >= 2,
+            "a parameter was declared without a second incoming frame"
+        );
         let input = self
             .parameters
             .merge(self.incoming_frames.values(), block_pc, values)?;
@@ -56,7 +60,7 @@ impl BlockState {
     pub(super) fn complete(&mut self, block: FrameBlock) {
         debug_assert!(
             self.result.is_none(),
-            "only a block awaiting interpretation can finish interpretation"
+            "a block was completed without being reinterpreted"
         );
         self.result = Some(block);
     }
@@ -64,7 +68,7 @@ impl BlockState {
     pub(super) fn into_solution(self) -> BlockSolution {
         let block = self
             .result
-            .expect("the worklist must drain only after every reachable block completes");
+            .expect("the worklist drains only after every block is interpreted");
         BlockSolution::new(self.incoming_frames, self.parameters.declared, block)
     }
 
@@ -96,6 +100,9 @@ struct BlockParameters {
 
 impl BlockParameters {
     /// Merges every incoming frame, updating the declared parameters in place.
+    ///
+    /// A block that declares a parameter merges at least two incoming frames:
+    /// `declared` is only written by `join`, and the incoming set never shrinks.
     fn merge<'frames>(
         &mut self,
         mut frames: impl Iterator<Item = &'frames Frame>,
@@ -104,7 +111,7 @@ impl BlockParameters {
     ) -> Result<Frame, Error> {
         let mut merged = frames
             .next()
-            .expect("a block must be created with its first incoming frame")
+            .expect("a block state is created with an incoming frame")
             .clone();
         // A site that is already a parameter stays one and keeps its identity,
         // even while every incoming frame transiently agrees. That monotone

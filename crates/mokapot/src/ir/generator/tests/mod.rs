@@ -35,7 +35,9 @@ where
     )
 }
 
+/// Builds `method`, first checking the frame bookkeeping that resolution erases.
 fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
+    super::dataflow::verify_method(method);
     MokaIRMethod::from_method(method)
 }
 

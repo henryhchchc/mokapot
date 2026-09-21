@@ -10,40 +10,19 @@ use crate::ir::{BasicBlock, BlockId, BlockParameter, SourceMap, Successor, Value
 
 impl BlockSolution {
     fn entry_arguments(&self) -> Vec<ValueId> {
-        self.arguments_for(FrameSource::Entry)
-    }
-
-    fn arguments_for(&self, source: FrameSource) -> Vec<ValueId> {
         let frame = self
             .incoming_frames
-            .get(&source)
-            .expect("a block solution must retain every incoming frame");
+            .get(&FrameSource::Entry)
+            .expect("the entry block is seeded with its entry frame");
         self.parameters
             .keys()
             .map(|&position| {
                 frame
                     .value_at(position)
                     .copied()
-                    .expect("a block parameter must have a value in every incoming frame")
+                    .expect("every incoming frame holds each declared parameter")
             })
             .collect()
-    }
-
-    #[cfg(test)]
-    fn verify_successors(&self, source: BlockId, blocks: &HashMap<BlockId, BlockSolution>) {
-        for (frame_source, target, frame) in self.block.outgoing_frames(source) {
-            let target_block = blocks
-                .get(&target)
-                .expect("every successor must have a block solution");
-            let incoming_frame = target_block
-                .incoming_frames
-                .get(&frame_source)
-                .expect("every successor must have a matching incoming frame");
-            assert_eq!(
-                incoming_frame, frame,
-                "a successor frame must match its recorded incoming frame"
-            );
-        }
     }
 
     fn parameter_positions(&self) -> Vec<Position> {
@@ -69,13 +48,13 @@ impl BlockSolution {
             } => {
                 let arguments = target_parameters
                     .get(&target)
-                    .expect("every successor must have resolved block parameters")
+                    .expect("every arm target is a solved block")
                     .iter()
                     .map(|&position| {
                         frame
                             .value_at(position)
                             .copied()
-                            .expect("every successor frame must supply each target parameter")
+                            .expect("a successor frame holds every target parameter")
                     })
                     .collect();
                 Successor::Block {
@@ -109,12 +88,8 @@ pub(super) fn resolve_blocks(
 ) -> (Vec<ValueId>, HashMap<BlockId, BasicBlock>) {
     let entry_arguments = blocks
         .get(&entry)
-        .expect("the entry block must have a block solution")
+        .expect("the entry block is always solved")
         .entry_arguments();
-    #[cfg(test)]
-    for (&source, block) in &blocks {
-        block.verify_successors(source, &blocks);
-    }
     let target_parameters = blocks
         .iter()
         .map(|(&id, block)| (id, block.parameter_positions()))

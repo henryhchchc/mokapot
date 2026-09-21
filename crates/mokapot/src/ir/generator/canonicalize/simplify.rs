@@ -55,9 +55,9 @@ pub(super) fn simplify_parameters(
         for component in components {
             let external = component
                 .iter()
-                .flat_map(|result| {
+                .flat_map(|it| {
                     candidates
-                        .get(result)
+                        .get(it)
                         .expect("SCC nodes are candidate results")
                         .inputs
                         .iter()
@@ -68,6 +68,9 @@ pub(super) fn simplify_parameters(
 
             match external.len() {
                 0 => {
+                    // A reachable parameter always takes an input from outside its SCC:
+                    // the entry is seeded from `entry_arguments`, and a block is lowered
+                    // only when an edge reaches it.
                     debug_assert!(false, "reachable block parameters form a closed cycle");
                 }
                 1 => {
@@ -102,7 +105,7 @@ pub(super) fn simplify_parameters(
 
 fn canonical(mut value: ValueId, substitutions: &HashMap<ValueId, ValueId>) -> ValueId {
     while let Some(&replacement) = substitutions.get(&value) {
-        debug_assert_ne!(value, replacement, "a substitution must make progress");
+        debug_assert_ne!(value, replacement, "a substitution maps a value to itself");
         value = replacement;
     }
     value

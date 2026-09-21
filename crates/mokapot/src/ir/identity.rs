@@ -40,7 +40,6 @@ pub enum InstructionLocation {
     },
 }
 
-/// The structural location of an instruction within a method.
 /// The opaque identity of a scalar value within one Moka IR method.
 ///
 /// Identities may be sparse and convey neither definition order nor a value

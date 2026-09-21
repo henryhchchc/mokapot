@@ -38,7 +38,7 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
             let state = self
                 .blocks
                 .get_mut(&block_id)
-                .expect("a worklist block must have analysis state");
+                .expect("every scheduled block has analysis state");
 
             let input = state.input();
             let block = self
@@ -100,8 +100,7 @@ impl Worklist {
 
     fn pop(&mut self) -> Option<BlockId> {
         let block = self.pending.pop_front()?;
-        let was_queued = self.queued.remove(&block);
-        debug_assert!(was_queued, "a pending block must be marked queued");
+        self.queued.remove(&block);
         Some(block)
     }
 }

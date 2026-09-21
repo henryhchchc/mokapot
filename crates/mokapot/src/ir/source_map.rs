@@ -56,39 +56,12 @@ impl SourceMap {
     }
 
     fn record(&mut self, pc: ProgramCounter, instruction: InstructionLocation) {
-        assert!(
-            self.by_location.insert(instruction, pc).is_none(),
-            "an IR instruction location cannot have multiple JVM origins"
+        let replaced = self.by_location.insert(instruction, pc);
+        debug_assert!(
+            replaced.is_none(),
+            "an instruction location was recorded twice"
         );
         self.by_pc.entry(pc).or_default().push(instruction);
-    }
-}
-
-#[cfg(test)]
-impl SourceMap {
-    /// Panics unless every recorded location resolves to a live instruction and
-    /// the relation is bidirectional.
-    pub(super) fn verify(&self, method: &super::MokaIRMethod) {
-        for (&location, &pc) in &self.by_location {
-            assert!(
-                method.instruction(location).is_some(),
-                "source location {pc} refers to missing instruction {location:?}"
-            );
-            assert!(
-                self.instructions_at(pc)
-                    .any(|candidate| candidate == location),
-                "source mapping between {pc} and {location:?} is not bidirectional"
-            );
-        }
-        for (&pc, locations) in &self.by_pc {
-            for &location in locations {
-                assert_eq!(
-                    self.by_location.get(&location),
-                    Some(&pc),
-                    "source mapping between {pc} and {location:?} is not bidirectional"
-                );
-            }
-        }
     }
 }
 

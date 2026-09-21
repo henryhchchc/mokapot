@@ -6,6 +6,11 @@ mod lifting;
 mod resolve;
 mod values;
 
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+pub(super) use tests::verify_method;
+
 pub use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
 

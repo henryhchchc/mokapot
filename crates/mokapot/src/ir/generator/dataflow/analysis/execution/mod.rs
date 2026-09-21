@@ -95,12 +95,15 @@ impl BlockInterpreter<'_, '_> {
         let mut instructions = self.cfg.instructions_in(start_pc, end_pc);
         let (final_pc, instruction) = instructions
             .next_back()
-            .expect("a structural block must contain its final instruction");
-        debug_assert_eq!(final_pc, end_pc);
+            .expect("a structural block contains its final instruction");
+        debug_assert_eq!(
+            final_pc, end_pc,
+            "the block's last instruction is not at its end pc"
+        );
         let mut operations = Vec::new();
         for (pc, instruction) in instructions {
             if let Some(operation) = lifting::lift_instruction(values, instruction, pc, &mut frame)
-                .map_err(|error| error.at_instruction(pc))?
+                .map_err(|e| e.at_instruction(pc))?
             {
                 operations.push((pc, operation));
             }

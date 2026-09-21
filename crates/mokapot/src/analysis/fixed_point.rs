@@ -444,7 +444,7 @@ where
     while let Some(location) = worklist.pop_one() {
         let fact = facts
             .get(&location)
-            .expect("scheduled locations must have a stored fact");
+            .expect("a scheduled location has a stored fact");
         let output = problem.flow(&location, fact)?;
         handle_output(location, output, &mut facts, &mut worklist);
     }
@@ -558,7 +558,7 @@ mod test {
                     self.one_calls += 1;
                     Vec::new()
                 }
-                _ => unreachable!(),
+                _ => unreachable!("the test problem only names locations 0 and 1"),
             })
         }
     }
