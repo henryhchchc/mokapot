@@ -86,7 +86,7 @@ impl Annotation {
 }
 
 /// The maximum supported major version of a class file.
-pub const MAX_MAJOR_VERSION: u16 = 70;
+pub const MAX_MAJOR_VERSION: u16 = 71;
 
 const PREVIEW_FEATURES: u16 = 0xFFFF;
 
@@ -146,6 +146,8 @@ pub enum Version {
     Jdk25(bool),
     /// JDK 26
     Jdk26(bool),
+    /// JDK 27
+    Jdk27(bool),
 }
 impl Version {
     pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
@@ -191,6 +193,8 @@ impl Version {
             (69, PREVIEW_FEATURES) => Ok(Self::Jdk25(true)),
             (70, 0x0000) => Ok(Self::Jdk26(false)),
             (70, PREVIEW_FEATURES) => Ok(Self::Jdk26(true)),
+            (71, 0x0000) => Ok(Self::Jdk27(false)),
+            (71, PREVIEW_FEATURES) => Ok(Self::Jdk27(true)),
             (major, _) if major > MAX_MAJOR_VERSION => {
                 Err(ParseError::malform("Unsupported class version"))
             }
@@ -218,6 +222,7 @@ impl Version {
                 | Self::Jdk24(true)
                 | Self::Jdk25(true)
                 | Self::Jdk26(true)
+                | Self::Jdk27(true)
         )
     }
 
@@ -251,6 +256,7 @@ impl Version {
             Self::Jdk24(_) => 68,
             Self::Jdk25(_) => 69,
             Self::Jdk26(_) => 70,
+            Self::Jdk27(_) => 71,
         }
     }
 
@@ -276,7 +282,8 @@ impl Version {
             | Jdk23(enable_preview)
             | Jdk24(enable_preview)
             | Jdk25(enable_preview)
-            | Jdk26(enable_preview) => {
+            | Jdk26(enable_preview)
+            | Jdk27(enable_preview) => {
                 if *enable_preview {
                     u16::MAX
                 } else {

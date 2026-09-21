@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  JAVA_VERSION: 26
+  JAVA_VERSION: 27
 
 permissions:
   checks: write
