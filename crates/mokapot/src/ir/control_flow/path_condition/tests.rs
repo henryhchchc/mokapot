@@ -27,20 +27,8 @@ impl<P> PathCondition<P> {
     }
 }
 
-impl proptest::arbitrary::Arbitrary for BooleanVariable<u32> {
-    type Parameters = (u32, bool);
-    type Strategy = Just<Self>;
-
-    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
-        let (id, negative) = args;
-        if negative {
-            Just(BooleanVariable::Negative(id))
-        } else {
-            Just(BooleanVariable::Positive(id))
-        }
-    }
-}
-
+/// Evaluates a condition under `value_map` by unfolding its disjunctive normal form. This is the
+/// reference semantics the structural operations are checked against.
 fn evaluate(cond: &PathCondition<u32>, value_map: &HashMap<u32, bool>) -> bool {
     cond.disjuncts()
         .map(|term| {
@@ -51,6 +39,56 @@ fn evaluate(cond: &PathCondition<u32>, value_map: &HashMap<u32, bool>) -> bool {
         })
         .reduce(|lhs, rhs| lhs || rhs)
         .unwrap_or_default()
+}
+
+/// The predicate ids every generated condition draws from. A small domain lets one generated
+/// assignment cover every id a condition can reference, while keeping proptest inputs shrinkable.
+const PREDICATE_IDS: u32 = 4;
+
+/// A conjunction of one or more literals, the shape a conditional CFG edge carries.
+fn arb_branch_guard() -> impl Strategy<Value = BranchGuard<u32>> {
+    hash_set(
+        (0..PREDICATE_IDS, any::<bool>()).prop_map(|(predicate, negative)| {
+            if negative {
+                BooleanVariable::Negative(predicate)
+            } else {
+                BooleanVariable::Positive(predicate)
+            }
+        }),
+        1..=PREDICATE_IDS as usize,
+    )
+    .prop_map(BranchGuard::from_iter)
+}
+
+/// A condition with a structured cover: a disjunction of one or more branch guards.
+fn arb_structured_condition() -> impl Strategy<Value = PathCondition<u32>> {
+    hash_set(arb_branch_guard(), 1..=4).prop_map(PathCondition::from_branch_guards)
+}
+
+/// Any condition, including the tautology `⊤` and the contradiction `⊥`.
+fn arb_condition() -> impl Strategy<Value = PathCondition<u32>> {
+    prop_oneof![
+        Just(PathCondition::<u32>::one()),
+        Just(PathCondition::<u32>::zero()),
+        arb_structured_condition(),
+    ]
+}
+
+/// A total truth assignment over every predicate id a generated condition can reference.
+fn arb_values() -> impl Strategy<Value = HashMap<u32, bool>> {
+    prop::collection::vec(any::<bool>(), PREDICATE_IDS as usize)
+        .prop_map(|values| (0..PREDICATE_IDS).zip(values).collect())
+}
+
+/// Budgets that exercise both the exact and the bounded heuristic reducer.
+fn arb_budget() -> impl Strategy<Value = SolvingBudget> {
+    (0..=8_usize, 0..=4_usize, 0..=64_usize).prop_map(
+        |(on_set_size, heuristic_rounds, cover_checks)| SolvingBudget {
+            on_set_size,
+            heuristic_rounds,
+            cover_checks,
+        },
+    )
 }
 
 #[test]
@@ -80,52 +118,34 @@ fn exposes_dnf_terms_and_guard_literals() {
     assert!(PathCondition::<u32>::zero().disjuncts().next().is_none());
 }
 
-fn generate_pred_values(cond: &PathCondition<u32>) -> HashMap<u32, bool> {
-    cond.predicates()
-        .into_iter()
-        .copied()
-        .map(|predicate| (predicate, rand::random()))
-        .collect()
-}
-
-fn arb_test_cond() -> impl Strategy<Value = PathCondition<u32>> {
-    hash_set(
-        hash_set(any::<BooleanVariable<u32>>(), 1..26).prop_map(BranchGuard),
-        1..26,
-    )
-    .prop_map(PathCondition::from_branch_guards)
-}
-
 mod raw_structure {
     use super::*;
 
     proptest! {
         #[test]
         fn conjunction_matches_boolean_semantics(
-            lhs in arb_test_cond(),
-            rhs in arb_test_cond()
+            lhs in arb_condition(),
+            rhs in arb_condition(),
+            values in arb_values(),
         ) {
-            let mut pred_values = generate_pred_values(&lhs);
-            pred_values.extend(generate_pred_values(&rhs));
-            let lhs_eval = evaluate(&lhs, &pred_values);
-            let rhs_eval = evaluate(&rhs, &pred_values);
             let conjunction = lhs.clone() & rhs.clone();
-            let conjunction_eval = evaluate(&conjunction, &pred_values);
-            assert_eq!(lhs_eval && rhs_eval, conjunction_eval);
+            prop_assert_eq!(
+                evaluate(&lhs, &values) && evaluate(&rhs, &values),
+                evaluate(&conjunction, &values),
+            );
         }
 
         #[test]
         fn disjunction_matches_boolean_semantics(
-            lhs in arb_test_cond(),
-            rhs in arb_test_cond()
+            lhs in arb_condition(),
+            rhs in arb_condition(),
+            values in arb_values(),
         ) {
-            let mut pred_values = generate_pred_values(&lhs);
-            pred_values.extend(generate_pred_values(&rhs));
-            let lhs_eval = evaluate(&lhs, &pred_values);
-            let rhs_eval = evaluate(&rhs, &pred_values);
             let disjunction = lhs.clone() | rhs.clone();
-            let disjunction_eval = evaluate(&disjunction, &pred_values);
-            assert_eq!(lhs_eval || rhs_eval, disjunction_eval);
+            prop_assert_eq!(
+                evaluate(&lhs, &values) || evaluate(&rhs, &values),
+                evaluate(&disjunction, &values),
+            );
         }
     }
 
@@ -153,5 +173,23 @@ mod explicit_reduction {
 
         assert_ne!(structural, PathCondition::of(a.clone()));
         assert_eq!(reduced, PathCondition::of(a));
+    }
+
+    proptest! {
+        /// Reduction keeps the meaning of a condition under every budget.
+        #[test]
+        fn reduction_preserves_meaning(
+            condition in arb_condition(),
+            values in arb_values(),
+            budget in arb_budget(),
+        ) {
+            let reduced = condition.clone().reduce_with_budget(budget);
+            prop_assert_eq!(
+                evaluate(&condition, &values),
+                evaluate(&reduced, &values),
+                "reduction changed the meaning of {}",
+                condition,
+            );
+        }
     }
 }

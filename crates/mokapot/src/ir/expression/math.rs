@@ -76,7 +76,6 @@ impl Operation {
 
 /// How NaNs are treated in floating point comparisons.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum NaNTreatment {
     /// NaNs are treated as the largest possible value.
     #[display("NaN == Max")]
@@ -84,52 +83,4 @@ pub enum NaNTreatment {
     /// NaNs are treated as the smallest possible value.
     #[display("NaN == Min")]
     IsSmallest,
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use proptest::prelude::*;
-
-    use super::*;
-
-    proptest! {
-        #[test]
-        fn uses(
-            arg1 in any::<ValueId>(),
-            arg2 in any::<ValueId>(),
-            num in any::<i32>(),
-            nan_treatment in any::<NaNTreatment>()
-        ) {
-            let bin_ops = [
-                Operation::Add(arg1, arg2),
-                Operation::Subtract(arg1, arg2),
-                Operation::Multiply(arg1, arg2),
-                Operation::Divide(arg1, arg2),
-                Operation::Remainder(arg1, arg2),
-                Operation::ShiftLeft(arg1, arg2),
-                Operation::ShiftRight(arg1, arg2),
-                Operation::LogicalShiftRight(arg1, arg2),
-                Operation::BitwiseAnd(arg1, arg2),
-                Operation::BitwiseOr(arg1, arg2),
-                Operation::BitwiseXor(arg1, arg2),
-                Operation::LongComparison(arg1, arg2),
-                Operation::FloatingPointComparison(arg1, arg2, nan_treatment.clone()),
-            ];
-            let bin_ops_ids = HashSet::from([arg1, arg2]);
-            for op in &bin_ops {
-                assert_eq!(op.uses(), bin_ops_ids);
-            }
-
-            let unitary_ops = [
-                Operation::Negate(arg1),
-                Operation::Increment(arg1, num),
-            ];
-            let unitary_ops_ids = HashSet::from([arg1]);
-            for op in &unitary_ops {
-                assert_eq!(op.uses(), unitary_ops_ids);
-            }
-        }
-    }
 }

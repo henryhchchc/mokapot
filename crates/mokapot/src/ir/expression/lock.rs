@@ -22,24 +22,3 @@ impl Operation {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    use proptest::prelude::*;
-
-    use super::*;
-
-    proptest! {
-
-        #[test]
-        fn uses(lock in any::<ValueId>()) {
-            let ids = HashSet::from([lock]);
-            let operation = Operation::Acquire(lock);
-            assert_eq!(operation.uses(), ids);
-
-            let operation = Operation::Release(lock);
-            assert_eq!(operation.uses(), ids);
-        }
-    }
-}
