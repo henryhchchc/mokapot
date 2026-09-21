@@ -14,7 +14,7 @@ enum CallResult {
 }
 
 impl LiftContext<'_, '_> {
-    pub(super) fn invoke(
+    pub fn invoke(
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
@@ -32,7 +32,7 @@ impl LiftContext<'_, '_> {
         self.finish_call(result, expr)
     }
 
-    pub(super) fn invoke_dynamic(
+    pub fn invoke_dynamic(
         &mut self,
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,

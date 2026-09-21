@@ -7,37 +7,33 @@ use crate::{
 };
 
 impl LiftContext<'_, '_> {
-    pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         self.frame
             .stack
             .push(value, ValueCategory::of_field_type(&field.field_type))?;
-        Ok(Some({
-            let expr = FieldAccess::ReadStatic {
-                field: field.clone(),
-            }
-            .into();
-            Operation::Definition { value, expr }
-        }))
+        let expr = FieldAccess::ReadStatic {
+            field: field.clone(),
+        }
+        .into();
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
             .stack
             .push(value, ValueCategory::of_field_type(&field.field_type))?;
-        Ok(Some({
-            let expr = FieldAccess::ReadInstance {
-                object_ref,
-                field: field.clone(),
-            }
-            .into();
-            Operation::Definition { value, expr }
-        }))
+        let expr = FieldAccess::ReadInstance {
+            object_ref,
+            field: field.clone(),
+        }
+        .into();
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.pop_field_value(field)?;
         let field = field.clone();
         Ok(Some(Operation::Effect {
@@ -45,7 +41,7 @@ impl LiftContext<'_, '_> {
         }))
     }
 
-    pub(super) fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(Some(Operation::Effect {

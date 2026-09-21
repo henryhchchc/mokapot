@@ -1,43 +1,14 @@
 use ValueCategory::{Category1, Category2};
 
-use super::{super::Frame, LiftContext, ValueCategory};
+use super::{LiftContext, ValueCategory};
 use crate::ir::{
     Operation, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::error::Error,
 };
 
-#[inline]
-pub(super) fn lift_conversion(
-    frame: &mut Frame,
-    value: ValueId,
-    conversion: impl FnOnce(ValueId) -> Conversion,
-    operand_category: ValueCategory,
-    result_category: ValueCategory,
-) -> Result<Option<Operation>, Error> {
-    let operand = frame.stack.pop(operand_category)?;
-    frame.stack.push(value, result_category)?;
-    let expr = conversion(operand).into();
-    Ok(Some(Operation::Definition { value, expr }))
-}
-
-#[inline]
-pub(super) fn lift_binary_math(
-    frame: &mut Frame,
-    value: ValueId,
-    math: impl FnOnce(ValueId, ValueId) -> MathOperation,
-    category: ValueCategory,
-) -> Result<Option<Operation>, Error> {
-    let rhs = frame.stack.pop(category)?;
-    let lhs = frame.stack.pop(category)?;
-    frame.stack.push(value, category)?;
-
-    let expr = math(lhs, rhs).into();
-    Ok(Some(Operation::Definition { value, expr }))
-}
-
 impl LiftContext<'_, '_> {
-    pub(super) fn shift_long(
+    pub fn shift_long(
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
     ) -> Result<Option<Operation>, Error> {
@@ -49,7 +20,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn compare_long(&mut self) -> Result<Option<Operation>, Error> {
+    pub fn compare_long(&mut self) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
@@ -58,7 +29,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn compare_float(
+    pub fn compare_float(
         &mut self,
         nan_treatment: NaNTreatment,
         category: ValueCategory,
@@ -68,6 +39,45 @@ impl LiftContext<'_, '_> {
         let lhs = self.frame.stack.pop(category)?;
         self.frame.stack.push(value, Category1)?;
         let expr = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into();
+        Ok(Some(Operation::Definition { value, expr }))
+    }
+
+    pub fn binary(
+        &mut self,
+        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
+        category: ValueCategory,
+    ) -> Result<Option<Operation>, Error> {
+        let value = self.definition_id();
+        let rhs = self.frame.stack.pop(category)?;
+        let lhs = self.frame.stack.pop(category)?;
+        self.frame.stack.push(value, category)?;
+
+        let expr = operation(lhs, rhs).into();
+        Ok(Some(Operation::Definition { value, expr }))
+    }
+
+    pub fn conversion(
+        &mut self,
+        conversion: impl FnOnce(ValueId) -> Conversion,
+        operand_category: ValueCategory,
+        result_category: ValueCategory,
+    ) -> Result<Option<Operation>, Error> {
+        let value = self.definition_id();
+        let operand = self.frame.stack.pop(operand_category)?;
+        self.frame.stack.push(value, result_category)?;
+        let expr = conversion(operand).into();
+        Ok(Some(Operation::Definition { value, expr }))
+    }
+
+    pub fn unary(
+        &mut self,
+        operation: impl FnOnce(ValueId) -> MathOperation,
+        category: ValueCategory,
+    ) -> Result<Option<Operation>, Error> {
+        let value = self.definition_id();
+        let operand = self.frame.stack.pop(category)?;
+        self.frame.stack.push(value, category)?;
+        let expr = operation(operand).into();
         Ok(Some(Operation::Definition { value, expr }))
     }
 }
