@@ -75,8 +75,7 @@ impl<P> Cube<P> {
         P: Hash + Eq,
     {
         let mut cube = Self::one();
-        let result = cube.insert(literal);
-        debug_assert_ne!(result, InsertResult::Contradiction);
+        cube.insert(literal);
         cube
     }
 

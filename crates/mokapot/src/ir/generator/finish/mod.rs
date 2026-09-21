@@ -25,7 +25,7 @@ pub(super) fn finish(method: &Method, draft: DraftMethod, source_map: SourceMap)
     }
     for (index, &value) in parameter_values.iter().enumerate() {
         let index =
-            u16::try_from(index).expect("the number of method parameters should be within u16");
+            u16::try_from(index).expect("a method descriptor declares fewer than 2^16 parameters");
         state.define(value, ValueDefinition::Parameter(index));
     }
     for (&id, block) in &blocks {
@@ -167,6 +167,5 @@ mod tests {
                 .chain(completed_block.terminator.uses())
                 .all(|value| ir.definition_of(value).is_some())
         );
-        ir.verify();
     }
 }

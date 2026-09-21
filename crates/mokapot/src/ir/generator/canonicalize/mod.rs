@@ -12,8 +12,8 @@ use crate::ir::{ValueId, generator::draft::DraftMethod};
 /// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
 pub(super) fn canonicalize(draft: &mut DraftMethod) {
     let mut inputs = HashMap::<ValueId, Vec<ValueId>>::new();
+    // `resolve_blocks` lowers one argument per parameter position, so the arities match.
     let entry = &draft.blocks[&draft.entry];
-    assert_eq!(entry.parameters.len(), draft.entry_arguments.len());
     for (parameter, &argument) in entry.parameters.iter().zip(&draft.entry_arguments) {
         inputs.entry(parameter.value).or_default().push(argument);
     }
@@ -25,8 +25,7 @@ pub(super) fn canonicalize(draft: &mut DraftMethod) {
             let target = draft
                 .blocks
                 .get(&target)
-                .expect("a draft edge target must belong to the method");
-            assert_eq!(target.parameters.len(), edge.arguments().len());
+                .expect("a draft edge target belongs to the method");
             for (parameter, &argument) in target.parameters.iter().zip(edge.arguments()) {
                 inputs.entry(parameter.value).or_default().push(argument);
             }

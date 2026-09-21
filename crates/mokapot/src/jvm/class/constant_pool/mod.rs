@@ -824,7 +824,7 @@ mod tests {
                 18 => assert!(matches!(parsed, Ok(Entry::InvokeDynamic { .. }))),
                 19 => assert!(matches!(parsed, Ok(Entry::Module { .. }))),
                 20 => assert!(matches!(parsed, Ok(Entry::Package { .. }))),
-                _ => unreachable!()
+                _ => unreachable!("`arb_constant_pool_info` produces only defined tags")
             }
         }
 

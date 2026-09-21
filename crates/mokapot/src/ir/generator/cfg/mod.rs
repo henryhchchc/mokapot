@@ -49,10 +49,13 @@ impl<'method> Cfg<'method> {
         self.entry
     }
 
+    /// # Panics
+    ///
+    /// Panics unless `id` was allocated by this graph.
     pub fn block(&self, id: BlockId) -> &CfgNode {
         self.blocks
             .get(&id)
-            .expect("a CFG block identity must belong to its graph")
+            .expect("a CFG block identity belongs to its graph")
     }
 
     pub fn instructions_in(

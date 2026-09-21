@@ -66,20 +66,12 @@ impl LocalVariables {
 
     pub(crate) fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, Error> {
         let index = usize::from(index);
-        let value = match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
-            LocalSlot::Value(value) if value.category == expected => &value.value,
-            LocalSlot::Value(_) | LocalSlot::Reserved => {
-                return Err(Error::InvalidSlotLayout);
-            }
-            LocalSlot::Unavailable => return Err(Error::UnavailableLocal),
-            LocalSlot::Unset => return Err(Error::UninitializedLocal),
-        };
-        if expected == ValueCategory::Category2
-            && !matches!(self.slots.get(index + 1), Some(LocalSlot::Reserved))
-        {
-            return Err(Error::InvalidSlotLayout);
+        match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
+            LocalSlot::Value(value) if value.category == expected => Ok(&value.value),
+            LocalSlot::Value(_) | LocalSlot::Reserved => Err(Error::InvalidSlotLayout),
+            LocalSlot::Unavailable => Err(Error::UnavailableLocal),
+            LocalSlot::Unset => Err(Error::UninitializedLocal),
         }
-        Ok(value)
     }
 
     pub(crate) fn set(
@@ -154,5 +146,108 @@ impl LocalVariables {
 
     pub(super) fn slot_values(&self) -> impl Iterator<Item = Option<&ValueId>> {
         self.slots.iter().map(LocalSlot::value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::{Error, LocalSlot, LocalVariables};
+    use crate::{
+        ir::{IdAllocator, ValueId},
+        types::field_type::ValueCategory,
+    };
+    use ValueCategory::{Category1, Category2};
+
+    /// A table of `slot_count` variables, none of them written. Built from primitives rather than a
+    /// derived `Arbitrary`, which would not keep a category 2 value's upper variable reserved.
+    fn empty_locals(slot_count: usize) -> LocalVariables {
+        LocalVariables {
+            slots: vec![LocalSlot::Unset; slot_count].into_boxed_slice(),
+        }
+    }
+
+    proptest! {
+        /// A store reads back under its own category and, for a category 2 value, reserves the
+        /// variable above it, from which nothing can be loaded (JVMS §2.6.1).
+        #[test]
+        fn a_store_reads_back_and_reserves_the_variable_above_it(
+            slot_count in 1..6_usize,
+            index in 0..8_u16,
+            value in any::<ValueId>(),
+            category in any::<ValueCategory>(),
+        ) {
+            let mut locals = empty_locals(slot_count);
+            match locals.set(index, value, category) {
+                Ok(()) => {
+                    prop_assert_eq!(locals.get(index, category), Ok(&value));
+                    if category == Category2 {
+                        let reserved = index + 1;
+                        prop_assert_eq!(
+                            locals.get(reserved, Category1),
+                            Err(Error::InvalidSlotLayout),
+                        );
+                        prop_assert_eq!(
+                            locals.get(reserved, Category2),
+                            Err(Error::InvalidSlotLayout),
+                        );
+                    }
+                }
+                // Only an address the value does not fit in is refused.
+                Err(error) => prop_assert_eq!(error, Error::LocalIndexOutOfBounds),
+            }
+        }
+
+        /// Overwriting either half of a category 2 value never leaves the original readable, not even
+        /// when the store installs a fresh pair there (JVMS §4.10.2.3).
+        #[test]
+        fn overwriting_a_half_of_a_category_2_value_never_leaves_it_readable(
+            start in 0..3_u16,
+            category in any::<ValueCategory>(),
+            higher_half in any::<bool>(),
+        ) {
+            let mut ids = IdAllocator::default();
+            let value = ids.new_id();
+            let overwrite = ids.new_id();
+            // A table long enough for the pair at `start` and a two-slot overwrite of either half.
+            let mut locals = empty_locals(6);
+            locals.set(start, value, Category2).expect("the pair fits");
+            prop_assert_eq!(locals.get(start, Category2), Ok(&value));
+
+            let overwritten = if higher_half { start + 1 } else { start };
+            locals.set(overwritten, overwrite, category).expect("the overwrite fits");
+            let read = locals.get(start, Category2);
+
+            // The failure is the implementation's taxonomy; that the pair stops reading is not.
+            if category == Category1 || higher_half {
+                prop_assert!(read.is_err(), "the overwritten pair still reads back");
+            }
+            prop_assert_ne!(read, Ok(&value), "the old value still reads back");
+            prop_assert_eq!(locals.get(overwritten, category), Ok(&overwrite));
+        }
+
+        /// A read of a variable that was never written, and of a value under the category the
+        /// variable does not hold, is refused.
+        #[test]
+        fn illegal_accesses_are_refused(
+            slot_count in 0..6_usize,
+            value in any::<ValueId>(),
+            category in any::<ValueCategory>(),
+        ) {
+            let locals = empty_locals(slot_count);
+            for slot in 0..slot_count {
+                let index = u16::try_from(slot).expect("the small tables fit in u16");
+                prop_assert_eq!(locals.get(index, category), Err(Error::UninitializedLocal));
+            }
+
+            let mut locals = empty_locals(2);
+            locals.set(0, value, category).expect("two variables hold any value");
+            let other = match category {
+                Category1 => Category2,
+                Category2 => Category1,
+            };
+            prop_assert_eq!(locals.get(0, other), Err(Error::InvalidSlotLayout));
+        }
     }
 }

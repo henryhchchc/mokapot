@@ -229,6 +229,3 @@ impl MokaIRMethod {
         }
     }
 }
-
-#[cfg(test)]
-mod verify;

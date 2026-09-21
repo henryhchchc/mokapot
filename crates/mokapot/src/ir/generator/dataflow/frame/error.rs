@@ -1,5 +1,5 @@
 /// A failure while validating or manipulating an abstract JVM frame.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
     /// An instruction tried to pop more values than the operand stack holds.

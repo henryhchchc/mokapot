@@ -74,7 +74,7 @@ impl BlockLayout {
     }
 }
 
-/// Collects every block leader, verifying each names a decoded instruction.
+/// Collects every block leader, checking each names a decoded instruction.
 fn leaders(
     body: &MethodBody,
     entry: PC,
