@@ -1,4 +1,4 @@
-//! Builds and prints MokaIR for each concrete method in a class file.
+//! Builds and prints `MokaIR` for each concrete method in a class file.
 
 use std::{collections::HashSet, env, fs::File, io::BufReader, path::PathBuf};
 
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             for (index, operation) in bb.operations.iter().enumerate() {
                 let loc = InstructionLocation::Operation { block, index };
-                println!("  {:?}: {operation}", loc);
+                println!("  {loc:?}: {operation}");
             }
 
             let loc = InstructionLocation::Terminator { block };

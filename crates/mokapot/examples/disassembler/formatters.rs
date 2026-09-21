@@ -27,7 +27,7 @@ impl<'a> ClassFormatter<'a> {
     /// # Arguments
     ///
     /// * `class` - Reference to the Class to format
-    pub fn new(class: &'a Class) -> Self {
+    pub const fn new(class: &'a Class) -> Self {
         Self { class }
     }
 
@@ -88,7 +88,7 @@ impl<'a> FieldFormatter<'a> {
     /// # Arguments
     ///
     /// * `field` - Reference to the Field to format
-    pub fn new(field: &'a Field) -> Self {
+    pub const fn new(field: &'a Field) -> Self {
         Self { field }
     }
 
@@ -137,14 +137,14 @@ impl<'a> FieldFormatter<'a> {
     }
 }
 
-/// Implements Display for FieldFormatter to enable string conversion
+/// Implements Display for `FieldFormatter` to enable string conversion
 ///
 /// The Display implementation follows Java source syntax:
 /// - Access modifiers first (public, private, etc.)
 /// - Field type and name
 /// - Constant value if present (for static final fields)
 /// - Ending with a semicolon
-impl<'a> Display for FieldFormatter<'a> {
+impl Display for FieldFormatter<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // First print access flags if present
         let access_flags = self.format_access_flags();
@@ -180,7 +180,7 @@ impl<'a> MethodFormatter<'a> {
     /// # Arguments
     ///
     /// * `method` - Reference to the Method to format
-    pub fn new(method: &'a Method) -> Self {
+    pub const fn new(method: &'a Method) -> Self {
         Self { method }
     }
 
@@ -238,7 +238,7 @@ impl<'a> MethodFormatter<'a> {
     }
 }
 
-/// Implements Display for MethodFormatter to enable string conversion
+/// Implements Display for `MethodFormatter` to enable string conversion
 ///
 /// The Display implementation follows Java source syntax:
 /// - Access modifiers first (public, static, etc.)
@@ -246,7 +246,7 @@ impl<'a> MethodFormatter<'a> {
 /// - Method name
 /// - Parameter list in parentheses
 /// - Ending with a semicolon
-impl<'a> Display for MethodFormatter<'a> {
+impl Display for MethodFormatter<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // First print access flags if present
         let access_flags = self.format_access_flags();

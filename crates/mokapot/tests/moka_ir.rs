@@ -1,3 +1,5 @@
+#![allow(missing_docs, clippy::ignore_without_reason)]
+
 use std::collections::{HashSet, VecDeque};
 
 use mokapot::{
@@ -52,7 +54,7 @@ fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(mokapot::ir::BlockId, &mokapot::i
             block
                 .terminator
                 .successors()
-                .filter_map(|edge| edge.block_target()),
+                .filter_map(mokapot::ir::Successor::block_target),
         );
         result.push((id, block));
     }

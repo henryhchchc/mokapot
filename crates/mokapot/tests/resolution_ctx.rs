@@ -1,3 +1,5 @@
+#![allow(missing_docs, clippy::ignore_without_reason)]
+
 use mokapot::{
     analysis::ResolutionContext,
     jvm::{
