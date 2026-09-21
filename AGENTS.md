@@ -25,6 +25,7 @@ Use Rust 2024 edition defaults and keep code `rustfmt`-clean.
 The crate enables strict lints in `src/lib.rs`.
 Avoid `pub(in ...)` visibility.
 Prefer `pub(super)` when possible; otherwise use `pub(crate)` and constrain visibility through module re-exports.
+When the hosting type is already private, its associated items may be `pub`: the type's own visibility already bounds them, and module re-exports guard what is exposed.
 
 ## Testing Guidelines
 
