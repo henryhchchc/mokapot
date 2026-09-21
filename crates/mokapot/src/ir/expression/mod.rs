@@ -119,3 +119,107 @@ impl Expression {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::IdAllocator,
+        jvm::references::FieldRef,
+        types::{field_type::FieldType, reference_type::ReferenceType},
+    };
+
+    /// Every variant reports exactly its operands, including the payload shapes that differ in arity.
+    #[test]
+    fn uses_reports_exactly_the_operands_of_each_variant() {
+        let mut ids = IdAllocator::<ValueId>::default();
+        let (receiver, first, second) = (ids.new_id(), ids.new_id(), ids.new_id());
+        let owner: ReferenceType = "java/lang/Object".parse().expect("a valid class name");
+        let field_type: FieldType = "I".parse().expect("a valid field type");
+        let descriptor: MethodDescriptor = "(II)I".parse().expect("a valid descriptor");
+        let field = FieldRef {
+            owner: owner.clone(),
+            name: "value".to_owned(),
+            field_type,
+        };
+
+        let str_type = "java/lang/String".parse().expect("a valid class name");
+        let cases: [(Expression, HashSet<ValueId>); 12] = [
+            (Expression::Const(ConstantValue::Integer(7)), HashSet::new()),
+            (Expression::New(str_type), HashSet::new()),
+            (
+                Expression::Call {
+                    method: MethodRef {
+                        owner: owner.clone(),
+                        name: "f".to_owned(),
+                        descriptor: descriptor.clone(),
+                    },
+                    this: Some(receiver),
+                    args: vec![first, second],
+                },
+                HashSet::from([receiver, first, second]),
+            ),
+            (
+                Expression::Closure {
+                    name: "lambda".to_owned(),
+                    captures: vec![first, second],
+                    bootstrap_method_index: 0,
+                    closure_descriptor: descriptor,
+                },
+                HashSet::from([first, second]),
+            ),
+            (
+                Expression::Math(MathOperation::Add(first, second)),
+                HashSet::from([first, second]),
+            ),
+            (
+                Expression::Math(MathOperation::Negate(first)),
+                HashSet::from([first]),
+            ),
+            (
+                Expression::Field(FieldAccess::ReadStatic {
+                    field: field.clone(),
+                }),
+                HashSet::new(),
+            ),
+            (
+                Expression::Field(FieldAccess::WriteInstance {
+                    object_ref: receiver,
+                    field,
+                    value: first,
+                }),
+                HashSet::from([receiver, first]),
+            ),
+            (
+                Expression::Array(ArrayOperation::Write {
+                    array_ref: receiver,
+                    index: first,
+                    value: second,
+                }),
+                HashSet::from([receiver, first, second]),
+            ),
+            (
+                Expression::Array(ArrayOperation::Length {
+                    array_ref: receiver,
+                }),
+                HashSet::from([receiver]),
+            ),
+            (
+                Expression::Conversion(Conversion::CheckCast(first, owner)),
+                HashSet::from([first]),
+            ),
+            (
+                Expression::Synchronization(LockOperation::Acquire(first)),
+                HashSet::from([first]),
+            ),
+        ];
+
+        for (expression, expected) in cases {
+            assert_eq!(
+                expression.uses(),
+                expected,
+                "{expression} reports the wrong operands"
+            );
+        }
+    }
+}

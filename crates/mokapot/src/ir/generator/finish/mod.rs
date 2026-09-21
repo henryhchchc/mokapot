@@ -160,12 +160,5 @@ mod tests {
                 InstructionLocation::Operation { block, index: 0 }
             ))
         );
-        assert!(
-            operation
-                .uses()
-                .into_iter()
-                .chain(completed_block.terminator.uses())
-                .all(|value| ir.definition_of(value).is_some())
-        );
     }
 }

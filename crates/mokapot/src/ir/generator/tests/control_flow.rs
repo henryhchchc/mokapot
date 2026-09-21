@@ -223,9 +223,13 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
         .block_target()
         .expect("the entry block falls through into the loop header");
 
+    let header = ir.block(header).unwrap();
+    let [parameter] = header.parameters.as_slice() else {
+        panic!("the loop header merges its counter through exactly one block argument");
+    };
     assert!(
-        !ir.block(header).unwrap().parameters.is_empty(),
-        "a cyclic block must merge its back edge through a block argument"
+        header.terminator.uses().contains(&parameter.value),
+        "the merged counter must feed the loop condition"
     );
 }
 

@@ -220,30 +220,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        ir::{
-            MalformedBytecode, MokaIRBuildError,
-            generator::{cfg, tests::reachable_blocks},
-        },
+        ir::generator::{cfg, tests::reachable_blocks},
         jvm::{code::Instruction, method::AccessFlags},
     };
-
-    #[test]
-    fn rejects_a_missing_fallthrough_even_when_its_source_is_unreachable() {
-        let method = crate::tests::method(
-            [(0, Instruction::Return), (1, Instruction::Nop)],
-            "()V",
-            vec![],
-            AccessFlags::PUBLIC | AccessFlags::STATIC,
-        );
-
-        assert!(matches!(
-            cfg::build(&method),
-            Err(MokaIRBuildError::MalformedBytecode {
-                pc: Some(pc),
-                kind: MalformedBytecode::MissingFallthrough,
-            }) if pc == 1.into()
-        ));
-    }
 
     #[test]
     fn parallel_edges_keep_distinct_internal_parameter_arguments() {

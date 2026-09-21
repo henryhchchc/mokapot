@@ -37,41 +37,42 @@ fn synchronized_return_has_only_exceptional_successors() {
     assert!(matches!(pad.kind, BlockKind::LandingPad { .. }));
 }
 
+/// A return that may unwind — in a `synchronized` method, after a monitor operation, or because
+/// the JVM permits any return to unwind — has exactly one outcome: the method-unwind exit.
 #[test]
-fn unhandled_synchronized_return_reaches_unwind() {
-    let mut method = method([(0, Instruction::Return)], "()V", vec![]);
-    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
-    let ir = build(&method).unwrap();
-    let ret_term = terminator_at(&ir, 0.into());
+fn returns_without_a_handler_unwind_conservatively() {
+    let mut synchronized = method([(0, Instruction::Return)], "()V", vec![]);
+    synchronized.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    let monitor = method(
+        [
+            (0, Instruction::ALoad0),
+            (1, Instruction::MonitorEnter),
+            (2, Instruction::Return),
+        ],
+        "(Ljava/lang/Object;)V",
+        vec![],
+    );
+    let monitor_free = method([(0, Instruction::Return)], "()V", vec![]);
 
-    assert!(matches!(
-        ret_term,
-        Terminator::TryReturn { value: None, .. }
-    ));
-    assert_eq!(ret_term.successors().count(), 1);
-    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
-    assert_eq!(ret_term.successors().next().unwrap().block_target(), None);
-}
-
-#[test]
-fn explicit_monitor_operations_have_fallible_returns() {
-    let instructions = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::MonitorEnter),
-        (2, Instruction::Return),
+    let cases: [(&str, Method, ProgramCounter); 3] = [
+        ("a synchronized method", synchronized, 0.into()),
+        ("an explicit monitor operation", monitor, 2.into()),
+        ("a monitor-free method", monitor_free, 0.into()),
     ];
-    let method = method(instructions, "(Ljava/lang/Object;)V", vec![]);
-    let ir = build(&method).unwrap();
-    let ret_term = terminator_at(&ir, 2.into());
-    assert_eq!(ret_term.successors().count(), 1);
-    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
-}
-
-#[test]
-fn monitor_free_nonsynchronized_return_is_conservatively_fallible() {
-    let method = method([(0, Instruction::Return)], "()V", vec![]);
-    let ir = build(&method).unwrap();
-    let ret_term = terminator_at(&ir, 0.into());
-    assert_eq!(ret_term.successors().count(), 1);
-    assert_eq!(ret_term.successors().next().unwrap().transfer(), None);
+    for (label, case, return_pc) in cases {
+        let ir = build(&case).unwrap();
+        let ret_term = terminator_at(&ir, return_pc);
+        assert!(
+            matches!(ret_term, Terminator::TryReturn { value: None, .. }),
+            "{label} must return fallibly"
+        );
+        let mut outcomes = ret_term.successors();
+        let unwind = outcomes.next().expect("the return has one outcome");
+        assert_eq!(unwind.transfer(), None, "{label}");
+        assert_eq!(unwind.block_target(), None, "{label}");
+        assert!(
+            outcomes.next().is_none(),
+            "{label} has more than one outcome"
+        );
+    }
 }

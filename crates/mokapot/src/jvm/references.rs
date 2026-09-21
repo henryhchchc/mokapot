@@ -106,21 +106,7 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::{arb_binary_name, arb_field_type};
-
-    pub(crate) fn arb_class_ref() -> impl Strategy<Value = ClassRef> {
-        arb_binary_name().prop_map(ClassRef)
-    }
-
-    pub(crate) fn arb_field_ref() -> impl Strategy<Value = FieldRef> {
-        (arb_class_ref(), any::<String>(), arb_field_type()).prop_map(
-            |(owner, name, field_type)| FieldRef {
-                owner: ReferenceType::Class(owner),
-                name,
-                field_type,
-            },
-        )
-    }
+    use crate::tests::arb_binary_name;
 
     proptest! {
 

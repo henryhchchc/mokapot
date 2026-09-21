@@ -40,10 +40,21 @@ fn reports_frame_sources_at_the_executed_instruction() {
 
 #[test]
 fn reports_a_missing_fallthrough_at_the_source_instruction() {
-    let method = method([(4, Instruction::Nop)], "()V", vec![]);
+    let fallthrough = method([(4, Instruction::Nop)], "()V", vec![]);
     assert_eq!(
-        malformed(&method),
+        malformed(&fallthrough),
         (Some(4.into()), MalformedBytecode::MissingFallthrough)
+    );
+
+    // Structural validation runs off the reachable path too.
+    let unreachable = method(
+        [(0, Instruction::Return), (1, Instruction::Nop)],
+        "()V",
+        vec![],
+    );
+    assert_eq!(
+        malformed(&unreachable),
+        (Some(1.into()), MalformedBytecode::MissingFallthrough)
     );
 }
 
