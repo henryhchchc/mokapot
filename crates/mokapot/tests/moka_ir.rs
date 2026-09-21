@@ -29,16 +29,6 @@ fn get_test_method() -> Method {
         .unwrap()
 }
 
-fn operation(
-    method: &MokaIRMethod,
-    location: InstructionLocation,
-) -> Option<&mokapot::ir::Operation> {
-    match method.instruction(location) {
-        Some(InstructionRef::Operation(operation)) => Some(operation),
-        Some(InstructionRef::BlockParameter(_) | InstructionRef::Terminator(_)) | None => None,
-    }
-}
-
 fn terminator(
     method: &MokaIRMethod,
     location: InstructionLocation,
@@ -80,10 +70,13 @@ fn load_test_method() {
 fn builds_ir_blocks_and_provenance() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
 
+    // The `ldc` at `0x0000` may fail, so lifting folds it into the block's
+    // `Try` terminator instead of an ordinary operation.
     let first = ir
         .source_map()
         .instructions_at(ProgramCounter::from(0x0000))
-        .find_map(|id| operation(&ir, id))
+        .find_map(|id| terminator(&ir, id))
+        .and_then(Terminator::operation)
         .unwrap();
     assert!(matches!(
         first,
@@ -105,9 +98,10 @@ fn builds_ir_blocks_and_provenance() {
         .instructions_at(ProgramCounter::from(0x00F7))
         .find_map(|id| terminator(&ir, id))
         .unwrap();
+    // Exiting a method may unwind, so the return is a fallible terminator.
     assert!(matches!(
         returned,
-        Terminator::Return { value: Some(value), .. } if value == &ir.parameter_values()[1]
+        Terminator::TryReturn { value: Some(value), .. } if value == &ir.parameter_values()[1]
     ));
 
     for (block_id, _) in reachable_blocks(&ir) {
@@ -158,6 +152,9 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
             uses.extend(instruction.uses());
         }
         assert!(instruction_locations.insert(InstructionLocation::Terminator { block: block_id }));
+        if let Some(value) = block.terminator.def() {
+            assert!(definitions.insert(value));
+        }
         for successor in block.terminator.successors() {
             assert_eq!(
                 successor.arguments().len(),
