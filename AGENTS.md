@@ -17,13 +17,14 @@ Run commands from the repository root:
 - `cargo clippy --all-targets --all-features -- -D warnings` matches CI lint strictness.
 - `cargo run --example disassembler -- <class-file>` runs the example in `crates/mokapot/examples/disassembler`.
 - `cargo hack check --feature-powerset --no-dev-deps` checks feature combinations used in CI.
+- On macOS, use `/usr/libexec/java_home` (maybe outside the sandbox) to locate `JAVA_HOME`.
 
 ## Coding Style & Naming Conventions
 
 Use Rust 2024 edition defaults and keep code `rustfmt`-clean.
-The crate enables strict lints in `src/lib.rs`, including `clippy::pedantic`, `missing_docs`, and broken intra-doc link denial, so public APIs should be documented and warning-free.
-Follow existing naming patterns: `snake_case` for modules, files, and functions; `PascalCase` for types; focused module names like `class_loader`, `method_descriptor`, and `fixed_point`.
-Avoid `pub(in ...)` visibility. Prefer `pub(super)` when possible; otherwise use `pub(crate)` and constrain visibility through module re-exports.
+The crate enables strict lints in `src/lib.rs`.
+Avoid `pub(in ...)` visibility.
+Prefer `pub(super)` when possible; otherwise use `pub(crate)` and constrain visibility through module re-exports.
 
 ## Testing Guidelines
 
