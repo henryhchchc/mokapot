@@ -1,6 +1,6 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory, definition_operation};
+use super::{LiftContext, ValueCategory};
 use crate::{
     ir::{Operation, ValueId, expression::FieldAccess, generator::error::Error},
     jvm::references::FieldRef,
@@ -12,13 +12,13 @@ impl LiftContext<'_, '_> {
         self.frame
             .stack
             .push(value, ValueCategory::of_field_type(&field.field_type))?;
-        Ok(Some(definition_operation(
-            value,
-            FieldAccess::ReadStatic {
+        Ok(Some({
+            let expr = FieldAccess::ReadStatic {
                 field: field.clone(),
             }
-            .into(),
-        )))
+            .into();
+            Operation::Definition { value, expr }
+        }))
     }
 
     pub(super) fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
@@ -27,14 +27,14 @@ impl LiftContext<'_, '_> {
         self.frame
             .stack
             .push(value, ValueCategory::of_field_type(&field.field_type))?;
-        Ok(Some(definition_operation(
-            value,
-            FieldAccess::ReadInstance {
+        Ok(Some({
+            let expr = FieldAccess::ReadInstance {
                 object_ref,
                 field: field.clone(),
             }
-            .into(),
-        )))
+            .into();
+            Operation::Definition { value, expr }
+        }))
     }
 
     pub(super) fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {

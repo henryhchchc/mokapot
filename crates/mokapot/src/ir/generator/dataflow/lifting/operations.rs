@@ -1,6 +1,6 @@
 use ValueCategory::{Category1, Category2};
 
-use super::{super::Frame, LiftContext, ValueCategory, definition_operation};
+use super::{super::Frame, LiftContext, ValueCategory};
 use crate::ir::{
     Operation, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
@@ -18,7 +18,7 @@ pub(super) fn lift_conversion(
     let operand = frame.stack.pop(operand_category)?;
     frame.stack.push(value, result_category)?;
     let expr = conversion(operand).into();
-    Ok(Some(definition_operation(value, expr)))
+    Ok(Some(Operation::Definition { value, expr }))
 }
 
 #[inline]
@@ -33,7 +33,7 @@ pub(super) fn lift_binary_math(
     frame.stack.push(value, category)?;
 
     let expr = math(lhs, rhs).into();
-    Ok(Some(definition_operation(value, expr)))
+    Ok(Some(Operation::Definition { value, expr }))
 }
 
 impl LiftContext<'_, '_> {
@@ -46,7 +46,7 @@ impl LiftContext<'_, '_> {
         let base = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value, Category2)?;
         let expr = operation(base, shift_amount).into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn compare_long(&mut self) -> Result<Option<Operation>, Error> {
@@ -55,7 +55,7 @@ impl LiftContext<'_, '_> {
         let lhs = self.frame.stack.pop(Category2)?;
         self.frame.stack.push(value, Category1)?;
         let expr = MathOperation::LongComparison(lhs, rhs).into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn compare_float(
@@ -68,6 +68,6 @@ impl LiftContext<'_, '_> {
         let lhs = self.frame.stack.pop(category)?;
         self.frame.stack.push(value, Category1)?;
         let expr = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 }

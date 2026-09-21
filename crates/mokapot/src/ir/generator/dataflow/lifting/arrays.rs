@@ -1,6 +1,6 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory, definition_operation};
+use super::{LiftContext, ValueCategory};
 use crate::{
     ir::{Operation, expression::ArrayOperation, generator::error::Error},
     types::field_type::FieldType,
@@ -16,7 +16,7 @@ impl LiftContext<'_, '_> {
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, category)?;
         let expr = ArrayOperation::Read { array_ref, index }.into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn array_write(
@@ -47,7 +47,7 @@ impl LiftContext<'_, '_> {
             length,
         }
         .into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn new_multi_array(
@@ -65,7 +65,7 @@ impl LiftContext<'_, '_> {
             dimensions,
         }
         .into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn array_length(&mut self) -> Result<Option<Operation>, Error> {
@@ -73,6 +73,6 @@ impl LiftContext<'_, '_> {
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
         let expr = ArrayOperation::Length { array_ref }.into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 }

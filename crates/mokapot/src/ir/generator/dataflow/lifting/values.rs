@@ -1,6 +1,6 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory, definition_operation};
+use super::{LiftContext, ValueCategory};
 use crate::{
     ir::{
         Operation,
@@ -19,7 +19,7 @@ impl LiftContext<'_, '_> {
         let value = self.definition_id();
         self.frame.stack.push(value, category)?;
         let expr = Expression::Const(constant);
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn increment(
@@ -31,7 +31,7 @@ impl LiftContext<'_, '_> {
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value, Category1)?;
         let expr = MathOperation::Increment(base, constant).into();
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 
     pub(super) fn load(
@@ -58,6 +58,6 @@ impl LiftContext<'_, '_> {
         let value = self.definition_id();
         self.frame.stack.push(value, Category1)?;
         let expr = Expression::New(class.clone());
-        Ok(Some(definition_operation(value, expr)))
+        Ok(Some(Operation::Definition { value, expr }))
     }
 }

@@ -13,7 +13,7 @@ use super::{Frame, StackOperation, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
-        expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
+        expression::{Conversion, LockOperation, MathOperation, NaNTreatment},
         generator::error::Error,
     },
     jvm::{
@@ -22,11 +22,6 @@ use crate::{
     },
     types::field_type::FieldType,
 };
-
-/// Builds the definition operation produced by a lifted expression.
-const fn definition_operation(value: ValueId, expr: Expression) -> Operation {
-    Operation::Definition { value, expr }
-}
 
 pub(super) struct LiftContext<'values, 'frame> {
     values: &'values mut ValueContext,
@@ -231,7 +226,7 @@ impl LiftContext<'_, '_> {
             let operand = frame.stack.pop(category)?;
             frame.stack.push(value, category)?;
             let expr = operation(operand).into();
-            Ok(Some(definition_operation(value, expr)))
+            Ok(Some(Operation::Definition { value, expr }))
         })
     }
 
