@@ -199,6 +199,37 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
 }
 
 #[test]
+fn loop_header_takes_a_block_argument_from_its_back_edge() {
+    let body = [
+        (0, Instruction::IConst0),
+        (1, Instruction::IStore1),
+        (2, Instruction::ILoad1),
+        (3, Instruction::ILoad0),
+        (4, Instruction::IfICmpGe(7.into())),
+        (5, Instruction::IInc(1, 1)),
+        (6, Instruction::Goto(2.into())),
+        (7, Instruction::ILoad1),
+        (8, Instruction::IReturn),
+    ];
+    let method = method(body, "(I)I", vec![]);
+    let ir = build(&method).unwrap();
+    let header = ir
+        .block(ir.entry_block())
+        .unwrap()
+        .terminator
+        .successors()
+        .next()
+        .unwrap()
+        .block_target()
+        .expect("the entry block falls through into the loop header");
+
+    assert!(
+        !ir.block(header).unwrap().parameters.is_empty(),
+        "a cyclic block must merge its back edge through a block argument"
+    );
+}
+
+#[test]
 fn throw_is_a_source_backed_terminator() {
     let body = [(0, Instruction::ALoad0), (1, Instruction::AThrow)];
     let method = method(body, "(Ljava/lang/Throwable;)V", vec![]);

@@ -16,6 +16,8 @@ use crate::{
 pub(super) struct BlockState {
     incoming_frames: HashMap<FrameSource, Frame>,
     parameters: BTreeMap<Position, ValueId>,
+    /// The most recently merged input frame.
+    input: Frame,
     execution: ExecutionState,
 }
 
@@ -24,7 +26,8 @@ impl BlockState {
         Self {
             incoming_frames: HashMap::from([(source, frame.clone())]),
             parameters: BTreeMap::new(),
-            execution: ExecutionState::Ready(frame),
+            input: frame,
+            execution: ExecutionState::Ready,
         }
     }
 
@@ -43,11 +46,12 @@ impl BlockState {
             values,
         )?;
         self.parameters = parameters;
-        Ok(self.execution.update_input(input))
+        Ok(self.update_input(input))
     }
 
     pub(super) fn begin_execution(&mut self) -> Frame {
-        self.execution.begin()
+        self.execution.begin();
+        self.input.clone()
     }
 
     pub(super) fn complete(&mut self, block: FrameBlock) {
@@ -59,6 +63,17 @@ impl BlockState {
             panic!("the worklist must drain only after every reachable block completes");
         };
         BlockSolution::new(self.incoming_frames, self.parameters, block)
+    }
+
+    /// Records a freshly merged input frame, reporting whether it differs from
+    /// the frame the block last executed with.
+    fn update_input(&mut self, input: Frame) -> bool {
+        if self.input == input {
+            return false;
+        }
+        self.input = input;
+        self.execution = ExecutionState::Ready;
+        true
     }
 }
 
@@ -91,27 +106,16 @@ impl BlockSolution {
     reason = "each block moves from Ready through Running to Complete"
 )]
 enum ExecutionState {
-    Ready(Frame),
+    Ready,
     Running,
     Complete(FrameBlock),
 }
 
 impl ExecutionState {
-    fn begin(&mut self) -> Frame {
-        let Self::Ready(input) = std::mem::replace(self, Self::Running) else {
+    fn begin(&mut self) {
+        let Self::Ready = std::mem::replace(self, Self::Running) else {
             panic!("a scheduled block must be ready");
         };
-        input
-    }
-
-    fn update_input(&mut self, input: Frame) -> bool {
-        if let Self::Ready(current) = self
-            && current == &input
-        {
-            return false;
-        }
-        *self = Self::Ready(input);
-        true
     }
 
     fn complete(&mut self, block: FrameBlock) {
