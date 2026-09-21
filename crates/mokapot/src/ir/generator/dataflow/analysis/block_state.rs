@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use derive_more::Constructor;
+
 use super::{
     super::{Frame, Position, values::ValueContext},
     frame_block::{FrameBlock, FrameSource},
@@ -154,23 +156,9 @@ impl BlockParameters {
 }
 
 /// One block after fixed-point execution has completed.
-#[derive(Debug)]
+#[derive(Debug, Constructor)]
 pub(crate) struct BlockSolution {
     pub(crate) incoming_frames: HashMap<FrameSource, Frame>,
     pub(crate) parameters: BTreeMap<Position, ValueId>,
     pub(crate) block: FrameBlock,
-}
-
-impl BlockSolution {
-    const fn new(
-        incoming_frames: HashMap<FrameSource, Frame>,
-        parameters: BTreeMap<Position, ValueId>,
-        block: FrameBlock,
-    ) -> Self {
-        Self {
-            incoming_frames,
-            parameters,
-            block,
-        }
-    }
 }
