@@ -18,7 +18,8 @@ pub(super) struct BlockState {
     parameters: BlockParameters,
     /// The most recently merged input frame.
     input: Frame,
-    execution: ExecutionState,
+    /// The interpretation of `input`, once the block has run with it.
+    result: Option<FrameBlock>,
 }
 
 impl BlockState {
@@ -27,7 +28,7 @@ impl BlockState {
             incoming_frames: HashMap::from([(source, frame.clone())]),
             parameters: BlockParameters::default(),
             input: frame,
-            execution: ExecutionState::Ready,
+            result: None,
         }
     }
 
@@ -45,19 +46,23 @@ impl BlockState {
         Ok(self.update_input(input))
     }
 
-    pub(super) fn begin_execution(&mut self) -> Frame {
-        self.execution.begin();
+    /// The frame this block is to be interpreted with.
+    pub(super) fn input(&self) -> Frame {
         self.input.clone()
     }
 
     pub(super) fn complete(&mut self, block: FrameBlock) {
-        self.execution.complete(block);
+        debug_assert!(
+            self.result.is_none(),
+            "only a block awaiting interpretation can finish interpretation"
+        );
+        self.result = Some(block);
     }
 
     pub(super) fn into_solution(self) -> BlockSolution {
-        let ExecutionState::Complete(block) = self.execution else {
-            panic!("the worklist must drain only after every reachable block completes");
-        };
+        let block = self
+            .result
+            .expect("the worklist must drain only after every reachable block completes");
         BlockSolution::new(self.incoming_frames, self.parameters.declared, block)
     }
 
@@ -68,7 +73,7 @@ impl BlockState {
             return false;
         }
         self.input = input;
-        self.execution = ExecutionState::Ready;
+        self.result = None;
         true
     }
 }
@@ -171,32 +176,5 @@ impl BlockSolution {
             parameters,
             block,
         }
-    }
-}
-
-/// Execution lifecycle of a reachable block.
-#[derive(Debug)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "each block moves from Ready through Running to Complete"
-)]
-enum ExecutionState {
-    Ready,
-    Running,
-    Complete(FrameBlock),
-}
-
-impl ExecutionState {
-    fn begin(&mut self) {
-        let Self::Ready = std::mem::replace(self, Self::Running) else {
-            panic!("a scheduled block must be ready");
-        };
-    }
-
-    fn complete(&mut self, block: FrameBlock) {
-        let Self::Running = self else {
-            panic!("only a running block can finish interpretation");
-        };
-        *self = Self::Complete(block);
     }
 }

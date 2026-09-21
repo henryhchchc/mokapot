@@ -39,7 +39,7 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
                 .get_mut(&block_id)
                 .expect("a worklist block must have analysis state");
 
-            let input = state.begin_execution();
+            let input = state.input();
             let block = self
                 .interpreter
                 .interpret(&mut self.values, block_id, input)?;
