@@ -15,14 +15,7 @@ use crate::{
 #[derive(Debug)]
 pub(super) struct BlockState {
     incoming_frames: HashMap<FrameSource, Frame>,
-    parameters: BTreeMap<Position, ValueId>,
-    /// Every parameter identity ever allocated at this block, keyed by site.
-    ///
-    /// Identities are retained across merges so that a site which stops and then
-    /// resumes conflicting reuses the same value instead of allocating a fresh
-    /// one; otherwise merging a cyclic block churns through new identities
-    /// without ever reaching a fixed point.
-    parameter_ids: BTreeMap<Position, ValueId>,
+    parameters: BlockParameters,
     /// The most recently merged input frame.
     input: Frame,
     execution: ExecutionState,
@@ -32,8 +25,7 @@ impl BlockState {
     pub(super) fn new(source: FrameSource, frame: Frame) -> Self {
         Self {
             incoming_frames: HashMap::from([(source, frame.clone())]),
-            parameters: BTreeMap::new(),
-            parameter_ids: BTreeMap::new(),
+            parameters: BlockParameters::default(),
             input: frame,
             execution: ExecutionState::Ready,
         }
@@ -47,14 +39,9 @@ impl BlockState {
         values: &mut ValueContext,
     ) -> Result<bool, Error> {
         self.incoming_frames.insert(source, frame);
-        let (input, parameters) = merge_frames(
-            self.incoming_frames.values(),
-            &self.parameters,
-            &mut self.parameter_ids,
-            block_pc,
-            values,
-        )?;
-        self.parameters = parameters;
+        let input = self
+            .parameters
+            .merge(self.incoming_frames.values(), block_pc, values)?;
         Ok(self.update_input(input))
     }
 
@@ -71,7 +58,7 @@ impl BlockState {
         let ExecutionState::Complete(block) = self.execution else {
             panic!("the worklist must drain only after every reachable block completes");
         };
-        BlockSolution::new(self.incoming_frames, self.parameters, block)
+        BlockSolution::new(self.incoming_frames, self.parameters.declared, block)
     }
 
     /// Records a freshly merged input frame, reporting whether it differs from
@@ -83,6 +70,85 @@ impl BlockState {
         self.input = input;
         self.execution = ExecutionState::Ready;
         true
+    }
+}
+
+/// The block parameters of one block.
+///
+/// A site is declared a parameter only while the merged frame still holds a
+/// value for it, but its identity is retained for the rest of the analysis.
+/// Reusing the identity lets the merge reach a fixed point; allocating a fresh
+/// one on every reappearance instead makes a cyclic block churn forever.
+#[derive(Debug, Default)]
+struct BlockParameters {
+    /// Sites whose values the block currently declares on entry.
+    declared: BTreeMap<Position, ValueId>,
+    /// Identity retained for every site that has ever been a parameter.
+    identities: BTreeMap<Position, ValueId>,
+}
+
+impl BlockParameters {
+    /// Merges every incoming frame, updating the declared parameters in place.
+    fn merge<'frames>(
+        &mut self,
+        frames: impl Iterator<Item = &'frames Frame>,
+        block_pc: Option<ProgramCounter>,
+        values: &mut ValueContext,
+    ) -> Result<Frame, Error> {
+        let mut frames = frames;
+        let mut merged = frames
+            .next()
+            .expect("a block must be created with its first incoming frame")
+            .clone();
+        // A site that is already a parameter stays one and keeps its identity,
+        // even while every incoming frame transiently agrees. That monotone
+        // parameter set is what lets a cyclic block reach a fixed point instead
+        // of flipping between a parameter and a narrower frame; `canonicalize`
+        // eliminates the parameters a block does not end up needing.
+        let mut active = self.declared.clone();
+
+        for incoming in frames {
+            merged
+                .merge_from_with(incoming.clone(), |position, lhs, rhs| {
+                    self.join(position, lhs, rhs, &mut active, values);
+                    Ok::<_, Error>(())
+                })
+                .map_err(|error| match block_pc {
+                    Some(pc) => error.at_instruction(pc),
+                    None => error,
+                })?;
+        }
+
+        self.declared = active
+            .into_iter()
+            .filter(|(position, result)| merged.value_at(*position) == Some(result))
+            .collect();
+        Ok(merged)
+    }
+
+    /// Records one merged position, keeping an active parameter as is and
+    /// otherwise reusing or allocating the site's identity.
+    fn join(
+        &mut self,
+        position: Position,
+        lhs: &mut ValueId,
+        rhs: ValueId,
+        active: &mut BTreeMap<Position, ValueId>,
+        values: &mut ValueContext,
+    ) {
+        if let Some(&result) = active.get(&position) {
+            *lhs = result;
+            return;
+        }
+        if *lhs == rhs {
+            return;
+        }
+        let result = *self
+            .identities
+            .entry(position)
+            .or_insert_with(|| values.fresh());
+        active.insert(position, result);
+        *lhs = result;
     }
 }
 
@@ -133,75 +199,4 @@ impl ExecutionState {
         };
         *self = Self::Complete(block);
     }
-}
-
-fn merge_frames<'frames>(
-    frames: impl Iterator<Item = &'frames Frame>,
-    previous_parameters: &BTreeMap<Position, ValueId>,
-    parameter_ids: &mut BTreeMap<Position, ValueId>,
-    block_pc: Option<ProgramCounter>,
-    values: &mut ValueContext,
-) -> Result<(Frame, BTreeMap<Position, ValueId>), Error> {
-    let mut frames = frames;
-    let mut merged = frames
-        .next()
-        .expect("a block must be created with its first incoming frame")
-        .clone();
-    // A site that is already a parameter stays one and keeps its identity, even
-    // while every incoming frame transiently agrees. Making the parameter set
-    // monotone is what lets a cyclic block reach a fixed point instead of
-    // flipping between a parameter and a narrower frame. `canonicalize`
-    // eliminates the parameters a block does not end up needing.
-    let mut active_parameters = previous_parameters.clone();
-
-    for incoming in frames {
-        merged
-            .merge_from_with(incoming.clone(), |position, lhs, rhs| {
-                merge_value(
-                    position,
-                    lhs,
-                    rhs,
-                    parameter_ids,
-                    &mut active_parameters,
-                    values,
-                );
-                Ok::<_, Error>(())
-            })
-            .map_err(|error| match block_pc {
-                Some(pc) => error.at_instruction(pc),
-                None => error,
-            })?;
-    }
-
-    // A site is declared a parameter only while the merged frame still holds
-    // its identity; the identity itself is retained in `parameter_ids` for
-    // later merges.
-    let declared = active_parameters
-        .into_iter()
-        .filter(|(position, result)| merged.value_at(*position) == Some(result))
-        .collect();
-
-    Ok((merged, declared))
-}
-
-fn merge_value(
-    position: Position,
-    lhs: &mut ValueId,
-    rhs: ValueId,
-    parameter_ids: &mut BTreeMap<Position, ValueId>,
-    active_parameters: &mut BTreeMap<Position, ValueId>,
-    values: &mut ValueContext,
-) {
-    if let Some(&result) = active_parameters.get(&position) {
-        *lhs = result;
-        return;
-    }
-    if *lhs == rhs {
-        return;
-    }
-    let result = *parameter_ids
-        .entry(position)
-        .or_insert_with(|| values.fresh());
-    active_parameters.insert(position, result);
-    *lhs = result;
 }
