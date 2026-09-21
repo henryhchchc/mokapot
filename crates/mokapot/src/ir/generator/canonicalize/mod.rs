@@ -13,11 +13,11 @@ use crate::ir::{ValueId, generator::draft::DraftMethod};
 pub(super) fn canonicalize(draft: &mut DraftMethod) {
     let mut inputs = HashMap::<ValueId, Vec<ValueId>>::new();
     // `resolve_blocks` lowers one argument per parameter position, so the arities match.
-    let entry = &draft.blocks[&draft.entry];
+    let entry = &draft.blocks[&draft.entry.target];
     entry
         .parameters
         .iter()
-        .zip(&draft.entry_arguments)
+        .zip(&draft.entry.arguments)
         .for_each(|(param, &arg)| inputs.entry(param.value).or_default().push(arg));
 
     draft

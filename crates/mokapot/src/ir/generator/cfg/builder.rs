@@ -247,7 +247,7 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = cfg::build(&method).unwrap();
-        let (mut draft, _) = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
+        let mut draft = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
         let (&target, target_block) = draft
             .blocks
             .iter()
@@ -270,7 +270,7 @@ mod tests {
             panic!("the public join does not hold exactly one parameter");
         };
         assert_eq!(parameter.value, parameter_value);
-        let public_incoming = reachable_of(&draft.blocks, draft.entry)
+        let public_incoming = reachable_of(&draft.blocks, draft.entry.target)
             .into_iter()
             .map(|(_, block)| block)
             .flat_map(|block| block.terminator.successors())
