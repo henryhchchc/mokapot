@@ -3,7 +3,6 @@
 mod error;
 mod local_variables;
 mod operand_stack;
-mod value_category;
 
 #[cfg(test)]
 mod tests;
@@ -12,9 +11,11 @@ pub use error::Error as FrameError;
 use local_variables::LocalVariables;
 use operand_stack::OperandStack;
 pub(super) use operand_stack::StackOperation;
-pub(super) use value_category::ValueCategory;
 
-use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
+use crate::{
+    ir::ValueId,
+    types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

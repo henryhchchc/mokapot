@@ -1,6 +1,6 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory};
+use super::LiftContext;
 use crate::{
     ir::{
         Operation,
@@ -8,6 +8,7 @@ use crate::{
         generator::error::Error,
     },
     jvm::{ConstantValue, references::ClassRef},
+    types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {

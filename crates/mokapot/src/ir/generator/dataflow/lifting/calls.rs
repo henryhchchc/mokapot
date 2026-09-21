@@ -1,10 +1,13 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory};
+use super::LiftContext;
 use crate::{
     ir::{Operation, ValueId, expression::Expression, generator::error::Error},
     jvm::references::MethodRef,
-    types::method_descriptor::{MethodDescriptor, ReturnType},
+    types::{
+        field_type::ValueCategory,
+        method_descriptor::{MethodDescriptor, ReturnType},
+    },
 };
 
 #[derive(Clone, Copy)]
@@ -64,10 +67,9 @@ impl LiftContext<'_, '_> {
 
     fn call_result(&mut self, return_type: &ReturnType) -> CallResult {
         match return_type {
-            ReturnType::Some(return_type) => CallResult::Value(
-                self.definition_id(),
-                ValueCategory::of_field_type(return_type),
-            ),
+            ReturnType::Some(return_type) => {
+                CallResult::Value(self.definition_id(), return_type.value_category())
+            }
             ReturnType::Void => CallResult::Void,
         }
     }

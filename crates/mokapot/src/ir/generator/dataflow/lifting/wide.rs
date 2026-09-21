@@ -1,9 +1,10 @@
 use ValueCategory::{Category1, Category2};
 
-use super::{LiftContext, ValueCategory};
+use super::LiftContext;
 use crate::{
     ir::{Operation, generator::error::Error},
     jvm::code::WideInstruction,
+    types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {

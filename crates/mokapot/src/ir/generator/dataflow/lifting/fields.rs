@@ -1,9 +1,10 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory};
+use super::LiftContext;
 use crate::{
     ir::{Operation, ValueId, expression::FieldAccess, generator::error::Error},
     jvm::references::FieldRef,
+    types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {
@@ -11,7 +12,7 @@ impl LiftContext<'_, '_> {
         let value = self.definition_id();
         self.frame
             .stack
-            .push(value, ValueCategory::of_field_type(&field.field_type))?;
+            .push(value, field.field_type.value_category())?;
         let expr = FieldAccess::ReadStatic {
             field: field.clone(),
         }
@@ -24,7 +25,7 @@ impl LiftContext<'_, '_> {
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
             .stack
-            .push(value, ValueCategory::of_field_type(&field.field_type))?;
+            .push(value, field.field_type.value_category())?;
         let expr = FieldAccess::ReadInstance {
             object_ref,
             field: field.clone(),
@@ -55,9 +56,6 @@ impl LiftContext<'_, '_> {
     }
 
     fn pop_field_value(&mut self, field: &FieldRef) -> Result<ValueId, Error> {
-        Ok(self
-            .frame
-            .stack
-            .pop(ValueCategory::of_field_type(&field.field_type))?)
+        Ok(self.frame.stack.pop(field.field_type.value_category())?)
     }
 }

@@ -1,5 +1,8 @@
-use super::{ValueCategory, error::Error};
-use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
+use super::error::Error;
+use crate::{
+    ir::ValueId,
+    types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct LocalValue {
@@ -121,7 +124,7 @@ impl LocalVariables {
             .parameters_types
             .iter()
             .zip(parameters)
-            .map(|(ty, value)| (*value, ValueCategory::of_field_type(ty)));
+            .map(|(ty, value)| (*value, ty.value_category()));
         let mut entries = this_value
             .map(|value| (value, ValueCategory::Category1))
             .into_iter()
