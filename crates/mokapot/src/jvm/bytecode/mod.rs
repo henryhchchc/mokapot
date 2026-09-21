@@ -15,15 +15,17 @@ use std::{
     num::TryFromIntError,
 };
 
+use num_traits::ToBytes;
+
 #[cfg(not(feature = "unstable-bytecode-generation"))]
 pub(crate) use crate::jvm::errors::GenerationError;
 #[cfg(feature = "unstable-bytecode-generation")]
 pub use crate::jvm::errors::{GenerationError, GenerationErrorKind};
 pub use crate::jvm::errors::{ParseError, ParseErrorKind};
-use num_traits::ToBytes;
-
-use crate::jvm::class::{ConstantPool, Version};
-use crate::types::binary_name::BinaryName;
+use crate::{
+    jvm::class::{ConstantPool, Version},
+    types::binary_name::BinaryName,
+};
 
 /// Maintains context for parsing a JVM class file.
 ///

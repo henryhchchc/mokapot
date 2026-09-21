@@ -2,14 +2,13 @@
 
 use std::{cmp::Ordering, hash::Hash};
 
+use super::{JavaString, class::MethodHandle};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
         field_type::FieldType, method_descriptor::MethodDescriptor, reference_type::ReferenceType,
     },
 };
-
-use super::{JavaString, class::MethodHandle};
 
 /// Denotes a compile-time constant value.
 ///

@@ -178,8 +178,9 @@ fn validate(name: &str) -> Result<(), InvalidBinaryName> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     fn binary_name_segments() -> impl Strategy<Value = Vec<String>> {
         prop::collection::vec(

@@ -2,11 +2,10 @@
 
 pub mod constant_pool;
 
-pub use constant_pool::ConstantPool;
-
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
+pub use constant_pool::ConstantPool;
 
 use super::{
     Annotation, Class, ConstantValue, Field, Method,

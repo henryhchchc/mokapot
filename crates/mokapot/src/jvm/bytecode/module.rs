@@ -5,10 +5,10 @@ use itertools::Itertools;
 use super::{
     GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
 };
-use crate::jvm::errors::ParsingErrorContext;
 use crate::jvm::{
     Module,
     class::{ConstantPool, constant_pool::Entry},
+    errors::ParsingErrorContext,
     module::{Export, Open, Provide, Require},
 };
 

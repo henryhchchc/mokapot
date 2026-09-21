@@ -184,9 +184,11 @@ impl InstructionList<RawInstruction> {
 }
 
 pub mod instruction_list {
-    use crate::jvm::code::ProgramCounter;
-    use derive_more::Constructor;
     use std::collections::BTreeMap;
+
+    use derive_more::Constructor;
+
+    use crate::jvm::code::ProgramCounter;
 
     #[derive(Debug, Constructor)]
     pub struct Iter<'a, I> {

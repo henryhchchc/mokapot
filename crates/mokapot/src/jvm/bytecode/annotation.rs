@@ -5,7 +5,6 @@ use itertools::Itertools;
 use super::{
     GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
 };
-use crate::jvm::errors::ParsingErrorContext;
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
@@ -15,6 +14,7 @@ use crate::{
         },
         class::{ConstantPool, constant_pool},
         code::LocalVariableId,
+        errors::ParsingErrorContext,
     },
     types::{Descriptor, field_type::PrimitiveType},
 };

@@ -20,9 +20,8 @@ pub mod module;
 pub mod references;
 
 pub mod constant_value;
-pub use constant_value::ConstantValue;
-
 pub use class_loader::ClassLoader;
+pub use constant_value::ConstantValue;
 
 /// A JVM class
 #[doc = see_jvm_spec!(4, 1)]

@@ -104,8 +104,9 @@ where
 mod test {
     use std::io::ErrorKind::UnexpectedEof;
 
-    use super::BytecodeReader;
     use proptest::prelude::*;
+
+    use super::BytecodeReader;
 
     #[test]
     fn read_bytes_success() {

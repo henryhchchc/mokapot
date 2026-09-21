@@ -9,8 +9,7 @@ use crate::{
         code::LocalVariableId,
         errors::{GenerationError, ParsingErrorContext},
     },
-    types::Descriptor,
-    types::field_type::FieldType,
+    types::{Descriptor, field_type::FieldType},
 };
 
 #[derive(Debug)]

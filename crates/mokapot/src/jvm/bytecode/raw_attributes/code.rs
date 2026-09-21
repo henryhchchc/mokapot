@@ -1,7 +1,9 @@
 //! Raw attribute types for the `Code` attribute and its sub-attributes.
 
-use std::io::{self, Read, Write};
-use std::result::Result;
+use std::{
+    io::{self, Read, Write},
+    result::Result,
+};
 
 use super::super::{
     FromBytecode, GenerationError, ToBytecode,

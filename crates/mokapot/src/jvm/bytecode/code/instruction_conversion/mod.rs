@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 
+use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
         bytecode::{GenerationError, ParseError, ParsingContext, class_element::ClassElement},
@@ -13,8 +14,6 @@ use crate::{
     },
     types::field_type::PrimitiveType,
 };
-
-use super::raw_instruction::{RawInstruction, RawWideInstruction};
 
 impl ClassElement for InstructionList<Instruction> {
     type Raw = InstructionList<RawInstruction>;

@@ -9,6 +9,7 @@ use std::{
 };
 
 use itertools::Itertools;
+pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
 
 use super::{
     FromBytecode, ParseError, ParsingContext, ToBytecode,
@@ -20,18 +21,16 @@ use super::{
 use crate::{
     intrinsics::extract_attributes,
     jvm::{
+        bytecode::code::raw_instruction::RawInstruction,
         class::ConstantPool,
         code::{
             ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableTable,
             MethodBody, ProgramCounter,
         },
+        errors::GenerationError,
         method::{ParameterAccessFlags, ParameterInfo},
     },
 };
-
-pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
-
-use crate::jvm::{bytecode::code::raw_instruction::RawInstruction, errors::GenerationError};
 
 impl ClassElement for LineNumberTableEntry {
     type Raw = Self;

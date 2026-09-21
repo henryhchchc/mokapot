@@ -111,8 +111,9 @@ pub struct InvalidOffset;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]
