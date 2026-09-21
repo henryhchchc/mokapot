@@ -5,8 +5,9 @@ use std::{
 
 use proptest::{collection::hash_set, prelude::*};
 
-use super::cover::Cover;
-use super::{BooleanVariable, BranchGuard, PathCondition, PathConditionTerm, SolvingBudget};
+use super::{
+    BooleanVariable, BranchGuard, PathCondition, PathConditionTerm, SolvingBudget, cover::Cover,
+};
 
 impl<P> PathConditionTerm<'_, P> {
     /// Iterates over this term's literals.

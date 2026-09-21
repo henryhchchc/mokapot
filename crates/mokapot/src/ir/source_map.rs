@@ -94,9 +94,10 @@ impl SourceMap {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::ir::{BlockId, NumericalId};
-    use std::collections::HashSet;
 
     #[test]
     fn source_map_is_sparse_and_one_to_many() {

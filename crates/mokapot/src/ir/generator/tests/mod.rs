@@ -1,5 +1,7 @@
-use std::collections::{BTreeMap, HashSet, VecDeque};
-use std::ops::Range;
+use std::{
+    collections::{BTreeMap, HashSet, VecDeque},
+    ops::Range,
+};
 
 use crate::{
     ir::{

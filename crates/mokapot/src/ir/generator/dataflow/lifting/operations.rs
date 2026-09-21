@@ -1,11 +1,11 @@
-use super::super::Frame;
-use super::{LiftContext, ValueCategory, definition_operation};
+use ValueCategory::{Category1, Category2};
+
+use super::{super::Frame, LiftContext, ValueCategory, definition_operation};
 use crate::ir::{
     Operation, ValueId,
     expression::{Conversion, MathOperation, NaNTreatment},
     generator::error::Error,
 };
-use ValueCategory::{Category1, Category2};
 
 #[inline]
 pub(super) fn lift_conversion(

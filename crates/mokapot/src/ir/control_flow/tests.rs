@@ -1,9 +1,10 @@
+use std::collections::HashMap;
+
 use super::*;
 use crate::ir::{
     BasicBlock, BlockKind, NumericalId, Successor, Terminator,
     control_flow::path_condition::BooleanVariable, expression::Predicate,
 };
-use std::collections::HashMap;
 
 fn code_bb(id: u32, terminator: Terminator) -> (BlockId, BasicBlock) {
     let bb = BasicBlock {

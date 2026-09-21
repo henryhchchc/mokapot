@@ -1,9 +1,15 @@
 //! Block representation carrying analyzed frames on its successor arms.
 
-use super::super::Frame;
-use crate::ir::{BlockId, BlockKind, Operation, Terminator, control_flow::ControlTransfer};
-use crate::{ir::generator::cfg::ArmKey, jvm::code::ProgramCounter};
 use derive_more::Constructor;
+
+use super::super::Frame;
+use crate::{
+    ir::{
+        BlockId, BlockKind, Operation, Terminator, control_flow::ControlTransfer,
+        generator::cfg::ArmKey,
+    },
+    jvm::code::ProgramCounter,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FrameSource {

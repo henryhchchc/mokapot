@@ -6,9 +6,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::ir::{BlockId, BlockKind, InstructionLocation, Terminator, ValueDefinition, ValueId};
-
 use super::MokaIRMethod;
+use crate::ir::{BlockId, BlockKind, InstructionLocation, Terminator, ValueDefinition, ValueId};
 
 /// Where a value is read.
 #[derive(Debug, Clone, Copy)]

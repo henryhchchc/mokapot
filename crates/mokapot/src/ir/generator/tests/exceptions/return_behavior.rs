@@ -1,6 +1,5 @@
 use super::*;
-use crate::ir::BlockKind;
-use crate::jvm::method;
+use crate::{ir::BlockKind, jvm::method};
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {

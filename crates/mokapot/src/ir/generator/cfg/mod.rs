@@ -11,6 +11,8 @@ mod layout;
 
 use std::collections::HashMap;
 
+pub(super) use control_flow::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget};
+
 use super::error::Error;
 use crate::{
     ir::BlockId,
@@ -19,8 +21,6 @@ use crate::{
         code::{Instruction, MethodBody, ProgramCounter},
     },
 };
-
-pub(super) use control_flow::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget};
 
 /// Builds the reachable control-flow graph used by the later dataflow stage.
 pub(super) fn build(method: &Method) -> Result<Cfg<'_>, Error> {

@@ -1,18 +1,18 @@
 //! Path condition analysis.
 
 use std::{
-    collections::HashMap,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Display,
     hash::{Hash, Hasher},
     ops::{BitAnd, BitOr},
 };
 
+use itertools::Itertools;
+
 use crate::{
     analysis::fixed_point,
     ir::{BasicBlock, BlockId, expression::Predicate},
 };
-use itertools::Itertools;
 
 mod analyzer;
 mod branch_guard;
@@ -26,10 +26,9 @@ mod predicate;
 #[cfg(test)]
 mod tests;
 
-use cover::Cover;
-
 pub use branch_guard::BranchGuard;
 pub use budget::SolvingBudget;
+use cover::Cover;
 pub use literal::BooleanVariable;
 pub use predicate::PathValue;
 

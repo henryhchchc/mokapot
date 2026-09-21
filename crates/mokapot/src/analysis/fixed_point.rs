@@ -496,7 +496,10 @@ impl<T: JoinSemiLattice> JoinSemiLattice for Option<T> {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, collections::BTreeSet, convert::Infallible};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        convert::Infallible,
+    };
 
     use proptest::prelude::*;
 

@@ -1,11 +1,10 @@
 use std::iter::{once, repeat_n};
 
+use ValueCategory::{Category1, Category2};
 use itertools::Itertools;
 
 use super::{ValueCategory, error::Error};
 use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
-
-use ValueCategory::{Category1, Category2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StackOperation {

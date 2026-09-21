@@ -1,10 +1,11 @@
+use ValueCategory::Category1;
+
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{Operation, ValueId, expression::Expression, generator::error::Error},
     jvm::references::MethodRef,
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
-use ValueCategory::Category1;
 
 enum CallResult {
     Value(ValueId, ValueCategory),

@@ -6,16 +6,18 @@ use super::super::super::{
     Frame,
     ValueCategory::{Category1, Category2},
 };
-use crate::ir::{
-    BlockId, ValueId,
-    control_flow::{
-        ControlTransfer,
-        path_condition::{BooleanVariable, BranchGuard, PathValue},
+use crate::{
+    ir::{
+        BlockId, ValueId,
+        control_flow::{
+            ControlTransfer,
+            path_condition::{BooleanVariable, BranchGuard, PathValue},
+        },
+        expression::Predicate,
+        generator::error::Error,
     },
-    expression::Predicate,
-    generator::error::Error,
+    jvm::{ConstantValue, code::Instruction},
 };
-use crate::jvm::{ConstantValue, code::Instruction};
 
 /// Pops the compared operands and returns the transfers selected when the branch
 /// is taken and when it is not.

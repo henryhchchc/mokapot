@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
+use super::BooleanVariable;
 use crate::{
     ir::{ValueId, expression::Predicate},
     jvm::ConstantValue,
 };
-
-use super::BooleanVariable;
 
 impl BooleanVariable<Predicate> {
     fn canonicalize(self) -> Self {

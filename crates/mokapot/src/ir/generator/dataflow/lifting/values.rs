@@ -1,3 +1,5 @@
+use ValueCategory::Category1;
+
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{
@@ -7,7 +9,6 @@ use crate::{
     },
     jvm::{ConstantValue, references::ClassRef},
 };
-use ValueCategory::Category1;
 
 impl LiftContext<'_, '_> {
     pub(super) fn constant(

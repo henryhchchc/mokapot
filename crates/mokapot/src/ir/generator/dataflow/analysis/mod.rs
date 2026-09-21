@@ -5,11 +5,11 @@ mod execution;
 mod frame_block;
 mod solver;
 
+use std::collections::HashMap;
+
 pub(super) use block_state::BlockSolution;
 pub(super) use frame_block::{FrameArm, FrameBlock, FrameSource};
 pub(super) use solver::DataflowSolver;
-
-use std::collections::HashMap;
 
 use crate::ir::{BlockId, ValueId};
 

@@ -1,6 +1,5 @@
-use crate::ir::BlockKind;
-
 use super::*;
+use crate::ir::BlockKind;
 
 #[test]
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
