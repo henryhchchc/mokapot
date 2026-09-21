@@ -30,6 +30,18 @@ trait-gen = "2.0"
 walkdir = "2.5"
 zip = { version = "8.6", default-features = false }
 
+[workspace.lints.clippy]
+missing_const_for_fn = "warn"
+pedantic = "warn"
+
+[workspace.lints.rust]
+future-incompatible = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+
 [profile.integration-test]
 inherits = "test"
 opt-level = 3
