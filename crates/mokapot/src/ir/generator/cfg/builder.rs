@@ -220,7 +220,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        ir::generator::{cfg, tests::reachable_blocks},
+        ir::generator::{cfg, tests::reachable_of},
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -247,7 +247,7 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = cfg::build(&method).unwrap();
-        let (mut draft, source_map) = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
+        let (mut draft, _) = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
         let (&target, target_block) = draft
             .blocks
             .iter()
@@ -266,12 +266,11 @@ mod tests {
         assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
 
         crate::ir::generator::canonicalize::canonicalize(&mut draft);
-        let ir = crate::ir::generator::finish::finish(&method, draft, source_map);
-        let [parameter] = ir.block(target).unwrap().parameters.as_slice() else {
+        let [parameter] = draft.blocks[&target].parameters.as_slice() else {
             panic!("the public join does not hold exactly one parameter");
         };
         assert_eq!(parameter.value, parameter_value);
-        let public_incoming = reachable_blocks(&ir)
+        let public_incoming = reachable_of(&draft.blocks, draft.entry)
             .into_iter()
             .map(|(_, block)| block)
             .flat_map(|block| block.terminator.successors())

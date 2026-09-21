@@ -8,11 +8,10 @@ mod values;
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-pub(super) use tests::verify_method;
-
 pub use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
+#[cfg(test)]
+pub(super) use tests::verify_method;
 
 use crate::ir::{
     SourceMap,
@@ -34,8 +33,8 @@ pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<(DraftMethod, SourceM
         entry,
         entry_arguments,
         blocks,
-        this_value,
-        parameter_values,
+        this: this_value,
+        parameters: parameter_values,
     };
     Ok((draft_method, source_map))
 }

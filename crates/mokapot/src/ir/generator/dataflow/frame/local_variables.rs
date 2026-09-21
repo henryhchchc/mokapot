@@ -151,6 +151,7 @@ impl LocalVariables {
 
 #[cfg(test)]
 mod tests {
+    use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
     use super::{Error, LocalSlot, LocalVariables};
@@ -158,7 +159,6 @@ mod tests {
         ir::{IdAllocator, ValueId},
         types::field_type::ValueCategory,
     };
-    use ValueCategory::{Category1, Category2};
 
     /// A table of `slot_count` variables, none of them written. Built from primitives rather than a
     /// derived `Arbitrary`, which would not keep a category 2 value's upper variable reserved.

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     ops::Range,
 };
 
@@ -79,14 +79,24 @@ pub(super) fn unsupported(method: &Method) -> (ProgramCounter, UnsupportedByteco
 }
 
 pub(super) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
+    reachable_of(&ir.blocks, ir.entry_block())
+}
+
+/// Returns the blocks reachable from `entry` within `blocks`.
+pub(super) fn reachable_of(
+    blocks: &HashMap<crate::ir::BlockId, BasicBlock>,
+    entry: crate::ir::BlockId,
+) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
     let mut result = Vec::new();
     let mut visited = HashSet::new();
-    let mut pending = VecDeque::from([ir.entry_block()]);
+    let mut pending = VecDeque::from([entry]);
     while let Some(id) = pending.pop_front() {
         if !visited.insert(id) {
             continue;
         }
-        let block = ir.block(id).expect("a successor must belong to its method");
+        let block = blocks
+            .get(&id)
+            .expect("a successor must belong to its method");
         pending.extend(
             block
                 .terminator

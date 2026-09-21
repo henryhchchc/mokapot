@@ -203,6 +203,7 @@ impl OperandStack {
 
 #[cfg(test)]
 mod tests {
+    use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
     use super::{Error, OperandStack, StackItem, StackOperation};
@@ -210,7 +211,6 @@ mod tests {
         ir::{IdAllocator, ValueId},
         types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
     };
-    use ValueCategory::{Category1, Category2};
 
     /// The operand stack depths the forms of `operation` transform, as JVMS §6.5 documents them:
     /// every form of one instruction replaces and leaves the same depth, so the effect is constant.

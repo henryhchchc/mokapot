@@ -1,11 +1,11 @@
-use super::*;
-
-use mokapot::ir::BlockKind;
-
-#[cfg(integration_test)]
-use mokapot::ir::ValueId;
 #[cfg(integration_test)]
 use std::collections::HashMap;
+
+use mokapot::ir::BlockKind;
+#[cfg(integration_test)]
+use mokapot::ir::ValueId;
+
+use super::*;
 
 #[test]
 #[cfg_attr(not(integration_test), ignore)]

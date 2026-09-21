@@ -6,7 +6,7 @@
 //! 2. [`dataflow`] analyzes reachable structural blocks and
 //!    constructs a mutable draft IR with provisional SSA.
 //! 3. [`canonicalize`] simplifies provisional block parameters in place.
-//! 4. [`finish`] attaches method metadata and derived indexes.
+//! 4. [`definitions`] indexes each SSA value to its defining site.
 //!
 //! Analysis fixes addressable instruction positions and records their JVM
 //! origins in a detached source map. Later phases preserve those positions.
@@ -17,21 +17,47 @@
 mod canonicalize;
 mod cfg;
 mod dataflow;
+mod definitions;
 mod draft;
 mod error;
-mod finish;
 mod remap;
 
 pub use dataflow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
-use crate::{ir::MokaIRMethod, jvm::Method};
+use crate::{
+    ir::{MethodEntry, MokaIRMethod, generator::draft::DraftMethod},
+    jvm::Method,
+};
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = cfg::build(method)?;
     let (mut draft, source_map) = dataflow::analyze(&cfg)?;
     canonicalize::canonicalize(&mut draft);
-    let ir = finish::finish(method, draft, source_map);
+    let DraftMethod {
+        entry,
+        entry_arguments,
+        blocks,
+        this,
+        parameters,
+    } = draft;
+    let entry = MethodEntry {
+        target: entry,
+        arguments: entry_arguments,
+    };
+    let value_definitions = definitions::index_definitions(this, &parameters, &blocks);
+    let ir = MokaIRMethod {
+        access_flags: method.access_flags,
+        name: method.name.clone(),
+        descriptor: method.descriptor.clone(),
+        owner: method.owner.clone(),
+        entry,
+        blocks,
+        source_map,
+        this,
+        parameters,
+        value_definitions,
+    };
     Ok(ir)
 }
 
