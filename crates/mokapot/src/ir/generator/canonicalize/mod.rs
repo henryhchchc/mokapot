@@ -5,8 +5,9 @@ mod simplify;
 
 use std::collections::HashMap;
 
-use crate::ir::{ValueId, generator::draft::DraftMethod};
 use simplify::{ParameterCandidate, simplify_parameters};
+
+use crate::ir::{ValueId, generator::draft::DraftMethod};
 
 /// Simplifies provisional block parameters and rewrites the draft to canonical SSA.
 pub(super) fn canonicalize(draft: &mut DraftMethod) {

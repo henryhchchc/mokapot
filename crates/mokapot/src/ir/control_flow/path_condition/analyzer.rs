@@ -1,7 +1,6 @@
-use std::{cmp, convert::Infallible, hash::Hash};
+use std::{cmp, collections::HashMap, convert::Infallible, hash::Hash};
 
-use std::collections::HashMap;
-
+use super::{BranchGuard, PathCondition, SolvingBudget};
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
     ir::{
@@ -10,8 +9,6 @@ use crate::{
         expression::Predicate,
     },
 };
-
-use super::{BranchGuard, PathCondition, SolvingBudget};
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]

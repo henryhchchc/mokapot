@@ -1,12 +1,11 @@
 //! Worklist orchestration for reachable block analysis.
 
-use super::{
-    DataflowParts, block_state::BlockState, execution::BlockInterpreter, frame_block::FrameSource,
-};
-
 use std::collections::{HashMap, HashSet, VecDeque, hash_map::Entry};
 
-use super::super::values::ValueContext;
+use super::{
+    super::values::ValueContext, DataflowParts, block_state::BlockState,
+    execution::BlockInterpreter, frame_block::FrameSource,
+};
 use crate::ir::{
     BlockId,
     generator::{cfg::Cfg, error::Error},

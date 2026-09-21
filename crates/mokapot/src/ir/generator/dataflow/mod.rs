@@ -8,11 +8,13 @@ mod values;
 
 use std::collections::HashMap;
 
-use crate::ir::generator::dataflow::analysis::BlockSolution;
-use crate::ir::generator::{draft::DraftMethod, error::Error};
-use crate::ir::{BlockId, SourceMap};
 pub use frame::FrameError;
 use frame::{Frame, Position, StackOperation, ValueCategory};
+
+use crate::ir::{
+    BlockId, SourceMap,
+    generator::{dataflow::analysis::BlockSolution, draft::DraftMethod, error::Error},
+};
 
 pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<(DraftMethod, SourceMap), Error> {
     let analysis::DataflowParts {

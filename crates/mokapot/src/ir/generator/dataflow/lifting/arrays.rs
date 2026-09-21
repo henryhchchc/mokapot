@@ -1,9 +1,10 @@
+use ValueCategory::Category1;
+
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{Operation, expression::ArrayOperation, generator::error::Error},
     types::field_type::FieldType,
 };
-use ValueCategory::Category1;
 
 impl LiftContext<'_, '_> {
     pub(super) fn array_read(

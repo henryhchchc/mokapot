@@ -2,8 +2,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::super::{Frame, Position, values::ValueContext};
-use super::frame_block::{FrameBlock, FrameSource};
+use super::{
+    super::{Frame, Position, values::ValueContext},
+    frame_block::{FrameBlock, FrameSource},
+};
 use crate::{
     ir::{ValueId, generator::error::Error},
     jvm::code::ProgramCounter,

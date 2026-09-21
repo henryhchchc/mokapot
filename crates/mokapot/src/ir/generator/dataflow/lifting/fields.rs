@@ -1,9 +1,10 @@
+use ValueCategory::Category1;
+
 use super::{LiftContext, ValueCategory, definition_operation};
 use crate::{
     ir::{Operation, ValueId, expression::FieldAccess, generator::error::Error},
     jvm::references::FieldRef,
 };
-use ValueCategory::Category1;
 
 impl LiftContext<'_, '_> {
     pub(super) fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {

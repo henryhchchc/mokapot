@@ -1,6 +1,5 @@
 use std::{
-    collections::hash_map::DefaultHasher,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
 };
 

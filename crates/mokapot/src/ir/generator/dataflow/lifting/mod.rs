@@ -7,6 +7,8 @@ mod operations;
 mod values;
 mod wide;
 
+use ValueCategory::{Category1, Category2};
+
 use super::{Frame, StackOperation, ValueCategory, values::ValueContext};
 use crate::{
     ir::{
@@ -17,7 +19,6 @@ use crate::{
     jvm::{ConstantValue, code::Instruction as JVM},
     types::field_type::FieldType,
 };
-use ValueCategory::{Category1, Category2};
 
 /// Builds the definition operation produced by a lifted expression.
 ///

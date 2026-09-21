@@ -4,18 +4,19 @@ mod effects;
 
 use std::collections::BTreeMap;
 
-use super::super::{Frame, lifting, values::ValueContext};
-use super::frame_block::{FrameArm, FrameBlock, FrameTerminator};
-use crate::ir::{
-    BlockId, BlockKind, Operation,
-    control_flow::ControlTransfer,
-    generator::{
-        cfg::{ArmKey, BlockExit, CfgNode, ExceptionArm, ExceptionTarget},
-        error::Error,
-    },
+use super::{
+    super::{Frame, lifting, values::ValueContext},
+    frame_block::{FrameArm, FrameBlock, FrameTerminator},
 };
 use crate::{
-    ir::generator::cfg::Cfg,
+    ir::{
+        BlockId, BlockKind, Operation,
+        control_flow::ControlTransfer,
+        generator::{
+            cfg::{ArmKey, BlockExit, Cfg, CfgNode, ExceptionArm, ExceptionTarget},
+            error::Error,
+        },
+    },
     jvm::code::{Instruction, ProgramCounter},
 };
 

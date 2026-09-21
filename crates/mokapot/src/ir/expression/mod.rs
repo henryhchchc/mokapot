@@ -1,6 +1,5 @@
 //! Module for the expressions in Moka IR.
-use std::collections::HashSet;
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use itertools::Itertools;
 
@@ -24,8 +23,7 @@ pub use array::Operation as ArrayOperation;
 pub use conversion::Operation as Conversion;
 pub use field::Access as FieldAccess;
 pub use lock::Operation as LockOperation;
-pub use math::NaNTreatment;
-pub use math::Operation as MathOperation;
+pub use math::{NaNTreatment, Operation as MathOperation};
 pub use predicate::Predicate;
 
 /// An expression over method-local SSA values.

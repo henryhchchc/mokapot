@@ -2,10 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::jvm::{Class, references::ClassRef};
-
 #[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use crate::jvm::class_loader::ClassPath;
+use crate::jvm::{Class, references::ClassRef};
 
 pub mod fixed_point;
 pub mod type_hierarchy;

@@ -1,6 +1,8 @@
-use std::collections::{BTreeSet, HashSet};
-use std::hash::Hash;
-use std::iter::once;
+use std::{
+    collections::{BTreeSet, HashSet},
+    hash::Hash,
+    iter::once,
+};
 
 use itertools::Itertools;
 

@@ -1,3 +1,5 @@
+use std::collections::{HashSet, VecDeque};
+
 use mokapot::{
     ir::{
         InstructionLocation, InstructionRef, MokaIRMethod, Operation, Terminator,
@@ -5,7 +7,6 @@ use mokapot::{
     },
     jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
 };
-use std::collections::{HashSet, VecDeque};
 
 fn get_test_class() -> Class {
     let mut bytes = if cfg!(integration_test) {
