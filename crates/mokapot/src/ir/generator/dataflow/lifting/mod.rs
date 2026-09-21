@@ -23,7 +23,7 @@ use crate::{
     types::field_type::FieldType,
 };
 
-pub(super) struct LiftContext<'values, 'frame> {
+struct LiftContext<'values, 'frame> {
     values: &'values mut ValueContext,
     pc: ProgramCounter,
     frame: &'frame mut Frame,
@@ -51,23 +51,19 @@ pub(super) fn lift_instruction(
         AConstNull => cx.constant(ConstantValue::Null, Category1),
         IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
             let value = i32::from(jvm_instruction.opcode()) - i32::from(IConst0.opcode());
-            let constant = ConstantValue::Integer(value);
-            cx.constant(constant, Category1)
+            cx.constant(ConstantValue::Integer(value), Category1)
         }
         LConst0 | LConst1 => {
             let value = i64::from(jvm_instruction.opcode()) - i64::from(LConst0.opcode());
-            let constant = ConstantValue::Long(value);
-            cx.constant(constant, Category2)
+            cx.constant(ConstantValue::Long(value), Category2)
         }
         FConst0 | FConst1 | FConst2 => {
             let value = f32::from(jvm_instruction.opcode()) - f32::from(FConst0.opcode());
-            let constant = ConstantValue::Float(value);
-            cx.constant(constant, Category1)
+            cx.constant(ConstantValue::Float(value), Category1)
         }
         DConst0 | DConst1 => {
             let value = f64::from(jvm_instruction.opcode()) - f64::from(DConst0.opcode());
-            let constant = ConstantValue::Double(value);
-            cx.constant(constant, Category2)
+            cx.constant(ConstantValue::Double(value), Category2)
         }
         BiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
         SiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
@@ -101,9 +97,7 @@ pub(super) fn lift_instruction(
         LAStore | DAStore => cx.array_write(Category2),
         ANewArray(element_type) => cx.new_array(element_type.clone().into()),
         NewArray(element_type) => cx.new_array(FieldType::Base(*element_type)),
-        MultiANewArray(element_type, dimension) => {
-            cx.new_multi_array(element_type.clone().into(), *dimension)
-        }
+        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type.clone().into(), *dim),
         ArrayLength => cx.array_length(),
         Pop => cx.stack_effect(StackOperation::Pop),
         Pop2 => cx.stack_effect(StackOperation::Pop2),
@@ -207,47 +201,5 @@ impl LiftContext<'_, '_> {
 
     fn definition_id(&mut self) -> ValueId {
         self.values.definition_at(self.pc)
-    }
-
-    fn with_def<T, L>(&mut self, lift: L) -> Result<T, Error>
-    where
-        L: FnOnce(ValueId, &mut Frame) -> Result<T, Error>,
-    {
-        let value = self.definition_id();
-        lift(value, self.frame)
-    }
-
-    fn unary(
-        &mut self,
-        operation: impl FnOnce(ValueId) -> MathOperation,
-        category: ValueCategory,
-    ) -> Result<Option<Operation>, Error> {
-        self.with_def(|value, frame| {
-            let operand = frame.stack.pop(category)?;
-            frame.stack.push(value, category)?;
-            let expr = operation(operand).into();
-            Ok(Some(Operation::Definition { value, expr }))
-        })
-    }
-
-    fn binary(
-        &mut self,
-        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
-        category: ValueCategory,
-    ) -> Result<Option<Operation>, Error> {
-        self.with_def(|value, frame| {
-            operations::lift_binary_math(frame, value, operation, category)
-        })
-    }
-
-    fn conversion(
-        &mut self,
-        conversion: impl FnOnce(ValueId) -> Conversion,
-        operand_category: ValueCategory,
-        result_category: ValueCategory,
-    ) -> Result<Option<Operation>, Error> {
-        self.with_def(|value, frame| {
-            operations::lift_conversion(frame, value, conversion, operand_category, result_category)
-        })
     }
 }

@@ -7,10 +7,7 @@ use crate::{
 };
 
 impl LiftContext<'_, '_> {
-    pub(super) fn array_read(
-        &mut self,
-        category: ValueCategory,
-    ) -> Result<Option<Operation>, Error> {
+    pub fn array_read(&mut self, category: ValueCategory) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -19,10 +16,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn array_write(
-        &mut self,
-        category: ValueCategory,
-    ) -> Result<Option<Operation>, Error> {
+    pub fn array_write(&mut self, category: ValueCategory) -> Result<Option<Operation>, Error> {
         let value = self.frame.stack.pop(category)?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -35,10 +29,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Effect { expr }))
     }
 
-    pub(super) fn new_array(
-        &mut self,
-        element_type: FieldType,
-    ) -> Result<Option<Operation>, Error> {
+    pub fn new_array(&mut self, element_type: FieldType) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
@@ -50,7 +41,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn new_multi_array(
+    pub fn new_multi_array(
         &mut self,
         element_type: FieldType,
         dimension: u8,
@@ -68,7 +59,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub(super) fn array_length(&mut self) -> Result<Option<Operation>, Error> {
+    pub fn array_length(&mut self) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
