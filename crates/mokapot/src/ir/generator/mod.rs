@@ -4,7 +4,7 @@
 //!
 //! 1. [`cfg`] partitions all decoded bytecode into a structural CFG.
 //! 2. [`dataflow`] analyzes reachable structural blocks and
-//!    constructs a mutable draft IR with provisional SSA.
+//!    constructs a mutable parts IR with provisional SSA.
 //! 3. [`canonicalize`] simplifies provisional block parameters in place.
 //! 4. [`definitions`] indexes each SSA value to its defining site.
 //!
@@ -18,29 +18,29 @@ mod canonicalize;
 mod cfg;
 mod dataflow;
 mod definitions;
-mod draft;
 mod error;
+mod parts;
 mod remap;
 
 pub use dataflow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
 use crate::{
-    ir::{MokaIRMethod, generator::draft::DraftMethod},
+    ir::{MokaIRMethod, generator::parts::IrParts},
     jvm::Method,
 };
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = cfg::build(method)?;
-    let mut draft = dataflow::analyze(&cfg)?;
-    canonicalize::canonicalize(&mut draft);
-    let DraftMethod {
+    let mut parts = dataflow::analyze(&cfg)?;
+    canonicalize::canonicalize(&mut parts);
+    let IrParts {
         entry,
         blocks,
         this,
         parameters,
         source_map,
-    } = draft;
+    } = parts;
     let ir = MokaIRMethod {
         access_flags: method.access_flags,
         name: method.name.clone(),

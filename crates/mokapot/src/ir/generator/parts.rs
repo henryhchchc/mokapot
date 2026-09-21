@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId};
 
 /// A method under construction.
-pub(super) struct DraftMethod {
+pub(super) struct IrParts {
     pub entry: MethodEntry,
     pub blocks: HashMap<BlockId, BasicBlock>,
     pub this: Option<ValueId>,

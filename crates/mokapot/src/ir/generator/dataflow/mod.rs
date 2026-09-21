@@ -15,10 +15,10 @@ pub(super) use tests::verify_method;
 
 use crate::ir::{
     MethodEntry, SourceMap,
-    generator::{draft::DraftMethod, error::Error},
+    generator::{error::Error, parts::IrParts},
 };
 
-pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<DraftMethod, Error> {
+pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<IrParts, Error> {
     let analysis::DataflowParts {
         entry,
         blocks,
@@ -29,7 +29,7 @@ pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<DraftMethod, Error> {
     let source_map = SourceMap::from_block_solutions(&blocks);
     let (entry_arguments, blocks) = resolve::resolve_blocks(entry, blocks);
 
-    let draft_method = DraftMethod {
+    let parts_method = IrParts {
         entry: MethodEntry {
             target: entry,
             arguments: entry_arguments,
@@ -39,5 +39,5 @@ pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<DraftMethod, Error> {
         parameters: parameter_values,
         source_map,
     };
-    Ok(draft_method)
+    Ok(parts_method)
 }
