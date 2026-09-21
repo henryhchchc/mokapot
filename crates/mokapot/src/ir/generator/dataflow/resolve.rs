@@ -1,4 +1,4 @@
-//! Resolution of frame-carrying arms to SSA successor arguments.
+//! Resolution of frame-carrying arms to SSA successor arguments and instruction origins.
 
 use std::collections::HashMap;
 
@@ -6,7 +6,7 @@ use super::{
     Position,
     analysis::{BlockSolution, FrameArm, FrameBlock, FrameSource},
 };
-use crate::ir::{BasicBlock, BlockId, BlockParameter, Successor, ValueId};
+use crate::ir::{BasicBlock, BlockId, BlockParameter, SourceMap, Successor, ValueId};
 
 impl BlockSolution {
     fn entry_arguments(&self) -> Vec<ValueId> {
@@ -124,4 +124,19 @@ pub(super) fn resolve_blocks(
         .map(|(id, block)| (id, block.resolve(&target_parameters)))
         .collect();
     (entry_arguments, basic_blocks)
+}
+
+impl SourceMap {
+    pub(super) fn from_block_solutions(block_solutions: &HashMap<BlockId, BlockSolution>) -> Self {
+        let mut source_map = SourceMap::new();
+        for (&block, sol) in block_solutions {
+            if let Some(origin) = sol.block.terminator_source {
+                source_map.record_terminator(origin, block);
+            }
+            for (index, (origin, _)) in sol.block.operations.iter().enumerate() {
+                source_map.record_operation(*origin, block, index);
+            }
+        }
+        source_map
+    }
 }

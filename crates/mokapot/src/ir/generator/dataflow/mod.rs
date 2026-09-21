@@ -2,18 +2,16 @@
 
 mod analysis;
 mod frame;
-pub(super) mod lifting;
+mod lifting;
 mod resolve;
 mod values;
-
-use std::collections::HashMap;
 
 pub use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
 
 use crate::ir::{
-    BlockId, SourceMap,
-    generator::{dataflow::analysis::BlockSolution, draft::DraftMethod, error::Error},
+    SourceMap,
+    generator::{draft::DraftMethod, error::Error},
 };
 
 pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<(DraftMethod, SourceMap), Error> {
@@ -35,19 +33,4 @@ pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<(DraftMethod, SourceM
         parameter_values,
     };
     Ok((draft_method, source_map))
-}
-
-impl SourceMap {
-    fn from_block_solutions(block_solutions: &HashMap<BlockId, BlockSolution>) -> Self {
-        let mut source_map = SourceMap::new();
-        for (&block, sol) in block_solutions {
-            if let Some(origin) = sol.block.terminator_source {
-                source_map.record_terminator(origin, block);
-            }
-            for (index, (origin, _)) in sol.block.operations.iter().enumerate() {
-                source_map.record_operation(*origin, block, index);
-            }
-        }
-        source_map
-    }
 }
