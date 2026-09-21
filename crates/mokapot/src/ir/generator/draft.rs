@@ -1,4 +1,4 @@
-//! Mutable internal IR shared by analysis, canonicalization, and finishing.
+//! Mutable internal IR shared by analysis, canonicalization, and definition indexing.
 
 use std::collections::HashMap;
 
@@ -9,6 +9,6 @@ pub(super) struct DraftMethod {
     pub entry: BlockId,
     pub entry_arguments: Vec<ValueId>,
     pub blocks: HashMap<BlockId, BasicBlock>,
-    pub this_value: Option<ValueId>,
-    pub parameter_values: Vec<ValueId>,
+    pub this: Option<ValueId>,
+    pub parameters: Vec<ValueId>,
 }

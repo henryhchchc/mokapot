@@ -11,7 +11,7 @@ use super::{
     generator,
 };
 use crate::{
-    jvm::{self, Method as JvmMethod, method, references::ClassRef},
+    jvm::{Method as JvmMethod, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -24,16 +24,16 @@ use crate::{
 /// are the sole source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
-    access_flags: method::AccessFlags,
-    name: String,
-    descriptor: MethodDescriptor,
-    owner: ClassRef,
-    entry: MethodEntry,
-    blocks: HashMap<BlockId, BasicBlock>,
-    source_map: SourceMap,
-    this_value: Option<ValueId>,
-    parameter_values: Vec<ValueId>,
-    value_definitions: HashMap<ValueId, ValueDefinition>,
+    pub(super) access_flags: method::AccessFlags,
+    pub(super) name: String,
+    pub(super) descriptor: MethodDescriptor,
+    pub(super) owner: ClassRef,
+    pub(super) entry: MethodEntry,
+    pub(super) blocks: HashMap<BlockId, BasicBlock>,
+    pub(super) source_map: SourceMap,
+    pub(super) this: Option<ValueId>,
+    pub(super) parameters: Vec<ValueId>,
+    pub(super) value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -47,15 +47,6 @@ pub enum InstructionRef<'method> {
     Operation(&'method Operation),
     /// A block terminator.
     Terminator(&'method Terminator),
-}
-
-pub(super) struct MokaIRMethodParts {
-    pub(super) entry: MethodEntry,
-    pub(super) blocks: HashMap<BlockId, BasicBlock>,
-    pub(super) source_map: SourceMap,
-    pub(super) this_value: Option<ValueId>,
-    pub(super) parameter_values: Vec<ValueId>,
-    pub(super) value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// The invocation boundary that supplies arguments to the method's entry block.
@@ -171,13 +162,13 @@ impl MokaIRMethod {
     /// Returns the SSA value representing `this`, if this is an instance method.
     #[must_use]
     pub const fn this_value(&self) -> Option<ValueId> {
-        self.this_value
+        self.this
     }
 
     /// Returns the SSA values representing method parameters in descriptor order.
     #[must_use]
     pub fn parameter_values(&self) -> &[ValueId] {
-        &self.parameter_values
+        &self.parameters
     }
 
     /// Returns the unique definition of a method-local SSA value.
@@ -210,22 +201,5 @@ impl MokaIRMethod {
         budget: SolvingBudget,
     ) -> HashMap<BlockId, PathCondition<&Predicate>> {
         control_flow::path_condition::analyze(&self.blocks, self.entry.target, budget)
-    }
-}
-
-impl MokaIRMethod {
-    pub(super) fn new(method: &jvm::Method, parts: MokaIRMethodParts) -> Self {
-        Self {
-            access_flags: method.access_flags,
-            name: method.name.clone(),
-            descriptor: method.descriptor.clone(),
-            owner: method.owner.clone(),
-            entry: parts.entry,
-            blocks: parts.blocks,
-            source_map: parts.source_map,
-            this_value: parts.this_value,
-            parameter_values: parts.parameter_values,
-            value_definitions: parts.value_definitions,
-        }
     }
 }
