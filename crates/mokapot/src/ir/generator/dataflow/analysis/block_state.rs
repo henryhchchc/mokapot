@@ -96,11 +96,10 @@ impl BlockParameters {
     /// Merges every incoming frame, updating the declared parameters in place.
     fn merge<'frames>(
         &mut self,
-        frames: impl Iterator<Item = &'frames Frame>,
+        mut frames: impl Iterator<Item = &'frames Frame>,
         block_pc: Option<ProgramCounter>,
         values: &mut ValueContext,
     ) -> Result<Frame, Error> {
-        let mut frames = frames;
         let mut merged = frames
             .next()
             .expect("a block must be created with its first incoming frame")
@@ -108,40 +107,37 @@ impl BlockParameters {
         // A site that is already a parameter stays one and keeps its identity,
         // even while every incoming frame transiently agrees. That monotone
         // parameter set is what lets a cyclic block reach a fixed point instead
-        // of flipping between a parameter and a narrower frame; `canonicalize`
-        // eliminates the parameters a block does not end up needing.
-        let mut active = self.declared.clone();
-
+        // of flipping between a parameter and a narrower frame; the `retain`
+        // below drops the parameters a block does not end up needing.
         for incoming in frames {
             merged
                 .merge_from_with(incoming.clone(), |position, lhs, rhs| {
-                    self.join(position, lhs, rhs, &mut active, values);
-                    Ok::<_, Error>(())
+                    self.join(position, lhs, rhs, values);
                 })
-                .map_err(|error| match block_pc {
-                    Some(pc) => error.at_instruction(pc),
-                    None => error,
+                .map_err(|error| {
+                    let error = Error::from(error);
+                    match block_pc {
+                        Some(pc) => error.at_instruction(pc),
+                        None => error,
+                    }
                 })?;
         }
 
-        self.declared = active
-            .into_iter()
-            .filter(|(position, result)| merged.value_at(*position) == Some(result))
-            .collect();
+        self.declared
+            .retain(|position, result| merged.value_at(*position).copied() == Some(*result));
         Ok(merged)
     }
 
-    /// Records one merged position, keeping an active parameter as is and
+    /// Records one merged position, keeping a declared parameter as is and
     /// otherwise reusing or allocating the site's identity.
     fn join(
         &mut self,
         position: Position,
         lhs: &mut ValueId,
         rhs: ValueId,
-        active: &mut BTreeMap<Position, ValueId>,
         values: &mut ValueContext,
     ) {
-        if let Some(&result) = active.get(&position) {
+        if let Some(&result) = self.declared.get(&position) {
             *lhs = result;
             return;
         }
@@ -152,7 +148,7 @@ impl BlockParameters {
             .identities
             .entry(position)
             .or_insert_with(|| values.fresh());
-        active.insert(position, result);
+        self.declared.insert(position, result);
         *lhs = result;
     }
 }

@@ -41,22 +41,20 @@ impl Frame {
         self.stack.single_value(ValueCategory::Category1)
     }
 
-    pub(super) fn merge_from_with<E>(
+    pub(super) fn merge_from_with(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(Position, &mut ValueId, ValueId) -> Result<(), E>,
-    ) -> Result<(), E>
-    where
-        E: From<FrameError>,
-    {
-        self.ensure_compatible_shape(&other).map_err(E::from)?;
+        mut merge_values: impl FnMut(Position, &mut ValueId, ValueId),
+    ) -> Result<(), FrameError> {
+        self.ensure_compatible_shape(&other)?;
         self.locals
             .merge_from_with(other.locals, |index, lhs, rhs| {
-                merge_values(Position::Local(index), lhs, rhs)
-            })?;
+                merge_values(Position::Local(index), lhs, rhs);
+            });
         self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
-            merge_values(Position::Stack(index), lhs, rhs)
-        })
+            merge_values(Position::Stack(index), lhs, rhs);
+        });
+        Ok(())
     }
 
     fn ensure_compatible_shape(&self, other: &Self) -> Result<(), FrameError> {
@@ -65,6 +63,7 @@ impl Frame {
         }
         Ok(())
     }
+
     pub(super) fn for_method_entry(
         descriptor: &MethodDescriptor,
         max_locals: u16,

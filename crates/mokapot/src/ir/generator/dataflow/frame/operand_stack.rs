@@ -30,10 +30,10 @@ impl StackOperation {
     }
 
     fn matching_form(self, categories: &[ValueCategory]) -> Option<(usize, &'static [usize])> {
-        let form = match self {
-            Self::Pop if categories.ends_with(&[Category1]) => (1, &[0; 0][..]),
-            Self::Pop2 if categories.ends_with(&[Category2]) => (1, &[0; 0][..]),
-            Self::Pop2 if categories.ends_with(&[Category1, Category1]) => (2, &[0; 0][..]),
+        let form: (usize, &'static [usize]) = match self {
+            Self::Pop if categories.ends_with(&[Category1]) => (1, &[]),
+            Self::Pop2 if categories.ends_with(&[Category2]) => (1, &[]),
+            Self::Pop2 if categories.ends_with(&[Category1, Category1]) => (2, &[]),
             Self::Dup if categories.ends_with(&[Category1]) => (1, &[0, 0][..]),
             Self::DupX1 if categories.ends_with(&[Category1, Category1]) => (2, &[1, 0, 1][..]),
             Self::DupX2 if categories.ends_with(&[Category2, Category1]) => (2, &[1, 0, 1][..]),
@@ -164,18 +164,17 @@ impl OperandStack {
                 .eq(other.values.iter().map(|value| value.category))
     }
 
-    pub(super) fn merge_from_with<E>(
+    pub(super) fn merge_from_with(
         &mut self,
         other: Self,
-        mut merge_values: impl FnMut(usize, &mut ValueId, ValueId) -> Result<(), E>,
-    ) -> Result<(), E> {
+        mut merge_values: impl FnMut(usize, &mut ValueId, ValueId),
+    ) {
         let mut slot = 0;
         for (lhs, rhs) in self.values.iter_mut().zip(other.values) {
             slot += lhs.category.slot_count() - 1;
-            merge_values(slot, &mut lhs.value, rhs.value)?;
+            merge_values(slot, &mut lhs.value, rhs.value);
             slot += 1;
         }
-        Ok(())
     }
 
     pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&ValueId, Error> {

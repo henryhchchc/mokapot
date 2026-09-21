@@ -56,8 +56,8 @@ proptest! {
         let frame = Frame::for_method_entry(&descriptor, max_locals, 4, receiver, &parameters)
             .expect("the entry values must fit in their own slot count");
 
+        let frame_type = if instance { "instance" } else { "static" };
         for (slot, expected) in layout.iter().enumerate() {
-            let frame_type = if instance { "instance" } else { "static" };
             let actual = frame.value_at(Position::Local(slot));
             let expected = expected.map(|index| entries[index]);
             prop_assert_eq!(actual, expected, "slot {} of the {} entry frame", slot, frame_type);
