@@ -9,7 +9,7 @@ mod values;
 use std::collections::HashMap;
 
 pub use frame::FrameError;
-use frame::{Frame, Position, StackOperation, ValueCategory};
+use frame::{Frame, Position, StackOperation};
 
 use crate::ir::{
     BlockId, SourceMap,

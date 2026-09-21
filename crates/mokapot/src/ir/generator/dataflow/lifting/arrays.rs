@@ -1,9 +1,9 @@
 use ValueCategory::Category1;
 
-use super::{LiftContext, ValueCategory};
+use super::LiftContext;
 use crate::{
     ir::{Operation, expression::ArrayOperation, generator::error::Error},
-    types::field_type::FieldType,
+    types::field_type::{FieldType, ValueCategory},
 };
 
 impl LiftContext<'_, '_> {

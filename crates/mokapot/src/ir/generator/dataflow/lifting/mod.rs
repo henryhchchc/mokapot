@@ -9,7 +9,7 @@ mod wide;
 
 use ValueCategory::{Category1, Category2};
 
-use super::{Frame, StackOperation, ValueCategory, values::ValueContext};
+use super::{Frame, StackOperation, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
@@ -20,7 +20,7 @@ use crate::{
         ConstantValue,
         code::{Instruction as JVM, ProgramCounter},
     },
-    types::field_type::FieldType,
+    types::field_type::{FieldType, ValueCategory},
 };
 
 struct LiftContext<'values, 'frame> {

@@ -156,6 +156,30 @@ impl FromStr for PrimitiveType {
     }
 }
 
+/// The category of a JVM value, which determines the number of slots it occupies.
+///
+/// Most values are of [`Category1`](Self::Category1), while `long` and `double` values are of [`Category2`](Self::Category2).
+#[doc = see_jvm_spec!(2, 11, 1)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum ValueCategory {
+    /// A value that occupies one slot.
+    Category1,
+    /// A value that occupies two slots.
+    Category2,
+}
+
+impl ValueCategory {
+    /// Returns the number of slots occupied by a value of this category.
+    #[must_use]
+    pub const fn slot_count(self) -> usize {
+        match self {
+            Self::Category1 => 1,
+            Self::Category2 => 2,
+        }
+    }
+}
+
 /// A field type (non-generic) in Java.
 ///
 /// This enum represents any valid JVM field type, which can be:
@@ -241,6 +265,15 @@ impl FieldType {
     #[must_use]
     pub fn array_of(inner: Self, dim: u8) -> Self {
         (0..dim).fold(inner, |acc, _| acc.into_array_type())
+    }
+
+    /// Returns the category of the values of this type.
+    #[must_use]
+    pub const fn value_category(&self) -> ValueCategory {
+        match self {
+            Self::Base(PrimitiveType::Long | PrimitiveType::Double) => ValueCategory::Category2,
+            _ => ValueCategory::Category1,
+        }
     }
 }
 

@@ -2,10 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use super::super::super::{
-    Frame,
-    ValueCategory::{Category1, Category2},
-};
+use ValueCategory::{Category1, Category2};
+
+use super::super::super::Frame;
 use crate::{
     ir::{
         BlockId, ValueId,
@@ -17,6 +16,7 @@ use crate::{
         generator::error::Error,
     },
     jvm::{ConstantValue, code::Instruction},
+    types::field_type::ValueCategory,
 };
 
 /// Pops the compared operands and returns the transfers selected when the branch

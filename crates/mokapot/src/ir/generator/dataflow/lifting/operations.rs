@@ -1,10 +1,13 @@
 use ValueCategory::{Category1, Category2};
 
-use super::{LiftContext, ValueCategory};
-use crate::ir::{
-    Operation, ValueId,
-    expression::{Conversion, MathOperation, NaNTreatment},
-    generator::error::Error,
+use super::LiftContext;
+use crate::{
+    ir::{
+        Operation, ValueId,
+        expression::{Conversion, MathOperation, NaNTreatment},
+        generator::error::Error,
+    },
+    types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {

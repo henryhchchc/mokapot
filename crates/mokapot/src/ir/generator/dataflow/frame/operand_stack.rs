@@ -3,8 +3,11 @@ use std::iter::{once, repeat_n};
 use ValueCategory::{Category1, Category2};
 use itertools::Itertools;
 
-use super::{ValueCategory, error::Error};
-use crate::{ir::ValueId, types::method_descriptor::MethodDescriptor};
+use super::error::Error;
+use crate::{
+    ir::ValueId,
+    types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StackOperation {
@@ -113,7 +116,7 @@ impl OperandStack {
             .parameters_types
             .iter()
             .rev()
-            .map(|value_type| self.pop(ValueCategory::of_field_type(value_type)))
+            .map(|value_type| self.pop(value_type.value_category()))
             .try_collect()?;
         arguments.reverse();
         Ok(arguments)
