@@ -9,7 +9,7 @@ use crate::{
     jvm::{code::ProgramCounter, method},
 };
 
-pub(crate) struct ValueContext {
+pub(super) struct ValueContext {
     definition_ids: HashMap<ProgramCounter, ValueId>,
     caught_exceptions: HashMap<BlockId, ValueId>,
     value_id_allocator: IdAllocator<ValueId>,
@@ -54,12 +54,10 @@ impl ValueContext {
 
     /// Returns the single value identity associated with a handler entry.
     pub(super) fn caught_exception(&mut self, handler: BlockId) -> ValueId {
-        if let Some(&value) = self.caught_exceptions.get(&handler) {
-            return value;
-        }
-        let value = self.fresh();
-        self.caught_exceptions.insert(handler, value);
-        value
+        *self
+            .caught_exceptions
+            .entry(handler)
+            .or_insert_with(|| self.value_id_allocator.new_id())
     }
 
     pub(super) fn into_method_values(self) -> (Option<ValueId>, Vec<ValueId>) {
@@ -67,11 +65,9 @@ impl ValueContext {
     }
 
     pub(super) fn definition_at(&mut self, pc: ProgramCounter) -> ValueId {
-        if let Some(&id) = self.definition_ids.get(&pc) {
-            return id;
-        }
-        let id = self.fresh();
-        self.definition_ids.insert(pc, id);
-        id
+        *self
+            .definition_ids
+            .entry(pc)
+            .or_insert_with(|| self.value_id_allocator.new_id())
     }
 }

@@ -20,10 +20,11 @@ pub(crate) struct DataflowSolver<'method, 'cfg> {
 impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
     pub(crate) fn new(cfg: &'cfg Cfg<'method>) -> Result<Self, Error> {
         let (values, initial_frame) = ValueContext::for_cfg(cfg)?;
-        let entry = BlockInterpreter::new(cfg).entry_block();
+        let interpreter = BlockInterpreter::new(cfg);
+        let entry = interpreter.entry_block();
         let entry_state = BlockState::new(FrameSource::Entry, initial_frame);
         Ok(Self {
-            interpreter: BlockInterpreter::new(cfg),
+            interpreter,
             values,
             blocks: HashMap::from([(entry, entry_state)]),
         })

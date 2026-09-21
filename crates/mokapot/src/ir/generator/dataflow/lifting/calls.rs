@@ -7,6 +7,7 @@ use crate::{
     types::method_descriptor::{MethodDescriptor, ReturnType},
 };
 
+#[derive(Clone, Copy)]
 enum CallResult {
     Value(ValueId, ValueCategory),
     Void,
@@ -47,10 +48,6 @@ impl LiftContext<'_, '_> {
         self.finish_call(result, expr)
     }
 
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a call result is consumed exactly once"
-    )]
     fn finish_call(
         &mut self,
         result: CallResult,

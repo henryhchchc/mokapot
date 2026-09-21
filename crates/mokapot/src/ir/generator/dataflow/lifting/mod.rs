@@ -16,19 +16,21 @@ use crate::{
         expression::{Conversion, Expression, LockOperation, MathOperation, NaNTreatment},
         generator::error::Error,
     },
-    jvm::{ConstantValue, code::Instruction as JVM},
+    jvm::{
+        ConstantValue,
+        code::{Instruction as JVM, ProgramCounter},
+    },
     types::field_type::FieldType,
 };
 
 /// Builds the definition operation produced by a lifted expression.
-///
 const fn definition_operation(value: ValueId, expr: Expression) -> Operation {
     Operation::Definition { value, expr }
 }
 
 pub(super) struct LiftContext<'values, 'frame> {
     values: &'values mut ValueContext,
-    pc: crate::jvm::code::ProgramCounter,
+    pc: ProgramCounter,
     frame: &'frame mut Frame,
 }
 
@@ -39,7 +41,7 @@ pub(super) struct LiftContext<'values, 'frame> {
 pub(super) fn lift_instruction(
     values: &mut ValueContext,
     jvm_instruction: &JVM,
-    pc: crate::jvm::code::ProgramCounter,
+    pc: ProgramCounter,
     frame: &mut Frame,
 ) -> Result<Option<Operation>, Error> {
     #[allow(
