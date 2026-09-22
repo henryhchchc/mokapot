@@ -2,11 +2,10 @@
 
 use std::{collections::HashMap, convert::Infallible};
 
+use super::SimplifiedParameters;
 use crate::ir::{
     BasicBlock, BlockId, BlockKind, MethodEntry, Successor, ValueId, generator::remap::RemapValues,
 };
-
-use super::SimplifiedParameters;
 
 impl SimplifiedParameters {
     /// Rewrites `entry` and `blocks` to canonical SSA.
