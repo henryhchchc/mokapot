@@ -2,6 +2,7 @@
 
 mod finalization;
 mod simplify;
+mod tarjan;
 
 use std::collections::HashMap;
 

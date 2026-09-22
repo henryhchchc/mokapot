@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
-use crate::ir::ValueId;
+use crate::ir::{ValueId, generator::canonicalize::tarjan::Tarjan};
 
 /// A block parameter and the arguments supplied by all incoming edges.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,80 +116,18 @@ fn canonical(mut value: ValueId, remaps: &HashMap<ValueId, ValueId>) -> ValueId 
 fn strongly_connected_components(
     candidates: &HashMap<ValueId, ParameterCandidate>,
 ) -> Vec<HashSet<ValueId>> {
-    let nodes = candidates.keys().copied().collect::<HashSet<_>>();
     let adjacency = candidates
         .iter()
-        .map(|(&result, candidate)| {
+        .map(|(&value, candidate)| {
             let dependencies = candidate
                 .inputs
                 .iter()
                 .copied()
-                .filter(|value| nodes.contains(value))
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>();
-            (result, dependencies)
+                .filter(|it| candidates.contains_key(it))
+                .unique()
+                .collect();
+            (value, dependencies)
         })
-        .collect::<HashMap<_, _>>();
-
-    let mut reverse = nodes
-        .iter()
-        .map(|&node| (node, Vec::new()))
-        .collect::<HashMap<_, _>>();
-    for (&source, targets) in &adjacency {
-        for target in targets {
-            reverse
-                .get_mut(target)
-                .expect("a parameter dependency is a candidate result")
-                .push(source);
-        }
-    }
-
-    let mut visited = HashSet::new();
-    let mut finished = Vec::with_capacity(nodes.len());
-    for &start in &nodes {
-        if !visited.insert(start) {
-            continue;
-        }
-        let mut stack = vec![(start, 0_usize)];
-        while let Some((node, next_index)) = stack.last_mut() {
-            let neighbors = adjacency
-                .get(node)
-                .expect("every candidate result has an adjacency list");
-            if let Some(&neighbor) = neighbors.get(*next_index) {
-                *next_index += 1;
-                if visited.insert(neighbor) {
-                    stack.push((neighbor, 0));
-                }
-            } else {
-                let (node, _) = stack.pop().expect("the DFS stack is not empty");
-                finished.push(node);
-            }
-        }
-    }
-
-    visited.clear();
-    let mut components = Vec::new();
-    while let Some(start) = finished.pop() {
-        if !visited.insert(start) {
-            continue;
-        }
-        let mut component = HashSet::new();
-        let mut stack = vec![start];
-        while let Some(node) = stack.pop() {
-            component.insert(node);
-            for &neighbor in reverse
-                .get(&node)
-                .expect("every candidate result has a reverse adjacency list")
-                .iter()
-                .rev()
-            {
-                if visited.insert(neighbor) {
-                    stack.push(neighbor);
-                }
-            }
-        }
-        components.push(component);
-    }
-    components
+        .collect();
+    Tarjan::new(adjacency).scc()
 }
