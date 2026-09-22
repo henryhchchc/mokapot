@@ -6,11 +6,11 @@ use crate::ir::{
     generator::{canonicalize::simplify::SimplifiedParameters, remap::RemapValues},
 };
 
-pub(super) fn finalize(
-    mut entry: MethodEntry,
-    mut blocks: HashMap<BlockId, BasicBlock>,
+pub(super) fn rewrite_values(
+    entry: &mut MethodEntry,
+    blocks: &mut HashMap<BlockId, BasicBlock>,
     simplified: &SimplifiedParameters,
-) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
+) {
     let canonical = |it| simplified.remaps.get(&it).copied().unwrap_or(it);
     let retained = blocks
         .iter_mut()
@@ -31,28 +31,32 @@ pub(super) fn finalize(
         .collect();
 
     for block in blocks.values_mut() {
-        finalize_block(block, &retained, &canonical);
+        rewrite_block(block, &retained, &canonical);
     }
-
-    (entry, blocks)
 }
 
-fn finalize_block(
+fn rewrite_block(
     block: &mut BasicBlock,
     retained: &HashMap<BlockId, Vec<usize>>,
     canonical: &impl Fn(ValueId) -> ValueId,
 ) {
-    if let BlockKind::LandingPad { exception } = &mut block.kind {
+    let BasicBlock {
+        kind,
+        parameters,
+        operations,
+        terminator,
+    } = block;
+    if let BlockKind::LandingPad { exception } = kind {
         *exception = canonical(*exception);
     }
-    for parameter in &mut block.parameters {
+    for parameter in parameters {
         parameter.value = canonical(parameter.value);
     }
-    for operation in &mut block.operations {
-        apply_substitutions(operation, canonical);
+    for operation in operations {
+        rewrite_ops(operation, canonical);
     }
-    apply_substitutions(&mut block.terminator, canonical);
-    block.terminator.arms_mut().for_each(|edge| {
+    rewrite_ops(terminator, canonical);
+    for edge in terminator.arms_mut() {
         if let Successor::Block {
             target,
             arguments,
@@ -64,14 +68,11 @@ fn finalize_block(
                 .iter()
                 .map(|&index| canonical(arguments[index]))
                 .collect();
-            apply_substitutions(transfer, canonical);
+            rewrite_ops(transfer, canonical);
         }
-    });
+    }
 }
 
-fn apply_substitutions<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {
-    match value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value))) {
-        Ok(()) => {}
-        Err(never) => match never {},
-    }
+fn rewrite_ops<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {
+    value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value)));
 }

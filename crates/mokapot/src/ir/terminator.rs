@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt, slice};
+use std::{collections::HashSet, convert::Infallible, fmt, slice};
 
 use super::{
     BlockId, Operation, ValueId,
@@ -117,8 +117,8 @@ impl<Arm> Terminator<Arm> {
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
     ) -> Terminator<MappedArm> {
-        self.try_map_arms(|arm| Ok::<_, std::convert::Infallible>(map(arm)))
-            .unwrap_or_else(|never| match never {})
+        let Ok(term) = self.try_map_arms(|arm| Ok::<_, Infallible>(map(arm)));
+        term
     }
 
     /// Maps every outgoing arm fallibly while preserving the terminator's
