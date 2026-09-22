@@ -55,7 +55,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     let entry = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert_eq!(reachable_blocks(&ir).len(), 1);
-    assert!(matches!(entry, Terminator::TryReturn { value: None, .. }));
+    assert!(matches!(entry, Terminator::Return { value: None, .. }));
     assert_eq!(entry.successors().count(), 1);
     assert_eq!(entry.successors().next().unwrap().transfer(), None);
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
