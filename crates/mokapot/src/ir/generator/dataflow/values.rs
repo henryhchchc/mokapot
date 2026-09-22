@@ -4,7 +4,7 @@ use super::Frame;
 use crate::{
     ir::{
         BlockId, IdAllocator, ValueId,
-        generator::{cfg::Cfg, error::Error},
+        generator::{controlflow::Cfg, error::Error},
     },
     jvm::{code::ProgramCounter, method},
 };

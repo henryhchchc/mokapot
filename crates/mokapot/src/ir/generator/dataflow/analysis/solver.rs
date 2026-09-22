@@ -8,7 +8,7 @@ use super::{
 };
 use crate::ir::{
     BlockId,
-    generator::{cfg::Cfg, error::Error},
+    generator::{controlflow::Cfg, error::Error},
 };
 
 pub(crate) struct DataflowSolver<'method, 'cfg> {

@@ -221,7 +221,7 @@ mod tests {
 
     use crate::{
         ir::{
-            generator::{cfg, dataflow},
+            generator::{controlflow, dataflow},
             test::prelude::*,
         },
         jvm::code::Instruction,
@@ -248,7 +248,7 @@ mod tests {
             "(I)I",
             vec![],
         );
-        let cfg = cfg::build(&method).unwrap();
+        let cfg = controlflow::analyze(&method).unwrap();
         let parts = dataflow::analyze(&cfg).unwrap();
         let (&target, target_block) = parts
             .blocks
