@@ -11,8 +11,10 @@ use super::{
     cube::Cube,
     minimizer::{BoundedMinimizer, Minimizer},
 };
-use crate::intrinsics::HashUnordered;
-use crate::ir::{BranchGuard, expression::BooleanVariable};
+use crate::{
+    intrinsics::HashUnordered,
+    ir::{BranchGuard, expression::BooleanVariable},
+};
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct Cover<P> {
