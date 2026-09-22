@@ -5,6 +5,7 @@ mod simplify;
 
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use simplify::{ParameterCandidate, simplify_parameters};
 
 use crate::ir::{BasicBlock, BlockId, MethodEntry, ValueId};
@@ -14,21 +15,21 @@ pub(super) fn canonicalize(
     entry: MethodEntry,
     blocks: HashMap<BlockId, BasicBlock>,
 ) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
-    let mut inputs = HashMap::<ValueId, Vec<ValueId>>::new();
-    // `resolve_blocks` lowers one argument per parameter position, so the arities match.
-    let entry_bb = &blocks[&entry.target];
-    entry_bb
-        .parameters
-        .iter()
-        .zip(&entry.arguments)
-        .for_each(|(param, &arg)| inputs.entry(param.value).or_default().push(arg));
+    let mut inputs = {
+        let entry_inputs = blocks[&entry.target]
+            .parameters
+            .iter()
+            .zip(&entry.arguments)
+            .map(|(p, a)| (p.value, *a));
 
-    blocks
-        .values()
-        .flat_map(|bb| bb.terminator.arms())
-        .filter_map(|it| it.block_target().map(|target_bb| (it, target_bb)))
-        .flat_map(|(edge, target)| blocks[&target].parameters.iter().zip(edge.arguments()))
-        .for_each(|(param, &arg)| inputs.entry(param.value).or_default().push(arg));
+        let block_inputs = blocks
+            .values()
+            .flat_map(|bb| bb.terminator.arms())
+            .filter_map(|it| it.block_target().map(|target_bb| (it, target_bb)))
+            .flat_map(|(edge, target)| blocks[&target].parameters.iter().zip(edge.arguments()))
+            .map(|(p, a)| (p.value, *a));
+        entry_inputs.chain(block_inputs).into_group_map()
+    };
 
     let candidates = blocks
         .values()
