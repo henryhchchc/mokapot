@@ -29,13 +29,13 @@ use crate::{ir::MokaIRMethod, jvm::Method};
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = cfg::build(method)?;
     let dataflow::IrParts {
-        entry,
-        blocks,
+        mut entry,
+        mut blocks,
         this,
         parameters,
         source_map,
     } = dataflow::analyze(&cfg)?;
-    let (entry, blocks) = canonicalize::canonicalize(entry, blocks);
+    canonicalize::canonicalize_values(&mut entry, &mut blocks);
     let ir = MokaIRMethod {
         access_flags: method.access_flags,
         name: method.name.clone(),

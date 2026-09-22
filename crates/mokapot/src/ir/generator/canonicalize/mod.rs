@@ -13,10 +13,10 @@ use crate::ir::{BasicBlock, BlockId, MethodEntry, ValueId};
 type Substitutions = HashMap<ValueId, ValueId>;
 
 /// Simplifies provisional block parameters and rewrites `entry` and `blocks` to canonical SSA.
-pub(super) fn canonicalize(
-    mut entry: MethodEntry,
-    mut blocks: HashMap<BlockId, BasicBlock>,
-) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
+pub(super) fn canonicalize_values(
+    entry: &mut MethodEntry,
+    blocks: &mut HashMap<BlockId, BasicBlock>,
+) {
     let mut arguments = {
         let entry_arguments = blocks[&entry.target]
             .parameters
@@ -44,8 +44,7 @@ pub(super) fn canonicalize(
             (parameter.value, candidate)
         })
         .collect();
-    SimplifiedParameters::for_block_inputs(inputs).apply(&mut entry, &mut blocks);
-    (entry, blocks)
+    SimplifiedParameters::for_block_inputs(inputs).apply(entry, blocks);
 }
 
 /// The result of simplifying provisional block parameters.
@@ -67,7 +66,7 @@ pub(super) struct ParameterInputs {
 mod tests {
     use std::collections::HashMap;
 
-    use super::canonicalize;
+    use super::canonicalize_values;
     use crate::ir::{expression::MathOperation, test::prelude::*};
 
     #[test]
@@ -77,12 +76,12 @@ mod tests {
         let ops = [def(r, MathOperation::Increment(p, 1))];
         let canonical_ops = [def(r, MathOperation::Increment(x, 1))];
 
-        let blocks = HashMap::from([
+        let mut blocks = HashMap::from([
             code(b0, goto(b1, [x])),
             bb(b1, [p], &ops, goto(b2, [p])),
             bb(b2, [q], &[], ret(q)),
         ]);
-        let (_, blocks) = canonicalize(method_entry(b0, []), blocks);
+        canonicalize_values(&mut method_entry(b0, []), &mut blocks);
 
         // Every single-input parameter is replaced by the value it forwards.
         let expected = HashMap::from([
@@ -103,7 +102,8 @@ mod tests {
             bb(b1, [join], &[], ret(join)),
         ]);
 
-        let (_, canonicalized) = canonicalize(method_entry(b0, []), blocks.clone());
+        let mut canonicalized = blocks.clone();
+        canonicalize_values(&mut method_entry(b0, []), &mut canonicalized);
         assert_eq!(canonicalized, blocks);
     }
 
@@ -113,12 +113,13 @@ mod tests {
         let [b0, b1] = ids(0);
         let ops = [def(result, MathOperation::Increment(kept, 1))];
 
-        let blocks = HashMap::from([
+        let mut blocks = HashMap::from([
             bb(b0, [kept, dead], &ops, ret(dead)),
             // A back edge making the entry block's parameters a join of two inputs.
             code(b1, goto(b0, [back_edge, dead_arg])),
         ]);
-        let (entry, blocks) = canonicalize(method_entry(b0, [kept_arg, dead_arg]), blocks);
+        let mut entry = method_entry(b0, [kept_arg, dead_arg]);
+        canonicalize_values(&mut entry, &mut blocks);
 
         // `kept` joins two distinct inputs while `dead` forwards one, so only it is replaced.
         let expected = HashMap::from([
@@ -134,10 +135,10 @@ mod tests {
     fn rejects_a_closed_parameter_cycle() {
         let [a, b] = ids(0);
         let [b1, b2] = ids(0);
-        let blocks = HashMap::from([
+        let mut blocks = HashMap::from([
             bb(b1, [a], &[], goto(b2, [a])),
             bb(b2, [b], &[], goto(b1, [b])),
         ]);
-        canonicalize(method_entry(b1, []), blocks);
+        canonicalize_values(&mut method_entry(b1, []), &mut blocks);
     }
 }
