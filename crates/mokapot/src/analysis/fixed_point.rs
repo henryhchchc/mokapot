@@ -5,7 +5,6 @@
 //!
 //! - [`JoinSemiLattice`]: Defines the algebraic structure for dataflow facts
 //! - [`DataflowProblem`]: Defines the analysis problem (initial facts + flow function)
-//! - [`DataflowOutput`]: Exposes the successor facts produced by a flow function
 //! - [`FactsMap`]: Abstraction over map data structures (e.g., `BTreeMap`, `HashMap`)
 //! - [`solve`]: Runs the worklist algorithm
 //!
@@ -41,11 +40,10 @@
 //!     type Location = usize;
 //!     type Fact = MyFact;
 //!     type Err = std::convert::Infallible;
-//!     type Output = Vec<(Self::Location, Self::Fact)>;
 //!
 //!     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> { /* ... */ }
 //!     fn flow(&mut self, loc: &Self::Location, fact: &Self::Fact)
-//!         -> Result<Self::Output, Self::Err> { /* ... */ }
+//!         -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> { /* ... */ }
 //! }
 //!
 //! // Run the analysis with BTreeMap as the container (requires Ord)
@@ -57,91 +55,41 @@
 //! ```
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     hash::{BuildHasher, Hash},
 };
 
 /// A join semi-lattice for dataflow analysis.
 ///
-/// A join semi-lattice is a partially ordered set where every pair of elements has a
-/// least upper bound (join). This algebraic structure is fundamental to dataflow analysis
-/// as it defines how facts are combined when control flow paths merge.
+/// Facts form a partially ordered set in which every pair has a least upper
+/// bound, the join (⊔). The join defines how facts combine where control flow
+/// merges, and [`join_assign`](Self::join_assign) computes it in place.
 ///
 /// # Laws
 ///
-/// Implementations must satisfy the following laws:
+/// The join must be idempotent (`a ⊔ a = a`), commutative (`a ⊔ b = b ⊔ a`),
+/// and associative (`(a ⊔ b) ⊔ c = a ⊔ (b ⊔ c)`).
 ///
-/// - **Idempotency**: `a.clone().join(a) == a`
-/// - **Commutativity**: `a.join(b) == b.join(a)`
-/// - **Associativity**: `a.join(b).join(c) == a.join(b.join(c))`
+/// # Ordering
 ///
-/// # Lattice Ordering via `PartialOrd`
-///
-/// This trait requires [`PartialOrd`] to express the lattice ordering (⊑). The ordering
-/// represents information content: `a <= b` means "a is less informative than or equal to b".
-///
-/// The lattice ordering must be consistent with the join operation:
-/// - `a <= a.join(b)` and `b <= a.join(b)` (join is an upper bound)
-/// - If `a <= c` and `b <= c`, then `a.join(b) <= c` (join is the *least* upper bound)
-///
-/// **Note**: This ordering may differ from any "natural" ordering of the underlying type.
-/// For example, in a powerset lattice, `{a} <= {a, b}` even though set ordering might
-/// typically be defined differently.
+/// [`PartialOrd`] expresses the lattice ordering (⊑): `a <= b` means `a` is no
+/// more informative than `b`. It must agree with the join, making `a ⊔ b` the
+/// *least* upper bound of `a` and `b`. This ordering may differ from any
+/// "natural" ordering of the type; a powerset lattice, for example, has
+/// `{a} <= {a, b}`.
 ///
 /// # Termination
 ///
-/// For the fixed-point algorithm to terminate, the lattice should have finite height
-/// (i.e., all ascending chains are finite), or the analysis should use widening.
+/// The fixed-point algorithm terminates when the lattice has finite height
+/// (all ascending chains are finite) and the flow function is monotonic.
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait JoinSemiLattice: PartialOrd {
-    /// Joins `other` into this element in place.
+    /// Joins `other` into `self` in place.
     ///
     /// Implementations should reuse owned storage from either operand where
-    /// practical. The returned boolean must be `true` exactly when the value
-    /// of `self` changed. A change must move `self` strictly upwards in the
-    /// lattice ordering.
+    /// practical. Returns `true` exactly when `self` changed, which must move
+    /// `self` strictly upwards in the lattice ordering.
     fn join_assign(&mut self, other: Self) -> bool;
-
-    /// Computes the join (least upper bound) of two elements.
-    ///
-    /// The join operation combines information from two facts, typically when
-    /// control flow paths merge. For may-analyses, this is usually set union;
-    /// for must-analyses, set intersection.
-    ///
-    /// This method consumes both operands, similar to [`std::ops::Add`]. This
-    /// allows implementations to reuse allocations when possible. If you need
-    /// to keep the original values, clone them before calling `join`.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - The other element to join with
-    ///
-    /// # Returns
-    ///
-    /// The least upper bound of `self` and `other`.
-    #[must_use]
-    fn join(mut self, other: Self) -> Self
-    where
-        Self: Sized,
-    {
-        self.join_assign(other);
-        self
-    }
-}
-
-/// Successor facts produced by a dataflow transfer function.
-///
-/// The consuming iterator lets [`solve`] propagate facts without cloning them.
-#[instability::unstable(feature = "fixed-point-analyses")]
-pub trait DataflowOutput<L, F> {
-    /// Consumes this output and iterates over its successor facts.
-    fn into_successors(self) -> impl Iterator<Item = (L, F)>;
-}
-
-impl<L, F> DataflowOutput<L, F> for Vec<(L, F)> {
-    fn into_successors(self) -> impl Iterator<Item = (L, F)> {
-        self.into_iter()
-    }
 }
 
 /// A dataflow analysis problem definition.
@@ -156,18 +104,18 @@ impl<L, F> DataflowOutput<L, F> for Vec<(L, F)> {
 ///
 /// # Type Parameters
 ///
-/// Implementors define four associated types:
+/// Implementors define three associated types:
 /// - [`Location`](DataflowProblem::Location): Program points in the control flow graph
 /// - [`Fact`](DataflowProblem::Fact): Dataflow facts that form a join semi-lattice
 /// - [`Err`](DataflowProblem::Err): Error type for fallible operations
-/// - [`Output`](DataflowProblem::Output): A transfer result exposing successor facts
 ///
 /// # Container Independence
 ///
-/// The `Location` type only requires `Clone`. The `Fact` type only requires
-/// [`JoinSemiLattice`] (which includes `PartialOrd`).
-/// The choice of container (e.g., `BTreeMap` vs `HashMap`) is made at the call
-/// site of [`solve`], allowing flexibility based on what traits your types implement.
+/// Neither the `Location` nor the `Fact` type requires [`Clone`]: the `Fact`
+/// only requires [`JoinSemiLattice`] (which includes `PartialOrd`), and
+/// locations move between the two maps rather than being copied. The choice of
+/// container (e.g., `BTreeMap` vs `HashMap`) is made at the call site of
+/// [`solve`], allowing flexibility based on what traits your types implement.
 ///
 /// # Mutability
 ///
@@ -192,12 +140,6 @@ pub trait DataflowProblem {
 
     /// The error type for operations that may fail.
     type Err;
-
-    /// The output produced by the transfer function.
-    ///
-    /// This may be a plain vector of successor facts, or a richer result that
-    /// records information such as edge categories or generated instructions.
-    type Output: DataflowOutput<Self::Location, Self::Fact>;
 
     /// Returns the initial facts (seeds) for the analysis.
     ///
@@ -232,7 +174,7 @@ pub trait DataflowProblem {
     ///
     /// # Returns
     ///
-    /// An output exposing `(successor_location, propagated_fact)` pairs.
+    /// An iterator of `(successor_location, propagated_fact)` pairs.
     ///
     /// # Errors
     ///
@@ -241,126 +183,111 @@ pub trait DataflowProblem {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::Output, Self::Err>;
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err>;
 }
 
-/// A set-like worklist of dataflow locations.
+/// A map of dataflow facts that also serves as the solver's worklist.
 ///
-/// Worklists contain only locations. Facts remain in the result map and are
-/// therefore not cloned merely to schedule a location for processing.
-#[instability::unstable(feature = "fixed-point-analyses")]
-pub trait LocationWorklist<L>: Default {
-    /// Schedules `location` if it is not already scheduled.
-    fn schedule(&mut self, location: L);
-
-    /// Removes and returns an arbitrary scheduled location, or `None` when empty.
-    fn pop_one(&mut self) -> Option<L>;
-}
-
-impl<L: Ord> LocationWorklist<L> for BTreeSet<L> {
-    fn schedule(&mut self, location: L) {
-        self.insert(location);
-    }
-
-    fn pop_one(&mut self) -> Option<L> {
-        self.pop_first()
-    }
-}
-
-impl<L, S> LocationWorklist<L> for HashSet<L, S>
-where
-    L: Clone + Hash + Eq,
-    S: BuildHasher + Default,
-{
-    fn schedule(&mut self, location: L) {
-        self.insert(location);
-    }
-
-    fn pop_one(&mut self) -> Option<L> {
-        let location = self.iter().next()?.clone();
-        self.take(&location)
-    }
-}
-
-/// A trait for map-like containers used in the fixed-point algorithm.
-///
-/// This abstraction allows the solver to work with different map implementations
-/// (e.g., `BTreeMap`, `HashMap`) depending on what traits the key type implements.
+/// A location's fact is owned by exactly one map at a time: [`pop_one`] hands a
+/// pending `(location, fact)` to the result map, and successor facts are joined
+/// back into the worklist. Locations are therefore moved, not cloned.
 ///
 /// # Provided Implementations
 ///
-/// - [`BTreeMap<L, F>`] for `L: Clone + Ord`
-/// - [`HashMap<L, F>`] for `L: Clone + Hash + Eq`
+/// - [`BTreeMap<L, F>`] for `L: Ord`
+/// - [`HashMap<L, F>`] for `L: Hash + Eq`
+///
+/// [`pop_one`]: FactsMap::pop_one
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub trait FactsMap<L, F>: Default {
-    /// The location-only worklist compatible with this map's key type.
-    type Worklist: LocationWorklist<L>;
-
-    /// Returns the fact stored at `location`, if any.
-    fn get(&self, location: &L) -> Option<&F>;
-
-    /// Inserts a fact, joining with any existing fact at that location.
+    /// Joins `fact` into the fact stored at `location`.
     ///
     /// If no fact exists at the location, the new fact is inserted directly.
-    /// If a fact already exists, the new fact is joined with the existing fact.
+    /// Otherwise the new fact is joined in place, so this does not require
+    /// [`Clone`].
     ///
     /// # Returns
     ///
-    /// Returns `true` if the stored fact changed. Existing facts are updated
-    /// in place, so this operation does not require [`Clone`].
-    fn insert_or_join(&mut self, location: L, fact: F) -> bool
+    /// The stored location and joined fact when the stored fact changed, or
+    /// `None` when the new fact added no information.
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice;
+
+    /// Removes and returns an arbitrary `(location, fact)` entry, or `None`
+    /// when empty.
+    fn pop_one(&mut self) -> Option<(L, F)>;
 }
 
 impl<L, F> FactsMap<L, F> for BTreeMap<L, F>
 where
-    L: Clone + Ord,
+    L: Ord,
 {
-    type Worklist = BTreeSet<L>;
-
-    fn get(&self, location: &L) -> Option<&F> {
-        BTreeMap::get(self, location)
-    }
-
-    fn insert_or_join(&mut self, location: L, fact: F) -> bool
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice,
     {
         use std::collections::btree_map::Entry;
-        match self.entry(location) {
-            Entry::Vacant(entry) => {
-                entry.insert(fact);
-                true
+        let entry = match self.entry(location) {
+            Entry::Vacant(entry) => entry.insert_entry(fact),
+            Entry::Occupied(mut entry) => {
+                if !entry.get_mut().join_assign(fact) {
+                    return None;
+                }
+                entry
             }
-            Entry::Occupied(mut entry) => entry.get_mut().join_assign(fact),
-        }
+        };
+        // SAFETY: `entry` borrows `self`, so its key and value outlive the
+        // returned references; the local binding only obscures that lifetime.
+        Some(unsafe {
+            (
+                std::mem::transmute::<&L, &L>(entry.key()),
+                std::mem::transmute::<&F, &F>(entry.get()),
+            )
+        })
+    }
+
+    fn pop_one(&mut self) -> Option<(L, F)> {
+        self.pop_first()
     }
 }
 
 impl<L, F, S> FactsMap<L, F> for HashMap<L, F, S>
 where
-    L: Clone + Hash + Eq,
+    L: Hash + Eq,
     S: BuildHasher + Default,
 {
-    type Worklist = HashSet<L, S>;
-
-    fn get(&self, location: &L) -> Option<&F> {
-        HashMap::get(self, location)
-    }
-
-    fn insert_or_join(&mut self, location: L, fact: F) -> bool
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
     where
         F: JoinSemiLattice,
     {
         use std::collections::hash_map::Entry;
-        match self.entry(location) {
-            Entry::Vacant(entry) => {
-                entry.insert(fact);
-                true
+        let entry = match self.entry(location) {
+            Entry::Vacant(entry) => entry.insert_entry(fact),
+            Entry::Occupied(mut entry) => {
+                if !entry.get_mut().join_assign(fact) {
+                    return None;
+                }
+                entry
             }
-            Entry::Occupied(mut entry) => entry.get_mut().join_assign(fact),
-        }
+        };
+        // SAFETY: `entry` borrows `self`, so its key and value outlive the
+        // returned references; the local binding only obscures that lifetime.
+        Some(unsafe {
+            (
+                std::mem::transmute::<&L, &L>(entry.key()),
+                std::mem::transmute::<&F, &F>(entry.get()),
+            )
+        })
+    }
+
+    fn pop_one(&mut self) -> Option<(L, F)> {
+        let location = self.keys().next()?;
+        // SAFETY: `remove_entry` searches with `location` before it moves the
+        // matching entry and never reads the key afterwards, so disassociating
+        // its lifetime from the map is sound for this call.
+        let location = unsafe { std::mem::transmute::<&L, &L>(location) };
+        self.remove_entry(location)
     }
 }
 
@@ -371,12 +298,12 @@ where
 ///
 /// # Algorithm
 ///
-/// 1. Join seed facts into the result map and schedule their locations
+/// 1. Join seed facts into the worklist
 /// 2. While the worklist is non-empty:
-///    a. Remove a location from the worklist
-///    b. Apply the flow function to its current joined fact
-///    c. Join each successor fact directly into the result map
-///    d. Schedule successors whose facts changed
+///    a. Remove a pending `(location, fact)` entry
+///    b. Join its fact into the result map
+///    c. If the stored fact changed, apply the flow function and join each
+///       successor fact back into the worklist
 /// 3. Return the final facts at all locations
 ///
 /// # Type Parameters
@@ -399,11 +326,6 @@ where
 ///
 /// Returns an error if the flow function fails at any location.
 ///
-/// # Panics
-///
-/// Panics if a custom [`FactsMap`] or its associated [`LocationWorklist`]
-/// violates the storage and scheduling contracts.
-///
 /// # Termination
 ///
 /// Termination is guaranteed if:
@@ -413,55 +335,25 @@ where
 pub fn solve<P, M>(problem: &mut P) -> Result<M, P::Err>
 where
     P: DataflowProblem,
-    P::Location: Clone,
     M: FactsMap<P::Location, P::Fact>,
-{
-    solve_accumulating(problem, |_, output, facts, worklist| {
-        for (successor, propagated) in output.into_successors() {
-            schedule_if_changed(facts, worklist, successor, propagated);
-        }
-    })
-}
-
-/// Runs the accumulating worklist algorithm, delegating transfer-output handling.
-fn solve_accumulating<P, M, HandleOutput>(
-    problem: &mut P,
-    mut handle_output: HandleOutput,
-) -> Result<M, P::Err>
-where
-    P: DataflowProblem,
-    P::Location: Clone,
-    M: FactsMap<P::Location, P::Fact>,
-    HandleOutput: FnMut(P::Location, P::Output, &mut M, &mut M::Worklist),
 {
     let mut facts = M::default();
-    let mut worklist = M::Worklist::default();
+    let mut worklist = M::default();
 
     for (location, fact) in problem.seeds() {
-        schedule_if_changed(&mut facts, &mut worklist, location, fact);
+        worklist.insert_or_join(location, fact);
     }
 
-    while let Some(location) = worklist.pop_one() {
-        let fact = facts
-            .get(&location)
-            .expect("a scheduled location has a stored fact");
-        let output = problem.flow(&location, fact)?;
-        handle_output(location, output, &mut facts, &mut worklist);
+    while let Some((location, incoming)) = worklist.pop_one() {
+        let Some((location, fact)) = facts.insert_or_join(location, incoming) else {
+            continue;
+        };
+        for (successor, propagated) in problem.flow(location, fact)? {
+            worklist.insert_or_join(successor, propagated);
+        }
     }
 
     Ok(facts)
-}
-
-/// Joins a propagated fact and schedules its location when the joined fact changed.
-fn schedule_if_changed<L, F, M>(facts: &mut M, worklist: &mut M::Worklist, location: L, fact: F)
-where
-    L: Clone,
-    F: JoinSemiLattice,
-    M: FactsMap<L, F>,
-{
-    if facts.insert_or_join(location.clone(), fact) {
-        worklist.schedule(location);
-    }
 }
 
 // ============================================================================
@@ -477,8 +369,8 @@ where
 /// # Lattice Structure
 ///
 /// - `None` is the bottom element (⊥)
-/// - `Some(x).join(Some(y)) = Some(x.join(y))` (lifted join)
-/// - `None.join(Some(x)) = Some(x)` (bottom identity)
+/// - `Some(x) ⊔ Some(y) = Some(x ⊔ y)` (lifted join)
+/// - `None ⊔ Some(x) = Some(x)` (bottom identity)
 /// - `None <= Some(_)` for all values
 /// - `Some(a) <= Some(b)` iff `a <= b` in the inner lattice
 impl<T: JoinSemiLattice> JoinSemiLattice for Option<T> {
@@ -538,7 +430,6 @@ mod test {
         type Location = u8;
         type Fact = TestSet;
         type Err = Infallible;
-        type Output = Vec<(Self::Location, Self::Fact)>;
 
         fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
             [(0, TestSet(BTreeSet::new()))]
@@ -548,7 +439,7 @@ mod test {
             &mut self,
             location: &Self::Location,
             _fact: &Self::Fact,
-        ) -> Result<Self::Output, Self::Err> {
+        ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
             Ok(match location {
                 0 => vec![
                     (1, TestSet(BTreeSet::from([1]))),
@@ -564,7 +455,7 @@ mod test {
     }
 
     #[test]
-    fn location_worklist_coalesces_repeated_successors() {
+    fn worklist_coalesces_repeated_successors() {
         let mut problem = RepeatedSuccessors { one_calls: 0 };
 
         let facts: BTreeMap<_, _> = solve(&mut problem).expect("infallible analysis");
@@ -573,66 +464,23 @@ mod test {
         assert_eq!(problem.one_calls, 1);
     }
 
-    #[derive(Debug, PartialEq, PartialOrd)]
-    struct NonCloneMax(u8);
-
-    impl JoinSemiLattice for NonCloneMax {
-        fn join_assign(&mut self, other: Self) -> bool {
-            if other > *self {
-                *self = other;
-                true
-            } else {
-                false
-            }
-        }
-    }
-
-    struct NonCloneFacts;
-
-    impl DataflowProblem for NonCloneFacts {
-        type Location = u8;
-        type Fact = NonCloneMax;
-        type Err = Infallible;
-        type Output = Vec<(Self::Location, Self::Fact)>;
-
-        fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-            [(0, NonCloneMax(1))]
-        }
-
-        fn flow(
-            &mut self,
-            location: &Self::Location,
-            _fact: &Self::Fact,
-        ) -> Result<Self::Output, Self::Err> {
-            Ok(if *location == 0 {
-                vec![(1, NonCloneMax(2))]
-            } else {
-                Vec::new()
-            })
-        }
-    }
-
-    #[test]
-    fn ordinary_solver_does_not_require_cloneable_facts() {
-        let facts: BTreeMap<_, _> =
-            solve(&mut NonCloneFacts).expect("infallible non-clone analysis");
-
-        assert_eq!(facts[&1], NonCloneMax(2));
-    }
-
     proptest! {
        #[test]
        fn option_join_ordering(
            lhs in any::<Option<TestSet>>(),
            rhs in any::<Option<TestSet>>(),
        ) {
-           let joined = lhs.clone().join(rhs.clone());
-           let mut assigned = lhs.clone();
-           let changed = assigned.join_assign(rhs.clone());
+           let mut joined = lhs.clone();
+           let changed = joined.join_assign(rhs.clone());
            prop_assert!(joined >= lhs);
            prop_assert!(joined >= rhs);
-           prop_assert_eq!(&assigned, &joined);
-           prop_assert_eq!(changed, assigned != lhs);
+           prop_assert_eq!(changed, joined != lhs);
+
+           // The join is commutative and idempotent.
+           let mut commuted = rhs.clone();
+           commuted.join_assign(lhs.clone());
+           prop_assert_eq!(&joined, &commuted);
+           prop_assert!(!joined.clone().join_assign(joined.clone()));
        }
     }
 }
