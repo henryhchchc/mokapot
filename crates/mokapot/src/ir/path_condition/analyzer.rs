@@ -1,32 +1,23 @@
-use std::{cmp, collections::HashMap, convert::Infallible, hash::Hash};
+use std::{cmp, convert::Infallible, hash::Hash};
 
 use super::{PathCondition, SolvingBudget};
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
-    ir::{BasicBlock, BlockId, BranchGuard, ControlTransfer, expression::Predicate},
+    ir::{BlockId, BranchGuard, ControlTransfer, MokaIRMethod, expression::Predicate},
 };
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
 pub(super) struct PathConditionProblem<'method> {
-    blocks: &'method HashMap<BlockId, BasicBlock>,
-    entry: BlockId,
+    method: &'method MokaIRMethod,
     budget: SolvingBudget,
 }
 
 impl<'method> PathConditionProblem<'method> {
-    /// Creates a path-condition analysis over the given method blocks.
+    /// Creates a path-condition analysis over the given method.
     #[must_use]
-    pub(super) const fn new(
-        blocks: &'method HashMap<BlockId, BasicBlock>,
-        entry: BlockId,
-        budget: SolvingBudget,
-    ) -> Self {
-        Self {
-            blocks,
-            entry,
-            budget,
-        }
+    pub(super) const fn new(method: &'method MokaIRMethod, budget: SolvingBudget) -> Self {
+        Self { method, budget }
     }
 }
 
@@ -40,7 +31,10 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
     type Output = Vec<(Self::Location, Self::Fact)>;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        [(self.entry, PathConditionFact::one(self.budget))]
+        [(
+            self.method.entry_block(),
+            PathConditionFact::one(self.budget),
+        )]
     }
 
     fn flow(
@@ -48,7 +42,11 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::Output, Self::Err> {
-        Ok(self.blocks[location]
+        let block = self
+            .method
+            .block(*location)
+            .expect("a dataflow location is a block of the method");
+        Ok(block
             .terminator
             .successors()
             .filter_map(|successor| {

@@ -7,7 +7,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 pub(crate) use crate::ir::{
     BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
-    MethodEntry, MokaIRMethod, Operation, Successor, Terminator, ValueId, expression::Expression,
+    MethodEntry, MokaIRMethod, Operation, SourceMap, Successor, Terminator, ValueId,
+    expression::Expression,
 };
 use crate::{
     ir::NumericalId,
@@ -83,6 +84,22 @@ pub(crate) fn method_entry(
     MethodEntry {
         target,
         arguments: args.into_iter().collect(),
+    }
+}
+
+/// A `MokaIRMethod` over `blocks` entering at `entry`.
+pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) -> MokaIRMethod {
+    MokaIRMethod {
+        access_flags: AccessFlags::PUBLIC | AccessFlags::STATIC,
+        name: "test".to_owned(),
+        descriptor: "()V".parse().expect("a valid descriptor"),
+        owner: cls_r("java/lang/Object"),
+        entry: method_entry(entry, []),
+        blocks,
+        source_map: SourceMap::new(),
+        this: None,
+        parameters: Vec::new(),
+        value_definitions: HashMap::new(),
     }
 }
 
