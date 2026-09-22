@@ -4,10 +4,7 @@ use derive_more::Constructor;
 
 use super::super::Frame;
 use crate::{
-    ir::{
-        BlockId, BlockKind, Operation, Terminator, control_flow::ControlTransfer,
-        generator::cfg::ArmKey,
-    },
+    ir::{BlockId, BlockKind, ControlTransfer, Operation, Terminator, generator::cfg::ArmKey},
     jvm::code::ProgramCounter,
 };
 

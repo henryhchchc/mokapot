@@ -7,7 +7,7 @@ use super::{
     absorb,
     indexed::{AtomTable, IndexedCube, LiteralState, absorb_indexed, indexed_cover_cost},
 };
-use crate::ir::control_flow::path_condition::{SolvingBudget, cube::Cube};
+use crate::ir::path_condition::{SolvingBudget, cube::Cube};
 
 pub(super) fn heuristic_minimize<P>(
     cubes: &HashSet<Cube<P>>,

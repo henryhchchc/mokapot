@@ -11,8 +11,7 @@ use super::{
 };
 use crate::{
     ir::{
-        BlockId, Operation,
-        control_flow::ControlTransfer,
+        BlockId, ControlTransfer, Operation,
         generator::{
             cfg::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget},
             error::Error,

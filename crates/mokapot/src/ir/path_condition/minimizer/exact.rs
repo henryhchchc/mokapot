@@ -10,7 +10,7 @@ use super::{
     absorb,
     indexed::{AtomTable, IndexedCube, absorb_indexed, cover_cost},
 };
-use crate::ir::control_flow::path_condition::cube::Cube;
+use crate::ir::path_condition::cube::Cube;
 
 pub(super) fn exact_minimize<P>(cubes: &HashSet<Cube<P>>, atoms: &AtomTable<P>) -> HashSet<Cube<P>>
 where

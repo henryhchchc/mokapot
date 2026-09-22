@@ -7,11 +7,12 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    BooleanVariable, BranchGuard, SolvingBudget,
+    SolvingBudget,
     cube::Cube,
     minimizer::{BoundedMinimizer, Minimizer},
 };
 use crate::intrinsics::HashUnordered;
+use crate::ir::{BranchGuard, expression::BooleanVariable};
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct Cover<P> {

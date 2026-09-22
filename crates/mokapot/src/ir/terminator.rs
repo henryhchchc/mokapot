@@ -1,9 +1,21 @@
-use std::{collections::HashSet, convert::Infallible, fmt, slice};
+use std::{
+    cmp,
+    collections::{HashSet, hash_set},
+    convert::Infallible,
+    fmt::{self, Display},
+    hash::{Hash, Hasher},
+    slice,
+};
+
+use itertools::Itertools;
 
 use super::{
     BlockId, Operation, ValueId,
-    control_flow::{ControlTransfer, path_condition::BranchGuard},
-    expression::Predicate,
+    expression::{BooleanVariable, Predicate},
+};
+use crate::{
+    intrinsics::{HashUnordered, hashset_partial_order},
+    jvm::references::ClassRef,
 };
 
 /// One outgoing arm of a terminator.
@@ -295,5 +307,166 @@ impl<Arm> fmt::Display for Terminator<Arm> {
             Self::TryReturn { value: None, .. } => f.write_str("try return"),
             Self::Throw { value, .. } => write!(f, "throw {value}"),
         }
+    }
+}
+
+/// The semantics of one control-flow successor arm.
+///
+/// Exceptional arms begin a new block, so an operation that can raise never
+/// coalesces with the location its unguarded arm targets.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ControlTransfer {
+    /// An unguarded transfer that always reaches its target.
+    Unconditional,
+    /// A conditional transfer guarded by a conjunction of literals.
+    Conditional(BranchGuard<Predicate>),
+    /// An exceptional outcome selected by this catch type.
+    ///
+    /// `None` denotes a catch-all exception-table entry. Arm order retains
+    /// JVM exception-handler precedence.
+    Exception(Option<ClassRef>),
+}
+
+/// A conjunction of literals.
+///
+/// `BranchGuard` is the conjunction carried by a conditional CFG edge. An
+/// empty guard represents `⊤`.
+#[derive(Debug, Clone)]
+pub struct BranchGuard<P>(pub(super) HashSet<BooleanVariable<P>>);
+
+impl<P> PartialEq for BranchGuard<P>
+where
+    P: Hash + Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<P> Eq for BranchGuard<P> where P: Hash + Eq {}
+
+impl<P> Hash for BranchGuard<P>
+where
+    P: Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (&self.0).hash_unordered(state);
+    }
+}
+
+impl<P> PartialOrd for BranchGuard<P>
+where
+    P: Hash + Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        hashset_partial_order(&self.0, &other.0)
+    }
+}
+
+impl<P> BranchGuard<P> {
+    /// Creates the tautological guard `⊤`.
+    #[must_use]
+    pub fn one() -> Self {
+        Self(HashSet::new())
+    }
+
+    /// Creates a guard containing a single literal.
+    #[must_use]
+    pub fn of(predicate: BooleanVariable<P>) -> Self
+    where
+        P: Hash + Eq,
+    {
+        Self(HashSet::from([predicate]))
+    }
+
+    /// Returns whether this guard is `⊤`.
+    #[must_use]
+    pub fn is_tautology(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Iterates over this guard's literals.
+    ///
+    /// The iteration order is unspecified.
+    pub fn literals(&self) -> impl Iterator<Item = BooleanVariable<&P>> {
+        self.0.iter().map(|literal| match literal {
+            BooleanVariable::Positive(predicate) => BooleanVariable::Positive(predicate),
+            BooleanVariable::Negative(predicate) => BooleanVariable::Negative(predicate),
+        })
+    }
+
+    /// Returns the number of unique predicates referenced by this guard. For estimating the complexity of the path condition.
+    #[must_use]
+    pub fn predicate_count(&self) -> usize
+    where
+        P: Hash + Eq,
+    {
+        self.0
+            .iter()
+            .map(|it| match it {
+                BooleanVariable::Negative(predicate) | BooleanVariable::Positive(predicate) => {
+                    predicate
+                }
+            })
+            .unique()
+            .count()
+    }
+}
+
+impl<P> BranchGuard<P> {
+    pub(crate) fn predicates(&self) -> impl Iterator<Item = &P> {
+        self.literals().map(|literal| match literal {
+            BooleanVariable::Positive(predicate) | BooleanVariable::Negative(predicate) => {
+                predicate
+            }
+        })
+    }
+
+    /// Borrows the predicates while preserving the conjunction structure.
+    pub(super) fn as_ref(&self) -> BranchGuard<&P>
+    where
+        P: Hash + Eq,
+    {
+        self.0
+            .iter()
+            .map(|literal| match literal {
+                BooleanVariable::Positive(predicate) => BooleanVariable::Positive(predicate),
+                BooleanVariable::Negative(predicate) => BooleanVariable::Negative(predicate),
+            })
+            .collect()
+    }
+}
+
+impl<P: Display> Display for BranchGuard<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_tautology() {
+            write!(f, "⊤")
+        } else {
+            let literals = self
+                .0
+                .iter()
+                .map(ToString::to_string)
+                .sorted()
+                .collect::<Vec<_>>();
+            write!(f, "{}", literals.iter().format(" && "))
+        }
+    }
+}
+
+impl<P> FromIterator<BooleanVariable<P>> for BranchGuard<P>
+where
+    P: Hash + Eq,
+{
+    fn from_iter<T: IntoIterator<Item = BooleanVariable<P>>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl<P> IntoIterator for BranchGuard<P> {
+    type Item = BooleanVariable<P>;
+    type IntoIter = hash_set::IntoIter<BooleanVariable<P>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }

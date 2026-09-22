@@ -1,13 +1,9 @@
 use std::{cmp, collections::HashMap, convert::Infallible, hash::Hash};
 
-use super::{BranchGuard, PathCondition, SolvingBudget};
+use super::{PathCondition, SolvingBudget};
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
-    ir::{
-        BasicBlock, BlockId,
-        control_flow::{ControlTransfer, outgoing_edges},
-        expression::Predicate,
-    },
+    ir::{BasicBlock, BlockId, BranchGuard, ControlTransfer, expression::Predicate},
 };
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
@@ -52,15 +48,20 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
         location: &Self::Location,
         fact: &Self::Fact,
     ) -> Result<Self::Output, Self::Err> {
-        Ok(outgoing_edges(self.blocks, *location)
-            .filter_map(|edge| {
-                let propagated = match edge.transfer() {
-                    ControlTransfer::Conditional(guard) => {
+        Ok(self.blocks[location]
+            .terminator
+            .successors()
+            .filter_map(|successor| {
+                let target = successor.block_target()?;
+                let propagated = match successor.transfer() {
+                    Some(ControlTransfer::Conditional(guard)) => {
                         fact.conjoin_branch_guard(guard.as_ref())
                     }
-                    ControlTransfer::Unconditional | ControlTransfer::Exception(_) => fact.clone(),
+                    Some(ControlTransfer::Unconditional | ControlTransfer::Exception(_)) | None => {
+                        fact.clone()
+                    }
                 };
-                (!propagated.is_contradiction()).then_some((edge.target(), propagated))
+                (!propagated.is_contradiction()).then_some((target, propagated))
             })
             .collect::<Vec<_>>())
     }

@@ -7,8 +7,8 @@ use std::{
 
 use itertools::Itertools;
 
-use super::{BooleanVariable, BranchGuard};
 use crate::intrinsics::{HashUnordered, hashset_partial_order};
+use crate::ir::{BranchGuard, expression::BooleanVariable};
 
 /// A normalized conjunction of literals.
 ///
