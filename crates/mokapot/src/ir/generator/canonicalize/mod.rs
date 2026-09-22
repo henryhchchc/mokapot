@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use simplify::{ParameterCandidate, simplify_parameters};
 
-use crate::ir::{BasicBlock, BlockId, MethodEntry, ValueId};
+use crate::ir::{BasicBlock, BlockId, MethodEntry};
 
 /// Simplifies provisional block parameters and rewrites `entry` and `blocks` to canonical SSA.
 pub(super) fn canonicalize(
@@ -30,17 +30,18 @@ pub(super) fn canonicalize(
             .map(|(p, a)| (p.value, *a));
         entry_inputs.chain(block_inputs).into_group_map()
     };
-
     let candidates = blocks
         .values()
-        .flat_map(|block| &block.parameters)
-        .map(|parameter| {
-            let candidate = ParameterCandidate {
-                inputs: inputs.remove(&parameter.value).unwrap_or_default(),
+        .flat_map(|it| &it.parameters)
+        .map(|param| {
+            let cand = ParameterCandidate {
+                inputs: inputs
+                    .remove(&param.value)
+                    .expect("every block parameter takes an incoming argument"),
             };
-            (parameter.value, candidate)
+            (param.value, cand)
         })
-        .collect::<HashMap<ValueId, _>>();
+        .collect();
     let simplified = simplify_parameters(candidates);
     finalization::finalize(entry, blocks, &simplified)
 }
