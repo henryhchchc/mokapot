@@ -71,7 +71,7 @@ pub(super) fn simplify_parameters(
                     // A reachable parameter always takes an input from outside its SCC:
                     // the entry is seeded from `entry_arguments`, and a block is lowered
                     // only when an edge reaches it.
-                    debug_assert!(false, "reachable block parameters form a closed cycle");
+                    panic!("reachable block parameters form a closed cycle");
                 }
                 1 => {
                     let replacement = *external.iter().next().expect("the set contains one value");
