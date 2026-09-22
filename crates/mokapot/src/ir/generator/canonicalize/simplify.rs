@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use itertools::Itertools;
+
 use crate::ir::ValueId;
 
 /// A block parameter and the arguments supplied by all incoming edges.
@@ -12,7 +14,7 @@ pub(super) struct ParameterCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SimplifiedParameters {
     /// Canonical replacements for eliminated parameter results.
-    pub(super) substitutions: HashMap<ValueId, ValueId>,
+    pub(super) remaps: HashMap<ValueId, ValueId>,
     /// Results of parameters that represent genuine choices after rewriting.
     pub(super) retained: HashSet<ValueId>,
 }
@@ -25,101 +27,106 @@ pub(super) struct SimplifiedParameters {
 pub(super) fn simplify_parameters(
     mut candidates: HashMap<ValueId, ParameterCandidate>,
 ) -> SimplifiedParameters {
-    let mut substitutions = HashMap::new();
+    let mut working_remaps = HashMap::new();
 
-    loop {
-        rewrite_candidates(&mut candidates, &substitutions);
-
-        let trivial = candidates.iter().find_map(|(&result, candidate)| {
-            let external = candidate
-                .inputs
-                .iter()
-                .map(|value| canonical(*value, &substitutions))
-                .filter(|&value| value != result)
-                .collect::<HashSet<_>>();
-            (external.len() == 1).then(|| {
-                (
-                    result,
-                    *external.iter().next().expect("the set contains one value"),
-                )
-            })
-        });
-        if let Some((result, replacement)) = trivial {
-            candidates.remove(&result);
-            substitutions.insert(result, replacement);
-            continue;
+    let retained = loop {
+        if simplify_acyclic(&mut candidates, &mut working_remaps)
+            || simplify_cyclic(&mut candidates, &mut working_remaps)
+        {
+            rewrite_candidates(&mut candidates, &working_remaps);
+        } else {
+            break candidates.into_keys().collect();
         }
+    };
 
-        let components = strongly_connected_components(&candidates);
-        let mut collapsed = false;
-        for component in components {
-            let external = component
-                .iter()
-                .flat_map(|it| {
-                    candidates
-                        .get(it)
-                        .expect("SCC nodes are candidate results")
-                        .inputs
-                        .iter()
-                })
-                .map(|value| canonical(*value, &substitutions))
-                .filter(|value| !component.contains(value))
-                .collect::<HashSet<_>>();
+    let remaps = working_remaps
+        .keys()
+        .copied()
+        .map(|it| (it, canonical(it, &working_remaps)))
+        .collect();
 
-            match external.len() {
-                0 => {
-                    // A reachable parameter always takes an input from outside its SCC:
-                    // the entry is seeded from `entry_arguments`, and a block is lowered
-                    // only when an edge reaches it.
-                    panic!("reachable block parameters form a closed cycle");
-                }
-                1 => {
-                    let replacement = *external.iter().next().expect("the set contains one value");
-                    for result in component {
-                        candidates.remove(&result);
-                        substitutions.insert(result, replacement);
-                    }
-                    collapsed = true;
-                }
-                _ => {}
-            }
-        }
+    SimplifiedParameters { remaps, retained }
+}
 
-        if !collapsed {
-            break;
-        }
-    }
+fn simplify_acyclic(
+    candidates: &mut HashMap<ValueId, ParameterCandidate>,
+    working_remaps: &mut HashMap<ValueId, ValueId>,
+) -> bool {
+    let acyclic_substitution = candidates.iter().find_map(|(&val, candidate)| {
+        let external: HashSet<_> = candidate
+            .inputs
+            .iter()
+            .map(|it| canonical(*it, &*working_remaps))
+            .filter(|&it| it != val)
+            .collect();
+        external.into_iter().exactly_one().ok().map(|id| (val, id))
+    });
 
-    rewrite_candidates(&mut candidates, &substitutions);
-    let keys = substitutions.keys().copied().collect::<Vec<_>>();
-    for value in keys {
-        let replacement = canonical(value, &substitutions);
-        substitutions.insert(value, replacement);
-    }
-
-    SimplifiedParameters {
-        substitutions,
-        retained: candidates.into_keys().collect(),
+    if let Some((result, replacement)) = acyclic_substitution {
+        candidates.remove(&result);
+        working_remaps.insert(result, replacement);
+        true
+    } else {
+        false
     }
 }
 
-fn canonical(mut value: ValueId, substitutions: &HashMap<ValueId, ValueId>) -> ValueId {
-    while let Some(&replacement) = substitutions.get(&value) {
-        debug_assert_ne!(value, replacement, "a substitution maps a value to itself");
-        value = replacement;
+fn simplify_cyclic(
+    candidates: &mut HashMap<ValueId, ParameterCandidate>,
+    working_remaps: &mut HashMap<ValueId, ValueId>,
+) -> bool {
+    let components = strongly_connected_components(&*candidates);
+    let mut collapsed = false;
+    for component in components {
+        let external = component
+            .iter()
+            .flat_map(|it| {
+                candidates
+                    .get(it)
+                    .expect("SCC nodes are candidate results")
+                    .inputs
+                    .iter()
+            })
+            .map(|value| canonical(*value, &*working_remaps))
+            .filter(|value| !component.contains(value))
+            .collect::<HashSet<_>>();
+
+        match external.into_iter().exactly_one() {
+            Ok(replacement) => {
+                for result in component {
+                    candidates.remove(&result);
+                    working_remaps.insert(result, replacement);
+                }
+                collapsed = true;
+            }
+            Err(items) if items.len() == 0 => {
+                // A reachable parameter always takes an input from outside its SCC:
+                // the entry is seeded from `entry_arguments`, and a block is lowered
+                // only when an edge reaches it.
+                panic!("reachable block parameters form a closed cycle");
+            }
+            Err(_) => {}
+        }
+    }
+    collapsed
+}
+
+fn canonical(mut value: ValueId, remaps: &HashMap<ValueId, ValueId>) -> ValueId {
+    while let Some(&substitute) = remaps.get(&value) {
+        debug_assert_ne!(value, substitute, "{value} is remapped to itself");
+        value = substitute;
     }
     value
 }
 
 fn rewrite_candidates(
     candidates: &mut HashMap<ValueId, ParameterCandidate>,
-    substitutions: &HashMap<ValueId, ValueId>,
+    remaps: &HashMap<ValueId, ValueId>,
 ) {
-    for candidate in candidates.values_mut() {
-        for value in &mut candidate.inputs {
-            *value = canonical(*value, substitutions);
-        }
-    }
+    candidates
+        .values_mut()
+        .flat_map(|it| it.inputs.iter_mut())
+        .for_each(|it| *it = canonical(*it, remaps));
 }
 
 fn strongly_connected_components(
