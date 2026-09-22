@@ -15,7 +15,7 @@ use crate::{
 
 /// Builds `method`, first checking the frame bookkeeping that resolution erases.
 pub(crate) fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    super::dataflow::verify_method(method);
+    super::data_flow::verify_method(method);
     MokaIRMethod::from_method(method)
 }
 

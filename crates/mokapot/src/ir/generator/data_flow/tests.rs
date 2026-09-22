@@ -7,14 +7,14 @@ use super::{
     frame::Frame,
 };
 use crate::{
-    ir::{BlockId, generator::controlflow},
+    ir::{BlockId, generator::control_flow},
     jvm::Method,
 };
 
 /// Asserts the frame-flow invariant of `method`'s solutions; methods the phase
 /// rejects are left to the tests that cover those failures.
 pub(crate) fn verify_method(method: &Method) {
-    let Ok(cfg) = controlflow::analyze(method) else {
+    let Ok(cfg) = control_flow::analyze(method) else {
         return;
     };
     let Ok(solver) = DataflowSolver::new(&cfg) else {

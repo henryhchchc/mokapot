@@ -4,14 +4,14 @@
 //! instruction, including bytecode unreachable from method entry, before
 //! partitioning supported bytecode into reachable blocks.
 
+mod block_exit;
 mod builder;
-mod control_flow;
 mod fallibility;
 mod layout;
 
 use std::collections::HashMap;
 
-pub(super) use control_flow::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget};
+pub(super) use block_exit::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget};
 
 use super::error::Error;
 use crate::{
