@@ -50,13 +50,13 @@ mod basic_block;
 pub mod expression;
 mod generator;
 mod identity;
+mod ir_method;
 mod operation;
 pub mod path_condition;
 mod source_map;
 mod terminator;
 #[cfg(test)]
 mod test;
-mod value_definition;
 
 use std::collections::HashMap;
 
@@ -66,10 +66,9 @@ pub use identity::{BlockId, InstructionLocation, ValueId};
 pub use operation::Operation;
 pub use source_map::SourceMap;
 pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
-pub use value_definition::ValueDefinition;
 
 use crate::{
-    jvm::{Method, method, references::ClassRef},
+    jvm::{method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -95,117 +94,6 @@ pub struct MokaIRMethod {
     this: Option<ValueId>,
     parameters: Vec<ValueId>,
     value_definitions: HashMap<ValueId, ValueDefinition>,
-}
-
-impl MokaIRMethod {
-    /// Builds completed `MokaIR` from a JVM method.
-    ///
-    /// JVM stack and local state are eliminated during construction, trivial
-    /// block parameters are simplified, and only reachable blocks are emitted.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MokaIRBuildError`] when the method has no body, uses unsupported
-    /// bytecode, has invalid bytecode structure or reachable frame state, or an
-    /// internal construction invariant is violated.
-    pub fn from_method(method: &Method) -> Result<Self, MokaIRBuildError> {
-        generator::generate(method)
-    }
-
-    /// Returns the method access flags.
-    #[must_use]
-    pub const fn access_flags(&self) -> method::AccessFlags {
-        self.access_flags
-    }
-
-    /// Returns the method name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns the method descriptor.
-    #[must_use]
-    pub const fn descriptor(&self) -> &MethodDescriptor {
-        &self.descriptor
-    }
-
-    /// Returns the class containing this method.
-    #[must_use]
-    pub const fn owner(&self) -> &ClassRef {
-        &self.owner
-    }
-
-    /// Checks if the method is `static`.
-    #[must_use]
-    pub const fn is_static(&self) -> bool {
-        self.access_flags.contains(method::AccessFlags::STATIC)
-    }
-
-    /// Returns the entry block identity.
-    #[must_use]
-    pub const fn entry_block(&self) -> BlockId {
-        self.entry.target
-    }
-
-    /// Returns the method-entry invocation.
-    #[must_use]
-    pub const fn entry(&self) -> &MethodEntry {
-        &self.entry
-    }
-
-    /// Looks up a block by its method-local identity.
-    ///
-    /// Identities outside this method's block set yield `None`.
-    #[must_use]
-    pub fn block(&self, id: BlockId) -> Option<&BasicBlock> {
-        self.blocks.get(&id)
-    }
-
-    /// Resolves a block parameter, operation, or terminator by structural location.
-    ///
-    /// Locations outside this method's block structure yield `None`.
-    #[must_use]
-    pub fn instruction(&self, location: InstructionLocation) -> Option<InstructionRef<'_>> {
-        Some(match location {
-            InstructionLocation::BlockParameter { block, index } => {
-                InstructionRef::BlockParameter(self.block(block)?.parameters.get(index)?)
-            }
-            InstructionLocation::Operation { block, index } => {
-                InstructionRef::Operation(self.block(block)?.operations.get(index)?)
-            }
-            InstructionLocation::Terminator { block } => {
-                InstructionRef::Terminator(&self.block(block)?.terminator)
-            }
-        })
-    }
-
-    /// Returns this method's source-provenance relation.
-    #[must_use]
-    pub const fn source_map(&self) -> &SourceMap {
-        &self.source_map
-    }
-
-    /// Returns the SSA value representing `this`, if this is an instance method.
-    #[must_use]
-    pub const fn this_value(&self) -> Option<ValueId> {
-        self.this
-    }
-
-    /// Returns the SSA values representing method parameters in descriptor order.
-    #[must_use]
-    pub fn parameter_values(&self) -> &[ValueId] {
-        &self.parameters
-    }
-
-    /// Returns the unique definition of a method-local SSA value.
-    ///
-    /// Value identities are opaque and may be sparse. An identity with no
-    /// retained definition yields `None`.
-    #[must_use]
-    pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
-        self.value_definitions.get(&value).copied()
-    }
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -240,4 +128,17 @@ impl MethodEntry {
     pub fn arguments(&self) -> &[ValueId] {
         &self.arguments
     }
+}
+
+/// Describes where a scalar value is defined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValueDefinition {
+    /// The receiver of an instance method.
+    This,
+    /// A method parameter at the given parameter index.
+    Parameter(u16),
+    /// The exception introduced by a landing-pad block.
+    CaughtException(BlockId),
+    /// A value produced by a block parameter, operation, or terminator.
+    Instruction(InstructionLocation),
 }
