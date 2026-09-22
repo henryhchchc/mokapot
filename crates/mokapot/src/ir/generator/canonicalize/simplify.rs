@@ -78,37 +78,28 @@ fn simplify_cyclic(
     candidates: &mut HashMap<ValueId, ParameterCandidate>,
     working_remaps: &mut HashMap<ValueId, ValueId>,
 ) -> bool {
-    let components = strongly_connected_components(&*candidates);
+    let components = strongly_connected_components(candidates);
     let mut collapsed = false;
-    for component in components {
-        let external = component
+    for scc in components {
+        let mut external = scc
             .iter()
-            .flat_map(|it| {
-                candidates
-                    .get(it)
-                    .expect("SCC nodes are candidate results")
-                    .inputs
-                    .iter()
-            })
+            .flat_map(|it| candidates[it].inputs.iter())
             .map(|value| canonical(*value, &*working_remaps))
-            .filter(|value| !component.contains(value))
-            .collect::<HashSet<_>>();
-
-        match external.into_iter().exactly_one() {
-            Ok(replacement) => {
-                for result in component {
+            .filter(|value| !scc.contains(value))
+            .unique();
+        match (external.next(), external.next()) {
+            (Some(replacement), None) => {
+                for result in scc {
                     candidates.remove(&result);
                     working_remaps.insert(result, replacement);
                 }
                 collapsed = true;
             }
-            Err(items) if items.len() == 0 => {
-                // A reachable parameter always takes an input from outside its SCC:
-                // the entry is seeded from `entry_arguments`, and a block is lowered
-                // only when an edge reaches it.
+            (None, None) => {
+                // A reachable parameter always takes an input from outside the cycle.
                 panic!("reachable block parameters form a closed cycle");
             }
-            Err(_) => {}
+            _ => {}
         }
     }
     collapsed
