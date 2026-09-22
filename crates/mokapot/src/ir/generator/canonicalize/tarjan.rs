@@ -3,12 +3,17 @@ use std::{
     hash::Hash,
 };
 
-/// Tarjan's bookkeeping, threaded through the recursive DFS.
+#[derive(Clone)]
+struct State {
+    index: usize,
+    lowlink: usize,
+    on_stack: bool,
+}
+
 pub(super) struct Tarjan<N> {
     adjacency: HashMap<N, Vec<N>>,
-    index: HashMap<N, usize>,
-    lowlink: HashMap<N, usize>,
-    on_stack: HashSet<N>,
+    next_index: usize,
+    state: HashMap<N, State>,
     stack: Vec<N>,
     components: Vec<HashSet<N>>,
 }
@@ -20,62 +25,66 @@ where
     pub fn new(adjacency: HashMap<N, Vec<N>>) -> Self {
         Self {
             adjacency,
-            index: HashMap::new(),
-            lowlink: HashMap::new(),
-            on_stack: HashSet::new(),
+            next_index: 0,
+            state: HashMap::new(),
             stack: Vec::new(),
             components: Vec::new(),
         }
     }
 
     pub fn scc(mut self) -> Vec<HashSet<N>> {
-        let nodes = self.adjacency.keys().copied().collect::<HashSet<_>>();
-        for start in nodes {
-            if !self.index.contains_key(&start) {
-                self.strongconnect(start);
+        let nodes = self.adjacency.keys().copied().collect::<Vec<_>>();
+
+        for node in nodes {
+            if !self.state.contains_key(&node) {
+                self.strongconnect(node);
             }
         }
+
         self.components
     }
 
-    /// Tarjan's `strongconnect`: visits `v`, recursing into its undiscovered
-    /// successors and closing `v`'s component when `v` turns out to be a root.
-    fn strongconnect(&mut self, v: N) {
-        // Number `v` and push it onto the stack.
-        let index = self.index.len();
-        self.index.insert(v, index);
-        self.lowlink.insert(v, index);
-        self.stack.push(v);
-        self.on_stack.insert(v);
+    fn strongconnect(&mut self, node: N) {
+        let index = self.next_index;
+        self.next_index += 1;
 
-        // Consider the successors of `v`. Iterating by index keeps the borrow of
-        // `self.adjacency` from living across the recursive call.
-        for position in 0..self.adjacency[&v].len() {
-            let successor = self.adjacency[&v][position];
-            if !self.index.contains_key(&successor) {
-                // `successor` has not been visited yet: recurse on it.
+        let state = State {
+            index,
+            lowlink: index,
+            on_stack: true,
+        };
+        self.state.insert(node, state);
+        self.stack.push(node);
+
+        for i in 0..self.adjacency.get(&node).map_or(0, Vec::len) {
+            let successor = self.adjacency[&node][i];
+
+            if !self.state.contains_key(&successor) {
                 self.strongconnect(successor);
-                let lowlink = self.lowlink[&v].min(self.lowlink[&successor]);
-                self.lowlink.insert(v, lowlink);
-            } else if self.on_stack.contains(&successor) {
-                // `successor` is on the stack and hence in the current component.
-                let lowlink = self.lowlink[&v].min(self.index[&successor]);
-                self.lowlink.insert(v, lowlink);
+                self.update_lowlink(node, self.state[&successor].lowlink);
+            } else if self.state[&successor].on_stack {
+                self.update_lowlink(node, self.state[&successor].index);
             }
         }
 
-        // If `v` is a root node, pop the stack and generate a component.
-        if self.lowlink[&v] == self.index[&v] {
+        let state = self.state[&node].clone();
+        if state.lowlink == state.index {
             let mut component = HashSet::new();
             loop {
-                let member = self.stack.pop().expect("the stack is not empty");
-                self.on_stack.remove(&member);
+                let member = self.stack.pop().expect("node must be on the stack");
+                self.state.get_mut(&member).unwrap().on_stack = false;
                 component.insert(member);
-                if member == v {
+
+                if member == node {
                     break;
                 }
             }
             self.components.push(component);
         }
+    }
+
+    fn update_lowlink(&mut self, node: N, candidate: usize) {
+        let state = self.state.get_mut(&node).unwrap();
+        state.lowlink = state.lowlink.min(candidate);
     }
 }
