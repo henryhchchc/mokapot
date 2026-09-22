@@ -56,9 +56,7 @@ where
         self.state.insert(node, state);
         self.stack.push(node);
 
-        for i in 0..self.adjacency.get(&node).map_or(0, Vec::len) {
-            let successor = self.adjacency[&node][i];
-
+        for successor in self.adjacency[&node].clone() {
             if !self.state.contains_key(&successor) {
                 self.strongconnect(successor);
                 self.update_lowlink(node, self.state[&successor].lowlink);
@@ -72,7 +70,8 @@ where
             let mut component = HashSet::new();
             loop {
                 let member = self.stack.pop().expect("node must be on the stack");
-                self.state.get_mut(&member).unwrap().on_stack = false;
+                let state = self.state.get_mut(&member).expect("it's in the state");
+                state.on_stack = false;
                 component.insert(member);
 
                 if member == node {
