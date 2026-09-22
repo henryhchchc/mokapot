@@ -28,8 +28,6 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
 
     type Err = Infallible;
 
-    type Output = Vec<(Self::Location, Self::Fact)>;
-
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         [(
             self.method.entry_block(),
@@ -41,27 +39,23 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
         &mut self,
         location: &Self::Location,
         fact: &Self::Fact,
-    ) -> Result<Self::Output, Self::Err> {
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
         let block = self
             .method
             .block(*location)
             .expect("a dataflow location is a block of the method");
-        Ok(block
-            .terminator
-            .successors()
-            .filter_map(|successor| {
-                let target = successor.block_target()?;
-                let propagated = match successor.transfer() {
-                    Some(ControlTransfer::Conditional(guard)) => {
-                        fact.conjoin_branch_guard(guard.as_ref())
-                    }
-                    Some(ControlTransfer::Unconditional | ControlTransfer::Exception(_)) | None => {
-                        fact.clone()
-                    }
-                };
-                (!propagated.is_contradiction()).then_some((target, propagated))
-            })
-            .collect::<Vec<_>>())
+        Ok(block.terminator.successors().filter_map(|successor| {
+            let target = successor.block_target()?;
+            let propagated = match successor.transfer() {
+                Some(ControlTransfer::Conditional(guard)) => {
+                    fact.conjoin_branch_guard(guard.as_ref())
+                }
+                Some(ControlTransfer::Unconditional | ControlTransfer::Exception(_)) | None => {
+                    fact.clone()
+                }
+            };
+            (!propagated.is_contradiction()).then_some((target, propagated))
+        }))
     }
 }
 
