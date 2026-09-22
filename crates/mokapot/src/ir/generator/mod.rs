@@ -5,7 +5,7 @@
 //! 1. [`cfg`] partitions all decoded bytecode into a structural CFG.
 //! 2. [`dataflow`] analyzes reachable structural blocks and
 //!    constructs a mutable parts IR with provisional SSA.
-//! 3. [`canonicalize`] simplifies provisional block parameters in place.
+//! 3. [`canonicalize`] simplifies provisional block parameters.
 //! 4. [`definitions`] indexes each SSA value to its defining site.
 //!
 //! Analysis fixes addressable instruction positions and records their JVM
@@ -19,28 +19,23 @@ mod cfg;
 mod dataflow;
 mod definitions;
 mod error;
-mod parts;
 mod remap;
 
 pub use dataflow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
-use crate::{
-    ir::{MokaIRMethod, generator::parts::IrParts},
-    jvm::Method,
-};
+use crate::{ir::MokaIRMethod, jvm::Method};
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = cfg::build(method)?;
-    let mut parts = dataflow::analyze(&cfg)?;
-    canonicalize::canonicalize(&mut parts);
-    let IrParts {
+    let dataflow::IrParts {
         entry,
         blocks,
         this,
         parameters,
         source_map,
-    } = parts;
+    } = dataflow::analyze(&cfg)?;
+    let (entry, blocks) = canonicalize::canonicalize(entry, blocks);
     let ir = MokaIRMethod {
         access_flags: method.access_flags,
         name: method.name.clone(),
