@@ -1,14 +1,10 @@
 //! Rewrites the single IR value identity space during canonicalization.
 
 use crate::ir::{
-    Operation, Successor, Terminator, ValueId,
-    control_flow::{
-        ControlTransfer,
-        path_condition::{BooleanVariable, BranchGuard, PathValue},
-    },
+    BranchGuard, ControlTransfer, Operation, Successor, Terminator, ValueId,
     expression::{
-        ArrayOperation, Conversion, Expression, FieldAccess, LockOperation, MathOperation,
-        Predicate,
+        ArrayOperation, BooleanVariable, Conversion, Expression, FieldAccess, LockOperation,
+        MathOperation, PathValue, Predicate,
     },
 };
 

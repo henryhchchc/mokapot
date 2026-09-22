@@ -7,12 +7,8 @@ use ValueCategory::{Category1, Category2};
 use super::super::super::Frame;
 use crate::{
     ir::{
-        BlockId, ValueId,
-        control_flow::{
-            ControlTransfer,
-            path_condition::{BooleanVariable, BranchGuard, PathValue},
-        },
-        expression::Predicate,
+        BlockId, BranchGuard, ControlTransfer, ValueId,
+        expression::{BooleanVariable, PathValue, Predicate},
         generator::error::Error,
     },
     jvm::{ConstantValue, code::Instruction},

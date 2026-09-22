@@ -3,11 +3,8 @@ use std::collections::BTreeMap;
 use super::*;
 use crate::{
     ir::{
-        control_flow::{
-            ControlTransfer,
-            path_condition::{BooleanVariable, BranchGuard, PathValue},
-        },
-        expression::Predicate,
+        BranchGuard, ControlTransfer,
+        expression::{BooleanVariable, PathValue, Predicate},
     },
     jvm::ConstantValue,
 };
@@ -28,10 +25,20 @@ fn switch_retains_parallel_successor_arms() {
     let switch = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert_matches!(switch, Terminator::Switch { .. });
-    assert_eq!(switch.successors().count(), 3);
-    let check = |it| it == switch.successors().next().unwrap().block_target();
-    assert!(switch.successors().map(Successor::block_target).all(check));
-    assert_eq!(ir.outgoing_edges(ir.entry_block()).count(), 3);
+    let targets = switch
+        .successors()
+        .map(Successor::block_target)
+        .collect::<Vec<_>>();
+    // Parallel arms are retained rather than merged: three arms, one target.
+    assert_eq!(targets.len(), 3);
+    assert!(targets.iter().all(|it| *it == targets[0]));
+    assert_eq!(
+        switch
+            .successors()
+            .filter_map(Successor::block_target)
+            .count(),
+        3
+    );
 }
 
 #[test]

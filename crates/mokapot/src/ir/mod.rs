@@ -47,11 +47,11 @@
 //! ```
 
 mod basic_block;
-pub mod control_flow;
 pub mod expression;
 mod generator;
 mod identity;
 mod operation;
+pub mod path_condition;
 mod source_map;
 mod terminator;
 #[cfg(test)]
@@ -65,16 +65,13 @@ pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, Unsup
 pub use identity::{BlockId, InstructionLocation, ValueId};
 pub use operation::Operation;
 pub use source_map::SourceMap;
-pub use terminator::{Successor, Terminator};
+pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
 pub use value_definition::ValueDefinition;
 
 use crate::{
     ir::{
-        control_flow::{
-            Edge,
-            path_condition::{PathCondition, SolvingBudget},
-        },
         expression::Predicate,
+        path_condition::{PathCondition, SolvingBudget},
     },
     jvm::{Method, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
@@ -214,14 +211,6 @@ impl MokaIRMethod {
         self.value_definitions.get(&value).copied()
     }
 
-    /// Returns all outgoing block-to-block successor arms from `source`.
-    ///
-    /// An identity outside this method yields no arms. Method-exiting unwind
-    /// arms are not returned because they have no basic-block target.
-    pub fn outgoing_edges(&self, source: BlockId) -> impl Iterator<Item = Edge<'_>> {
-        control_flow::outgoing_edges(&self.blocks, source)
-    }
-
     /// Computes path conditions at reachable blocks.
     #[must_use]
     pub fn path_conditions(&self) -> HashMap<BlockId, PathCondition<&Predicate>> {
@@ -234,7 +223,7 @@ impl MokaIRMethod {
         &self,
         budget: SolvingBudget,
     ) -> HashMap<BlockId, PathCondition<&Predicate>> {
-        control_flow::path_condition::analyze(&self.blocks, self.entry.target, budget)
+        path_condition::analyze(&self.blocks, self.entry.target, budget)
     }
 }
 

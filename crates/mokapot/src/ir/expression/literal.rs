@@ -1,3 +1,5 @@
+//! Signed predicates used as boolean literals in conditions.
+
 use std::{fmt::Display, ops::Not};
 
 /// A variable in a path condition.

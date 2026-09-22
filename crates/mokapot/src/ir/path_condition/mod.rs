@@ -11,26 +11,23 @@ use itertools::Itertools;
 
 use crate::{
     analysis::fixed_point,
-    ir::{BasicBlock, BlockId, expression::Predicate},
+    ir::{
+        BasicBlock, BlockId, BranchGuard,
+        expression::{BooleanVariable, Predicate},
+    },
 };
 
 mod analyzer;
-mod branch_guard;
 mod budget;
 mod cover;
 mod cube;
-mod literal;
 mod minimizer;
-mod predicate;
 
 #[cfg(test)]
 mod tests;
 
-pub use branch_guard::BranchGuard;
 pub use budget::SolvingBudget;
 use cover::Cover;
-pub use literal::BooleanVariable;
-pub use predicate::PathValue;
 
 pub(in crate::ir) fn analyze(
     blocks: &HashMap<BlockId, BasicBlock>,

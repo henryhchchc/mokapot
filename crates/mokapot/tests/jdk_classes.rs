@@ -3,7 +3,7 @@
 use std::{collections::HashSet, env, fs, path::PathBuf};
 
 use mokapot::{
-    ir::{MokaIRMethod, control_flow::ControlTransfer},
+    ir::{ControlTransfer, MokaIRMethod},
     jvm::Class,
     types::Descriptor,
 };
@@ -69,9 +69,15 @@ fn test_a_class(class: Class) {
                 if !visited.insert(block) {
                     continue;
                 }
-                for edge in ir_method.outgoing_edges(block) {
-                    pending.push(edge.target());
-                    if let ControlTransfer::Conditional(guard) = edge.transfer() {
+                let terminator = &ir_method
+                    .block(block)
+                    .expect("successor blocks belong to the method")
+                    .terminator;
+                for successor in terminator.successors() {
+                    if let Some(target) = successor.block_target() {
+                        pending.push(target);
+                    }
+                    if let Some(ControlTransfer::Conditional(guard)) = successor.transfer() {
                         variable_count += guard.predicate_count();
                     }
                 }

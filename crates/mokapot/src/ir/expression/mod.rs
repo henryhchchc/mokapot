@@ -15,6 +15,7 @@ use crate::{
 mod array;
 mod conversion;
 mod field;
+mod literal;
 mod lock;
 mod math;
 mod predicate;
@@ -22,9 +23,10 @@ mod predicate;
 pub use array::Operation as ArrayOperation;
 pub use conversion::Operation as Conversion;
 pub use field::Access as FieldAccess;
+pub use literal::BooleanVariable;
 pub use lock::Operation as LockOperation;
 pub use math::{NaNTreatment, Operation as MathOperation};
-pub use predicate::Predicate;
+pub use predicate::{PathValue, Predicate};
 
 /// An expression over method-local SSA values.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]

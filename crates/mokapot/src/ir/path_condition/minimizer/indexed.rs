@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::ir::control_flow::path_condition::{BooleanVariable, cube::Cube};
+use crate::ir::{expression::BooleanVariable, path_condition::cube::Cube};
 
 #[derive(Debug, Clone)]
 pub(super) struct AtomTable<P> {

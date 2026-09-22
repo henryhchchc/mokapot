@@ -6,9 +6,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub(crate) use crate::ir::{
-    BasicBlock, BlockId, BlockKind, BlockParameter, InstructionLocation, MethodEntry, MokaIRMethod,
-    Operation, Successor, Terminator, ValueId, control_flow::ControlTransfer,
-    expression::Expression,
+    BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
+    MethodEntry, MokaIRMethod, Operation, Successor, Terminator, ValueId, expression::Expression,
 };
 use crate::{
     ir::NumericalId,
