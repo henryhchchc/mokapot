@@ -70,37 +70,26 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::ir::{BlockId, NumericalId};
+    use crate::ir::test::prelude::*;
 
     #[test]
     fn source_map_is_sparse_and_one_to_many() {
-        let pc0 = ProgramCounter::from(0);
-        let pc1 = ProgramCounter::from(100);
-        let pc2 = ProgramCounter::from(200);
-        let instruction0 = InstructionLocation::Operation {
-            block: BlockId::from_raw(0),
-            index: 0,
-        };
-        let instruction1 = InstructionLocation::Operation {
-            block: BlockId::from_raw(0),
-            index: 1,
-        };
-        let instruction2 = InstructionLocation::Operation {
-            block: BlockId::from_raw(1),
-            index: 0,
-        };
-        let instruction3 = InstructionLocation::Terminator {
-            block: BlockId::from_raw(1),
-        };
-        let synthetic = InstructionLocation::BlockParameter {
-            block: BlockId::from_raw(1),
-            index: 0,
-        };
+        let [b0, b1] = ids(0);
+        let (pc0, pc1, pc2) = (0.into(), 100.into(), 200.into());
+        let operation = |block, index| InstructionLocation::Operation { block, index };
+        let terminator = |block| InstructionLocation::Terminator { block };
+        let parameter = |block, index| InstructionLocation::BlockParameter { block, index };
+        let instruction0 = operation(b0, 0);
+        let instruction1 = operation(b0, 1);
+        let instruction2 = operation(b1, 0);
+        let instruction3 = terminator(b1);
+        let synthetic = parameter(b1, 0);
+
         let mut map = SourceMap::new();
-        map.record_operation(pc0, BlockId::from_raw(0), 0);
-        map.record_operation(pc0, BlockId::from_raw(0), 1);
-        map.record_operation(pc1, BlockId::from_raw(1), 0);
-        map.record_terminator(pc2, BlockId::from_raw(1));
+        map.record_operation(pc0, b0, 0);
+        map.record_operation(pc0, b0, 1);
+        map.record_operation(pc1, b1, 0);
+        map.record_terminator(pc2, b1);
 
         assert_eq!(
             map.instructions_at(pc0).collect::<Vec<_>>(),

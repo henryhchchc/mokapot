@@ -3,16 +3,14 @@ use crate::ir::BlockKind;
 
 #[test]
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
-    let str_type = "java/lang/String".parse().unwrap();
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::AStore1),
         (3, Instruction::Return),
     ];
     let table = vec![handler(1.into()..2.into(), 2.into(), None)];
-    let method = method(body, "(Ljava/lang/Object;)V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(Ljava/lang/Object;)V", table);
     let location = ir.source_map().instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let target = |predicate: fn(&ControlTransfer) -> bool| {
@@ -28,22 +26,17 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let pad_id = target(|it| matches!(it, ControlTransfer::Exception(None)));
 
     assert_ne!(normal_target, pad_id);
-    let pad = ir.block(pad_id).unwrap();
+    let pad = block_of(&ir, pad_id);
     let BlockKind::LandingPad { exception: caught } = pad.kind else {
         panic!("exceptional successor must target a landing pad");
     };
-    assert_eq!(
-        ir.definition_of(caught),
-        Some(ValueDefinition::CaughtException(pad_id))
-    );
+    let expected = Some(ValueDefinition::CaughtException(pad_id));
+    assert_eq!(ir.definition_of(caught), expected);
     assert!(pad.parameters.is_empty());
     assert!(pad.operations.is_empty());
     assert_eq!(pad.terminator.successors().count(), 1);
     let successor = pad.terminator.successors().next().unwrap();
-    assert!(matches!(
-        successor.transfer(),
-        Some(&ControlTransfer::Unconditional)
-    ));
+    assert_matches!(successor.transfer(), Some(&ControlTransfer::Unconditional));
     assert_eq!(successor.block_target(), Some(normal_target));
     let loc = InstructionLocation::Terminator { block: pad_id };
     assert_eq!(ir.source_map().origin_of(loc), None);
@@ -51,31 +44,21 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
 
 #[test]
 fn exceptional_state_excludes_the_fallible_result() {
-    let str_type = "java/lang/String".parse().unwrap();
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::AReturn),
         (10, Instruction::AStore1),
         (11, Instruction::ALoad0),
         (12, Instruction::AReturn),
     ];
     let table = vec![handler(1.into()..2.into(), 10.into(), None)];
-    let method = method(body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
-    let ir = build(&method).unwrap();
-    let result = ir
-        .source_map()
-        .instructions_at(1.into())
-        .find_map(|it| match ir.instruction(it) {
-            Some(InstructionRef::Terminator(terminator)) => terminator.def(),
-            Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
-        })
-        .expect("checkcast must define a result");
+    let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
+    let definition = terminator_at(&ir, 1.into()).def();
+    let result = definition.expect("checkcast must define a result");
     let location = ir.source_map().instructions_at(1.into()).next().unwrap();
-    assert_eq!(
-        ir.definition_of(result),
-        Some(ValueDefinition::Instruction(location))
-    );
+    let expected = Some(ValueDefinition::Instruction(location));
+    assert_eq!(ir.definition_of(result), expected);
     let fallible = block_containing_instruction(&ir, location);
     let target = |predicate: fn(&ControlTransfer) -> bool| {
         fallible
@@ -87,20 +70,12 @@ fn exceptional_state_excludes_the_fallible_result() {
             .unwrap()
     };
     let normal_target = target(|it| *it == ControlTransfer::Unconditional);
-    let pad = ir
-        .block(target(|it| matches!(it, ControlTransfer::Exception(None))))
-        .unwrap();
-    let handler_id = pad
-        .terminator
-        .successors()
-        .next()
-        .unwrap()
-        .block_target()
-        .unwrap();
-    let handler = ir.block(handler_id).unwrap();
+    let pad_id = target(|it| matches!(it, ControlTransfer::Exception(None)));
+    let pad = block_of(&ir, pad_id);
+    let handler = block_of(&ir, successor_target(pad, 0));
 
     assert!(matches!(
-        ir.block(normal_target).unwrap().terminator,
+        block_of(&ir, normal_target).terminator,
         Terminator::TryReturn { value: Some(value), .. } if value == result
     ));
     assert!(matches!(
@@ -112,11 +87,10 @@ fn exceptional_state_excludes_the_fallible_result() {
 
 #[test]
 fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
-    let runtime: ClassRef = "java/lang/RuntimeException".parse().unwrap();
-    let str_type = "java/lang/String".parse().unwrap();
+    let runtime = cls_r("java/lang/RuntimeException");
     let body = [
         (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::Return),
         (10, Instruction::AStore0),
         (11, Instruction::Return),
@@ -125,8 +99,7 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
         handler(1.into()..2.into(), 10.into(), Some(runtime.clone())),
         handler(1.into()..2.into(), 10.into(), None),
     ];
-    let method = method(body, "()V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "()V", table);
     let location = ir.source_map().instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let exceptional = fallible

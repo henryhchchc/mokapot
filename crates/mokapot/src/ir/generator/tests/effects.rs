@@ -23,10 +23,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let ir = build(&method(body, "(I)I", vec![])).unwrap();
     let parameter = ir.parameter_values()[0];
     let (_, expr) = definition(operations(&ir).next().unwrap());
-    assert_eq!(
-        expr,
-        &Expression::Math(MathOperation::Add(parameter, parameter))
-    );
+    let expected = Expression::Math(MathOperation::Add(parameter, parameter));
+    assert_eq!(expr, &expected);
 
     let body = [
         (0, Instruction::LLoad0),
@@ -37,10 +35,8 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let ir = build(&method(body, "(J)J", vec![])).unwrap();
     let parameter = ir.parameter_values()[0];
     let (_, expr) = definition(operations(&ir).next().unwrap());
-    assert_eq!(
-        expr,
-        &Expression::Math(MathOperation::Add(parameter, parameter))
-    );
+    let expected = Expression::Math(MathOperation::Add(parameter, parameter));
+    assert_eq!(expr, &expected);
 
     let body = [
         (0, Instruction::LLoad0),
@@ -55,25 +51,21 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
     let parameters = ir.parameter_values();
     let mut operations = operations(&ir);
     let (conversion, expr) = definition(operations.next().unwrap());
-    assert_eq!(
-        expr,
-        &Expression::Conversion(Conversion::Long2Int(parameters[0]))
-    );
+    let expected = Expression::Conversion(Conversion::Long2Int(parameters[0]));
+    assert_eq!(expr, &expected);
     let (_, expr) = definition(operations.next().unwrap());
-    assert_eq!(
-        expr,
-        &Expression::Math(MathOperation::Add(parameters[1], conversion))
-    );
+    let expected = Expression::Math(MathOperation::Add(parameters[1], conversion));
+    assert_eq!(expr, &expected);
     assert!(operations.next().is_none());
 }
 
 #[test]
 fn invalid_stack_shuffles_report_the_source_instruction() {
-    let body = vec![(0, Instruction::Dup), (1, Instruction::Return)];
+    let body = [(0, Instruction::Dup), (1, Instruction::Return)];
     let underflow = frame_failure(&method(body, "()V", vec![]));
     assert!(matches!(underflow, (Some(pc), MokaIRFrameError::StackUnderflow) if pc == 0.into()));
 
-    let body = vec![
+    let body = [
         (0, Instruction::LLoad0),
         (1, Instruction::Dup),
         (2, Instruction::Return),
@@ -92,16 +84,9 @@ fn array_write_is_an_effect_without_a_definition() {
         (4, Instruction::Return),
     ];
     let ir = build(&method(body, "([III)V", vec![])).unwrap();
-    let effect = ir
-        .source_map()
-        .instructions_at(3.into())
-        .find_map(|it| match ir.instruction(it) {
-            Some(InstructionRef::Terminator(terminator)) => terminator.operation(),
-            _ => None,
-        })
-        .unwrap();
+    let effect = terminator_at(&ir, 3.into()).operation().unwrap();
 
-    assert!(matches!(effect, Operation::Effect { .. }));
+    assert_matches!(effect, Operation::Effect { .. });
     assert_eq!(effect.def(), None);
     assert_eq!(effect.uses().len(), 3);
     for pc in [0, 1, 2] {

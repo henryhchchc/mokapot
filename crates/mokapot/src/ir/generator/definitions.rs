@@ -64,27 +64,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        ir::{BlockParameter, NumericalId, Operation, Successor, Terminator},
-        jvm::ConstantValue,
+        ir::{NumericalId, test::prelude::*},
+        jvm::ConstantValue::Null,
     };
-
-    /// An effectful operation; indexing only cares that it defines no value.
-    fn effect() -> Operation {
-        let expr = ConstantValue::Null.into();
-        Operation::Effect { expr }
-    }
-
-    /// A definition operation, the only kind indexed by location.
-    fn definition(value: ValueId) -> Operation {
-        let expr = ConstantValue::Null.into();
-        Operation::Definition { value, expr }
-    }
 
     #[test]
     fn defines_this_then_parameters_in_descriptor_order() {
-        let this = ValueId::from_raw(0);
-        let first = ValueId::from_raw(1);
-        let second = ValueId::from_raw(2);
+        let [this, first, second] = ids(0);
 
         let definitions = index_definitions(Some(this), &[first, second], &HashMap::new());
 
@@ -101,21 +87,11 @@ mod tests {
         use InstructionLocation as Loc;
         use ValueDefinition::{CaughtException, Instruction};
 
-        let block = BlockId::from_raw(0);
-        let exception = ValueId::from_raw(0);
-        let param = ValueId::from_raw(1);
-        let defined = ValueId::from_raw(2);
-        let attempted = ValueId::from_raw(3);
-        let body = BasicBlock {
-            kind: BlockKind::LandingPad { exception },
-            parameters: vec![BlockParameter { value: param }],
-            operations: vec![effect(), definition(defined)],
-            terminator: Terminator::Try {
-                operation: definition(attempted),
-                normal: Successor::Unwind,
-                exceptional: vec![],
-            },
-        };
+        let [exception, param, defined, attempted] = ids(0);
+        let block_id = BlockId::from_raw(0);
+        let ops = [effect(Null), def(defined, Null)];
+        let terminator = try_op(def(attempted, Null), Successor::Unwind, vec![]);
+        let (block, body) = landing_pad(block_id, exception, [param], &ops, terminator);
 
         let expected = HashMap::from([
             (exception, CaughtException(block)),
@@ -123,9 +99,7 @@ mod tests {
             (defined, Instruction(Loc::Operation { block, index: 1 })),
             (attempted, Instruction(Loc::Terminator { block })),
         ]);
-        assert_eq!(
-            index_definitions(None, &[], &HashMap::from([(block, body)])),
-            expected
-        );
+        let indexed = index_definitions(None, &[], &HashMap::from([(block, body)]));
+        assert_eq!(indexed, expected);
     }
 }

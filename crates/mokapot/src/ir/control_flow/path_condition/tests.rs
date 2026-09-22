@@ -93,23 +93,18 @@ fn arb_budget() -> impl Strategy<Value = SolvingBudget> {
 
 #[test]
 fn exposes_dnf_terms_and_guard_literals() {
+    let expected = HashSet::from([BooleanVariable::Positive(&1), BooleanVariable::Negative(&2)]);
     let guard = BranchGuard::from_iter([
         BooleanVariable::Positive(1_u32),
         BooleanVariable::Negative(2),
     ]);
-    assert_eq!(
-        guard.literals().collect::<HashSet<_>>(),
-        HashSet::from([BooleanVariable::Positive(&1), BooleanVariable::Negative(&2),])
-    );
+    assert_eq!(guard.literals().collect::<HashSet<_>>(), expected);
 
     let condition = PathCondition::one() & guard;
     let terms = condition.disjuncts().collect::<Vec<_>>();
     assert_eq!(terms.len(), 1);
     assert!(!terms[0].is_tautology());
-    assert_eq!(
-        terms[0].literals().collect::<HashSet<_>>(),
-        HashSet::from([BooleanVariable::Positive(&1), BooleanVariable::Negative(&2),])
-    );
+    assert_eq!(terms[0].literals().collect::<HashSet<_>>(), expected);
 
     let tautology_condition = PathCondition::<u32>::one();
     let tautology = tautology_condition.disjuncts().collect::<Vec<_>>();

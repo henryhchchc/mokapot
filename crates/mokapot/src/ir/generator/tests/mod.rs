@@ -1,48 +1,79 @@
-use std::{
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    ops::Range,
-};
+use std::ops::Range;
 
+pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{
-        BasicBlock, InstructionLocation, InstructionRef, MalformedBytecode, MokaIRBuildError,
-        MokaIRFrameError, MokaIRMethod, Operation, Successor, Terminator, UnsupportedBytecode,
-        ValueDefinition, control_flow::ControlTransfer,
+        InstructionRef, MalformedBytecode, MokaIRBuildError, MokaIRFrameError, MokaIRMethod,
+        UnsupportedBytecode, ValueDefinition,
     },
     jvm::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
-        method::AccessFlags,
         references::ClassRef,
     },
 };
 
-/// Builds a `static` method for the generator to lift from the given body.
-pub(super) fn method<I, PC>(
-    instructions: I,
-    descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
-) -> Method
-where
-    I: IntoIterator<Item = (PC, Instruction)>,
-    PC: Into<ProgramCounter>,
-{
-    crate::tests::method(
-        instructions,
-        descriptor,
-        exception_table,
-        AccessFlags::PUBLIC | AccessFlags::STATIC,
-    )
-}
-
 /// Builds `method`, first checking the frame bookkeeping that resolution erases.
-fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(crate) fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     super::dataflow::verify_method(method);
     MokaIRMethod::from_method(method)
 }
 
+/// Lifts `instructions` into IR, panicking on a build failure.
+pub(crate) fn lift<I, PC>(
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<ExceptionTableEntry>,
+) -> MokaIRMethod
+where
+    I: IntoIterator<Item = (PC, Instruction)>,
+    PC: Into<ProgramCounter>,
+{
+    build(&method(instructions, descriptor, exception_table)).unwrap()
+}
+
+/// The terminator whose source instruction is `pc`.
+pub(crate) fn terminator_at(ir: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
+    ir.source_map()
+        .instructions_at(pc)
+        .find_map(|it| match ir.instruction(it) {
+            Some(InstructionRef::Terminator(terminator)) => Some(terminator),
+            _ => None,
+        })
+        .expect("the source PC must map to a terminator")
+}
+
+/// The block `id` in `ir`.
+pub(crate) fn block_of(ir: &MokaIRMethod, id: BlockId) -> &BasicBlock {
+    ir.block(id).expect("the block belongs to its method")
+}
+
+/// The target of the successor of `block` at `index`.
+pub(crate) fn successor_target(block: &BasicBlock, index: usize) -> BlockId {
+    block
+        .terminator
+        .successors()
+        .nth(index)
+        .expect("the successor exists")
+        .block_target()
+        .expect("the successor targets a block")
+}
+
+/// The block `location` belongs to.
+pub(crate) fn block_containing_instruction(
+    ir: &MokaIRMethod,
+    location: InstructionLocation,
+) -> &BasicBlock {
+    let id = match location {
+        InstructionLocation::BlockParameter { block, .. }
+        | InstructionLocation::Operation { block, .. }
+        | InstructionLocation::Terminator { block } => block,
+    };
+    block_of(ir, id)
+}
+
 /// Builds an exception-table entry covering `covered_pc` that jumps to `handler_pc`.
-pub(super) fn handler(
+pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,
     handler_pc: ProgramCounter,
     catch_type: Option<ClassRef>,
@@ -55,7 +86,7 @@ pub(super) fn handler(
 }
 
 /// Returns the malformed-bytecode location and kind reported for `method`.
-pub(super) fn malformed(method: &Method) -> (Option<ProgramCounter>, MalformedBytecode) {
+pub(crate) fn malformed(method: &Method) -> (Option<ProgramCounter>, MalformedBytecode) {
     match build(method) {
         Err(MokaIRBuildError::MalformedBytecode { pc, kind }) => (pc, kind),
         other => panic!("expected malformed bytecode, got {other:?}"),
@@ -63,7 +94,7 @@ pub(super) fn malformed(method: &Method) -> (Option<ProgramCounter>, MalformedBy
 }
 
 /// Returns the frame-failure location and cause reported for `method`.
-pub(super) fn frame_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRFrameError) {
+pub(crate) fn frame_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRFrameError) {
     match build(method) {
         Err(MokaIRBuildError::InvalidFrame { pc, source }) => (pc, source),
         other => panic!("expected a frame failure, got {other:?}"),
@@ -71,62 +102,11 @@ pub(super) fn frame_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRF
 }
 
 /// Returns the unsupported-bytecode location and kind reported for `method`.
-pub(super) fn unsupported(method: &Method) -> (ProgramCounter, UnsupportedBytecode) {
+pub(crate) fn unsupported(method: &Method) -> (ProgramCounter, UnsupportedBytecode) {
     match build(method) {
         Err(MokaIRBuildError::UnsupportedBytecode { pc, kind }) => (pc, kind),
         other => panic!("expected unsupported bytecode, got {other:?}"),
     }
-}
-
-pub(super) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
-    reachable_of(&ir.blocks, ir.entry_block())
-}
-
-/// Returns the blocks reachable from `entry` within `blocks`.
-pub(super) fn reachable_of(
-    blocks: &HashMap<crate::ir::BlockId, BasicBlock>,
-    entry: crate::ir::BlockId,
-) -> Vec<(crate::ir::BlockId, &BasicBlock)> {
-    let mut result = Vec::new();
-    let mut visited = HashSet::new();
-    let mut pending = VecDeque::from([entry]);
-    while let Some(id) = pending.pop_front() {
-        if !visited.insert(id) {
-            continue;
-        }
-        let block = blocks
-            .get(&id)
-            .expect("a successor must belong to its method");
-        pending.extend(
-            block
-                .terminator
-                .successors()
-                .filter_map(Successor::block_target),
-        );
-        result.push((id, block));
-    }
-    result
-}
-
-/// Returns the operations of `ir`'s reachable blocks.
-pub(super) fn operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .flat_map(|(_, it)| &it.operations)
-}
-
-/// Returns the operations of `ir`'s reachable terminators.
-pub(super) fn terminator_operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .filter_map(|(_, it)| it.terminator.operation())
-}
-
-/// Returns the JVM origin of `ir`'s entry terminator.
-pub(super) fn entry_origin(ir: &MokaIRMethod) -> Option<ProgramCounter> {
-    ir.source_map().origin_of(InstructionLocation::Terminator {
-        block: ir.entry_block(),
-    })
 }
 
 mod block_arguments;

@@ -220,8 +220,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        ir::generator::cfg,
-        jvm::{code::Instruction, method::AccessFlags},
+        ir::{
+            generator::{cfg, dataflow},
+            test::prelude::*,
+        },
+        jvm::code::Instruction,
     };
 
     #[test]
@@ -230,7 +233,7 @@ mod tests {
             default: 8.into(),
             match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
         };
-        let method = crate::tests::method(
+        let method = method(
             [
                 (0, Instruction::IConst0),
                 (1, Instruction::IStore1),
@@ -244,10 +247,9 @@ mod tests {
             ],
             "(I)I",
             vec![],
-            AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = cfg::build(&method).unwrap();
-        let parts = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
+        let parts = dataflow::analyze(&cfg).unwrap();
         let (&target, target_block) = parts
             .blocks
             .iter()

@@ -54,6 +54,8 @@ mod identity;
 mod operation;
 mod source_map;
 mod terminator;
+#[cfg(test)]
+mod test;
 mod value_definition;
 
 use std::collections::HashMap;
