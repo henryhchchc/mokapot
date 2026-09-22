@@ -2,91 +2,85 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
-use crate::ir::{ValueId, generator::canonicalize::tarjan::Tarjan};
+use crate::ir::{
+    ValueId,
+    generator::canonicalize::{
+        ParameterInputs, SimplifiedParameters, Substitutions, tarjan::Tarjan,
+    },
+};
 
-/// A block parameter and the arguments supplied by all incoming edges.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ParameterCandidate {
-    pub(super) inputs: Vec<ValueId>,
-}
+type InputsByParameter = HashMap<ValueId, ParameterInputs>;
 
-type CandidateMap = HashMap<ValueId, ParameterCandidate>;
-type Substitutions = HashMap<ValueId, ValueId>;
+impl SimplifiedParameters {
+    /// Eliminates trivial acyclic and cyclic block parameters.
+    ///
+    /// Inputs retain their caller-provided edge order. Eliminated results are
+    /// returned as fully canonical substitutions, and every retained input is
+    /// rewritten through those substitutions.
+    pub(super) fn for_block_inputs(mut inputs: InputsByParameter) -> SimplifiedParameters {
+        let mut substitutions = HashMap::new();
 
-/// The result of simplifying provisional block parameters.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct SimplifiedParameters {
-    /// Canonical replacements for eliminated parameter results.
-    pub(super) remaps: HashMap<ValueId, ValueId>,
-    /// Results of parameters that represent genuine choices after rewriting.
-    pub(super) retained: HashSet<ValueId>,
-}
+        let retained = loop {
+            if eliminate_acyclic(&mut inputs, &mut substitutions)
+                || eliminate_cyclic(&mut inputs, &mut substitutions)
+            {
+                // Rewrite inputs through the substitutions discovered so far
+                inputs
+                    .values_mut()
+                    .flat_map(|it| it.arguments.iter_mut())
+                    .for_each(|it| *it = canonical(*it, &substitutions));
+            } else {
+                // Terminate when no parameter can be eliminated further
+                break inputs.into_keys().collect();
+            }
+        };
 
-/// Eliminates trivial acyclic and cyclic block parameters.
-///
-/// Inputs retain their caller-provided edge order. Eliminated results are
-/// returned as fully canonical substitutions, and every retained input is
-/// rewritten through those substitutions.
-pub(super) fn simplify_parameters(mut candidates: CandidateMap) -> SimplifiedParameters {
-    let mut remaps = HashMap::new();
+        let substitutions = substitutions
+            .keys()
+            .copied()
+            .map(|it| (it, canonical(it, &substitutions)))
+            .collect();
 
-    let retained = loop {
-        if simplify_acyclic(&mut candidates, &mut remaps)
-            || simplify_cyclic(&mut candidates, &mut remaps)
-        {
-            // Rewrite candidates after simplification
-            candidates
-                .values_mut()
-                .flat_map(|it| it.inputs.iter_mut())
-                .for_each(|it| *it = canonical(*it, &remaps));
-        } else {
-            // Terminate when no more candidates can be simplified
-            break candidates.into_keys().collect();
+        SimplifiedParameters {
+            substitutions,
+            retained,
         }
-    };
-
-    let remaps = remaps
-        .keys()
-        .copied()
-        .map(|it| (it, canonical(it, &remaps)))
-        .collect();
-
-    SimplifiedParameters { remaps, retained }
+    }
 }
 
-fn simplify_acyclic(candidates: &mut CandidateMap, remaps: &mut Substitutions) -> bool {
-    let substitution = candidates.iter().find_map(|(&val, candidate)| {
-        let external = candidate
-            .inputs
+fn eliminate_acyclic(inputs: &mut InputsByParameter, substitutions: &mut Substitutions) -> bool {
+    let substitution = inputs.iter().find_map(|(&val, input)| {
+        let external = input
+            .arguments
             .iter()
-            .map(|it| canonical(*it, &*remaps))
+            .map(|it| canonical(*it, substitutions))
             .filter(|&it| it != val);
         external.unique().exactly_one().ok().map(|id| (val, id))
     });
 
     substitution
         .map(|(result, replacement)| {
-            candidates.remove(&result);
-            remaps.insert(result, replacement);
+            inputs.remove(&result);
+            substitutions.insert(result, replacement);
         })
         .is_some()
 }
 
-fn simplify_cyclic(candidates: &mut CandidateMap, remaps: &mut Substitutions) -> bool {
-    let components = strongly_connected_components(candidates);
+fn eliminate_cyclic(inputs: &mut InputsByParameter, substitutions: &mut Substitutions) -> bool {
+    let components = strongly_connected_components(inputs);
     let mut collapsed = false;
     for scc in components {
         let mut external = scc
             .iter()
-            .flat_map(|it| candidates[it].inputs.iter())
-            .map(|value| canonical(*value, &*remaps))
+            .flat_map(|it| inputs[it].arguments.iter())
+            .map(|value| canonical(*value, substitutions))
             .filter(|value| !scc.contains(value))
             .unique();
         match (external.next(), external.next()) {
             (Some(replacement), None) => {
                 for result in scc {
-                    candidates.remove(&result);
-                    remaps.insert(result, replacement);
+                    inputs.remove(&result);
+                    substitutions.insert(result, replacement);
                 }
                 collapsed = true;
             }
@@ -100,23 +94,23 @@ fn simplify_cyclic(candidates: &mut CandidateMap, remaps: &mut Substitutions) ->
     collapsed
 }
 
-fn canonical(mut value: ValueId, remaps: &Substitutions) -> ValueId {
-    while let Some(&substitute) = remaps.get(&value) {
+fn canonical(mut value: ValueId, substitutions: &Substitutions) -> ValueId {
+    while let Some(&substitute) = substitutions.get(&value) {
         debug_assert_ne!(value, substitute, "{value} is remapped to itself");
         value = substitute;
     }
     value
 }
 
-fn strongly_connected_components(candidates: &CandidateMap) -> Vec<HashSet<ValueId>> {
-    let adjacency = candidates
+fn strongly_connected_components(inputs: &InputsByParameter) -> Vec<HashSet<ValueId>> {
+    let adjacency = inputs
         .iter()
-        .map(|(&value, candidate)| {
-            let dependencies = candidate
-                .inputs
+        .map(|(&value, input)| {
+            let dependencies = input
+                .arguments
                 .iter()
                 .copied()
-                .filter(|it| candidates.contains_key(it))
+                .filter(|it| inputs.contains_key(it))
                 .unique()
                 .collect();
             (value, dependencies)
