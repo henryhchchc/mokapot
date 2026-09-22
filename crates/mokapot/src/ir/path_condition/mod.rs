@@ -12,7 +12,7 @@ use itertools::Itertools;
 use crate::{
     analysis::fixed_point,
     ir::{
-        BasicBlock, BlockId, BranchGuard, MokaIRMethod,
+        BlockId, BranchGuard, MokaIRMethod,
         expression::{BooleanVariable, Predicate},
     },
 };
@@ -42,21 +42,13 @@ impl<'method> PathCondition<&'method Predicate> {
         method: &'method MokaIRMethod,
         budget: SolvingBudget,
     ) -> HashMap<BlockId, Self> {
-        analyze_blocks(&method.blocks, method.entry_block(), budget)
+        let mut problem = analyzer::PathConditionProblem::new(method, budget);
+        let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
+        path_conditions
+            .into_iter()
+            .map(|(block, fact)| (block, fact.into_inner()))
+            .collect()
     }
-}
-
-fn analyze_blocks(
-    blocks: &HashMap<BlockId, BasicBlock>,
-    entry: BlockId,
-    budget: SolvingBudget,
-) -> HashMap<BlockId, PathCondition<&Predicate>> {
-    let mut problem = analyzer::PathConditionProblem::new(blocks, entry, budget);
-    let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
-    path_conditions
-        .into_iter()
-        .map(|(block, fact)| (block, fact.into_inner()))
-        .collect()
 }
 
 /// A path condition stored in disjunctive normal form.
