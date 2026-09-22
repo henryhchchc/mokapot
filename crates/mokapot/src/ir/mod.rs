@@ -254,8 +254,8 @@ pub enum InstructionRef<'method> {
 /// The invocation boundary that supplies arguments to the method's entry block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodEntry {
-    pub(super) target: BlockId,
-    pub(super) arguments: Vec<ValueId>,
+    target: BlockId,
+    arguments: Vec<ValueId>,
 }
 
 impl MethodEntry {
