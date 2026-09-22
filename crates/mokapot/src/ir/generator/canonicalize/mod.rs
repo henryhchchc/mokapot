@@ -111,4 +111,16 @@ mod tests {
         assert_eq!(entry, method_entry(b0, [kept_arg]));
         assert_eq!(blocks, expected);
     }
+
+    #[test]
+    #[should_panic(expected = "closed cycle")]
+    fn tmp_rejects_a_closed_parameter_cycle() {
+        let [a, b] = ids(0);
+        let [b1, b2] = ids(0);
+        let blocks = HashMap::from([
+            bb(b1, [a], &[], goto(b2, [a])),
+            bb(b2, [b], &[], goto(b1, [b])),
+        ]);
+        canonicalize(method_entry(b1, []), blocks);
+    }
 }
