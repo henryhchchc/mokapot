@@ -1,51 +1,66 @@
 //! Canonicalizes the provisional SSA produced by dataflow analysis.
 
-mod finalization;
+mod apply;
 mod simplify;
 mod tarjan;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
-use simplify::{ParameterCandidate, simplify_parameters};
 
-use crate::ir::{BasicBlock, BlockId, MethodEntry};
+use crate::ir::{BasicBlock, BlockId, MethodEntry, ValueId};
+
+type Substitutions = HashMap<ValueId, ValueId>;
 
 /// Simplifies provisional block parameters and rewrites `entry` and `blocks` to canonical SSA.
 pub(super) fn canonicalize(
     mut entry: MethodEntry,
     mut blocks: HashMap<BlockId, BasicBlock>,
 ) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
-    let mut inputs = {
-        let entry_inputs = blocks[&entry.target]
+    let mut arguments = {
+        let entry_arguments = blocks[&entry.target]
             .parameters
             .iter()
             .zip(&entry.arguments)
-            .map(|(p, a)| (p.value, *a));
+            .map(|(parameter, argument)| (parameter.value, *argument));
 
-        let block_inputs = blocks
+        let edge_arguments = blocks
             .values()
             .flat_map(|bb| bb.terminator.arms())
-            .filter_map(|it| it.block_target().map(|target_bb| (it, target_bb)))
+            .filter_map(|it| it.block_target().map(|target| (it, target)))
             .flat_map(|(edge, target)| blocks[&target].parameters.iter().zip(edge.arguments()))
-            .map(|(p, a)| (p.value, *a));
-        entry_inputs.chain(block_inputs).into_group_map()
+            .map(|(parameter, argument)| (parameter.value, *argument));
+        entry_arguments.chain(edge_arguments).into_group_map()
     };
-    let candidates = blocks
+    let inputs = blocks
         .values()
         .flat_map(|it| &it.parameters)
-        .map(|param| {
-            let cand = ParameterCandidate {
-                inputs: inputs
-                    .remove(&param.value)
+        .map(|parameter| {
+            let candidate = ParameterInputs {
+                arguments: arguments
+                    .remove(&parameter.value)
                     .expect("every block parameter takes an incoming argument"),
             };
-            (param.value, cand)
+            (parameter.value, candidate)
         })
         .collect();
-    let simplified = simplify_parameters(candidates);
-    finalization::rewrite_values(&mut entry, &mut blocks, &simplified);
+    SimplifiedParameters::for_block_inputs(inputs).apply(&mut entry, &mut blocks);
     (entry, blocks)
+}
+
+/// The result of simplifying provisional block parameters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SimplifiedParameters {
+    /// Canonical replacements for eliminated parameter results.
+    pub(super) substitutions: HashMap<ValueId, ValueId>,
+    /// Results of parameters that represent genuine choices after rewriting.
+    pub(super) retained: HashSet<ValueId>,
+}
+
+/// The arguments supplied to a block parameter by all incoming edges.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ParameterInputs {
+    pub(super) arguments: Vec<ValueId>,
 }
 
 #[cfg(test)]
@@ -116,7 +131,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "closed cycle")]
-    fn tmp_rejects_a_closed_parameter_cycle() {
+    fn rejects_a_closed_parameter_cycle() {
         let [a, b] = ids(0);
         let [b1, b2] = ids(0);
         let blocks = HashMap::from([
