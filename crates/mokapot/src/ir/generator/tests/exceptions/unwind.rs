@@ -2,18 +2,15 @@ use super::*;
 
 #[test]
 fn unhandled_exceptions_target_the_method_unwind_exit() {
-    let str_type = "java/lang/String".parse().unwrap();
-    let int_type = "java/lang/Integer".parse().unwrap();
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::ALoad0),
-        (4, Instruction::CheckCast(int_type)),
+        (4, Instruction::CheckCast(ref_t("java/lang/Integer"))),
         (5, Instruction::AReturn),
     ];
-    let method = method(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
     let unwind_targets = [1, 4].map(|it| {
         let location = ir
             .source_map()
@@ -38,7 +35,7 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
 
 #[test]
 fn throw_has_only_ordered_exceptional_outcomes() {
-    let runtime = "java/lang/RuntimeException".parse().unwrap();
+    let runtime = cls_r("java/lang/RuntimeException");
     let body = [
         (0, Instruction::ALoad0),
         (1, Instruction::AThrow),
@@ -46,8 +43,7 @@ fn throw_has_only_ordered_exceptional_outcomes() {
         (11, Instruction::Return),
     ];
     let table = vec![handler(1.into()..2.into(), 10.into(), Some(runtime))];
-    let method = method(body, "(Ljava/lang/Throwable;)V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(Ljava/lang/Throwable;)V", table);
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
         .successors()

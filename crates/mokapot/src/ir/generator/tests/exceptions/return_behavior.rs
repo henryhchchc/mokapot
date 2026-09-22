@@ -3,7 +3,7 @@ use crate::{ir::BlockKind, jvm::method};
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {
-    let illegal: ClassRef = "java/lang/IllegalMonitorStateException".parse().unwrap();
+    let illegal = cls_r("java/lang/IllegalMonitorStateException");
     let body = [
         (0, Instruction::IConst1),
         (1, Instruction::IReturn),

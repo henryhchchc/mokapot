@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::*;
 use crate::{
     ir::{
@@ -22,11 +24,10 @@ fn switch_retains_parallel_successor_arms() {
         (1, instruction),
         (10, Instruction::Return),
     ];
-    let method = method(body, "(I)V", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(I)V", vec![]);
     let switch = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert!(matches!(switch, Terminator::Switch { .. }));
+    assert_matches!(switch, Terminator::Switch { .. });
     assert_eq!(switch.successors().count(), 3);
     let check = |it| it == switch.successors().next().unwrap().block_target();
     assert!(switch.successors().map(Successor::block_target).all(check));
@@ -41,11 +42,10 @@ fn branch_preserves_taken_then_fallthrough_guards() {
         (2, Instruction::Return),
         (5, Instruction::Return),
     ];
-    let method = method(body, "(I)V", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(I)V", vec![]);
     let branch = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert!(matches!(branch, Terminator::Branch { .. }));
+    assert_matches!(branch, Terminator::Branch { .. });
     assert_eq!(branch.successors().count(), 2);
     let taken = branch.successors().next().unwrap().transfer().unwrap();
     let otherwise = branch.successors().nth(1).unwrap().transfer().unwrap();
@@ -66,8 +66,7 @@ fn comparison_branch_preserves_operand_order() {
         (5, Instruction::Return),
         (6, Instruction::Return),
     ];
-    let method = method(body, "(II)V", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(II)V", vec![]);
     let branch = &ir.block(ir.entry_block()).unwrap().terminator;
     let parameters = ir.parameter_values();
 
@@ -77,10 +76,9 @@ fn comparison_branch_preserves_operand_order() {
     );
     let predicate = BooleanVariable::Positive(Predicate::LessThan(lhs, rhs));
     let expected = ControlTransfer::Conditional(BranchGuard::of(predicate));
-    assert_eq!(
-        branch.successors().next().unwrap().transfer(),
-        Some(&expected)
-    );
+
+    let taken = branch.successors().next().unwrap().transfer();
+    assert_eq!(taken, Some(&expected));
 }
 
 #[test]
@@ -96,8 +94,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         (1, instruction),
         (10, Instruction::Return),
     ];
-    let method = method(body, "(I)V", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(I)V", vec![]);
     let switch = &ir.block(ir.entry_block()).unwrap().terminator;
     let match_value = PathValue::Variable(ir.parameter_values()[0]);
     let case_guard = |it| {
@@ -106,7 +103,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         ControlTransfer::Conditional(BranchGuard::of(predicate))
     };
 
-    assert!(matches!(switch, Terminator::Switch { .. }));
+    assert_matches!(switch, Terminator::Switch { .. });
     let arms = switch.successors().collect::<Vec<_>>();
     assert_eq!(arms.len(), 3);
     let check = |it| it == arms[0].block_target();
@@ -114,7 +111,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     assert_eq!(arms[0].transfer(), Some(&case_guard(3)));
     assert_eq!(arms[1].transfer(), Some(&case_guard(4)));
     let default = arms[2].transfer().unwrap();
-    assert!(matches!(default, ControlTransfer::Conditional(guard) if guard.predicate_count() == 2));
+    assert_matches!(default, ControlTransfer::Conditional(guard) if guard.predicate_count() == 2);
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }
 
@@ -130,20 +127,16 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
         (1, instruction),
         (10, Instruction::Return),
     ];
-    let method = method(body, "(I)V", vec![]);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(I)V", vec![]);
     let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
 
     let successors = terminator.successors().collect::<Vec<_>>();
     assert_eq!(successors.len(), 1);
-    let default_target =
-        ir.source_map()
-            .instructions_at(10.into())
-            .find_map(|it| match it {
-                InstructionLocation::Terminator { block } => Some(block),
-                InstructionLocation::BlockParameter { .. }
-                | InstructionLocation::Operation { .. } => None,
-            });
+    let mut locations = ir.source_map().instructions_at(10.into());
+    let default_target = locations.find_map(|it| match it {
+        InstructionLocation::Terminator { block } => Some(block),
+        _ => None,
+    });
     assert_eq!(successors[0].block_target(), default_target);
     assert!(!terminator.uses().contains(&ir.parameter_values()[0]));
     assert_eq!(entry_origin(&ir), Some(1.into()));
@@ -151,22 +144,15 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
 
 #[test]
 fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
+    let runtime = cls_r("java/lang/RuntimeException");
+    let throwable = cls_r("java/lang/Throwable");
     let table = vec![
-        handler(
-            1.into()..2.into(),
-            10.into(),
-            Some("java/lang/RuntimeException".parse().unwrap()),
-        ),
-        handler(
-            1.into()..2.into(),
-            20.into(),
-            Some("java/lang/Throwable".parse().unwrap()),
-        ),
+        handler(1.into()..2.into(), 10.into(), Some(runtime)),
+        handler(1.into()..2.into(), 20.into(), Some(throwable)),
     ];
-    let str_type = "java/lang/String".parse().unwrap();
     let body = [
         (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::Return),
         (10, Instruction::AStore0),
@@ -174,16 +160,13 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         (20, Instruction::AStore0),
         (21, Instruction::Return),
     ];
-    let method = method(body, "()V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "()V", table);
     let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
 
-    assert!(matches!(fallible, Terminator::Try { .. }));
+    assert_matches!(fallible, Terminator::Try { .. });
     assert_eq!(entry_origin(&ir), Some(1.into()));
-    assert!(matches!(
-        fallible.successors().next().unwrap().transfer(),
-        Some(ControlTransfer::Unconditional)
-    ));
+    let first_transfer = fallible.successors().next().unwrap().transfer();
+    assert_matches!(first_transfer, Some(ControlTransfer::Unconditional));
     let handler_types = fallible
         .successors()
         .skip(1)
@@ -192,10 +175,8 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
             _ => panic!(),
         })
         .collect::<Vec<_>>();
-    assert_eq!(
-        handler_types,
-        ["java/lang/RuntimeException", "java/lang/Throwable"]
-    );
+    let expected = ["java/lang/RuntimeException", "java/lang/Throwable"];
+    assert_eq!(handler_types, expected);
 }
 
 #[test]
@@ -211,24 +192,17 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
         (7, Instruction::ILoad1),
         (8, Instruction::IReturn),
     ];
-    let method = method(body, "(I)I", vec![]);
-    let ir = build(&method).unwrap();
-    let header = ir
-        .block(ir.entry_block())
-        .unwrap()
-        .terminator
-        .successors()
-        .next()
-        .unwrap()
-        .block_target()
-        .expect("the entry block falls through into the loop header");
+    let ir = lift(body, "(I)I", vec![]);
+    let bb = ir.block(ir.entry_block()).unwrap();
+    let next_succ = bb.terminator.successors().next().unwrap();
+    let header = next_succ.block_target().expect("the entry falls through");
 
     let header = ir.block(header).unwrap();
-    let [parameter] = header.parameters.as_slice() else {
+    let [param] = header.parameters.as_slice() else {
         panic!("the loop header merges its counter through exactly one block argument");
     };
     assert!(
-        header.terminator.uses().contains(&parameter.value),
+        header.terminator.uses().contains(&param.value),
         "the merged counter must feed the loop condition"
     );
 }
@@ -236,12 +210,8 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
 #[test]
 fn throw_is_a_source_backed_terminator() {
     let body = [(0, Instruction::ALoad0), (1, Instruction::AThrow)];
-    let method = method(body, "(Ljava/lang/Throwable;)V", vec![]);
-    let ir = build(&method).unwrap();
-
-    assert!(matches!(
-        ir.block(ir.entry_block()).unwrap().terminator,
-        Terminator::Throw { .. }
-    ));
+    let ir = lift(body, "(Ljava/lang/Throwable;)V", vec![]);
+    let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
+    assert_matches!(terminator, Terminator::Throw { .. });
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }

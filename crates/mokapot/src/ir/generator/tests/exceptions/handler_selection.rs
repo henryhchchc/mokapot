@@ -2,12 +2,11 @@ use super::*;
 
 #[test]
 fn catch_all_preserves_precedence_and_shadows_later_handlers() {
-    let runtime: ClassRef = "java/lang/RuntimeException".parse().unwrap();
-    let exception: ClassRef = "java/lang/Exception".parse().unwrap();
-    let str_type = "java/lang/String".parse().unwrap();
+    let runtime = cls_r("java/lang/RuntimeException");
+    let exception = cls_r("java/lang/Exception");
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(str_type)),
+        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::Return),
         (10, Instruction::AStore1),
@@ -22,8 +21,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         handler(1.into()..2.into(), 20.into(), None),
         handler(1.into()..2.into(), 30.into(), Some(exception)),
     ];
-    let method = method(body, "(Ljava/lang/Object;)V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "(Ljava/lang/Object;)V", table);
     let location = ir.source_map().instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let transfers = fallible
@@ -53,8 +51,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
         (11, Instruction::Return),
     ];
     let table = vec![handler(0.into()..2.into(), 10.into(), None)];
-    let method = method(body, "()V", table);
-    let ir = build(&method).unwrap();
+    let ir = lift(body, "()V", table);
     let entry = &ir.block(ir.entry_block()).unwrap().terminator;
 
     assert_eq!(reachable_blocks(&ir).len(), 1);
