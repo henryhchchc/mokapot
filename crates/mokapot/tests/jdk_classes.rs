@@ -3,7 +3,7 @@
 use std::{collections::HashSet, env, fs, path::PathBuf};
 
 use mokapot::{
-    ir::{ControlTransfer, MokaIRMethod},
+    ir::{ControlTransfer, MokaIRMethod, path_condition::PathCondition},
     jvm::Class,
     types::Descriptor,
 };
@@ -92,7 +92,7 @@ fn test_a_class(class: Class) {
                     it.name,
                     it.descriptor.descriptor()
                 );
-                let _ = ir_method.path_conditions();
+                let _ = PathCondition::analyze(&ir_method);
             } else {
                 println!(
                     "Skip path condition for: {}::{}{}",

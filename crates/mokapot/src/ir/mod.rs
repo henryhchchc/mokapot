@@ -69,10 +69,6 @@ pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
 pub use value_definition::ValueDefinition;
 
 use crate::{
-    ir::{
-        expression::Predicate,
-        path_condition::{PathCondition, SolvingBudget},
-    },
     jvm::{Method, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };
@@ -209,21 +205,6 @@ impl MokaIRMethod {
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
         self.value_definitions.get(&value).copied()
-    }
-
-    /// Computes path conditions at reachable blocks.
-    #[must_use]
-    pub fn path_conditions(&self) -> HashMap<BlockId, PathCondition<&Predicate>> {
-        self.path_conditions_with_budget(SolvingBudget::default())
-    }
-
-    /// Computes path conditions with a custom minimization budget.
-    #[must_use]
-    pub fn path_conditions_with_budget(
-        &self,
-        budget: SolvingBudget,
-    ) -> HashMap<BlockId, PathCondition<&Predicate>> {
-        path_condition::analyze(&self.blocks, self.entry.target, budget)
     }
 }
 

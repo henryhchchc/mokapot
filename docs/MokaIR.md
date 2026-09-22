@@ -45,6 +45,6 @@ For coverage, mark the locations of each covered program counter, and never infe
 
 ## Path conditions
 
-`path_conditions` computes a disjunctive-normal-form `PathCondition` per reachable block: a disjunction of conjunctions of signed `Predicate`s.
+`PathCondition::analyze` computes a disjunctive-normal-form `PathCondition` per reachable block: a disjunction of conjunctions of signed `Predicate`s.
 `disjuncts` yields the conjunctions, `predicates` the referenced predicates, and `is_contradiction` reports `⊥`; blocks reachable only under a contradiction are omitted.
-`&` and `|` compose structurally; `reduce`, or `path_conditions_with_budget` with a `SolvingBudget`, applies semantic minimization.
+`&` and `|` compose structurally; `reduce`, or `analyze_with_budget` with a `SolvingBudget`, applies semantic minimization.

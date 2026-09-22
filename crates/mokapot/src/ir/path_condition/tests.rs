@@ -195,7 +195,7 @@ mod analyzer {
         ir::{
             BranchGuard, ControlTransfer as Transfer, NumericalId,
             expression::{BooleanVariable, Predicate},
-            path_condition::{SolvingBudget, analyze},
+            path_condition::{SolvingBudget, analyze_blocks},
             test::prelude::*,
         },
         jvm::ConstantValue::Null,
@@ -217,7 +217,7 @@ mod analyzer {
             code(b2, exit.clone()),
             code(b3, exit),
         ]);
-        let conditions = analyze(&blocks, b0, SolvingBudget::default());
+        let conditions = analyze_blocks(&blocks, b0, SolvingBudget::default());
 
         assert!(conditions.contains_key(&b0));
         assert!(conditions.contains_key(&b1));
@@ -246,7 +246,7 @@ mod analyzer {
             code(handler, exit.clone()),
             code(otherwise, exit),
         ]);
-        let conditions = analyze(&blocks, entry_id, SolvingBudget::default());
+        let conditions = analyze_blocks(&blocks, entry_id, SolvingBudget::default());
 
         assert_eq!(conditions[&tried], conditions[&normal]);
         assert_eq!(conditions[&tried], conditions[&handler]);

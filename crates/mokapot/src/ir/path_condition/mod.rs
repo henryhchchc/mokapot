@@ -12,7 +12,7 @@ use itertools::Itertools;
 use crate::{
     analysis::fixed_point,
     ir::{
-        BasicBlock, BlockId, BranchGuard,
+        BasicBlock, BlockId, BranchGuard, MokaIRMethod,
         expression::{BooleanVariable, Predicate},
     },
 };
@@ -29,7 +29,24 @@ mod tests;
 pub use budget::SolvingBudget;
 use cover::Cover;
 
-pub(in crate::ir) fn analyze(
+impl<'method> PathCondition<&'method Predicate> {
+    /// Computes path conditions at the reachable blocks of `method`.
+    #[must_use]
+    pub fn analyze(method: &'method MokaIRMethod) -> HashMap<BlockId, Self> {
+        Self::analyze_with_budget(method, SolvingBudget::default())
+    }
+
+    /// Computes path conditions with a custom minimization budget.
+    #[must_use]
+    pub fn analyze_with_budget(
+        method: &'method MokaIRMethod,
+        budget: SolvingBudget,
+    ) -> HashMap<BlockId, Self> {
+        analyze_blocks(&method.blocks, method.entry_block(), budget)
+    }
+}
+
+fn analyze_blocks(
     blocks: &HashMap<BlockId, BasicBlock>,
     entry: BlockId,
     budget: SolvingBudget,
@@ -38,7 +55,7 @@ pub(in crate::ir) fn analyze(
     let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
     path_conditions
         .into_iter()
-        .map(|(program_counter, fact)| (program_counter, fact.into_inner()))
+        .map(|(block, fact)| (block, fact.into_inner()))
         .collect()
 }
 
