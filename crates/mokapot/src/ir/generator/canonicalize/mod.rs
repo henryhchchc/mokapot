@@ -13,8 +13,8 @@ use crate::ir::{BasicBlock, BlockId, MethodEntry};
 
 /// Simplifies provisional block parameters and rewrites `entry` and `blocks` to canonical SSA.
 pub(super) fn canonicalize(
-    entry: MethodEntry,
-    blocks: HashMap<BlockId, BasicBlock>,
+    mut entry: MethodEntry,
+    mut blocks: HashMap<BlockId, BasicBlock>,
 ) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
     let mut inputs = {
         let entry_inputs = blocks[&entry.target]
@@ -44,7 +44,8 @@ pub(super) fn canonicalize(
         })
         .collect();
     let simplified = simplify_parameters(candidates);
-    finalization::finalize(entry, blocks, &simplified)
+    finalization::rewrite_values(&mut entry, &mut blocks, &simplified);
+    (entry, blocks)
 }
 
 #[cfg(test)]
