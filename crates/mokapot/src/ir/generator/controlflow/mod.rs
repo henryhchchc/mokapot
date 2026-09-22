@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Builds the reachable control-flow graph used by the later dataflow stage.
-pub(super) fn build(method: &Method) -> Result<Cfg<'_>, Error> {
+pub(super) fn analyze(method: &Method) -> Result<Cfg<'_>, Error> {
     builder::build(method)
 }
 

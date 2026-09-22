@@ -15,7 +15,7 @@
 //! used while analyzing structural blocks.
 
 mod canonicalize;
-mod cfg;
+mod controlflow;
 mod dataflow;
 mod definitions;
 mod error;
@@ -27,7 +27,7 @@ pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecod
 use crate::{ir::MokaIRMethod, jvm::Method};
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let cfg = cfg::build(method)?;
+    let cfg = controlflow::analyze(method)?;
     let dataflow::IrParts {
         mut entry,
         mut blocks,
