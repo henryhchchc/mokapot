@@ -52,23 +52,21 @@ fn simplify_acyclic(
     candidates: &mut HashMap<ValueId, ParameterCandidate>,
     working_remaps: &mut HashMap<ValueId, ValueId>,
 ) -> bool {
-    let acyclic_substitution = candidates.iter().find_map(|(&val, candidate)| {
-        let external: HashSet<_> = candidate
+    let substitution = candidates.iter().find_map(|(&val, candidate)| {
+        let external = candidate
             .inputs
             .iter()
             .map(|it| canonical(*it, &*working_remaps))
-            .filter(|&it| it != val)
-            .collect();
-        external.into_iter().exactly_one().ok().map(|id| (val, id))
+            .filter(|&it| it != val);
+        external.unique().exactly_one().ok().map(|id| (val, id))
     });
 
-    if let Some((result, replacement)) = acyclic_substitution {
-        candidates.remove(&result);
-        working_remaps.insert(result, replacement);
-        true
-    } else {
-        false
-    }
+    substitution
+        .map(|(result, replacement)| {
+            candidates.remove(&result);
+            working_remaps.insert(result, replacement);
+        })
+        .is_some()
 }
 
 fn simplify_cyclic(
