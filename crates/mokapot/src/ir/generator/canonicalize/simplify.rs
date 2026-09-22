@@ -33,8 +33,13 @@ pub(super) fn simplify_parameters(
         if simplify_acyclic(&mut candidates, &mut working_remaps)
             || simplify_cyclic(&mut candidates, &mut working_remaps)
         {
-            rewrite_candidates(&mut candidates, &working_remaps);
+            // Rewrite candidates after simplification
+            candidates
+                .values_mut()
+                .flat_map(|it| it.inputs.iter_mut())
+                .for_each(|it| *it = canonical(*it, &working_remaps));
         } else {
+            // Terminate when no more candidates can be simplified
             break candidates.into_keys().collect();
         }
     };
@@ -115,16 +120,6 @@ fn canonical(mut value: ValueId, remaps: &HashMap<ValueId, ValueId>) -> ValueId 
         value = substitute;
     }
     value
-}
-
-fn rewrite_candidates(
-    candidates: &mut HashMap<ValueId, ParameterCandidate>,
-    remaps: &HashMap<ValueId, ValueId>,
-) {
-    candidates
-        .values_mut()
-        .flat_map(|it| it.inputs.iter_mut())
-        .for_each(|it| *it = canonical(*it, remaps));
 }
 
 fn strongly_connected_components(
