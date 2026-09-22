@@ -15,26 +15,26 @@
 //! used while analyzing structural blocks.
 
 mod canonicalize;
-mod controlflow;
-mod dataflow;
+mod control_flow;
+mod data_flow;
 mod definitions;
 mod error;
 mod remap;
 
-pub use dataflow::FrameError as MokaIRFrameError;
+pub use data_flow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    let cfg = controlflow::analyze(method)?;
-    let dataflow::IrParts {
+    let cfg = control_flow::analyze(method)?;
+    let data_flow::IrParts {
         mut entry,
         mut blocks,
         this,
         parameters,
         source_map,
-    } = dataflow::analyze(&cfg)?;
+    } = data_flow::analyze(&cfg)?;
     canonicalize::canonicalize_values(&mut entry, &mut blocks);
     let ir = MokaIRMethod {
         access_flags: method.access_flags,

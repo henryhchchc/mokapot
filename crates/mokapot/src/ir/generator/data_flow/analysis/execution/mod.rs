@@ -13,7 +13,7 @@ use crate::{
     ir::{
         BlockId, BlockKind, ControlTransfer,
         generator::{
-            controlflow::{ArmKey, BlockExit, Cfg, CfgNode},
+            control_flow::{ArmKey, BlockExit, Cfg, CfgNode},
             error::Error,
         },
     },

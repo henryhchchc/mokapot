@@ -17,7 +17,7 @@ pub(super) use tests::verify_method;
 
 use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId, generator::error::Error};
 
-pub(super) fn analyze(cfg: &super::controlflow::Cfg<'_>) -> Result<IrParts, Error> {
+pub(super) fn analyze(cfg: &super::control_flow::Cfg<'_>) -> Result<IrParts, Error> {
     let analysis::DataflowParts {
         entry,
         blocks,
