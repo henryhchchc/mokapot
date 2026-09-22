@@ -2,14 +2,17 @@
 use std::{collections::HashMap, convert::Infallible};
 
 use crate::ir::{
-    BasicBlock, BlockId, BlockKind, Successor, ValueId,
-    generator::{canonicalize::simplify::SimplifiedParameters, parts::IrParts, remap::RemapValues},
+    BasicBlock, BlockId, BlockKind, MethodEntry, Successor, ValueId,
+    generator::{canonicalize::simplify::SimplifiedParameters, remap::RemapValues},
 };
 
-pub(super) fn finalize(parts: &mut IrParts, simplified: &SimplifiedParameters) {
+pub(super) fn finalize(
+    mut entry: MethodEntry,
+    mut blocks: HashMap<BlockId, BasicBlock>,
+    simplified: &SimplifiedParameters,
+) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
     let canonical = |it| simplified.substitutions.get(&it).copied().unwrap_or(it);
-    let retained = parts
-        .blocks
+    let retained = blocks
         .iter_mut()
         .map(|(&id, block)| {
             let positions = std::mem::take(&mut block.parameters)
@@ -22,14 +25,16 @@ pub(super) fn finalize(parts: &mut IrParts, simplified: &SimplifiedParameters) {
         })
         .collect::<HashMap<BlockId, Vec<usize>>>();
 
-    parts.entry.arguments = retained[&parts.entry.target]
+    entry.arguments = retained[&entry.target]
         .iter()
-        .map(|&index| canonical(parts.entry.arguments[index]))
+        .map(|&index| canonical(entry.arguments[index]))
         .collect();
 
-    for block in parts.blocks.values_mut() {
+    for block in blocks.values_mut() {
         finalize_block(block, &retained, &canonical);
     }
+
+    (entry, blocks)
 }
 
 fn finalize_block(

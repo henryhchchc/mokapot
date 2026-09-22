@@ -8,15 +8,14 @@ mod values;
 
 #[cfg(test)]
 mod tests;
+use std::collections::HashMap;
+
 pub use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
 #[cfg(test)]
 pub(super) use tests::verify_method;
 
-use crate::ir::{
-    MethodEntry, SourceMap,
-    generator::{error::Error, parts::IrParts},
-};
+use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId, generator::error::Error};
 
 pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<IrParts, Error> {
     let analysis::DataflowParts {
@@ -40,4 +39,12 @@ pub(super) fn analyze(cfg: &super::cfg::Cfg<'_>) -> Result<IrParts, Error> {
         source_map,
     };
     Ok(parts_method)
+}
+
+pub(super) struct IrParts {
+    pub entry: MethodEntry,
+    pub blocks: HashMap<BlockId, BasicBlock>,
+    pub this: Option<ValueId>,
+    pub parameters: Vec<ValueId>,
+    pub source_map: SourceMap,
 }

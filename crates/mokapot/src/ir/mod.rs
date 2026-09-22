@@ -58,6 +58,14 @@ mod value_definition;
 
 use std::collections::HashMap;
 
+pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
+pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
+pub use identity::{BlockId, InstructionLocation, ValueId};
+pub use operation::Operation;
+pub use source_map::SourceMap;
+pub use terminator::{Successor, Terminator};
+pub use value_definition::ValueDefinition;
+
 use crate::{
     ir::{
         control_flow::{
@@ -69,14 +77,6 @@ use crate::{
     jvm::{Method, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };
-
-pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
-pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
-pub use identity::{BlockId, InstructionLocation, ValueId};
-pub use operation::Operation;
-pub use source_map::SourceMap;
-pub use terminator::{Successor, Terminator};
-pub use value_definition::ValueDefinition;
 
 mod id_allocation;
 use id_allocation::{IdAllocator, NumericalId};

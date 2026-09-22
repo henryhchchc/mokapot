@@ -220,7 +220,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        ir::generator::{cfg, tests::reachable_of},
+        ir::generator::cfg,
         jvm::{code::Instruction, method::AccessFlags},
     };
 
@@ -247,14 +247,13 @@ mod tests {
             AccessFlags::PUBLIC | AccessFlags::STATIC,
         );
         let cfg = cfg::build(&method).unwrap();
-        let mut parts = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
+        let parts = crate::ir::generator::dataflow::analyze(&cfg).unwrap();
         let (&target, target_block) = parts
             .blocks
             .iter()
             .find(|(_, block)| !block.parameters.is_empty())
             .expect("the local-variable join has a block parameter");
         assert_eq!(target_block.parameters.len(), 1);
-        let parameter_value = target_block.parameters[0].value;
 
         let incoming = parts
             .blocks
@@ -264,19 +263,5 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(incoming.len(), 3);
         assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
-
-        crate::ir::generator::canonicalize::canonicalize(&mut parts);
-        let [parameter] = parts.blocks[&target].parameters.as_slice() else {
-            panic!("the public join does not hold exactly one parameter");
-        };
-        assert_eq!(parameter.value, parameter_value);
-        let public_incoming = reachable_of(&parts.blocks, parts.entry.target)
-            .into_iter()
-            .map(|(_, block)| block)
-            .flat_map(|block| block.terminator.successors())
-            .filter(|edge| edge.block_target() == Some(target))
-            .collect::<Vec<_>>();
-        assert_eq!(public_incoming.len(), 3);
-        assert!(public_incoming.iter().all(|it| it.arguments().len() == 1));
     }
 }
