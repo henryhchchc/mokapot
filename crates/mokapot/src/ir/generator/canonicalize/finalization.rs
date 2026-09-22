@@ -11,7 +11,7 @@ pub(super) fn finalize(
     mut blocks: HashMap<BlockId, BasicBlock>,
     simplified: &SimplifiedParameters,
 ) -> (MethodEntry, HashMap<BlockId, BasicBlock>) {
-    let canonical = |it| simplified.substitutions.get(&it).copied().unwrap_or(it);
+    let canonical = |it| simplified.remaps.get(&it).copied().unwrap_or(it);
     let retained = blocks
         .iter_mut()
         .map(|(&id, block)| {
