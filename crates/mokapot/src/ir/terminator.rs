@@ -102,13 +102,8 @@ pub enum Terminator<Arm = Successor> {
         /// Ordered exceptional outcomes.
         exceptional: Vec<Arm>,
     },
-    /// Completes the method normally.
-    Return {
-        /// The returned value, or `None` for a void return.
-        value: Option<ValueId>,
-    },
     /// Attempts to complete the method normally, but may fail while exiting.
-    TryReturn {
+    Return {
         /// The returned value, or `None` for a void return.
         value: Option<ValueId>,
         /// Ordered failures possible while completing the return.
@@ -163,8 +158,7 @@ impl<Arm> Terminator<Arm> {
                     .map(&mut map)
                     .collect::<Result<_, _>>()?,
             },
-            Self::Return { value } => Terminator::Return { value },
-            Self::TryReturn { value, exceptional } => Terminator::TryReturn {
+            Self::Return { value, exceptional } => Terminator::Return {
                 value,
                 exceptional: exceptional
                     .into_iter()
@@ -194,10 +188,9 @@ impl<Arm> Terminator<Arm> {
                 exceptional,
                 ..
             } => (slice::from_ref(normal), exceptional),
-            Self::TryReturn { exceptional, .. } | Self::Throw { exceptional, .. } => {
+            Self::Return { exceptional, .. } | Self::Throw { exceptional, .. } => {
                 (&[], exceptional)
             }
-            Self::Return { .. } => (&[], &[]),
         };
         head.iter().chain(tail)
     }
@@ -215,10 +208,9 @@ impl<Arm> Terminator<Arm> {
                 exceptional,
                 ..
             } => (slice::from_mut(normal), exceptional),
-            Self::TryReturn { exceptional, .. } | Self::Throw { exceptional, .. } => {
+            Self::Return { exceptional, .. } | Self::Throw { exceptional, .. } => {
                 (&mut [], exceptional)
             }
-            Self::Return { .. } => (&mut [], &mut []),
         };
         head.iter_mut().chain(tail)
     }
@@ -266,8 +258,7 @@ impl Terminator<Successor> {
     pub(super) fn local_uses(&self) -> HashSet<ValueId> {
         let value = match self {
             Self::Throw { value, .. }
-            | Self::Return { value: Some(value) }
-            | Self::TryReturn {
+            | Self::Return {
                 value: Some(value), ..
             } => Some(*value),
             _ => None,
@@ -299,12 +290,10 @@ impl<Arm> fmt::Display for Terminator<Arm> {
             Self::Branch { .. } => f.write_str("branch"),
             Self::Switch { .. } => f.write_str("switch"),
             Self::Try { operation, .. } => write!(f, "try {operation}"),
-            Self::Return { value: Some(value) } => write!(f, "return {value}"),
-            Self::Return { value: None } => f.write_str("return"),
-            Self::TryReturn {
+            Self::Return {
                 value: Some(value), ..
-            } => write!(f, "try return {value}"),
-            Self::TryReturn { value: None, .. } => f.write_str("try return"),
+            } => write!(f, "return {value}"),
+            Self::Return { value: None, .. } => f.write_str("return"),
             Self::Throw { value, .. } => write!(f, "throw {value}"),
         }
     }

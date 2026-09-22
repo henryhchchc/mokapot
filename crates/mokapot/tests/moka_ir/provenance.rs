@@ -36,7 +36,7 @@ fn builds_ir_blocks_and_provenance() {
     // Exiting a method may unwind, so the return is a fallible terminator.
     assert!(matches!(
         returned,
-        Terminator::TryReturn { value: Some(value), .. } if value == &ir.parameter_values()[1]
+        Terminator::Return { value: Some(value), .. } if value == &ir.parameter_values()[1]
     ));
 }
 

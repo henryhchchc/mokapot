@@ -33,7 +33,8 @@ Instructions are addressed structurally, not by identity: an `InstructionLocatio
 
 A fallible definition or effect ends its block with a `Try` terminator: an unguarded normal arm first, then exceptional arms in exception-table order, with a trailing unwind arm when no handler catches all.
 The operation's value is available only on the normal arm; exceptional arms see pre-operation locals.
-`Throw`, and a `TryReturn` whose exit can fail, have only exceptional arms.
+Every return may unwind, so a returned value ends its block with a `Return` whose arms are all exceptional.
+`Throw` likewise has only exceptional arms.
 Each handler context begins with a landing-pad block defining its caught exception.
 Legacy `jsr`/`ret` subroutines are unmodeled: any occurrence, reachable or not, is rejected.
 

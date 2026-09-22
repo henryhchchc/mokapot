@@ -195,14 +195,20 @@ pub(crate) fn try_op(op: Operation, normal: Successor, exceptional: Vec<Successo
     }
 }
 
-/// A `return` of `value`.
+/// A `return` of `value`, which may unwind.
 pub(crate) fn ret(value: ValueId) -> Terminator {
-    Terminator::Return { value: Some(value) }
+    Terminator::Return {
+        value: Some(value),
+        exceptional: vec![Successor::Unwind],
+    }
 }
 
-/// A `void` return.
+/// A `void` return, which may unwind.
 pub(crate) fn void() -> Terminator {
-    Terminator::Return { value: None }
+    Terminator::Return {
+        value: None,
+        exceptional: vec![Successor::Unwind],
+    }
 }
 
 /// An operation evaluated only for its effects.

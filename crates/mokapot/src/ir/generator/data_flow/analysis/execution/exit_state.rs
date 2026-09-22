@@ -175,11 +175,8 @@ impl<'instruction> ExitState<'instruction> {
     ) -> Result<FrameTerminator, Error> {
         let value = effects::return_operand(self.instruction, &mut self.frame)
             .map_err(|e| e.at_instruction(self.pc))?;
-        if exception_arms.is_empty() {
-            return Ok(FrameTerminator::Return { value });
-        }
         let exceptional = self.exception_arms(values, exception_arms)?;
-        Ok(FrameTerminator::TryReturn { value, exceptional })
+        Ok(FrameTerminator::Return { value, exceptional })
     }
 
     /// Interprets a throw, which delivers along its ordered exception arms.

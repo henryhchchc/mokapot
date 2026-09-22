@@ -45,15 +45,13 @@ impl RemapValues for Terminator<Successor> {
     ) -> Result<(), E> {
         match self {
             Self::Throw { value, .. }
-            | Self::Return { value: Some(value) }
-            | Self::TryReturn {
+            | Self::Return {
                 value: Some(value), ..
             } => remap_value(value, remap),
             Self::Goto { .. }
             | Self::Branch { .. }
             | Self::Switch { .. }
-            | Self::Return { value: None }
-            | Self::TryReturn { value: None, .. } => Ok(()),
+            | Self::Return { value: None, .. } => Ok(()),
             Self::Try { operation, .. } => operation.try_remap_values(remap),
         }
     }

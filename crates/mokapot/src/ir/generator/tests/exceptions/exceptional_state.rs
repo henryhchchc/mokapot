@@ -76,11 +76,11 @@ fn exceptional_state_excludes_the_fallible_result() {
 
     assert!(matches!(
         block_of(&ir, normal_target).terminator,
-        Terminator::TryReturn { value: Some(value), .. } if value == result
+        Terminator::Return { value: Some(value), .. } if value == result
     ));
     assert!(matches!(
         handler.terminator,
-        Terminator::TryReturn { value: Some(value), .. }
+        Terminator::Return { value: Some(value), .. }
             if value == ir.parameter_values()[0] && value != result
     ));
 }

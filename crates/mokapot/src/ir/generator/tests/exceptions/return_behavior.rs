@@ -19,7 +19,7 @@ fn synchronized_return_has_only_exceptional_successors() {
     let mut method = method(body, "()I", table);
     method.access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
-    let Terminator::TryReturn { exceptional, .. } = terminator_at(&ir, 1.into()) else {
+    let Terminator::Return { exceptional, .. } = terminator_at(&ir, 1.into()) else {
         panic!("expected a fallible return terminator");
     };
 
@@ -63,7 +63,7 @@ fn returns_without_a_handler_unwind_conservatively() {
         let ir = build(&case).unwrap();
         let ret_term = terminator_at(&ir, return_pc);
         assert!(
-            matches!(ret_term, Terminator::TryReturn { value: None, .. }),
+            matches!(ret_term, Terminator::Return { value: None, .. }),
             "{label} must return fallibly"
         );
         let mut outcomes = ret_term.successors();
