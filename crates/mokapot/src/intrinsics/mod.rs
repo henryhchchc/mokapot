@@ -39,7 +39,7 @@ where
         Some(cmp::Ordering::Equal)
     } else if lhs.is_subset(rhs) {
         Some(cmp::Ordering::Less)
-    } else if lhs.is_superset(lhs) {
+    } else if lhs.is_superset(rhs) {
         Some(cmp::Ordering::Greater)
     } else {
         None
