@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     hash::{BuildHasher, Hash},
 };
 
@@ -9,9 +9,10 @@ use super::JoinSemiLattice;
 ///
 /// A location's fact is owned by exactly one map at a time: [`pop_one`] hands a
 /// pending `(location, fact)` to the result map, and successors are joined back
-/// into the worklist. Locations move rather than clone.
+/// into the worklist. Facts move rather than clone.
 ///
-/// Implemented for [`BTreeMap`] (`L: Ord`) and [`HashMap`] (`L: Hash + Eq`).
+/// Implemented for [`BTreeMap`] (`L: Ord`), [`HashMap`] (`L: Hash + Eq`), and
+/// [`QueuedFactsMap`] (`L: Hash + Eq + Clone`).
 ///
 /// [`pop_one`]: FactsMap::pop_one
 #[instability::unstable(feature = "fixed-point-analyses")]
@@ -99,5 +100,75 @@ where
         // its lifetime from the map is sound for this call.
         let location = unsafe { std::mem::transmute::<&L, &L>(location) };
         self.remove_entry(location)
+    }
+}
+
+/// A [`FactsMap`] that dequeues in first-enqueued order.
+///
+/// An unordered map picks an arbitrary key, making the work spent reaching the
+/// fixed point depend on iteration order; the queue costs a clone per location.
+#[derive(Debug)]
+#[instability::unstable(feature = "fixed-point-analyses")]
+pub struct QueuedFactsMap<L, F> {
+    entries: HashMap<L, F>,
+    order: VecDeque<L>,
+}
+
+impl<L, F> Default for QueuedFactsMap<L, F> {
+    fn default() -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+}
+
+impl<L, F> FactsMap<L, F> for QueuedFactsMap<L, F>
+where
+    L: Hash + Eq + Clone,
+{
+    fn insert_or_join(&mut self, location: L, fact: F) -> Option<(&L, &F)>
+    where
+        F: JoinSemiLattice,
+    {
+        use std::collections::hash_map::Entry;
+        let entry = match self.entries.entry(location) {
+            Entry::Vacant(entry) => {
+                self.order.push_back(entry.key().clone());
+                entry.insert_entry(fact)
+            }
+            Entry::Occupied(mut entry) => {
+                if !entry.get_mut().join_assign(fact) {
+                    return None;
+                }
+                entry
+            }
+        };
+        // SAFETY: `entry` borrows `self.entries`, so its key and value outlive
+        // the returned references.
+        Some(unsafe {
+            (
+                std::mem::transmute::<&L, &L>(entry.key()),
+                std::mem::transmute::<&F, &F>(entry.get()),
+            )
+        })
+    }
+
+    fn pop_one(&mut self) -> Option<(L, F)> {
+        while let Some(location) = self.order.pop_front() {
+            if let Some(fact) = self.entries.remove(&location) {
+                return Some((location, fact));
+            }
+        }
+        None
+    }
+}
+
+impl<L, F> IntoIterator for QueuedFactsMap<L, F> {
+    type IntoIter = std::collections::hash_map::IntoIter<L, F>;
+    type Item = (L, F);
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
     }
 }

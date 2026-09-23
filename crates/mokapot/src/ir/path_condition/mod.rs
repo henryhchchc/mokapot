@@ -13,7 +13,7 @@ use super::{
     BlockId, BranchGuard, MokaIRMethod,
     expression::{BooleanVariable, Predicate},
 };
-use crate::analysis::fixed_point;
+use crate::analysis::fixed_point::{self, QueuedFactsMap};
 
 mod analyzer;
 mod budget;
@@ -45,7 +45,9 @@ impl<'method> PathCondition<&'method Predicate> {
         budget: SolvingBudget,
     ) -> HashMap<BlockId, Self> {
         let mut problem = analyzer::PathConditionProblem::new(method, budget);
-        let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
+        // Queued so the reduction work does not vary between runs.
+        let Ok(path_conditions): Result<QueuedFactsMap<BlockId, _>, _> =
+            fixed_point::solve(&mut problem);
         path_conditions
             .into_iter()
             .map(|(block, fact)| (block, fact.into_inner().reduce_with_budget(budget)))
