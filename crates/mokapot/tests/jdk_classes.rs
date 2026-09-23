@@ -84,12 +84,7 @@ fn test_a_class(class: Class) {
     class
         .methods
         .iter()
-        .filter(|it| {
-            it.body
-                .as_ref()
-                // Skip large method to speed up the test
-                .is_some_and(|it| it.instructions.len() < 512)
-        })
+        .filter(|it| it.body.is_some())
         .for_each(|it| {
             it.body
                 .as_ref()
