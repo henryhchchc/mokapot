@@ -3,7 +3,7 @@ use std::iter;
 use super::*;
 use crate::{
     ir::{
-        MalformedBytecode::{MissingEntry, MissingFallthrough, MissingInstruction},
+        MalformedControlFlow::{MissingFallthrough, MissingInstruction},
         UnsupportedBytecode::LegacySubroutine,
     },
     jvm::code::WideInstruction,
@@ -12,13 +12,16 @@ use crate::{
 #[test]
 fn reports_empty_code_at_the_method_boundary() {
     let method = method(iter::empty::<(u16, Instruction)>(), "()V", vec![]);
-    assert_eq!(malformed(&method), (None, MissingEntry));
+    assert_matches!(build(&method), Err(MokaIRBuildError::MissingOrEmptyBody));
 }
 
 #[test]
 fn reports_a_missing_jump_target_at_that_target() {
     let method = method([(0, Instruction::Goto(10.into()))], "()V", vec![]);
-    assert_eq!(malformed(&method), (Some(10.into()), MissingInstruction));
+    assert_matches!(
+        build(&method),
+        Err(MokaIRBuildError::ControlFlow(MissingInstruction(pc))) if pc == 10.into()
+    );
 }
 
 #[test]
@@ -28,7 +31,10 @@ fn rejects_a_missing_structural_target_even_when_its_source_is_unreachable() {
         "()V",
         vec![],
     );
-    assert_eq!(malformed(&method), (Some(10.into()), MissingInstruction));
+    assert_matches!(
+        build(&method),
+        Err(MokaIRBuildError::ControlFlow(MissingInstruction(pc))) if pc == 10.into()
+    );
 }
 
 #[test]
@@ -41,10 +47,7 @@ fn reports_frame_sources_at_the_executed_instruction() {
 #[test]
 fn reports_a_missing_fallthrough_at_the_source_instruction() {
     let fallthrough = method([(4, Instruction::Nop)], "()V", vec![]);
-    assert_eq!(
-        malformed(&fallthrough),
-        (Some(4.into()), MissingFallthrough)
-    );
+    assert_matches!(build(&fallthrough), Err(MokaIRBuildError::ControlFlow(MissingFallthrough(pc))) if pc == 4.into());
 
     // Structural validation runs off the reachable path too.
     let unreachable = method(
@@ -52,10 +55,7 @@ fn reports_a_missing_fallthrough_at_the_source_instruction() {
         "()V",
         vec![],
     );
-    assert_eq!(
-        malformed(&unreachable),
-        (Some(1.into()), MissingFallthrough)
-    );
+    assert_matches!(build(&unreachable), Err(MokaIRBuildError::ControlFlow(MissingFallthrough(pc))) if pc == 1.into());
 }
 
 #[test]

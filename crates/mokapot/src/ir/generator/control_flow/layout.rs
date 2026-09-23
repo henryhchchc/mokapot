@@ -7,7 +7,7 @@ use std::{
 
 use super::BlockExit;
 use crate::{
-    ir::generator::error::{Error, MalformedBytecode},
+    ir::generator::error::{Error, MalformedControlFlow},
     jvm::code::{MethodBody, ProgramCounter as PC},
 };
 
@@ -28,7 +28,7 @@ impl BlockLayout {
             .instructions
             .entry_point()
             .map(|(pc, _)| pc)
-            .ok_or_else(|| Error::malformed(None, MalformedBytecode::MissingEntry))?;
+            .ok_or(Error::MissingOrEmptyBody)?;
         let mut exits = body
             .instructions
             .iter()
@@ -109,8 +109,7 @@ fn leaders(
         .iter()
         .find(|pc| body.instruction_at(**pc).is_none())
     {
-        let kind = MalformedBytecode::MissingInstruction;
-        return Err(Error::malformed(Some(pc), kind));
+        return Err(MalformedControlFlow::MissingInstruction(pc).into());
     }
     Ok(leaders)
 }

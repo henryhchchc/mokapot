@@ -1,21 +1,15 @@
 use crate::{ir::generator::data_flow::FrameError, jvm::code::ProgramCounter};
 
 /// Why JVM bytecode cannot be converted to Moka IR.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum MalformedBytecode {
-    /// The code attribute contains no entry instruction.
-    #[display("the code attribute has no entry instruction")]
-    MissingEntry,
+pub enum MalformedControlFlow {
     /// A control-flow target has no instruction.
-    #[display("a control-flow target has no instruction")]
-    MissingInstruction,
+    #[error("control-flow target at {_0} has no instruction")]
+    MissingInstruction(ProgramCounter),
     /// An instruction that must fall through has no following instruction.
-    #[display("an instruction has no required fallthrough")]
-    MissingFallthrough,
-    /// A `tableswitch` range and jump table have different cardinalities.
-    #[display("a tableswitch range does not match its jump table")]
-    InvalidTableSwitch,
+    #[error("instruction at {_0} has no required fallthrough")]
+    MissingFallthrough(ProgramCounter),
 }
 
 /// A well-formed JVM bytecode feature that Moka IR does not support.
@@ -31,8 +25,8 @@ pub enum UnsupportedBytecode {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// A JVM frame operation failed while processing reachable bytecode.
-    #[error("invalid JVM frame{location}: {source}", location = display_location(*pc))]
+    /// A JVM frame operation failed during dataflow analysis.
+    #[error("invalid JVM frame{loc}: {source}", loc = display_pc(pc.as_ref()))]
     InvalidFrame {
         /// The instruction being processed, or `None` for method initialization.
         pc: Option<ProgramCounter>,
@@ -41,18 +35,13 @@ pub enum Error {
         source: FrameError,
     },
     /// The method does not have a code body.
-    #[error("the method does not have a body")]
-    NoMethodBody,
+    #[error("the method does not have a body or the body is empty")]
+    MissingOrEmptyBody,
     /// JVM bytecode structure is malformed.
-    #[error("malformed JVM bytecode{location}: {kind}", location = display_location(*pc))]
-    MalformedBytecode {
-        /// The relevant bytecode location, when one exists.
-        pc: Option<ProgramCounter>,
-        /// The invalid bytecode condition.
-        kind: MalformedBytecode,
-    },
+    #[error(transparent)]
+    ControlFlow(#[from] MalformedControlFlow),
     /// JVM bytecode uses a feature that Moka IR intentionally does not model.
-    #[error("unsupported JVM bytecode at instruction {pc}: {kind}")]
+    #[error("unsupported JVM bytecode at {pc}: {kind}")]
     UnsupportedBytecode {
         /// The unsupported instruction's location.
         pc: ProgramCounter,
@@ -62,19 +51,12 @@ pub enum Error {
 }
 
 impl Error {
-    pub(super) const fn malformed(pc: Option<ProgramCounter>, kind: MalformedBytecode) -> Self {
-        Self::MalformedBytecode { pc, kind }
-    }
-
-    pub(super) const fn at_instruction(self, pc: ProgramCounter) -> Self {
+    pub(super) const fn at_pc(self, pc: ProgramCounter) -> Self {
         match self {
             Self::InvalidFrame { pc: None, source } => Self::InvalidFrame {
                 pc: Some(pc),
                 source,
             },
-            Self::MalformedBytecode { pc: None, kind } => {
-                Self::MalformedBytecode { pc: Some(pc), kind }
-            }
             error => error,
         }
     }
@@ -86,6 +68,6 @@ impl From<FrameError> for Error {
     }
 }
 
-fn display_location(pc: Option<ProgramCounter>) -> String {
-    pc.map_or_else(String::new, |pc| format!(" at instruction {pc}"))
+fn display_pc(pc: Option<&ProgramCounter>) -> String {
+    pc.map_or_else(String::new, |pc| format!(" at {pc}"))
 }

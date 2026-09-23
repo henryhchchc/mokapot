@@ -80,7 +80,7 @@ impl<'instruction> ExitState<'instruction> {
     ) -> Result<FrameTerminator, Error> {
         let operation =
             lifting::lift_instruction(values, self.instruction, self.pc, &mut self.frame)
-                .map_err(|error| error.at_instruction(self.pc))?;
+                .map_err(|error| error.at_pc(self.pc))?;
         let normal = FrameArm::block(
             ArmKey::Continue,
             next,
@@ -122,7 +122,7 @@ impl<'instruction> ExitState<'instruction> {
     ) -> Result<FrameTerminator, Error> {
         let (taken_transfer, otherwise_transfer) =
             effects::branch_transfers(self.instruction, &mut self.frame)
-                .map_err(|e| e.at_instruction(self.pc))?;
+                .map_err(|e| e.at_pc(self.pc))?;
         let taken = FrameArm::block(ArmKey::Taken, taken, taken_transfer, self.frame.clone());
         let otherwise = FrameArm::block(
             ArmKey::Otherwise,
@@ -139,8 +139,7 @@ impl<'instruction> ExitState<'instruction> {
         cases: BTreeMap<i32, BlockId>,
         default: BlockId,
     ) -> Result<FrameTerminator, Error> {
-        let selector =
-            effects::switch_selector(&mut self.frame).map_err(|e| e.at_instruction(self.pc))?;
+        let selector = effects::switch_selector(&mut self.frame).map_err(|e| e.at_pc(self.pc))?;
         if cases.is_empty() {
             let target = FrameArm::block(
                 ArmKey::Default,
@@ -174,7 +173,7 @@ impl<'instruction> ExitState<'instruction> {
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, Error> {
         let value = effects::return_operand(self.instruction, &mut self.frame)
-            .map_err(|e| e.at_instruction(self.pc))?;
+            .map_err(|e| e.at_pc(self.pc))?;
         let exceptional = self.exception_arms(values, exception_arms)?;
         Ok(FrameTerminator::Return { value, exceptional })
     }
@@ -186,7 +185,7 @@ impl<'instruction> ExitState<'instruction> {
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, Error> {
         let value = effects::throw_operand(self.instruction, &mut self.frame)
-            .map_err(|e| e.at_instruction(self.pc))?;
+            .map_err(|e| e.at_pc(self.pc))?;
         let exceptional = self.exception_arms(values, exception_arms)?;
         Ok(FrameTerminator::Throw { value, exceptional })
     }

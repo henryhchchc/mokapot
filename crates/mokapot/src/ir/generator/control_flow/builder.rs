@@ -11,7 +11,7 @@ use crate::{
 
 /// Builds the reachable control-flow graph of one method.
 pub(super) fn build(method: &Method) -> Result<Cfg<'_>, Error> {
-    let body = method.body.as_ref().ok_or(Error::NoMethodBody)?;
+    let body = method.body.as_ref().ok_or(Error::MissingOrEmptyBody)?;
     let mut layout = BlockLayout::of(body)?;
     let reachable = ReachableNodes::discover(&layout);
     let ids = NodeIds::allocate(&reachable);

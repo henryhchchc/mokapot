@@ -22,7 +22,7 @@ mod error;
 mod remap;
 
 pub use data_flow::FrameError as MokaIRFrameError;
-pub use error::{Error as MokaIRBuildError, MalformedBytecode, UnsupportedBytecode};
+pub use error::{Error as MokaIRBuildError, MalformedControlFlow, UnsupportedBytecode};
 
 use crate::{ir::MokaIRMethod, jvm::Method};
 

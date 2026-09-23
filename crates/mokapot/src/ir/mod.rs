@@ -61,7 +61,9 @@ mod test;
 use std::collections::HashMap;
 
 pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
-pub use generator::{MalformedBytecode, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode};
+pub use generator::{
+    MalformedControlFlow, MokaIRBuildError, MokaIRFrameError, UnsupportedBytecode,
+};
 pub use identity::{BlockId, InstructionLocation, ValueId};
 pub use operation::Operation;
 pub use source_map::SourceMap;

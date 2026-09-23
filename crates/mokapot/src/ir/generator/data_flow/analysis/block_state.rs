@@ -126,7 +126,7 @@ impl BlockParameters {
                 .map_err(|error| {
                     let error = Error::from(error);
                     match block_pc {
-                        Some(pc) => error.at_instruction(pc),
+                        Some(pc) => error.at_pc(pc),
                         None => error,
                     }
                 })?;
