@@ -116,8 +116,7 @@ fn leaders(
 
 /// The final instruction of the block starting at `start_pc`.
 ///
-/// A block spans from its leader up to the instruction before the next leader,
-/// so the leaders alone determine every block span.
+/// A block spans from its leader up to the instruction before the next leader.
 fn block_end(body: &MethodBody, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: PC) -> PC {
     leaders
         .range((Bound::Excluded(start_pc), Bound::Unbounded))

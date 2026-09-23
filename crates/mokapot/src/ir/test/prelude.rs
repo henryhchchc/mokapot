@@ -1,7 +1,4 @@
 //! IR fixtures for unit tests, importable with `use crate::ir::test::prelude::*;`.
-//!
-//! The module name ends in `prelude` so glob imports do not trip
-//! `clippy::wildcard_imports`.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -22,8 +19,6 @@ use crate::{
 };
 
 /// Asserts that `value` matches `pattern`, printing the value on failure.
-///
-/// `std`'s `assert_matches!` is not stable yet.
 macro_rules! assert_matches {
     ($value:expr, $($pattern:tt)+) => {
         match $value {
@@ -38,10 +33,7 @@ macro_rules! assert_matches {
 }
 pub(crate) use assert_matches;
 
-/// `N` consecutive identities starting at `base`.
-///
-/// The kind is inferred from use: `let [a, b] = ids(0);` binds either `ValueId`s or `BlockId`s
-/// depending on how `a` and `b` are used.
+/// `N` consecutive identities starting at `base`, with the id kind inferred from use.
 pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
     std::array::from_fn(|offset| {
         T::from_raw(base + u32::try_from(offset).expect("a test declares few ids"))

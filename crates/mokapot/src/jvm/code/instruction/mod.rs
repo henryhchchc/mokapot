@@ -267,6 +267,7 @@ pub enum Instruction {
 }
 
 /// A wide instruction.
+#[doc = see_jvm_spec!(6, 5)]
 #[allow(
     missing_docs,
     reason = "This maps one-to-one to those in the JVM spec."

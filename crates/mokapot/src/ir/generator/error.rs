@@ -41,7 +41,7 @@ pub enum Error {
     /// JVM bytecode structure is malformed.
     #[error(transparent)]
     ControlFlow(#[from] MalformedControlFlow),
-    /// JVM bytecode uses a feature that Moka IR intentionally does not model.
+    /// JVM bytecode uses a feature that Moka IR does not support.
     #[error("unsupported JVM bytecode at {pc}: {kind}")]
     UnsupportedBytecode {
         /// The unsupported instruction's location.

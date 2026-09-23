@@ -1,5 +1,6 @@
 use super::error::Error;
 use crate::{
+    intrinsics::see_jvm_spec,
     ir::ValueId,
     types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
 };
@@ -39,6 +40,7 @@ impl LocalSlot {
     }
 }
 
+#[doc = see_jvm_spec!(2, 6, 1)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LocalVariables {
     slots: Box<[LocalSlot]>,
@@ -156,12 +158,12 @@ mod tests {
 
     use super::{Error, LocalSlot, LocalVariables};
     use crate::{
+        intrinsics::see_jvm_spec,
         ir::{IdAllocator, ValueId},
         types::field_type::ValueCategory,
     };
 
-    /// A table of `slot_count` variables, none of them written. Built from primitives rather than a
-    /// derived `Arbitrary`, which would not keep a category 2 value's upper variable reserved.
+    /// A table of `slot_count` variables, none of them written.
     fn empty_locals(slot_count: usize) -> LocalVariables {
         LocalVariables {
             slots: vec![LocalSlot::Unset; slot_count].into_boxed_slice(),
@@ -169,8 +171,9 @@ mod tests {
     }
 
     proptest! {
-        /// A store reads back under its own category and, for a category 2 value, reserves the
-        /// variable above it, from which nothing can be loaded (JVMS §2.6.1).
+        /// A store reads back under its own category, reserving the variable
+        /// above a category 2 value.
+        #[doc = see_jvm_spec!(2, 6, 1)]
         #[test]
         fn a_store_reads_back_and_reserves_the_variable_above_it(
             slot_count in 1..6_usize,
@@ -199,8 +202,9 @@ mod tests {
             }
         }
 
-        /// Overwriting either half of a category 2 value never leaves the original readable, not even
-        /// when the store installs a fresh pair there (JVMS §4.10.2.3).
+        /// Overwriting either half of a category 2 value never leaves the
+        /// original readable.
+        #[doc = see_jvm_spec!(4, 10, 2, 3)]
         #[test]
         fn overwriting_a_half_of_a_category_2_value_never_leaves_it_readable(
             start in 0..3_u16,
@@ -219,7 +223,7 @@ mod tests {
             locals.set(overwritten, overwrite, category).expect("the overwrite fits");
             let read = locals.get(start, Category2);
 
-            // The failure is the implementation's taxonomy; that the pair stops reading is not.
+            // The error kind is the implementation's; the pair must stop reading.
             if category == Category1 || higher_half {
                 prop_assert!(read.is_err(), "the overwritten pair still reads back");
             }
@@ -227,8 +231,8 @@ mod tests {
             prop_assert_eq!(locals.get(overwritten, category), Ok(&overwrite));
         }
 
-        /// A read of a variable that was never written, and of a value under the category the
-        /// variable does not hold, is refused.
+        /// A read of an unwritten variable, or of a value under the wrong
+        /// category, is refused.
         #[test]
         fn illegal_accesses_are_refused(
             slot_count in 0..6_usize,

@@ -9,7 +9,7 @@
 //! 4. [`definitions`] indexes each SSA value to its defining site.
 //!
 //! Analysis fixes addressable instruction positions and records their JVM
-//! origins in a detached source map. Later phases preserve those positions.
+//! origins in a detached source map, which later phases preserve.
 //!
 //! The [`dataflow::lifting`] module contains the JVM opcode semantics
 //! used while analyzing structural blocks.

@@ -8,8 +8,12 @@ use std::{
 use super::super::{
     FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
 };
-use crate::{intrinsics::enum_discriminant, jvm::code::ProgramCounter};
+use crate::{
+    intrinsics::{enum_discriminant, see_jvm_spec},
+    jvm::code::ProgramCounter,
+};
 
+#[doc = see_jvm_spec!(4, 7, 16)]
 pub struct Annotation {
     pub type_index: u16,
     pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
@@ -45,6 +49,7 @@ impl ToBytecode for Annotation {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 16, 1)]
 pub enum ElementValueInfo {
     Const(u8, u16),
     Enum {
@@ -123,6 +128,7 @@ impl ElementValueInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 20)]
 pub struct TypeAnnotation {
     pub target_info: TargetInfo,
     pub target_path: Vec<(u8, u8)>,
@@ -177,6 +183,7 @@ impl ToBytecode for TypeAnnotation {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[repr(u8)]
 pub enum TargetInfo {
     TypeParameterOfClass {

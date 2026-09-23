@@ -12,9 +12,9 @@
 //! operations have distinct normal and exceptional successor arms, and each
 //! reachable handler context has a distinct caught-exception value.
 //!
-//! [`SourceMap`] records sparse, bidirectional JVM provenance. There is no
-//! bytecode-to-IR bijection: erased stack operations may have no IR node, while
-//! block parameters and other synthetic nodes may have no JVM origin.
+//! [`SourceMap`] records sparse, bidirectional JVM provenance: erased stack
+//! operations may have no IR node, while synthetic nodes such as block
+//! parameters may have no JVM origin.
 
 mod basic_block;
 pub mod expression;
@@ -49,11 +49,9 @@ use id_allocation::{IdAllocator, NumericalId};
 
 /// A completed scalar-SSA representation of the reachable part of a JVM method.
 ///
-/// Blocks and values have opaque identities local to this method. These
-/// identities may be sparse and must not be interpreted as positions, counts,
-/// or creation order.
-/// Instructions are addressed by structural locations, and block terminators
-/// are the sole source of control-flow edges.
+/// Blocks and values have opaque identities local to this method. Instructions
+/// are addressed by structural locations, and block terminators are the sole
+/// source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
     access_flags: method::AccessFlags,
@@ -69,8 +67,6 @@ pub struct MokaIRMethod {
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
-///
-/// This enum preserves which kind of instruction was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionRef<'method> {
     /// A parameter bound on block entry.

@@ -38,11 +38,8 @@ pub(super) const fn fallthrough_may_throw(instruction: &Instruction) -> bool {
 /// Whether loading `value` with `ldc`, `ldc_w`, or `ldc2_w` can fail.
 ///
 /// Numeric constants are read straight out of the run-time constant pool, and
-/// `Null` never reaches it (`aconst_null` pushes it instead), so neither can
-/// fail. Every other entry may require resolution or materialization.
-///
-/// The constants that cannot fail are named, so a newly added constant defaults
-/// to fallible.
+/// `Null` never reaches it (`aconst_null` pushes it instead). Every other entry
+/// may require resolution or materialization.
 #[doc = see_jvm_spec!(6, 5)]
 #[doc = see_jvm_spec!(5, 4, 3)]
 const fn can_const_resolution_fall(value: &ConstantValue) -> bool {

@@ -4,7 +4,7 @@ use super::NumericalId;
 
 /// The identity of a basic block within one Moka IR method.
 ///
-/// Identities may be sparse and convey neither block order nor a block count.
+/// Identities are opaque and may be sparse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display)]
 #[repr(transparent)]
 #[display("b{_0}")]
@@ -40,10 +40,7 @@ pub enum InstructionLocation {
     },
 }
 
-/// The opaque identity of a scalar value within one Moka IR method.
-///
-/// Identities may be sparse and convey neither definition order nor a value
-/// count.
+/// The identity of a scalar value within one Moka IR method.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]

@@ -29,7 +29,7 @@ fn switch_retains_parallel_successor_arms() {
         .successors()
         .map(Successor::block_target)
         .collect::<Vec<_>>();
-    // Parallel arms are retained rather than merged: three arms, one target.
+    // Parallel arms are retained: three arms, one target.
     assert_eq!(targets.len(), 3);
     assert!(targets.iter().all(|it| *it == targets[0]));
     assert_eq!(

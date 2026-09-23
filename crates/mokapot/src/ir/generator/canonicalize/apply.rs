@@ -10,7 +10,6 @@ use crate::ir::{
 impl SimplifiedParameters {
     /// Rewrites `entry` and `blocks` to canonical SSA.
     pub(super) fn apply(&self, entry: &mut MethodEntry, blocks: &mut HashMap<BlockId, BasicBlock>) {
-        // let canonical = |it| self.substitutions.get(&it).copied().unwrap_or(it);
         let kept_indices = blocks
             .iter_mut()
             .map(|(&id, block)| {

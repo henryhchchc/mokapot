@@ -27,8 +27,7 @@ impl<P> PathCondition<P> {
     }
 }
 
-/// Evaluates a condition under `value_map` by unfolding its disjunctive normal form. This is the
-/// reference semantics the structural operations are checked against.
+/// Evaluates a condition under `value_map` by unfolding its disjunctive normal form.
 fn evaluate(cond: &PathCondition<u32>, value_map: &HashMap<u32, bool>) -> bool {
     cond.disjuncts()
         .map(|term| {
@@ -41,8 +40,7 @@ fn evaluate(cond: &PathCondition<u32>, value_map: &HashMap<u32, bool>) -> bool {
         .unwrap_or_default()
 }
 
-/// The predicate ids every generated condition draws from. A small domain lets one generated
-/// assignment cover every id a condition can reference, while keeping proptest inputs shrinkable.
+/// The predicate ids every generated condition draws from.
 const PREDICATE_IDS: u32 = 4;
 
 /// A conjunction of one or more literals, the shape a conditional CFG edge carries.

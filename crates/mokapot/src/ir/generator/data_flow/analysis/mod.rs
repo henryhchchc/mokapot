@@ -11,7 +11,6 @@ pub(super) use block_state::BlockSolution;
 pub(super) use frame_block::{FrameArm, FrameBlock, FrameSource};
 pub(super) use solver::DataflowSolver;
 
-// Re-exported so the submodules below can reach them through a single `super` hop.
 use super::{Frame, Position, lifting, values::ValueContext};
 use crate::ir::{BlockId, ValueId};
 

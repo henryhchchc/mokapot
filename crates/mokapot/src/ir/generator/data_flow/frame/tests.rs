@@ -6,6 +6,7 @@ use super::{
     Frame, FrameError, Position, local_variables::LocalVariables, operand_stack::OperandStack,
 };
 use crate::{
+    intrinsics::see_jvm_spec,
     ir::{IdAllocator, ValueId},
     tests::arb_field_type,
     types::{
@@ -14,7 +15,7 @@ use crate::{
     },
 };
 
-/// The receiver of an instance method, if any, and the arguments of the frame to build.
+/// The receiver, if any, and the arguments of the frame to build.
 fn entry_values(instance: bool, parameter_count: usize) -> (Option<ValueId>, Vec<ValueId>) {
     let mut allocator = IdAllocator::default();
     let receiver = instance.then(|| allocator.new_id());
@@ -41,8 +42,8 @@ fn locals_with(items: &[(ValueId, ValueCategory)], slot_count: u16) -> LocalVari
     locals
 }
 
-/// A frame whose local variables hold `items` from variable zero, sized `slot_count`, and whose
-/// operand stack holds one fresh identity per category, with room for `extra_slots` slots beyond.
+/// A frame whose locals hold `items` from variable zero, sized `slot_count`, with an operand stack
+/// of one fresh identity per category and `extra_slots` slots of room.
 fn frame_with(
     items: &[(ValueId, ValueCategory)],
     slot_count: u16,
@@ -71,12 +72,10 @@ fn frame_with(
     }
 }
 
-/// The local variable table length the merge tests use. Any length both frames share will do, as
-/// long as it holds the items of either: `items` never exceeds four category 2 operands.
+/// The local variable table length the merge tests use.
 const MERGE_LOCALS: u16 = 8;
 
-/// The operand stack room the entry-frame tests pass: the entry frame starts empty, so any room
-/// fits.
+/// The operand stack room the entry-frame tests pass.
 const ENTRY_MAX_STACK: u16 = 4;
 
 proptest! {
@@ -92,8 +91,8 @@ proptest! {
         let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());
         let entries: Vec<&ValueId> = receiver.iter().chain(&parameters).collect();
 
-        // The receiver takes the first local variable, and the parameters follow it in the order
-        // the descriptor lists them, each taking the variables its category needs (JVMS §2.6.1).
+        // The receiver takes local 0; the parameters follow in descriptor order, each taking the
+        // variables its category needs (JVMS §2.6.1).
         let mut layout: Vec<Option<usize>> = Vec::new();
         let mut entry = 0;
         if instance {
@@ -139,8 +138,9 @@ proptest! {
         }
     }
 
-    /// A merge reports every position that holds a value in the merged frame exactly once, hands the
-    /// receiving frame its own value, and leaves a frame merged with itself unchanged (JVMS §4.10.2.2).
+    /// A merge visits every value of the merged frame once, reads the receiving frame's own value,
+    /// and leaves a frame merged with itself unchanged.
+    #[doc = see_jvm_spec!(4, 10, 2, 2)]
     #[test]
     fn merging_frames_visits_every_surviving_value_once_and_is_idempotent(
         categories in prop::collection::vec(any::<ValueCategory>(), 0..5),
@@ -202,8 +202,8 @@ proptest! {
         }
     }
 
-    /// Frames whose local variable counts or operand stack shapes differ cannot merge, and a
-    /// rejected merge changes nothing. The shape failure has no end-to-end coverage.
+    /// Frames whose local variable counts or operand stack shapes differ cannot
+    /// merge, and a rejected merge changes nothing.
     #[test]
     fn merge_from_with_rejects_incompatible_shapes(
         categories in prop::collection::vec(any::<ValueCategory>(), 0..5),

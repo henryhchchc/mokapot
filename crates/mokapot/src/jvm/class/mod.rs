@@ -90,6 +90,7 @@ pub const MAX_MAJOR_VERSION: u16 = 71;
 const PREVIEW_FEATURES: u16 = 0xFFFF;
 
 /// The version of a class file.
+#[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
 pub enum Version {
@@ -294,6 +295,7 @@ impl Version {
 }
 
 /// The information of an inner class.
+#[doc = see_jvm_spec!(4, 7, 6)]
 #[derive(Debug, Clone)]
 pub struct InnerClassInfo {
     /// The inner class.
@@ -307,6 +309,7 @@ pub struct InnerClassInfo {
 }
 
 /// The information of an enclosing method of a [`Class`].
+#[doc = see_jvm_spec!(4, 7, 7)]
 #[derive(Debug, Clone)]
 pub struct EnclosingMethod {
     /// The class being enclosed.
@@ -316,6 +319,7 @@ pub struct EnclosingMethod {
 }
 
 /// The information of a bootstrap method.
+#[doc = see_jvm_spec!(4, 7, 23)]
 #[derive(Debug, Clone)]
 pub struct BootstrapMethod {
     /// The method handle of the bootstrap method.
@@ -359,6 +363,7 @@ impl MethodHandle {
 }
 
 /// The record components of a [`Class`] that represents a `record`.
+#[doc = see_jvm_spec!(4, 7, 30)]
 #[derive(Debug, Clone)]
 pub struct RecordComponent {
     /// The name of the component.
@@ -381,6 +386,7 @@ pub struct RecordComponent {
 
 bitflags! {
     /// The access flags of a [`Class`].
+    #[doc = see_jvm_spec!(4, 1)]
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
@@ -410,6 +416,7 @@ bitflags! {
 
 bitflags! {
     /// The access flags of a nested class.
+    #[doc = see_jvm_spec!(4, 7, 6)]
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct NestedClassAccessFlags: u16 {
         /// Marked or implicitly `public` in source.

@@ -65,9 +65,7 @@ impl Successor {
 
 /// A structurally valid control-flow operation ending a basic block.
 ///
-/// The shape is parameterized by its outgoing arm type so lifted and completed
-/// IR stages share one definition. [`Successor`] is the default, so
-/// `Terminator` names the completed public form.
+/// The outgoing arm type is a parameter defaulting to [`Successor`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Terminator<Arm = Successor> {
     /// Transfers control to one successor.
@@ -86,7 +84,7 @@ pub enum Terminator<Arm = Successor> {
     ///
     /// Each case arm carries a conditional guard matching the selected value
     /// against its case key, and the default arm carries the negation of every
-    /// case. Those guards are the complete switch semantics.
+    /// case.
     Switch {
         /// Ordered case arms.
         cases: Vec<Arm>,
@@ -301,8 +299,8 @@ impl<Arm> fmt::Display for Terminator<Arm> {
 
 /// The semantics of one control-flow successor arm.
 ///
-/// Exceptional arms begin a new block, so an operation that can raise never
-/// coalesces with the location its unguarded arm targets.
+/// An exceptional arm always begins a new block, so an operation that can raise
+/// never coalesces with the block its unguarded arm continues into.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlTransfer {
     /// An unguarded transfer that always reaches its target.
@@ -316,10 +314,9 @@ pub enum ControlTransfer {
     Exception(Option<ClassRef>),
 }
 
-/// A conjunction of literals.
+/// A conjunction of literals carried by a conditional CFG edge.
 ///
-/// `BranchGuard` is the conjunction carried by a conditional CFG edge. An
-/// empty guard represents `⊤`.
+/// An empty guard represents `⊤`.
 #[derive(Debug, Clone)]
 pub struct BranchGuard<P>(pub(super) HashSet<BooleanVariable<P>>);
 
@@ -384,7 +381,7 @@ impl<P> BranchGuard<P> {
         })
     }
 
-    /// Returns the number of unique predicates referenced by this guard. For estimating the complexity of the path condition.
+    /// Returns the number of unique predicates referenced by this guard.
     #[must_use]
     pub fn predicate_count(&self) -> usize
     where

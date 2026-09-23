@@ -52,6 +52,7 @@ pub struct Require {
 
 bitflags! {
     /// The flags of a module.
+    #[doc = see_jvm_spec!(4, 7, 25)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Flags: u16 {
         /// Indicates that this module is open.
@@ -65,6 +66,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module require.
+    #[doc = see_jvm_spec!(4, 7, 25)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct RequireFlags: u16 {
         /// Indicates that any module which depends on the current module, implicitly declares a dependence on the module indicated by this entry.
@@ -80,6 +82,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module export.
+    #[doc = see_jvm_spec!(4, 7, 25)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ExportFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
@@ -91,6 +94,7 @@ bitflags! {
 
 bitflags! {
     /// The flags of a module open.
+    #[doc = see_jvm_spec!(4, 7, 25)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct OpenFlags: u16 {
         /// Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.

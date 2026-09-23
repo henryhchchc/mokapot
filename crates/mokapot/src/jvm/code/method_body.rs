@@ -258,6 +258,7 @@ mod test {
 }
 
 /// An entry in the exception table.
+#[doc = see_jvm_spec!(4, 7, 3)]
 #[derive(Debug, Clone)]
 pub struct ExceptionTableEntry {
     /// The half-open range of locations where the exception handler is active.
@@ -288,6 +289,7 @@ impl ExceptionTableEntry {
 }
 
 /// An entry in the line number table.
+#[doc = see_jvm_spec!(4, 7, 12)]
 #[derive(Debug, Clone)]
 pub struct LineNumberTableEntry {
     /// The program counter of the first instruction in the line.
@@ -297,6 +299,7 @@ pub struct LineNumberTableEntry {
 }
 
 /// A local variable table.
+#[doc = see_jvm_spec!(4, 7, 13)]
 #[derive(Debug, Clone, Default)]
 pub struct LocalVariableTable {
     entries: HashMap<LocalVariableId, LocalVariableTableEntry>,
@@ -357,6 +360,7 @@ pub struct LocalVariableId {
 }
 
 /// An entry in the local variable table.
+#[doc = see_jvm_spec!(4, 7, 13)]
 #[derive(Debug, Clone, Default)]
 pub struct LocalVariableTableEntry {
     /// The name of the variable.

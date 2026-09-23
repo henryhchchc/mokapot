@@ -17,7 +17,6 @@ fn unreachable_bytecode_is_omitted() {
     assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
     assert_eq!(ir.source_map().instructions_at(11.into()).count(), 0);
 
-    // They are not even checked: a frame-invalid unreachable instruction is not an error.
     let frame_invalid = method(
         [
             (0, Instruction::Goto(10.into())),

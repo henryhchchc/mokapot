@@ -2,9 +2,8 @@
 
 use std::{fmt::Display, ops::Not};
 
-/// A variable in a path condition.
-///
-/// Represents either a positive or negative occurrence of a predicate.
+/// A variable in a path condition: a positive or negative occurrence of a
+/// predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum BooleanVariable<P> {
     /// A positive variable.

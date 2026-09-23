@@ -13,6 +13,7 @@ use operand_stack::OperandStack;
 pub(super) use operand_stack::StackOperation;
 
 use crate::{
+    intrinsics::see_jvm_spec,
     ir::ValueId,
     types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
 };
@@ -24,6 +25,7 @@ pub(super) enum Position {
     Stack(usize),
 }
 
+#[doc = see_jvm_spec!(2, 6)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct Frame {
     pub locals: LocalVariables,

@@ -11,8 +11,7 @@ use crate::{
     jvm::Method,
 };
 
-/// Asserts the frame-flow invariant of `method`'s solutions; methods the phase
-/// rejects are left to the tests that cover those failures.
+/// Asserts the frame-flow invariant of `method`'s solutions.
 pub(crate) fn verify_method(method: &Method) {
     let Ok(cfg) = control_flow::analyze(method) else {
         return;

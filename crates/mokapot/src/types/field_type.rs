@@ -57,6 +57,7 @@ use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
 /// // Getting type name string
 /// assert_eq!(PrimitiveType::Long.to_string(), "long");
 /// ```
+#[doc = see_jvm_spec!(2, 3)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
@@ -211,6 +212,7 @@ impl ValueCategory {
 /// assert_eq!(string_type.qualified_name(), "java.lang.String");
 /// ```
 ///
+#[doc = see_jvm_spec!(4, 3, 2)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
 pub enum FieldType {
     /// A primitive type.

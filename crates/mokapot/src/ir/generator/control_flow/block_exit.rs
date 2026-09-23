@@ -42,8 +42,8 @@ pub(crate) enum BlockExit<T> {
 impl<T> BlockExit<T> {
     /// Whether this exit forces the following instruction into a new block.
     ///
-    /// A continuation without exception arms proceeds into the next instruction,
-    /// so the block has no terminator of its own.
+    /// A continuation without exception arms proceeds into the next instruction
+    /// without its own terminator.
     pub(crate) const fn forces_block_boundary(&self) -> bool {
         !matches!(self, Self::Continue { exception_arms, .. } if exception_arms.is_empty())
     }
@@ -150,8 +150,8 @@ impl BlockExit<ProgramCounter> {
 
 /// The ordered exception arms of the instruction at `pc`.
 ///
-/// Exception selection walks the table in order, so the first catch-all shadows
-/// later entries. An escaping exception unwinds unless a catch-all applies.
+/// Selection walks the table in order, so the first catch-all shadows later
+/// entries and an escaping exception unwinds.
 fn exception_arms(body: &MethodBody, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
     let mut exception_arms = Vec::new();
     for entry in body.exception_table.iter().filter(|entry| entry.covers(pc)) {

@@ -37,8 +37,7 @@ fn synchronized_return_has_only_exceptional_successors() {
     assert!(matches!(pad.kind, BlockKind::LandingPad { .. }));
 }
 
-/// A return that may unwind — in a `synchronized` method, after a monitor operation, or because
-/// the JVM permits any return to unwind — has exactly one outcome: the method-unwind exit.
+/// A return that may unwind has exactly one outcome: the method-unwind exit.
 #[test]
 fn returns_without_a_handler_unwind_conservatively() {
     let mut synchronized = method([(0, Instruction::Return)], "()V", vec![]);

@@ -1,6 +1,7 @@
 //! JVM fields and constant values.
 
 use super::{Field, references::FieldRef};
+use crate::intrinsics::see_jvm_spec;
 use crate::types::reference_type::ReferenceType;
 
 impl Field {
@@ -22,6 +23,7 @@ use bitflags::bitflags;
 
 bitflags! {
     /// The access flags of a field.
+    #[doc = see_jvm_spec!(4, 5)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
