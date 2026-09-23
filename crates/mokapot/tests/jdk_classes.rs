@@ -1,16 +1,48 @@
 #![allow(missing_docs, clippy::ignore_without_reason)]
 
-use std::{collections::HashSet, env, fs, path::PathBuf};
+use std::{
+    collections::HashSet,
+    env, fs,
+    hash::{DefaultHasher, Hash, Hasher},
+    path::PathBuf,
+};
 
 use mokapot::{
     ir::{ControlTransfer, MokaIRMethod, path_condition::PathCondition},
     jvm::Class,
 };
-use rayon::prelude::*;
 
-#[test]
-#[ignore = "CI Only"]
-fn works_with_jdk_classes() {
+/// Declares one sharded test per bin, and derives `BIN_COUNT` from the list so
+/// that the shard count and the tests cannot drift apart.
+macro_rules! jdk_class_bins {
+    (@id $bin:literal) => {
+        $bin
+    };
+    ($($name:ident = $bin:literal;)*) => {
+        const BIN_COUNT: u64 = [$(jdk_class_bins!(@id $bin)),*].len() as u64;
+
+        $(
+            #[test]
+            #[ignore = "CI Only"]
+            fn $name() {
+                test_jdk_classes::<$bin>();
+            }
+        )*
+    };
+}
+
+jdk_class_bins! {
+    works_with_jdk_classes_bin_0 = 0;
+    works_with_jdk_classes_bin_1 = 1;
+    works_with_jdk_classes_bin_2 = 2;
+    works_with_jdk_classes_bin_3 = 3;
+    works_with_jdk_classes_bin_4 = 4;
+    works_with_jdk_classes_bin_5 = 5;
+    works_with_jdk_classes_bin_6 = 6;
+    works_with_jdk_classes_bin_7 = 7;
+}
+
+fn test_jdk_classes<const BIN: u64>() {
     let extracted_modules_images = env::var("JDK_CLASSES").unwrap();
     let extracted_modules_images = PathBuf::from(extracted_modules_images);
     let class_files: Vec<_> = walkdir::WalkDir::new(&extracted_modules_images)
@@ -26,23 +58,32 @@ fn works_with_jdk_classes() {
         extracted_modules_images.display()
     );
 
-    class_files.into_par_iter().for_each(|class_file| {
+    // Sequential on purpose: the analysis is allocation-heavy, and under
+    // `-Cinstrument-coverage` parallel workers contend on the allocator and
+    // coverage counters, which dominates the runtime (~7x slower on 10 threads
+    // than on one).
+    for class_file in class_files.into_iter().filter(|it| {
+        let mut hasher = DefaultHasher::new();
+        it.hash(&mut hasher);
+        let hash = hasher.finish();
+        hash % BIN_COUNT == BIN
+    }) {
         let reader = fs::File::open(&class_file).unwrap();
         let mut buf_reader = std::io::BufReader::new(reader);
         let class = Class::from_reader(&mut buf_reader);
         match class {
             Ok(c) => test_a_class(c),
             Err(e) => {
-                panic!("Failed to parse {class_file:?}: {e}");
+                panic!("Failed to parse {}: {e}", class_file.display());
             }
         }
-    });
+    }
 }
 
 fn test_a_class(class: Class) {
     class
         .methods
-        .par_iter()
+        .iter()
         .filter(|it| {
             it.body
                 .as_ref()
