@@ -168,6 +168,18 @@ mod explicit_reduction {
         assert_eq!(reduced, PathCondition::of(a));
     }
 
+    #[test]
+    fn equivalent_to_compares_meaning_not_form() {
+        let a = BooleanVariable::Positive(1_u32);
+        let b = BooleanVariable::Positive(2_u32);
+        let structural = (PathCondition::of(a.clone()) & b.clone())
+            | (PathCondition::of(a.clone()) & !b.clone());
+
+        assert_ne!(structural, PathCondition::of(a.clone()));
+        assert!(structural.equivalent_to(&PathCondition::of(a)));
+        assert!(!structural.equivalent_to(&PathCondition::of(b)));
+    }
+
     proptest! {
         /// Reduction keeps the meaning of a condition under every budget.
         #[test]
