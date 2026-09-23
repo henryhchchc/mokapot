@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use super::fallibility::fallthrough_may_throw;
 use crate::{
-    ir::generator::error::{Error, MalformedBytecode, UnsupportedBytecode},
+    ir::generator::error::{Error, MalformedControlFlow, UnsupportedBytecode},
     jvm::{
         code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
         references::ClassRef,
@@ -101,7 +101,7 @@ impl BlockExit<ProgramCounter> {
         let next = || {
             body.instructions
                 .next_pc_of(&pc)
-                .ok_or_else(|| Error::malformed(Some(pc), MalformedBytecode::MissingFallthrough))
+                .ok_or(MalformedControlFlow::MissingFallthrough(pc))
         };
         Ok(match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {

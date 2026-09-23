@@ -3,8 +3,8 @@ use std::ops::Range;
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{
-        InstructionRef, MalformedBytecode, MokaIRBuildError, MokaIRFrameError, MokaIRMethod,
-        UnsupportedBytecode, ValueDefinition,
+        InstructionRef, MokaIRBuildError, MokaIRFrameError, MokaIRMethod, UnsupportedBytecode,
+        ValueDefinition,
     },
     jvm::{
         Method,
@@ -82,14 +82,6 @@ pub(crate) fn handler(
         covered_pc,
         handler_pc,
         catch_type,
-    }
-}
-
-/// Returns the malformed-bytecode location and kind reported for `method`.
-pub(crate) fn malformed(method: &Method) -> (Option<ProgramCounter>, MalformedBytecode) {
-    match build(method) {
-        Err(MokaIRBuildError::MalformedBytecode { pc, kind }) => (pc, kind),
-        other => panic!("expected malformed bytecode, got {other:?}"),
     }
 }
 
