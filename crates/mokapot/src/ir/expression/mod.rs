@@ -131,7 +131,6 @@ mod tests {
         types::{field_type::FieldType, reference_type::ReferenceType},
     };
 
-    /// Every variant reports exactly its operands, including the payload shapes that differ in arity.
     #[test]
     fn uses_reports_exactly_the_operands_of_each_variant() {
         let mut ids = IdAllocator::<ValueId>::default();

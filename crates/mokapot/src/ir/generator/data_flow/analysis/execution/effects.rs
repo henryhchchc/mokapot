@@ -28,10 +28,7 @@ pub(super) fn branch_transfers(
     ))
 }
 
-/// Pops the switch selector.
-///
-/// The selector is popped even when `cases` is empty, so a caller executing an
-/// empty switch to a goto still pops it.
+/// Pops the switch selector, even when the switch has no cases.
 pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, Error> {
     Ok(frame.stack.pop(Category1)?)
 }

@@ -9,7 +9,9 @@ use super::super::{
     FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo, reader::BytecodeReader,
     write_length,
 };
+use crate::intrinsics::see_jvm_spec;
 
+#[doc = see_jvm_spec!(4, 7, 6)]
 pub struct InnerClass {
     pub info_index: u16,
     pub outer_class_info_index: u16,
@@ -38,6 +40,7 @@ impl ToBytecode for InnerClass {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 7)]
 pub struct EnclosingMethod {
     pub class_index: u16,
     pub method_index: u16,
@@ -60,6 +63,7 @@ impl ToBytecode for EnclosingMethod {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 23)]
 pub struct BootstrapMethod {
     pub method_ref_idx: u16,
     pub arguments: Vec<u16>,
@@ -90,6 +94,7 @@ impl ToBytecode for BootstrapMethod {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 24)]
 pub struct ParameterInfo {
     pub name_index: u16,
     pub access_flags: u16,
@@ -112,6 +117,7 @@ impl ToBytecode for ParameterInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 30)]
 pub struct RecordComponentInfo {
     pub name_index: u16,
     pub descriptor_index: u16,

@@ -1,8 +1,7 @@
 //! A structural control-flow graph over decoded JVM bytecode.
 //!
-//! This phase deliberately precedes dataflow analysis. It validates every decoded
-//! instruction, including bytecode unreachable from method entry, before
-//! partitioning supported bytecode into reachable blocks.
+//! Validates every decoded instruction, including bytecode unreachable from
+//! method entry, before partitioning supported bytecode into reachable blocks.
 
 mod block_exit;
 mod builder;

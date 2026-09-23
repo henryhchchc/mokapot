@@ -3,6 +3,7 @@
 use bitflags::bitflags;
 
 use super::{Method, references::MethodRef};
+use crate::intrinsics::see_jvm_spec;
 use crate::types::reference_type::ReferenceType;
 
 /// A generic type signature for a method.
@@ -38,6 +39,7 @@ impl Method {
 }
 
 /// The information of a method parameter.
+#[doc = see_jvm_spec!(4, 7, 24)]
 #[derive(Debug, Clone)]
 pub struct ParameterInfo {
     /// The name of the parameter.
@@ -48,6 +50,7 @@ pub struct ParameterInfo {
 
 bitflags! {
     /// Access flags for a [`Method`].
+    #[doc = see_jvm_spec!(4, 6)]
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct AccessFlags: u16 {
         /// Declared `public`; may be accessed from outside its package.
@@ -79,6 +82,7 @@ bitflags! {
 
 bitflags! {
     /// The access flags for a method parameter.
+    #[doc = see_jvm_spec!(4, 7, 24)]
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct ParameterAccessFlags: u16 {
         /// Declared `final`; may not be assigned to after initialization.

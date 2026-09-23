@@ -1,7 +1,7 @@
 /// Budget knobs for path-condition minimization.
 ///
-/// The exact reducer is only used while the estimated on-set stays below
-/// [`on_set_size`](Self::on_set_size). Larger covers fall back to a bounded heuristic reducer.
+/// The exact reducer runs while the estimated on-set stays below
+/// [`on_set_size`](Self::on_set_size); larger covers fall back to the bounded heuristic reducer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SolvingBudget {
     /// Maximum estimated on-set size for exact minimization.

@@ -8,7 +8,9 @@ use std::{
 use super::super::{
     FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
 };
+use crate::intrinsics::see_jvm_spec;
 
+#[doc = see_jvm_spec!(4, 7, 25)]
 pub struct ModuleInfo {
     pub info_index: u16,
     pub flags: u16,
@@ -87,6 +89,7 @@ impl ToBytecode for ModuleInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 25)]
 pub struct RequiresInfo {
     pub requires_index: u16,
     pub flags: u16,
@@ -112,6 +115,7 @@ impl ToBytecode for RequiresInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 25)]
 pub struct ExportsInfo {
     pub exports_index: u16,
     pub flags: u16,
@@ -146,6 +150,7 @@ impl ToBytecode for ExportsInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 25)]
 pub struct OpensInfo {
     pub opens_index: u16,
     pub flags: u16,
@@ -180,6 +185,7 @@ impl ToBytecode for OpensInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 25)]
 pub struct ProvidesInfo {
     pub provides_index: u16,
     pub with: Vec<u16>,

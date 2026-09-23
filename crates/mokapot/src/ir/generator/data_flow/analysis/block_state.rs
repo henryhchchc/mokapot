@@ -87,9 +87,7 @@ impl BlockState {
 /// The block parameters of one block.
 ///
 /// A site is declared a parameter only while the merged frame still holds a
-/// value for it, but its identity is retained for the rest of the analysis.
-/// Reusing the identity lets the merge reach a fixed point; allocating a fresh
-/// one on every reappearance instead makes a cyclic block churn forever.
+/// value for it; its identity is retained for the rest of the analysis.
 #[derive(Debug, Default)]
 struct BlockParameters {
     /// Sites whose values the block currently declares on entry.
@@ -100,9 +98,6 @@ struct BlockParameters {
 
 impl BlockParameters {
     /// Merges every incoming frame, updating the declared parameters in place.
-    ///
-    /// A block that declares a parameter merges at least two incoming frames:
-    /// `declared` is only written by `join`, and the incoming set never shrinks.
     fn merge<'frames>(
         &mut self,
         mut frames: impl Iterator<Item = &'frames Frame>,
@@ -114,9 +109,7 @@ impl BlockParameters {
             .expect("a block state is created with an incoming frame")
             .clone();
         // A site that is already a parameter stays one and keeps its identity,
-        // even while every incoming frame transiently agrees. That monotone
-        // parameter set is what lets a cyclic block reach a fixed point instead
-        // of flipping between a parameter and a narrower frame; the `retain`
+        // even while every incoming frame transiently agrees; the `retain`
         // below drops the parameters a block does not end up needing.
         for incoming in frames {
             merged

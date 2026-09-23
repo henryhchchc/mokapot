@@ -83,7 +83,6 @@ mod tests {
         ]);
         canonicalize_values(&mut method_entry(b0, []), &mut blocks);
 
-        // Every single-input parameter is replaced by the value it forwards.
         let expected = HashMap::from([
             code(b0, goto(b1, [])),
             bb(b1, [], &canonical_ops, goto(b2, [])),
@@ -96,7 +95,7 @@ mod tests {
     fn retains_a_genuine_join_parameter_and_its_parallel_arguments() {
         let [left, right, join] = ids(0);
         let [b0, b1] = ids(0);
-        // Two distinct inputs make the join a real choice, so both edges keep their argument.
+        // Two distinct inputs make the join a real choice.
         let blocks = HashMap::from([
             code(b0, branch(edge(b1, [left]), edge(b1, [right]))),
             bb(b1, [join], &[], ret(join)),
@@ -121,7 +120,7 @@ mod tests {
         let mut entry = method_entry(b0, [kept_arg, dead_arg]);
         canonicalize_values(&mut entry, &mut blocks);
 
-        // `kept` joins two distinct inputs while `dead` forwards one, so only it is replaced.
+        // `kept` joins two distinct inputs while `dead` forwards one.
         let expected = HashMap::from([
             bb(b0, [kept], &ops, ret(dead_arg)),
             code(b1, goto(b0, [back_edge])),

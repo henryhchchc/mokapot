@@ -5,6 +5,7 @@ use itertools::Itertools;
 
 use super::error::Error;
 use crate::{
+    intrinsics::see_jvm_spec,
     ir::ValueId,
     types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
 };
@@ -74,6 +75,7 @@ struct StackItem {
     category: ValueCategory,
 }
 
+#[doc = see_jvm_spec!(2, 6, 2)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OperandStack {
     max_slots: u16,
@@ -208,12 +210,13 @@ mod tests {
 
     use super::{Error, OperandStack, StackItem, StackOperation};
     use crate::{
+        intrinsics::see_jvm_spec,
         ir::{IdAllocator, ValueId},
         types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
     };
 
-    /// The operand stack depths the forms of `operation` transform, as JVMS §6.5 documents them:
-    /// every form of one instruction replaces and leaves the same depth, so the effect is constant.
+    /// The operand stack depths the forms of `operation` transform.
+    #[doc = see_jvm_spec!(6, 5)]
     const fn depths(operation: StackOperation) -> (usize, usize) {
         match operation {
             StackOperation::Pop => (1, 0),
@@ -249,8 +252,9 @@ mod tests {
         stack
     }
 
-    /// Applies `operation` to `input` and reads the result back through [`OperandStack::pop`],
-    /// comparing it with `expected`; both lists are bottom-to-top, as JVMS §6.5 writes them.
+    /// Applies `operation` to `input` and reads `expected` back through
+    /// [`OperandStack::pop`]; both lists are bottom-to-top.
+    #[doc = see_jvm_spec!(6, 5)]
     fn assert_reads_back(
         operation: StackOperation,
         input: &[(ValueId, ValueCategory)],
@@ -275,8 +279,9 @@ mod tests {
     }
 
     proptest! {
-        /// An instruction transforms the stack by the depths JVMS §6.5 documents for it, or rejects
-        /// it untouched, without inventing an operand, touching one below the last four, or panicking.
+        /// An instruction transforms the stack by the documented depths, or
+        /// rejects it untouched.
+        #[doc = see_jvm_spec!(6, 5)]
         #[test]
         fn an_operation_moves_the_documented_depth(
             operation in any::<StackOperation>(),
@@ -315,8 +320,9 @@ mod tests {
             prop_assert_eq!(stack.slot_count, slots(&stack.values));
         }
 
-        /// `push` accepts an operand while the stack has room for its slots and refuses it otherwise
-        /// (JVMS §2.6.2); a category 2 operand costs two of them, so what fits is not an item count.
+        /// `push` accepts an operand while the stack has room for its slots and
+        /// refuses it otherwise; a category 2 operand costs two slots.
+        #[doc = see_jvm_spec!(2, 6, 2)]
         #[test]
         fn push_checks_the_slot_budget(
             items in prop::collection::vec(any::<StackItem>(), 0..6),
@@ -340,8 +346,9 @@ mod tests {
         }
     }
 
-    /// `pop_arguments` consumes the arguments a caller pushed in declaration order and returns them
-    /// in that order, leaving the operands below them (JVMS §6.5 `invokevirtual`: `[arg1, [arg2...]]`).
+    /// `pop_arguments` consumes arguments pushed in declaration order and returns
+    /// them in that order, leaving the operands below them, as `invokevirtual` requires.
+    #[doc = see_jvm_spec!(6, 5)]
     #[test]
     fn pop_arguments_pops_in_reverse_declaration_order() {
         // `(JI)V`: the last argument takes two slots, the one before it takes one.
@@ -383,8 +390,9 @@ mod tests {
         assert_eq!(stack, before, "a rejected pop changed the stack");
     }
 
-    /// The operand order the order-sensitive instructions leave behind, read back through `pop` (the
-    /// only order-observable accessor): one form each, as JVMS §6.5 lists them, category 2 included.
+    /// The operand order the order-sensitive instructions leave behind, read back
+    /// through `pop` (the only order-observable accessor); one form each.
+    #[doc = see_jvm_spec!(6, 5)]
     #[test]
     fn an_operation_leaves_its_operands_in_the_documented_order() {
         use StackOperation::*;

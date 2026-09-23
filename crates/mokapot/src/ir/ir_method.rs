@@ -110,8 +110,7 @@ impl MokaIRMethod {
 
     /// Returns the unique definition of a method-local SSA value.
     ///
-    /// Value identities are opaque and may be sparse. An identity with no
-    /// retained definition yields `None`.
+    /// An identity with no retained definition yields `None`.
     #[must_use]
     pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
         self.value_definitions.get(&value).copied()

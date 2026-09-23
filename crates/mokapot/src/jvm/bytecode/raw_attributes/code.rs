@@ -96,6 +96,7 @@ impl ToBytecode for ExceptionTableEntry {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 4)]
 pub enum StackMapFrameInfo {
     SameFrame {
         frame_type: u8,
@@ -261,6 +262,7 @@ impl ToBytecode for StackMapFrameInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 4)]
 #[repr(u8)]
 pub enum VerificationTypeInfo {
     Top = 0,
@@ -321,6 +323,7 @@ impl ToBytecode for VerificationTypeInfo {
     }
 }
 
+#[doc = see_jvm_spec!(4, 7, 13)]
 pub struct LocalVariableInfo {
     pub start_pc: ProgramCounter,
     pub length: u16,

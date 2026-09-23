@@ -1,9 +1,11 @@
 //! JVM reference type — a class, interface, or array type.
 //!
-//! A `ReferenceType` is the semantic model of what `CONSTANT_Class_info` represents
-//! ([JVMS §4.4.1]). It is either a class/interface name in internal form or an
+//! A `ReferenceType` is the semantic model of what `CONSTANT_Class_info` represents.
+//! It is either a class/interface name in internal form or an
 //! array type descriptor. It is a strict subset of [`FieldType`] — it excludes
 //! primitive [`Base`](crate::types::field_type::FieldType::Base) types.
+//!
+#![doc = see_jvm_spec!(4, 4, 1)]
 //!
 //! # Examples
 //!

@@ -10,9 +10,8 @@ type InputsByParameter = HashMap<ValueId, ParameterInputs>;
 impl SimplifiedParameters {
     /// Eliminates trivial acyclic and cyclic block parameters.
     ///
-    /// Inputs retain their caller-provided edge order. Eliminated results are
-    /// returned as fully canonical substitutions, and every retained input is
-    /// rewritten through those substitutions.
+    /// Preserves each input's caller-provided edge order. Eliminated results are
+    /// returned as fully canonical substitutions.
     pub(super) fn for_block_inputs(mut inputs: InputsByParameter) -> SimplifiedParameters {
         let mut substitutions = HashMap::new();
 
@@ -20,13 +19,11 @@ impl SimplifiedParameters {
             if eliminate_acyclic(&mut inputs, &mut substitutions)
                 || eliminate_cyclic(&mut inputs, &mut substitutions)
             {
-                // Rewrite inputs through the substitutions discovered so far
                 inputs
                     .values_mut()
                     .flat_map(|it| it.arguments.iter_mut())
                     .for_each(|it| *it = canonical(*it, &substitutions));
             } else {
-                // Terminate when no parameter can be eliminated further
                 break inputs.into_keys().collect();
             }
         };
@@ -81,7 +78,6 @@ fn eliminate_cyclic(inputs: &mut InputsByParameter, substitutions: &mut Substitu
                 collapsed = true;
             }
             (None, None) => {
-                // A reachable parameter always takes an input from outside the cycle.
                 panic!("reachable block parameters form a closed cycle");
             }
             _ => {}

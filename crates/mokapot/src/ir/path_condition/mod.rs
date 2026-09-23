@@ -148,9 +148,7 @@ impl<P> PathCondition<P> {
 
     /// Reduces this condition with the given minimization budget.
     ///
-    /// This is an explicit structural optimization step. Raw boolean
-    /// composition on [`PathCondition`] does not perform semantic
-    /// minimization implicitly.
+    /// Boolean composition on a [`PathCondition`] does not minimize implicitly.
     #[must_use]
     pub fn reduce_with_budget(self, budget: SolvingBudget) -> Self
     where

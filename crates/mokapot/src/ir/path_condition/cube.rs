@@ -12,8 +12,7 @@ use crate::intrinsics::{HashUnordered, hashset_partial_order};
 
 /// A normalized conjunction of literals.
 ///
-/// Literals are stored in polarity-specific sets so future minimization passes can
-/// reason about positive and negative occurrences independently.
+/// Literals are stored in polarity-specific sets.
 #[derive(Debug, Clone)]
 pub(super) struct Cube<P> {
     positive: HashSet<P>,

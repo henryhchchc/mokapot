@@ -5,9 +5,8 @@ use crate::jvm::code::ProgramCounter;
 
 /// A sparse, bidirectional relation between JVM locations and `MokaIR` nodes.
 ///
-/// This is not a bijection. A JVM instruction may have zero, one, or several
-/// related IR nodes, while each non-synthetic IR node has at most one JVM
-/// origin.
+/// A JVM instruction may relate to zero, one, or several IR nodes, while a
+/// non-synthetic IR node has at most one JVM origin.
 #[derive(Debug, Clone)]
 pub struct SourceMap {
     by_pc: HashMap<ProgramCounter, Vec<InstructionLocation>>,
