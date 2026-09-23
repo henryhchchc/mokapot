@@ -5,9 +5,9 @@ use std::{
     ops::Bound,
 };
 
-use super::BlockExit;
+use super::{BlockExit, Error};
 use crate::{
-    ir::generator::error::{Error, MalformedControlFlow},
+    ir::generator::error::MalformedControlFlow,
     jvm::code::{MethodBody, ProgramCounter as PC},
 };
 

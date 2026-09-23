@@ -15,7 +15,8 @@ use frame::{Frame, Position, StackOperation};
 #[cfg(test)]
 pub(super) use tests::verify_method;
 
-use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId, generator::error::Error};
+use super::error::Error;
+use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId};
 
 pub(super) fn analyze(cfg: &super::control_flow::Cfg<'_>) -> Result<IrParts, Error> {
     let analysis::DataflowParts {

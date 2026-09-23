@@ -7,10 +7,9 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    absorb,
+    Cube, absorb,
     indexed::{AtomTable, IndexedCube, absorb_indexed, cover_cost},
 };
-use crate::ir::path_condition::cube::Cube;
 
 pub(super) fn exact_minimize<P>(cubes: &HashSet<Cube<P>>, atoms: &AtomTable<P>) -> HashSet<Cube<P>>
 where

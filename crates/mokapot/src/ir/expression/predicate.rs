@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use super::BooleanVariable;
-use crate::{ir::ValueId, jvm::ConstantValue};
+use super::{BooleanVariable, ValueId};
+use crate::jvm::ConstantValue;
 
 /// A branch predicate over SSA values and JVM constants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::Display)]

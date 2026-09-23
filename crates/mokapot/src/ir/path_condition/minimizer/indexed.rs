@@ -3,7 +3,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::ir::{expression::BooleanVariable, path_condition::cube::Cube};
+use super::Cube;
+use crate::ir::expression::BooleanVariable;
 
 #[derive(Debug, Clone)]
 pub(super) struct AtomTable<P> {

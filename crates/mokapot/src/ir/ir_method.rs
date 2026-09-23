@@ -1,8 +1,8 @@
+use super::{
+    BasicBlock, BlockId, InstructionLocation, InstructionRef, MethodEntry, MokaIRBuildError,
+    MokaIRMethod, SourceMap, ValueDefinition, ValueId,
+};
 use crate::{
-    ir::{
-        BasicBlock, BlockId, InstructionLocation, InstructionRef, MethodEntry, MokaIRBuildError,
-        MokaIRMethod, SourceMap, ValueDefinition, ValueId,
-    },
     jvm::{Method, method, references::ClassRef},
     types::method_descriptor::MethodDescriptor,
 };

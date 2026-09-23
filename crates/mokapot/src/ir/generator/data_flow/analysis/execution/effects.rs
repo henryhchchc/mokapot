@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use ValueCategory::{Category1, Category2};
 
-use super::super::super::Frame;
+use super::Frame;
 use crate::{
     ir::{
         BlockId, BranchGuard, ControlTransfer, ValueId,

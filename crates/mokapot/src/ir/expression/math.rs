@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::ValueId;
+use super::ValueId;
 
 /// A mathematical operation.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]

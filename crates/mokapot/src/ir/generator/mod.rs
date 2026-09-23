@@ -24,7 +24,8 @@ mod remap;
 pub use data_flow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedControlFlow, UnsupportedBytecode};
 
-use crate::{ir::MokaIRMethod, jvm::Method};
+use super::MokaIRMethod;
+use crate::jvm::Method;
 
 pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = control_flow::analyze(method)?;

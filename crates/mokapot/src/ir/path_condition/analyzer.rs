@@ -1,9 +1,9 @@
 use std::{cmp, convert::Infallible, hash::Hash};
 
-use super::{PathCondition, SolvingBudget};
+use super::{BlockId, BranchGuard, MokaIRMethod, PathCondition, Predicate, SolvingBudget};
 use crate::{
     analysis::fixed_point::{DataflowProblem, JoinSemiLattice},
-    ir::{BlockId, BranchGuard, ControlTransfer, MokaIRMethod, expression::Predicate},
+    ir::ControlTransfer,
 };
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.

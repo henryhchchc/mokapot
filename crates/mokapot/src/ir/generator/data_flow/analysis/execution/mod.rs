@@ -6,8 +6,9 @@ mod exit_state;
 use exit_state::ExitState;
 
 use super::{
-    super::{Frame, lifting, values::ValueContext},
+    Frame, ValueContext,
     frame_block::{FrameArm, FrameBlock, FrameTerminator},
+    lifting,
 };
 use crate::{
     ir::{

@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 
-use super::Frame;
+use super::{Error, Frame};
 use crate::{
-    ir::{
-        BlockId, IdAllocator, ValueId,
-        generator::{control_flow::Cfg, error::Error},
-    },
+    ir::{BlockId, IdAllocator, ValueId, generator::control_flow::Cfg},
     jvm::{code::ProgramCounter, method},
 };
 

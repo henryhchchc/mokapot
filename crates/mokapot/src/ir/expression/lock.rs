@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ir::ValueId;
+use super::ValueId;
 
 /// An operation on a lock.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]

@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 
-use crate::{ir::ValueId, types::field_type::FieldType};
+use super::ValueId;
+use crate::types::field_type::FieldType;
 
 /// An operation on an array.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
