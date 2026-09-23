@@ -5,7 +5,6 @@ use std::{collections::HashSet, env, fs, path::PathBuf};
 use mokapot::{
     ir::{ControlTransfer, MokaIRMethod, path_condition::PathCondition},
     jvm::Class,
-    types::Descriptor,
 };
 use rayon::prelude::*;
 
@@ -86,20 +85,7 @@ fn test_a_class(class: Class) {
             // [TODO] optimized later.
             let variable_count_limit = if env::var("CI").is_ok() { 8 } else { 16 };
             if variable_count <= variable_count_limit {
-                println!(
-                    "Analyzing path condition for: {}::{}{}",
-                    class.binary_name,
-                    it.name,
-                    it.descriptor.descriptor()
-                );
                 let _ = PathCondition::analyze(&ir_method);
-            } else {
-                println!(
-                    "Skip path condition for: {}::{}{}",
-                    class.binary_name,
-                    it.name,
-                    it.descriptor.descriptor()
-                );
             }
         });
 
