@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::{ir::ValueId, types::reference_type::ReferenceType};
+use super::ValueId;
+use crate::types::reference_type::ReferenceType;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]

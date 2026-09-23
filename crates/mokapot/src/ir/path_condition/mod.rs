@@ -9,13 +9,11 @@ use std::{
 
 use itertools::Itertools;
 
-use crate::{
-    analysis::fixed_point,
-    ir::{
-        BlockId, BranchGuard, MokaIRMethod,
-        expression::{BooleanVariable, Predicate},
-    },
+use super::{
+    BlockId, BranchGuard, MokaIRMethod,
+    expression::{BooleanVariable, Predicate},
 };
+use crate::analysis::fixed_point;
 
 mod analyzer;
 mod budget;

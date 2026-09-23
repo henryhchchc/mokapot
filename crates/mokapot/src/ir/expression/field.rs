@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::{ir::ValueId, jvm::references::FieldRef};
+use super::ValueId;
+use crate::jvm::references::FieldRef;
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]

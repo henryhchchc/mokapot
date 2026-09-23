@@ -1,6 +1,6 @@
 use derive_more::Display;
 
-use crate::ir::NumericalId;
+use super::NumericalId;
 
 /// The identity of a basic block within one Moka IR method.
 ///

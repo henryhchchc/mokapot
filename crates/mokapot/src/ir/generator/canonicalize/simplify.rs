@@ -2,12 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
-use crate::ir::{
-    ValueId,
-    generator::canonicalize::{
-        ParameterInputs, SimplifiedParameters, Substitutions, tarjan::Tarjan,
-    },
-};
+use super::{ParameterInputs, SimplifiedParameters, Substitutions, tarjan::Tarjan};
+use crate::ir::ValueId;
 
 type InputsByParameter = HashMap<ValueId, ParameterInputs>;
 

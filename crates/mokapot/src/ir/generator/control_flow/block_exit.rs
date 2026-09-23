@@ -4,9 +4,9 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 
-use super::fallibility::fallthrough_may_throw;
+use super::{Error, fallibility::fallthrough_may_throw};
 use crate::{
-    ir::generator::error::{Error, MalformedControlFlow, UnsupportedBytecode},
+    ir::generator::error::{MalformedControlFlow, UnsupportedBytecode},
     jvm::{
         code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
         references::ClassRef,

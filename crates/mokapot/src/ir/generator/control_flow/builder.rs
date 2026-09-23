@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::{
-    BlockExit, Cfg, CfgNode, ExceptionArm, ExceptionTarget,
+    BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
     layout::{BlockLayout, BlockShape},
 };
 use crate::{
-    ir::{BlockId, IdAllocator, generator::error::Error},
+    ir::{BlockId, IdAllocator},
     jvm::{Method, code::ProgramCounter},
 };
 

@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet, VecDeque, hash_map::Entry};
 
 use super::{
-    super::values::ValueContext, DataflowParts, block_state::BlockState,
-    execution::BlockInterpreter, frame_block::FrameSource,
+    DataflowParts, ValueContext, block_state::BlockState, execution::BlockInterpreter,
+    frame_block::FrameSource,
 };
 use crate::ir::{
     BlockId,

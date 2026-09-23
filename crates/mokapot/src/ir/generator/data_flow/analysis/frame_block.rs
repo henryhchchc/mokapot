@@ -2,7 +2,7 @@
 
 use derive_more::Constructor;
 
-use super::super::Frame;
+use super::Frame;
 use crate::{
     ir::{
         BlockId, BlockKind, ControlTransfer, Operation, Terminator, generator::control_flow::ArmKey,

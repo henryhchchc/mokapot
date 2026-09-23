@@ -2,13 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{
-    super::{
-        super::{Frame, lifting, values::ValueContext},
-        frame_block::{FrameArm, FrameTerminator},
-    },
-    effects,
-};
+use super::{Frame, FrameArm, FrameTerminator, ValueContext, effects, lifting};
 use crate::{
     ir::{
         BlockId, ControlTransfer, Operation,

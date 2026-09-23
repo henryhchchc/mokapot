@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use derive_more::Constructor;
 
 use super::{
-    super::{Frame, Position, values::ValueContext},
+    Frame, Position, ValueContext,
     frame_block::{FrameBlock, FrameSource},
 };
 use crate::{
