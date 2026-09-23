@@ -223,6 +223,21 @@ impl<P> Cover<P> {
             cubes: minimizer.minimize(self.cubes),
         }
     }
+
+    /// Reduces this cover without the heuristic generalization pass.
+    ///
+    /// Subsumed terms are still removed and small on-sets are still minimized
+    /// exactly, so covers stay bounded; the result is expected to be reduced
+    /// again before it is observed.
+    pub(super) fn reduce_without_generalization(self, budget: SolvingBudget) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        let minimizer = BoundedMinimizer::deferring_generalization(budget);
+        Self {
+            cubes: minimizer.minimize(self.cubes),
+        }
+    }
 }
 
 #[cfg(test)]
