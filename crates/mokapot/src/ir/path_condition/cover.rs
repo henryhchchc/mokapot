@@ -38,6 +38,8 @@ where
     }
 }
 
+/// The lattice order: compares covers by entailment, unlike the structural
+/// equality above.
 impl<P> PartialOrd for Cover<P>
 where
     P: Hash + Eq + Clone,
@@ -57,6 +59,15 @@ where
 }
 
 impl<P> Cover<P> {
+    /// Returns whether `other` denotes the same set of assignments, which the
+    /// lattice order reports as `Equal` even when the forms differ.
+    pub(super) fn equivalent_to(&self, other: &Self) -> bool
+    where
+        P: Hash + Eq + Clone,
+    {
+        self.partial_cmp(other) == Some(cmp::Ordering::Equal)
+    }
+
     pub(super) fn one() -> Self
     where
         P: Hash + Eq,

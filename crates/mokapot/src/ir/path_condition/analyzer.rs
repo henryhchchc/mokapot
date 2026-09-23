@@ -104,14 +104,14 @@ impl<P> PathConditionFact<P> {
 
 impl<P> PartialEq for PathConditionFact<P>
 where
-    P: Hash + Eq,
+    P: Hash + Eq + Clone,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+        self.partial_cmp(other) == Some(cmp::Ordering::Equal)
     }
 }
 
-impl<P> Eq for PathConditionFact<P> where P: Hash + Eq {}
+impl<P> Eq for PathConditionFact<P> where P: Hash + Eq + Clone {}
 
 impl<P> PartialOrd for PathConditionFact<P>
 where

@@ -54,6 +54,9 @@ impl<'method> PathCondition<&'method Predicate> {
 }
 
 /// A path condition stored in disjunctive normal form.
+///
+/// Equality and hashing compare the stored form, so equivalent conditions may
+/// compare unequal; use [`PathCondition::equivalent_to`] to compare meaning.
 #[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     cover: Cover<P>,
@@ -125,6 +128,19 @@ impl<P> PathCondition<P> {
         P: Hash + Eq,
     {
         self.cover.predicates().collect()
+    }
+
+    /// Returns whether `other` denotes the same condition, possibly in a
+    /// different form.
+    ///
+    /// Deciding this is entailment in both directions, so its cost grows with
+    /// the number of predicates rather than with the length of the stored form.
+    #[must_use]
+    pub fn equivalent_to(&self, other: &Self) -> bool
+    where
+        P: Hash + Eq + Clone,
+    {
+        self.cover.equivalent_to(&other.cover)
     }
 
     /// Iterates over the conjunctions that this condition disjoins.
