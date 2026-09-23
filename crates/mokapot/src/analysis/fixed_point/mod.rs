@@ -49,7 +49,7 @@ mod solve;
 mod tests;
 
 #[instability::unstable(feature = "fixed-point-analyses")]
-pub use facts_map::FactsMap;
+pub use facts_map::{FactsMap, QueuedFactsMap};
 #[instability::unstable(feature = "fixed-point-analyses")]
 pub use lattice::JoinSemiLattice;
 #[instability::unstable(feature = "fixed-point-analyses")]
