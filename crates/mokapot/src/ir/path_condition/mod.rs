@@ -35,6 +35,10 @@ impl<'method> PathCondition<&'method Predicate> {
     }
 
     /// Computes path conditions with a custom minimization budget.
+    ///
+    /// Intermediate facts are reduced without generalization, which keeps covers
+    /// bounded while avoiding that cost on facts that may still be replaced; the
+    /// returned facts are then reduced once with the full budget.
     #[must_use]
     pub fn analyze_with_budget(
         method: &'method MokaIRMethod,
@@ -44,7 +48,7 @@ impl<'method> PathCondition<&'method Predicate> {
         let Ok(path_conditions): Result<HashMap<_, _>, _> = fixed_point::solve(&mut problem);
         path_conditions
             .into_iter()
-            .map(|(block, fact)| (block, fact.into_inner()))
+            .map(|(block, fact)| (block, fact.into_inner().reduce_with_budget(budget)))
             .collect()
     }
 }
@@ -144,6 +148,17 @@ impl<P> PathCondition<P> {
         P: Hash + Eq + Clone,
     {
         self.reduce_with_budget(SolvingBudget::default())
+    }
+
+    /// Reduces this condition without the heuristic generalization pass.
+    ///
+    /// Only suitable for intermediate facts: the result is expected to be
+    /// reduced again with [`Self::reduce_with_budget`] before it is observed.
+    pub(super) fn reduce_without_generalization(self, budget: SolvingBudget) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        Self::with_cover(self.cover.reduce_without_generalization(budget))
     }
 
     /// Reduces this condition with the given minimization budget.

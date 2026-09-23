@@ -60,6 +60,9 @@ impl<'method> DataflowProblem for PathConditionProblem<'method> {
 }
 
 /// Internal lattice wrapper used by the generic fixed-point solver.
+///
+/// Facts are reduced without generalization; the returned ones are generalized
+/// by [`PathCondition::analyze_with_budget`].
 #[derive(Debug, Clone)]
 #[doc(hidden)]
 pub(super) struct PathConditionFact<P> {
@@ -79,7 +82,7 @@ impl<P> PathConditionFact<P> {
     where
         P: Hash + Eq + Clone,
     {
-        let inner = inner.reduce_with_budget(budget);
+        let inner = inner.reduce_without_generalization(budget);
         Self { inner, budget }
     }
 
