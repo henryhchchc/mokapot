@@ -14,6 +14,9 @@ pub enum MalformedControlFlow {
     /// A tableswitch has no targets or its case values exceed `i32`.
     #[error("tableswitch at {_0} has an invalid range")]
     InvalidTableSwitchRange(ProgramCounter),
+    /// A multianewarray has no dimensions or exceeds its array type's rank.
+    #[error("multianewarray at {_0} has invalid dimensions")]
+    InvalidMultiArrayDimensions(ProgramCounter),
 }
 
 /// A well-formed JVM bytecode feature that Moka IR does not support.
