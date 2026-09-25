@@ -46,14 +46,8 @@ pub(crate) fn read_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
 where
     R: Read + ?Sized,
 {
-    let mut buf = Vec::with_capacity(len);
-    unsafe {
-        // SAFETY: We are going to read exactly `len` bytes into the buffer.
-        //         Otherwise, `read_exact` will return an error.
-        //         Therefore, we will never return a `Vec` with uninitialized memory.
-        buf.set_len(len);
-        reader.read_exact(buf.as_mut_slice())
-    }?;
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf)?;
     Ok(buf)
 }
 

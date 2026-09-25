@@ -15,7 +15,6 @@ use mokapot::{
     },
     types::binary_name::BinaryName,
 };
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 macro_rules! test_data_class {
     ($folder:literal, $class_name:literal) => {
@@ -78,10 +77,18 @@ fn caching_class_loader_load_once() {
     let counter = AtomicUsize::new(0);
     let test_cp = MockClassPath::new(&counter);
     let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
-    (0..100).into_par_iter().for_each(|_| {
-        let my_class = "org/mokapot/test/MyClass".parse().unwrap();
-        let class = class_loader.load_class(&my_class).unwrap();
-        assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
+    let test = || {
+        for _ in 0..25 {
+            let my_class = "org/mokapot/test/MyClass".parse().unwrap();
+            let class = class_loader.load_class(&my_class).unwrap();
+            assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
+        }
+    };
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..4).map(|_| scope.spawn(test)).collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
     });
     assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
 }

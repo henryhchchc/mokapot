@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn finds_a_deep_cycle_without_recursing() {
-        const LENGTH: usize = 20_000;
+        const LENGTH: usize = if cfg!(miri) { 256 } else { 20_000 };
         let adjacency = (0..LENGTH)
             .map(|node| (node, vec![(node + 1) % LENGTH]))
             .collect::<HashMap<_, _>>();

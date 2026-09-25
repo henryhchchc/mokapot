@@ -35,7 +35,6 @@ mokapot = { path = ".", features = ["unstable"] }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 rand = { workspace = true }
-rayon = { workspace = true }
 walkdir = { workspace = true }
 
 [build-dependencies]

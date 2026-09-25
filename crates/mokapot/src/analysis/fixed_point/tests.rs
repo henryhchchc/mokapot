@@ -1,11 +1,13 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::Infallible,
 };
 
 use proptest::prelude::*;
 
-use crate::analysis::fixed_point::{DataflowProblem, JoinSemiLattice, solve};
+use crate::analysis::fixed_point::{
+    DataflowProblem, FactsMap, JoinSemiLattice, QueuedFactsMap, solve,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, proptest_derive::Arbitrary)]
 struct TestSet(BTreeSet<u8>);
@@ -66,9 +68,19 @@ impl DataflowProblem for RepeatedSuccessors {
 
 #[test]
 fn worklist_coalesces_repeated_successors() {
+    assert_repeated_successors::<BTreeMap<u8, TestSet>>();
+    assert_repeated_successors::<HashMap<u8, TestSet>>();
+    assert_repeated_successors::<QueuedFactsMap<u8, TestSet>>();
+}
+
+fn assert_repeated_successors<M>()
+where
+    M: FactsMap<u8, TestSet> + IntoIterator<Item = (u8, TestSet)>,
+{
     let mut problem = RepeatedSuccessors { one_calls: 0 };
 
-    let facts: BTreeMap<_, _> = solve(&mut problem).expect("infallible analysis");
+    let facts: M = solve(&mut problem).expect("infallible analysis");
+    let facts: BTreeMap<_, _> = facts.into_iter().collect();
 
     assert_eq!(facts[&1], TestSet(BTreeSet::from([1, 2])));
     assert_eq!(problem.one_calls, 1);

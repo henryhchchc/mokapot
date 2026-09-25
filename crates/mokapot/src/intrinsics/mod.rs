@@ -114,22 +114,26 @@ impl<K, V> Cache<K, V> {
 mod tests {
     use std::sync::atomic::{self, AtomicUsize};
 
-    use proptest::prelude::*;
-    use rayon::prelude::*;
-
     use super::*;
+    use proptest::prelude::*;
 
     proptest! {
         #[test]
         fn get_or_try_put_generate_once(key in any::<u32>(), value in any::<u32>()) {
             let cache = Cache::new();
             let counter = AtomicUsize::new(0);
-            (0..10).into_par_iter().for_each(|_|{
+            let test = || {
                 let result = cache.get_or_try_put(&key, |_| {
                     counter.fetch_add(1, atomic::Ordering::Relaxed);
                     Ok::<_, ()>(value)
                 });
                 assert_eq!(&value, result.unwrap());
+            };
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..10).map(|_|scope.spawn(test)).collect();
+                for handle in handles {
+                    handle.join().unwrap();
+                }
             });
             assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
         }
