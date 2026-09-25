@@ -157,7 +157,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn read_bytes_vec_success(
+        fn miri_read_bytes_vec_success(
             expected in prop::collection::vec(any::<u8>(), 0..64),
             suffix in prop::collection::vec(any::<u8>(), 0..16),
         ) {
@@ -172,7 +172,7 @@ mod test {
         }
 
         #[test]
-        fn read_bytes_vec_failed(
+        fn miri_read_bytes_vec_failed(
             available in prop::collection::vec(any::<u8>(), 0..64),
             missing in 1usize..16,
         ) {

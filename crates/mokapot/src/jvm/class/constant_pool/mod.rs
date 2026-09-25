@@ -778,6 +778,17 @@ mod tests {
 
     const MAX_BYTES: usize = 255;
 
+    #[test]
+    fn miri_entry_tags_match_encoding() {
+        assert_eq!(Entry::Integer(42).tag(), 3);
+        assert_eq!(Entry::Class { name_index: 1 }.tag(), 7);
+        let method_handle = Entry::MethodHandle {
+            reference_kind: 9,
+            reference_index: 1,
+        };
+        assert_eq!(method_handle.tag(), 15);
+    }
+
     proptest! {
 
         #[test]
@@ -845,7 +856,7 @@ mod tests {
     }
 
     #[test]
-    fn interface_method_handles_use_interface_method_refs() {
+    fn miri_interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
             owner: ReferenceType::Class("example/Interface".parse().unwrap()),
             name: "method".to_owned(),

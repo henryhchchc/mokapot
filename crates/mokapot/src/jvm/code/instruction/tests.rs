@@ -1,7 +1,7 @@
 use super::{super::ProgramCounter, Instruction::*, WideInstruction};
 
 #[test]
-fn opcode_matches_jvm_encoding() {
+fn miri_opcode_matches_jvm_encoding() {
     assert_eq!(Nop.opcode(), 0x00);
     assert_eq!(AConstNull.opcode(), 0x01);
     assert_eq!(IConstM1.opcode(), 0x02);

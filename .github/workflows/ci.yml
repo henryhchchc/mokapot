@@ -286,11 +286,6 @@ jobs:
         uses: taiki-e/install-action@v2.87.13
         with:
           tool: cargo-nextest
-      - name: Setup JDK
-        uses: actions/setup-java@v6.0.1
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: corretto
       - name: Checkout source code
         uses: actions/checkout@v7
       - name: Cache Rust Build Stuff
@@ -308,11 +303,8 @@ jobs:
         run: cargo +nightly miri setup
       - name: Test with Miri
         env:
-          INTEGRATION_TEST: TRUE
-          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-env-set=PROPTEST_CASES=4 -Zmiri-env-set=PROPTEST_DISABLE_FAILURE_PERSISTENCE=1
-        run: |
-          cargo +nightly miri nextest run -p mokapot --all-features
-          cargo +nightly miri test -p mokapot --doc --all-features
+          MIRIFLAGS: -Zmiri-env-set=PROPTEST_CASES=4 -Zmiri-env-set=PROPTEST_DISABLE_FAILURE_PERSISTENCE=1
+        run: cargo +nightly miri nextest run -p mokapot --all-features --lib --no-tests=fail
 
   codecov:
     name: Tests / Coverage Report

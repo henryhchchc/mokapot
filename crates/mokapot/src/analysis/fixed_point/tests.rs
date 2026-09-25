@@ -67,7 +67,7 @@ impl DataflowProblem for RepeatedSuccessors {
 }
 
 #[test]
-fn worklist_coalesces_repeated_successors() {
+fn miri_worklist_coalesces_repeated_successors() {
     assert_repeated_successors::<BTreeMap<u8, TestSet>>();
     assert_repeated_successors::<HashMap<u8, TestSet>>();
     assert_repeated_successors::<QueuedFactsMap<u8, TestSet>>();

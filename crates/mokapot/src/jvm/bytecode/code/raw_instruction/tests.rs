@@ -151,11 +151,17 @@ proptest! {
 }
 
 #[test]
-fn opcode_matches_encoding() {
+fn miri_opcode_matches_encoding() {
     use RawInstruction::*;
 
     assert_eq!(Nop.opcode(), 0x00);
     assert_eq!(AConstNull.opcode(), 0x01);
     assert_eq!(IConstM1.opcode(), 0x02);
     assert_eq!(ILoad { index: 233 }.opcode(), 0x15);
+    assert_eq!(RawWideInstruction::ILoad { index: 233 }.opcode(), 0x15);
+    let wide_iinc = RawWideInstruction::IInc {
+        index: 233,
+        increment: -1,
+    };
+    assert_eq!(wide_iinc.opcode(), 0x84);
 }

@@ -354,3 +354,23 @@ impl ToBytecode for LocalVariableInfo {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ToBytecode, VerificationTypeInfo};
+
+    #[test]
+    fn miri_verification_type_tags_match_encoding() {
+        let mut bytes = Vec::new();
+        VerificationTypeInfo::Top.to_writer(&mut bytes).unwrap();
+        assert_eq!(bytes, [0]);
+
+        bytes.clear();
+        VerificationTypeInfo::Object {
+            class_info_index: 0x1234,
+        }
+        .to_writer(&mut bytes)
+        .unwrap();
+        assert_eq!(bytes, [7, 0x12, 0x34]);
+    }
+}

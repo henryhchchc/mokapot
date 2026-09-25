@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn collapses_a_long_forwarding_chain() {
-        const LENGTH: usize = if cfg!(miri) { 256 } else { 10_000 };
+        const LENGTH: usize = 10_000;
         let values: [ValueId; LENGTH + 1] = ids(0);
         let source = values[0];
         let inputs = values

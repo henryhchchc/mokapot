@@ -119,7 +119,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn get_or_try_put_generate_once(key in any::<u32>(), value in any::<u32>()) {
+        fn miri_get_or_try_put_generate_once(key in any::<u32>(), value in any::<u32>()) {
             let cache = Cache::new();
             let counter = AtomicUsize::new(0);
             let test = || {

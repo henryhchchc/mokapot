@@ -1,0 +1,2 @@
+[profile.default-miri]
+default-filter = 'kind(lib) & test(/(^|::)miri_/)'

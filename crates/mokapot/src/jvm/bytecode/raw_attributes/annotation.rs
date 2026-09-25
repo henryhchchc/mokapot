@@ -401,3 +401,21 @@ impl ToBytecode for TargetInfo {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{TargetInfo, ToBytecode};
+
+    #[test]
+    fn miri_target_info_tags_match_encoding() {
+        let mut bytes = Vec::new();
+        TargetInfo::Field.to_writer(&mut bytes).unwrap();
+        assert_eq!(bytes, [0x13]);
+
+        bytes.clear();
+        TargetInfo::TypeParameterOfClass { index: 7 }
+            .to_writer(&mut bytes)
+            .unwrap();
+        assert_eq!(bytes, [0x00, 7]);
+    }
+}
