@@ -67,7 +67,7 @@ impl<P> Cover<P> {
         self.cubes.is_empty()
     }
 
-    fn implies(&self, other: &Self) -> bool
+    pub(super) fn implies(&self, other: &Self) -> bool
     where
         P: Hash + Eq + Clone,
     {
@@ -84,6 +84,9 @@ impl<P> Cover<P> {
         if let Some(&result) = memo.get(cube) {
             return result;
         }
+        if self.cubes.iter().any(|existing| existing.subsumes(cube)) {
+            return true;
+        }
 
         let result = self.covers_cube_uncached(cube, memo);
         memo.insert(cube.clone(), result);
@@ -94,10 +97,6 @@ impl<P> Cover<P> {
     where
         P: Hash + Eq + Clone,
     {
-        if self.cubes.iter().any(|existing| existing.subsumes(cube)) {
-            return true;
-        }
-
         let split_predicate = self
             .cubes
             .iter()
@@ -136,7 +135,7 @@ impl<P> Cover<P> {
         self
     }
 
-    pub(super) fn conjoin_branch_guard(self, branch_guard: BranchGuard<P>) -> Self
+    pub(super) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<P>) -> Self
     where
         P: Hash + Eq + Clone,
     {
@@ -148,12 +147,12 @@ impl<P> Cover<P> {
             return Self::zero();
         };
         if rhs_cube.is_tautology() {
-            return self;
+            return self.clone();
         }
 
         let cubes = self
             .cubes
-            .into_iter()
+            .iter()
             .filter_map(|lhs_cube| lhs_cube.conjoin(&rhs_cube))
             .collect();
         Self { cubes }

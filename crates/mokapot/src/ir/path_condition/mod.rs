@@ -119,6 +119,13 @@ impl<P> PathCondition<P> {
 }
 
 impl<P> PathCondition<P> {
+    pub(super) fn conjoin_branch_guard(&self, guard: BranchGuard<P>) -> Self
+    where
+        P: Hash + Eq + Clone,
+    {
+        Self::with_cover(self.cover.conjoin_branch_guard(guard))
+    }
+
     const fn with_cover(cover: Cover<P>) -> Self {
         Self { cover }
     }
@@ -142,7 +149,7 @@ where
     type Output = Self;
 
     fn bitand(self, rhs: BranchGuard<P>) -> Self::Output {
-        Self::with_cover(self.cover.conjoin_branch_guard(rhs))
+        self.conjoin_branch_guard(rhs)
     }
 }
 
