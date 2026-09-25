@@ -9,6 +9,7 @@ use crate::{
         code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
         references::ClassRef,
     },
+    types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// The structural exit of one decoded instruction.
@@ -101,6 +102,11 @@ impl BlockExit<ProgramCounter> {
                 .next_pc_of(&pc)
                 .ok_or(MalformedControlFlow::MissingFallthrough(pc))
         };
+        if let Instruction::MultiANewArray(array_type, dimensions) = instruction
+            && !valid_multi_array_dimensions(array_type, *dimensions)
+        {
+            return Err(MalformedControlFlow::InvalidMultiArrayDimensions(pc).into());
+        }
         Ok(match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
                 exception_arms: exception_arms(body, pc),
@@ -149,6 +155,23 @@ impl BlockExit<ProgramCounter> {
             },
         })
     }
+}
+
+fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> bool {
+    let ReferenceType::Array(element_type) = array_type else {
+        return false;
+    };
+    let mut element_type = element_type.as_ref();
+    if dimensions == 0 {
+        return false;
+    }
+    for _ in 1..dimensions {
+        let FieldType::Array(inner) = element_type else {
+            return false;
+        };
+        element_type = inner.as_ref();
+    }
+    true
 }
 
 /// The ordered exception arms of the instruction at `pc`.

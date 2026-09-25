@@ -3,7 +3,10 @@ use std::iter;
 use super::*;
 use crate::{
     ir::{
-        MalformedControlFlow::{InvalidTableSwitchRange, MissingFallthrough, MissingInstruction},
+        MalformedControlFlow::{
+            InvalidMultiArrayDimensions, InvalidTableSwitchRange, MissingFallthrough,
+            MissingInstruction,
+        },
         UnsupportedBytecode::LegacySubroutine,
     },
     jvm::code::WideInstruction,
@@ -60,6 +63,25 @@ fn rejects_tableswitch_without_cases() {
         build(&method),
         Err(MokaIRBuildError::ControlFlow(InvalidTableSwitchRange(pc))) if pc == 1.into()
     );
+}
+
+#[test]
+fn rejects_invalid_multianewarray_dimensions() {
+    for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
+        let instructions = [
+            (0, Instruction::Return),
+            (
+                1,
+                Instruction::MultiANewArray(ref_t(array_type), dimensions),
+            ),
+            (2, Instruction::Return),
+        ];
+        let method = method(instructions, "()V", vec![]);
+        assert_matches!(
+            build(&method),
+            Err(MokaIRBuildError::ControlFlow(InvalidMultiArrayDimensions(pc))) if pc == 1.into()
+        );
+    }
 }
 
 #[test]
