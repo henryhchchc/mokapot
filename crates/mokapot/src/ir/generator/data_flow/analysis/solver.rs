@@ -1,6 +1,6 @@
 //! Worklist orchestration for reachable block analysis.
 
-use std::collections::{HashMap, HashSet, VecDeque, hash_map::Entry};
+use std::collections::{HashMap, hash_map::Entry};
 
 use super::{
     DataflowParts, ValueContext, block_state::BlockState, execution::BlockInterpreter,
@@ -8,7 +8,7 @@ use super::{
 };
 use crate::ir::{
     BlockId,
-    generator::{control_flow::Cfg, error::Error},
+    generator::{control_flow::Cfg, error::Error, worklist::Worklist},
 };
 
 pub(crate) struct DataflowSolver<'method, 'cfg> {
@@ -81,26 +81,5 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
             this_value: receiver_value,
             parameter_values,
         })
-    }
-}
-
-/// A FIFO worklist that schedules each block at most once while queued.
-#[derive(Default)]
-struct Worklist {
-    pending: VecDeque<BlockId>,
-    queued: HashSet<BlockId>,
-}
-
-impl Worklist {
-    fn schedule(&mut self, block: BlockId) {
-        if self.queued.insert(block) {
-            self.pending.push_back(block);
-        }
-    }
-
-    fn pop(&mut self) -> Option<BlockId> {
-        let block = self.pending.pop_front()?;
-        self.queued.remove(&block);
-        Some(block)
     }
 }
