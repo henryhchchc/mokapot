@@ -3,7 +3,7 @@
 mod display;
 mod name;
 
-use std::{collections::BTreeMap, ops::RangeInclusive};
+use std::collections::BTreeMap;
 
 use super::ProgramCounter;
 use crate::{
@@ -213,7 +213,7 @@ pub enum Instruction {
     Jsr(ProgramCounter) = 0xa8,
     Ret(u8) = 0xa9,
     TableSwitch {
-        range: RangeInclusive<i32>,
+        low: i32,
         jump_targets: Vec<ProgramCounter>,
         default: ProgramCounter,
     } = 0xaa,
@@ -293,6 +293,11 @@ pub enum WideInstruction {
 }
 
 impl Instruction {
+    pub(crate) fn tableswitch_high(low: i32, target_count: usize) -> Option<i32> {
+        let offset = i128::try_from(target_count.checked_sub(1)?).ok()?;
+        i32::try_from(i128::from(low) + offset).ok()
+    }
+
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {

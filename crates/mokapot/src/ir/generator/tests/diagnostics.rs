@@ -3,7 +3,7 @@ use std::iter;
 use super::*;
 use crate::{
     ir::{
-        MalformedControlFlow::{MissingFallthrough, MissingInstruction},
+        MalformedControlFlow::{InvalidTableSwitchRange, MissingFallthrough, MissingInstruction},
         UnsupportedBytecode::LegacySubroutine,
     },
     jvm::code::WideInstruction,
@@ -21,6 +21,44 @@ fn reports_a_missing_jump_target_at_that_target() {
     assert_matches!(
         build(&method),
         Err(MokaIRBuildError::ControlFlow(MissingInstruction(pc))) if pc == 10.into()
+    );
+}
+
+#[test]
+fn rejects_tableswitch_cases_outside_i32_range() {
+    let switch = Instruction::TableSwitch {
+        low: i32::MAX,
+        jump_targets: vec![10.into(), 10.into()],
+        default: 10.into(),
+    };
+    let instructions = [
+        (0, Instruction::ILoad0),
+        (1, switch),
+        (10, Instruction::Return),
+    ];
+    let method = method(instructions, "(I)V", vec![]);
+    assert_matches!(
+        build(&method),
+        Err(MokaIRBuildError::ControlFlow(InvalidTableSwitchRange(pc))) if pc == 1.into()
+    );
+}
+
+#[test]
+fn rejects_tableswitch_without_cases() {
+    let switch = Instruction::TableSwitch {
+        low: 0,
+        jump_targets: vec![],
+        default: 10.into(),
+    };
+    let instructions = [
+        (0, Instruction::ILoad0),
+        (1, switch),
+        (10, Instruction::Return),
+    ];
+    let method = method(instructions, "(I)V", vec![]);
+    assert_matches!(
+        build(&method),
+        Err(MokaIRBuildError::ControlFlow(InvalidTableSwitchRange(pc))) if pc == 1.into()
     );
 }
 
