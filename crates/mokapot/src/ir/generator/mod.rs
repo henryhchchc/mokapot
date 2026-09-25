@@ -20,6 +20,7 @@ mod data_flow;
 mod definitions;
 mod error;
 mod remap;
+mod worklist;
 
 pub use data_flow::FrameError as MokaIRFrameError;
 pub use error::{Error as MokaIRBuildError, MalformedControlFlow, UnsupportedBytecode};
