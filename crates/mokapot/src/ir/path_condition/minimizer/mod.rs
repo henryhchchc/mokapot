@@ -10,14 +10,6 @@ use indexed::AtomTable;
 
 use super::{SolvingBudget, cube::Cube};
 
-/// A reduction strategy for boolean covers.
-pub(super) trait Minimizer<P> {
-    /// Returns an equivalent set of cubes with redundant terms removed.
-    fn minimize(&self, cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
-    where
-        P: Hash + Eq + Clone;
-}
-
 /// A bounded boolean minimizer for path-condition covers.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct BoundedMinimizer {
@@ -57,10 +49,9 @@ impl BoundedMinimizer {
             generalization: Generalization::Deferred,
         }
     }
-}
 
-impl<P> Minimizer<P> for BoundedMinimizer {
-    fn minimize(&self, cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
+    /// Returns an equivalent set of cubes with redundant terms removed.
+    pub(super) fn minimize<P>(&self, cubes: HashSet<Cube<P>>) -> HashSet<Cube<P>>
     where
         P: Hash + Eq + Clone,
     {

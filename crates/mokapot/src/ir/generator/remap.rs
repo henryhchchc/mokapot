@@ -222,25 +222,7 @@ fn remap_predicate<E>(
     predicate: &mut Predicate,
     remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
 ) -> Result<(), E> {
-    match predicate {
-        Predicate::Equal(lhs, rhs)
-        | Predicate::NotEqual(lhs, rhs)
-        | Predicate::LessThan(lhs, rhs)
-        | Predicate::LessThanOrEqual(lhs, rhs)
-        | Predicate::GreaterThan(lhs, rhs)
-        | Predicate::GreaterThanOrEqual(lhs, rhs) => {
-            remap_path_value(lhs, remap)?;
-            remap_path_value(rhs, remap)
-        }
-        Predicate::IsNull(value)
-        | Predicate::IsNotNull(value)
-        | Predicate::IsZero(value)
-        | Predicate::IsNonZero(value)
-        | Predicate::IsPositive(value)
-        | Predicate::IsNegative(value)
-        | Predicate::IsNonNegative(value)
-        | Predicate::IsNonPositive(value) => remap_path_value(value, remap),
-    }
+    predicate.try_for_each_value_mut(|value| remap_path_value(value, remap))
 }
 
 fn remap_path_value<E>(

@@ -1,18 +1,15 @@
 //! Path condition analysis.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Display,
-    hash::{Hash, Hasher},
+    hash::Hash,
     ops::{BitAnd, BitOr},
 };
 
 use itertools::Itertools;
 
-use super::{
-    BlockId, BranchGuard, MokaIRMethod,
-    expression::{BooleanVariable, Predicate},
-};
+use super::{BlockId, BranchGuard, MokaIRMethod, expression::Predicate};
 use crate::analysis::fixed_point::{self, QueuedFactsMap};
 
 mod analyzer;
@@ -27,25 +24,27 @@ mod tests;
 pub use budget::SolvingBudget;
 use cover::Cover;
 
-impl<'method> PathCondition<&'method Predicate> {
+impl PathCondition<Predicate> {
     /// Computes path conditions at the reachable blocks of `method`.
+    ///
+    /// Predicates in the result own their operands. Constant SSA definitions
+    /// are substituted into edge guards, and decidable guards are folded.
     #[must_use]
-    pub fn analyze(method: &'method MokaIRMethod) -> HashMap<BlockId, Self> {
+    pub fn analyze(method: &MokaIRMethod) -> HashMap<BlockId, Self> {
         Self::analyze_with_budget(method, SolvingBudget::default())
     }
 
     /// Computes path conditions with a custom minimization budget.
     ///
-    /// Intermediate facts are reduced without generalization, which keeps covers
-    /// bounded while avoiding that cost on facts that may still be replaced; the
-    /// returned facts are then reduced once with the full budget.
+    /// Intermediate facts skip heuristic generalization. Returned facts are
+    /// reduced once with the full budget.
     #[must_use]
     pub fn analyze_with_budget(
-        method: &'method MokaIRMethod,
+        method: &MokaIRMethod,
         budget: SolvingBudget,
     ) -> HashMap<BlockId, Self> {
         let mut problem = analyzer::PathConditionProblem::new(method, budget);
-        // Queued so the reduction work does not vary between runs.
+        // Visit blocks in successor order so worklist behavior is stable.
         let Ok(path_conditions): Result<QueuedFactsMap<BlockId, _>, _> =
             fixed_point::solve(&mut problem);
         path_conditions
@@ -57,25 +56,10 @@ impl<'method> PathCondition<&'method Predicate> {
 
 /// A path condition stored in disjunctive normal form.
 ///
-/// Equality and hashing compare the stored form, so equivalent conditions may
-/// compare unequal; use [`PathCondition::equivalent_to`] to compare meaning.
+/// Equality compares the stored form, so equivalent conditions may compare unequal.
 #[derive(Debug, Clone)]
 pub struct PathCondition<P> {
     cover: Cover<P>,
-}
-
-/// A borrowed conjunction in a [`PathCondition`] disjunctive normal form.
-///
-/// A condition is the disjunction of its [`PathCondition::disjuncts`].
-#[derive(Debug, Clone, Copy)]
-pub struct PathConditionTerm<'a, P>(&'a cube::Cube<P>);
-
-impl<P> PathConditionTerm<'_, P> {
-    /// Returns whether this term is the tautological conjunction `⊤`.
-    #[must_use]
-    pub fn is_tautology(&self) -> bool {
-        self.0.is_tautology()
-    }
 }
 
 impl<P> PartialEq for PathCondition<P>
@@ -88,15 +72,6 @@ where
 }
 
 impl<P> Eq for PathCondition<P> where P: Hash + Eq {}
-
-impl<P> Hash for PathCondition<P>
-where
-    P: Hash + Eq,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.cover.hash(state);
-    }
-}
 
 impl<P> PathCondition<P> {
     /// Creates the tautological condition `⊤`.
@@ -114,58 +89,10 @@ impl<P> PathCondition<P> {
         Self::with_cover(Cover::zero())
     }
 
-    /// Creates a path condition from a single literal.
-    #[must_use]
-    pub fn of(predicate: BooleanVariable<P>) -> Self
-    where
-        P: Hash + Eq,
-    {
-        Self::with_cover(Cover::of_literal(predicate))
-    }
-
-    /// Returns the predicates referenced by this condition.
-    #[must_use]
-    pub fn predicates(&self) -> HashSet<&P>
-    where
-        P: Hash + Eq,
-    {
-        self.cover.predicates().collect()
-    }
-
-    /// Returns whether `other` denotes the same condition, possibly in a
-    /// different form.
-    ///
-    /// Deciding this is entailment in both directions, so its cost grows with
-    /// the number of predicates rather than with the length of the stored form.
-    #[must_use]
-    pub fn equivalent_to(&self, other: &Self) -> bool
-    where
-        P: Hash + Eq + Clone,
-    {
-        self.cover.equivalent_to(&other.cover)
-    }
-
-    /// Iterates over the conjunctions that this condition disjoins.
-    ///
-    /// The iteration order is unspecified. A contradictory condition has no
-    /// disjuncts, while a tautological condition has one tautological disjunct.
-    pub fn disjuncts(&self) -> impl Iterator<Item = PathConditionTerm<'_, P>> {
-        self.cover.cubes().map(PathConditionTerm)
-    }
-
     /// Returns whether this condition is `⊥`.
     #[must_use]
     pub fn is_contradiction(&self) -> bool {
         self.cover.is_contradiction()
-    }
-
-    /// Reduces this condition with a default minimization budget.
-    #[must_use]
-    pub fn reduce(self) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        self.reduce_with_budget(SolvingBudget::default())
     }
 
     /// Reduces this condition without the heuristic generalization pass.
@@ -208,17 +135,6 @@ where
     }
 }
 
-impl<P> BitAnd<BooleanVariable<P>> for PathCondition<P>
-where
-    P: Hash + Eq + Clone,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: BooleanVariable<P>) -> Self::Output {
-        Self::with_cover(self.cover.conjoin_literal(&rhs))
-    }
-}
-
 impl<P> BitAnd<BranchGuard<P>> for PathCondition<P>
 where
     P: Hash + Eq + Clone,
@@ -227,17 +143,6 @@ where
 
     fn bitand(self, rhs: BranchGuard<P>) -> Self::Output {
         Self::with_cover(self.cover.conjoin_branch_guard(rhs))
-    }
-}
-
-impl<P> BitAnd for PathCondition<P>
-where
-    P: Hash + Eq + Clone,
-{
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        Self::with_cover(self.cover.conjoin(&rhs.cover))
     }
 }
 
