@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, convert::Infallible};
 
 use super::{BooleanVariable, ValueId};
 use crate::jvm::ConstantValue;
@@ -112,30 +112,67 @@ impl From<ConstantValue> for PathValue {
 }
 
 impl Predicate {
-    pub(crate) fn uses(&self) -> HashSet<ValueId> {
+    fn values(&self) -> impl Iterator<Item = &PathValue> {
         use Predicate::{
             Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
             IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
         };
 
-        let values = match self {
+        let (first, second) = match self {
             Equal(lhs, rhs)
             | NotEqual(lhs, rhs)
             | LessThan(lhs, rhs)
             | LessThanOrEqual(lhs, rhs)
             | GreaterThan(lhs, rhs)
-            | GreaterThanOrEqual(lhs, rhs) => vec![lhs, rhs],
+            | GreaterThanOrEqual(lhs, rhs) => (lhs, Some(rhs)),
             IsNull(value) | IsNotNull(value) | IsZero(value) | IsNonZero(value)
             | IsPositive(value) | IsNegative(value) | IsNonNegative(value)
-            | IsNonPositive(value) => vec![value],
+            | IsNonPositive(value) => (value, None),
         };
-        values
-            .into_iter()
+        std::iter::once(first).chain(second)
+    }
+
+    pub(crate) fn uses(&self) -> HashSet<ValueId> {
+        self.values()
             .filter_map(|value| match value {
                 PathValue::Variable(value) => Some(value),
                 PathValue::Constant(_) => None,
             })
             .copied()
             .collect()
+    }
+
+    pub(crate) fn map_values(&self, mut map: impl FnMut(&PathValue) -> PathValue) -> Self {
+        let mut mapped = self.clone();
+        let Ok(()) = mapped.try_for_each_value_mut(|value| {
+            *value = map(value);
+            Ok::<_, Infallible>(())
+        });
+        mapped
+    }
+
+    pub(crate) fn try_for_each_value_mut<E>(
+        &mut self,
+        mut visit: impl FnMut(&mut PathValue) -> Result<(), E>,
+    ) -> Result<(), E> {
+        use Predicate::{
+            Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
+            IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
+        };
+
+        match self {
+            Equal(lhs, rhs)
+            | NotEqual(lhs, rhs)
+            | LessThan(lhs, rhs)
+            | LessThanOrEqual(lhs, rhs)
+            | GreaterThan(lhs, rhs)
+            | GreaterThanOrEqual(lhs, rhs) => {
+                visit(lhs)?;
+                visit(rhs)
+            }
+            IsNull(value) | IsNotNull(value) | IsZero(value) | IsNonZero(value)
+            | IsPositive(value) | IsNegative(value) | IsNonNegative(value)
+            | IsNonPositive(value) => visit(value),
+        }
     }
 }

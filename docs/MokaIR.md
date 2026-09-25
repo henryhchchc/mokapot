@@ -45,5 +45,7 @@ For coverage, mark the locations of each covered program counter, and never infe
 ## Path conditions
 
 `PathCondition::analyze` computes a DNF `PathCondition` per reachable block: a disjunction of conjunctions of signed `Predicate`s.
-`disjuncts` yields the conjunctions, `predicates` the referenced predicates, and `is_contradiction` reports `⊥`; blocks reachable only under a contradiction are omitted.
-`&` and `|` compose structurally; `reduce` (or `analyze_with_budget` with a `SolvingBudget`) applies semantic minimization.
+The returned predicates are owned.
+Constant SSA definitions are substituted into guards before propagation, so known integer and null tests can be resolved and equivalent tests can share a literal.
+`is_contradiction` reports `⊥`; blocks reachable only under a contradiction are omitted.
+`analyze_with_budget` accepts a `SolvingBudget` for semantic minimization.

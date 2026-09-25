@@ -407,20 +407,6 @@ impl<P> BranchGuard<P> {
             }
         })
     }
-
-    /// Borrows the predicates while preserving the conjunction structure.
-    pub(super) fn as_ref(&self) -> BranchGuard<&P>
-    where
-        P: Hash + Eq,
-    {
-        self.0
-            .iter()
-            .map(|literal| match literal {
-                BooleanVariable::Positive(predicate) => BooleanVariable::Positive(predicate),
-                BooleanVariable::Negative(predicate) => BooleanVariable::Negative(predicate),
-            })
-            .collect()
-    }
 }
 
 impl<P: Display> Display for BranchGuard<P> {

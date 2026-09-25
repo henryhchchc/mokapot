@@ -1,17 +1,11 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
+    hash::Hash,
 };
 
-use itertools::Itertools;
-
-use super::{
-    BooleanVariable, BranchGuard, SolvingBudget,
-    cube::Cube,
-    minimizer::{BoundedMinimizer, Minimizer},
-};
-use crate::intrinsics::HashUnordered;
+use super::{BranchGuard, SolvingBudget, cube::Cube, minimizer::BoundedMinimizer};
+use crate::ir::expression::BooleanVariable;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct Cover<P> {
@@ -28,15 +22,6 @@ where
 }
 
 impl<P> Eq for Cover<P> where P: Hash + Eq {}
-
-impl<P> Hash for Cover<P>
-where
-    P: Hash + Eq,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (&self.cubes).hash_unordered(state);
-    }
-}
 
 /// The lattice order: compares covers by entailment, unlike the structural
 /// equality above.
@@ -59,15 +44,6 @@ where
 }
 
 impl<P> Cover<P> {
-    /// Returns whether `other` denotes the same set of assignments, which the
-    /// lattice order reports as `Equal` even when the forms differ.
-    pub(super) fn equivalent_to(&self, other: &Self) -> bool
-    where
-        P: Hash + Eq + Clone,
-    {
-        self.partial_cmp(other) == Some(cmp::Ordering::Equal)
-    }
-
     pub(super) fn one() -> Self
     where
         P: Hash + Eq,
@@ -81,19 +57,6 @@ impl<P> Cover<P> {
         Self {
             cubes: HashSet::new(),
         }
-    }
-
-    pub(super) fn of_literal(literal: BooleanVariable<P>) -> Self
-    where
-        P: Hash + Eq,
-    {
-        Self {
-            cubes: HashSet::from([Cube::of(literal)]),
-        }
-    }
-
-    pub(super) fn predicates(&self) -> impl Iterator<Item = &P> {
-        self.cubes.iter().flat_map(Cube::predicates)
     }
 
     pub(super) fn cubes(&self) -> impl Iterator<Item = &Cube<P>> {
@@ -173,18 +136,6 @@ impl<P> Cover<P> {
         self
     }
 
-    pub(super) fn conjoin_literal(self, literal: &BooleanVariable<P>) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        let cubes = self
-            .cubes
-            .into_iter()
-            .filter_map(|cube| cube.conjoin_literal(literal.clone()))
-            .collect();
-        Self { cubes }
-    }
-
     pub(super) fn conjoin_branch_guard(self, branch_guard: BranchGuard<P>) -> Self
     where
         P: Hash + Eq + Clone,
@@ -208,23 +159,6 @@ impl<P> Cover<P> {
         Self { cubes }
     }
 
-    pub(super) fn conjoin(self, rhs: &Self) -> Self
-    where
-        P: Hash + Eq + Clone,
-    {
-        if self.is_contradiction() || rhs.is_contradiction() {
-            return Self::zero();
-        }
-
-        let cubes = self
-            .cubes
-            .iter()
-            .cartesian_product(&rhs.cubes)
-            .filter_map(|(lhs_cube, rhs_cube)| lhs_cube.conjoin(rhs_cube))
-            .collect();
-        Self { cubes }
-    }
-
     pub(super) fn reduce(self, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,
@@ -237,9 +171,8 @@ impl<P> Cover<P> {
 
     /// Reduces this cover without the heuristic generalization pass.
     ///
-    /// Subsumed terms are still removed and small on-sets are still minimized
-    /// exactly, so covers stay bounded; the result is expected to be reduced
-    /// again before it is observed.
+    /// Subsumed terms are still removed and small on-sets are minimized exactly.
+    /// The result is reduced again before it is observed.
     pub(super) fn reduce_without_generalization(self, budget: SolvingBudget) -> Self
     where
         P: Hash + Eq + Clone,

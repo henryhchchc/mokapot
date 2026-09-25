@@ -7,8 +7,11 @@ use std::{
 
 use itertools::Itertools;
 
-use super::{BooleanVariable, BranchGuard};
-use crate::intrinsics::{HashUnordered, hashset_partial_order};
+use super::BranchGuard;
+use crate::{
+    intrinsics::{HashUnordered, hashset_partial_order},
+    ir::expression::BooleanVariable,
+};
 
 /// A normalized conjunction of literals.
 ///
@@ -67,15 +70,6 @@ impl<P> Cube<P> {
             positive: HashSet::new(),
             negative: HashSet::new(),
         }
-    }
-
-    pub(super) fn of(literal: BooleanVariable<P>) -> Self
-    where
-        P: Hash + Eq,
-    {
-        let mut cube = Self::one();
-        cube.insert(literal);
-        cube
     }
 
     pub(super) fn from_branch_guard(branch_guard: BranchGuard<P>) -> Option<Self>
