@@ -47,9 +47,10 @@ impl LiftContext<'_, '_> {
         dimension: u8,
     ) -> Result<Option<Operation>, Error> {
         let value = self.definition_id();
-        let dimensions = (0..dimension)
+        let mut dimensions: Vec<_> = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
             .collect::<Result<_, _>>()?;
+        dimensions.reverse();
         self.frame.stack.push(value, Category1)?;
         let expr = ArrayOperation::NewMultiDim {
             element_type,

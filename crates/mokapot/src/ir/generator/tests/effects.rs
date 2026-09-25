@@ -1,7 +1,7 @@
 use super::*;
 use crate::ir::{
     MokaIRFrameError, ValueId,
-    expression::{Conversion, Expression, MathOperation},
+    expression::{ArrayOperation, Conversion, Expression, MathOperation},
 };
 
 /// Returns the value and expression of a definition operation.
@@ -92,6 +92,26 @@ fn array_write_is_an_effect_without_a_definition() {
     for pc in [0, 1, 2] {
         assert_eq!(ir.source_map().instructions_at(pc.into()).count(), 0);
     }
+}
+
+#[test]
+fn multidimensional_array_lengths_follow_array_nesting_order() {
+    let body = [
+        (0, Instruction::ILoad0),
+        (1, Instruction::ILoad1),
+        (2, Instruction::MultiANewArray(ref_t("[[I"), 2)),
+        (3, Instruction::AReturn),
+    ];
+    let ir = build(&method(body, "(II)[[I", vec![])).unwrap();
+    let parameters = ir.parameter_values();
+    let operation = terminator_at(&ir, 2.into()).operation().unwrap();
+    let (_, Expression::Array(ArrayOperation::NewMultiDim { dimensions, .. })) =
+        definition(operation)
+    else {
+        panic!("multianewarray must define a multidimensional array");
+    };
+
+    assert_eq!(dimensions, parameters);
 }
 
 #[test]
