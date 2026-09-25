@@ -11,6 +11,9 @@ pub enum MalformedControlFlow {
     /// An instruction that must fall through has no following instruction.
     #[error("instruction at {_0} has no required fallthrough")]
     MissingFallthrough(ProgramCounter),
+    /// A tableswitch has no targets or its case values exceed `i32`.
+    #[error("tableswitch at {_0} has an invalid range")]
+    InvalidTableSwitchRange(ProgramCounter),
 }
 
 /// A well-formed JVM bytecode feature that Moka IR does not support.

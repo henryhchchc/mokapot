@@ -2,8 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use itertools::Itertools;
-
 use super::{Error, fallibility::fallthrough_may_throw};
 use crate::{
     ir::generator::error::{MalformedControlFlow, UnsupportedBytecode},
@@ -122,16 +120,21 @@ impl BlockExit<ProgramCounter> {
                 return Err(Error::UnsupportedBytecode { pc, kind });
             }
             Instruction::TableSwitch {
-                jump_targets,
+                low,
+                jump_targets: targets,
                 default,
-                range,
-            } => Self::Switch {
-                cases: range.clone().zip_eq(jump_targets.clone()).collect(),
-                default: *default,
-            },
+            } => {
+                let high = Instruction::tableswitch_high(*low, targets.len())
+                    .ok_or(MalformedControlFlow::InvalidTableSwitchRange(pc))?;
+                let cases = (*low..=high).zip(targets.iter().copied()).collect();
+                Self::Switch {
+                    cases,
+                    default: *default,
+                }
+            }
             Instruction::LookupSwitch {
-                default,
                 match_targets,
+                default,
             } => Self::Switch {
                 cases: match_targets.clone(),
                 default: *default,

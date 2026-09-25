@@ -1,7 +1,5 @@
 use std::fmt;
 
-use itertools::Itertools as _;
-
 use super::{Instruction, WideInstruction};
 
 impl fmt::Display for WideInstruction {
@@ -86,18 +84,18 @@ impl fmt::Display for Instruction {
                 self.name()
             ),
             TableSwitch {
-                range,
+                low,
                 jump_targets,
                 default,
             } => {
+                let high = i128::from(*low) + jump_targets.len() as i128 - 1;
                 write!(
                     f,
-                    "{} {{\n  range: {}..={}\n  default: {default}\n",
-                    self.name(),
-                    range.start(),
-                    range.end(),
+                    "{} {{\n  range: {low}..={high}\n  default: {default}\n",
+                    self.name()
                 )?;
-                for (value, target) in range.clone().zip_eq(jump_targets) {
+                for (offset, target) in jump_targets.iter().enumerate() {
+                    let value = i128::from(*low) + offset as i128;
                     writeln!(f, "  {value}: {target}")?;
                 }
                 write!(f, "}}")

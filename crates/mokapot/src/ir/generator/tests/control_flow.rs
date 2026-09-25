@@ -92,7 +92,7 @@ fn comparison_branch_preserves_operand_order() {
 fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     let jump_targets = vec![10.into(), 10.into()];
     let instruction = Instruction::TableSwitch {
-        range: 3..=4,
+        low: 3,
         jump_targets,
         default: 10.into(),
     };

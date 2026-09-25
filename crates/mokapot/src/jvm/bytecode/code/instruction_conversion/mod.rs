@@ -299,14 +299,20 @@ impl Instruction {
                 high,
                 jump_offsets,
             } => {
-                let targets = jump_offsets
+                if low > high
+                    || i64::try_from(jump_offsets.len()).ok()
+                        != Some(i64::from(high) - i64::from(low) + 1)
+                {
+                    return Err(ParseError::malform("Invalid tableswitch range"));
+                }
+                let jump_targets = jump_offsets
                     .into_iter()
                     .map(|offset| (pc + offset).context("Invalid jump offset"))
                     .try_collect()?;
                 Self::TableSwitch {
+                    low,
+                    jump_targets,
                     default: (pc + default).context("Invalid jump offset")?,
-                    range: low..=high,
-                    jump_targets: targets,
                 }
             }
             LookupSwitch {
@@ -706,11 +712,11 @@ impl Instruction {
 
             Self::TableSwitch {
                 default,
-                range,
+                low,
                 jump_targets,
             } => {
-                let low = *range.start();
-                let high = *range.end();
+                let high = Self::tableswitch_high(low, jump_targets.len())
+                    .ok_or_else(|| GenerationError::other("Invalid tableswitch range"))?;
                 let jump_offsets = jump_targets
                     .into_iter()
                     .map(|target| offset_wide(target, pc))
