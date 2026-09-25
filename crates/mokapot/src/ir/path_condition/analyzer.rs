@@ -188,7 +188,10 @@ impl PathConditionFact {
     }
 
     pub(super) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<Predicate>) -> Self {
-        Self::new(self.inner.clone() & branch_guard, self.budget)
+        if branch_guard.is_tautology() {
+            return self.clone();
+        }
+        Self::new(self.inner.conjoin_branch_guard(branch_guard), self.budget)
     }
 
     pub(super) fn is_contradiction(&self) -> bool {
@@ -218,7 +221,7 @@ impl PartialOrd for PathConditionFact {
 impl JoinSemiLattice for PathConditionFact {
     fn join_assign(&mut self, other: Self) -> bool {
         debug_assert_eq!(self.budget, other.budget);
-        if other <= *self {
+        if other.inner.cover == self.inner.cover || other.inner.cover.implies(&self.inner.cover) {
             return false;
         }
         let inner = std::mem::replace(&mut self.inner, PathCondition::zero());
