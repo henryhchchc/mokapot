@@ -41,7 +41,7 @@ fn terminator(method: &MokaIRMethod, location: InstructionLocation) -> Option<&T
 fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
     let mut result = Vec::new();
     let mut visited = HashSet::new();
-    let mut pending = VecDeque::from([ir.entry_block()]);
+    let mut pending = VecDeque::from([ir.entry.block]);
     while let Some(id) = pending.pop_front() {
         if !visited.insert(id) {
             continue;

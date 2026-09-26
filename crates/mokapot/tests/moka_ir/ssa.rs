@@ -20,7 +20,7 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
     definitions.extend(ir.parameters.clone());
     assert_eq!(
         ir.entry.arguments.len(),
-        ir.block(ir.entry_block()).unwrap().parameters.len()
+        ir.block(ir.entry.block).unwrap().parameters.len()
     );
     uses.extend(ir.entry.arguments.clone());
     for (_, block) in reachable_blocks(&ir) {
@@ -157,7 +157,7 @@ fn block_uses(block_id: BlockId, block: &BasicBlock) -> Vec<(ValueId, UseSite)> 
 /// Blocks reachable from the entry while skipping the normal arm of `skipped`.
 #[cfg(integration_test)]
 fn reachable_skipping_normal(ir: &MokaIRMethod, skipped: BlockId) -> HashSet<BlockId> {
-    let entry = ir.entry_block();
+    let entry = ir.entry.block;
     let mut reachable = HashSet::from([entry]);
     let mut pending = VecDeque::from([entry]);
     while let Some(block_id) = pending.pop_front() {

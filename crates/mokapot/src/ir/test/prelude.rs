@@ -74,7 +74,7 @@ pub(crate) fn method_entry(
     args: impl IntoIterator<Item = ValueId>,
 ) -> MethodEntry {
     MethodEntry {
-        target,
+        block: target,
         arguments: args.into_iter().collect(),
     }
 }
@@ -218,7 +218,7 @@ pub(crate) fn def(value: ValueId, expr: impl Into<Expression>) -> Operation {
 
 /// The blocks reachable from the entry of `ir`.
 pub(crate) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
-    reachable_of(&ir.blocks, ir.entry_block())
+    reachable_of(&ir.blocks, ir.entry.block)
 }
 
 /// The blocks reachable from `entry` within `blocks`.
@@ -264,6 +264,6 @@ pub(crate) fn terminator_operations(ir: &MokaIRMethod) -> impl Iterator<Item = &
 /// The JVM origin of `ir`'s entry terminator.
 pub(crate) fn entry_origin(ir: &MokaIRMethod) -> Option<ProgramCounter> {
     ir.source_map.origin_of(InstructionLocation::Terminator {
-        block: ir.entry_block(),
+        block: ir.entry.block,
     })
 }

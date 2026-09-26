@@ -28,12 +28,6 @@ impl MokaIRMethod {
         self.access_flags.contains(method::AccessFlags::STATIC)
     }
 
-    /// Returns the entry block identity.
-    #[must_use]
-    pub const fn entry_block(&self) -> BlockId {
-        self.entry.target
-    }
-
     /// Looks up a block by its method-local identity.
     ///
     /// Identities outside this method's block set yield `None`.
