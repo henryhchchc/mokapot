@@ -57,7 +57,7 @@ jobs:
           toolchain: stable
           components: clippy
       - name: Setup Checking Tools
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
@@ -92,7 +92,7 @@ jobs:
           echo "CLIPPY_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
         continue-on-error: true
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v4.38.0
+        uses: github/codeql-action/upload-sarif@v4.38.1
         if: always()
         with:
           sarif_file: rust-clippy-results.sarif
@@ -123,7 +123,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-hack
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: cargo-hack
       - name: Checkout source code
@@ -166,7 +166,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
@@ -215,7 +215,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
@@ -267,7 +267,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: cargo-nextest
       - name: Setup JDK
@@ -330,7 +330,7 @@ jobs:
           toolchain: nightly
           components: miri
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.19
         with:
           tool: cargo-nextest
       - name: Checkout source code
