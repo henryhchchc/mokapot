@@ -13,7 +13,7 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
     let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
     let unwind_targets = [1, 4].map(|it| {
         let location = ir
-            .source_map()
+            .source_map
             .instructions_at(it.into())
             .find(|&it| {
                 ir.instruction(it)

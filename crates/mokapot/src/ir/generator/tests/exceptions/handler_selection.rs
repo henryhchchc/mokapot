@@ -22,7 +22,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         handler(1.into()..2.into(), 30.into(), Some(exception)),
     ];
     let ir = lift(body, "(Ljava/lang/Object;)V", table);
-    let location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let transfers = fallible
         .terminator
@@ -37,7 +37,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         transfers[2],
         Some(ControlTransfer::Exception(None))
     ));
-    assert_eq!(ir.source_map().instructions_at(30.into()).count(), 0);
+    assert_eq!(ir.source_map.instructions_at(30.into()).count(), 0);
     assert!(!transfers.iter().any(Option::is_none));
 }
 
@@ -58,5 +58,5 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     assert!(matches!(entry, Terminator::Return { value: None, .. }));
     assert_eq!(entry.successors().count(), 1);
     assert_eq!(entry.successors().next().unwrap().transfer(), None);
-    assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
+    assert_eq!(ir.source_map.instructions_at(10.into()).count(), 0);
 }

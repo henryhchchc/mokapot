@@ -11,7 +11,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     ];
     let table = vec![handler(1.into()..2.into(), 2.into(), None)];
     let ir = lift(body, "(Ljava/lang/Object;)V", table);
-    let location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let target = |predicate: fn(&ControlTransfer) -> bool| {
         fallible
@@ -39,7 +39,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     assert_matches!(successor.transfer(), Some(&ControlTransfer::Unconditional));
     assert_eq!(successor.block_target(), Some(normal_target));
     let loc = InstructionLocation::Terminator { block: pad_id };
-    assert_eq!(ir.source_map().origin_of(loc), None);
+    assert_eq!(ir.source_map.origin_of(loc), None);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn exceptional_state_excludes_the_fallible_result() {
     let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
     let definition = terminator_at(&ir, 1.into()).def();
     let result = definition.expect("checkcast must define a result");
-    let location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let expected = Some(ValueDefinition::Instruction(location));
     assert_eq!(ir.definition_of(result), expected);
     let fallible = block_containing_instruction(&ir, location);
@@ -81,7 +81,7 @@ fn exceptional_state_excludes_the_fallible_result() {
     assert!(matches!(
         handler.terminator,
         Terminator::Return { value: Some(value), .. }
-            if value == ir.parameter_values()[0] && value != result
+            if value == ir.parameters[0] && value != result
     ));
 }
 
@@ -100,7 +100,7 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
         handler(1.into()..2.into(), 10.into(), None),
     ];
     let ir = lift(body, "()V", table);
-    let location = ir.source_map().instructions_at(1.into()).next().unwrap();
+    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let exceptional = fallible
         .terminator

@@ -21,7 +21,7 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         (3, Instruction::IReturn),
     ];
     let ir = build(&method(body, "(I)I", vec![])).unwrap();
-    let parameter = ir.parameter_values()[0];
+    let parameter = ir.parameters[0];
     let (_, expr) = definition(operations(&ir).next().unwrap());
     let expected = Expression::Math(MathOperation::Add(parameter, parameter));
     assert_eq!(expr, &expected);
@@ -33,7 +33,7 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         (3, Instruction::LReturn),
     ];
     let ir = build(&method(body, "(J)J", vec![])).unwrap();
-    let parameter = ir.parameter_values()[0];
+    let parameter = ir.parameters[0];
     let (_, expr) = definition(operations(&ir).next().unwrap());
     let expected = Expression::Math(MathOperation::Add(parameter, parameter));
     assert_eq!(expr, &expected);
@@ -48,13 +48,12 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
         (6, Instruction::IReturn),
     ];
     let ir = build(&method(body, "(JI)I", vec![])).unwrap();
-    let parameters = ir.parameter_values();
     let mut operations = operations(&ir);
     let (conversion, expr) = definition(operations.next().unwrap());
-    let expected = Expression::Conversion(Conversion::Long2Int(parameters[0]));
+    let expected = Expression::Conversion(Conversion::Long2Int(ir.parameters[0]));
     assert_eq!(expr, &expected);
     let (_, expr) = definition(operations.next().unwrap());
-    let expected = Expression::Math(MathOperation::Add(parameters[1], conversion));
+    let expected = Expression::Math(MathOperation::Add(ir.parameters[1], conversion));
     assert_eq!(expr, &expected);
     assert!(operations.next().is_none());
 }
@@ -90,7 +89,7 @@ fn array_write_is_an_effect_without_a_definition() {
     assert_eq!(effect.def(), None);
     assert_eq!(effect.uses().len(), 3);
     for pc in [0, 1, 2] {
-        assert_eq!(ir.source_map().instructions_at(pc.into()).count(), 0);
+        assert_eq!(ir.source_map.instructions_at(pc.into()).count(), 0);
     }
 }
 
@@ -103,7 +102,6 @@ fn multidimensional_array_lengths_follow_array_nesting_order() {
         (3, Instruction::AReturn),
     ];
     let ir = build(&method(body, "(II)[[I", vec![])).unwrap();
-    let parameters = ir.parameter_values();
     let operation = terminator_at(&ir, 2.into()).operation().unwrap();
     let (_, Expression::Array(ArrayOperation::NewMultiDim { dimensions, .. })) =
         definition(operation)
@@ -111,7 +109,7 @@ fn multidimensional_array_lengths_follow_array_nesting_order() {
         panic!("multianewarray must define a multidimensional array");
     };
 
-    assert_eq!(dimensions, parameters);
+    assert_eq!(dimensions, &ir.parameters);
 }
 
 #[test]

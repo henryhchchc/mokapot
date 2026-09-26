@@ -8,7 +8,7 @@ fn builds_ir_blocks_and_provenance() {
     // The `ldc` at `0x0000` may fail, so lifting folds it into the block's
     // `Try` terminator instead of an ordinary operation.
     let first = ir
-        .source_map()
+        .source_map
         .instructions_at(ProgramCounter::from(0x0000))
         .find_map(|id| terminator(&ir, id))
         .and_then(Terminator::operation)
@@ -22,21 +22,21 @@ fn builds_ir_blocks_and_provenance() {
     ));
 
     assert_eq!(
-        ir.source_map()
+        ir.source_map
             .instructions_at(ProgramCounter::from(0x007B))
             .count(),
         0
     );
 
     let returned = ir
-        .source_map()
+        .source_map
         .instructions_at(ProgramCounter::from(0x00F7))
         .find_map(|id| terminator(&ir, id))
         .unwrap();
     // Exiting a method may unwind, so the return is a fallible terminator.
     assert!(matches!(
         returned,
-        Terminator::Return { value: Some(value), .. } if value == &ir.parameter_values()[1]
+        Terminator::Return { value: Some(value), .. } if value == &ir.parameters[1]
     ));
 }
 
@@ -48,7 +48,7 @@ fn block_parameters_have_no_origin() {
         for (index, _) in basic_block.parameters.iter().enumerate() {
             let parameter = InstructionLocation::BlockParameter { block, index };
             assert!(
-                ir.source_map().origin_of(parameter).is_none(),
+                ir.source_map.origin_of(parameter).is_none(),
                 "block parameter {parameter:?} has a JVM origin"
             );
         }

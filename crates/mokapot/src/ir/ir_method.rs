@@ -1,10 +1,10 @@
 use super::{
-    BasicBlock, BlockId, InstructionLocation, InstructionRef, MethodEntry, MokaIRBuildError,
-    MokaIRMethod, SourceMap, ValueDefinition, ValueId,
+    BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, ValueDefinition,
+    ValueId,
 };
 use crate::{
-    jvm::{Method, method, references::ClassRef},
-    types::method_descriptor::MethodDescriptor,
+    ir::MokaIRBuildError,
+    jvm::{Method, method},
 };
 
 impl MokaIRMethod {
@@ -22,30 +22,6 @@ impl MokaIRMethod {
         super::generator::generate(method)
     }
 
-    /// Returns the method access flags.
-    #[must_use]
-    pub const fn access_flags(&self) -> method::AccessFlags {
-        self.access_flags
-    }
-
-    /// Returns the method name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns the method descriptor.
-    #[must_use]
-    pub const fn descriptor(&self) -> &MethodDescriptor {
-        &self.descriptor
-    }
-
-    /// Returns the class containing this method.
-    #[must_use]
-    pub const fn owner(&self) -> &ClassRef {
-        &self.owner
-    }
-
     /// Checks if the method is `static`.
     #[must_use]
     pub const fn is_static(&self) -> bool {
@@ -56,12 +32,6 @@ impl MokaIRMethod {
     #[must_use]
     pub const fn entry_block(&self) -> BlockId {
         self.entry.target
-    }
-
-    /// Returns the method-entry invocation.
-    #[must_use]
-    pub const fn entry(&self) -> &MethodEntry {
-        &self.entry
     }
 
     /// Looks up a block by its method-local identity.
@@ -88,24 +58,6 @@ impl MokaIRMethod {
                 InstructionRef::Terminator(&self.block(block)?.terminator)
             }
         })
-    }
-
-    /// Returns this method's source-provenance relation.
-    #[must_use]
-    pub const fn source_map(&self) -> &SourceMap {
-        &self.source_map
-    }
-
-    /// Returns the SSA value representing `this`, if this is an instance method.
-    #[must_use]
-    pub const fn this_value(&self) -> Option<ValueId> {
-        self.this
-    }
-
-    /// Returns the SSA values representing method parameters in descriptor order.
-    #[must_use]
-    pub fn parameter_values(&self) -> &[ValueId] {
-        &self.parameters
     }
 
     /// Returns the unique definition of a method-local SSA value.
