@@ -25,7 +25,7 @@ macro_rules! jdk_class_bins {
 
         $(
             #[test]
-            #[ignore = "CI Only"]
+            #[ignore = "requires an extracted JDK image"]
             fn $name() {
                 test_jdk_classes::<$bin>();
             }

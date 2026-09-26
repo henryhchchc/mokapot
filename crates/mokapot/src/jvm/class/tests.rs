@@ -2,6 +2,13 @@ use proptest::prelude::*;
 
 use super::*;
 
+#[test]
+fn not_a_class_file() {
+    let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
+    let result = Class::from_reader(&mut bytes);
+    assert!(result.is_err_and(|error| error.kind() == crate::jvm::bytecode::ParseErrorKind::IO));
+}
+
 proptest! {
     #[test]
     fn jdk_1_1(minor in any::<u16>()) {

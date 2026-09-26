@@ -1,3 +1,6 @@
+//! Tests for resolving compiled Java fixtures.
+
+#![cfg(java_fixture_tests)]
 #![allow(missing_docs, clippy::ignore_without_reason)]
 
 use mokapot::{
@@ -8,21 +11,19 @@ use mokapot::{
     },
 };
 
-const TEST_CP: &str = concat!(env!("OUT_DIR"), "/mokapot/java_classes");
+mod support;
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn load_classes() {
-    let app_cp = DirectoryClassPath::new(TEST_CP);
+    let app_cp = DirectoryClassPath::new(support::classes_dir());
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
     let test_analysis: ClassRef = "org/mokapot/test/TestAnalysis".parse().unwrap();
     assert!(ctx.application_classes.contains_key(&test_analysis));
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn interfaces_impl() {
-    let app_cp = DirectoryClassPath::new(TEST_CP);
+    let app_cp = DirectoryClassPath::new(support::classes_dir());
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
     let my_class: ClassRef = "org/mokapot/test/MyClass".parse().unwrap();
     let implements = ctx

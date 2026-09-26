@@ -117,3 +117,6 @@ impl<P> From<ClassLoader<P>> for CachingClassLoader<P> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

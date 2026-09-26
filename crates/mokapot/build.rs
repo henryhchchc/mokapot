@@ -1,60 +1,86 @@
-//! Build script for the mokapot crate
+//! Build script for the mokapot crate.
 
-use std::{env, path::PathBuf, process::Command};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+const SKIP_JAVA_TESTS: &str = "MOKAPOT_SKIP_JAVA_TESTS";
 
 fn main() {
-    compile_java_test_data();
+    println!("cargo::rustc-check-cfg=cfg(java_fixture_tests)");
+    println!("cargo::rerun-if-env-changed={SKIP_JAVA_TESTS}");
+    println!("cargo::rerun-if-changed=test_data");
+
+    match env::var(SKIP_JAVA_TESTS).as_deref() {
+        Ok("1") => return,
+        Err(env::VarError::NotPresent) => {}
+        _ => panic!("{SKIP_JAVA_TESTS} must be unset or set to 1"),
+    }
+    println!("cargo::rustc-cfg=java_fixture_tests");
+
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR")).join("mokapot");
+    fs::create_dir_all(&output).expect("cannot create Java fixture output directory");
+    let error_path = output.join("fixture_error.txt");
+    if error_path.exists() {
+        fs::remove_file(&error_path).expect("cannot remove previous Java fixture error");
+    }
+    if let Err(error) = compile_java_test_data(&output) {
+        fs::write(&error_path, &error).expect("cannot record Java fixture error");
+        println!("cargo::warning={error}");
+    }
 }
 
-const INTEGRATION_TEST: &str = "INTEGRATION_TEST";
-
-fn compile_java_test_data() {
-    println!("cargo::rustc-check-cfg=cfg(integration_test)");
-    println!("cargo::rerun-if-env-changed={INTEGRATION_TEST}");
-    if env::var(INTEGRATION_TEST).is_ok() {
-        println!("cargo::rustc-cfg=integration_test");
-    }
-    if Command::new("javac").spawn().is_ok() {
-        compile_java_files("mokapot");
-        println!("cargo::rerun-if-changed=test_data");
-    } else {
-        println!("cargo::warning=Can not find javac, test compilation will fail");
-    }
-}
-
-fn compile_java_files(path: &str) {
-    let build_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let test_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn compile_java_test_data(output: &Path) -> Result<(), String> {
+    let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("test_data")
-        .join(path);
-    let glob_pattern = format!(
-        "{}/**/*.java",
-        test_data_path
-            .to_str()
-            .expect("Test folder is not named with valid UTF-8")
-    );
-    let java_source_files: Vec<_> = glob::glob(&glob_pattern)
-        .expect("The glob pattern is invalid.")
-        .filter_map(Result::ok)
-        .collect();
+        .join("mokapot");
+    let pattern = format!("{}/**/*.java", source_dir.display());
+    let mut sources = glob::glob(&pattern)
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    sources.sort();
+    if sources.is_empty() {
+        return Err("No Java fixture sources found".to_owned());
+    }
 
-    let status = Command::new("javac")
-        .current_dir(test_data_path)
+    let classes = output.join("java_classes");
+    if classes.exists() {
+        fs::remove_dir_all(&classes).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir_all(&classes).map_err(|error| error.to_string())?;
+
+    let javac = Command::new("javac")
+        .current_dir(&source_dir)
         .arg("-g")
         .arg("-d")
-        .arg(build_path.join(path).join("java_classes"))
-        .args(java_source_files.into_iter().map(|it| {
-            it.to_str()
-                .expect("Java source file is not named with valid UTF-8")
-                .to_owned()
-        }))
+        .arg(&classes)
+        .args(&sources)
         .output()
-        .expect("Fail to spawn javac");
-
-    if !status.status.success() {
-        println!(
-            "cargo::warning=Failed to compile java files: {}",
-            String::from_utf8_lossy(&status.stderr)
-        );
+        .map_err(|error| format!("Cannot run javac for Java test fixtures: {error}"))?;
+    if !javac.status.success() {
+        return Err(format!(
+            "Cannot compile Java test fixtures: {}",
+            String::from_utf8_lossy(&javac.stderr)
+        ));
     }
+
+    let jar = output.join("test_classes.jar");
+    let result = Command::new("jar")
+        .args(["--create", "--file"])
+        .arg(&jar)
+        .arg("-C")
+        .arg(&classes)
+        .arg(".")
+        .output()
+        .map_err(|error| format!("Cannot run jar for Java test fixtures: {error}"))?;
+    if !result.status.success() {
+        return Err(format!(
+            "Cannot package Java test fixtures: {}",
+            String::from_utf8_lossy(&result.stderr)
+        ));
+    }
+    Ok(())
 }

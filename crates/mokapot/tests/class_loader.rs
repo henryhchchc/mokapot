@@ -1,141 +1,39 @@
+//! Tests for loading classes from compiled Java fixtures.
+
+#![cfg(java_fixture_tests)]
 #![allow(missing_docs)]
 
-use std::{
-    path::PathBuf,
-    sync::atomic::{self, AtomicUsize},
-};
-
-use mokapot::{
-    jvm::{
-        Class, ClassLoader,
-        class_loader::{
-            CachingClassLoader, ClassPath, Error,
-            class_paths::{DirectoryClassPath, JarClassPath},
-        },
+use mokapot::jvm::{
+    ClassLoader,
+    class_loader::{
+        Error,
+        class_paths::{DirectoryClassPath, JarClassPath},
     },
-    types::binary_name::BinaryName,
 };
 
-macro_rules! test_data_class {
-    ($folder:literal, $class_name:literal) => {
-        include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/",
-            $folder,
-            "/java_classes/",
-            $class_name,
-            ".class"
-        ))
-        .as_slice()
-    };
-}
-
-fn create_test_dir_class_path() -> DirectoryClassPath {
-    DirectoryClassPath::new(concat!(env!("OUT_DIR"), "/mokapot/java_classes"))
-}
+mod support;
 
 #[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn load_class() {
-    let dir_cp = create_test_dir_class_path();
-    let class_loader = ClassLoader::new([dir_cp]);
-    let my_class = "org/mokapot/test/MyClass".parse().unwrap();
-    let class = class_loader.load_class(&my_class).unwrap();
+    let loader = ClassLoader::new([DirectoryClassPath::new(support::classes_dir())]);
+    let name = "org/mokapot/test/MyClass".parse().unwrap();
+    let class = loader.load_class(&name).unwrap();
     assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
-fn load_absent_class() {
-    let dir_cp = create_test_dir_class_path();
-    let class_loader = ClassLoader::new([dir_cp]);
-    let class = class_loader.load_class(&"org/pkg/MyAbsentClass".parse().unwrap());
-    assert!(matches!(class, Err(Error::NotFound)));
-}
-
-struct MockClassPath<'a> {
-    counter: &'a AtomicUsize,
-}
-
-impl<'a> MockClassPath<'a> {
-    const fn new(counter: &'a AtomicUsize) -> Self {
-        Self { counter }
-    }
-}
-
-impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, _binary_name: &BinaryName) -> Result<Class, Error> {
-        self.counter.fetch_add(1, atomic::Ordering::Relaxed);
-        let mut reader = test_data_class!("mokapot", "org/mokapot/test/MyClass");
-        Class::from_reader(&mut reader).map_err(Into::into)
-    }
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
-fn caching_class_loader_load_once() {
-    let counter = AtomicUsize::new(0);
-    let test_cp = MockClassPath::new(&counter);
-    let class_loader = CachingClassLoader::from(ClassLoader::new([test_cp]));
-    let test = || {
-        for _ in 0..25 {
-            let my_class = "org/mokapot/test/MyClass".parse().unwrap();
-            let class = class_loader.load_class(&my_class).unwrap();
-            assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
-        }
-    };
-    std::thread::scope(|scope| {
-        let handles: Vec<_> = (0..4).map(|_| scope.spawn(test)).collect();
-        for handle in handles {
-            handle.join().unwrap();
-        }
-    });
-    assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn jar_class_path() {
-    let Ok(java_home) = std::env::var("JAVA_HOME") else {
-        return;
-    };
-    let jar_path = PathBuf::from(java_home).join("lib").join("jrt-fs.jar");
-    let jar_cp = JarClassPath::new(jar_path);
-    let class_loader = ClassLoader::new([jar_cp]);
-
-    let image_reader = "jdk/internal/jimage/ImageReader".parse().unwrap();
-    assert!(class_loader.load_class(&image_reader).is_ok());
+    let loader = ClassLoader::new([JarClassPath::new(support::jar_path())]);
+    let name = "org/mokapot/test/MyClass".parse().unwrap();
+    let class = loader.load_class(&name).unwrap();
+    assert_eq!(class.binary_name, "org/mokapot/test/MyClass");
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
 fn jar_class_path_not_found() {
-    let Ok(java_home) = std::env::var("JAVA_HOME") else {
-        return;
-    };
-    let jar_path = PathBuf::from(java_home).join("lib").join("jrt-fs.jar");
-    let jar_cp = JarClassPath::new(jar_path);
-    let class_loader = ClassLoader::new([jar_cp]);
-
+    let loader = ClassLoader::new([JarClassPath::new(support::jar_path())]);
     assert!(matches!(
-        class_loader.load_class(&"jdk/internal/jimage/ImageReader3".parse().unwrap()),
+        loader.load_class(&"org/mokapot/test/Missing".parse().unwrap()),
         Err(Error::NotFound)
     ));
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore = "Integration test only")]
-fn jar_class_path_not_jar() {
-    let jar_path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
-    let jar_cp = JarClassPath::new(jar_path);
-    let class_loader = ClassLoader::new([jar_cp]);
-
-    assert!(matches!(
-        class_loader.load_class(&"jdk/internal/jimage/ImageReader".parse().unwrap()),
-        Err(Error::Other(_)),
-    ));
-}
-
-fn _class_path_object_safety(_b: Box<dyn ClassPath>) {
-    // For compilation checking only.
 }

@@ -1,14 +1,11 @@
-#[cfg(integration_test)]
 use std::collections::HashMap;
 
 use mokapot::ir::BlockKind;
-#[cfg(integration_test)]
 use mokapot::ir::ValueId;
 
 use super::*;
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn ssa_definitions_and_block_arguments_are_well_formed() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     let mut definitions = HashSet::new();
@@ -46,7 +43,6 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
     assert!(definitions.iter().all(|it| ir.definition_of(*it).is_some()));
 }
 
-#[cfg(integration_test)]
 #[derive(Debug, Clone, Copy)]
 enum UseSite {
     /// An operation operand or a terminator-local value (returned/thrown, guard).
@@ -55,7 +51,6 @@ enum UseSite {
     EdgeArgument { source: BlockId, normal: bool },
 }
 
-#[cfg(integration_test)]
 impl UseSite {
     const fn block(self) -> BlockId {
         match self {
@@ -66,14 +61,12 @@ impl UseSite {
 }
 
 /// The definitions the fallible-result rule consults.
-#[cfg(integration_test)]
 struct Definitions {
     defined: HashSet<ValueId>,
     /// Values defined by a block terminator, keyed by that block.
     fallible: HashMap<ValueId, BlockId>,
 }
 
-#[cfg(integration_test)]
 fn collect_definitions(ir: &MokaIRMethod) -> Definitions {
     let mut definitions = Definitions {
         defined: HashSet::new(),
@@ -112,7 +105,6 @@ fn collect_definitions(ir: &MokaIRMethod) -> Definitions {
     definitions
 }
 
-#[cfg(integration_test)]
 fn block_uses(block_id: BlockId, block: &BasicBlock) -> Vec<(ValueId, UseSite)> {
     let mut uses = Vec::new();
     for operation in &block.operations {
@@ -153,7 +145,6 @@ fn block_uses(block_id: BlockId, block: &BasicBlock) -> Vec<(ValueId, UseSite)> 
 }
 
 /// Blocks reachable from the entry while skipping the normal arm of `skipped`.
-#[cfg(integration_test)]
 fn reachable_skipping_normal(ir: &MokaIRMethod, skipped: BlockId) -> HashSet<BlockId> {
     let entry = ir.entry.block;
     let mut reachable = HashSet::from([entry]);
@@ -180,7 +171,6 @@ fn reachable_skipping_normal(ir: &MokaIRMethod, skipped: BlockId) -> HashSet<Blo
 }
 
 #[test]
-#[cfg(integration_test)]
 fn fallible_results_are_used_only_after_their_normal_arm() {
     for (label, ir) in corpus_ir() {
         let definitions = collect_definitions(&ir);
