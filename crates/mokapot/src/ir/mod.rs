@@ -54,15 +54,23 @@ use id_allocation::{IdAllocator, NumericalId};
 /// source of control-flow edges.
 #[derive(Debug, Clone)]
 pub struct MokaIRMethod {
-    access_flags: method::AccessFlags,
-    name: String,
-    descriptor: MethodDescriptor,
-    owner: ClassRef,
-    entry: MethodEntry,
+    /// The access flags of the method.
+    pub access_flags: method::AccessFlags,
+    /// The name of the method.
+    pub name: String,
+    /// The descriptor of the method.
+    pub descriptor: MethodDescriptor,
+    /// The class that owns the method.
+    pub owner: ClassRef,
+    /// The invocation of the entry block.
+    pub entry: MethodEntry,
+    /// The mapping between JVM bytecode and the IR.
+    pub source_map: SourceMap,
+    /// The value representing `this`, if this is an instance method.
+    pub this: Option<ValueId>,
+    /// The values representing the method parameters.
+    pub parameters: Vec<ValueId>,
     blocks: HashMap<BlockId, BasicBlock>,
-    source_map: SourceMap,
-    this: Option<ValueId>,
-    parameters: Vec<ValueId>,
     value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
@@ -80,22 +88,10 @@ pub enum InstructionRef<'method> {
 /// The invocation boundary that supplies arguments to the method's entry block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodEntry {
-    target: BlockId,
-    arguments: Vec<ValueId>,
-}
-
-impl MethodEntry {
-    /// Returns the invoked entry block.
-    #[must_use]
-    pub const fn target(&self) -> BlockId {
-        self.target
-    }
-
-    /// Returns the values supplied to the entry block's parameters.
-    #[must_use]
-    pub fn arguments(&self) -> &[ValueId] {
-        &self.arguments
-    }
+    /// The invoked entry block.
+    pub target: BlockId,
+    /// The values supplied to the entry block's parameters.
+    pub arguments: Vec<ValueId>,
 }
 
 /// Describes where a scalar value is defined.

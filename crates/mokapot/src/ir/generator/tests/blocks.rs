@@ -14,8 +14,8 @@ fn unreachable_bytecode_is_omitted() {
         vec![],
     );
     let ir = build(&unreachable).unwrap();
-    assert_eq!(ir.source_map().instructions_at(10.into()).count(), 0);
-    assert_eq!(ir.source_map().instructions_at(11.into()).count(), 0);
+    assert_eq!(ir.source_map.instructions_at(10.into()).count(), 0);
+    assert_eq!(ir.source_map.instructions_at(11.into()).count(), 0);
 
     let frame_invalid = method(
         [
@@ -28,5 +28,5 @@ fn unreachable_bytecode_is_omitted() {
     );
     let ir =
         build(&frame_invalid).expect("unreachable instructions must not contribute frame facts");
-    assert_eq!(ir.source_map().instructions_at(3.into()).count(), 0);
+    assert_eq!(ir.source_map.instructions_at(3.into()).count(), 0);
 }

@@ -14,15 +14,15 @@ fn ssa_definitions_and_block_arguments_are_well_formed() {
     let mut definitions = HashSet::new();
     let mut uses = HashSet::new();
 
-    if let Some(value) = ir.this_value() {
+    if let Some(value) = ir.this {
         definitions.insert(value);
     }
-    definitions.extend(ir.parameter_values());
+    definitions.extend(ir.parameters.clone());
     assert_eq!(
-        ir.entry().arguments().len(),
+        ir.entry.arguments.len(),
         ir.block(ir.entry_block()).unwrap().parameters.len()
     );
-    uses.extend(ir.entry().arguments());
+    uses.extend(ir.entry.arguments.clone());
     for (_, block) in reachable_blocks(&ir) {
         if let BlockKind::LandingPad { exception: value } = block.kind {
             definitions.insert(value);

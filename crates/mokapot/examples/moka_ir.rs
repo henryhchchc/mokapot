@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let ir = MokaIRMethod::from_method(method)?;
-        println!("{}{}:", ir.name(), ir.descriptor());
+        println!("{}{}:", ir.name, ir.descriptor);
 
         let mut pending = vec![ir.entry_block()];
         let mut visited = HashSet::new();

@@ -263,7 +263,7 @@ pub(crate) fn terminator_operations(ir: &MokaIRMethod) -> impl Iterator<Item = &
 
 /// The JVM origin of `ir`'s entry terminator.
 pub(crate) fn entry_origin(ir: &MokaIRMethod) -> Option<ProgramCounter> {
-    ir.source_map().origin_of(InstructionLocation::Terminator {
+    ir.source_map.origin_of(InstructionLocation::Terminator {
         block: ir.entry_block(),
     })
 }

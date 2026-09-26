@@ -56,7 +56,7 @@ fn branch_preserves_taken_then_fallthrough_guards() {
     assert_eq!(branch.successors().count(), 2);
     let taken = branch.successors().next().unwrap().transfer().unwrap();
     let otherwise = branch.successors().nth(1).unwrap().transfer().unwrap();
-    let is_zero = Predicate::IsZero(PathValue::Variable(ir.parameter_values()[0]));
+    let is_zero = Predicate::IsZero(PathValue::Variable(ir.parameters[0]));
     let positive = BranchGuard::of(BooleanVariable::Positive(is_zero.clone()));
     let negative = BranchGuard::of(BooleanVariable::Negative(is_zero));
     assert_eq!(taken, &ControlTransfer::Conditional(positive));
@@ -75,11 +75,10 @@ fn comparison_branch_preserves_operand_order() {
     ];
     let ir = lift(body, "(II)V", vec![]);
     let branch = &ir.block(ir.entry_block()).unwrap().terminator;
-    let parameters = ir.parameter_values();
 
     let (lhs, rhs) = (
-        PathValue::Variable(parameters[0]),
-        PathValue::Variable(parameters[1]),
+        PathValue::Variable(ir.parameters[0]),
+        PathValue::Variable(ir.parameters[1]),
     );
     let predicate = BooleanVariable::Positive(Predicate::LessThan(lhs, rhs));
     let expected = ControlTransfer::Conditional(BranchGuard::of(predicate));
@@ -103,7 +102,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     ];
     let ir = lift(body, "(I)V", vec![]);
     let switch = &ir.block(ir.entry_block()).unwrap().terminator;
-    let match_value = PathValue::Variable(ir.parameter_values()[0]);
+    let match_value = PathValue::Variable(ir.parameters[0]);
     let case_guard = |it| {
         let case = PathValue::Constant(ConstantValue::Integer(it));
         let predicate = BooleanVariable::Positive(Predicate::Equal(match_value.clone(), case));
@@ -139,13 +138,13 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
 
     let successors = terminator.successors().collect::<Vec<_>>();
     assert_eq!(successors.len(), 1);
-    let mut locations = ir.source_map().instructions_at(10.into());
+    let mut locations = ir.source_map.instructions_at(10.into());
     let default_target = locations.find_map(|it| match it {
         InstructionLocation::Terminator { block } => Some(block),
         _ => None,
     });
     assert_eq!(successors[0].block_target(), default_target);
-    assert!(!terminator.uses().contains(&ir.parameter_values()[0]));
+    assert!(!terminator.uses().contains(&ir.parameters[0]));
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }
 

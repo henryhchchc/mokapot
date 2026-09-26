@@ -34,7 +34,7 @@ where
 
 /// The terminator whose source instruction is `pc`.
 pub(crate) fn terminator_at(ir: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
-    ir.source_map()
+    ir.source_map
         .instructions_at(pc)
         .find_map(|it| match ir.instruction(it) {
             Some(InstructionRef::Terminator(terminator)) => Some(terminator),
