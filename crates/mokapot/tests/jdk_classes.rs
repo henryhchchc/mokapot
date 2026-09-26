@@ -73,14 +73,12 @@ fn test_jdk_classes<const BIN: u64>() {
     );
 
     // The cost of path-condition analysis grows with the predicate count, so
-    // bound it to keep the instrumented CI run in budget.
+    // bound it to keep the CI run in budget.
     // [TODO] optimize and lift the bound.
     let variable_count_limit = if env::var("CI").is_ok() { 8 } else { 16 };
 
-    // Sequential on purpose: the analysis is allocation-heavy, and under
-    // `-Cinstrument-coverage` parallel workers contend on the allocator and
-    // coverage counters, which dominates the runtime (~7x slower on 10 threads
-    // than on one). Shards get their concurrency from separate processes.
+    // Process classes sequentially within each shard to bound memory use.
+    // Nextest runs the shards in separate processes.
     for class_file in shard {
         let mut reader = BufReader::new(fs::File::open(&class_file).unwrap());
         match Class::from_reader(&mut reader) {

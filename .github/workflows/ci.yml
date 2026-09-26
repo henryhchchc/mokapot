@@ -266,11 +266,10 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          components: llvm-tools-preview
-      - name: Setup Build Tools
+      - name: Setup cargo-nextest
         uses: taiki-e/install-action@v2.87.13
         with:
-          tool: cargo-llvm-cov,cargo-nextest
+          tool: cargo-nextest
       - name: Setup JDK
         uses: actions/setup-java@v6.0.1
         with:
@@ -313,15 +312,7 @@ jobs:
           MOKAPOT_SKIP_JAVA_TESTS: 1
           JDK_CLASSES: ${{ github.workspace }}/jdk_classes
         timeout-minutes: 10
-        run: |
-          cargo llvm-cov clean --workspace
-          cargo llvm-cov nextest --cargo-profile=jdk-smoke --all-features --test jdk_classes --no-report --run-ignored=all
-          cargo llvm-cov report --profile=jdk-smoke --codecov --output-path ./target/codecov-jdk-smoke.json
-      - name: Upload Coverage Data
-        uses: actions/upload-artifact@v7
-        with:
-          name: codecov-jdk-smoke.json
-          path: ./target/codecov-jdk-smoke.json
+        run: cargo nextest run --cargo-profile=jdk-smoke --all-features --test jdk_classes --run-ignored=all
       - name: Sweep target cache
         if: always()
         uses: BD103/cargo-sweep@v2
@@ -366,7 +357,7 @@ jobs:
   codecov:
     name: Tests / Coverage Report
     runs-on: ubuntu-latest
-    needs: [unit_test, fixture_test, jdk_smoke]
+    needs: [unit_test, fixture_test]
     steps:
       - name: Checkout source code
         uses: actions/checkout@v7
@@ -378,10 +369,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: codecov-fixtures.json
-      - name: Download Coverage Data (JDK Smoke)
-        uses: actions/download-artifact@v8
-        with:
-          name: codecov-jdk-smoke.json
       - name: Upload to codecov (Unit Test)
         uses: codecov/codecov-action@v7
         env:
@@ -398,15 +385,6 @@ jobs:
           files: codecov-fixtures.json
           flags: fixture_tests
           fail_ci_if_error: true
-      - name: Upload to codecov (JDK Smoke)
-        uses: codecov/codecov-action@v7
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          files: codecov-jdk-smoke.json
-          flags: jdk_smoke
-          fail_ci_if_error: true
-
   # ====================
   # Documentation
   # ====================
