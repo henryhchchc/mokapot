@@ -18,7 +18,7 @@ pub(super) fn canonicalize_values(
     blocks: &mut HashMap<BlockId, BasicBlock>,
 ) {
     let mut arguments = {
-        let entry_arguments = blocks[&entry.target]
+        let entry_arguments = blocks[&entry.block]
             .parameters
             .iter()
             .zip(&entry.arguments)

@@ -52,7 +52,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     ];
     let table = vec![handler(0.into()..2.into(), 10.into(), None)];
     let ir = lift(body, "()V", table);
-    let entry = &ir.block(ir.entry_block()).unwrap().terminator;
+    let entry = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_eq!(reachable_blocks(&ir).len(), 1);
     assert!(matches!(entry, Terminator::Return { value: None, .. }));

@@ -137,10 +137,7 @@ impl DataflowProblem for PathConditionProblem<'_> {
     type Err = Infallible;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        [(
-            self.method.entry_block(),
-            PathConditionFact::one(self.budget),
-        )]
+        [(self.method.entry.block, PathConditionFact::one(self.budget))]
     }
 
     fn flow(

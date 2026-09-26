@@ -23,7 +23,7 @@ impl SimplifiedParameters {
             })
             .collect::<HashMap<BlockId, Vec<usize>>>();
 
-        entry.arguments = kept_indices[&entry.target]
+        entry.arguments = kept_indices[&entry.block]
             .iter()
             .map(|&index| self.lookup(entry.arguments[index]))
             .collect();

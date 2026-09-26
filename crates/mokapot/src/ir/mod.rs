@@ -89,7 +89,7 @@ pub enum InstructionRef<'method> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodEntry {
     /// The invoked entry block.
-    pub target: BlockId,
+    pub block: BlockId,
     /// The values supplied to the entry block's parameters.
     pub arguments: Vec<ValueId>,
 }

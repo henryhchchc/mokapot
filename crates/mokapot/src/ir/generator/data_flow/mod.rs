@@ -31,7 +31,7 @@ pub(super) fn analyze(cfg: &super::control_flow::Cfg<'_>) -> Result<IrParts, Err
 
     let parts_method = IrParts {
         entry: MethodEntry {
-            target: entry,
+            block: entry,
             arguments: entry_arguments,
         },
         blocks,

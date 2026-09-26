@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ir = MokaIRMethod::from_method(method)?;
         println!("{}{}:", ir.name, ir.descriptor);
 
-        let mut pending = vec![ir.entry_block()];
+        let mut pending = vec![ir.entry.block];
         let mut visited = HashSet::new();
         while let Some(block) = pending.pop() {
             if !visited.insert(block) {

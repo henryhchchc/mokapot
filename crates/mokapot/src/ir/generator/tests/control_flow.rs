@@ -22,7 +22,7 @@ fn switch_retains_parallel_successor_arms() {
         (10, Instruction::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
-    let switch = &ir.block(ir.entry_block()).unwrap().terminator;
+    let switch = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(switch, Terminator::Switch { .. });
     let targets = switch
@@ -50,7 +50,7 @@ fn branch_preserves_taken_then_fallthrough_guards() {
         (5, Instruction::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
-    let branch = &ir.block(ir.entry_block()).unwrap().terminator;
+    let branch = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(branch, Terminator::Branch { .. });
     assert_eq!(branch.successors().count(), 2);
@@ -74,7 +74,7 @@ fn comparison_branch_preserves_operand_order() {
         (6, Instruction::Return),
     ];
     let ir = lift(body, "(II)V", vec![]);
-    let branch = &ir.block(ir.entry_block()).unwrap().terminator;
+    let branch = &ir.block(ir.entry.block).unwrap().terminator;
 
     let (lhs, rhs) = (
         PathValue::Variable(ir.parameters[0]),
@@ -101,7 +101,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
         (10, Instruction::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
-    let switch = &ir.block(ir.entry_block()).unwrap().terminator;
+    let switch = &ir.block(ir.entry.block).unwrap().terminator;
     let match_value = PathValue::Variable(ir.parameters[0]);
     let case_guard = |it| {
         let case = PathValue::Constant(ConstantValue::Integer(it));
@@ -134,7 +134,7 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
         (10, Instruction::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
-    let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
+    let terminator = &ir.block(ir.entry.block).unwrap().terminator;
 
     let successors = terminator.successors().collect::<Vec<_>>();
     assert_eq!(successors.len(), 1);
@@ -167,7 +167,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         (21, Instruction::Return),
     ];
     let ir = lift(body, "()V", table);
-    let fallible = &ir.block(ir.entry_block()).unwrap().terminator;
+    let fallible = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(fallible, Terminator::Try { .. });
     assert_eq!(entry_origin(&ir), Some(1.into()));
@@ -199,7 +199,7 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
         (8, Instruction::IReturn),
     ];
     let ir = lift(body, "(I)I", vec![]);
-    let bb = ir.block(ir.entry_block()).unwrap();
+    let bb = ir.block(ir.entry.block).unwrap();
     let next_succ = bb.terminator.successors().next().unwrap();
     let header = next_succ.block_target().expect("the entry falls through");
 
@@ -217,7 +217,7 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
 fn throw_is_a_source_backed_terminator() {
     let body = [(0, Instruction::ALoad0), (1, Instruction::AThrow)];
     let ir = lift(body, "(Ljava/lang/Throwable;)V", vec![]);
-    let terminator = &ir.block(ir.entry_block()).unwrap().terminator;
+    let terminator = &ir.block(ir.entry.block).unwrap().terminator;
     assert_matches!(terminator, Terminator::Throw { .. });
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }

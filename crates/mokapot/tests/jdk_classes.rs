@@ -93,7 +93,7 @@ fn test_jdk_classes<const BIN: u64>() {
 /// Counts the predicates guarding the successors reachable from the entry
 /// block, which is what the path-condition analysis cost grows with.
 fn reachable_predicate_count(ir_method: &MokaIRMethod) -> usize {
-    let mut pending = vec![ir_method.entry_block()];
+    let mut pending = vec![ir_method.entry.block];
     let mut visited = HashSet::new();
     let mut count = 0;
     while let Some(block) = pending.pop() {
