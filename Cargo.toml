@@ -41,7 +41,7 @@ missing_docs = "warn"
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 
-[profile.integration-test]
+[profile.jdk-smoke]
 inherits = "test"
 opt-level = 3
 lto = true

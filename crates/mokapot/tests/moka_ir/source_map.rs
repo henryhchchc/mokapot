@@ -1,5 +1,3 @@
-#![cfg(integration_test)]
-
 use super::*;
 
 #[test]

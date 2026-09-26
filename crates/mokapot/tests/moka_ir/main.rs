@@ -1,3 +1,6 @@
+//! Tests for generating Moka IR from compiled Java fixtures.
+
+#![cfg(java_fixture_tests)]
 #![allow(missing_docs, clippy::ignore_without_reason)]
 
 use std::collections::{HashSet, VecDeque};
@@ -13,13 +16,12 @@ use mokapot::{
 mod provenance;
 mod source_map;
 mod ssa;
+#[path = "../support/mod.rs"]
+mod support;
 
 fn get_test_class() -> Class {
-    let mut bytes = include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/mokapot/java_classes/org/mokapot/test/TestAnalysis.class"
-    ))
-    .as_slice();
+    let bytes = support::class_bytes("org/mokapot/test/TestAnalysis");
+    let mut bytes = bytes.as_slice();
     Class::from_reader(&mut bytes).unwrap()
 }
 
@@ -58,7 +60,6 @@ fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
     result
 }
 
-#[cfg(integration_test)]
 fn live_locations(ir: &MokaIRMethod) -> Vec<InstructionLocation> {
     let mut locations = Vec::new();
     for (block_id, block) in reachable_blocks(ir) {
@@ -81,9 +82,8 @@ fn live_locations(ir: &MokaIRMethod) -> Vec<InstructionLocation> {
 
 /// Every method with a body in the fixture corpus (`OUT_DIR/mokapot/java_classes`,
 /// compiled by `build.rs`).
-#[cfg(integration_test)]
 fn corpus_methods() -> Vec<(String, Method)> {
-    let mut directories = vec![std::path::Path::new(env!("OUT_DIR")).join("mokapot/java_classes")];
+    let mut directories = vec![support::classes_dir()];
     let mut class_files = Vec::new();
     while let Some(directory) = directories.pop() {
         for entry in std::fs::read_dir(&directory).expect("the corpus directory is readable") {
@@ -116,7 +116,6 @@ fn corpus_methods() -> Vec<(String, Method)> {
     methods
 }
 
-#[cfg(integration_test)]
 fn corpus_ir() -> Vec<(String, MokaIRMethod)> {
     corpus_methods()
         .into_iter()
@@ -126,10 +125,4 @@ fn corpus_ir() -> Vec<(String, MokaIRMethod)> {
             (label, ir)
         })
         .collect()
-}
-
-#[test]
-#[cfg_attr(not(integration_test), ignore)]
-fn load_test_method() {
-    get_test_method();
 }

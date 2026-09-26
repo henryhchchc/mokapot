@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn builds_ir_blocks_and_provenance() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
 
@@ -41,7 +40,6 @@ fn builds_ir_blocks_and_provenance() {
 }
 
 #[test]
-#[cfg_attr(not(integration_test), ignore)]
 fn block_parameters_have_no_origin() {
     let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
     for (block, basic_block) in reachable_blocks(&ir) {

@@ -12,7 +12,8 @@ Java fixtures used by Rust tests are stored in `crates/mokapot/test_data`.
 Run commands from the repository root:
 
 - `cargo build --all-features` builds the workspace with optional features enabled.
-- `cargo test --all-features` runs the default local test suite.
+- `cargo test --all-features` runs unit and Java fixture tests.
+- `MOKAPOT_SKIP_JAVA_TESTS=1 cargo test --all-features` skips Java fixture generation and tests.
 - `cargo fmt --all -- --check` verifies formatting.
 - `cargo clippy --all-targets --all-features -- -D warnings` matches CI lint strictness.
 - `cargo run --example disassembler -- <class-file>` runs the example in `crates/mokapot/examples/disassembler`.
@@ -30,12 +31,11 @@ When the hosting type is already private, its associated items may be `pub`: the
 ## Testing Guidelines
 
 Add unit tests near the code they cover and integration tests in `crates/mokapot/tests/<feature>.rs`.
-If tests depend on compiled Java fixtures, ensure `javac` is available; `build.rs` recompiles files from `crates/mokapot/test_data`.
+Java fixture tests require JDK 27 (`javac` and `jar`); `build.rs` recompiles files from `crates/mokapot/test_data`.
 JDK-wide ignored tests require extracted JDK classes:
 
-- `export INTEGRATION_TEST=1`
 - `export JDK_CLASSES=/path/to/jdk_classes`
-- `cargo nextest run --run-ignored=all`
+- `MOKAPOT_SKIP_JAVA_TESTS=1 cargo nextest run --cargo-profile=jdk-smoke --all-features --test jdk_classes --run-ignored=all`
 
 ## Commit & Pull Request Guidelines
 
