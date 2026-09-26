@@ -79,12 +79,10 @@ fn collect_definitions(ir: &MokaIRMethod) -> Definitions {
         defined: HashSet::new(),
         fallible: HashMap::new(),
     };
-    if let Some(value) = ir.this_value() {
+    if let Some(value) = ir.this {
         definitions.defined.insert(value);
     }
-    definitions
-        .defined
-        .extend(ir.parameter_values().iter().copied());
+    definitions.defined.extend(ir.parameters.clone());
     for location in live_locations(ir) {
         match ir.instruction(location) {
             Some(InstructionRef::BlockParameter(parameter)) => {
