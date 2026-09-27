@@ -72,10 +72,7 @@ fn test_jdk_classes<const BIN: u64>() {
         root.display()
     );
 
-    // The cost of path-condition analysis grows with the predicate count, so
-    // bound it to keep the CI run in budget.
-    // [TODO] optimize and lift the bound.
-    let variable_count_limit = if env::var("CI").is_ok() { 8 } else { 16 };
+    let variable_count_limit = 16;
 
     // Process classes sequentially within each shard to bound memory use.
     // Nextest runs the shards in separate processes.
