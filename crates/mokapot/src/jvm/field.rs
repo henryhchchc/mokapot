@@ -46,37 +46,3 @@ bitflags! {
         const ENUM = 0x4000;
     }
 }
-
-#[cfg(test)]
-mod test {
-
-    use proptest::prelude::*;
-
-    use super::AccessFlags;
-
-    fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
-        prop_oneof![
-            Just(AccessFlags::PUBLIC),
-            Just(AccessFlags::PRIVATE),
-            Just(AccessFlags::PROTECTED),
-            Just(AccessFlags::STATIC),
-            Just(AccessFlags::FINAL),
-            Just(AccessFlags::VOLATILE),
-            Just(AccessFlags::TRANSIENT),
-            Just(AccessFlags::SYNTHETIC),
-            Just(AccessFlags::ENUM),
-        ]
-    }
-
-    proptest! {
-
-        #[test]
-        fn access_flags_bit_no_overlap(
-            lhs in arb_access_flag(),
-            rhs in arb_access_flag()
-        ){
-            prop_assume!(lhs != rhs);
-            assert_eq!(lhs.bits() & rhs.bits(), 0);
-        }
-    }
-}

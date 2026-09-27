@@ -110,7 +110,7 @@ impl ConstantPool {
             self.inner.push(Slot::Entry(entry));
             self.inner.push(Slot::Padding);
         } else {
-            if self.inner.len() > u16::MAX as usize {
+            if self.inner.len() >= u16::MAX as usize {
                 return Err(Overflow(entry));
             }
             self.inner.push(Slot::Entry(entry));
@@ -787,6 +787,46 @@ mod tests {
             reference_index: 1,
         };
         assert_eq!(method_handle.tag(), 15);
+    }
+
+    #[test]
+    fn deduplicated_entries_keep_the_original_index() {
+        let mut pool = ConstantPool::new();
+        let entry = Entry::Integer(42);
+
+        let first = pool.put_entry_deduplicated(entry.clone()).unwrap();
+        assert_eq!(first, (1, true));
+        assert_eq!(pool.put_entry_deduplicated(entry).unwrap(), (1, false));
+        assert_eq!(pool.count(), 2);
+    }
+
+    #[test]
+    fn long_and_double_entries_reserve_the_following_index() {
+        let mut pool = ConstantPool::new();
+
+        let long_index = pool.put_entry(Entry::Long(42)).unwrap();
+        let integer_index = pool.put_entry(Entry::Integer(7)).unwrap();
+        let double_index = pool.put_entry(Entry::Double(3.5)).unwrap();
+
+        assert_eq!((long_index, integer_index, double_index), (1, 3, 4));
+        assert_eq!(pool.get_entry(2), None);
+        assert_eq!(pool.get_entry(3), Some(&Entry::Integer(7)));
+        assert_eq!(pool.get_entry(5), None);
+        assert_eq!(pool.count(), 6);
+    }
+
+    #[test]
+    fn constant_pool_overflow_respects_reserved_slots() {
+        let mut pool = ConstantPool::new();
+        for _ in 0..(u16::MAX as usize - 2) {
+            pool.put_entry(Entry::Integer(0)).unwrap();
+        }
+
+        assert_eq!(pool.count(), u16::MAX - 1);
+        assert_eq!(pool.put_entry(Entry::Integer(1)).unwrap(), u16::MAX - 1);
+        assert_eq!(pool.count(), u16::MAX);
+        assert!(pool.put_entry(Entry::Integer(1)).is_err());
+        assert!(pool.put_entry(Entry::Long(1)).is_err());
     }
 
     proptest! {

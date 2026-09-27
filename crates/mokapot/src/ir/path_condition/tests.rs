@@ -56,10 +56,13 @@ fn arb_condition() -> impl Strategy<Value = PathCondition<u32>> {
     ]
 }
 
-/// A total truth assignment over every predicate id a generated condition can reference.
-fn arb_values() -> impl Strategy<Value = HashMap<u32, bool>> {
-    prop::collection::vec(any::<bool>(), PREDICATE_IDS as usize)
-        .prop_map(|values| (0..PREDICATE_IDS).zip(values).collect())
+/// Every truth assignment for the small predicate domain used by these tests.
+fn assignments() -> impl Iterator<Item = HashMap<u32, bool>> {
+    (0..(1 << PREDICATE_IDS)).map(|bits| {
+        (0..PREDICATE_IDS)
+            .map(|predicate| (predicate, bits & (1 << predicate) != 0))
+            .collect()
+    })
 }
 
 /// Budgets that exercise both the exact and the bounded heuristic reducer.
@@ -81,13 +84,14 @@ mod raw_structure {
         fn disjunction_matches_boolean_semantics(
             lhs in arb_condition(),
             rhs in arb_condition(),
-            values in arb_values(),
         ) {
             let disjunction = lhs.clone() | rhs.clone();
-            prop_assert_eq!(
-                evaluate(&lhs, &values) || evaluate(&rhs, &values),
-                evaluate(&disjunction, &values),
-            );
+            for values in assignments() {
+                prop_assert_eq!(
+                    evaluate(&lhs, &values) || evaluate(&rhs, &values),
+                    evaluate(&disjunction, &values),
+                );
+            }
         }
     }
 
@@ -150,16 +154,17 @@ mod explicit_reduction {
         #[test]
         fn reduction_preserves_meaning(
             condition in arb_condition(),
-            values in arb_values(),
             budget in arb_budget(),
         ) {
             let reduced = condition.clone().reduce_with_budget(budget);
-            prop_assert_eq!(
-                evaluate(&condition, &values),
-                evaluate(&reduced, &values),
-                "reduction changed the meaning of {}",
-                condition,
-            );
+            for values in assignments() {
+                prop_assert_eq!(
+                    evaluate(&condition, &values),
+                    evaluate(&reduced, &values),
+                    "reduction changed the meaning of {}",
+                    condition,
+                );
+            }
         }
     }
 }

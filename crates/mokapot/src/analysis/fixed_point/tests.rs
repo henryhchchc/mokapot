@@ -86,6 +86,52 @@ where
     assert_eq!(problem.one_calls, 1);
 }
 
+struct CyclicProblem;
+
+impl DataflowProblem for CyclicProblem {
+    type Location = u8;
+    type Fact = TestSet;
+    type Err = Infallible;
+
+    fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
+        [(0, TestSet(BTreeSet::new()))]
+    }
+
+    fn flow(
+        &mut self,
+        location: &Self::Location,
+        fact: &Self::Fact,
+    ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
+        let successor = 1 - *location;
+        let mut propagated = fact.clone();
+        propagated.0.insert(*location);
+        Ok([(successor, propagated)])
+    }
+}
+
+#[test]
+fn cyclic_flow_reaches_the_same_fixed_point_with_each_facts_map() {
+    let expected = TestSet(BTreeSet::from([0, 1]));
+    for facts in [
+        solve::<_, BTreeMap<u8, TestSet>>(&mut CyclicProblem)
+            .unwrap()
+            .into_iter()
+            .collect::<BTreeMap<_, _>>(),
+        solve::<_, HashMap<u8, TestSet>>(&mut CyclicProblem)
+            .unwrap()
+            .into_iter()
+            .collect(),
+        solve::<_, QueuedFactsMap<u8, TestSet>>(&mut CyclicProblem)
+            .unwrap()
+            .into_iter()
+            .collect(),
+    ] {
+        assert_eq!(facts.len(), 2);
+        assert_eq!(facts[&0], expected);
+        assert_eq!(facts[&1], expected);
+    }
+}
+
 proptest! {
    #[test]
    fn option_join_ordering(

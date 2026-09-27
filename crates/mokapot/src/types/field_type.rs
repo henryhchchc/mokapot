@@ -451,6 +451,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_object_name_and_descriptor_suffix() {
+        assert!(FieldType::from_str("L;").is_err());
+        assert!(FieldType::from_str("L/java/lang/String;").is_err());
+        assert!(FieldType::from_str("Ljava/lang/String;;").is_err());
+    }
+
+    #[test]
     fn missing_semicolon() {
         assert!(FieldType::from_str("Ljava/lang/String").is_err());
     }

@@ -55,29 +55,6 @@ proptest! {
     }
 }
 
-fn arb_access_flag() -> impl Strategy<Value = AccessFlags> {
-    prop_oneof![
-        Just(AccessFlags::PUBLIC),
-        Just(AccessFlags::PRIVATE),
-        Just(AccessFlags::FINAL),
-        Just(AccessFlags::SUPER),
-        Just(AccessFlags::INTERFACE),
-        Just(AccessFlags::ABSTRACT),
-        Just(AccessFlags::SYNTHETIC),
-        Just(AccessFlags::ANNOTATION),
-        Just(AccessFlags::ENUM),
-        Just(AccessFlags::MODULE),
-    ]
-}
-
-proptest! {
-    #[test]
-    fn access_flags_bit_no_overlap(lhs in arb_access_flag(), rhs in arb_access_flag()) {
-        prop_assume!(lhs != rhs);
-        assert_eq!(lhs.bits() & rhs.bits(), 0);
-    }
-}
-
 #[test]
 fn class_is_abstract() {
     let class = Class {

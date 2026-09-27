@@ -165,3 +165,59 @@ fn miri_opcode_matches_encoding() {
     };
     assert_eq!(wide_iinc.opcode(), 0x84);
 }
+
+#[test]
+fn instruction_operands_widths_and_switch_alignment_round_trip() {
+    use RawInstruction::*;
+
+    let instructions = [
+        IConst0,
+        BiPush { value: 0xFE },
+        SiPush { value: 0xFEDC },
+        Ldc { const_index: 0xFE },
+        LdcW {
+            const_index: 0xFEDC,
+        },
+        ILoad { index: 0xFE },
+        IInc {
+            index: 0xFE,
+            constant: -2,
+        },
+        Wide(RawWideInstruction::IInc {
+            index: 0xFEDC,
+            increment: -1234,
+        }),
+        InvokeInterface {
+            method_index: 0xFEDC,
+            count: 7,
+        },
+        TableSwitch {
+            default: -12,
+            low: -1,
+            high: 1,
+            jump_offsets: vec![10, -20, 30],
+        },
+        LookupSwitch {
+            default: 40,
+            match_offsets: vec![(-3, -30), (2, 20), (9, 90)],
+        },
+        GotoW { offset: -123_456 },
+    ];
+    let mut pc = ProgramCounter::default();
+    let mut positioned = Vec::with_capacity(instructions.len());
+    for instruction in instructions {
+        let length = instruction.num_bytes(pc).unwrap();
+        positioned.push((pc, instruction));
+        pc = (u16::from(pc) + length).into();
+    }
+    let original = InstructionList::from_iter(positioned);
+
+    let mut bytes = Vec::new();
+    original.to_writer(&mut bytes).unwrap();
+    let decoded = InstructionList::<RawInstruction>::from_bytes(bytes.clone()).unwrap();
+    let mut encoded_again = Vec::new();
+    decoded.to_writer(&mut encoded_again).unwrap();
+
+    assert_eq!(encoded_again, bytes);
+    assert!(decoded.iter().eq(original.iter()));
+}

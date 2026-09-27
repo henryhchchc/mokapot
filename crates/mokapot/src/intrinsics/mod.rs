@@ -117,6 +117,34 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    #[test]
+    fn failed_generation_can_be_retried() {
+        let cache = Cache::new();
+        let attempts = AtomicUsize::new(0);
+
+        let failed = cache.get_or_try_put("key", |_| {
+            attempts.fetch_add(1, atomic::Ordering::Relaxed);
+            Err::<u32, _>("failed")
+        });
+        assert_eq!(failed, Err("failed"));
+
+        let value = cache
+            .get_or_try_put("key", |_| {
+                attempts.fetch_add(1, atomic::Ordering::Relaxed);
+                Ok::<_, &str>(42)
+            })
+            .unwrap();
+        assert_eq!(*value, 42);
+        assert_eq!(attempts.load(atomic::Ordering::Relaxed), 2);
+
+        let cached = cache
+            .get_or_try_put("key", |_| -> Result<u32, &str> {
+                panic!("cached values must not be regenerated")
+            })
+            .unwrap();
+        assert_eq!(*cached, 42);
+    }
+
     proptest! {
         #[test]
         fn miri_get_or_try_put_generate_once(key in any::<u32>(), value in any::<u32>()) {

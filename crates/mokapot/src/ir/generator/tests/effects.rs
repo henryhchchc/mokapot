@@ -1,7 +1,11 @@
 use super::*;
-use crate::ir::{
-    MokaIRFrameError, ValueId,
-    expression::{ArrayOperation, Conversion, Expression, MathOperation},
+use crate::{
+    ir::{
+        MokaIRFrameError, ValueId,
+        expression::{ArrayOperation, Conversion, Expression, FieldAccess, MathOperation},
+    },
+    jvm::references::{FieldRef, MethodRef},
+    types::field_type::{FieldType, PrimitiveType},
 };
 
 /// Returns the value and expression of a definition operation.
@@ -10,6 +14,10 @@ fn definition(operation: &Operation) -> (ValueId, &Expression) {
         panic!("the operation must define a value");
     };
     (*value, expr)
+}
+
+fn assert_returns(ir: &MokaIRMethod, pc: u16, value: ValueId) {
+    assert_matches!(terminator_at(ir, pc.into()), Terminator::Return { value: Some(returned), .. } if *returned == value);
 }
 
 #[test]
@@ -125,9 +133,136 @@ fn monitor_operations_are_effects_without_definitions() {
     let instructions = terminator_operations(&ir).collect::<Vec<_>>();
 
     assert_eq!(instructions.len(), 2);
-    assert!(
-        instructions
-            .iter()
-            .all(|it| { it.def().is_none() && matches!(it, Operation::Effect { .. }) })
-    );
+    let are_effects = instructions
+        .iter()
+        .all(|it| it.def().is_none() && matches!(it, Operation::Effect { .. }));
+    assert!(are_effects);
+}
+
+#[test]
+fn calls_preserve_receiver_and_argument_order_and_void_effects() {
+    let method_ref = MethodRef {
+        owner: ref_t("java/lang/Object"),
+        name: "accept".to_owned(),
+        descriptor: "(IJ)V".parse().unwrap(),
+    };
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::ILoad1),
+        (2, Instruction::LLoad2),
+        (3, Instruction::InvokeVirtual(method_ref.clone())),
+        (4, Instruction::Return),
+    ];
+    let ir = lift(body, "(Ljava/lang/Object;IJ)V", vec![]);
+    let operation = terminator_at(&ir, 3.into()).operation().unwrap();
+    let Operation::Effect {
+        expr: Expression::Call { method, this, args },
+    } = operation
+    else {
+        panic!("void invocation must be an effect");
+    };
+    assert_eq!(method, &method_ref);
+    assert_eq!(*this, Some(ir.parameters[0]));
+    assert_eq!(args, &ir.parameters[1..]);
+
+    let static_method = MethodRef {
+        descriptor: "(I)I".parse().unwrap(),
+        ..method_ref
+    };
+    let body = [
+        (0, Instruction::ILoad0),
+        (1, Instruction::InvokeStatic(static_method.clone())),
+        (2, Instruction::IReturn),
+    ];
+    let ir = lift(body, "(I)I", vec![]);
+    let operation = terminator_at(&ir, 1.into()).operation().unwrap();
+    let (value, expression) = definition(operation);
+    let expected = Expression::Call {
+        method: static_method,
+        this: None,
+        args: ir.parameters.clone(),
+    };
+    assert_eq!(expression, &expected);
+    assert_returns(&ir, 2, value);
+}
+
+#[test]
+fn field_reads_define_values_and_writes_are_effects() {
+    let field = FieldRef {
+        owner: ref_t("java/lang/Object"),
+        name: "count".to_owned(),
+        field_type: FieldType::Base(PrimitiveType::Int),
+    };
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::GetField(field.clone())),
+        (2, Instruction::IReturn),
+    ];
+    let read = lift(body, "(Ljava/lang/Object;)I", vec![]);
+    let operation = terminator_at(&read, 1.into()).operation().unwrap();
+    let (value, expression) = definition(operation);
+    let expected = Expression::Field(FieldAccess::ReadInstance {
+        object_ref: read.parameters[0],
+        field: field.clone(),
+    });
+    assert_eq!(expression, &expected);
+    assert_returns(&read, 2, value);
+
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::ILoad1),
+        (2, Instruction::PutField(field.clone())),
+        (3, Instruction::Return),
+    ];
+    let write = lift(body, "(Ljava/lang/Object;I)V", vec![]);
+    let operation = terminator_at(&write, 2.into()).operation().unwrap();
+    let expected = effect(FieldAccess::WriteInstance {
+        object_ref: write.parameters[0],
+        field: field.clone(),
+        value: write.parameters[1],
+    });
+    assert_eq!(operation, &expected);
+
+    let body = [
+        (0, Instruction::GetStatic(field.clone())),
+        (1, Instruction::IReturn),
+    ];
+    let read = lift(body, "()I", vec![]);
+    let (value, expression) = definition(terminator_at(&read, 0.into()).operation().unwrap());
+    let expected = Expression::Field(FieldAccess::ReadStatic {
+        field: field.clone(),
+    });
+    assert_eq!(expression, &expected);
+    assert_returns(&read, 1, value);
+
+    let body = [
+        (0, Instruction::ILoad0),
+        (1, Instruction::PutStatic(field.clone())),
+        (2, Instruction::Return),
+    ];
+    let write = lift(body, "(I)V", vec![]);
+    let expected = effect(FieldAccess::WriteStatic {
+        field,
+        value: write.parameters[0],
+    });
+    assert_eq!(terminator_at(&write, 1.into()).operation(), Some(&expected));
+}
+
+#[test]
+fn array_read_uses_index_then_returns_the_defined_value() {
+    let body = [
+        (0, Instruction::ALoad0),
+        (1, Instruction::ILoad1),
+        (2, Instruction::IALoad),
+        (3, Instruction::IReturn),
+    ];
+    let ir = lift(body, "([II)I", vec![]);
+    let operation = terminator_at(&ir, 2.into()).operation().unwrap();
+    let (value, expression) = definition(operation);
+    let expected = Expression::Array(ArrayOperation::Read {
+        array_ref: ir.parameters[0],
+        index: ir.parameters[1],
+    });
+    assert_eq!(expression, &expected);
+    assert_returns(&ir, 3, value);
 }

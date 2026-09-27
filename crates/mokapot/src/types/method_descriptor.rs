@@ -235,6 +235,12 @@ mod test {
     }
 
     #[test]
+    fn rejects_void_parameters_and_trailing_return_data() {
+        assert!(MethodDescriptor::from_str("(V)V").is_err());
+        assert!(MethodDescriptor::from_str("()VV").is_err());
+    }
+
+    #[test]
     fn invalid_primitive() {
         let descriptor = "(V[Ljava/lang/String;J)V";
         let method_descriptor = MethodDescriptor::from_str(descriptor);

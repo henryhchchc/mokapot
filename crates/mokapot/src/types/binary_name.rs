@@ -157,9 +157,14 @@ fn validate(name: &str) -> Result<(), InvalidBinaryName> {
     if name.is_empty() {
         return Err(InvalidBinaryName("binary name must not be empty".into()));
     }
-    if name.starts_with('[') {
+    if name.contains('[') {
         return Err(InvalidBinaryName(format!(
-            "'{name}' starts with '['; binary names are class names, not array descriptors"
+            "'{name}' contains '['; binary names are class names, not array descriptors"
+        )));
+    }
+    if name.contains('.') {
+        return Err(InvalidBinaryName(format!(
+            "'{name}' contains '.'; binary names use '/' to separate class name segments"
         )));
     }
     if name.contains(';') {
@@ -213,6 +218,20 @@ mod tests {
             segments.insert(insertion_point, String::new());
 
             prop_assert!(segments.join("/").parse::<BinaryName>().is_err());
+        }
+    }
+
+    #[test]
+    fn rejects_empty_segments_and_descriptor_delimiters() {
+        for name in [
+            "/java/lang/String",
+            "java/lang/String/",
+            "java//lang/String",
+        ] {
+            assert!(name.parse::<BinaryName>().is_err(), "accepted {name:?}");
+        }
+        for name in ["java/lang;String", "java/[lang/String", "java/lang.String"] {
+            assert!(name.parse::<BinaryName>().is_err(), "accepted {name:?}");
         }
     }
 

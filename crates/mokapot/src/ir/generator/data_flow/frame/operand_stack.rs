@@ -255,25 +255,25 @@ mod tests {
     /// Applies `operation` to `input` and reads `expected` back through
     /// [`OperandStack::pop`]; both lists are bottom-to-top.
     #[doc = see_jvm_spec!(6, 5)]
-    fn assert_reads_back(
+    fn assert_reads_back<Input, Expected>(
         operation: StackOperation,
-        input: &[(ValueId, ValueCategory)],
-        expected: &[(ValueId, ValueCategory)],
-    ) {
+        input: Input,
+        expected: Expected,
+    ) where
+        Input: IntoIterator<Item = (ValueId, ValueCategory)>,
+        Expected: IntoIterator<Item = (ValueId, ValueCategory)>,
+        <Expected as IntoIterator>::IntoIter: DoubleEndedIterator,
+    {
         let items: Vec<StackItem> = input
-            .iter()
-            .map(|&(value, category)| StackItem { value, category })
+            .into_iter()
+            .map(|(value, category)| StackItem { value, category })
             .collect();
         let mut stack = stack_with(&items, 2);
         stack
             .apply(operation)
             .expect("the operands fit a form of the instruction");
-        for &(value, category) in expected.iter().rev() {
-            assert_eq!(
-                stack.pop(category),
-                Ok(value),
-                "{operation:?} did not leave {expected:?}",
-            );
+        for (value, category) in expected.into_iter().rev() {
+            assert_eq!(stack.pop(category), Ok(value));
         }
         assert_eq!(stack.slot_count, 0, "{operation:?} left operands behind");
     }
@@ -401,17 +401,30 @@ mod tests {
         let c1 = |value: ValueId| (value, Category1);
         let c2 = |value: ValueId| (value, Category2);
 
-        assert_reads_back(Dup, &[c1(a)], &[c1(a), c1(a)]);
-        assert_reads_back(DupX1, &[c1(a), c1(c)], &[c1(c), c1(a), c1(c)]);
-        assert_reads_back(DupX2, &[c2(b), c1(a)], &[c1(a), c2(b), c1(a)]);
-        assert_reads_back(Dup2, &[c1(a), c1(c)], &[c1(a), c1(c), c1(a), c1(c)]);
-        assert_reads_back(Dup2, &[c2(b)], &[c2(b), c2(b)]);
-        assert_reads_back(Dup2X1, &[c1(a), c2(b)], &[c2(b), c1(a), c2(b)]);
+        assert_reads_back(Dup, [c1(a)], [c1(a), c1(a)]);
+        assert_reads_back(DupX1, [c1(a), c1(c)], [c1(c), c1(a), c1(c)]);
+        assert_reads_back(DupX2, [c1(a), c1(b), c1(c)], [c1(c), c1(a), c1(b), c1(c)]);
+        assert_reads_back(DupX2, [c2(b), c1(a)], [c1(a), c2(b), c1(a)]);
+        assert_reads_back(Dup2, [c1(a), c1(c)], [c1(a), c1(c), c1(a), c1(c)]);
+        assert_reads_back(Dup2, [c2(b)], [c2(b), c2(b)]);
+        assert_reads_back(Dup2X1, [c1(a), c2(b)], [c2(b), c1(a), c2(b)]);
+        assert_reads_back(
+            Dup2X1,
+            [c1(a), c1(b), c1(c)],
+            [c1(b), c1(c), c1(a), c1(b), c1(c)],
+        );
         assert_reads_back(
             Dup2X2,
-            &[c1(a), c1(b), c1(c), c1(d)],
-            &[c1(c), c1(d), c1(a), c1(b), c1(c), c1(d)],
+            [c1(a), c1(b), c1(c), c1(d)],
+            [c1(c), c1(d), c1(a), c1(b), c1(c), c1(d)],
         );
-        assert_reads_back(Swap, &[c1(a), c1(c)], &[c1(c), c1(a)]);
+        assert_reads_back(Dup2X2, [c1(a), c1(b), c2(c)], [c2(c), c1(a), c1(b), c2(c)]);
+        assert_reads_back(
+            Dup2X2,
+            [c2(a), c1(b), c1(c)],
+            [c1(b), c1(c), c2(a), c1(b), c1(c)],
+        );
+        assert_reads_back(Dup2X2, [c2(a), c2(b)], [c2(b), c2(a), c2(b)]);
+        assert_reads_back(Swap, [c1(a), c1(c)], [c1(c), c1(a)]);
     }
 }

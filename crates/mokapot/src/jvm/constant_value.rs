@@ -159,6 +159,17 @@ mod tests {
     };
 
     use super::ConstantValue;
+    use crate::{
+        jvm::{
+            JavaString,
+            class::MethodHandle,
+            references::{ClassRef, FieldRef},
+        },
+        types::{
+            field_type::{FieldType, PrimitiveType},
+            reference_type::ReferenceType,
+        },
+    };
 
     #[test]
     fn floating_point_order_and_identity() {
@@ -209,14 +220,27 @@ mod tests {
     }
 
     #[test]
-    fn primitive_variant_order() {
+    fn all_variant_order() {
+        let owner = ReferenceType::Class("Example".parse::<ClassRef>().unwrap());
+        let field = FieldRef {
+            owner: owner.clone(),
+            name: "field".into(),
+            field_type: FieldType::Base(PrimitiveType::Int),
+        };
+        let method_type = "()V".parse().unwrap();
         let values = [
             ConstantValue::Null,
-            ConstantValue::Integer(i32::MAX),
-            ConstantValue::Float(f32::NAN),
-            ConstantValue::Long(i64::MIN),
-            ConstantValue::Double(f64::NEG_INFINITY),
+            ConstantValue::Integer(0),
+            ConstantValue::Float(0.0),
+            ConstantValue::Long(0),
+            ConstantValue::Double(0.0),
+            ConstantValue::String(JavaString::Utf8(String::new())),
+            ConstantValue::Class(owner.clone()),
+            ConstantValue::Handle(MethodHandle::RefGetField(field)),
+            ConstantValue::MethodType(method_type),
+            ConstantValue::Dynamic(0, String::new(), FieldType::Base(PrimitiveType::Int)),
         ];
+
         for (i, lhs) in values.iter().enumerate() {
             for (j, rhs) in values.iter().enumerate() {
                 assert_eq!(lhs.cmp(rhs), i.cmp(&j));
