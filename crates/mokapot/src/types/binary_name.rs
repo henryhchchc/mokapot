@@ -34,7 +34,7 @@ use crate::intrinsics::see_jvm_spec;
 /// assert_eq!(name.to_qualified_name(), "java.lang.String");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BinaryName(Box<str>);
 
 /// An error indicating that a string is not a valid JVM binary name.

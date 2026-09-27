@@ -41,7 +41,7 @@ use crate::{
 /// This is a strict subset of [`FieldType`]: it excludes primitive base types
 /// since `CONSTANT_Class_info` never references those.
 #[doc = see_jvm_spec!(4, 4, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ReferenceType {
     /// A class or interface type (e.g., `java/lang/String`).
     Class(ClassRef),

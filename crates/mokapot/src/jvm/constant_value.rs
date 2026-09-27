@@ -1,6 +1,6 @@
 //! JVM compile-time constant values.
 
-use std::{cmp::Ordering, hash::Hash};
+use std::hash::Hash;
 
 use super::{JavaString, class::MethodHandle};
 use crate::{
@@ -12,8 +12,6 @@ use crate::{
 
 /// Denotes a compile-time constant value.
 ///
-/// Values sort by variant declaration order, then by payload. Within each floating-point
-/// variant, all NaNs are equal and sort last, while negative zero precedes positive zero.
 #[doc = see_jvm_spec!(4, 4)]
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum ConstantValue {
@@ -50,23 +48,6 @@ pub enum ConstantValue {
     Dynamic(u16, String, FieldType),
 }
 
-impl ConstantValue {
-    const fn rank(&self) -> u8 {
-        match self {
-            Self::Null => 0,
-            Self::Integer(_) => 1,
-            Self::Float(_) => 2,
-            Self::Long(_) => 3,
-            Self::Double(_) => 4,
-            Self::String(_) => 5,
-            Self::Class(_) => 6,
-            Self::Handle(_) => 7,
-            Self::MethodType(_) => 8,
-            Self::Dynamic(..) => 9,
-        }
-    }
-}
-
 impl PartialEq<Self> for ConstantValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -90,42 +71,6 @@ impl PartialEq<Self> for ConstantValue {
 }
 
 impl Eq for ConstantValue {}
-
-impl PartialOrd for ConstantValue {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for ConstantValue {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::Null, Self::Null) => Ordering::Equal,
-            (Self::Integer(lhs), Self::Integer(rhs)) => lhs.cmp(rhs),
-            (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                (true, true) => Ordering::Equal,
-                (true, false) => Ordering::Greater,
-                (false, true) => Ordering::Less,
-                (false, false) => lhs.total_cmp(rhs),
-            },
-            (Self::Long(lhs), Self::Long(rhs)) => lhs.cmp(rhs),
-            (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                (true, true) => Ordering::Equal,
-                (true, false) => Ordering::Greater,
-                (false, true) => Ordering::Less,
-                (false, false) => lhs.total_cmp(rhs),
-            },
-            (Self::String(lhs), Self::String(rhs)) => lhs.cmp(rhs),
-            (Self::Class(lhs), Self::Class(rhs)) => lhs.cmp(rhs),
-            (Self::Handle(lhs), Self::Handle(rhs)) => lhs.cmp(rhs),
-            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs.cmp(rhs),
-            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
-                (lhs0, lhs1, lhs2).cmp(&(rhs0, rhs1, rhs2))
-            }
-            _ => self.rank().cmp(&other.rank()),
-        }
-    }
-}
 
 impl Hash for ConstantValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -154,25 +99,14 @@ impl Hash for ConstantValue {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::{BTreeSet, HashSet, hash_map::DefaultHasher},
+        collections::{HashSet, hash_map::DefaultHasher},
         hash::{Hash, Hasher},
     };
 
     use super::ConstantValue;
-    use crate::{
-        jvm::{
-            JavaString,
-            class::MethodHandle,
-            references::{ClassRef, FieldRef},
-        },
-        types::{
-            field_type::{FieldType, PrimitiveType},
-            reference_type::ReferenceType,
-        },
-    };
 
     #[test]
-    fn floating_point_order_and_identity() {
+    fn floating_point_identity() {
         let floats = [
             f32::NEG_INFINITY,
             -1.0,
@@ -201,10 +135,7 @@ mod tests {
         for values in [floats, doubles] {
             for (i, lhs) in values.iter().enumerate() {
                 for (j, rhs) in values.iter().enumerate() {
-                    let expected = i.min(6).cmp(&j.min(6));
-                    assert_eq!(lhs.cmp(rhs), expected);
-                    assert_eq!(lhs.partial_cmp(rhs), Some(expected));
-                    assert_eq!(lhs == rhs, expected.is_eq());
+                    assert_eq!(lhs == rhs, i.min(6) == j.min(6));
                     if lhs == rhs {
                         let mut lhs_hash = DefaultHasher::new();
                         let mut rhs_hash = DefaultHasher::new();
@@ -214,37 +145,7 @@ mod tests {
                     }
                 }
             }
-            assert_eq!(values.iter().collect::<BTreeSet<_>>().len(), 7);
             assert_eq!(values.iter().collect::<HashSet<_>>().len(), 7);
-        }
-    }
-
-    #[test]
-    fn all_variant_order() {
-        let owner = ReferenceType::Class("Example".parse::<ClassRef>().unwrap());
-        let field = FieldRef {
-            owner: owner.clone(),
-            name: "field".into(),
-            field_type: FieldType::Base(PrimitiveType::Int),
-        };
-        let method_type = "()V".parse().unwrap();
-        let values = [
-            ConstantValue::Null,
-            ConstantValue::Integer(0),
-            ConstantValue::Float(0.0),
-            ConstantValue::Long(0),
-            ConstantValue::Double(0.0),
-            ConstantValue::String(JavaString::Utf8(String::new())),
-            ConstantValue::Class(owner.clone()),
-            ConstantValue::Handle(MethodHandle::RefGetField(field)),
-            ConstantValue::MethodType(method_type),
-            ConstantValue::Dynamic(0, String::new(), FieldType::Base(PrimitiveType::Int)),
-        ];
-
-        for (i, lhs) in values.iter().enumerate() {
-            for (j, rhs) in values.iter().enumerate() {
-                assert_eq!(lhs.cmp(rhs), i.cmp(&j));
-            }
         }
     }
 }

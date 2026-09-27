@@ -58,7 +58,7 @@ use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
 /// assert_eq!(PrimitiveType::Long.to_string(), "long");
 /// ```
 #[doc = see_jvm_spec!(2, 3)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
     /// The `boolean` type (descriptor: 'Z')
@@ -213,7 +213,7 @@ impl ValueCategory {
 /// ```
 ///
 #[doc = see_jvm_spec!(4, 3, 2)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
 pub enum FieldType {
     /// A primitive type.
     Base(PrimitiveType),
