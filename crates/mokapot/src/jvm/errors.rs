@@ -103,22 +103,15 @@ impl From<io::Error> for BytecodeError<ParseErrorKind> {
 ///
 /// This enum represents the different categories of errors that can occur
 /// during parsing of a class file.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, derive_more::Display)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
     /// An error occurred while reading from the underlying input source.
+    #[display("IO Error")]
     IO,
     /// The class file is malformed and does not conform to the JVM specification.
+    #[display("Malformed class file")]
     Malformed,
-}
-
-impl Display for ParseErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IO => write!(f, "IO Error"),
-            Self::Malformed => write!(f, "Malformed class file"),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -262,33 +255,26 @@ impl From<TryFromIntError> for BytecodeError<GenerationErrorKind> {
 ///
 /// This enum represents the different categories of errors that can occur
 /// during bytecode generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
 #[non_exhaustive]
 #[instability::unstable(feature = "bytecode-generation")]
 pub enum GenerationErrorKind {
     /// An error occurred while writing to the underlying output destination.
+    #[display("IO Error")]
     IO,
     /// A value exceeds the maximum allowed by the JVM specification.
     ///
     /// For example, an instruction list containing more than 65535 instructions,
     /// which exceeds the maximum number that can be represented in a 16-bit field.
+    #[display("Out of range error")]
     OutOfRange,
     /// An error occurred when operating on the constant pool.
     ///
     /// This could be due to reaching the maximum number of entries
     /// or trying to add an invalid entry.
+    #[display("Constant pool error")]
     ConstantPool,
     /// Other errors that don't fall into the above categories.
+    #[display("Other error")]
     Other,
-}
-
-impl Display for GenerationErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IO => write!(f, "IO Error"),
-            Self::OutOfRange => write!(f, "Out of range error"),
-            Self::ConstantPool => write!(f, "Constant pool error"),
-            Self::Other => write!(f, "Other error"),
-        }
-    }
 }

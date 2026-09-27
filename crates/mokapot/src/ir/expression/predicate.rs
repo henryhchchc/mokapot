@@ -91,24 +91,12 @@ impl From<Predicate> for BooleanVariable<Predicate> {
 }
 
 /// An SSA value or constant in a path predicate.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display, derive_more::From)]
 pub enum PathValue {
     /// A value produced by the IR.
-    Variable(ValueId),
+    Variable(#[from] ValueId),
     /// A JVM constant embedded in the condition.
-    Constant(ConstantValue),
-}
-
-impl From<ValueId> for PathValue {
-    fn from(value: ValueId) -> Self {
-        Self::Variable(value)
-    }
-}
-
-impl From<ConstantValue> for PathValue {
-    fn from(value: ConstantValue) -> Self {
-        Self::Constant(value)
-    }
+    Constant(#[from] ConstantValue),
 }
 
 impl Predicate {

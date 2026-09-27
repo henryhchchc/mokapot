@@ -28,7 +28,7 @@
 //! assert_eq!(class_type.to_string(), "java/lang/String");
 //! ```
 
-use std::{fmt, str::FromStr};
+use std::str::FromStr;
 
 use crate::{
     intrinsics::see_jvm_spec,
@@ -41,11 +41,13 @@ use crate::{
 /// This is a strict subset of [`FieldType`]: it excludes primitive base types
 /// since `CONSTANT_Class_info` never references those.
 #[doc = see_jvm_spec!(4, 4, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::Display, derive_more::From)]
 pub enum ReferenceType {
     /// A class or interface type (e.g., `java/lang/String`).
-    Class(ClassRef),
+    #[display("{_0}")]
+    Class(#[from] ClassRef),
     /// An array type (e.g., `[I`, `[Ljava/lang/Object;`).
+    #[display("{_0}")]
     Array(Box<FieldType>),
 }
 
@@ -66,25 +68,10 @@ impl Descriptor for ReferenceType {
     }
 }
 
-impl fmt::Display for ReferenceType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Class(class_ref) => write!(f, "{class_ref}"),
-            Self::Array(inner) => write!(f, "{inner}"),
-        }
-    }
-}
-
-impl From<ClassRef> for ReferenceType {
-    fn from(class_ref: ClassRef) -> Self {
-        Self::Class(class_ref)
-    }
-}
-
 impl From<ReferenceType> for FieldType {
     fn from(rt: ReferenceType) -> Self {
         match rt {
-            ReferenceType::Class(cr) => FieldType::Object(cr),
+            ReferenceType::Class(cr) => cr.into(),
             ReferenceType::Array(ft) => FieldType::Array(ft),
         }
     }

@@ -143,7 +143,7 @@ pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
         any::<PrimitiveType>().prop_map(FieldType::Base),
         arb_binary_name()
             .prop_map(ClassRef)
-            .prop_map(FieldType::Object),
+            .prop_map(FieldType::from),
     ]
 }
 

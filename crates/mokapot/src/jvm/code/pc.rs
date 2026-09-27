@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Add};
+use std::ops::Add;
 
 /// Denotes a program counter in an instruction sequence.
 #[derive(
@@ -13,9 +13,11 @@ use std::{fmt::Debug, ops::Add};
     derive_more::From,
     derive_more::Into,
     derive_more::Display,
+    derive_more::Debug,
 )]
 #[repr(transparent)]
 #[display("#{_0:04X}")]
+#[debug("ProgramCounter(#{_0:04X})")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProgramCounter(u16);
 
@@ -90,12 +92,6 @@ impl ProgramCounter {
 
     pub(crate) const fn into_inner(self) -> u16 {
         self.0
-    }
-}
-
-impl Debug for ProgramCounter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ProgramCounter(#{:04X})", self.0)
     }
 }
 

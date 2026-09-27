@@ -213,12 +213,12 @@ impl ValueCategory {
 /// ```
 ///
 #[doc = see_jvm_spec!(4, 3, 2)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display, derive_more::From)]
 pub enum FieldType {
     /// A primitive type.
-    Base(PrimitiveType),
+    Base(#[from] PrimitiveType),
     /// A reference type (except arrays).
-    Object(ClassRef),
+    Object(#[from] ClassRef),
     /// An array type.
     #[display("{_0}[]")]
     Array(Box<FieldType>),
@@ -250,7 +250,7 @@ impl FieldType {
             } else {
                 let class_ref = ClassRef(binary_name.parse().map_err(|_| InvalidDescriptor)?);
                 *input = after_semi;
-                Ok(Self::Object(class_ref))
+                Ok(class_ref.into())
             }
         } else {
             Err(InvalidDescriptor)
@@ -301,12 +301,6 @@ impl FromStr for FieldType {
         } else {
             Err(InvalidDescriptor)
         }
-    }
-}
-
-impl From<PrimitiveType> for FieldType {
-    fn from(it: PrimitiveType) -> Self {
-        Self::Base(it)
     }
 }
 
@@ -374,9 +368,11 @@ mod tests {
 
     #[test]
     fn field_type_display() {
-        use FieldType::Object;
         let object = "java/lang/Object".parse::<ClassRef>().unwrap();
-        assert_eq!(Object(object.clone()).to_string(), "java/lang/Object");
+        assert_eq!(
+            FieldType::from(object.clone()).to_string(),
+            "java/lang/Object"
+        );
         assert_eq!(
             FieldType::Base(PrimitiveType::Int)
                 .into_array_type()
@@ -384,7 +380,7 @@ mod tests {
             "int[]"
         );
         assert_eq!(
-            Object(object).into_array_type().to_string(),
+            FieldType::from(object).into_array_type().to_string(),
             "java/lang/Object[]"
         );
     }
@@ -393,7 +389,7 @@ mod tests {
         #[test]
         fn field_type_from_str_class(class_name in arb_binary_name()) {
             let s = format!("L{class_name};");
-            let expected = FieldType::Object(ClassRef(class_name));
+            let expected: FieldType = ClassRef(class_name).into();
             assert_eq!(s.parse(), Ok(expected));
         }
 

@@ -1,27 +1,17 @@
 //! Signed predicates used as boolean literals in conditions.
 
-use std::{fmt::Display, ops::Not};
+use std::ops::Not;
 
 /// A variable in a path condition: a positive or negative occurrence of a
 /// predicate.
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display)]
 pub enum BooleanVariable<P> {
     /// A positive variable.
+    #[display("{_0}")]
     Positive(P),
     /// A negative variable.
+    #[display("~({_0})")]
     Negative(P),
-}
-
-impl<P> Display for BooleanVariable<P>
-where
-    P: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Positive(predicate) => predicate.fmt(f),
-            Self::Negative(predicate) => write!(f, "~({predicate})"),
-        }
-    }
 }
 
 impl<P> Not for BooleanVariable<P> {

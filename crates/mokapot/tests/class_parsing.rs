@@ -55,7 +55,7 @@ fn test_parse_my_class() {
         .expect("Cannot find main method");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::Object("java/lang/String".parse().unwrap()).into_array_type(),
+        FieldType::from("java/lang/String".parse::<ClassRef>().unwrap()).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }

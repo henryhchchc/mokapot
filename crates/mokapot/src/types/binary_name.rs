@@ -18,7 +18,7 @@
 //! These checks catch the common mistake of using a descriptor where a binary name
 //! is expected, or vice versa.
 
-use std::{fmt, ops::Deref, str::FromStr};
+use std::str::FromStr;
 
 use crate::intrinsics::see_jvm_spec;
 
@@ -34,7 +34,12 @@ use crate::intrinsics::see_jvm_spec;
 /// assert_eq!(name.to_qualified_name(), "java.lang.String");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, derive_more::Deref, derive_more::AsRef, derive_more::Display,
+)]
+#[deref(forward)]
+#[as_ref(str)]
+#[display("{_0}")]
 pub struct BinaryName(Box<str>);
 
 /// An error indicating that a string is not a valid JVM binary name.
@@ -112,14 +117,6 @@ impl BinaryName {
     }
 }
 
-impl Deref for BinaryName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl PartialEq<&str> for BinaryName {
     fn eq(&self, other: &&str) -> bool {
         self.0.as_ref() == *other
@@ -129,18 +126,6 @@ impl PartialEq<&str> for BinaryName {
 impl PartialEq<BinaryName> for &str {
     fn eq(&self, other: &BinaryName) -> bool {
         *self == other.0.as_ref()
-    }
-}
-
-impl AsRef<str> for BinaryName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for BinaryName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
     }
 }
 
