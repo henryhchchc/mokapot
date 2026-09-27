@@ -1,6 +1,6 @@
 //! JVM compile-time constant values.
 
-use std::hash::Hash;
+use std::{cmp::Ordering, hash::Hash};
 
 use super::{JavaString, class::MethodHandle};
 use crate::{
@@ -66,6 +66,28 @@ impl PartialEq<Self> for ConstantValue {
                 lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
             }
             _ => false,
+        }
+    }
+}
+
+impl PartialOrd for ConstantValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Self::Null, Self::Null) => Some(Ordering::Equal),
+            (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                (true, true) => Some(Ordering::Equal),
+                (false, false) => lhs.partial_cmp(rhs),
+                _ => None,
+            },
+            (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                (true, true) => Some(Ordering::Equal),
+                (false, false) => lhs.partial_cmp(rhs),
+                _ => None,
+            },
+            (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
+            _ => None,
         }
     }
 }

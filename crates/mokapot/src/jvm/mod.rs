@@ -212,7 +212,7 @@ pub struct Module {
 }
 
 /// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, Clone, Hash, derive_more::Display)]
+#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.
