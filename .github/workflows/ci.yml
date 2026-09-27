@@ -188,6 +188,7 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         env:
+          RUSTFLAGS: -C target-cpu=native
           MOKAPOT_SKIP_JAVA_TESTS: 1
         run: |
           cargo llvm-cov clean --workspace
@@ -242,6 +243,8 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         timeout-minutes: 10
+        env:
+          RUSTFLAGS: -C target-cpu=native
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report -E 'kind(test)'
@@ -309,6 +312,7 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-cargo-target-
       - name: Test
         env:
+          RUSTFLAGS: -C target-cpu=native
           MOKAPOT_SKIP_JAVA_TESTS: 1
           JDK_CLASSES: ${{ github.workspace }}/jdk_classes
         timeout-minutes: 10
@@ -350,6 +354,7 @@ jobs:
         run: cargo +nightly miri setup
       - name: Test with Miri
         env:
+          RUSTFLAGS: -C target-cpu=native
           MIRIFLAGS: -Zmiri-env-set=PROPTEST_CASES=4 -Zmiri-env-set=PROPTEST_DISABLE_FAILURE_PERSISTENCE=1
           MOKAPOT_SKIP_JAVA_TESTS: 1
         run: cargo +nightly miri nextest run -p mokapot --all-features --lib --no-tests=fail
