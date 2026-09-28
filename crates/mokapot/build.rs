@@ -14,10 +14,13 @@ fn main() {
     println!("cargo::rerun-if-changed=test_data");
 
     match env::var(SKIP_JAVA_TESTS).as_deref() {
-        Ok("1") => return,
-        Err(env::VarError::NotPresent) => {}
+        Ok("1") => {}
+        Err(env::VarError::NotPresent) => build_java_fixtures(),
         _ => panic!("{SKIP_JAVA_TESTS} must be unset or set to 1"),
     }
+}
+
+fn build_java_fixtures() {
     println!("cargo::rustc-cfg=java_fixture_tests");
 
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR")).join("mokapot");
