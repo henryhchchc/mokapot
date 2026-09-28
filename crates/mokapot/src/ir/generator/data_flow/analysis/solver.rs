@@ -8,7 +8,11 @@ use super::{
 };
 use crate::ir::{
     BlockId,
-    generator::{control_flow::Cfg, error::Error, worklist::Worklist},
+    generator::{
+        control_flow::Cfg,
+        error::{Error, ResultExt},
+        worklist::Worklist,
+    },
 };
 
 pub(crate) struct DataflowSolver<'method, 'cfg> {
@@ -53,10 +57,11 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
             for (source, target, frame) in outputs {
                 let input_changed = match self.blocks.entry(target) {
                     Entry::Occupied(mut entry) => {
-                        let block_pc = self.interpreter.block_pc(target);
-                        entry
-                            .get_mut()
-                            .add_frame(source, frame, block_pc, &mut self.values)?
+                        let result = entry.get_mut().add_frame(source, frame, &mut self.values);
+                        match self.interpreter.block_pc(target) {
+                            Some(pc) => result.at_pc(pc)?,
+                            None => result?,
+                        }
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(BlockState::new(source, frame));

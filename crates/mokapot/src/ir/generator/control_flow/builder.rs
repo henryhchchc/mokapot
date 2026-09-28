@@ -5,13 +5,13 @@ use super::{
     layout::{BlockLayout, BlockShape},
 };
 use crate::{
-    ir::{BlockId, IdAllocator},
+    ir::{BlockId, IdAllocator, generator::error::ErrorKind},
     jvm::{Method, code::ProgramCounter},
 };
 
 /// Builds the reachable control-flow graph of one method.
 pub(super) fn build(method: &Method) -> Result<Cfg<'_>, Error> {
-    let body = method.body.as_ref().ok_or(Error::MissingOrEmptyBody)?;
+    let body = method.body.as_ref().ok_or(ErrorKind::MissingOrEmptyBody)?;
     let mut layout = BlockLayout::of(body)?;
     let reachable = ReachableNodes::discover(&layout);
     let ids = NodeIds::allocate(&reachable);

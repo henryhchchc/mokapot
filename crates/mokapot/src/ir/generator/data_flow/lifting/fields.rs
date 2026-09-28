@@ -1,14 +1,14 @@
 use ValueCategory::Category1;
 
-use super::LiftContext;
+use super::{FrameError, LiftContext};
 use crate::{
-    ir::{Operation, ValueId, expression::FieldAccess, generator::error::Error},
+    ir::{Operation, ValueId, expression::FieldAccess},
     jvm::references::FieldRef,
     types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {
-    pub fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         self.frame
             .stack
@@ -20,7 +20,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
@@ -34,7 +34,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
         let field = field.clone();
         Ok(Some(Operation::Effect {
@@ -42,7 +42,7 @@ impl LiftContext<'_, '_> {
         }))
     }
 
-    pub fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, Error> {
+    pub fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(Some(Operation::Effect {
@@ -55,7 +55,7 @@ impl LiftContext<'_, '_> {
         }))
     }
 
-    fn pop_field_value(&mut self, field: &FieldRef) -> Result<ValueId, Error> {
-        Ok(self.frame.stack.pop(field.field_type.value_category())?)
+    fn pop_field_value(&mut self, field: &FieldRef) -> Result<ValueId, FrameError> {
+        self.frame.stack.pop(field.field_type.value_category())
     }
 }

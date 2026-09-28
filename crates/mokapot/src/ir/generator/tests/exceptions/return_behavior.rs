@@ -1,5 +1,29 @@
 use super::*;
-use crate::{ir::BlockKind, jvm::method};
+use crate::{
+    ir::{BlockKind, MokaIRBuildErrorKind},
+    jvm::method,
+};
+
+#[test]
+fn synchronized_return_reports_handler_frame_overflow_at_return() {
+    let mut method = method(
+        [
+            (4, Instruction::Return),
+            (10, Instruction::AStore0),
+            (11, Instruction::Return),
+        ],
+        "()V",
+        vec![handler(4.into()..5.into(), 10.into(), None)],
+    );
+    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    method.body.as_mut().expect("method has a body").max_stack = 0;
+
+    let failure = build_failure(&method);
+    assert_eq!(
+        failure,
+        (Some(4.into()), MokaIRBuildErrorKind::StackOverflow)
+    );
+}
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {

@@ -7,7 +7,7 @@ mod operand_stack;
 #[cfg(test)]
 mod tests;
 
-pub use error::Error as FrameError;
+pub(crate) use error::FrameError;
 use local_variables::LocalVariables;
 use operand_stack::OperandStack;
 pub(super) use operand_stack::StackOperation;

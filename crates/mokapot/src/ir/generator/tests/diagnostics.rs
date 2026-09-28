@@ -1,21 +1,38 @@
-use std::iter;
+use std::{error::Error, iter};
 
 use super::*;
 use crate::{
     ir::{
-        MalformedControlFlow::{
-            InvalidMultiArrayDimensions, InvalidTableSwitchRange, MissingFallthrough,
-            MissingInstruction,
+        MokaIRBuildError,
+        MokaIRBuildErrorKind::{
+            IncompatibleFrameShape, InvalidMultiArrayDimensions, InvalidTableSwitchRange,
+            LocalIndexOutOfBounds, MissingFallthrough, MissingInstruction, MissingOrEmptyBody,
+            StackUnderflow, UnsupportedLegacySubroutine,
         },
-        UnsupportedBytecode::LegacySubroutine,
     },
     jvm::code::WideInstruction,
 };
 
 #[test]
+fn build_error_display_includes_optional_pc_and_has_no_source() {
+    let kind = MissingOrEmptyBody;
+    let without_pc = MokaIRBuildError { kind, pc: None };
+    assert_eq!(without_pc.to_string(), kind.to_string());
+    assert!(without_pc.source().is_none());
+
+    let pc = 7.into();
+    let with_pc = MokaIRBuildError {
+        kind: StackUnderflow,
+        pc: Some(pc),
+    };
+    assert_eq!(with_pc.to_string(), format!("{StackUnderflow} at {pc}"));
+    assert!(with_pc.source().is_none());
+}
+
+#[test]
 fn reports_empty_code_at_the_method_boundary() {
     let method = method(iter::empty::<(u16, Instruction)>(), "()V", vec![]);
-    assert_matches!(build(&method), Err(MokaIRBuildError::MissingOrEmptyBody));
+    assert_matches!(build(&method), Err(error) if error.kind == MissingOrEmptyBody && error.pc.is_none());
 }
 
 #[test]
@@ -23,7 +40,7 @@ fn reports_a_missing_jump_target_at_that_target() {
     let method = method([(0, Instruction::Goto(10.into()))], "()V", vec![]);
     assert_matches!(
         build(&method),
-        Err(MokaIRBuildError::ControlFlow(MissingInstruction(pc))) if pc == 10.into()
+        Err(error) if error.kind == MissingInstruction && error.pc == Some(10.into())
     );
 }
 
@@ -42,7 +59,7 @@ fn rejects_tableswitch_cases_outside_i32_range() {
     let method = method(instructions, "(I)V", vec![]);
     assert_matches!(
         build(&method),
-        Err(MokaIRBuildError::ControlFlow(InvalidTableSwitchRange(pc))) if pc == 1.into()
+        Err(error) if error.kind == InvalidTableSwitchRange && error.pc == Some(1.into())
     );
 }
 
@@ -61,7 +78,7 @@ fn rejects_tableswitch_without_cases() {
     let method = method(instructions, "(I)V", vec![]);
     assert_matches!(
         build(&method),
-        Err(MokaIRBuildError::ControlFlow(InvalidTableSwitchRange(pc))) if pc == 1.into()
+        Err(error) if error.kind == InvalidTableSwitchRange && error.pc == Some(1.into())
     );
 }
 
@@ -79,7 +96,7 @@ fn rejects_invalid_multianewarray_dimensions() {
         let method = method(instructions, "()V", vec![]);
         assert_matches!(
             build(&method),
-            Err(MokaIRBuildError::ControlFlow(InvalidMultiArrayDimensions(pc))) if pc == 1.into()
+            Err(error) if error.kind == InvalidMultiArrayDimensions && error.pc == Some(1.into())
         );
     }
 }
@@ -93,21 +110,37 @@ fn rejects_a_missing_structural_target_even_when_its_source_is_unreachable() {
     );
     assert_matches!(
         build(&method),
-        Err(MokaIRBuildError::ControlFlow(MissingInstruction(pc))) if pc == 10.into()
+        Err(error) if error.kind == MissingInstruction && error.pc == Some(10.into())
     );
 }
 
 #[test]
 fn reports_frame_sources_at_the_executed_instruction() {
     let method = method([(3, Instruction::IReturn)], "()I", vec![]);
-    let error = frame_failure(&method);
-    assert_matches!(error, (Some(pc), MokaIRFrameError::StackUnderflow) if pc == 3.into());
+    let error = build_failure(&method);
+    assert_matches!(error, (Some(pc), StackUnderflow) if pc == 3.into());
+}
+
+#[test]
+fn reports_incompatible_frame_shape_at_the_merge_target() {
+    let instructions = [
+        (0, Instruction::ILoad0),
+        (1, Instruction::IfEq(6.into())),
+        (4, Instruction::IConst0),
+        (5, Instruction::Goto(6.into())),
+        (6, Instruction::Return),
+    ];
+    let method = method(instructions, "(I)V", vec![]);
+
+    let error = build(&method).expect_err("incoming stack shapes differ");
+    assert_eq!(error.pc, Some(6.into()));
+    assert_eq!(error.kind, IncompatibleFrameShape);
 }
 
 #[test]
 fn reports_a_missing_fallthrough_at_the_source_instruction() {
     let fallthrough = method([(4, Instruction::Nop)], "()V", vec![]);
-    assert_matches!(build(&fallthrough), Err(MokaIRBuildError::ControlFlow(MissingFallthrough(pc))) if pc == 4.into());
+    assert_matches!(build(&fallthrough), Err(error) if error.kind == MissingFallthrough && error.pc == Some(4.into()));
 
     // Structural validation runs off the reachable path too.
     let unreachable = method(
@@ -115,15 +148,15 @@ fn reports_a_missing_fallthrough_at_the_source_instruction() {
         "()V",
         vec![],
     );
-    assert_matches!(build(&unreachable), Err(MokaIRBuildError::ControlFlow(MissingFallthrough(pc))) if pc == 1.into());
+    assert_matches!(build(&unreachable), Err(error) if error.kind == MissingFallthrough && error.pc == Some(1.into()));
 }
 
 #[test]
 fn reports_method_entry_frame_initialization_failures() {
     let mut method = method([(0, Instruction::Return)], "(I)V", vec![]);
     method.body.as_mut().expect("method has a body").max_locals = 0;
-    let error = frame_failure(&method);
-    assert_matches!(error, (None, MokaIRFrameError::LocalIndexOutOfBounds));
+    let error = build_failure(&method);
+    assert_matches!(error, (None, LocalIndexOutOfBounds));
 }
 
 #[test]
@@ -136,6 +169,9 @@ fn rejects_every_legacy_subroutine_instruction_even_when_unreachable() {
     ];
     for instruction in instructions {
         let method = method([(0, Instruction::Return), (1, instruction)], "()V", vec![]);
-        assert_eq!(unsupported(&method), (1.into(), LegacySubroutine));
+        assert_eq!(
+            build_failure(&method),
+            (Some(1.into()), UnsupportedLegacySubroutine)
+        );
     }
 }

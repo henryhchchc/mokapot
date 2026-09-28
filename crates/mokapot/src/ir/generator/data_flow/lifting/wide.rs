@@ -1,14 +1,13 @@
 use ValueCategory::{Category1, Category2};
 
-use super::LiftContext;
-use crate::{
-    ir::{Operation, generator::error::Error},
-    jvm::code::WideInstruction,
-    types::field_type::ValueCategory,
-};
+use super::{FrameError, LiftContext};
+use crate::{ir::Operation, jvm::code::WideInstruction, types::field_type::ValueCategory};
 
 impl LiftContext<'_, '_> {
-    pub fn lift_wide(&mut self, instruction: &WideInstruction) -> Result<Option<Operation>, Error> {
+    pub fn lift_wide(
+        &mut self,
+        instruction: &WideInstruction,
+    ) -> Result<Option<Operation>, FrameError> {
         #[allow(clippy::enum_glob_use, reason = "exhaustive dispatch")]
         use WideInstruction::*;
         match instruction {

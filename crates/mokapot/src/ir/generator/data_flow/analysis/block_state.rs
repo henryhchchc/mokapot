@@ -8,10 +8,7 @@ use super::{
     Frame, Position, ValueContext,
     frame_block::{FrameBlock, FrameSource},
 };
-use crate::{
-    ir::{ValueId, generator::error::Error},
-    jvm::code::ProgramCounter,
-};
+use crate::ir::{ValueId, generator::data_flow::FrameError};
 
 /// Mutable analysis state for one reachable block.
 #[derive(Debug)]
@@ -38,9 +35,8 @@ impl BlockState {
         &mut self,
         source: FrameSource,
         frame: Frame,
-        block_pc: Option<ProgramCounter>,
         values: &mut ValueContext,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool, FrameError> {
         self.incoming_frames.insert(source, frame);
         debug_assert!(
             self.parameters.declared.is_empty() || self.incoming_frames.len() >= 2,
@@ -48,7 +44,7 @@ impl BlockState {
         );
         let input = self
             .parameters
-            .merge(self.incoming_frames.values(), block_pc, values)?;
+            .merge(self.incoming_frames.values(), values)?;
         Ok(self.update_input(input))
     }
 
@@ -101,9 +97,8 @@ impl BlockParameters {
     fn merge<'frames>(
         &mut self,
         mut frames: impl Iterator<Item = &'frames Frame>,
-        block_pc: Option<ProgramCounter>,
         values: &mut ValueContext,
-    ) -> Result<Frame, Error> {
+    ) -> Result<Frame, FrameError> {
         let mut merged = frames
             .next()
             .expect("a block state is created with an incoming frame")
@@ -112,17 +107,9 @@ impl BlockParameters {
         // even while every incoming frame transiently agrees; the `retain`
         // below drops the parameters a block does not end up needing.
         for incoming in frames {
-            merged
-                .merge_from_with(incoming.clone(), |position, lhs, rhs| {
-                    self.join(position, lhs, rhs, values);
-                })
-                .map_err(|error| {
-                    let error = Error::from(error);
-                    match block_pc {
-                        Some(pc) => error.at_pc(pc),
-                        None => error,
-                    }
-                })?;
+            merged.merge_from_with(incoming.clone(), |position, lhs, rhs| {
+                self.join(position, lhs, rhs, values);
+            })?;
         }
 
         self.declared

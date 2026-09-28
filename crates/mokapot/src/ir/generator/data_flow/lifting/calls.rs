@@ -1,8 +1,8 @@
 use ValueCategory::Category1;
 
-use super::LiftContext;
+use super::{FrameError, LiftContext};
 use crate::{
-    ir::{Operation, ValueId, expression::Expression, generator::error::Error},
+    ir::{Operation, ValueId, expression::Expression},
     jvm::references::MethodRef,
     types::{
         field_type::ValueCategory,
@@ -21,7 +21,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         method: &MethodRef,
         has_receiver: bool,
-    ) -> Result<Option<Operation>, Error> {
+    ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&method.descriptor.return_type);
         let args = self.frame.stack.pop_arguments(&method.descriptor)?;
         let this = has_receiver
@@ -40,7 +40,7 @@ impl LiftContext<'_, '_> {
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
         name: &str,
-    ) -> Result<Option<Operation>, Error> {
+    ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
@@ -55,7 +55,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         result: CallResult,
         expr: Expression,
-    ) -> Result<Option<Operation>, Error> {
+    ) -> Result<Option<Operation>, FrameError> {
         match result {
             CallResult::Value(value, category) => {
                 self.frame.stack.push(value, category)?;

@@ -10,7 +10,7 @@ mod values;
 mod tests;
 use std::collections::HashMap;
 
-pub use frame::FrameError;
+pub(super) use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
 #[cfg(test)]
 pub(super) use tests::verify_method;

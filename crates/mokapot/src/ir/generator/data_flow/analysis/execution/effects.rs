@@ -9,7 +9,7 @@ use crate::{
     ir::{
         BlockId, BranchGuard, ControlTransfer, ValueId,
         expression::{BooleanVariable, PathValue, Predicate},
-        generator::error::Error,
+        generator::data_flow::FrameError,
     },
     jvm::{ConstantValue, code::Instruction},
     types::field_type::ValueCategory,
@@ -20,7 +20,7 @@ use crate::{
 pub(super) fn branch_transfers(
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<(ControlTransfer, ControlTransfer), Error> {
+) -> Result<(ControlTransfer, ControlTransfer), FrameError> {
     let condition: BooleanVariable<Predicate> = pop_condition(frame, instruction)?.into();
     Ok((
         ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
@@ -29,8 +29,8 @@ pub(super) fn branch_transfers(
 }
 
 /// Pops the switch selector, even when the switch has no cases.
-pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, Error> {
-    Ok(frame.stack.pop(Category1)?)
+pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, FrameError> {
+    frame.stack.pop(Category1)
 }
 
 /// The transfer selected when `selector` matches `case`.
@@ -61,7 +61,7 @@ fn equal(selector: ValueId, case: i32) -> Predicate {
 pub(super) fn return_operand(
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<Option<ValueId>, Error> {
+) -> Result<Option<ValueId>, FrameError> {
     Ok(match instruction {
         Instruction::Return => None,
         Instruction::IReturn | Instruction::FReturn | Instruction::AReturn => {
@@ -76,19 +76,19 @@ pub(super) fn return_operand(
 pub(super) fn throw_operand(
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<ValueId, Error> {
+) -> Result<ValueId, FrameError> {
     match instruction {
-        Instruction::AThrow => Ok(frame.stack.pop(Category1)?),
+        Instruction::AThrow => frame.stack.pop(Category1),
         _ => panic!("throw block ends in a non-throw instruction"),
     }
 }
 
-fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, Error> {
+fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, FrameError> {
     let unary = |frame: &mut Frame| frame.stack.pop(Category1).map(Into::into);
     let binary = |frame: &mut Frame| {
         let rhs = frame.stack.pop(Category1)?.into();
         let lhs = frame.stack.pop(Category1)?.into();
-        Ok::<_, Error>((lhs, rhs))
+        Ok::<_, FrameError>((lhs, rhs))
     };
     Ok(match instruction {
         Instruction::IfEq(_) => Predicate::IsZero(unary(frame)?),

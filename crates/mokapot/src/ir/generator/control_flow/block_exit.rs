@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use super::{Error, fallibility::fallthrough_may_throw};
+use super::fallibility::fallthrough_may_throw;
 use crate::{
-    ir::generator::error::{MalformedControlFlow, UnsupportedBytecode},
+    ir::generator::error::ErrorKind,
     jvm::{
         code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
         references::ClassRef,
@@ -91,7 +91,7 @@ impl BlockExit<ProgramCounter> {
         body: &MethodBody,
         pc: ProgramCounter,
         instruction: &Instruction,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, ErrorKind> {
         use Instruction::{
             AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq,
             IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
@@ -100,12 +100,12 @@ impl BlockExit<ProgramCounter> {
         let next = || {
             body.instructions
                 .next_pc_of(&pc)
-                .ok_or(MalformedControlFlow::MissingFallthrough(pc))
+                .ok_or(ErrorKind::MissingFallthrough)
         };
         if let Instruction::MultiANewArray(array_type, dimensions) = instruction
             && !valid_multi_array_dimensions(array_type, *dimensions)
         {
-            return Err(MalformedControlFlow::InvalidMultiArrayDimensions(pc).into());
+            return Err(ErrorKind::InvalidMultiArrayDimensions);
         }
         Ok(match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
@@ -122,8 +122,7 @@ impl BlockExit<ProgramCounter> {
                 otherwise: next()?,
             },
             Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
-                let kind = UnsupportedBytecode::LegacySubroutine;
-                return Err(Error::UnsupportedBytecode { pc, kind });
+                return Err(ErrorKind::UnsupportedLegacySubroutine);
             }
             Instruction::TableSwitch {
                 low,
@@ -131,7 +130,7 @@ impl BlockExit<ProgramCounter> {
                 default,
             } => {
                 let high = Instruction::tableswitch_high(*low, targets.len())
-                    .ok_or(MalformedControlFlow::InvalidTableSwitchRange(pc))?;
+                    .ok_or(ErrorKind::InvalidTableSwitchRange)?;
                 let cases = (*low..=high).zip(targets.iter().copied()).collect();
                 Self::Switch {
                     cases,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     ir::{
-        MokaIRFrameError, ValueId,
+        MokaIRBuildErrorKind, ValueId,
         expression::{ArrayOperation, Conversion, Expression, FieldAccess, MathOperation},
     },
     jvm::references::{FieldRef, MethodRef},
@@ -69,16 +69,16 @@ fn valid_stack_shuffles_preserve_value_identity_and_order() {
 #[test]
 fn invalid_stack_shuffles_report_the_source_instruction() {
     let body = [(0, Instruction::Dup), (1, Instruction::Return)];
-    let underflow = frame_failure(&method(body, "()V", vec![]));
-    assert!(matches!(underflow, (Some(pc), MokaIRFrameError::StackUnderflow) if pc == 0.into()));
+    let underflow = build_failure(&method(body, "()V", vec![]));
+    assert_matches!(underflow, (Some(pc), MokaIRBuildErrorKind::StackUnderflow) if pc == 0.into());
 
     let body = [
         (0, Instruction::LLoad0),
         (1, Instruction::Dup),
         (2, Instruction::Return),
     ];
-    let layout = frame_failure(&method(body, "(J)V", vec![]));
-    assert!(matches!(layout, (Some(pc), MokaIRFrameError::InvalidSlotLayout) if pc == 1.into()));
+    let layout = build_failure(&method(body, "(J)V", vec![]));
+    assert_matches!(layout, (Some(pc), MokaIRBuildErrorKind::InvalidSlotLayout) if pc == 1.into());
 }
 
 #[test]

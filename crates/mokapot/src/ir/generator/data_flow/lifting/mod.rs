@@ -9,12 +9,11 @@ mod wide;
 
 use ValueCategory::{Category1, Category2};
 
-use super::{Frame, StackOperation, values::ValueContext};
+use super::{Frame, FrameError, StackOperation, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
         expression::{Conversion, LockOperation, MathOperation, NaNTreatment},
-        generator::error::Error,
     },
     jvm::{
         ConstantValue,
@@ -38,7 +37,7 @@ pub(super) fn lift_instruction(
     jvm_instruction: &JVM,
     pc: ProgramCounter,
     frame: &mut Frame,
-) -> Result<Option<Operation>, Error> {
+) -> Result<Option<Operation>, FrameError> {
     #[allow(
         clippy::enum_glob_use,
         reason = "this match exhaustively dispatches the JVM instruction enum"
@@ -185,16 +184,16 @@ pub(super) fn lift_instruction(
 }
 
 impl LiftContext<'_, '_> {
-    fn monitor(
-        &mut self,
-        operation: impl FnOnce(ValueId) -> LockOperation,
-    ) -> Result<Option<Operation>, Error> {
+    fn monitor<OP>(&mut self, operation: OP) -> Result<Option<Operation>, FrameError>
+    where
+        OP: FnOnce(ValueId) -> LockOperation,
+    {
         let object_ref = self.frame.stack.pop(Category1)?;
         let expr = operation(object_ref).into();
         Ok(Some(Operation::Effect { expr }))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<Operation>, Error> {
+    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<Operation>, FrameError> {
         self.frame.stack.apply(operation)?;
         Ok(None)
     }

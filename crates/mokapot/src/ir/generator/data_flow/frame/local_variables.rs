@@ -1,4 +1,4 @@
-use super::error::Error;
+use super::FrameError;
 use crate::{
     intrinsics::see_jvm_spec,
     ir::ValueId,
@@ -66,13 +66,17 @@ impl LocalVariables {
         }
     }
 
-    pub(crate) fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, Error> {
+    pub(crate) fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, FrameError> {
         let index = usize::from(index);
-        match self.slots.get(index).ok_or(Error::LocalIndexOutOfBounds)? {
+        match self
+            .slots
+            .get(index)
+            .ok_or(FrameError::LocalIndexOutOfBounds)?
+        {
             LocalSlot::Value(value) if value.category == expected => Ok(&value.value),
-            LocalSlot::Value(_) | LocalSlot::Reserved => Err(Error::InvalidSlotLayout),
-            LocalSlot::Unavailable => Err(Error::UnavailableLocal),
-            LocalSlot::Unset => Err(Error::UninitializedLocal),
+            LocalSlot::Value(_) | LocalSlot::Reserved => Err(FrameError::InvalidSlotLayout),
+            LocalSlot::Unavailable => Err(FrameError::UnavailableLocal),
+            LocalSlot::Unset => Err(FrameError::UninitializedLocal),
         }
     }
 
@@ -81,13 +85,13 @@ impl LocalVariables {
         index: u16,
         value: ValueId,
         category: ValueCategory,
-    ) -> Result<(), Error> {
+    ) -> Result<(), FrameError> {
         let index = usize::from(index);
         let end = index
             .checked_add(category.slot_count())
-            .ok_or(Error::LocalIndexOutOfBounds)?;
+            .ok_or(FrameError::LocalIndexOutOfBounds)?;
         if end > self.slots.len() {
-            return Err(Error::LocalIndexOutOfBounds);
+            return Err(FrameError::LocalIndexOutOfBounds);
         }
 
         for overwritten in index..end {
@@ -107,10 +111,8 @@ impl LocalVariables {
         max_slots: u16,
         this_value: Option<ValueId>,
         parameters: &[ValueId],
-    ) -> Result<Self, Error> {
-        if parameters.len() != descriptor.parameters_types.len() {
-            return Err(Error::ParameterCountMismatch);
-        }
+    ) -> Result<Self, FrameError> {
+        assert_eq!(parameters.len(), descriptor.parameters_types.len());
         let mut locals = Self {
             slots: vec![LocalSlot::Unset; max_slots.into()].into_boxed_slice(),
         };
@@ -156,7 +158,7 @@ mod tests {
     use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
-    use super::{Error, LocalSlot, LocalVariables};
+    use super::{FrameError, LocalSlot, LocalVariables};
     use crate::{
         intrinsics::see_jvm_spec,
         ir::{IdAllocator, ValueId},
@@ -189,16 +191,16 @@ mod tests {
                         let reserved = index + 1;
                         prop_assert_eq!(
                             locals.get(reserved, Category1),
-                            Err(Error::InvalidSlotLayout),
+                            Err(FrameError::InvalidSlotLayout),
                         );
                         prop_assert_eq!(
                             locals.get(reserved, Category2),
-                            Err(Error::InvalidSlotLayout),
+                            Err(FrameError::InvalidSlotLayout),
                         );
                     }
                 }
                 // Only an address the value does not fit in is refused.
-                Err(error) => prop_assert_eq!(error, Error::LocalIndexOutOfBounds),
+                Err(error) => prop_assert_eq!(error, FrameError::LocalIndexOutOfBounds),
             }
         }
 
@@ -242,7 +244,7 @@ mod tests {
             let locals = empty_locals(slot_count);
             for slot in 0..slot_count {
                 let index = u16::try_from(slot).expect("the small tables fit in u16");
-                prop_assert_eq!(locals.get(index, category), Err(Error::UninitializedLocal));
+                prop_assert_eq!(locals.get(index, category), Err(FrameError::UninitializedLocal));
             }
 
             let mut locals = empty_locals(2);
@@ -251,7 +253,7 @@ mod tests {
                 Category1 => Category2,
                 Category2 => Category1,
             };
-            prop_assert_eq!(locals.get(0, other), Err(Error::InvalidSlotLayout));
+            prop_assert_eq!(locals.get(0, other), Err(FrameError::InvalidSlotLayout));
         }
     }
 }

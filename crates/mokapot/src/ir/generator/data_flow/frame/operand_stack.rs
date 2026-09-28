@@ -3,7 +3,7 @@ use std::iter::{once, repeat_n};
 use ValueCategory::{Category1, Category2};
 use itertools::Itertools;
 
-use super::error::Error;
+use super::FrameError;
 use crate::{
     intrinsics::see_jvm_spec,
     ir::ValueId,
@@ -92,20 +92,23 @@ impl OperandStack {
         }
     }
 
-    pub(crate) fn push(&mut self, value: ValueId, category: ValueCategory) -> Result<(), Error> {
-        let slot_count = self.slot_count + category.slot_count();
+    pub(crate) fn push(&mut self, value: ValueId, cat: ValueCategory) -> Result<(), FrameError> {
+        let slot_count = self.slot_count + cat.slot_count();
         if slot_count > usize::from(self.max_slots) {
-            return Err(Error::StackOverflow);
+            return Err(FrameError::StackOverflow);
         }
-        self.values.push(StackItem { value, category });
+        self.values.push(StackItem {
+            value,
+            category: cat,
+        });
         self.slot_count = slot_count;
         Ok(())
     }
 
-    pub(crate) fn pop(&mut self, expected: ValueCategory) -> Result<ValueId, Error> {
-        let top = self.values.last().ok_or(Error::StackUnderflow)?;
+    pub(crate) fn pop(&mut self, expected: ValueCategory) -> Result<ValueId, FrameError> {
+        let top = self.values.last().ok_or(FrameError::StackUnderflow)?;
         if top.category != expected {
-            return Err(Error::InvalidSlotLayout);
+            return Err(FrameError::InvalidSlotLayout);
         }
         let value = top.value;
         self.values.truncate(self.values.len() - 1);
@@ -116,7 +119,7 @@ impl OperandStack {
     pub(crate) fn pop_arguments(
         &mut self,
         descriptor: &MethodDescriptor,
-    ) -> Result<Vec<ValueId>, Error> {
+    ) -> Result<Vec<ValueId>, FrameError> {
         let mut arguments: Vec<_> = descriptor
             .parameters_types
             .iter()
@@ -127,9 +130,9 @@ impl OperandStack {
         Ok(arguments)
     }
 
-    pub(crate) fn apply(&mut self, operation: StackOperation) -> Result<(), Error> {
+    pub(crate) fn apply(&mut self, operation: StackOperation) -> Result<(), FrameError> {
         if self.slot_count < operation.consumed_slots() {
-            return Err(Error::StackUnderflow);
+            return Err(FrameError::StackUnderflow);
         }
         let categories = self
             .values
@@ -138,7 +141,7 @@ impl OperandStack {
             .collect::<Vec<_>>();
         let (input_len, output_indices) = operation
             .matching_form(&categories)
-            .ok_or(Error::InvalidSlotLayout)?;
+            .ok_or(FrameError::InvalidSlotLayout)?;
         let input_start = self.values.len() - input_len;
         let replaced = &self.values[input_start..];
         let output_slots = output_indices
@@ -147,7 +150,7 @@ impl OperandStack {
             .sum::<usize>();
         let resulting_slots = self.slot_count - operation.consumed_slots() + output_slots;
         if resulting_slots > usize::from(self.max_slots) {
-            return Err(Error::StackOverflow);
+            return Err(FrameError::StackOverflow);
         }
 
         let output = output_indices
@@ -186,12 +189,12 @@ impl OperandStack {
         }
     }
 
-    pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&ValueId, Error> {
+    pub(super) fn single_value(&self, expected: ValueCategory) -> Result<&ValueId, FrameError> {
         let [value] = self.values.as_slice() else {
-            return Err(Error::InvalidSlotLayout);
+            return Err(FrameError::InvalidSlotLayout);
         };
         if value.category != expected {
-            return Err(Error::InvalidSlotLayout);
+            return Err(FrameError::InvalidSlotLayout);
         }
         Ok(&value.value)
     }
@@ -208,7 +211,7 @@ mod tests {
     use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
-    use super::{Error, OperandStack, StackItem, StackOperation};
+    use super::{FrameError, OperandStack, StackItem, StackOperation};
     use crate::{
         intrinsics::see_jvm_spec,
         ir::{IdAllocator, ValueId},
@@ -308,7 +311,7 @@ mod tests {
                     prop_assert_eq!(&stack.values[..untouched], &operands[..untouched]);
                 }
                 Err(error) => {
-                    use Error::{StackUnderflow, InvalidSlotLayout, StackOverflow};
+                    use FrameError::{StackUnderflow, InvalidSlotLayout, StackOverflow};
                     prop_assert!(
                         matches!(&error, StackUnderflow | InvalidSlotLayout | StackOverflow),
                         "{operation:?} failed with {error:?}"
@@ -339,7 +342,7 @@ mod tests {
                 prop_assert_eq!(stack.values.last(), Some(&StackItem { value, category }));
                 prop_assert_eq!(stack.slot_count, slots(&items) + category.slot_count());
             } else {
-                prop_assert_eq!(pushed, Err(Error::StackOverflow));
+                prop_assert_eq!(pushed, Err(FrameError::StackOverflow));
                 prop_assert_eq!(&stack, &before, "a rejected push changed the stack");
             }
             prop_assert_eq!(stack.slot_count, slots(&stack.values));
@@ -385,7 +388,7 @@ mod tests {
         let before = stack.clone();
         assert_eq!(
             stack.pop_arguments(&mismatched),
-            Err(Error::InvalidSlotLayout),
+            Err(FrameError::InvalidSlotLayout),
         );
         assert_eq!(stack, before, "a rejected pop changed the stack");
     }

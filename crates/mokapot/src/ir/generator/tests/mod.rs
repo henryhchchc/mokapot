@@ -2,10 +2,7 @@ use std::ops::Range;
 
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
-    ir::{
-        InstructionRef, MokaIRBuildError, MokaIRFrameError, MokaIRMethod, UnsupportedBytecode,
-        ValueDefinition,
-    },
+    ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod, ValueDefinition},
     jvm::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
@@ -85,20 +82,10 @@ pub(crate) fn handler(
     }
 }
 
-/// Returns the frame-failure location and cause reported for `method`.
-pub(crate) fn frame_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRFrameError) {
-    match build(method) {
-        Err(MokaIRBuildError::InvalidFrame { pc, source }) => (pc, source),
-        other => panic!("expected a frame failure, got {other:?}"),
-    }
-}
-
-/// Returns the unsupported-bytecode location and kind reported for `method`.
-pub(crate) fn unsupported(method: &Method) -> (ProgramCounter, UnsupportedBytecode) {
-    match build(method) {
-        Err(MokaIRBuildError::UnsupportedBytecode { pc, kind }) => (pc, kind),
-        other => panic!("expected unsupported bytecode, got {other:?}"),
-    }
+/// Returns the diagnostic location and kind reported for `method`.
+pub(crate) fn build_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
+    let error = build(method).expect_err("method should fail to build");
+    (error.pc, error.kind)
 }
 
 mod block_arguments;

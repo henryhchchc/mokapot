@@ -22,8 +22,7 @@ mod error;
 mod remap;
 mod worklist;
 
-pub use data_flow::FrameError as MokaIRFrameError;
-pub use error::{Error as MokaIRBuildError, MalformedControlFlow, UnsupportedBytecode};
+pub use error::{Error as MokaIRBuildError, ErrorKind as MokaIRBuildErrorKind};
 
 use super::MokaIRMethod;
 use crate::jvm::Method;

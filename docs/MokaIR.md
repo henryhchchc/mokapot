@@ -7,6 +7,7 @@ It is unstable: enable `unstable-moka-ir` (or the umbrella `unstable`).
 
 `MokaIRMethod::from_method` lifts a method with a body, emitting only blocks reachable from entry.
 Malformed or unsupported bytecode, or invalid frame state, returns `MokaIRBuildError`; there is no partial method.
+The error exposes a flat `kind` and an optional bytecode `pc`; method-entry and synthetic-state failures have no PC.
 
 ## Blocks
 

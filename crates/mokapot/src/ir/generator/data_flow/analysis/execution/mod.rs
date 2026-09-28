@@ -15,7 +15,7 @@ use crate::{
         BlockId, BlockKind, ControlTransfer,
         generator::{
             control_flow::{ArmKey, BlockExit, Cfg, CfgNode},
-            error::Error,
+            error::{Error, ResultExt},
         },
     },
     jvm::code::ProgramCounter,
@@ -61,7 +61,7 @@ impl BlockInterpreter<'_, '_> {
                 exit,
             } => self.interpret_bytecode(values, *start_pc, *end_pc, exit.clone(), input),
             CfgNode::LandingPad { successor } => {
-                let caught = *input.handler_exception().map_err(Error::from)?;
+                let caught = *input.handler_exception()?;
                 let kind = BlockKind::LandingPad { exception: caught };
                 Ok(Self::interpret_landing_pad(*successor, input, kind))
             }
@@ -102,15 +102,15 @@ impl BlockInterpreter<'_, '_> {
         );
         let mut operations = Vec::new();
         for (pc, instruction) in instructions {
-            if let Some(operation) = lifting::lift_instruction(values, instruction, pc, &mut frame)
-                .map_err(|e| e.at_pc(pc))?
+            if let Some(operation) =
+                lifting::lift_instruction(values, instruction, pc, &mut frame).at_pc(pc)?
             {
                 operations.push((pc, operation));
             }
         }
         let terminator_source = exit.forces_block_boundary().then_some(final_pc);
         let mut exit_state = ExitState::new(instruction, final_pc, frame, operations);
-        let terminator = exit_state.terminate(values, exit)?;
+        let terminator = exit_state.terminate(values, exit).at_pc(final_pc)?;
         Ok(FrameBlock::new(
             BlockKind::Code,
             exit_state.into_operations(),

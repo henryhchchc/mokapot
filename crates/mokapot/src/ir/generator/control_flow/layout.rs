@@ -5,9 +5,9 @@ use std::{
     ops::Bound,
 };
 
-use super::{BlockExit, Error};
+use super::BlockExit;
 use crate::{
-    ir::generator::error::MalformedControlFlow,
+    ir::generator::error::{Error, ErrorKind, ResultExt},
     jvm::code::{MethodBody, ProgramCounter as PC},
 };
 
@@ -28,11 +28,15 @@ impl BlockLayout {
             .instructions
             .entry_point()
             .map(|(pc, _)| pc)
-            .ok_or(Error::MissingOrEmptyBody)?;
+            .ok_or(ErrorKind::MissingOrEmptyBody)?;
         let mut exits = body
             .instructions
             .iter()
-            .map(|(pc, instruction)| BlockExit::of(body, pc, instruction).map(|exit| (pc, exit)))
+            .map(|(pc, instruction)| {
+                BlockExit::of(body, pc, instruction)
+                    .at_pc(pc)
+                    .map(|exit| (pc, exit))
+            })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
         let leaders = leaders(body, entry, &exits)?;
         let last_pc = exits
@@ -109,7 +113,7 @@ fn leaders(
         .iter()
         .find(|pc| body.instruction_at(**pc).is_none())
     {
-        return Err(MalformedControlFlow::MissingInstruction(pc).into());
+        return Err(ErrorKind::MissingInstruction).at_pc(pc);
     }
     Ok(leaders)
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{Error, Frame};
+use super::{Frame, FrameError};
 use crate::{
     ir::{BlockId, IdAllocator, ValueId, generator::control_flow::Cfg},
     jvm::{code::ProgramCounter, method},
@@ -15,7 +15,7 @@ pub(super) struct ValueContext {
 }
 
 impl ValueContext {
-    pub(super) fn for_cfg(cfg: &Cfg<'_>) -> Result<(Self, Frame), Error> {
+    pub(super) fn for_cfg(cfg: &Cfg<'_>) -> Result<(Self, Frame), FrameError> {
         let method = cfg.method();
         let body = cfg.body();
 
