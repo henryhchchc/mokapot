@@ -144,7 +144,11 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
         _ => None,
     });
     assert_eq!(successors[0].block_target(), default_target);
-    assert!(!terminator.uses().contains(&ir.parameters[0]));
+    assert_eq!(
+        successors[0].transfer(),
+        Some(&ControlTransfer::Unconditional)
+    );
+    assert!(successors[0].arguments().is_empty());
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }
 
@@ -207,10 +211,13 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
     let [param] = header.parameters.as_slice() else {
         panic!("the loop header merges its counter through exactly one block argument");
     };
-    assert!(
-        header.terminator.uses().contains(&param.value),
-        "the merged counter must feed the loop condition"
-    );
+    let counter = PathValue::Variable(param.value);
+    let limit = PathValue::Variable(ir.parameters[0]);
+    let guard = BranchGuard::of(BooleanVariable::from(Predicate::GreaterThanOrEqual(
+        counter, limit,
+    )));
+    let taken = header.terminator.successors().next().unwrap();
+    assert_eq!(taken.transfer(), Some(&ControlTransfer::Conditional(guard)));
 }
 
 #[test]

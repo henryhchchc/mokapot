@@ -6,7 +6,7 @@
 //! exactly one [`Terminator`]. The terminators' ordered [`Successor`] arms are
 //! the authoritative control-flow graph.
 //!
-//! Each operand is one method-local [`ValueId`] with one [`ValueDefinition`].
+//! Each operand is one method-local [`ValueId`] with one defining site.
 //! JVM local slots and the operand stack exist only while lifting. Effect-only
 //! operations remain ordered but define no value. Potentially throwing
 //! operations have distinct normal and exceptional successor arms, and each
@@ -69,7 +69,6 @@ pub struct MokaIRMethod {
     /// The values representing the method parameters.
     pub parameters: Vec<ValueId>,
     blocks: HashMap<BlockId, BasicBlock>,
-    value_definitions: HashMap<ValueId, ValueDefinition>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
@@ -90,17 +89,4 @@ pub struct MethodEntry {
     pub block: BlockId,
     /// The values supplied to the entry block's parameters.
     pub arguments: Vec<ValueId>,
-}
-
-/// Describes where a scalar value is defined.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ValueDefinition {
-    /// The receiver of an instance method.
-    This,
-    /// A method parameter at the given parameter index.
-    Parameter(u16),
-    /// The exception introduced by a landing-pad block.
-    CaughtException(BlockId),
-    /// A value produced by a block parameter, operation, or terminator.
-    Instruction(InstructionLocation),
 }

@@ -1,7 +1,4 @@
-use super::{
-    BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, ValueDefinition,
-    ValueId,
-};
+use super::{BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod};
 use crate::{
     ir::MokaIRBuildError,
     jvm::{Method, method},
@@ -52,13 +49,5 @@ impl MokaIRMethod {
                 InstructionRef::Terminator(&self.block(block)?.terminator)
             }
         })
-    }
-
-    /// Returns the unique definition of a method-local SSA value.
-    ///
-    /// An identity with no retained definition yields `None`.
-    #[must_use]
-    pub fn definition_of(&self, value: ValueId) -> Option<ValueDefinition> {
-        self.value_definitions.get(&value).copied()
     }
 }

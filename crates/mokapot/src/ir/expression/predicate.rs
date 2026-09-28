@@ -1,4 +1,4 @@
-use std::{collections::HashSet, convert::Infallible};
+use std::convert::Infallible;
 
 use super::{BooleanVariable, ValueId};
 use crate::jvm::ConstantValue;
@@ -100,36 +100,6 @@ pub enum PathValue {
 }
 
 impl Predicate {
-    fn values(&self) -> impl Iterator<Item = &PathValue> {
-        use Predicate::{
-            Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
-            IsNonZero, IsNotNull, IsNull, IsPositive, IsZero, LessThan, LessThanOrEqual, NotEqual,
-        };
-
-        let (first, second) = match self {
-            Equal(lhs, rhs)
-            | NotEqual(lhs, rhs)
-            | LessThan(lhs, rhs)
-            | LessThanOrEqual(lhs, rhs)
-            | GreaterThan(lhs, rhs)
-            | GreaterThanOrEqual(lhs, rhs) => (lhs, Some(rhs)),
-            IsNull(value) | IsNotNull(value) | IsZero(value) | IsNonZero(value)
-            | IsPositive(value) | IsNegative(value) | IsNonNegative(value)
-            | IsNonPositive(value) => (value, None),
-        };
-        std::iter::once(first).chain(second)
-    }
-
-    pub(crate) fn uses(&self) -> HashSet<ValueId> {
-        self.values()
-            .filter_map(|value| match value {
-                PathValue::Variable(value) => Some(value),
-                PathValue::Constant(_) => None,
-            })
-            .copied()
-            .collect()
-    }
-
     pub(crate) fn map_values(&self, mut map: impl FnMut(&PathValue) -> PathValue) -> Self {
         let mut mapped = self.clone();
         let Ok(()) = mapped.try_for_each_value_mut(|value| {

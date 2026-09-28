@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::{ValueId, expression::Expression};
 
 /// An ordinary non-parameter, non-terminator operation.
@@ -19,57 +17,4 @@ pub enum Operation {
         /// The effectful expression.
         expr: Expression,
     },
-}
-
-impl Operation {
-    /// Returns the value defined by this operation, if any.
-    #[must_use]
-    pub const fn def(&self) -> Option<ValueId> {
-        match self {
-            Self::Definition { value, .. } => Some(*value),
-            Self::Effect { .. } => None,
-        }
-    }
-
-    /// Returns the values used by this operation.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        match self {
-            Self::Definition { expr, .. } | Self::Effect { expr } => expr.uses(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        ir::test::prelude::{ids, ref_t},
-        jvm::references::MethodRef,
-    };
-
-    #[test]
-    fn definition_and_effect_expose_defs_and_uses() {
-        let [defined, lhs, rhs] = ids(0);
-        let expr = Expression::Call {
-            method: MethodRef {
-                owner: ref_t("java/lang/Object"),
-                name: "f".to_owned(),
-                descriptor: "(II)I".parse().expect("valid descriptor"),
-            },
-            this: None,
-            args: vec![lhs, rhs],
-        };
-        let uses = expr.uses();
-        let definition = Operation::Definition {
-            value: defined,
-            expr: expr.clone(),
-        };
-        let effect = Operation::Effect { expr };
-
-        assert_eq!(definition.def(), Some(defined));
-        assert_eq!(definition.uses(), uses);
-        assert_eq!(effect.def(), None);
-        assert_eq!(effect.uses(), uses);
-    }
 }

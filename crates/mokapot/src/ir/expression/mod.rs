@@ -1,5 +1,5 @@
 //! Module for the expressions in Moka IR.
-use std::{collections::HashSet, fmt};
+use std::fmt;
 
 use itertools::Itertools;
 
@@ -102,86 +102,5 @@ impl fmt::Display for Expression {
             Self::Synchronization(operation) => operation.fmt(f),
             Self::New(class) => write!(f, "new {class}"),
         }
-    }
-}
-
-impl Expression {
-    /// Returns the values used by the expression.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        match self {
-            Self::Call { this, args, .. } => this.iter().chain(args).copied().collect(),
-            Self::Closure { captures, .. } => captures.iter().copied().collect(),
-            Self::Math(math_op) => math_op.uses(),
-            Self::Field(field_op) => field_op.uses(),
-            Self::Array(array_op) => array_op.uses(),
-            Self::Conversion(conv_op) => conv_op.uses(),
-            Self::Synchronization(monitor_op) => monitor_op.uses(),
-            _ => HashSet::default(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        ir::test::prelude::{cls_r, field_ref, ids, ref_t},
-        jvm::ConstantValue,
-    };
-
-    #[test]
-    fn uses_reports_call_and_capture_operands() {
-        let [receiver, first, second] = ids(0);
-        let call = Expression::Call {
-            method: MethodRef {
-                owner: ref_t("java/lang/Object"),
-                name: "f".to_owned(),
-                descriptor: "(II)I".parse().unwrap(),
-            },
-            this: Some(receiver),
-            args: vec![first, second],
-        };
-        let closure = Expression::Closure {
-            name: "lambda".to_owned(),
-            captures: vec![first, second],
-            bootstrap_method_index: 0,
-            closure_descriptor: "(II)I".parse().unwrap(),
-        };
-        assert_eq!(call.uses(), HashSet::from([receiver, first, second]));
-        assert_eq!(closure.uses(), HashSet::from([first, second]));
-    }
-
-    #[test]
-    fn constants_and_allocations_have_no_operands() {
-        let expression = Expression::Const(ConstantValue::Integer(7));
-        assert!(expression.uses().is_empty());
-        assert!(Expression::New(cls_r("java/lang/Object")).uses().is_empty());
-    }
-
-    #[test]
-    fn uses_forwards_to_each_nested_operation() {
-        let [receiver, first, second] = ids(0);
-        let math = MathOperation::Add(first, second);
-        let access = FieldAccess::WriteInstance {
-            object_ref: receiver,
-            field: field_ref(),
-            value: first,
-        };
-        let array = ArrayOperation::Write {
-            array_ref: receiver,
-            index: first,
-            value: second,
-        };
-        let conversion = Conversion::CheckCast(first, ref_t("java/lang/Object"));
-        let lock = LockOperation::Acquire(first);
-
-        assert_eq!(Expression::Math(math.clone()).uses(), math.uses());
-        assert_eq!(Expression::Field(access.clone()).uses(), access.uses());
-        assert_eq!(Expression::Array(array.clone()).uses(), array.uses());
-        let converted = Expression::Conversion(conversion.clone());
-        assert_eq!(converted.uses(), conversion.uses());
-        let synchronization = Expression::Synchronization(lock.clone());
-        assert_eq!(synchronization.uses(), lock.uses());
     }
 }

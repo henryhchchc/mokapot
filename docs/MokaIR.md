@@ -20,7 +20,7 @@ Parallel arms stay distinct, preserving switch cases and handler precedence.
 
 ## Values
 
-Every operand is one `ValueId` with exactly one `ValueDefinition` — `This`, a `Parameter`, a landing-pad `CaughtException`, or an `Instruction` — findable with `definition_of`.
+Every operand is one method-local `ValueId`, defined by the receiver, a method parameter, a landing pad's caught exception, a block parameter, or an operation.
 `Operation::Definition` produces a value; `Operation::Effect` (a write or a void call) only orders effects.
 
 A `BlockParameter` is bound on entry from the arguments of each incoming arm, which line up with the target's parameters; `entry` supplies the entry block's arguments likewise.

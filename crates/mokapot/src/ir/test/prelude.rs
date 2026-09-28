@@ -14,7 +14,7 @@ use crate::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
         method::AccessFlags,
-        references::{ClassRef, FieldRef},
+        references::ClassRef,
     },
     types::reference_type::ReferenceType,
 };
@@ -104,15 +104,6 @@ pub(crate) fn ref_t(name: &str) -> ReferenceType {
     name.parse().expect("a valid type name")
 }
 
-/// A simple `int` instance field on `java/lang/Object`.
-pub(crate) fn field_ref() -> FieldRef {
-    FieldRef {
-        owner: ref_t("java/lang/Object"),
-        name: "value".to_owned(),
-        field_type: crate::types::field_type::PrimitiveType::Int.into(),
-    }
-}
-
 /// Fresh receiver and parameter identities for method-entry tests.
 pub(crate) fn entry_values(
     instance: bool,
@@ -147,7 +138,6 @@ pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) ->
         source_map: SourceMap::new(),
         this: None,
         parameters: Vec::new(),
-        value_definitions: HashMap::new(),
     }
 }
 
@@ -158,34 +148,8 @@ pub(crate) fn bb(
     ops: &[Operation],
     term: Terminator,
 ) -> (BlockId, BasicBlock) {
-    keyed(id, BlockKind::Code, params, ops, term)
-}
-
-/// A parameterless, operationless `Code` block keyed by `id`.
-pub(crate) fn code(id: BlockId, term: Terminator) -> (BlockId, BasicBlock) {
-    bb(id, [], &[], term)
-}
-
-/// A landing pad keyed by `id`, defining `exception` on entry.
-pub(crate) fn landing_pad(
-    id: BlockId,
-    exception: ValueId,
-    params: impl IntoIterator<Item = ValueId>,
-    ops: &[Operation],
-    term: Terminator,
-) -> (BlockId, BasicBlock) {
-    keyed(id, BlockKind::LandingPad { exception }, params, ops, term)
-}
-
-fn keyed(
-    id: BlockId,
-    kind: BlockKind,
-    params: impl IntoIterator<Item = ValueId>,
-    ops: &[Operation],
-    term: Terminator,
-) -> (BlockId, BasicBlock) {
     let block = BasicBlock {
-        kind,
+        kind: BlockKind::Code,
         parameters: params
             .into_iter()
             .map(|value| BlockParameter { value })
@@ -206,6 +170,11 @@ where
         arguments: args.into_iter().collect(),
         transfer,
     }
+}
+
+/// A parameterless, operationless `Code` block keyed by `id`.
+pub(crate) fn code(id: BlockId, term: Terminator) -> (BlockId, BasicBlock) {
+    bb(id, [], &[], term)
 }
 
 /// An unconditional `Block` arm to `target`.

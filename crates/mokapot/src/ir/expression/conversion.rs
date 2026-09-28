@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::ValueId;
 use crate::types::reference_type::ReferenceType;
 
@@ -57,45 +55,4 @@ pub enum Operation {
     /// Checks whether an object is an instance of a given type.
     #[display("{_0} is {_1}")]
     InstanceOf(ValueId, ReferenceType),
-}
-impl Operation {
-    /// Returns the values used by the expression.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        match self {
-            Self::Int2Long(arg)
-            | Self::Float2Long(arg)
-            | Self::Double2Long(arg)
-            | Self::Long2Int(arg)
-            | Self::Float2Int(arg)
-            | Self::Double2Int(arg)
-            | Self::Long2Float(arg)
-            | Self::Int2Float(arg)
-            | Self::Double2Float(arg)
-            | Self::Long2Double(arg)
-            | Self::Int2Double(arg)
-            | Self::Float2Double(arg)
-            | Self::Int2Byte(arg)
-            | Self::Int2Char(arg)
-            | Self::Int2Short(arg)
-            | Self::CheckCast(arg, _)
-            | Self::InstanceOf(arg, _) => HashSet::from([*arg]),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::test::prelude::{ids, ref_t};
-
-    #[test]
-    fn uses_reports_converted_value() {
-        let [value] = ids(0);
-        let cast = Operation::CheckCast(value, ref_t("java/lang/Object"));
-        let conversion = Operation::Int2Long(value);
-
-        assert_eq!(cast.uses(), HashSet::from([value]));
-        assert_eq!(conversion.uses(), HashSet::from([value]));
-    }
 }

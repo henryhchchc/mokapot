@@ -228,57 +228,6 @@ impl Terminator<Successor> {
             _ => None,
         }
     }
-
-    /// Returns the values used by this terminator and its successor guards.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        let successor_values = self
-            .successors()
-            .flat_map(|successor| successor.arguments().iter().copied());
-        self.local_uses()
-            .into_iter()
-            .chain(successor_values)
-            .collect()
-    }
-
-    /// Returns the value defined by a successful attempted operation.
-    #[must_use]
-    pub const fn def(&self) -> Option<ValueId> {
-        match self {
-            Self::Try { operation, .. } => operation.def(),
-            _ => None,
-        }
-    }
-}
-
-impl Terminator<Successor> {
-    /// Returns the values this terminator uses, excluding successor arguments.
-    pub(super) fn local_uses(&self) -> HashSet<ValueId> {
-        let value = match self {
-            Self::Throw { value, .. }
-            | Self::Return {
-                value: Some(value), ..
-            } => Some(*value),
-            _ => None,
-        };
-        let guard_uses = self
-            .successors()
-            .filter_map(|it| match it.transfer() {
-                Some(ControlTransfer::Conditional(guard)) => Some(guard),
-                _ => None,
-            })
-            .flat_map(BranchGuard::predicates)
-            .flat_map(Predicate::uses);
-        let operation_uses = match self {
-            Self::Try { operation, .. } => operation.uses(),
-            _ => HashSet::new(),
-        };
-        value
-            .into_iter()
-            .chain(operation_uses)
-            .chain(guard_uses)
-            .collect()
-    }
 }
 
 impl<Arm> fmt::Display for Terminator<Arm> {
@@ -396,16 +345,6 @@ impl<P> BranchGuard<P> {
             })
             .unique()
             .count()
-    }
-}
-
-impl<P> BranchGuard<P> {
-    pub(crate) fn predicates(&self) -> impl Iterator<Item = &P> {
-        self.literals().map(|literal| match literal {
-            BooleanVariable::Positive(predicate) | BooleanVariable::Negative(predicate) => {
-                predicate
-            }
-        })
     }
 }
 

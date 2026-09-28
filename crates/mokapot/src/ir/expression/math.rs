@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::ValueId;
 
 /// A mathematical operation.
@@ -51,47 +49,6 @@ pub enum Operation {
     #[display("cmp({_0}, {_1}) with {_2}")]
     FloatingPointComparison(ValueId, ValueId, NaNTreatment),
 }
-impl Operation {
-    /// Returns the values used by the expression.
-    #[must_use]
-    pub fn uses(&self) -> HashSet<ValueId> {
-        match self {
-            Self::Add(a, b)
-            | Self::Subtract(a, b)
-            | Self::Multiply(a, b)
-            | Self::Divide(a, b)
-            | Self::Remainder(a, b)
-            | Self::ShiftLeft(a, b)
-            | Self::ShiftRight(a, b)
-            | Self::LogicalShiftRight(a, b)
-            | Self::BitwiseAnd(a, b)
-            | Self::BitwiseOr(a, b)
-            | Self::BitwiseXor(a, b)
-            | Self::LongComparison(a, b)
-            | Self::FloatingPointComparison(a, b, _) => HashSet::from([*a, *b]),
-            Self::Negate(a) | Self::Increment(a, _) => HashSet::from([*a]),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::test::prelude::ids;
-
-    #[test]
-    fn uses_reports_both_binary_operands_and_one_unary_operand() {
-        let [lhs, rhs] = ids(0);
-        let add = Operation::Add(lhs, rhs);
-        let negate = Operation::Negate(lhs);
-        let increment = Operation::Increment(rhs, 3);
-
-        assert_eq!(add.uses(), HashSet::from([lhs, rhs]));
-        assert_eq!(negate.uses(), HashSet::from([lhs]));
-        assert_eq!(increment.uses(), HashSet::from([rhs]));
-    }
-}
-
 /// How NaNs are treated in floating point comparisons.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 pub enum NaNTreatment {

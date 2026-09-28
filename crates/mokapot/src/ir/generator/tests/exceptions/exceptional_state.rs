@@ -27,11 +27,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
 
     assert_ne!(normal_target, pad_id);
     let pad = block_of(&ir, pad_id);
-    let BlockKind::LandingPad { exception: caught } = pad.kind else {
-        panic!("exceptional successor must target a landing pad");
-    };
-    let expected = Some(ValueDefinition::CaughtException(pad_id));
-    assert_eq!(ir.definition_of(caught), expected);
+    assert_matches!(pad.kind, BlockKind::LandingPad { .. });
     assert!(pad.parameters.is_empty());
     assert!(pad.operations.is_empty());
     assert_eq!(pad.terminator.successors().count(), 1);
@@ -54,11 +50,12 @@ fn exceptional_state_excludes_the_fallible_result() {
     ];
     let table = vec![handler(1.into()..2.into(), 10.into(), None)];
     let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
-    let definition = terminator_at(&ir, 1.into()).def();
-    let result = definition.expect("checkcast must define a result");
+    let attempted = terminator_at(&ir, 1.into()).operation().unwrap();
+    let Operation::Definition { value: result, .. } = attempted else {
+        panic!("checkcast must define a result");
+    };
+    let result = *result;
     let location = ir.source_map.instructions_at(1.into()).next().unwrap();
-    let expected = Some(ValueDefinition::Instruction(location));
-    assert_eq!(ir.definition_of(result), expected);
     let fallible = block_containing_instruction(&ir, location);
     let target = |predicate: fn(&ControlTransfer) -> bool| {
         fallible

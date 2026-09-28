@@ -2,7 +2,7 @@ use std::ops::Range;
 
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
-    ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod, ValueDefinition},
+    ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
     jvm::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
