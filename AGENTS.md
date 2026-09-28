@@ -31,6 +31,9 @@ When the hosting type is already private, its associated items may be `pub`: the
 ## Testing Guidelines
 
 Add unit tests near the code they cover and integration tests in `crates/mokapot/tests/<feature>.rs`.
+Use the shared test prelude (`crate::ir::test::prelude::*`) and its fixtures where applicable; add reusable test utilities there.
+Bind instruction lists and assertion subjects to local variables when this makes calls and assertions shorter.
+Assert error kinds, variants, and structured context rather than message text; avoid `should_panic(expected = ...)`.
 Java fixture tests require JDK 27 (`javac` and `jar`); `build.rs` recompiles files from `crates/mokapot/test_data`.
 JDK-wide ignored tests require extracted JDK classes:
 

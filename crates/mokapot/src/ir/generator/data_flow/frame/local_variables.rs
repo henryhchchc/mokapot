@@ -155,14 +155,18 @@ impl LocalVariables {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_n;
+
     use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
     use super::{FrameError, LocalSlot, LocalVariables};
     use crate::{
         intrinsics::see_jvm_spec,
-        ir::{IdAllocator, ValueId},
+        ir::{IdAllocator, ValueId, test::prelude::entry_values},
+        tests::arb_field_type,
         types::field_type::ValueCategory,
+        types::method_descriptor::{MethodDescriptor, ReturnType},
     };
 
     /// A table of `slot_count` variables, none of them written.
@@ -173,6 +177,49 @@ mod tests {
     }
 
     proptest! {
+        /// Entry values occupy consecutive local slots, with a reserved slot after each category 2 value.
+        #[doc = see_jvm_spec!(2, 6, 1)]
+        #[test]
+        fn lays_out_method_entry_values(
+            parameter_types in prop::collection::vec(arb_field_type(), 0..8),
+            instance in any::<bool>(),
+        ) {
+            let descriptor = MethodDescriptor {
+                parameters_types: parameter_types,
+                return_type: ReturnType::Void,
+            };
+            let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());
+            let entries: Vec<&ValueId> = receiver.iter().chain(&parameters).collect();
+
+            let mut layout: Vec<Option<usize>> = Vec::new();
+            let mut entry = 0;
+            if instance {
+                layout.push(Some(entry));
+                entry += 1;
+            }
+            for value_type in &descriptor.parameters_types {
+                layout.push(Some(entry));
+                entry += 1;
+                layout.extend(repeat_n(None, value_type.value_category().slot_count() - 1));
+            }
+
+            let max_slots = u16::try_from(layout.len()).expect("a descriptor fits in u16 slots");
+            let locals = LocalVariables::for_method_entry(&descriptor, max_slots, receiver, &parameters)
+                .expect("the entry values fit their own slot count");
+            for (slot, expected) in layout.iter().enumerate() {
+                let actual = locals.slot_values().nth(slot).expect("slot belongs to table");
+                let expected = expected.map(|index| entries[index]);
+                prop_assert_eq!(actual, expected, "slot {} of the entry locals holds the wrong value", slot);
+            }
+
+            if max_slots > 0 {
+                let too_small = LocalVariables::for_method_entry(
+                    &descriptor, max_slots - 1, receiver, &parameters,
+                );
+                prop_assert!(matches!(too_small, Err(FrameError::LocalIndexOutOfBounds)));
+            }
+        }
+
         /// A store reads back under its own category, reserving the variable
         /// above a category 2 value.
         #[doc = see_jvm_spec!(2, 6, 1)]

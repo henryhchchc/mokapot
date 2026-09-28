@@ -199,3 +199,20 @@ fn product_partial_order(lhs: Option<Ordering>, rhs: Option<Ordering>) -> Option
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insertion_detects_duplicate_literals_and_contradictions() {
+        use BooleanVariable::{Negative, Positive};
+        let mut cube = Cube::one();
+        assert_eq!(cube.insert(Positive(1)), InsertResult::Inserted);
+        assert_eq!(cube.insert(Positive(1)), InsertResult::Present);
+        assert_eq!(cube.insert(Negative(1)), InsertResult::Contradiction);
+        let contraditon =
+            Cube::from_branch_guard(BranchGuard::from_iter([Positive(1), Negative(1)]));
+        assert!(contraditon.is_none());
+    }
+}

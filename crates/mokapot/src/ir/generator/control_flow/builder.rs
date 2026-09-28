@@ -221,14 +221,24 @@ mod tests {
 
     use crate::{
         ir::{
-            generator::{control_flow, data_flow},
+            generator::control_flow::{self, CfgNode},
             test::prelude::*,
         },
         jvm::code::Instruction,
     };
 
+    use super::super::block_exit::BlockExit;
+
     #[test]
-    fn parallel_edges_keep_distinct_internal_parameter_arguments() {
+    fn rejects_methods_without_bodies() {
+        let mut method = method([(0, Instruction::Return)], "()V", vec![]);
+        method.body = None;
+        let error = super::build(&method).err().unwrap();
+        assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);
+    }
+
+    #[test]
+    fn parallel_switch_edges_remain_distinct_arms() {
         let switch = Instruction::LookupSwitch {
             default: 8.into(),
             match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
@@ -249,21 +259,15 @@ mod tests {
             vec![],
         );
         let cfg = control_flow::analyze(&method).unwrap();
-        let parts = data_flow::analyze(&cfg).unwrap();
-        let (&target, target_block) = parts
-            .blocks
-            .iter()
-            .find(|(_, block)| !block.parameters.is_empty())
-            .expect("the local-variable join has a block parameter");
-        assert_eq!(target_block.parameters.len(), 1);
+        let switch = cfg.block(cfg.entry_block());
 
-        let incoming = parts
-            .blocks
-            .values()
-            .flat_map(|block| block.terminator.arms())
-            .filter(|edge| edge.block_target() == Some(target))
-            .collect::<Vec<_>>();
-        assert_eq!(incoming.len(), 3);
-        assert!(incoming.iter().all(|edge| edge.arguments().len() == 1));
+        assert_matches!(
+            switch,
+            CfgNode::Code {
+                exit: BlockExit::Switch { cases, .. },
+                ..
+            }
+            if cases.len() == 2 && cases[&1] == cases[&2]
+        );
     }
 }

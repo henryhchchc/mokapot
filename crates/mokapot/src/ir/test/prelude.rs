@@ -1,6 +1,6 @@
 //! IR fixtures for unit tests, importable with `use crate::ir::test::prelude::*;`.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 pub(crate) use crate::ir::{
     BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
@@ -8,15 +8,51 @@ pub(crate) use crate::ir::{
     expression::Expression,
 };
 use crate::{
+    analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
     jvm::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
         method::AccessFlags,
-        references::ClassRef,
+        references::{ClassRef, FieldRef},
     },
     types::reference_type::ReferenceType,
 };
+
+/// A set-valued fact used by fixed-point analysis tests.
+#[derive(Debug, Clone, PartialEq, Eq, Default, proptest_derive::Arbitrary)]
+pub(crate) struct TestSet(pub(crate) BTreeSet<u8>);
+
+impl<I> From<I> for TestSet
+where
+    I: IntoIterator<Item = u8>,
+{
+    fn from(value: I) -> Self {
+        Self(value.into_iter().collect())
+    }
+}
+
+impl PartialOrd for TestSet {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self == other {
+            Some(std::cmp::Ordering::Equal)
+        } else if self.0.is_subset(&other.0) {
+            Some(std::cmp::Ordering::Less)
+        } else if self.0.is_superset(&other.0) {
+            Some(std::cmp::Ordering::Greater)
+        } else {
+            None
+        }
+    }
+}
+
+impl JoinSemiLattice for TestSet {
+    fn join_assign(&mut self, other: Self) -> bool {
+        let old_len = self.0.len();
+        self.0.extend(other.0);
+        self.0.len() != old_len
+    }
+}
 
 /// Asserts that `value` matches `pattern`, printing the value on failure.
 macro_rules! assert_matches {
@@ -66,6 +102,26 @@ pub(crate) fn cls_r(name: &str) -> ClassRef {
 /// The reference type named `name`.
 pub(crate) fn ref_t(name: &str) -> ReferenceType {
     name.parse().expect("a valid type name")
+}
+
+/// A simple `int` instance field on `java/lang/Object`.
+pub(crate) fn field_ref() -> FieldRef {
+    FieldRef {
+        owner: ref_t("java/lang/Object"),
+        name: "value".to_owned(),
+        field_type: crate::types::field_type::PrimitiveType::Int.into(),
+    }
+}
+
+/// Fresh receiver and parameter identities for method-entry tests.
+pub(crate) fn entry_values(
+    instance: bool,
+    parameter_count: usize,
+) -> (Option<ValueId>, Vec<ValueId>) {
+    let mut allocator = crate::ir::IdAllocator::default();
+    let receiver = instance.then(|| allocator.new_id());
+    let parameters = (0..parameter_count).map(|_| allocator.new_id()).collect();
+    (receiver, parameters)
 }
 
 /// The method entry invoking `target` with `args`.

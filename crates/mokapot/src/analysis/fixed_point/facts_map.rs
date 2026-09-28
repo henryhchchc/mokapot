@@ -172,3 +172,54 @@ impl<L, F> IntoIterator for QueuedFactsMap<L, F> {
         self.entries.into_iter()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::TestSet;
+    use std::iter;
+
+    #[test]
+    fn maps_insert_join_coalesce_and_pop_exact_entries() {
+        assert_facts_map::<BTreeMap<u8, TestSet>>();
+        assert_facts_map::<HashMap<u8, TestSet>>();
+        assert_facts_map::<QueuedFactsMap<u8, TestSet>>();
+    }
+
+    fn assert_facts_map<M>()
+    where
+        M: FactsMap<u8, TestSet>,
+    {
+        let mut map = M::default();
+        let fact = map.insert_or_join(2, TestSet::from([1])).unwrap().1;
+        assert_eq!(fact, &TestSet::from([1]));
+
+        assert!(map.insert_or_join(2, TestSet::from([1])).is_none());
+
+        let fact = map.insert_or_join(2, TestSet::from([2])).unwrap().1;
+        assert_eq!(fact, &TestSet::from([1, 2]));
+
+        let fact = map.insert_or_join(1, TestSet::default()).unwrap().1;
+        assert_eq!(fact, &TestSet::default());
+
+        let popped: Vec<_> = iter::from_fn(|| map.pop_one()).collect();
+        assert_eq!(popped.len(), 2);
+        let popped: BTreeMap<_, _> = popped.into_iter().collect();
+        let expected = BTreeMap::from([(1, TestSet::default()), (2, TestSet::from([1, 2]))]);
+        assert_eq!(popped, expected);
+    }
+
+    #[test]
+    fn ordered_maps_pop_in_key_or_insertion_order() {
+        let mut ordered = BTreeMap::default();
+        ordered.insert_or_join(2, TestSet::default());
+        ordered.insert_or_join(1, TestSet::default());
+        assert_eq!(ordered.pop_one().unwrap().0, 1);
+
+        let mut queued = QueuedFactsMap::default();
+        queued.insert_or_join(2, TestSet::default());
+        queued.insert_or_join(1, TestSet::default());
+        assert_eq!(queued.pop_one().unwrap().0, 2);
+        assert_eq!(queued.pop_one().unwrap().0, 1);
+    }
+}

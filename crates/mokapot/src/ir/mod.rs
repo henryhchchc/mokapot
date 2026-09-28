@@ -26,7 +26,7 @@ pub mod path_condition;
 mod source_map;
 mod terminator;
 #[cfg(test)]
-mod test;
+pub(crate) mod test;
 
 use std::collections::HashMap;
 

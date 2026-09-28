@@ -164,3 +164,40 @@ impl Predicate {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::ids;
+
+    #[test]
+    fn conversion_canonicalizes_comparison_and_complement_predicates() {
+        let [x_id, y_id] = ids(0);
+        let x = PathValue::Variable(x_id);
+        let y = PathValue::Variable(y_id);
+        assert_eq!(
+            BooleanVariable::from(Predicate::GreaterThan(x.clone(), y.clone())),
+            BooleanVariable::Positive(Predicate::LessThan(y.clone(), x.clone()))
+        );
+        assert_eq!(
+            BooleanVariable::from(Predicate::GreaterThanOrEqual(x.clone(), y.clone())),
+            BooleanVariable::Negative(Predicate::LessThan(x.clone(), y.clone()))
+        );
+        assert_eq!(
+            BooleanVariable::from(Predicate::LessThanOrEqual(x.clone(), y.clone())),
+            BooleanVariable::Negative(Predicate::LessThan(y.clone(), x.clone()))
+        );
+        assert_eq!(
+            BooleanVariable::from(Predicate::NotEqual(x.clone(), y.clone())),
+            BooleanVariable::Negative(Predicate::Equal(x.clone(), y.clone()))
+        );
+        assert_eq!(
+            BooleanVariable::from(Predicate::IsNonZero(x.clone())),
+            BooleanVariable::Negative(Predicate::IsZero(x.clone()))
+        );
+        assert_eq!(
+            BooleanVariable::from(Predicate::IsNotNull(x.clone())),
+            BooleanVariable::Negative(Predicate::IsNull(x.clone()))
+        );
+    }
+}

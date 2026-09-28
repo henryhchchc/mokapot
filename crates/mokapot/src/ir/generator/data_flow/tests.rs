@@ -12,17 +12,91 @@ use crate::{
 };
 
 /// Asserts the frame-flow invariant of `method`'s solutions.
-pub(crate) fn verify_method(method: &Method) {
-    let Ok(cfg) = control_flow::analyze(method) else {
-        return;
-    };
-    let Ok(solver) = DataflowSolver::new(&cfg) else {
-        return;
-    };
-    let Ok(parts) = solver.solve() else {
-        return;
-    };
+fn verify_method(method: &Method) {
+    let cfg = control_flow::analyze(method).expect("the test method has a valid CFG");
+    let solver = DataflowSolver::new(&cfg).expect("the test method has a valid entry frame");
+    let parts = solver.solve().expect("the test method has valid dataflow");
     verify_frames(parts.entry, &parts.blocks);
+}
+
+mod cases {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    use crate::{
+        ir::{generator::data_flow::analyze, test::prelude::*},
+        jvm::code::Instruction,
+    };
+
+    #[test]
+    fn parallel_edges_deliver_their_join_arguments() {
+        let switch = Instruction::LookupSwitch {
+            default: 8.into(),
+            match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
+        };
+        let body = [
+            (0, Instruction::IConst0),
+            (1, Instruction::IStore1),
+            (2, Instruction::ILoad0),
+            (3, switch),
+            (8, Instruction::IConst1),
+            (9, Instruction::IStore1),
+            (10, Instruction::Goto(12.into())),
+            (12, Instruction::ILoad1),
+            (13, Instruction::IReturn),
+        ];
+        let method = method(body, "(I)I", vec![]);
+        let cfg = control_flow::analyze(&method).unwrap();
+        let parts = analyze(&cfg).unwrap();
+        let (&target, block) = parts
+            .blocks
+            .iter()
+            .find(|(_, block)| !block.parameters.is_empty())
+            .expect("the local join has a block parameter");
+        assert_eq!(block.parameters.len(), 1);
+        let incoming = parts
+            .blocks
+            .values()
+            .flat_map(|block| block.terminator.arms())
+            .filter(|arm| arm.block_target() == Some(target))
+            .collect::<Vec<_>>();
+        assert_eq!(incoming.len(), 3);
+        assert!(incoming.iter().all(|arm| arm.arguments().len() == 1));
+        verify_method(&method);
+    }
+
+    #[test]
+    fn branch_and_loop_frames_arrive_on_their_edges() {
+        let body = [
+            (0, Instruction::ILoad0),
+            (1, Instruction::IfEq(8.into())),
+            (4, Instruction::IInc(0, -1)),
+            (7, Instruction::Goto(0.into())),
+            (8, Instruction::ILoad0),
+            (9, Instruction::IReturn),
+        ];
+        let method = method(body, "(I)I", vec![]);
+        verify_method(&method);
+    }
+
+    #[test]
+    fn exception_handler_frames_arrive_from_throwing_instructions() {
+        let body = [
+            (0, Instruction::ALoad0),
+            (1, Instruction::ArrayLength),
+            (2, Instruction::IReturn),
+            (3, Instruction::AStore1),
+            (4, Instruction::IConst0),
+            (5, Instruction::IReturn),
+        ];
+        let handlers = vec![crate::jvm::code::ExceptionTableEntry {
+            covered_pc: 1.into()..2.into(),
+            handler_pc: 3.into(),
+            catch_type: None,
+        }];
+        let method = method(body, "([I)I", handlers);
+        verify_method(&method);
+    }
 }
 
 /// Verifies closure and both directions of the frame-flow relation.

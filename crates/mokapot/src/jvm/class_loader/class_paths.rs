@@ -143,3 +143,25 @@ impl ClassRefs for JarClassPath {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn directory_class_path_reports_absent_class() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+        let result =
+            DirectoryClassPath::new(path).find_class(&"org/pkg/MyAbsentClass".parse().unwrap());
+        assert!(matches!(result, Err(Error::NotFound)));
+    }
+
+    #[cfg(feature = "jar")]
+    #[test]
+    fn jar_class_path_rejects_non_jar_file() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+        let result =
+            JarClassPath::new(path).find_class(&"org/mokapot/test/MyClass".parse().unwrap());
+        assert!(matches!(result, Err(Error::Other(_))));
+    }
+}

@@ -194,3 +194,69 @@ fn exception_arms(body: &MethodBody, pc: ProgramCounter) -> Vec<ExceptionArm<Pro
     });
     exception_arms
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::*;
+
+    #[test]
+    fn rejects_invalid_tableswitch_ranges() {
+        for (low, jump_targets) in [(i32::MAX, vec![10.into(), 10.into()]), (0, vec![])] {
+            let switch = Instruction::TableSwitch {
+                low,
+                jump_targets,
+                default: 10.into(),
+            };
+            let instructions = [(0, switch.clone()), (10, Instruction::Return)];
+            let method = method(instructions, "()V", vec![]);
+            let body = method.body.unwrap();
+            assert_eq!(
+                BlockExit::of(&body, 0.into(), &switch),
+                Err(ErrorKind::InvalidTableSwitchRange)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_multianewarray_dimensions() {
+        for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
+            let allocation = Instruction::MultiANewArray(ref_t(array_type), dimensions);
+            let instructions = [(0, allocation.clone()), (1, Instruction::Return)];
+            let method = method(instructions, "()V", vec![]);
+            let body = method.body.unwrap();
+            assert_eq!(
+                BlockExit::of(&body, 0.into(), &allocation),
+                Err(ErrorKind::InvalidMultiArrayDimensions)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_legacy_subroutine_instructions() {
+        let instructions = [
+            Instruction::Jsr(0.into()),
+            Instruction::JsrW(0.into()),
+            Instruction::Ret(0),
+            Instruction::Wide(WideInstruction::Ret(300)),
+        ];
+        for instruction in instructions {
+            let method = method([(0, instruction.clone())], "()V", vec![]);
+            let body = method.body.unwrap();
+            assert_eq!(
+                BlockExit::of(&body, 0.into(), &instruction),
+                Err(ErrorKind::UnsupportedLegacySubroutine)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_fallthrough() {
+        let method = method([(4, Instruction::Nop)], "()V", vec![]);
+        let body = method.body.unwrap();
+        assert_eq!(
+            BlockExit::of(&body, 4.into(), &Instruction::Nop),
+            Err(ErrorKind::MissingFallthrough)
+        );
+    }
+}

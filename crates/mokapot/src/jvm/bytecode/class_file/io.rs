@@ -82,3 +82,14 @@ impl ToBytecode for ClassFile {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_magic() {
+        let error = ClassFile::from_reader(&mut &[0, 0, 0, 0][..]).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+}

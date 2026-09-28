@@ -65,17 +65,6 @@ fn assignments() -> impl Iterator<Item = HashMap<u32, bool>> {
     })
 }
 
-/// Budgets that exercise both the exact and the bounded heuristic reducer.
-fn arb_budget() -> impl Strategy<Value = SolvingBudget> {
-    (0..=8_usize, 0..=4_usize, 0..=64_usize).prop_map(
-        |(on_set_size, heuristic_rounds, cover_checks)| SolvingBudget {
-            on_set_size,
-            heuristic_rounds,
-            cover_checks,
-        },
-    )
-}
-
 mod raw_structure {
     use super::*;
 
@@ -110,62 +99,18 @@ mod explicit_reduction {
     use super::*;
 
     #[test]
-    fn reduce_eliminates_complementary_terms_explicitly() {
+    fn composition_defers_reduction_until_requested() {
         let a = BooleanVariable::Positive(1_u32);
         let b = BooleanVariable::Positive(2_u32);
         let structural = PathCondition::from_branch_guards([
             BranchGuard::from_iter([a.clone(), b.clone()]),
             BranchGuard::from_iter([a.clone(), !b]),
         ]);
-        let expected = PathCondition::one() & BranchGuard::of(a);
-
-        let reduced = structural
-            .clone()
-            .reduce_with_budget(SolvingBudget::default());
-
-        assert_ne!(structural, expected);
-        assert_eq!(reduced, expected);
-    }
-
-    #[test]
-    fn semantic_order_compares_meaning_not_form() {
-        let a = BooleanVariable::Positive(1_u32);
-        let b = BooleanVariable::Positive(2_u32);
-        let structural = PathCondition::from_branch_guards([
-            BranchGuard::from_iter([a.clone(), b.clone()]),
-            BranchGuard::from_iter([a.clone(), !b.clone()]),
-        ]);
-        let expected = PathCondition::one() & BranchGuard::of(a);
-        let different = PathCondition::one() & BranchGuard::of(b);
-
-        assert_ne!(structural, expected);
-        assert_eq!(
-            structural.cover.partial_cmp(&expected.cover),
-            Some(std::cmp::Ordering::Equal)
-        );
-        assert_ne!(
-            structural.cover.partial_cmp(&different.cover),
-            Some(std::cmp::Ordering::Equal)
-        );
-    }
-
-    proptest! {
-        /// Reduction keeps the meaning of a condition under every budget.
-        #[test]
-        fn reduction_preserves_meaning(
-            condition in arb_condition(),
-            budget in arb_budget(),
-        ) {
-            let reduced = condition.clone().reduce_with_budget(budget);
-            for values in assignments() {
-                prop_assert_eq!(
-                    evaluate(&condition, &values),
-                    evaluate(&reduced, &values),
-                    "reduction changed the meaning of {}",
-                    condition,
-                );
-            }
-        }
+        let budget = SolvingBudget::default();
+        let expected = structural.cover.clone().reduce(budget);
+        assert_ne!(structural.cover, expected);
+        let reduced = structural.reduce_with_budget(budget);
+        assert_eq!(reduced.cover, expected);
     }
 }
 
@@ -175,7 +120,7 @@ mod analyzer {
     use crate::{
         ir::{
             BranchGuard, ControlTransfer as Transfer, NumericalId,
-            expression::{BooleanVariable, Expression, PathValue, Predicate},
+            expression::{BooleanVariable, Expression, Predicate},
             path_condition::PathCondition,
             test::prelude::*,
         },
@@ -303,46 +248,5 @@ mod analyzer {
 
         assert!(!conditions.contains_key(&impossible));
         assert!(conditions.contains_key(&reachable));
-    }
-
-    #[test]
-    fn constant_folding_preserves_canonical_literal_polarity() {
-        let integer = |value| PathValue::Constant(Integer(value));
-        let cases = [
-            (
-                BooleanVariable::Positive(Predicate::GreaterThanOrEqual(integer(1), integer(2))),
-                false,
-            ),
-            (
-                BooleanVariable::Positive(Predicate::NotEqual(integer(0), integer(1))),
-                true,
-            ),
-            (
-                BooleanVariable::Positive(Predicate::IsNotNull(PathValue::Constant(Null))),
-                false,
-            ),
-            (
-                BooleanVariable::Negative(Predicate::IsNonZero(integer(0))),
-                true,
-            ),
-        ];
-
-        for (literal, expected_taken) in cases {
-            let [entry, taken, otherwise] = ids(0);
-            let blocks = HashMap::from([
-                code(
-                    entry,
-                    branch(
-                        arm(taken, [], Transfer::Conditional(BranchGuard::of(literal))),
-                        edge(otherwise, []),
-                    ),
-                ),
-                code(taken, void()),
-                code(otherwise, void()),
-            ]);
-            let conditions = PathCondition::analyze(&ir_method(entry, blocks));
-
-            assert_eq!(conditions.contains_key(&taken), expected_taken);
-        }
     }
 }

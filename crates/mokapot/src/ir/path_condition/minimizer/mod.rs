@@ -105,3 +105,102 @@ where
         upper_bound.checked_add(cube_expansion)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{BranchGuard, expression::BooleanVariable};
+    use proptest::prelude::*;
+
+    fn arb_cubes() -> impl Strategy<Value = HashSet<Cube<u8>>> {
+        let structured = prop::collection::hash_set(
+            prop::collection::hash_set(
+                (0..4_u8, any::<bool>()).prop_map(|(id, negative)| {
+                    if negative {
+                        BooleanVariable::Negative(id)
+                    } else {
+                        BooleanVariable::Positive(id)
+                    }
+                }),
+                1..=4,
+            )
+            .prop_map(BranchGuard::from_iter),
+            1..=4,
+        )
+        .prop_map(|guards| {
+            guards
+                .into_iter()
+                .filter_map(Cube::from_branch_guard)
+                .collect()
+        });
+        prop_oneof![
+            Just(HashSet::new()),
+            Just(HashSet::from([Cube::one()])),
+            structured,
+        ]
+    }
+
+    fn holds(cubes: &HashSet<Cube<u8>>, bits: u8) -> bool {
+        cubes.iter().any(|cube| {
+            cube.positive().all(|id| bits & (1 << id) != 0)
+                && cube.negative().all(|id| bits & (1 << id) == 0)
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn bounded_minimization_preserves_truth_table(
+            cubes in arb_cubes(),
+            on_set_size in 0..=8_usize,
+            heuristic_rounds in 0..=4_usize,
+            cover_checks in 0..=64_usize,
+        ) {
+            let minimized = BoundedMinimizer::new(SolvingBudget {
+                on_set_size,
+                heuristic_rounds,
+                cover_checks,
+            }).minimize(cubes.clone());
+            for bits in 0..(1 << 4) {
+                prop_assert_eq!(holds(&cubes, bits), holds(&minimized, bits));
+            }
+        }
+    }
+
+    #[test]
+    fn exact_minimization_merges_complementary_cubes() {
+        let a = BooleanVariable::Positive(1_u8);
+        let b = BooleanVariable::Positive(2_u8);
+        let cubes = [
+            BranchGuard::from_iter([a.clone(), b.clone()]),
+            BranchGuard::from_iter([a.clone(), !b]),
+        ]
+        .into_iter()
+        .filter_map(Cube::from_branch_guard)
+        .collect();
+        let minimized = BoundedMinimizer::new(SolvingBudget::default()).minimize(cubes);
+        let expected: HashSet<_> = [Cube::from_branch_guard(BranchGuard::of(a))]
+            .into_iter()
+            .flatten()
+            .collect();
+
+        assert_eq!(minimized, expected);
+    }
+
+    #[test]
+    fn deferred_generalization_still_absorbs_subsumed_cubes() {
+        let a = BooleanVariable::Positive(1_u8);
+        let b = BooleanVariable::Positive(2_u8);
+        let cubes = [BranchGuard::of(a.clone()), BranchGuard::from_iter([a, b])]
+            .into_iter()
+            .filter_map(Cube::from_branch_guard)
+            .collect();
+        let minimized = BoundedMinimizer::deferring_generalization(SolvingBudget {
+            on_set_size: 0,
+            heuristic_rounds: 0,
+            cover_checks: 0,
+        })
+        .minimize(cubes);
+
+        assert_eq!(minimized.len(), 1);
+    }
+}

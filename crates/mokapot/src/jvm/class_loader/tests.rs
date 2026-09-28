@@ -1,14 +1,49 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{CachingClassLoader, ClassLoader, ClassPath, Error, class_paths::DirectoryClassPath};
+use super::{CachingClassLoader, ClassLoader, ClassPath, Error};
 use crate::{jvm::Class, types::binary_name::BinaryName};
 
 #[test]
-fn load_absent_class() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
-    let loader = ClassLoader::new([DirectoryClassPath::new(path)]);
-    let result = loader.load_class(&"org/pkg/MyAbsentClass".parse().unwrap());
-    assert!(matches!(result, Err(Error::NotFound)));
+fn loader_exhausts_class_paths_after_not_found() {
+    struct Missing<'a>(&'a AtomicUsize);
+    impl ClassPath for Missing<'_> {
+        fn find_class(&self, _: &BinaryName) -> Result<Class, Error> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Err(Error::NotFound)
+        }
+    }
+    let missing_calls = AtomicUsize::new(0);
+    let second_calls = AtomicUsize::new(0);
+    let loader = ClassLoader::new(vec![
+        Box::new(Missing(&missing_calls)) as Box<dyn ClassPath>,
+        Box::new(Missing(&second_calls)),
+    ]);
+    let name = "org/mokapot/test/MyClass".parse().unwrap();
+    assert!(matches!(loader.load_class(&name), Err(Error::NotFound)));
+    assert_eq!(missing_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(second_calls.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn loader_propagates_non_not_found_errors() {
+    struct Failure;
+    impl ClassPath for Failure {
+        fn find_class(&self, _: &BinaryName) -> Result<Class, Error> {
+            Err(Error::Other("failure".into()))
+        }
+    }
+    let later_calls = AtomicUsize::new(0);
+    let loader = ClassLoader::new(vec![
+        Box::new(Failure) as Box<dyn ClassPath>,
+        Box::new(MockClassPath {
+            counter: &later_calls,
+        }),
+    ]);
+    let error = loader
+        .load_class(&"org/mokapot/test/MyClass".parse().unwrap())
+        .unwrap_err();
+    assert!(matches!(error, Error::Other(_)));
+    assert_eq!(later_calls.load(Ordering::Relaxed), 0);
 }
 
 struct MockClassPath<'a> {
@@ -47,19 +82,6 @@ fn caching_class_loader_load_once() {
         }
     });
     assert_eq!(1, counter.load(Ordering::Relaxed));
-}
-
-#[cfg(feature = "jar")]
-#[test]
-fn jar_class_path_not_jar() {
-    use super::class_paths::JarClassPath;
-
-    let jar = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
-    let loader = ClassLoader::new([JarClassPath::new(jar)]);
-    assert!(matches!(
-        loader.load_class(&"org/mokapot/test/MyClass".parse().unwrap()),
-        Err(Error::Other(_))
-    ));
 }
 
 #[test]

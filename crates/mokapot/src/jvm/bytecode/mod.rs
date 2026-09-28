@@ -1,6 +1,7 @@
 //! JVM class file format parsing and writing functionality.
 mod annotation;
 mod attribute;
+pub(crate) use attribute::Attribute;
 pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;

@@ -2,7 +2,9 @@ use super::*;
 use crate::{
     ir::{
         MokaIRBuildErrorKind, ValueId,
-        expression::{ArrayOperation, Conversion, Expression, FieldAccess, MathOperation},
+        expression::{
+            ArrayOperation, Conversion, Expression, FieldAccess, LockOperation, MathOperation,
+        },
     },
     jvm::references::{FieldRef, MethodRef},
     types::field_type::{FieldType, PrimitiveType},
@@ -91,11 +93,14 @@ fn array_write_is_an_effect_without_a_definition() {
         (4, Instruction::Return),
     ];
     let ir = build(&method(body, "([III)V", vec![])).unwrap();
-    let effect = terminator_at(&ir, 3.into()).operation().unwrap();
+    let operation = terminator_at(&ir, 3.into()).operation().unwrap();
 
-    assert_matches!(effect, Operation::Effect { .. });
-    assert_eq!(effect.def(), None);
-    assert_eq!(effect.uses().len(), 3);
+    let expected = effect(Expression::Array(ArrayOperation::Write {
+        array_ref: ir.parameters[0],
+        index: ir.parameters[1],
+        value: ir.parameters[2],
+    }));
+    assert_eq!(operation, &expected);
     for pc in [0, 1, 2] {
         assert_eq!(ir.source_map.instructions_at(pc.into()).count(), 0);
     }
@@ -130,13 +135,14 @@ fn monitor_operations_are_effects_without_definitions() {
         (4, Instruction::Return),
     ];
     let ir = build(&method(body, "(Ljava/lang/Object;)V", vec![])).unwrap();
-    let instructions = terminator_operations(&ir).collect::<Vec<_>>();
+    let instructions = terminator_operations(&ir).cloned().collect::<Vec<_>>();
 
     assert_eq!(instructions.len(), 2);
-    let are_effects = instructions
-        .iter()
-        .all(|it| it.def().is_none() && matches!(it, Operation::Effect { .. }));
-    assert!(are_effects);
+    let expected = [
+        effect(LockOperation::Acquire(ir.parameters[0])),
+        effect(LockOperation::Release(ir.parameters[0])),
+    ];
+    assert_eq!(instructions, expected);
 }
 
 #[test]

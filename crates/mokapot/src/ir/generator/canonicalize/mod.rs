@@ -105,39 +105,4 @@ mod tests {
         canonicalize_values(&mut method_entry(b0, []), &mut canonicalized);
         assert_eq!(canonicalized, blocks);
     }
-
-    #[test]
-    fn drops_eliminated_argument_slots_from_edges_and_entry_arguments() {
-        let [kept, dead, kept_arg, dead_arg, back_edge, result] = ids(0);
-        let [b0, b1] = ids(0);
-        let ops = [def(result, MathOperation::Increment(kept, 1))];
-
-        let mut blocks = HashMap::from([
-            bb(b0, [kept, dead], &ops, ret(dead)),
-            // A back edge making the entry block's parameters a join of two inputs.
-            code(b1, goto(b0, [back_edge, dead_arg])),
-        ]);
-        let mut entry = method_entry(b0, [kept_arg, dead_arg]);
-        canonicalize_values(&mut entry, &mut blocks);
-
-        // `kept` joins two distinct inputs while `dead` forwards one.
-        let expected = HashMap::from([
-            bb(b0, [kept], &ops, ret(dead_arg)),
-            code(b1, goto(b0, [back_edge])),
-        ]);
-        assert_eq!(entry, method_entry(b0, [kept_arg]));
-        assert_eq!(blocks, expected);
-    }
-
-    #[test]
-    #[should_panic(expected = "closed cycle")]
-    fn rejects_a_closed_parameter_cycle() {
-        let [a, b] = ids(0);
-        let [b1, b2] = ids(0);
-        let mut blocks = HashMap::from([
-            bb(b1, [a], &[], goto(b2, [a])),
-            bb(b2, [b], &[], goto(b1, [b])),
-        ]);
-        canonicalize_values(&mut method_entry(b1, []), &mut blocks);
-    }
 }

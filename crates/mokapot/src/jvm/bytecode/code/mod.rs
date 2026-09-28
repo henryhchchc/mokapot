@@ -281,10 +281,11 @@ impl ClassElement for MethodBody {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClassElement, ExceptionTableEntry, ParsingContext, raw_attributes};
+    use super::{ClassElement, ExceptionTableEntry, MethodBody, ParsingContext, raw_attributes};
     use crate::jvm::{
         class::{ConstantPool, Version},
         code::ProgramCounter,
+        errors::ParseErrorKind,
     };
 
     #[test]
@@ -309,12 +310,29 @@ mod tests {
             entry.covered_pc,
             ProgramCounter::from(1)..ProgramCounter::from(4)
         );
-        assert!(entry.covers(1.into()));
-        assert!(entry.covers(3.into()));
-        assert!(!entry.covers(4.into()));
-
         let raw = entry.into_raw(&mut ConstantPool::new()).unwrap();
         assert_eq!(raw.start_pc, 1);
         assert_eq!(raw.end_pc, 4);
+    }
+
+    #[test]
+    fn method_body_propagates_malformed_instruction_bytes() {
+        let context = ParsingContext {
+            constant_pool: ConstantPool::new(),
+            class_version: Version::Jdk8,
+            current_class_binary_name: "Test".parse().unwrap(),
+        };
+        let error = MethodBody::from_raw(
+            raw_attributes::Code {
+                max_stack: 0,
+                max_locals: 0,
+                instruction_bytes: vec![0xcb],
+                exception_table: Vec::new(),
+                attributes: Vec::new(),
+            },
+            &context,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ParseErrorKind::Malformed);
     }
 }

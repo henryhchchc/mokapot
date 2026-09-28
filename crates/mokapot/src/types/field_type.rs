@@ -449,18 +449,16 @@ mod tests {
     #[test]
     fn rejects_empty_object_name_and_descriptor_suffix() {
         assert!(FieldType::from_str("L;").is_err());
-        assert!(FieldType::from_str("L/java/lang/String;").is_err());
-        assert!(FieldType::from_str("Ljava/lang/String;;").is_err());
+        for descriptor in ["Ljava/lang/String;;", "Ljava/lang/String;A"] {
+            assert!(FieldType::from_str(descriptor).is_err());
+        }
     }
 
     #[test]
-    fn missing_semicolon() {
-        assert!(FieldType::from_str("Ljava/lang/String").is_err());
-    }
-
-    #[test]
-    fn tailing_chars() {
-        assert!(FieldType::from_str("Ljava/lang/String;A").is_err());
+    fn missing_object_semicolon_is_rejected_at_every_array_depth() {
+        FieldType::from_str("Ljava/lang/String").unwrap_err();
+        FieldType::from_str("[Ljava/lang/String").unwrap_err();
+        FieldType::from_str("[[Ljava/lang/String").unwrap_err();
     }
 
     #[test]

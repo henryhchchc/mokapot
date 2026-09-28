@@ -226,3 +226,39 @@ impl JoinSemiLattice for PathConditionFact {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::{
+            BranchGuard,
+            test::prelude::{code, ids, ir_method, void},
+        },
+        jvm::ConstantValue::Null,
+    };
+
+    #[test]
+    fn normalize_guard_folds_constant_predicates_with_their_polarity() {
+        use BooleanVariable::{Negative, Positive};
+        use Predicate::{GreaterThanOrEqual, IsNonZero, IsNotNull, NotEqual};
+        let [entry] = ids(0);
+        let method = ir_method(entry, HashMap::from([code(entry, void())]));
+        let problem = PathConditionProblem::new(&method, SolvingBudget::default());
+        let int = |value| PathValue::Constant(ConstantValue::Integer(value));
+        let cases = [
+            (Positive(GreaterThanOrEqual(int(1), int(2))), false),
+            (Positive(NotEqual(int(0), int(1))), true),
+            (Positive(IsNotNull(PathValue::Constant(Null))), false),
+            (Negative(IsNonZero(int(0))), true),
+        ];
+
+        for (literal, expected_taken) in cases {
+            let normalized = problem.normalize_guard(&BranchGuard::of(literal));
+            assert_eq!(normalized.is_some(), expected_taken);
+            if expected_taken {
+                assert!(normalized.unwrap().is_tautology());
+            }
+        }
+    }
+}

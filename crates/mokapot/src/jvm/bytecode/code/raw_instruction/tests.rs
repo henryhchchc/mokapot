@@ -3,10 +3,20 @@ use std::iter;
 use proptest::prelude::*;
 
 use super::*;
-use crate::jvm::bytecode::ParseErrorKind;
+use crate::jvm::bytecode::{ParseErrorKind, reader::PositionTracker};
 
-fn assert_malformed(bytes: Vec<u8>) {
-    let error = InstructionList::<RawInstruction>::from_bytes(bytes).unwrap_err();
+fn assert_malformed(bytes: &[u8]) {
+    assert_malformed_at(bytes, 0);
+}
+
+fn assert_malformed_at(bytes: &[u8], prefix_len: usize) {
+    let mut reader = PositionTracker::new(bytes);
+    for _ in 0..prefix_len {
+        RawInstruction::read_one(&mut reader)
+            .expect("prefix Nop should parse")
+            .expect("prefix Nop should be present");
+    }
+    let error = RawInstruction::read_one(&mut reader).unwrap_err();
     assert_eq!(error.kind(), ParseErrorKind::Malformed);
 }
 
@@ -45,15 +55,16 @@ fn valid_encoding(opcode: u8) -> Option<Vec<u8>> {
 fn decodes_every_defined_opcode_and_rejects_undefined_opcodes() {
     for opcode in 0..=u8::MAX {
         let Some(bytes) = valid_encoding(opcode) else {
-            assert_malformed(vec![opcode]);
+            assert_malformed(&[opcode]);
             continue;
         };
-        let instructions = InstructionList::<RawInstruction>::from_bytes(bytes)
-            .unwrap_or_else(|error| panic!("opcode 0x{opcode:02x} failed to parse: {error}"));
-        let decoded: Vec<_> = instructions.iter().collect();
-        assert_eq!(decoded.len(), 1, "opcode 0x{opcode:02x}");
-        assert_eq!(decoded[0].0, ProgramCounter::default());
-        assert_eq!(decoded[0].1.opcode(), opcode);
+        let mut reader = PositionTracker::new(bytes.as_slice());
+        let decoded = RawInstruction::read_one(&mut reader)
+            .unwrap_or_else(|error| panic!("opcode 0x{opcode:02x} failed to parse: {error}"))
+            .unwrap();
+        assert_eq!(reader.position(), bytes.len(), "opcode 0x{opcode:02x}");
+        assert_eq!(decoded.0, ProgramCounter::default());
+        assert_eq!(decoded.1.opcode(), opcode);
     }
 }
 
@@ -67,7 +78,8 @@ fn operand_bearing_opcodes_reject_truncated_encodings() {
             continue;
         }
         bytes.pop();
-        let error = InstructionList::<RawInstruction>::from_bytes(bytes).unwrap_err();
+        let error =
+            RawInstruction::read_one(&mut PositionTracker::new(bytes.as_slice())).unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::IO, "opcode 0x{opcode:02x}");
     }
 }
@@ -81,7 +93,7 @@ proptest! {
         let mut bytes = vec![0xba];
         bytes.extend(dynamic_index.to_be_bytes());
         bytes.extend(reserved.to_be_bytes());
-        assert_malformed(bytes);
+        assert_malformed(&bytes);
     }
 
     #[test]
@@ -102,7 +114,7 @@ proptest! {
         } else {
             &[0; 8][..]
         });
-        assert_malformed(bytes);
+        assert_malformed_at(&bytes, prefix_len);
     }
 
     #[test]
@@ -113,7 +125,7 @@ proptest! {
         let mut bytes = vec![0xab, 0, 0, 0];
         bytes.extend(default.to_be_bytes());
         bytes.extend(pair_count.to_be_bytes());
-        assert_malformed(bytes);
+        assert_malformed(&bytes);
     }
 
     #[test]
@@ -132,7 +144,7 @@ proptest! {
         bytes.extend(first_offset.to_be_bytes());
         bytes.extend(second_key.to_be_bytes());
         bytes.extend(second_offset.to_be_bytes());
-        assert_malformed(bytes);
+        assert_malformed(&bytes);
     }
 
     #[test]
@@ -146,8 +158,14 @@ proptest! {
         bytes.extend(default.to_be_bytes());
         bytes.extend(low.to_be_bytes());
         bytes.extend(high.to_be_bytes());
-        assert_malformed(bytes);
+        assert_malformed(&bytes);
     }
+}
+
+#[test]
+fn instruction_list_propagates_malformed_instruction() {
+    let error = InstructionList::<RawInstruction>::from_bytes(vec![0xcb]).unwrap_err();
+    assert_eq!(error.kind(), ParseErrorKind::Malformed);
 }
 
 #[test]

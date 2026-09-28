@@ -3,10 +3,9 @@ use proptest::prelude::*;
 use super::*;
 
 #[test]
-fn not_a_class_file() {
-    let mut bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).as_slice();
-    let result = Class::from_reader(&mut bytes);
-    assert!(result.is_err_and(|error| error.kind() == crate::jvm::bytecode::ParseErrorKind::IO));
+fn class_reader_propagates_invalid_magic_as_io_error() {
+    let error = Class::from_reader(&mut &[0, 0, 0, 0][..]).unwrap_err();
+    assert_eq!(error.kind(), crate::jvm::bytecode::ParseErrorKind::IO);
 }
 
 proptest! {

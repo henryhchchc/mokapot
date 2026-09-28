@@ -66,6 +66,7 @@ impl<'method> Cfg<'method> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum CfgNode {
     Code {
         start_pc: ProgramCounter,

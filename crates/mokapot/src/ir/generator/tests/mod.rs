@@ -10,9 +10,8 @@ use crate::{
     },
 };
 
-/// Builds `method`, first checking the frame bookkeeping that resolution erases.
+/// Builds `method` into [`MokaIRMethod`].
 pub(crate) fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    super::data_flow::verify_method(method);
     MokaIRMethod::from_method(method)
 }
 
@@ -91,6 +90,5 @@ pub(crate) fn build_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRB
 mod block_arguments;
 mod blocks;
 mod control_flow;
-mod diagnostics;
 mod effects;
 mod exceptions;

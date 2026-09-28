@@ -79,3 +79,36 @@ fn rewrite_block(
 fn rewrite_ops<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {
     value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value)));
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    use super::SimplifiedParameters;
+    use crate::ir::{expression::MathOperation, test::prelude::*};
+
+    #[test]
+    fn drops_eliminated_argument_slots_from_edges_and_entry_arguments() {
+        let [kept, dead, kept_arg, dead_arg, back_edge, result] = ids(0);
+        let [b0, b1] = ids(0);
+        let ops = [def(result, MathOperation::Increment(kept, 1))];
+        let mut blocks = HashMap::from([
+            bb(b0, [kept, dead], &ops, ret(dead)),
+            code(b1, goto(b0, [back_edge, dead_arg])),
+        ]);
+        let mut entry = method_entry(b0, [kept_arg, dead_arg]);
+        let simplified = SimplifiedParameters {
+            substitutions: HashMap::from([(dead, dead_arg)]),
+            retained: HashSet::from([kept]),
+        };
+
+        simplified.apply(&mut entry, &mut blocks);
+
+        let expected = HashMap::from([
+            bb(b0, [kept], &ops, ret(dead_arg)),
+            code(b1, goto(b0, [back_edge])),
+        ]);
+        assert_eq!(entry, method_entry(b0, [kept_arg]));
+        assert_eq!(blocks, expected);
+    }
+}

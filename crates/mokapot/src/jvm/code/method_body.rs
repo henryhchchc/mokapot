@@ -228,6 +228,20 @@ mod test {
     use crate::jvm::code::{Instruction, InstructionList};
 
     #[test]
+    fn exception_table_entry_covers_half_open_range() {
+        use super::super::ExceptionTableEntry;
+
+        let entry = ExceptionTableEntry {
+            covered_pc: 1.into()..4.into(),
+            handler_pc: 5.into(),
+            catch_type: None,
+        };
+        assert!(entry.covers(1.into()));
+        assert!(entry.covers(3.into()));
+        assert!(!entry.covers(4.into()));
+    }
+
+    #[test]
     fn instruction_at() {
         let body = MethodBody {
             instructions: InstructionList::from([

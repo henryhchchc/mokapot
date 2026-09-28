@@ -163,7 +163,7 @@ mod test {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{tests::arb_field_type, types::field_type::FieldType};
+    use crate::tests::arb_field_type;
 
     const MAX_PARAMS: usize = 10;
 
@@ -191,17 +191,18 @@ mod test {
         }
 
         #[test]
-        fn too_many_return_type(
-            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
-            rets in prop::collection::vec(arb_return_type(), 2..5),
+        fn return_type_rejects_a_second_suffix(
+            first in arb_return_type(),
+            suffix in prop::collection::vec(arb_return_type(), 1..5),
         ) {
             let descriptor = format!(
-                "({}){}",
-                params.iter().map(FieldType::descriptor).join(""),
-                rets.iter().map(ReturnType::descriptor).join(""),
+                "{}{}",
+                first.descriptor(),
+                suffix.iter().map(ReturnType::descriptor).join(""),
             );
-            assert!(MethodDescriptor::from_str(&descriptor).is_err());
+            assert!(ReturnType::from_str(&descriptor).is_err());
         }
+
     }
 
     #[test]
@@ -212,10 +213,8 @@ mod test {
     }
 
     #[test]
-    fn incomplete_return_type() {
-        let descriptor = "()Ljava/lang";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
+    fn propagates_invalid_return_type() {
+        assert!(MethodDescriptor::from_str("()Ljava/lang/String").is_err());
     }
 
     #[test]
@@ -226,22 +225,7 @@ mod test {
     }
 
     #[test]
-    fn missing_semicolon() {
-        let descriptor = "(I[Ljava/lang/StringJ)V";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
-    }
-
-    #[test]
-    fn rejects_void_parameters_and_trailing_return_data() {
+    fn rejects_void_parameters() {
         assert!(MethodDescriptor::from_str("(V)V").is_err());
-        assert!(MethodDescriptor::from_str("()VV").is_err());
-    }
-
-    #[test]
-    fn invalid_primitive() {
-        let descriptor = "(V[Ljava/lang/String;J)V";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
     }
 }

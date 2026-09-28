@@ -22,3 +22,19 @@ impl Operation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::ids;
+
+    #[test]
+    fn uses_reports_locked_value() {
+        let [value] = ids(0);
+        let acquire = Operation::Acquire(value);
+        let release = Operation::Release(value);
+
+        assert_eq!(acquire.uses(), HashSet::from([value]));
+        assert_eq!(release.uses(), HashSet::from([value]));
+    }
+}

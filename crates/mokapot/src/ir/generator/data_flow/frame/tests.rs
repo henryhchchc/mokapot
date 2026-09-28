@@ -1,5 +1,3 @@
-use std::iter::repeat_n;
-
 use proptest::prelude::*;
 
 use super::{
@@ -7,21 +5,13 @@ use super::{
 };
 use crate::{
     intrinsics::see_jvm_spec,
-    ir::{IdAllocator, ValueId},
+    ir::{IdAllocator, ValueId, test::prelude::entry_values},
     tests::arb_field_type,
     types::{
         field_type::ValueCategory,
         method_descriptor::{MethodDescriptor, ReturnType},
     },
 };
-
-/// The receiver, if any, and the arguments of the frame to build.
-fn entry_values(instance: bool, parameter_count: usize) -> (Option<ValueId>, Vec<ValueId>) {
-    let mut allocator = IdAllocator::default();
-    let receiver = instance.then(|| allocator.new_id());
-    let parameters = (0..parameter_count).map(|_| allocator.new_id()).collect();
-    (receiver, parameters)
-}
 
 /// A local variable table of `slot_count` variables holding `items` from variable zero.
 fn locals_with(items: &[(ValueId, ValueCategory)], slot_count: u16) -> LocalVariables {
@@ -80,7 +70,7 @@ const ENTRY_MAX_STACK: u16 = 4;
 
 proptest! {
     #[test]
-    fn entry_frame_lays_out_entry_values(
+    fn entry_frame_assembles_locals_and_operand_stack(
         parameter_types in prop::collection::vec(arb_field_type(), 0..8),
         instance in any::<bool>(),
     ) {
@@ -89,23 +79,12 @@ proptest! {
             return_type: ReturnType::Void,
         };
         let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());
-        let entries: Vec<&ValueId> = receiver.iter().chain(&parameters).collect();
-
-        // The receiver takes local 0; the parameters follow in descriptor order, each taking the
-        // variables its category needs (JVMS §2.6.1).
-        let mut layout: Vec<Option<usize>> = Vec::new();
-        let mut entry = 0;
-        if instance {
-            layout.push(Some(entry));
-            entry += 1;
-        }
-        for value_type in &descriptor.parameters_types {
-            layout.push(Some(entry));
-            entry += 1;
-            layout.extend(repeat_n(None, value_type.value_category().slot_count() - 1));
-        }
-
-        let max_locals = u16::try_from(layout.len()).expect("a descriptor fits in u16 slots");
+        let max_locals = u16::try_from(
+            usize::from(instance)
+                + descriptor.parameters_types.iter()
+                    .map(|value_type| value_type.value_category().slot_count())
+                    .sum::<usize>(),
+        ).expect("a descriptor fits in u16 slots");
         let frame = Frame::for_method_entry(
             &descriptor,
             max_locals,
@@ -115,27 +94,16 @@ proptest! {
         )
         .expect("the entry values fit their own slot count");
 
-        let frame_type = if instance { "instance" } else { "static" };
-        for (slot, expected) in layout.iter().enumerate() {
-            let actual = frame.value_at(Position::Local(slot));
-            let expected = expected.map(|index| entries[index]);
-            prop_assert_eq!(
-                actual,
-                expected,
-                "slot {} of the {} entry frame holds the wrong value",
-                slot,
-                frame_type
-            );
-        }
-
-        if max_locals > 0 {
-            let error_frame =
-                Frame::for_method_entry(&descriptor, max_locals - 1, ENTRY_MAX_STACK, receiver, &parameters);
-            prop_assert!(
-                matches!(error_frame, Err(FrameError::LocalIndexOutOfBounds)),
-                "a local table one slot short was accepted",
-            );
-        }
+        let expected_locals = LocalVariables::for_method_entry(
+            &descriptor,
+            max_locals,
+            receiver,
+            &parameters,
+        )
+        .expect("the locals fit");
+        let expected_stack = OperandStack::with_max_slots(ENTRY_MAX_STACK);
+        prop_assert_eq!(frame.locals, expected_locals);
+        prop_assert_eq!(frame.stack, expected_stack);
     }
 
     /// A merge visits every value of the merged frame once, reads the receiving frame's own value,

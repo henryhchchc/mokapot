@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     convert::Infallible,
 };
 
@@ -8,31 +8,7 @@ use proptest::prelude::*;
 use crate::analysis::fixed_point::{
     DataflowProblem, FactsMap, JoinSemiLattice, QueuedFactsMap, solve,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, proptest_derive::Arbitrary)]
-struct TestSet(BTreeSet<u8>);
-
-impl PartialOrd for TestSet {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self == other {
-            Some(std::cmp::Ordering::Equal)
-        } else if self.0.is_subset(&other.0) {
-            Some(std::cmp::Ordering::Less)
-        } else if self.0.is_superset(&other.0) {
-            Some(std::cmp::Ordering::Greater)
-        } else {
-            None
-        }
-    }
-}
-
-impl JoinSemiLattice for TestSet {
-    fn join_assign(&mut self, other: Self) -> bool {
-        let old_len = self.0.len();
-        self.0.extend(other.0);
-        self.0.len() != old_len
-    }
-}
+use crate::ir::test::prelude::TestSet;
 
 struct RepeatedSuccessors {
     one_calls: usize,
@@ -44,7 +20,7 @@ impl DataflowProblem for RepeatedSuccessors {
     type Err = Infallible;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        [(0, TestSet(BTreeSet::new()))]
+        [(0, TestSet::default())]
     }
 
     fn flow(
@@ -53,10 +29,7 @@ impl DataflowProblem for RepeatedSuccessors {
         _fact: &Self::Fact,
     ) -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> {
         Ok(match location {
-            0 => vec![
-                (1, TestSet(BTreeSet::from([1]))),
-                (1, TestSet(BTreeSet::from([2]))),
-            ],
+            0 => vec![(1, TestSet::from([1])), (1, TestSet::from([2]))],
             1 => {
                 self.one_calls += 1;
                 Vec::new()
@@ -82,7 +55,7 @@ where
     let facts: M = solve(&mut problem).expect("infallible analysis");
     let facts: BTreeMap<_, _> = facts.into_iter().collect();
 
-    assert_eq!(facts[&1], TestSet(BTreeSet::from([1, 2])));
+    assert_eq!(facts[&1], TestSet::from([1, 2]));
     assert_eq!(problem.one_calls, 1);
 }
 
@@ -94,7 +67,7 @@ impl DataflowProblem for CyclicProblem {
     type Err = Infallible;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
-        [(0, TestSet(BTreeSet::new()))]
+        [(0, TestSet::default())]
     }
 
     fn flow(
@@ -111,7 +84,7 @@ impl DataflowProblem for CyclicProblem {
 
 #[test]
 fn cyclic_flow_reaches_the_same_fixed_point_with_each_facts_map() {
-    let expected = TestSet(BTreeSet::from([0, 1]));
+    let expected = TestSet::from([0, 1]);
     for facts in [
         solve::<_, BTreeMap<u8, TestSet>>(&mut CyclicProblem)
             .unwrap()

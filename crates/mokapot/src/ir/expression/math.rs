@@ -74,6 +74,24 @@ impl Operation {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::ids;
+
+    #[test]
+    fn uses_reports_both_binary_operands_and_one_unary_operand() {
+        let [lhs, rhs] = ids(0);
+        let add = Operation::Add(lhs, rhs);
+        let negate = Operation::Negate(lhs);
+        let increment = Operation::Increment(rhs, 3);
+
+        assert_eq!(add.uses(), HashSet::from([lhs, rhs]));
+        assert_eq!(negate.uses(), HashSet::from([lhs]));
+        assert_eq!(increment.uses(), HashSet::from([rhs]));
+    }
+}
+
 /// How NaNs are treated in floating point comparisons.
 #[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
 pub enum NaNTreatment {

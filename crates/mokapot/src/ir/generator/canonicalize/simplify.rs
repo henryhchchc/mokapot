@@ -159,7 +159,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::{ParameterInputs, SimplifiedParameters};
-    use crate::ir::test::prelude::{ValueId, ids};
+    use crate::ir::test::prelude::*;
 
     fn input(arguments: impl IntoIterator<Item = ValueId>) -> ParameterInputs {
         ParameterInputs {
@@ -213,5 +213,16 @@ mod tests {
         assert!(simplified.retained.is_empty());
         let mut values = simplified.substitutions.values();
         assert!(values.all(|&value| value == source));
+    }
+
+    #[test]
+    #[expect(
+        clippy::should_panic_without_expect,
+        reason = "Panic wording is not a contract"
+    )]
+    #[should_panic]
+    fn rejects_a_closed_parameter_cycle() {
+        let [a, b] = ids(0);
+        SimplifiedParameters::for_block_inputs(HashMap::from([(a, input([b])), (b, input([a]))]));
     }
 }

@@ -39,3 +39,37 @@ impl Operation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ir::test::prelude::{ids, ref_t},
+        jvm::references::MethodRef,
+    };
+
+    #[test]
+    fn definition_and_effect_expose_defs_and_uses() {
+        let [defined, lhs, rhs] = ids(0);
+        let expr = Expression::Call {
+            method: MethodRef {
+                owner: ref_t("java/lang/Object"),
+                name: "f".to_owned(),
+                descriptor: "(II)I".parse().expect("valid descriptor"),
+            },
+            this: None,
+            args: vec![lhs, rhs],
+        };
+        let uses = expr.uses();
+        let definition = Operation::Definition {
+            value: defined,
+            expr: expr.clone(),
+        };
+        let effect = Operation::Effect { expr };
+
+        assert_eq!(definition.def(), Some(defined));
+        assert_eq!(definition.uses(), uses);
+        assert_eq!(effect.def(), None);
+        assert_eq!(effect.uses(), uses);
+    }
+}

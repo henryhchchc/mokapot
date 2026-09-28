@@ -83,3 +83,19 @@ impl Operation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::test::prelude::{ids, ref_t};
+
+    #[test]
+    fn uses_reports_converted_value() {
+        let [value] = ids(0);
+        let cast = Operation::CheckCast(value, ref_t("java/lang/Object"));
+        let conversion = Operation::Int2Long(value);
+
+        assert_eq!(cast.uses(), HashSet::from([value]));
+        assert_eq!(conversion.uses(), HashSet::from([value]));
+    }
+}
