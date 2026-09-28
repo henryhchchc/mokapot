@@ -23,7 +23,7 @@ impl fmt::Display for WideInstruction {
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[allow(clippy::enum_glob_use, reason = "JVM instructions are numerous")]
+        #[allow(clippy::enum_glob_use, reason = "all variants are used")]
         use Instruction::*;
 
         let name = self.name();

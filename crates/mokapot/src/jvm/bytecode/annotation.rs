@@ -195,12 +195,8 @@ impl ClassElement for TargetInfo {
                 let table = table
                     .into_iter()
                     .map(|(start, len, index)| -> Result<_, ParseError> {
-                        let effective_range =
-                            start..(start + len).context("Invalid jump offset")?;
-                        Ok(LocalVariableId {
-                            effective_range,
-                            index,
-                        })
+                        let range = start..(start + len).context("Invalid jump offset")?;
+                        Ok(LocalVariableId { range, index })
                     })
                     .try_collect()?;
                 Self::LocalVar(Local, table)
@@ -209,12 +205,8 @@ impl ClassElement for TargetInfo {
                 let table = table
                     .into_iter()
                     .map(|(start, len, index)| -> Result<_, ParseError> {
-                        let effective_range =
-                            start..(start + len).context("Invalid jump offset")?;
-                        Ok(LocalVariableId {
-                            effective_range,
-                            index,
-                        })
+                        let range = start..(start + len).context("Invalid jump offset")?;
+                        Ok(LocalVariableId { range, index })
                     })
                     .try_collect()?;
                 Self::LocalVar(Resource, table)
@@ -287,8 +279,8 @@ impl ClassElement for TargetInfo {
                 let table = table
                     .into_iter()
                     .map(|entry| {
-                        let start_pc = entry.effective_range.start;
-                        let length = u16::from(entry.effective_range.end) - u16::from(start_pc);
+                        let start_pc = entry.range.start;
+                        let length = u16::from(entry.range.end) - u16::from(start_pc);
                         let index = entry.index;
                         (start_pc, length, index)
                     })

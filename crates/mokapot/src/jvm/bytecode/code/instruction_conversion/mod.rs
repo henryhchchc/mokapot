@@ -434,22 +434,7 @@ impl Instruction {
             MonitorExit => Self::MonitorExit,
 
             // Extended
-            Wide(raw_wide) => Self::Wide(match raw_wide {
-                RawWideInstruction::ILoad { index } => WideInstruction::ILoad(index),
-                RawWideInstruction::LLoad { index } => WideInstruction::LLoad(index),
-                RawWideInstruction::FLoad { index } => WideInstruction::FLoad(index),
-                RawWideInstruction::DLoad { index } => WideInstruction::DLoad(index),
-                RawWideInstruction::ALoad { index } => WideInstruction::ALoad(index),
-                RawWideInstruction::IStore { index } => WideInstruction::IStore(index),
-                RawWideInstruction::LStore { index } => WideInstruction::LStore(index),
-                RawWideInstruction::FStore { index } => WideInstruction::FStore(index),
-                RawWideInstruction::DStore { index } => WideInstruction::DStore(index),
-                RawWideInstruction::AStore { index } => WideInstruction::AStore(index),
-                RawWideInstruction::IInc { index, increment } => {
-                    WideInstruction::IInc(index, i32::from(increment))
-                }
-                RawWideInstruction::Ret { index } => WideInstruction::Ret(index),
-            }),
+            Wide(ref raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
             MultiANewArray { index, dimensions } => {
                 let type_ref = constant_pool.get_type_ref(index)?;
                 Self::MultiANewArray(type_ref, dimensions)
@@ -851,6 +836,25 @@ impl Instruction {
         };
 
         Ok(raw)
+    }
+}
+
+fn lift_wide_instruction(raw_wide: &RawWideInstruction) -> WideInstruction {
+    match *raw_wide {
+        RawWideInstruction::ILoad { index } => WideInstruction::ILoad(index),
+        RawWideInstruction::LLoad { index } => WideInstruction::LLoad(index),
+        RawWideInstruction::FLoad { index } => WideInstruction::FLoad(index),
+        RawWideInstruction::DLoad { index } => WideInstruction::DLoad(index),
+        RawWideInstruction::ALoad { index } => WideInstruction::ALoad(index),
+        RawWideInstruction::IStore { index } => WideInstruction::IStore(index),
+        RawWideInstruction::LStore { index } => WideInstruction::LStore(index),
+        RawWideInstruction::FStore { index } => WideInstruction::FStore(index),
+        RawWideInstruction::DStore { index } => WideInstruction::DStore(index),
+        RawWideInstruction::AStore { index } => WideInstruction::AStore(index),
+        RawWideInstruction::IInc { index, increment } => {
+            WideInstruction::IInc(index, i32::from(increment))
+        }
+        RawWideInstruction::Ret { index } => WideInstruction::Ret(index),
     }
 }
 

@@ -43,7 +43,7 @@ impl ClassElement for LocalVariableDescAttr {
         let field_type =
             FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
         let id = LocalVariableId {
-            effective_range,
+            range: effective_range,
             index,
         };
         Ok(LocalVariableDescAttr {
@@ -54,8 +54,8 @@ impl ClassElement for LocalVariableDescAttr {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.effective_range.start;
-        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
+        let start_pc = self.id.range.start;
+        let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
         let desc_or_signature_idx = cp.put_string(self.field_type.descriptor())?;
         let index = self.id.index;
@@ -80,13 +80,10 @@ impl ClassElement for LocalVariableTypeAttr {
             index,
         } = raw;
 
-        let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
+        let range = start_pc..(start_pc + length).context("Invalid jump offset")?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
-        let id = LocalVariableId {
-            effective_range,
-            index,
-        };
+        let id = LocalVariableId { range, index };
         Ok(LocalVariableTypeAttr {
             id,
             name,
@@ -95,8 +92,8 @@ impl ClassElement for LocalVariableTypeAttr {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.effective_range.start;
-        let length = u16::from(self.id.effective_range.end) - u16::from(start_pc);
+        let start_pc = self.id.range.start;
+        let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
         let desc_or_signature_idx = cp.put_string(self.signature)?;
         let index = self.id.index;

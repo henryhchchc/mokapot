@@ -368,7 +368,7 @@ impl IntoIterator for LocalVariableTable {
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct LocalVariableId {
     /// The location where the variable is valid.
-    pub effective_range: Range<ProgramCounter>,
+    pub range: Range<ProgramCounter>,
     /// The index in the local variable.
     pub index: u16,
 }

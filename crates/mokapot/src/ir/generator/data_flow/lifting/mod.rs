@@ -28,20 +28,14 @@ struct LiftContext<'values, 'frame> {
     frame: &'frame mut Frame,
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "the match is an exhaustive JVM instruction dispatch"
-)]
+#[expect(clippy::too_many_lines, reason = "exhaustive JVM instruction dispatch")]
 pub(super) fn lift_instruction(
     values: &mut ValueContext,
     jvm_instruction: &JVM,
     pc: ProgramCounter,
     frame: &mut Frame,
 ) -> Result<Option<Operation>, FrameError> {
-    #[allow(
-        clippy::enum_glob_use,
-        reason = "this match exhaustively dispatches the JVM instruction enum"
-    )]
+    #[allow(clippy::enum_glob_use, reason = "all variants are used")]
     use JVM::*;
 
     let mut cx = LiftContext { values, pc, frame };
