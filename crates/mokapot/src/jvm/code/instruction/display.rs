@@ -26,6 +26,7 @@ impl fmt::Display for Instruction {
         #[allow(clippy::enum_glob_use, reason = "JVM instructions are numerous")]
         use Instruction::*;
 
+        let name = self.name();
         match self {
             Nop | AConstNull | IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4
             | IConst5 | LConst0 | LConst1 | FConst0 | FConst1 | FConst2 | DConst0 | DConst1
@@ -43,76 +44,70 @@ impl fmt::Display for Instruction {
             | F2I | F2L | F2D | D2I | D2L | D2F | I2B | I2C | I2S | LCmp | FCmpL | FCmpG
             | DCmpL | DCmpG | IReturn | LReturn | FReturn | DReturn | AReturn | Return
             | ArrayLength | AThrow | MonitorEnter | MonitorExit | Breakpoint | ImpDep1
-            | ImpDep2 => write!(f, "{}", self.name()),
-            BiPush(value) => write!(f, "{} {value}", self.name()),
-            SiPush(value) => write!(f, "{} {value}", self.name()),
+            | ImpDep2 => write!(f, "{name}"),
+            BiPush(value) => write!(f, "{name} {value}"),
+            SiPush(value) => write!(f, "{name} {value}"),
             ILoad(index) | LLoad(index) | FLoad(index) | DLoad(index) | ALoad(index)
             | IStore(index) | LStore(index) | FStore(index) | DStore(index) | AStore(index)
-            | Ret(index) => write!(f, "{} {index}", self.name()),
+            | Ret(index) => write!(f, "{name} {index}"),
             IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
             | IfLe(target) | IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target)
             | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
             | IfACmpNe(target) | Goto(target) | Jsr(target) | IfNull(target)
             | IfNonNull(target) | GotoW(target) | JsrW(target) => {
-                write!(f, "{} {target}", self.name())
+                write!(f, "{name} {target}")
             }
             GetStatic(reference) | PutStatic(reference) | GetField(reference)
-            | PutField(reference) => write!(f, "{} {reference}", self.name()),
+            | PutField(reference) => write!(f, "{name} {reference}"),
             InvokeVirtual(reference) | InvokeSpecial(reference) | InvokeStatic(reference) => {
-                write!(f, "{} {reference}", self.name())
+                write!(f, "{name} {reference}")
             }
             Ldc(constant) | LdcW(constant) | Ldc2W(constant) => {
-                write!(f, "{} {constant}", self.name())
+                write!(f, "{name} {constant}")
             }
-            New(reference) => write!(f, "{} {reference}", self.name()),
-            ANewArray(field_type) => write!(f, "{} {field_type}", self.name()),
-            NewArray(primitive_type) => write!(f, "{} {primitive_type}", self.name()),
+            New(reference) => write!(f, "{name} {reference}"),
+            ANewArray(field_type) => write!(f, "{name} {field_type}"),
+            NewArray(primitive_type) => write!(f, "{name} {primitive_type}"),
             CheckCast(field_type) | InstanceOf(field_type) => {
-                write!(f, "{} {field_type}", self.name())
+                write!(f, "{name} {field_type}")
             }
-            IInc(index, value) => write!(f, "{} {index} {value}", self.name()),
+            IInc(index, value) => write!(f, "{name} {index} {value}"),
             InvokeInterface(reference, count) => {
-                write!(f, "{} {reference} count {count}", self.name())
+                write!(f, "{name} {reference} count {count}")
             }
             InvokeDynamic {
-                bootstrap_method_index,
-                name,
+                bootstrap_method_index: bsi,
+                name: closure_name,
                 descriptor,
-            } => write!(
-                f,
-                "{} #{bootstrap_method_index} {name} {descriptor}",
-                self.name()
-            ),
+            } => write!(f, "{name} #{bsi} {closure_name} {descriptor}"),
             TableSwitch {
                 low,
                 jump_targets,
                 default,
             } => {
                 let high = i128::from(*low) + jump_targets.len() as i128 - 1;
-                write!(
-                    f,
-                    "{} {{\n  range: {low}..={high}\n  default: {default}\n",
-                    self.name()
-                )?;
+                writeln!(f, "{name} {low}..={high} {{")?;
                 for (offset, target) in jump_targets.iter().enumerate() {
                     let value = i128::from(*low) + offset as i128;
                     writeln!(f, "  {value}: {target}")?;
                 }
+                writeln!(f, "  default: {default}")?;
                 write!(f, "}}")
             }
             LookupSwitch {
                 default,
                 match_targets,
             } => {
-                write!(f, "{} {{\n  default: {default}\n", self.name())?;
+                writeln!(f, "{name} {{")?;
                 for (key, target) in match_targets {
                     writeln!(f, "  {key}: {target}")?;
                 }
+                writeln!(f, "  default: {default}")?;
                 write!(f, "}}")
             }
-            Wide(instruction) => write!(f, "{} {instruction}", self.name()),
+            Wide(instruction) => write!(f, "{name} {instruction}"),
             MultiANewArray(field_type, dimensions) => {
-                write!(f, "{} {field_type} {dimensions}", self.name())
+                write!(f, "{name} {field_type} {dimensions}")
             }
         }
     }
