@@ -34,7 +34,11 @@ fn main() -> anyhow::Result<()> {
 
 fn generate_jdk_classes_shards() -> anyhow::Result<()> {
     let num_cpus = thread::available_parallelism().context("getting number of CPUs")?;
-    let num_shards = num_cpus.get().saturating_sub(2).max(1);
+    let num_shards = if env::var("CI").is_ok() {
+        num_cpus.get() // Use all CPUs on CI
+    } else {
+        num_cpus.get().saturating_sub(2).max(1) // Reserve 2 CPUs for dev machine
+    };
 
     let shards_filename = OUT_DIR.join("jdk_class_shards.rs");
     let test_case_shards = File::create(shards_filename).context("creating shards file")?;
