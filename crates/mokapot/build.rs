@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
 
 fn generate_jdk_classes_shards() -> anyhow::Result<()> {
     let num_cpus = thread::available_parallelism().context("getting number of CPUs")?;
-    let num_shards = (num_cpus.get() - 2).max(1);
+    let num_shards = num_cpus.get().saturating_sub(2).max(1);
 
     let shards_fragment_fn = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"))
         .join("jdk_class_bins.rs");
