@@ -33,16 +33,7 @@ macro_rules! jdk_class_bins {
     };
 }
 
-jdk_class_bins! {
-    works_with_jdk_classes_bin_0 = 0;
-    works_with_jdk_classes_bin_1 = 1;
-    works_with_jdk_classes_bin_2 = 2;
-    works_with_jdk_classes_bin_3 = 3;
-    works_with_jdk_classes_bin_4 = 4;
-    works_with_jdk_classes_bin_5 = 5;
-    works_with_jdk_classes_bin_6 = 6;
-    works_with_jdk_classes_bin_7 = 7;
-}
+include!(concat!(env!("OUT_DIR"), "/jdk_class_bins.rs"));
 
 /// Whether `path` falls in the shard `BIN` of `BIN_COUNT`.
 ///
@@ -50,6 +41,7 @@ jdk_class_bins! {
 /// shards together cover it exactly once. That relies on the hasher being
 /// seeded with fixed keys: `RandomState` would scatter the corpus differently
 /// per process, leaving gaps and overlaps.
+#[allow(clippy::modulo_one)]
 fn in_shard<const BIN: u64>(path: &Path) -> bool {
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);
