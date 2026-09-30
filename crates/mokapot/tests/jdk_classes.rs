@@ -16,12 +16,12 @@ use mokapot::{
 
 /// Declares one sharded test per bin, and derives `BIN_COUNT` from the list so
 /// that the shard count and the tests cannot drift apart.
-macro_rules! jdk_class_bins {
+macro_rules! jdk_classes_smoke_tests {
     (@count $bin:literal) => {
         1
     };
     ($($name:ident = $bin:literal;)*) => {
-        const BIN_COUNT: u64 = [$(jdk_class_bins!(@count $bin)),*].len() as u64;
+        const BIN_COUNT: u64 = [$(jdk_classes_smoke_tests!(@count $bin)),*].len() as u64;
 
         $(
             #[test]
@@ -33,7 +33,7 @@ macro_rules! jdk_class_bins {
     };
 }
 
-include!(concat!(env!("OUT_DIR"), "/jdk_class_bins.rs"));
+include!(concat!(env!("OUT_DIR"), "/jdk_class_shards.rs"));
 
 /// Whether `path` falls in the shard `BIN` of `BIN_COUNT`.
 ///

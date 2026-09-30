@@ -6,12 +6,15 @@ use std::{
     io::{BufWriter, Write},
     path::{Path, PathBuf},
     process::Command,
+    sync::LazyLock,
     thread,
 };
 
 use anyhow::{Context, ensure};
 
 const SKIP_JAVA_TESTS: &str = "MOKAPOT_SKIP_JAVA_TESTS";
+static OUT_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR")));
 
 fn main() -> anyhow::Result<()> {
     println!("cargo::rustc-check-cfg=cfg(java_fixture_tests)");
@@ -33,24 +36,22 @@ fn generate_jdk_classes_shards() -> anyhow::Result<()> {
     let num_cpus = thread::available_parallelism().context("getting number of CPUs")?;
     let num_shards = num_cpus.get().saturating_sub(2).max(1);
 
-    let shards_fragment_fn = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"))
-        .join("jdk_class_bins.rs");
-    let shards_fragment = File::create(shards_fragment_fn).context("creating jdk_class_bins.rs")?;
-    let mut writer = BufWriter::new(shards_fragment);
-    let f = writer.by_ref();
+    let shards_filename = OUT_DIR.join("jdk_class_shards.rs");
+    let test_case_shards = File::create(shards_filename).context("creating shards file")?;
+    let mut w = BufWriter::new(test_case_shards);
 
-    writeln!(f, "jdk_class_bins! {{")?;
-    for bin in 0..num_shards {
-        writeln!(f, "works_with_jdk_classes_bin_{bin} = {bin};")?;
+    writeln!(&mut w, "jdk_classes_smoke_tests! {{")?;
+    for shard in 0..num_shards {
+        writeln!(&mut w, "jdk_classes_smoke_test_shard_{shard} = {shard};")?;
     }
-    writeln!(f, "}}")?;
+    writeln!(&mut w, "}}")?;
     Ok(())
 }
 
 fn build_java_fixtures() -> anyhow::Result<()> {
     println!("cargo::rustc-cfg=java_fixture_tests");
 
-    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR")).join("mokapot");
+    let output = OUT_DIR.join("mokapot");
     fs::create_dir_all(&output).context("creating Java fixture output directory")?;
     let error_path = output.join("fixture_error.txt");
     if error_path.exists() {
