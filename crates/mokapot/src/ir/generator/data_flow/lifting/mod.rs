@@ -13,7 +13,7 @@ use super::{Frame, FrameError, StackOperation, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
-        expression::{Conversion, LockOperation, MathOperation, NaNTreatment},
+        expression::{Conversion, InvocationKind, LockOperation, MathOperation, NaNTreatment},
     },
     jvm::{
         ConstantValue,
@@ -149,10 +149,16 @@ pub(super) fn lift_instruction(
         GetField(field) => cx.read_instance(field),
         PutStatic(field) => cx.write_static(field),
         PutField(field) => cx.write_instance(field),
-        InvokeVirtual(method) | InvokeSpecial(method) | InvokeInterface(method, _) => {
-            cx.invoke(method, true)
+        InvokeVirtual(method) => {
+            cx.invoke_instance(method, |this| InvocationKind::Virtual { this })
         }
-        InvokeStatic(method) => cx.invoke(method, false),
+        InvokeSpecial(method) => {
+            cx.invoke_instance(method, |this| InvocationKind::Special { this })
+        }
+        InvokeInterface(method, _) => {
+            cx.invoke_instance(method, |this| InvocationKind::Interface { this })
+        }
+        InvokeStatic(method) => cx.invoke_static(method),
         InvokeDynamic {
             bootstrap_method_index,
             name,

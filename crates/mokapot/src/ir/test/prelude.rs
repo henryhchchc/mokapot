@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 pub(crate) use crate::ir::{
     BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
     MethodEntry, MokaIRMethod, Operation, SourceMap, Successor, Terminator, ValueId,
-    expression::Expression,
+    expression::{Expression, InvocationKind},
 };
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
@@ -14,7 +14,7 @@ use crate::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
         method::AccessFlags,
-        references::ClassRef,
+        references::{ClassRef, MethodRef},
     },
     types::reference_type::ReferenceType,
 };
@@ -102,6 +102,28 @@ pub(crate) fn cls_r(name: &str) -> ClassRef {
 /// The reference type named `name`.
 pub(crate) fn ref_t(name: &str) -> ReferenceType {
     name.parse().expect("a valid type name")
+}
+
+/// A symbolic method on `java/lang/Object` with the given name and descriptor.
+pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
+    MethodRef {
+        owner: ref_t("java/lang/Object"),
+        name: name.to_owned(),
+        descriptor: descriptor.parse().expect("a valid method descriptor"),
+    }
+}
+
+/// A call with the given dispatch kind, symbolic method, and arguments.
+pub(crate) fn call(
+    kind: InvocationKind,
+    method: MethodRef,
+    args: impl IntoIterator<Item = ValueId>,
+) -> Expression {
+    Expression::Call {
+        kind,
+        method,
+        args: args.into_iter().collect(),
+    }
 }
 
 /// Fresh receiver and parameter identities for method-entry tests.

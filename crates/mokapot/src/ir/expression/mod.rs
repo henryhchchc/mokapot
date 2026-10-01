@@ -13,6 +13,7 @@ use crate::{
 };
 
 mod array;
+mod call;
 mod conversion;
 mod field;
 mod literal;
@@ -21,6 +22,7 @@ mod math;
 mod predicate;
 
 pub use array::Operation as ArrayOperation;
+pub use call::InvocationKind;
 pub use conversion::Operation as Conversion;
 pub use field::Access as FieldAccess;
 pub use literal::BooleanVariable;
@@ -35,10 +37,10 @@ pub enum Expression {
     Const(ConstantValue),
     /// A function call.
     Call {
-        /// The method being called.
+        /// The invocation opcode's dispatch semantics and receiver.
+        kind: InvocationKind,
+        /// The unresolved symbolic method reference.
         method: MethodRef,
-        /// The receiver for an instance method.
-        this: Option<ValueId>,
         /// The arguments.
         args: Vec<ValueId>,
     },
@@ -71,17 +73,22 @@ impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Const(value) => value.fmt(f),
-            Self::Call { method, this, args } => write!(
-                f,
-                "call {} {}{}::{}({})",
-                method.descriptor.return_type,
-                this.as_ref()
-                    .map(|value| format!("{value}@"))
-                    .unwrap_or_default(),
-                method.owner,
-                method.name,
-                args.iter().format(", "),
-            ),
+            Self::Call { kind, method, args } => {
+                write!(f, "call {kind} {} ", method.descriptor.return_type)?;
+                match kind {
+                    InvocationKind::Static => {}
+                    InvocationKind::Virtual { this }
+                    | InvocationKind::Interface { this }
+                    | InvocationKind::Special { this } => write!(f, "{this}@")?,
+                }
+                write!(
+                    f,
+                    "{}::{}({})",
+                    method.owner,
+                    method.name,
+                    args.iter().format(", ")
+                )
+            }
             Self::Closure {
                 name,
                 captures,

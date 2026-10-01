@@ -3,8 +3,8 @@
 use crate::ir::{
     BranchGuard, ControlTransfer, Operation, Successor, Terminator, ValueId,
     expression::{
-        ArrayOperation, BooleanVariable, Conversion, Expression, FieldAccess, LockOperation,
-        MathOperation, PathValue, Predicate,
+        ArrayOperation, BooleanVariable, Conversion, Expression, FieldAccess, InvocationKind,
+        LockOperation, MathOperation, PathValue, Predicate,
     },
 };
 
@@ -89,9 +89,12 @@ fn remap_expression<E>(
 ) -> Result<(), E> {
     match expression {
         Expression::Const(_) | Expression::New(_) => Ok(()),
-        Expression::Call { this, args, .. } => {
-            if let Some(value) = this {
-                remap_value(value, remap)?;
+        Expression::Call { kind, args, .. } => {
+            match kind {
+                InvocationKind::Static => {}
+                InvocationKind::Virtual { this }
+                | InvocationKind::Interface { this }
+                | InvocationKind::Special { this } => remap_value(this, remap)?,
             }
             for value in args {
                 remap_value(value, remap)?;
@@ -233,4 +236,39 @@ fn remap_path_value<E>(
         remap_value(value, remap)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RemapValues;
+    use crate::ir::test::prelude::*;
+
+    #[test]
+    fn calls_remap_receivers_and_arguments_without_changing_dispatch() {
+        let [this, argument] = ids(0);
+        let [new_this, new_argument] = ids(10);
+        let method = method_ref("accept", "(I)V");
+        let virtual_kind = InvocationKind::Virtual { this: new_this };
+        let interface_kind = InvocationKind::Interface { this: new_this };
+        let special_kind = InvocationKind::Special { this: new_this };
+        for (kind, expected_kind) in [
+            (InvocationKind::Static, InvocationKind::Static),
+            (InvocationKind::Virtual { this }, virtual_kind),
+            (InvocationKind::Interface { this }, interface_kind),
+            (InvocationKind::Special { this }, special_kind),
+        ] {
+            let mut operation = effect(call(kind, method.clone(), [argument]));
+            let mut remap = |value| {
+                Ok::<_, std::convert::Infallible>(if value == this {
+                    new_this
+                } else {
+                    assert_eq!(value, argument);
+                    new_argument
+                })
+            };
+            operation.try_remap_values(&mut remap).unwrap();
+            let expected = effect(call(expected_kind, method.clone(), [new_argument]));
+            assert_eq!(operation, expected);
+        }
+    }
 }

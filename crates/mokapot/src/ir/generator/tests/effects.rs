@@ -6,8 +6,11 @@ use crate::{
             ArrayOperation, Conversion, Expression, FieldAccess, LockOperation, MathOperation,
         },
     },
-    jvm::references::{FieldRef, MethodRef},
-    types::field_type::{FieldType, PrimitiveType},
+    jvm::references::FieldRef,
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::MethodDescriptor,
+    },
 };
 
 /// Returns the value and expression of a definition operation.
@@ -146,50 +149,99 @@ fn monitor_operations_are_effects_without_definitions() {
 }
 
 #[test]
-fn calls_preserve_receiver_and_argument_order_and_void_effects() {
-    let method_ref = MethodRef {
-        owner: ref_t("java/lang/Object"),
-        name: "accept".to_owned(),
-        descriptor: "(IJ)V".parse().unwrap(),
-    };
-    let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::ILoad1),
-        (2, Instruction::LLoad2),
-        (3, Instruction::InvokeVirtual(method_ref.clone())),
-        (4, Instruction::Return),
+fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
+    let kinds: [fn(ValueId) -> InvocationKind; 4] = [
+        |_| InvocationKind::Static,
+        |this| InvocationKind::Virtual { this },
+        |this| InvocationKind::Interface { this },
+        |this| InvocationKind::Special { this },
     ];
-    let ir = lift(body, "(Ljava/lang/Object;IJ)V", vec![]);
-    let operation = terminator_at(&ir, 3.into()).operation().unwrap();
-    let Operation::Effect {
-        expr: Expression::Call { method, this, args },
-    } = operation
-    else {
-        panic!("void invocation must be an effect");
-    };
-    assert_eq!(method, &method_ref);
-    assert_eq!(*this, Some(ir.parameters[0]));
-    assert_eq!(args, &ir.parameters[1..]);
+    for (descriptor, caller_descriptor, return_instruction) in [
+        ("(IJ)V", "(Ljava/lang/Object;IJ)V", Instruction::Return),
+        ("(IJ)I", "(Ljava/lang/Object;IJ)I", Instruction::IReturn),
+        ("(IJ)J", "(Ljava/lang/Object;IJ)J", Instruction::LReturn),
+    ] {
+        let method_ref = method_ref("accept", descriptor);
+        let invocations = [
+            Instruction::InvokeStatic(method_ref.clone()),
+            Instruction::InvokeVirtual(method_ref.clone()),
+            Instruction::InvokeInterface(method_ref.clone(), 4),
+            Instruction::InvokeSpecial(method_ref.clone()),
+        ];
+        for (invocation, kind) in invocations.into_iter().zip(kinds) {
+            let receiver = if matches!(invocation, Instruction::InvokeStatic(_)) {
+                Instruction::Nop
+            } else {
+                Instruction::ALoad0
+            };
+            let body = [
+                (0, receiver),
+                (1, Instruction::ILoad1),
+                (2, Instruction::LLoad2),
+                (3, invocation),
+                (4, return_instruction.clone()),
+            ];
+            let ir = lift(body, caller_descriptor, vec![]);
+            let operation = terminator_at(&ir, 3.into()).operation().unwrap();
+            let kind = kind(ir.parameters[0]);
+            let args = ir.parameters[1..].iter().copied();
+            let expected = call(kind, method_ref.clone(), args);
+            if matches!(return_instruction, Instruction::Return) {
+                assert_eq!(operation, &effect(expected));
+            } else {
+                let (value, expression) = definition(operation);
+                assert_eq!(expression, &expected);
+                assert_returns(&ir, 4, value);
+            }
+        }
+    }
+}
 
-    let static_method = MethodRef {
-        descriptor: "(I)I".parse().unwrap(),
-        ..method_ref
+#[test]
+fn instance_invocations_require_a_receiver() {
+    let method_ref = method_ref("accept", "(IJ)V");
+    for invocation in [
+        Instruction::InvokeVirtual(method_ref.clone()),
+        Instruction::InvokeInterface(method_ref.clone(), 4),
+        Instruction::InvokeSpecial(method_ref),
+    ] {
+        let body = [
+            (0, Instruction::ILoad0),
+            (1, Instruction::LLoad1),
+            (2, invocation),
+            (3, Instruction::Return),
+        ];
+        let method = method(body, "(IJ)V", vec![]);
+        let failure = build_failure(&method);
+        assert_matches!(failure, (Some(pc), MokaIRBuildErrorKind::StackUnderflow) if pc == 2.into());
+    }
+}
+
+#[test]
+fn dynamic_invocations_remain_closures() {
+    let descriptor: MethodDescriptor = "(IJ)Ljava/lang/Object;".parse().unwrap();
+    let invocation = Instruction::InvokeDynamic {
+        bootstrap_method_index: 7,
+        name: "accept".to_owned(),
+        descriptor: descriptor.clone(),
     };
     let body = [
         (0, Instruction::ILoad0),
-        (1, Instruction::InvokeStatic(static_method.clone())),
-        (2, Instruction::IReturn),
+        (1, Instruction::LLoad1),
+        (2, invocation),
+        (3, Instruction::AReturn),
     ];
-    let ir = lift(body, "(I)I", vec![]);
-    let operation = terminator_at(&ir, 1.into()).operation().unwrap();
+    let ir = lift(body, "(IJ)Ljava/lang/Object;", vec![]);
+    let operation = terminator_at(&ir, 2.into()).operation().unwrap();
     let (value, expression) = definition(operation);
-    let expected = Expression::Call {
-        method: static_method,
-        this: None,
-        args: ir.parameters.clone(),
+    let expected = Expression::Closure {
+        name: "accept".to_owned(),
+        captures: ir.parameters.clone(),
+        bootstrap_method_index: 7,
+        closure_descriptor: descriptor,
     };
     assert_eq!(expression, &expected);
-    assert_returns(&ir, 2, value);
+    assert_returns(&ir, 3, value);
 }
 
 #[test]

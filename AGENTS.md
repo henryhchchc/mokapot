@@ -32,9 +32,9 @@ When the hosting type is already private, its associated items may be `pub`: the
 
 Add unit tests near the code they cover and integration tests in `crates/mokapot/tests/<feature>.rs`.
 Use the shared test prelude (`crate::ir::test::prelude::*`) and its fixtures where applicable; add reusable test utilities there.
-Bind instruction lists and assertion subjects to local variables when this makes calls and assertions shorter.
+Bind arguments to local variables when this makes calls and assertions shorter.
 Assert error kinds, variants, and structured context rather than message text; avoid `should_panic(expected = ...)`.
-Java fixture tests require JDK 27 (`javac` and `jar`); `build.rs` recompiles files from `crates/mokapot/test_data`.
+Java fixture tests require the latest JDK (`javac` and `jar`); `build.rs` recompiles files from `crates/mokapot/test_data`.
 JDK-wide ignored tests require extracted JDK classes:
 
 - `export JDK_CLASSES=/path/to/jdk_classes`
@@ -42,7 +42,7 @@ JDK-wide ignored tests require extracted JDK classes:
 
 ## Commit & Pull Request Guidelines
 
-Use Conventional Commits with a scope that matches the top-level module or area, for example `feat(jvm): parse record attributes` or `fix(ir): guard stack frame merge`.
+Use Conventional Commits with a scope that matches the top-level module or area.
 Sign commits with `git commit --signoff` to satisfy the DCO.
 PRs should target `main`, describe behavior changes, list verification commands, and link issues or discussions when relevant.
 Include output samples or screenshots only when the change affects user-visible CLI or docs behavior.
