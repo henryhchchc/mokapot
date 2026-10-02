@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 bitflags = { workspace = true }
 cesu8 = { workspace = true }
-derive_more = { workspace = true, features = ["full"] }
+derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
 document-features = { workspace = true }
 instability = { workspace = true }
 itertools = { workspace = true }

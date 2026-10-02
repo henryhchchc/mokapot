@@ -189,13 +189,13 @@ impl InstructionList<RawInstruction> {
 }
 
 pub mod instruction_list {
-    use std::collections::BTreeMap;
+    use std::collections::btree_map;
 
     use crate::jvm::code::ProgramCounter;
 
     #[derive(Debug)]
     pub struct Iter<'a, I> {
-        pub(super) inner: <&'a BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter,
+        pub(super) inner: btree_map::Iter<'a, ProgramCounter, I>,
     }
 
     impl<'a, I> Iterator for Iter<'a, I> {
