@@ -78,13 +78,14 @@ impl<'i, I> IntoIterator for &'i InstructionList<I> {
     type IntoIter = instruction_list::Iter<'i, I>;
 
     fn into_iter(self) -> Self::IntoIter {
-        instruction_list::Iter::new(self.0.iter())
+        instruction_list::Iter {
+            inner: self.0.iter(),
+        }
     }
 }
 
 impl<I> InstructionList<I> {
     /// Creates an iterator over the instructions.
-    #[must_use]
     pub fn iter(
         &self,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> + ExactSizeIterator {
@@ -190,13 +191,11 @@ impl InstructionList<RawInstruction> {
 pub mod instruction_list {
     use std::collections::BTreeMap;
 
-    use derive_more::Constructor;
-
     use crate::jvm::code::ProgramCounter;
 
-    #[derive(Debug, Constructor)]
+    #[derive(Debug)]
     pub struct Iter<'a, I> {
-        inner: <&'a BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter,
+        pub(super) inner: <&'a BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter,
     }
 
     impl<'a, I> Iterator for Iter<'a, I> {

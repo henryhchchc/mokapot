@@ -148,7 +148,7 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
         successors[0].transfer(),
         Some(&ControlTransfer::Unconditional)
     );
-    assert!(successors[0].arguments().is_empty());
+    assert_eq!(successors[0].arguments(), []);
     assert_eq!(entry_origin(&ir), Some(1.into()));
 }
 

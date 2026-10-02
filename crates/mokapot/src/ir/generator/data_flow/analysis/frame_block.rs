@@ -1,7 +1,5 @@
 //! Block representation carrying analyzed frames on its successor arms.
 
-use derive_more::Constructor;
-
 use super::Frame;
 use crate::{
     ir::{
@@ -16,7 +14,7 @@ pub(crate) enum FrameSource {
     Predecessor { source: BlockId, arm: ArmKey },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Constructor)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FrameBlock {
     pub kind: BlockKind,
     pub operations: Vec<(ProgramCounter, Operation)>,

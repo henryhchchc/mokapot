@@ -1,5 +1,5 @@
 use super::*;
-use crate::ir::BlockKind;
+use crate::ir::{BlockKind, BlockParameter, Operation};
 
 #[test]
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
@@ -28,8 +28,8 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     assert_ne!(normal_target, pad_id);
     let pad = block_of(&ir, pad_id);
     assert_matches!(pad.kind, BlockKind::LandingPad { .. });
-    assert!(pad.parameters.is_empty());
-    assert!(pad.operations.is_empty());
+    assert_eq!(pad.parameters, [] as [BlockParameter; 0]);
+    assert_eq!(pad.operations, [] as [Operation; 0]);
     assert_eq!(pad.terminator.successors().count(), 1);
     let successor = pad.terminator.successors().next().unwrap();
     assert_matches!(successor.transfer(), Some(&ControlTransfer::Unconditional));

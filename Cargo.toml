@@ -35,7 +35,7 @@ missing_const_for_fn = "warn"
 pedantic = "warn"
 
 [workspace.lints.rust]
-future-incompatible = "warn"
+future_incompatible = "warn"
 missing_debug_implementations = "warn"
 missing_docs = "warn"
 

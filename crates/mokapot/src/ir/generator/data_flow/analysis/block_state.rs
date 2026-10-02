@@ -2,8 +2,6 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use derive_more::Constructor;
-
 use super::{
     Frame, Position, ValueContext,
     frame_block::{FrameBlock, FrameSource},
@@ -65,7 +63,11 @@ impl BlockState {
         let block = self
             .result
             .expect("the worklist drains only after every block is interpreted");
-        BlockSolution::new(self.incoming_frames, self.parameters.declared, block)
+        BlockSolution {
+            incoming_frames: self.incoming_frames,
+            parameters: self.parameters.declared,
+            block,
+        }
     }
 
     /// Records a freshly merged input frame, reporting whether it differs from
@@ -143,7 +145,7 @@ impl BlockParameters {
 }
 
 /// One block after fixed-point execution has completed.
-#[derive(Debug, Constructor)]
+#[derive(Debug)]
 pub(crate) struct BlockSolution {
     pub(crate) incoming_frames: HashMap<FrameSource, Frame>,
     pub(crate) parameters: BTreeMap<Position, ValueId>,

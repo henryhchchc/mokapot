@@ -836,7 +836,7 @@ mod tests {
             let mut reader = bytes.as_slice();
             let constant_pool = ConstantPool::from_reader(&mut reader, count);
             assert!(constant_pool.is_ok());
-            assert!(reader.is_empty());
+            assert_eq!(reader, []);
         }
 
         #[test]
