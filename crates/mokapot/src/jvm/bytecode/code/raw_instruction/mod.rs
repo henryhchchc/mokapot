@@ -398,6 +398,16 @@ impl InstructionList<RawInstruction> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`ParseError`] for more information.
+    ///
+    /// ```
+    /// use mokapot::jvm::code::{InstructionList, ProgramCounter, RawInstruction};
+    ///
+    /// // bipush 42; ireturn
+    /// let instructions = InstructionList::from_bytes(vec![0x10, 42, 0xac]).unwrap();
+    /// assert_eq!(instructions.get(&ProgramCounter::ZERO), Some(&RawInstruction::BiPush { value: 42 }));
+    /// assert_eq!(instructions.get(&ProgramCounter::from(2)), Some(&RawInstruction::IReturn));
+    /// assert_eq!(instructions.len(), 2);
+    /// ```
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParseError> {
         let bytes = VecDeque::from(bytes);
         let mut reader = PositionTracker::new(bytes);
@@ -410,6 +420,19 @@ impl InstructionList<RawInstruction> {
     /// Writes a list of [`RawInstruction`]s to the given writer.
     /// # Errors
     /// See [`GenerationError`] for more information.
+    ///
+    /// ```
+    /// # #[cfg(feature = "unstable-bytecode-generation")]
+    /// # {
+    /// use mokapot::jvm::code::InstructionList;
+    ///
+    /// let bytes = vec![0x10, 42, 0xac]; // bipush 42; ireturn
+    /// let instructions = InstructionList::from_bytes(bytes.clone()).unwrap();
+    /// let mut output = Vec::new();
+    /// instructions.to_writer(&mut output).unwrap();
+    /// assert_eq!(output, bytes);
+    /// # }
+    /// ```
     #[instability::unstable(feature = "bytecode-generation")]
     pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let mut writer = PositionTracker::new(writer);

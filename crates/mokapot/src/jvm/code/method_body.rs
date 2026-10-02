@@ -46,6 +46,20 @@ impl MethodBody {
 }
 
 /// A list of instructions.
+///
+/// ```
+/// use mokapot::jvm::code::{InstructionList, ProgramCounter, RawInstruction};
+///
+/// let start = ProgramCounter::ZERO;
+/// let end = ProgramCounter::from(3);
+/// let instructions: InstructionList<_> =
+///     [(end, RawInstruction::Return), (start, RawInstruction::Nop)].into_iter().collect();
+/// assert_eq!(instructions.entry_point(), Some((start, &RawInstruction::Nop)));
+/// assert_eq!(instructions.iter().map(|(pc, _)| pc).collect::<Vec<_>>(), [start, end]);
+/// assert_eq!(instructions.next_pc_of(&start), Some(end));
+/// assert_eq!(instructions.prev_pc_of(&end), Some(start));
+/// assert_eq!(instructions.next_pc_of(&end), None);
+/// ```
 #[derive(Debug, Clone)]
 pub struct InstructionList<I>(BTreeMap<ProgramCounter, I>);
 
@@ -272,6 +286,21 @@ mod test {
 
 /// An entry in the exception table.
 #[doc = see_jvm_spec!(4, 7, 3)]
+///
+/// ```
+/// use mokapot::jvm::code::{ExceptionTableEntry, ProgramCounter};
+///
+/// let start = ProgramCounter::from(2);
+/// let end = ProgramCounter::from(5);
+/// let handler = ExceptionTableEntry {
+///     covered_pc: start..end,
+///     handler_pc: end,
+///     catch_type: None,
+/// };
+/// assert!(handler.covers(start));
+/// assert!(!handler.covers(end));
+/// assert!(handler.catches_all());
+/// ```
 #[derive(Debug, Clone)]
 pub struct ExceptionTableEntry {
     /// The half-open range of locations where the exception handler is active.

@@ -1,6 +1,14 @@
 use std::ops::Add;
 
 /// Denotes a program counter in an instruction sequence.
+///
+/// ```
+/// use mokapot::jvm::code::{InvalidOffset, ProgramCounter};
+///
+/// let pc = ProgramCounter::from(3);
+/// assert_eq!(pc + 2_i16, Ok(ProgramCounter::from(5)));
+/// assert_eq!(pc + (-4_i32), Err(InvalidOffset));
+/// ```
 #[derive(
     Clone,
     Copy,

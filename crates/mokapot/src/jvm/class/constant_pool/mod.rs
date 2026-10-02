@@ -101,6 +101,19 @@ impl ConstantPool {
     ///
     /// # Errors
     /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
+    ///
+    /// `long` and `double` constants occupy two slots:
+    ///
+    /// ```
+    /// use mokapot::jvm::class::constant_pool::{ConstantPool, Entry};
+    ///
+    /// let mut pool = ConstantPool::new();
+    /// let index = pool.put_entry(Entry::Long(42)).unwrap();
+    /// assert_eq!(index, 1);
+    /// assert_eq!(pool.get_entry(index), Some(&Entry::Long(42)));
+    /// assert_eq!(pool.get_entry(index + 1), None);
+    /// assert_eq!(pool.put_entry(Entry::Integer(7)).unwrap(), index + 2);
+    /// ```
     pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Overflow> {
         let new_index = self.count();
         if matches!(entry, Entry::Long(_) | Entry::Double(_)) {
@@ -126,6 +139,16 @@ impl ConstantPool {
     ///
     /// # Errors
     /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
+    ///
+    /// ```
+    /// use mokapot::jvm::class::constant_pool::{ConstantPool, Entry};
+    ///
+    /// let mut pool = ConstantPool::new();
+    /// let (index, inserted) = pool.put_entry_deduplicated(Entry::Integer(42)).unwrap();
+    /// assert!(inserted);
+    /// assert_eq!(pool.put_entry_deduplicated(Entry::Integer(42)).unwrap(), (index, false));
+    /// assert_eq!(pool.get_entry(index), Some(&Entry::Integer(42)));
+    /// ```
     pub fn put_entry_deduplicated(&mut self, entry: Entry) -> Result<(u16, bool), Overflow> {
         if let Some(index) = self.find_index(|it| it == &entry) {
             return Ok((index, false));

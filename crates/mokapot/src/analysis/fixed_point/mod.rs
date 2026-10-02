@@ -11,33 +11,46 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```
+//! # #[cfg(feature = "unstable-fixed-point-analyses")]
+//! # {
 //! use mokapot::analysis::fixed_point::{DataflowProblem, JoinSemiLattice, solve};
-//! use std::collections::BTreeMap;
+//! use std::{collections::BTreeMap, convert::Infallible};
 //!
 //! #[derive(Clone, PartialEq, PartialOrd)]
-//! struct MyFact { /* ... */ }
+//! struct Reachable(bool);
 //!
-//! impl JoinSemiLattice for MyFact {
-//!     fn join_assign(&mut self, other: Self) -> bool { /* ... */ }
+//! impl JoinSemiLattice for Reachable {
+//!     fn join_assign(&mut self, other: Self) -> bool {
+//!         let changed = other.0 && !self.0;
+//!         self.0 |= other.0;
+//!         changed
+//!     }
 //! }
 //!
-//! struct MyAnalysis { /* ... */ }
+//! struct Reachability;
 //!
-//! impl DataflowProblem for MyAnalysis {
+//! impl DataflowProblem for Reachability {
 //!     type Location = usize;
-//!     type Fact = MyFact;
-//!     type Err = std::convert::Infallible;
+//!     type Fact = Reachable;
+//!     type Err = Infallible;
 //!
-//!     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> { /* ... */ }
-//!     fn flow(&mut self, loc: &Self::Location, fact: &Self::Fact)
-//!         -> Result<impl IntoIterator<Item = (Self::Location, Self::Fact)>, Self::Err> { /* ... */ }
+//!     fn seeds(&self) -> impl IntoIterator<Item = (usize, Reachable)> {
+//!         [(0, Reachable(true))]
+//!     }
+//!
+//!     fn flow(&mut self, location: &usize, fact: &Reachable)
+//!         -> Result<impl IntoIterator<Item = (usize, Reachable)>, Infallible>
+//!     {
+//!         // 0 -> 1 -> 2 -> 0; the unchanged fact ends the cycle.
+//!         Ok([((location + 1) % 3, fact.clone())])
+//!     }
 //! }
 //!
-//! // The inferred map type selects the container: `BTreeMap` here, `HashMap`
-//! // when the location is not `Ord`.
-//! let mut analysis = MyAnalysis { /* ... */ };
-//! let results: BTreeMap<_, _> = solve(&mut analysis).expect("analysis failed");
+//! let results: BTreeMap<_, _> = solve(&mut Reachability).unwrap();
+//! assert_eq!(results.keys().copied().collect::<Vec<_>>(), [0, 1, 2]);
+//! assert!(results.values().all(|fact| fact.0));
+//! # }
 //! ```
 
 mod facts_map;

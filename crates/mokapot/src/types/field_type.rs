@@ -264,6 +264,14 @@ impl FieldType {
     }
 
     /// Creates an array type with the given type as its elements.
+    ///
+    /// ```
+    /// use mokapot::types::{Descriptor, field_type::{FieldType, PrimitiveType}};
+    ///
+    /// let array = FieldType::array_of(PrimitiveType::Int.into(), 2);
+    /// assert_eq!(array.descriptor(), "[[I");
+    /// assert_eq!(array.qualified_name(), "int[][]");
+    /// ```
     #[must_use]
     pub fn array_of(inner: Self, dim: u8) -> Self {
         (0..dim).fold(inner, |acc, _| acc.into_array_type())

@@ -57,6 +57,8 @@ impl Descriptor for MethodDescriptor {
     ///
     /// // Parse a method descriptor for: int add(int a, int b)
     /// let add_method = MethodDescriptor::from_str("(II)I").unwrap();
+    /// use mokapot::types::Descriptor;
+    /// assert_eq!(add_method.descriptor(), "(II)I");
     /// ```
     fn descriptor(&self) -> String {
         format!(

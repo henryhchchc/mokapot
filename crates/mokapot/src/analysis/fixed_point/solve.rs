@@ -6,13 +6,9 @@ use super::{DataflowProblem, FactsMap};
 /// and, when it changed, flows it to the successors. Returns the final fact at
 /// every location.
 ///
-/// The map type `M` is inferred from the return type, so it selects the
-/// container:
-///
-/// ```ignore
-/// let results: BTreeMap<_, _> = solve(&problem)?; // `Location: Ord`
-/// let results: HashMap<_, _> = solve(&problem)?; // `Location: Hash + Eq`
-/// ```
+/// The map type `M` is inferred from the return type: use `BTreeMap` for
+/// ordered locations or `HashMap` for locations implementing `Hash + Eq`.
+/// See the [module example](super) for a runnable analysis using `&mut problem`.
 ///
 /// # Errors
 ///
