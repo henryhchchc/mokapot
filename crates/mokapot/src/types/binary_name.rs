@@ -143,24 +143,18 @@ fn validate(name: &str) -> Result<(), InvalidBinaryName> {
         return Err(InvalidBinaryName("binary name must not be empty".into()));
     }
     if name.contains('[') {
-        return Err(InvalidBinaryName(format!(
-            "'{name}' contains '['; binary names are class names, not array descriptors"
-        )));
+        return Err(InvalidBinaryName(format!("'{name}' cannot contain '['")));
     }
     if name.contains('.') {
-        return Err(InvalidBinaryName(format!(
-            "'{name}' contains '.'; binary names use '/' to separate class name segments"
-        )));
+        return Err(InvalidBinaryName(format!("'{name}' cannot contain '.'")));
     }
     if name.contains(';') {
-        return Err(InvalidBinaryName(format!(
-            "'{name}' contains ';'; binary names are class names, not descriptors"
-        )));
+        return Err(InvalidBinaryName(format!("'{name}' cannot contain ';'")));
     }
     // Check for empty segments: leading/trailing/double slash
     if name.starts_with('/') || name.ends_with('/') || name.contains("//") {
         return Err(InvalidBinaryName(format!(
-            "'{name}' contains empty segments (leading, trailing, or double '/')"
+            "'{name}' cannot contain empty segments"
         )));
     }
     Ok(())
