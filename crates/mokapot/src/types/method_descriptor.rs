@@ -91,6 +91,7 @@ impl Descriptor for MethodDescriptor {
 /// let int_return = ReturnType::Some(PrimitiveType::Int.into());
 /// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display, derive_more::From)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ReturnType {
     /// Represents a method that returns a specific type.
     /// The contained `FieldType` can be either a primitive type or a reference type.
@@ -168,19 +169,12 @@ mod test {
 
     const MAX_PARAMS: usize = 10;
 
-    fn arb_return_type() -> impl Strategy<Value = ReturnType> {
-        prop_oneof![
-            Just(ReturnType::Void),
-            any::<FieldType>().prop_map(ReturnType::Some),
-        ]
-    }
-
     proptest! {
 
         #[test]
         fn roundtrip(
             params in prop::collection::vec(any::<FieldType>(), 0..MAX_PARAMS),
-            ret in arb_return_type(),
+            ret in any::<ReturnType>(),
         ) {
             let desc = MethodDescriptor {
                 parameters_types: params,
@@ -193,8 +187,8 @@ mod test {
 
         #[test]
         fn return_type_rejects_a_second_suffix(
-            first in arb_return_type(),
-            suffix in prop::collection::vec(arb_return_type(), 1..5),
+            first in any::<ReturnType>(),
+            suffix in prop::collection::vec(any::<ReturnType>(), 1..5),
         ) {
             let descriptor = format!(
                 "{}{}",
