@@ -338,148 +338,179 @@ mod tests {
     }
 
     #[test]
-    fn primitive_type_descriptor() {
+    fn primitive_type_mappings() {
         use PrimitiveType::*;
-        assert_eq!(Boolean.descriptor(), 'Z');
-        assert_eq!(Char.descriptor(), 'C');
-        assert_eq!(Float.descriptor(), 'F');
-        assert_eq!(Double.descriptor(), 'D');
-        assert_eq!(Byte.descriptor(), 'B');
-        assert_eq!(Short.descriptor(), 'S');
-        assert_eq!(Int.descriptor(), 'I');
-        assert_eq!(Long.descriptor(), 'J');
-    }
+        use ValueCategory::*;
 
-    #[test]
-    fn primitive_type_display() {
-        use PrimitiveType::*;
-        assert_eq!(Boolean.to_string(), "boolean");
-        assert_eq!(Char.to_string(), "char");
-        assert_eq!(Float.to_string(), "float");
-        assert_eq!(Double.to_string(), "double");
-        assert_eq!(Byte.to_string(), "byte");
-        assert_eq!(Short.to_string(), "short");
-        assert_eq!(Int.to_string(), "int");
-        assert_eq!(Long.to_string(), "long");
-    }
-
-    #[test]
-    fn primitive_type_from_char() {
-        use PrimitiveType::*;
-        assert_eq!('Z'.try_into(), Ok(Boolean));
-        assert_eq!('C'.try_into(), Ok(Char));
-        assert_eq!('F'.try_into(), Ok(Float));
-        assert_eq!('D'.try_into(), Ok(Double));
-        assert_eq!('B'.try_into(), Ok(Byte));
-        assert_eq!('S'.try_into(), Ok(Short));
-        assert_eq!('I'.try_into(), Ok(Int));
-        assert_eq!('J'.try_into(), Ok(Long));
+        for (ty, descriptor, name, tag, category) in [
+            (Boolean, 'Z', "boolean", 4, Category1),
+            (Char, 'C', "char", 5, Category1),
+            (Float, 'F', "float", 6, Category1),
+            (Double, 'D', "double", 7, Category2),
+            (Byte, 'B', "byte", 8, Category1),
+            (Short, 'S', "short", 9, Category1),
+            (Int, 'I', "int", 10, Category1),
+            (Long, 'J', "long", 11, Category2),
+        ] {
+            assert_eq!(ty.descriptor(), descriptor);
+            assert_eq!(ty.to_string(), name);
+            assert_eq!(ty.new_array_type_tag(), tag);
+            assert_eq!(PrimitiveType::try_from(descriptor), Ok(ty));
+            assert_eq!(descriptor.to_string().parse::<PrimitiveType>(), Ok(ty));
+            let field_type = FieldType::Base(ty);
+            assert_eq!(descriptor.to_string().parse(), Ok(field_type.clone()));
+            assert_eq!(field_type.value_category(), category);
+        }
+        assert_eq!(Category1.slot_count(), 1);
+        assert_eq!(Category2.slot_count(), 2);
     }
 
     proptest! {
-
         #[test]
-        fn should_reject_invalid_primitive_type(s in r"[^ZCFDBSIJ].*") {
-            assert!(PrimitiveType::from_str(&s).is_err());
-        }
-
-        #[test]
-        fn should_reject_invalid_primitive_type_char(
-            c in r"[^ZCFDBSIJ]".prop_map(|it| it.chars().next().unwrap())
+        fn rejects_invalid_primitive_prefix(
+            c in r"[^ZCFDBSIJ]",
+            suffix in any::<String>(),
         ) {
-            assert!(PrimitiveType::try_from(c).is_err());
+            let ch = c.chars().next().unwrap();
+            prop_assert_eq!(PrimitiveType::try_from(ch), Err(InvalidDescriptor));
+            let descriptor = format!("{c}{suffix}");
+            let mut input = descriptor.as_str();
+            prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Err(InvalidDescriptor));
+            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(descriptor.parse::<PrimitiveType>(), Err(InvalidDescriptor));
         }
 
-    }
-
-    #[test]
-    fn field_type_display() {
-        let object = "java/lang/Object".parse::<ClassRef>().unwrap();
-        assert_eq!(
-            FieldType::from(object.clone()).to_string(),
-            "java/lang/Object"
-        );
-        assert_eq!(
-            FieldType::Base(PrimitiveType::Int)
-                .into_array_type()
-                .to_string(),
-            "int[]"
-        );
-        assert_eq!(
-            FieldType::from(object).into_array_type().to_string(),
-            "java/lang/Object[]"
-        );
-    }
-
-    proptest! {
         #[test]
-        fn field_type_from_str_class(class_name in any::<BinaryName>()) {
-            let s = format!("L{class_name};");
-            let expected: FieldType = ClassRef(class_name).into();
-            assert_eq!(s.parse(), Ok(expected));
+        fn primitive_prefix_preserves_suffix(
+            ty in any::<PrimitiveType>(),
+            suffix in any::<String>(),
+        ) {
+            let descriptor = format!("{}{suffix}", ty.descriptor());
+            let mut input = descriptor.as_str();
+            prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Ok(ty));
+            prop_assert_eq!(input, suffix.as_str());
+            if !suffix.is_empty() {
+                prop_assert_eq!(descriptor.parse::<PrimitiveType>(), Err(InvalidDescriptor));
+            }
+        }
+
+        #[test]
+        fn primitive_array_names_and_descriptors(
+            ty in any::<PrimitiveType>(),
+            dim in any::<u8>(),
+        ) {
+            let array = FieldType::array_of(ty.into(), dim);
+            let brackets = "[]".repeat(usize::from(dim));
+            let expected_name = format!("{ty}{brackets}");
+            prop_assert_eq!(array.to_string(), expected_name.as_str());
+            prop_assert_eq!(array.qualified_name(), expected_name);
+            prop_assert_eq!(
+                array.descriptor(),
+                format!("{}{}", "[".repeat(usize::from(dim)), ty.descriptor()),
+            );
+        }
+
+        #[test]
+        fn object_array_names_and_descriptors(
+            class_name in any::<BinaryName>(),
+            dim in any::<u8>(),
+        ) {
+            let array = FieldType::array_of(ClassRef(class_name.clone()).into(), dim);
+            let descriptor = format!("{}L{class_name};", "[".repeat(usize::from(dim)));
+            let brackets = "[]".repeat(usize::from(dim));
+            prop_assert_eq!(array.to_string(), format!("{class_name}{brackets}"));
+            prop_assert_eq!(
+                array.qualified_name(),
+                format!("{}{brackets}", class_name.as_str().replace('/', ".")),
+            );
+            prop_assert_eq!(array.descriptor(), descriptor.as_str());
+            prop_assert_eq!(descriptor.parse(), Ok(array));
         }
 
         #[test]
         fn round_trip_parses(field_type in any::<FieldType>()) {
-            let s = field_type.descriptor();
-            assert_eq!(s.parse(), Ok(field_type));
+            let descriptor = field_type.descriptor();
+            prop_assert_eq!(descriptor.parse(), Ok(field_type));
         }
 
-    }
+        #[test]
+        fn field_prefix_preserves_suffix(
+            field_type in any::<FieldType>(),
+            suffix in any::<String>(),
+        ) {
+            let descriptor = format!("{}{suffix}", field_type.descriptor());
+            let mut input = descriptor.as_str();
+            prop_assert_eq!(FieldType::parse_prefix(&mut input), Ok(field_type));
+            prop_assert_eq!(input, suffix.as_str());
+            if !suffix.is_empty() {
+                prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
+            }
+        }
 
-    #[test]
-    fn field_type_from_str_primitive() {
-        use FieldType::Base;
-        use PrimitiveType::*;
-        assert_eq!("Z".parse(), Ok(Base(Boolean)));
-        assert_eq!("C".parse(), Ok(Base(Char)));
-        assert_eq!("F".parse(), Ok(Base(Float)));
-        assert_eq!("D".parse(), Ok(Base(Double)));
-        assert_eq!("B".parse(), Ok(Base(Byte)));
-        assert_eq!("S".parse(), Ok(Base(Short)));
-        assert_eq!("I".parse(), Ok(Base(Int)));
-        assert_eq!("J".parse(), Ok(Base(Long)));
-    }
+        #[test]
+        fn array_construction_preserves_element(field_type in any::<FieldType>()) {
+            prop_assert_eq!(&FieldType::array_of(field_type.clone(), 0), &field_type);
+            let array = field_type.clone().into_array_type();
+            prop_assert_eq!(&array, &FieldType::Array(Box::new(field_type.clone())));
+            prop_assert_eq!(&FieldType::array_of(field_type, 1), &array);
+            prop_assert_eq!(array.value_category(), ValueCategory::Category1);
+        }
 
-    #[test]
-    fn qualified_name() {
-        assert_eq!(FieldType::Base(PrimitiveType::Int).qualified_name(), "int");
-        assert_eq!(
-            FieldType::from_str("Ljava/lang/String;")
-                .unwrap()
-                .qualified_name(),
-            "java.lang.String"
-        );
-        assert_eq!(
-            FieldType::from_str("[Ljava/lang/String;")
-                .unwrap()
-                .qualified_name(),
-            "java.lang.String[]"
-        );
-    }
+        #[test]
+        fn objects_have_category_one(class_name in any::<BinaryName>()) {
+            let object = FieldType::Object(ClassRef(class_name));
+            prop_assert_eq!(object.value_category(), ValueCategory::Category1);
+        }
 
-    #[test]
-    fn rejects_empty_object_name_and_descriptor_suffix() {
-        assert!(FieldType::from_str("L;").is_err());
-        for descriptor in ["Ljava/lang/String;;", "Ljava/lang/String;A"] {
-            assert!(FieldType::from_str(descriptor).is_err());
+        #[test]
+        fn missing_object_semicolon_is_rejected_at_every_array_depth(
+            class_name in any::<BinaryName>(),
+            dim in any::<u8>(),
+        ) {
+            let descriptor = format!("{}L{class_name}", "[".repeat(usize::from(dim)));
+            let mut input = descriptor.as_str();
+            prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
+            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
+        }
+
+        #[test]
+        fn invalid_elements_are_rejected_at_every_array_depth(
+            element in prop_oneof![
+                Just(String::new()),
+                "[^ZCFDBSIJL\\[]",
+                Just("L;".to_owned()),
+                Just("L/foo;".to_owned()),
+                Just("Lfoo/;".to_owned()),
+                Just("Lfoo//bar;".to_owned()),
+                Just("Lfoo.bar;".to_owned()),
+                Just("Lfoo[bar;".to_owned()),
+            ],
+            dim in any::<u8>(),
+        ) {
+            let descriptor = format!("{}{element}", "[".repeat(usize::from(dim)));
+            let mut input = descriptor.as_str();
+            prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
+            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
         }
     }
 
     #[test]
-    fn missing_object_semicolon_is_rejected_at_every_array_depth() {
-        FieldType::from_str("Ljava/lang/String").unwrap_err();
-        FieldType::from_str("[Ljava/lang/String").unwrap_err();
-        FieldType::from_str("[[Ljava/lang/String").unwrap_err();
+    fn rejects_empty_void_and_incomplete_field_descriptors() {
+        for descriptor in ["", "V", "[", "[V", "[A", "L;"] {
+            assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
+        }
     }
 
     #[test]
-    fn missing_array_element() {
-        assert!(FieldType::from_str("[").is_err());
-    }
-
-    #[test]
-    fn invalid_array_element() {
-        assert!(FieldType::from_str("[A").is_err());
+    fn empty_primitive_descriptor_is_rejected() {
+        let mut input = "";
+        assert_eq!(
+            PrimitiveType::parse_prefix(&mut input),
+            Err(InvalidDescriptor)
+        );
+        assert_eq!(input, "");
+        assert_eq!(input.parse::<PrimitiveType>(), Err(InvalidDescriptor));
     }
 }
