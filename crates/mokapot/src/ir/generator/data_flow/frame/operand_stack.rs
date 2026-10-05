@@ -3,7 +3,7 @@ use std::iter::{once, repeat_n};
 use ValueCategory::{Category1, Category2};
 use itertools::Itertools;
 
-use super::FrameError;
+use super::{FrameError, FrameValue};
 use crate::{
     intrinsics::see_jvm_spec,
     ir::ValueId,
@@ -68,19 +68,12 @@ impl StackOperation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-struct StackItem {
-    value: ValueId,
-    category: ValueCategory,
-}
-
 #[doc = see_jvm_spec!(2, 6, 2)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OperandStack {
     max_slots: u16,
     slot_count: usize,
-    values: Vec<StackItem>,
+    values: Vec<FrameValue>,
 }
 
 impl OperandStack {
@@ -92,15 +85,16 @@ impl OperandStack {
         }
     }
 
-    pub(crate) fn push(&mut self, value: ValueId, cat: ValueCategory) -> Result<(), FrameError> {
-        let slot_count = self.slot_count + cat.slot_count();
+    pub(crate) fn push(
+        &mut self,
+        value: ValueId,
+        category: ValueCategory,
+    ) -> Result<(), FrameError> {
+        let slot_count = self.slot_count + category.slot_count();
         if slot_count > usize::from(self.max_slots) {
             return Err(FrameError::StackOverflow);
         }
-        self.values.push(StackItem {
-            value,
-            category: cat,
-        });
+        self.values.push(FrameValue { value, category });
         self.slot_count = slot_count;
         Ok(())
     }
@@ -208,15 +202,10 @@ impl OperandStack {
 
 #[cfg(test)]
 mod tests {
-    use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
 
-    use super::{FrameError, OperandStack, StackItem, StackOperation};
-    use crate::{
-        intrinsics::see_jvm_spec,
-        ir::{IdAllocator, ValueId},
-        types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
-    };
+    use super::*;
+    use crate::{intrinsics::see_jvm_spec, ir::IdAllocator};
 
     /// The operand stack depths the forms of `operation` transform.
     #[doc = see_jvm_spec!(6, 5)]
@@ -237,12 +226,12 @@ mod tests {
     /// The most operands any instruction replaces: `dup2_x2` form 1 replaces four.
     const MAX_REPLACED_OPERANDS: usize = 4;
 
-    fn slots(items: &[StackItem]) -> usize {
+    fn slots(items: &[super::FrameValue]) -> usize {
         items.iter().map(|item| item.category.slot_count()).sum()
     }
 
     /// A stack holding `items`, with room for `extra_slots` slots beyond them.
-    fn stack_with(items: &[StackItem], extra_slots: usize) -> OperandStack {
+    fn stack_with(items: &[super::FrameValue], extra_slots: usize) -> OperandStack {
         let room =
             u16::try_from(slots(items) + extra_slots).expect("the test stacks fit in u16 slots");
         let mut stack = OperandStack::with_max_slots(room);
@@ -267,9 +256,9 @@ mod tests {
         Expected: IntoIterator<Item = (ValueId, ValueCategory)>,
         <Expected as IntoIterator>::IntoIter: DoubleEndedIterator,
     {
-        let items: Vec<StackItem> = input
+        let items: Vec<_> = input
             .into_iter()
-            .map(|(value, category)| StackItem { value, category })
+            .map(|(value, category)| FrameValue { value, category })
             .collect();
         let mut stack = stack_with(&items, 2);
         stack
@@ -287,8 +276,8 @@ mod tests {
         #[doc = see_jvm_spec!(6, 5)]
         #[test]
         fn an_operation_moves_the_documented_depth(
-            operation in any::<StackOperation>(),
-            items in prop::collection::vec(any::<StackItem>(), 0..6),
+            op in any::<StackOperation>(),
+            items in prop::collection::vec(any::<FrameValue>(), 0..6),
             extra_slots in 0..=4_usize,
         ) {
             let mut stack = stack_with(&items, extra_slots);
@@ -296,26 +285,23 @@ mod tests {
             let operands = stack.values.clone();
             let depth_before = stack.slot_count;
 
-            match stack.apply(operation) {
+            match stack.apply(op) {
                 Ok(()) => {
-                    let (replaced, pushed) = depths(operation);
+                    let (replaced, pushed) = depths(op);
                     prop_assert_eq!(stack.slot_count + replaced, depth_before + pushed);
                     for item in &stack.values {
-                        prop_assert!(operands.contains(item), "{:?} was not on the stack", item);
+                        prop_assert!(operands.contains(item));
                     }
                     let untouched = operands.len().saturating_sub(MAX_REPLACED_OPERANDS);
                     prop_assert!(
                         stack.values.len() >= untouched,
-                        "{operation:?} replaced more than {MAX_REPLACED_OPERANDS} operands",
+                        "{op:?} replaced more than {MAX_REPLACED_OPERANDS} operands",
                     );
                     prop_assert_eq!(&stack.values[..untouched], &operands[..untouched]);
                 }
                 Err(error) => {
                     use FrameError::{StackUnderflow, InvalidSlotLayout, StackOverflow};
-                    prop_assert!(
-                        matches!(&error, StackUnderflow | InvalidSlotLayout | StackOverflow),
-                        "{operation:?} failed with {error:?}"
-                    );
+                    prop_assert!(matches!(&error, StackUnderflow | InvalidSlotLayout | StackOverflow));
                     prop_assert_eq!(&stack, &before, "a rejected operation changed the stack");
                 }
             }
@@ -328,7 +314,7 @@ mod tests {
         #[doc = see_jvm_spec!(2, 6, 2)]
         #[test]
         fn push_checks_the_slot_budget(
-            items in prop::collection::vec(any::<StackItem>(), 0..6),
+            items in prop::collection::vec(any::<FrameValue>(), 0..6),
             extra_slots in 0..=2_usize,
             category in any::<ValueCategory>(),
             value in any::<ValueId>(),
@@ -339,7 +325,7 @@ mod tests {
 
             if category.slot_count() <= extra_slots {
                 prop_assert_eq!(pushed, Ok(()));
-                prop_assert_eq!(stack.values.last(), Some(&StackItem { value, category }));
+                prop_assert_eq!(stack.values.last(), Some(&FrameValue { value, category }));
                 prop_assert_eq!(stack.slot_count, slots(&items) + category.slot_count());
             } else {
                 prop_assert_eq!(pushed, Err(FrameError::StackOverflow));
@@ -358,12 +344,12 @@ mod tests {
         let descriptor: MethodDescriptor = "(JI)V".parse().expect("the descriptor is valid");
         let mut ids = IdAllocator::default();
         let arguments = [(ids.new_id(), Category2), (ids.new_id(), Category1)]
-            .map(|(value, category)| StackItem { value, category });
-        let below = [StackItem {
+            .map(|(value, category)| FrameValue { value, category });
+        let below = [FrameValue {
             value: ids.new_id(),
             category: Category1,
         }];
-        let pushed: Vec<StackItem> = below.iter().chain(&arguments).copied().collect();
+        let pushed: Vec<_> = below.iter().chain(&arguments).copied().collect();
         let mut stack = stack_with(&pushed, 1);
 
         let expected: Vec<ValueId> = arguments.iter().map(|item| item.value).collect();
@@ -375,11 +361,11 @@ mod tests {
         // `(IJ)V`: the last argument takes two slots, and the stack's top holds one.
         let mismatched: MethodDescriptor = "(IJ)V".parse().expect("the descriptor is valid");
         let short = [
-            StackItem {
+            FrameValue {
                 value: ids.new_id(),
                 category: Category1,
             },
-            StackItem {
+            FrameValue {
                 value: ids.new_id(),
                 category: Category1,
             },

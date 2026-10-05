@@ -1,4 +1,4 @@
-use super::FrameError;
+use super::{FrameError, FrameValue};
 use crate::{
     intrinsics::see_jvm_spec,
     ir::ValueId,
@@ -6,14 +6,8 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct LocalValue {
-    value: ValueId,
-    category: ValueCategory,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 enum LocalSlot {
-    Value(LocalValue),
+    Value(FrameValue),
     Reserved,
     Unset,
     Unavailable,
@@ -68,11 +62,11 @@ impl LocalVariables {
 
     pub(crate) fn get(&self, index: u16, expected: ValueCategory) -> Result<&ValueId, FrameError> {
         let index = usize::from(index);
-        match self
+        let slot = self
             .slots
             .get(index)
-            .ok_or(FrameError::LocalIndexOutOfBounds)?
-        {
+            .ok_or(FrameError::LocalIndexOutOfBounds)?;
+        match slot {
             LocalSlot::Value(value) if value.category == expected => Ok(&value.value),
             LocalSlot::Value(_) | LocalSlot::Reserved => Err(FrameError::InvalidSlotLayout),
             LocalSlot::Unavailable => Err(FrameError::UnavailableLocal),
@@ -98,7 +92,7 @@ impl LocalVariables {
             self.invalidate_overlapping_category_2(overwritten);
         }
 
-        self.slots[index] = LocalSlot::Value(LocalValue { value, category });
+        self.slots[index] = LocalSlot::Value(FrameValue { value, category });
         if category == ValueCategory::Category2 {
             self.slots[index + 1] = LocalSlot::Reserved;
         }
@@ -155,19 +149,16 @@ impl LocalVariables {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        ir::{IdAllocator, test::prelude::*},
+        tests::arb_field_type,
+        types::method_descriptor::ReturnType,
+    };
     use std::iter::repeat_n;
 
     use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
-
-    use super::{FrameError, LocalSlot, LocalVariables};
-    use crate::{
-        intrinsics::see_jvm_spec,
-        ir::{IdAllocator, ValueId, test::prelude::entry_values},
-        tests::arb_field_type,
-        types::field_type::ValueCategory,
-        types::method_descriptor::{MethodDescriptor, ReturnType},
-    };
 
     /// A table of `slot_count` variables, none of them written.
     fn empty_locals(slot_count: usize) -> LocalVariables {

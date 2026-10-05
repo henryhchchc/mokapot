@@ -25,6 +25,13 @@ pub(super) enum Position {
     Stack(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+struct FrameValue {
+    value: ValueId,
+    category: ValueCategory,
+}
+
 #[doc = see_jvm_spec!(2, 6)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct Frame {
