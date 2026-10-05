@@ -8,7 +8,7 @@ use bitflags::bitflags;
 pub use constant_pool::ConstantPool;
 
 use super::{
-    Annotation, Class, ConstantValue, Field, Method,
+    Annotation, Annotations, Class, ConstantValue, Field, Method,
     annotation::ElementValue,
     bytecode::ParseError,
     field,
@@ -372,14 +372,10 @@ pub struct RecordComponent {
     pub component_type: FieldType,
     /// The generic signature of the component.
     pub signature: Option<field::Signature>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<super::Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<super::Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<super::TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<super::TypeAnnotation>,
+    /// The annotations.
+    pub annotations: Annotations<super::Annotation>,
+    /// The type annotations.
+    pub type_annotations: Annotations<super::TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub other_attributes: Vec<(String, Vec<u8>)>,
 }

@@ -11,7 +11,7 @@ use super::{
 use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
-        Field,
+        Annotations, Field,
         errors::ParsingErrorContext,
         field::{self},
         references::ClassRef,
@@ -108,10 +108,14 @@ impl ClassElement for Field {
             is_synthetic,
             is_deprecated,
             signature,
-            runtime_visible_annotations,
-            runtime_invisible_annotations,
-            runtime_visible_type_annotations,
-            runtime_invisible_type_annotations,
+            annotations: Annotations {
+                runtime_visible: runtime_visible_annotations,
+                runtime_invisible: runtime_invisible_annotations,
+            },
+            type_annotations: Annotations {
+                runtime_visible: runtime_visible_type_annotations,
+                runtime_invisible: runtime_invisible_type_annotations,
+            },
             other_attributes,
         })
     }

@@ -50,14 +50,10 @@ pub struct Class {
     pub enclosing_method: Option<class::EnclosingMethod>,
     /// The source debug extension.
     pub source_debug_extension: Option<Vec<u8>>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// The annotations of the class.
+    pub annotations: Annotations<Annotation>,
+    /// The type annotations of the class.
+    pub type_annotations: Annotations<TypeAnnotation>,
     /// The bootstrap methods of the class, which are used to generate dynamic callsites.
     pub bootstrap_methods: Vec<class::BootstrapMethod>,
     /// The information of the module if the class is `module-info`.
@@ -82,6 +78,24 @@ pub struct Class {
     pub record: Option<Vec<class::RecordComponent>>,
     /// JVM attributes that are not specified in the JVM specification.
     pub other_attributes: Vec<(String, Vec<u8>)>,
+}
+
+/// Container for runtime-visible and runtime-invisible annotations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotations<T> {
+    /// The runtime-visible annotations.
+    pub runtime_visible: Vec<T>,
+    /// The runtime-invisible annotations.
+    pub runtime_invisible: Vec<T>,
+}
+
+impl<T> Default for Annotations<T> {
+    fn default() -> Self {
+        Self {
+            runtime_visible: Vec::new(),
+            runtime_invisible: Vec::new(),
+        }
+    }
 }
 
 /// An annotation on a class, field, method, or parameter.
@@ -135,14 +149,10 @@ pub struct Field {
     pub is_deprecated: bool,
     /// The generic signature.
     pub signature: Option<field::Signature>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// The annotations.
+    pub annotations: Annotations<Annotation>,
+    /// The type annotations.
+    pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub other_attributes: Vec<(String, Vec<u8>)>,
 }
@@ -163,18 +173,12 @@ pub struct Method {
     pub body: Option<code::MethodBody>,
     /// The checked exceptions that may be thrown by the method.
     pub exceptions: Vec<ClassRef>,
-    /// The runtime visible annotations.
-    pub runtime_visible_annotations: Vec<Annotation>,
-    /// The runtime invisible annotations.
-    pub runtime_invisible_annotations: Vec<Annotation>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime visible annotations on method parameters.
-    pub runtime_visible_parameter_annotations: Vec<Vec<Annotation>>,
-    /// The runtime invisible annotations on method parameters.
-    pub runtime_invisible_parameter_annotations: Vec<Vec<Annotation>>,
+    /// The annotations.
+    pub annotations: Annotations<Annotation>,
+    /// The type annotations.
+    pub type_annotations: Annotations<TypeAnnotation>,
+    /// The annotations on method parameters.
+    pub parameter_annotations: Annotations<Vec<Annotation>>,
     /// The default value of the annotation (only for annotation interface methods).
     pub annotation_default: Option<annotation::ElementValue>,
     /// The parameters of the method, including names and access flags.

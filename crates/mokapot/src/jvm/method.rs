@@ -99,6 +99,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::jvm::Annotations;
     use crate::tests::arb_identifier;
 
     fn empty_method(name: String) -> Method {
@@ -109,12 +110,9 @@ mod tests {
             owner: "org/mokapot/Test".parse().unwrap(),
             body: None,
             exceptions: vec![],
-            runtime_visible_annotations: vec![],
-            runtime_invisible_annotations: vec![],
-            runtime_visible_type_annotations: vec![],
-            runtime_invisible_type_annotations: vec![],
-            runtime_visible_parameter_annotations: vec![],
-            runtime_invisible_parameter_annotations: vec![],
+            annotations: Annotations::default(),
+            type_annotations: Annotations::default(),
+            parameter_annotations: Annotations::default(),
             annotation_default: None,
             parameters: vec![],
             is_synthetic: false,

@@ -282,17 +282,17 @@ fn print_field_details(field: &Field) {
         println!("    Deprecated: true");
     }
     // Show count of runtime visible annotations (available at runtime via reflection)
-    if !field.runtime_visible_annotations.is_empty() {
+    if !field.annotations.runtime_visible.is_empty() {
         println!(
             "    Runtime visible annotations: {}",
-            field.runtime_visible_annotations.len()
+            field.annotations.runtime_visible.len()
         );
     }
     // Show count of runtime invisible annotations (not available at runtime)
-    if !field.runtime_invisible_annotations.is_empty() {
+    if !field.annotations.runtime_invisible.is_empty() {
         println!(
             "    Runtime invisible annotations: {}",
-            field.runtime_invisible_annotations.len()
+            field.annotations.runtime_invisible.len()
         );
     }
 }

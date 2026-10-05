@@ -21,6 +21,7 @@ use super::{
 use crate::{
     intrinsics::extract_attributes,
     jvm::{
+        Annotations,
         bytecode::code::raw_instruction::RawInstruction,
         class::ConstantPool,
         code::{
@@ -208,8 +209,10 @@ impl ClassElement for MethodBody {
             line_number_table,
             local_variable_table,
             stack_map_table,
-            runtime_visible_type_annotations,
-            runtime_invisible_type_annotations,
+            type_annotations: Annotations {
+                runtime_visible: runtime_visible_type_annotations,
+                runtime_invisible: runtime_invisible_type_annotations,
+            },
             other_attributes,
         })
     }
@@ -251,10 +254,10 @@ impl ClassElement for MethodBody {
         let attributes = [
             self.line_number_table.map(Attribute::LineNumberTable),
             self.stack_map_table.map(Attribute::StackMapTable),
-            Some(self.runtime_visible_type_annotations)
+            Some(self.type_annotations.runtime_visible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeVisibleTypeAnnotations),
-            Some(self.runtime_invisible_type_annotations)
+            Some(self.type_annotations.runtime_invisible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeInvisibleTypeAnnotations),
             local_variable_table.map(Attribute::LocalVariableTable),

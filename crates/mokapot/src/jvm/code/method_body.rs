@@ -7,7 +7,10 @@ use std::{
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{TypeAnnotation, bytecode::ParseError, class::ConstantPool, references::ClassRef},
+    jvm::{
+        Annotations, TypeAnnotation, bytecode::ParseError, class::ConstantPool,
+        references::ClassRef,
+    },
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -29,10 +32,8 @@ pub struct MethodBody {
     pub local_variable_table: Option<LocalVariableTable>,
     /// The stack map table.
     pub stack_map_table: Option<Vec<StackMapFrame>>,
-    /// The runtime visible type annotations.
-    pub runtime_visible_type_annotations: Vec<TypeAnnotation>,
-    /// The runtime invisible type annotations.
-    pub runtime_invisible_type_annotations: Vec<TypeAnnotation>,
+    /// The type annotations.
+    pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
     pub other_attributes: Vec<(String, Vec<u8>)>,
 }
@@ -267,8 +268,7 @@ mod test {
             line_number_table: None,
             local_variable_table: None,
             stack_map_table: None,
-            runtime_visible_type_annotations: vec![],
-            runtime_invisible_type_annotations: vec![],
+            type_annotations: Annotations::default(),
             other_attributes: vec![],
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));

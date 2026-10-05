@@ -72,16 +72,16 @@ macro_rules! see_jvm_spec {
 macro_rules! attributes_into_iter {
     ($val: expr) => {
         [
-            Some($val.runtime_visible_annotations)
+            Some($val.annotations.runtime_visible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeVisibleAnnotations),
-            Some($val.runtime_invisible_annotations)
+            Some($val.annotations.runtime_invisible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeInvisibleAnnotations),
-            Some($val.runtime_visible_type_annotations)
+            Some($val.type_annotations.runtime_visible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeVisibleTypeAnnotations),
-            Some($val.runtime_invisible_type_annotations)
+            Some($val.type_annotations.runtime_invisible)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::RuntimeInvisibleTypeAnnotations),
         ]

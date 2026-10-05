@@ -17,7 +17,7 @@ use super::{
 use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
-        Class,
+        Annotations, Class,
         class::{
             self, BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo,
             NestedClassAccessFlags, RecordComponent, Version,
@@ -108,26 +108,12 @@ impl Class {
             it => Some(constant_pool.get_class_ref(it)?),
         };
 
-        let parsing_context = ParsingContext {
+        let ctx = &ParsingContext {
             constant_pool,
             class_version: version,
             current_class_binary_name: binary_name.clone(),
         };
 
-        let ctx = &parsing_context;
-
-        let interfaces = interfaces
-            .into_iter()
-            .map(|it| ctx.constant_pool.get_class_ref(it))
-            .collect::<Result<_, _>>()?;
-        let fields = fields
-            .into_iter()
-            .map(|it| ClassElement::from_raw(it, ctx))
-            .collect::<Result<_, _>>()?;
-        let methods = methods
-            .into_iter()
-            .map(|it| ClassElement::from_raw(it, ctx))
-            .collect::<Result<_, _>>()?;
         let attributes: Vec<Attribute> = attributes
             .into_iter()
             .map(|it| ClassElement::from_raw(it, ctx))
@@ -163,17 +149,30 @@ impl Class {
             access_flags,
             binary_name,
             super_class,
-            interfaces,
-            fields,
-            methods,
+            interfaces: interfaces
+                .into_iter()
+                .map(|it| ctx.constant_pool.get_class_ref(it))
+                .collect::<Result<_, _>>()?,
+            fields: fields
+                .into_iter()
+                .map(|it| ClassElement::from_raw(it, ctx))
+                .collect::<Result<_, _>>()?,
+            methods: methods
+                .into_iter()
+                .map(|it| ClassElement::from_raw(it, ctx))
+                .collect::<Result<_, _>>()?,
             source_file,
             inner_classes,
             enclosing_method,
             source_debug_extension,
-            runtime_visible_annotations,
-            runtime_invisible_annotations,
-            runtime_visible_type_annotations,
-            runtime_invisible_type_annotations,
+            annotations: Annotations {
+                runtime_visible: runtime_visible_annotations,
+                runtime_invisible: runtime_invisible_annotations,
+            },
+            type_annotations: Annotations {
+                runtime_visible: runtime_visible_type_annotations,
+                runtime_invisible: runtime_invisible_type_annotations,
+            },
             bootstrap_methods,
             module,
             module_packages,
@@ -384,10 +383,14 @@ impl ClassElement for RecordComponent {
             name,
             component_type,
             signature,
-            runtime_visible_annotations,
-            runtime_invisible_annotations,
-            runtime_visible_type_annotations,
-            runtime_invisible_type_annotations,
+            annotations: Annotations {
+                runtime_visible: runtime_visible_annotations,
+                runtime_invisible: runtime_invisible_annotations,
+            },
+            type_annotations: Annotations {
+                runtime_visible: runtime_visible_type_annotations,
+                runtime_invisible: runtime_invisible_type_annotations,
+            },
             other_attributes,
         })
     }

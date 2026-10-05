@@ -11,7 +11,7 @@ use super::{
 use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
     jvm::{
-        Method,
+        Annotations, Method,
         bytecode::ParsingContext,
         errors::ParsingErrorContext,
         method::{self},
@@ -143,12 +143,18 @@ impl ClassElement for Method {
             owner,
             body,
             exceptions,
-            runtime_visible_annotations,
-            runtime_invisible_annotations,
-            runtime_visible_type_annotations,
-            runtime_invisible_type_annotations,
-            runtime_visible_parameter_annotations,
-            runtime_invisible_parameter_annotations,
+            annotations: Annotations {
+                runtime_visible: runtime_visible_annotations,
+                runtime_invisible: runtime_invisible_annotations,
+            },
+            type_annotations: Annotations {
+                runtime_visible: runtime_visible_type_annotations,
+                runtime_invisible: runtime_invisible_type_annotations,
+            },
+            parameter_annotations: Annotations {
+                runtime_visible: runtime_visible_parameter_annotations,
+                runtime_invisible: runtime_invisible_parameter_annotations,
+            },
             annotation_default,
             parameters,
             is_synthetic,
@@ -173,6 +179,12 @@ impl ClassElement for Method {
             Some(self.parameters)
                 .filter(|it| !it.is_empty())
                 .map(Attribute::MethodParameters),
+            Some(self.parameter_annotations.runtime_visible)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeVisibleParameterAnnotations),
+            Some(self.parameter_annotations.runtime_invisible)
+                .filter(|it| !it.is_empty())
+                .map(Attribute::RuntimeInvisibleParameterAnnotations),
             self.annotation_default.map(Attribute::AnnotationDefault),
             self.is_synthetic.then_some(Attribute::Synthetic),
             self.is_deprecated.then_some(Attribute::Deprecated),
