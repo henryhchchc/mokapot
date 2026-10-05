@@ -205,7 +205,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{intrinsics::see_jvm_spec, ir::IdAllocator};
+    use crate::ir::IdAllocator;
 
     /// The operand stack depths the forms of `operation` transform.
     #[doc = see_jvm_spec!(6, 5)]

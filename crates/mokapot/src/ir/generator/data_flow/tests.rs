@@ -1,15 +1,10 @@
 //! Test-only oracle for the dataflow frame bookkeeping.
 
-use std::collections::HashMap;
-
 use super::{
     analysis::{BlockSolution, DataflowSolver, FrameSource},
-    frame::Frame,
+    *,
 };
-use crate::{
-    ir::{BlockId, generator::control_flow},
-    jvm::Method,
-};
+use crate::{ir::generator::control_flow, jvm::Method};
 
 /// Asserts the frame-flow invariant of `method`'s solutions.
 fn verify_method(method: &Method) {

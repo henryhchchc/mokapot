@@ -1,8 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
-
 use proptest::{collection::hash_set, prelude::*};
 
-use super::{BranchGuard, PathCondition, SolvingBudget, cover::Cover};
+use super::*;
 use crate::ir::expression::BooleanVariable;
 
 impl<P> PathCondition<P> {
@@ -115,13 +113,12 @@ mod explicit_reduction {
 }
 
 mod analyzer {
-    use std::collections::HashMap;
+    use super::*;
 
     use crate::{
         ir::{
-            BranchGuard, ControlTransfer as Transfer, NumericalId,
-            expression::{BooleanVariable, Expression, Predicate},
-            path_condition::PathCondition,
+            ControlTransfer as Transfer, NumericalId,
+            expression::{Expression, Predicate},
             test::prelude::*,
         },
         jvm::ConstantValue::{Integer, Null},

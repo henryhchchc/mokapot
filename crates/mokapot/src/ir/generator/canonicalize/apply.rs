@@ -82,9 +82,9 @@ fn rewrite_ops<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> Va
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
-    use super::SimplifiedParameters;
+    use super::*;
     use crate::ir::{expression::MathOperation, test::prelude::*};
 
     #[test]

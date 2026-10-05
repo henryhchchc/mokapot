@@ -1,16 +1,10 @@
 use proptest::prelude::*;
 
-use super::{
-    Frame, FrameError, Position, local_variables::LocalVariables, operand_stack::OperandStack,
-};
+use super::*;
 use crate::{
-    intrinsics::see_jvm_spec,
-    ir::{IdAllocator, ValueId, test::prelude::entry_values},
+    ir::{IdAllocator, test::prelude::entry_values},
     tests::arb_field_type,
-    types::{
-        field_type::ValueCategory,
-        method_descriptor::{MethodDescriptor, ReturnType},
-    },
+    types::method_descriptor::ReturnType,
 };
 
 /// A local variable table of `slot_count` variables holding `items` from variable zero.

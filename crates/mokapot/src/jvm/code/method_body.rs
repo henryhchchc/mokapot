@@ -237,8 +237,7 @@ pub mod instruction_list {
 mod test {
     use Instruction::*;
 
-    use super::MethodBody;
-    use crate::jvm::code::{Instruction, InstructionList};
+    use super::*;
 
     #[test]
     fn exception_table_entry_covers_half_open_range() {

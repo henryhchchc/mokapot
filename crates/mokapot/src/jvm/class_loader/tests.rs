@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{CachingClassLoader, ClassLoader, ClassPath, Error};
-use crate::{jvm::Class, types::binary_name::BinaryName};
+use super::*;
 
 #[test]
 fn loader_exhausts_class_paths_after_not_found() {

@@ -105,9 +105,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use super::Tarjan;
+    use super::*;
 
     #[test]
     fn finds_a_deep_cycle_without_recursing() {

@@ -281,12 +281,8 @@ impl ClassElement for MethodBody {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClassElement, ExceptionTableEntry, MethodBody, ParsingContext, raw_attributes};
-    use crate::jvm::{
-        class::{ConstantPool, Version},
-        code::ProgramCounter,
-        errors::ParseErrorKind,
-    };
+    use super::*;
+    use crate::jvm::{class::Version, errors::ParseErrorKind};
 
     #[test]
     fn exception_table_entry_preserves_exclusive_end_pc() {

@@ -5,9 +5,7 @@ use std::{
 
 use proptest::prelude::*;
 
-use crate::analysis::fixed_point::{
-    DataflowProblem, FactsMap, JoinSemiLattice, QueuedFactsMap, solve,
-};
+use super::*;
 use crate::ir::test::prelude::TestSet;
 
 struct RepeatedSuccessors {

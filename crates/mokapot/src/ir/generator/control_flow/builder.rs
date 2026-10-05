@@ -220,14 +220,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        ir::{
-            generator::control_flow::{self, CfgNode},
-            test::prelude::*,
-        },
+        ir::{generator::control_flow, test::prelude::*},
         jvm::code::Instruction,
     };
 
-    use super::super::block_exit::BlockExit;
+    use super::*;
 
     #[test]
     fn rejects_methods_without_bodies() {

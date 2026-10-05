@@ -156,9 +156,7 @@ fn strongly_connected_components(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use super::{ParameterInputs, SimplifiedParameters};
+    use super::*;
     use crate::ir::test::prelude::*;
 
     fn input(arguments: impl IntoIterator<Item = ValueId>) -> ParameterInputs {

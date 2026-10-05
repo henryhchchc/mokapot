@@ -1,11 +1,6 @@
 use super::*;
 use crate::{
-    ir::{
-        MokaIRBuildErrorKind, ValueId,
-        expression::{
-            ArrayOperation, Conversion, Expression, FieldAccess, LockOperation, MathOperation,
-        },
-    },
+    ir::expression::{ArrayOperation, Conversion, FieldAccess, LockOperation, MathOperation},
     jvm::references::FieldRef,
     types::{
         field_type::{FieldType, PrimitiveType},

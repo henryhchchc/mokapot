@@ -64,9 +64,7 @@ pub(super) struct ParameterInputs {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use super::canonicalize_values;
+    use super::*;
     use crate::ir::{expression::MathOperation, test::prelude::*};
 
     #[test]

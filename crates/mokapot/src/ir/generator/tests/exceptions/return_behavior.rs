@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    ir::{BlockKind, MokaIRBuildErrorKind},
-    jvm::method,
-};
+use crate::jvm::method;
 
 #[test]
 fn synchronized_return_reports_handler_frame_overflow_at_return() {
