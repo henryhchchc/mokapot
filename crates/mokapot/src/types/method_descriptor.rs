@@ -37,6 +37,7 @@ use crate::intrinsics::see_jvm_spec;
     "({}) -> {return_type}",
     parameters_types.iter().map(FieldType::descriptor).join(", ")
 )]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct MethodDescriptor {
     /// The types of the method parameters in order of declaration.
     /// For instance, for a method `foo(int x, String y)`, this would contain
@@ -168,59 +169,68 @@ mod test {
     use super::*;
 
     const MAX_PARAMS: usize = 10;
+    const INVALID_RETURN_DESCRIPTORS: &[&str] = &[
+        "",
+        "A",
+        "[",
+        "[V",
+        "L;",
+        "Ljava/lang/String",
+        "L/foo;",
+        "Lfoo.bar;",
+    ];
+
+    fn parameters() -> impl Strategy<Value = Vec<FieldType>> {
+        prop::collection::vec(any::<FieldType>(), 0..=MAX_PARAMS)
+    }
+
+    fn parameter_descriptors(params: &[FieldType]) -> String {
+        params.iter().map(FieldType::descriptor).join("")
+    }
 
     proptest! {
+        #[test]
+        fn method_round_trip(method in any::<MethodDescriptor>()) {
+            prop_assert_eq!(method.descriptor().parse(), Ok(method));
+        }
 
         #[test]
-        fn roundtrip(
-            params in prop::collection::vec(any::<FieldType>(), 0..MAX_PARAMS),
+        fn rejects_invalid_descriptors(
+            before in parameters(),
+            after in parameters(),
+            invalid_parameter in prop::sample::select(&["V", "[V", "L;", "L/foo;", "Lfoo.bar;"][..]),
             ret in any::<ReturnType>(),
+            suffix in "(?s).+",
         ) {
-            let desc = MethodDescriptor {
-                parameters_types: params,
-                return_type: ret,
-            };
-            let str_desc = desc.descriptor();
-            let parsed = MethodDescriptor::from_str(&str_desc).expect("Failed to parse method descriptor");
-            assert_eq!(desc, parsed);
+            let before = parameter_descriptors(&before);
+            let after = parameter_descriptors(&after);
+            let ret = ret.descriptor();
+            let invalid_parameters = [
+                format!("{before}){ret}"),
+                format!("({before}{ret}"),
+                format!("({before}{invalid_parameter}{after}){ret}"),
+            ];
+            for descriptor in invalid_parameters.iter().map(String::as_str).chain([
+                "", "(", "(V)V", "([)V", "(Ljava/lang/String)V",
+            ]) {
+                let mut input = descriptor;
+                prop_assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
+                prop_assert_eq!(input, descriptor);
+                prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
+            }
+
+            let trailing_input = format!("{ret}{suffix}");
+            for descriptor in INVALID_RETURN_DESCRIPTORS.iter().copied()
+                .chain(std::iter::once(trailing_input.as_str()))
+            {
+                prop_assert_eq!(descriptor.parse::<ReturnType>(), Err(InvalidDescriptor));
+                let method = format!("({before}){descriptor}");
+                prop_assert_eq!(method.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
+            }
+
+            for descriptor in ["()", "(I)"] {
+                prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
+            }
         }
-
-        #[test]
-        fn return_type_rejects_a_second_suffix(
-            first in any::<ReturnType>(),
-            suffix in prop::collection::vec(any::<ReturnType>(), 1..5),
-        ) {
-            let descriptor = format!(
-                "{}{}",
-                first.descriptor(),
-                suffix.iter().map(ReturnType::descriptor).join(""),
-            );
-            assert!(ReturnType::from_str(&descriptor).is_err());
-        }
-
-    }
-
-    #[test]
-    fn empty_desc() {
-        let descriptor = "";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
-    }
-
-    #[test]
-    fn propagates_invalid_return_type() {
-        assert!(MethodDescriptor::from_str("()Ljava/lang/String").is_err());
-    }
-
-    #[test]
-    fn missing_return_type() {
-        let descriptor = "(I)";
-        let method_descriptor = MethodDescriptor::from_str(descriptor);
-        assert!(method_descriptor.is_err());
-    }
-
-    #[test]
-    fn rejects_void_parameters() {
-        assert!(MethodDescriptor::from_str("(V)V").is_err());
     }
 }
