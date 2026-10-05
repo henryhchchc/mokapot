@@ -3,8 +3,7 @@ use proptest::prelude::*;
 use super::*;
 use crate::{
     ir::{IdAllocator, test::prelude::entry_values},
-    tests::arb_field_type,
-    types::method_descriptor::ReturnType,
+    types::{field_type::FieldType, method_descriptor::ReturnType},
 };
 
 /// A local variable table of `slot_count` variables holding `items` from variable zero.
@@ -65,7 +64,7 @@ const ENTRY_MAX_STACK: u16 = 4;
 proptest! {
     #[test]
     fn entry_frame_assembles_locals_and_operand_stack(
-        parameter_types in prop::collection::vec(arb_field_type(), 0..8),
+        parameter_types in prop::collection::vec(any::<FieldType>(), 0..8),
         instance in any::<bool>(),
     ) {
         let descriptor = MethodDescriptor {

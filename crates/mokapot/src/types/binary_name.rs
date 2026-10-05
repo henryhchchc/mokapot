@@ -168,9 +168,22 @@ fn validate(name: &str) -> Result<(), InvalidBinaryName> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use proptest::prelude::*;
 
-    use super::*;
+    impl Arbitrary for BinaryName {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
+            binary_name_segments()
+                .prop_map(|segments| {
+                    let name = segments.join("/");
+                    BinaryName::new(name).unwrap()
+                })
+                .boxed()
+        }
+    }
 
     fn binary_name_segments() -> impl Strategy<Value = Vec<String>> {
         prop::collection::vec(

@@ -5,12 +5,8 @@ use crate::{
         Class, Method, class,
         code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
         method::AccessFlags,
-        references::ClassRef,
     },
-    types::{
-        binary_name::BinaryName,
-        field_type::{FieldType, PrimitiveType},
-    },
+    types::binary_name::BinaryName,
 };
 
 #[rustfmt::skip]
@@ -48,7 +44,7 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8; 40] {
 impl Default for Class {
     fn default() -> Self {
         Self {
-            version: class::Version::Jdk22(false),
+            version: class::Version::Jdk27(false),
             access_flags: class::AccessFlags::empty(),
             binary_name: BinaryName::new("$default$").unwrap(),
             super_class: None,
@@ -128,34 +124,7 @@ where
         other_attributes: vec![],
     }
 }
-
 pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
     let arb_ident = prop::string::string_regex(r"[a-zA-Z][\w\$_]*").expect("The regex is invalid");
     prop::collection::vec(arb_ident, 1..10).prop_map(|v| v.join("/"))
-}
-
-pub(crate) fn arb_binary_name() -> impl Strategy<Value = BinaryName> {
-    arb_identifier().prop_map(|s| BinaryName::new(s).unwrap())
-}
-
-pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
-    prop_oneof![
-        any::<PrimitiveType>().prop_map(FieldType::Base),
-        arb_binary_name()
-            .prop_map(ClassRef)
-            .prop_map(FieldType::from),
-    ]
-}
-
-prop_compose! {
-    fn arb_array_field_type()(
-        t in arb_non_array_field_type(),
-        dim in 1..=u8::MAX
-    ) -> FieldType {
-        FieldType::array_of(t, dim)
-    }
-}
-
-pub(crate) fn arb_field_type() -> impl Strategy<Value = FieldType> {
-    prop_oneof![arb_non_array_field_type(), arb_array_field_type()]
 }

@@ -165,14 +165,13 @@ mod test {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::arb_field_type;
 
     const MAX_PARAMS: usize = 10;
 
     fn arb_return_type() -> impl Strategy<Value = ReturnType> {
         prop_oneof![
             Just(ReturnType::Void),
-            arb_field_type().prop_map(ReturnType::Some),
+            any::<FieldType>().prop_map(ReturnType::Some),
         ]
     }
 
@@ -180,7 +179,7 @@ mod test {
 
         #[test]
         fn roundtrip(
-            params in prop::collection::vec(arb_field_type(), 0..MAX_PARAMS),
+            params in prop::collection::vec(any::<FieldType>(), 0..MAX_PARAMS),
             ret in arb_return_type(),
         ) {
             let desc = MethodDescriptor {

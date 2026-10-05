@@ -152,8 +152,7 @@ mod tests {
     use super::*;
     use crate::{
         ir::{IdAllocator, test::prelude::*},
-        tests::arb_field_type,
-        types::method_descriptor::ReturnType,
+        types::{field_type::FieldType, method_descriptor::ReturnType},
     };
     use std::iter::repeat_n;
 
@@ -172,7 +171,7 @@ mod tests {
         #[doc = see_jvm_spec!(2, 6, 1)]
         #[test]
         fn lays_out_method_entry_values(
-            parameter_types in prop::collection::vec(arb_field_type(), 0..8),
+            parameter_types in prop::collection::vec(any::<FieldType>(), 0..8),
             instance in any::<bool>(),
         ) {
             let descriptor = MethodDescriptor {

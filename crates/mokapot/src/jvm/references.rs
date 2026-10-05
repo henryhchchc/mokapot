@@ -106,12 +106,11 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::arb_binary_name;
 
     proptest! {
 
         #[test]
-        fn test_is_constructor(class_name in arb_binary_name()) {
+        fn test_is_constructor(class_name in any::<BinaryName>()) {
             let method = MethodRef {
                 owner: ReferenceType::Class(ClassRef(class_name)),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
@@ -122,7 +121,7 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn test_is_static_initializer_bolck(class_name in arb_binary_name()) {
+        fn test_is_static_initializer_bolck(class_name in any::<BinaryName>()) {
             let method = MethodRef {
                 owner: ReferenceType::Class(ClassRef(class_name)),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),

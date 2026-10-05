@@ -317,7 +317,34 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::tests::{arb_binary_name, arb_non_array_field_type};
+    use crate::types::binary_name::BinaryName;
+
+    pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
+        prop_oneof![
+            any::<PrimitiveType>().prop_map(FieldType::Base),
+            any::<BinaryName>()
+                .prop_map(ClassRef)
+                .prop_map(FieldType::from),
+        ]
+    }
+
+    prop_compose! {
+        fn arb_array_field_type()(
+            t in arb_non_array_field_type(),
+            dim in 1..=u8::MAX
+        ) -> FieldType {
+            FieldType::array_of(t, dim)
+        }
+    }
+
+    impl Arbitrary for FieldType {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
+            prop_oneof![arb_non_array_field_type(), arb_array_field_type()].boxed()
+        }
+    }
 
     #[test]
     fn primitive_type_descriptor() {
@@ -395,7 +422,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn field_type_from_str_class(class_name in arb_binary_name()) {
+        fn field_type_from_str_class(class_name in any::<BinaryName>()) {
             let s = format!("L{class_name};");
             let expected: FieldType = ClassRef(class_name).into();
             assert_eq!(s.parse(), Ok(expected));
