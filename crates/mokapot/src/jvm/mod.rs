@@ -19,7 +19,7 @@ pub mod method;
 pub mod module;
 pub mod references;
 
-pub mod constant_value;
+mod constant_value;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
 
