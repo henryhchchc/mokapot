@@ -319,30 +319,21 @@ mod tests {
     use super::*;
     use crate::types::binary_name::BinaryName;
 
-    pub(crate) fn arb_non_array_field_type() -> impl Strategy<Value = FieldType> {
-        prop_oneof![
-            any::<PrimitiveType>().prop_map(FieldType::Base),
-            any::<BinaryName>()
-                .prop_map(ClassRef)
-                .prop_map(FieldType::from),
-        ]
-    }
-
-    prop_compose! {
-        fn arb_array_field_type()(
-            t in arb_non_array_field_type(),
-            dim in 1..=u8::MAX
-        ) -> FieldType {
-            FieldType::array_of(t, dim)
-        }
-    }
-
     impl Arbitrary for FieldType {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-            prop_oneof![arb_non_array_field_type(), arb_array_field_type()].boxed()
+            let non_array = prop_oneof![
+                any::<PrimitiveType>().prop_map(FieldType::Base),
+                any::<BinaryName>()
+                    .prop_map(ClassRef)
+                    .prop_map(FieldType::from),
+            ];
+            let dimensions = prop_oneof![Just(0_u8), 1..=u8::MAX];
+            (non_array, dimensions)
+                .prop_map(|(inner, dim)| FieldType::array_of(inner, dim))
+                .boxed()
         }
     }
 
@@ -429,25 +420,11 @@ mod tests {
         }
 
         #[test]
-        fn field_type_from_str_array(
-            base_type in arb_non_array_field_type(),
-            dimension in 1..=u8::MAX
-        ) {
-            let s = format!("{}{}", "[".repeat(usize::from(dimension)), base_type.descriptor());
-            let mut parsed = s.parse().expect("Failed to parse field type");
-            for _ in 0..dimension {
-                if let FieldType::Array(element_type) = parsed {
-                    // TODO: change to the following line
-                    //       when `Box::into_inner` is stable
-                    //       See https://github.com/rust-lang/rust/issues/80437
-                    // parsed = Box::into_inner(element_type);
-                    parsed = *element_type;
-                } else {
-                    panic!("Expected array type, got: {parsed:?}");
-                }
-            }
-            assert_eq!(parsed, base_type);
+        fn round_trip_parses(field_type in any::<FieldType>()) {
+            let s = field_type.descriptor();
+            assert_eq!(s.parse(), Ok(field_type));
         }
+
     }
 
     #[test]
