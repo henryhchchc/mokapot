@@ -5,6 +5,7 @@ use std::{
     hash::Hash,
 };
 
+#[derive(Debug)]
 pub(crate) struct Worklist<T> {
     pending: VecDeque<T>,
     queued: HashSet<T>,
