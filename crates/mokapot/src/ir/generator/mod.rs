@@ -18,7 +18,6 @@ mod control_flow;
 mod data_flow;
 mod error;
 mod remap;
-mod worklist;
 
 pub use error::{Error as MokaIRBuildError, ErrorKind as MokaIRBuildErrorKind};
 

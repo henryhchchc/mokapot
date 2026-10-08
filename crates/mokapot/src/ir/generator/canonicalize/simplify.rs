@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 
 use super::{ParameterInputs, SimplifiedParameters, Substitutions, tarjan::Tarjan};
-use crate::ir::{ValueId, generator::worklist::Worklist};
+use crate::{intrinsics::Worklist, ir::ValueId};
 
 type InputsByParameter = HashMap<ValueId, ParameterInputs>;
 

@@ -6,12 +6,14 @@ use super::{
     DataflowParts, ValueContext, block_state::BlockState, execution::BlockInterpreter,
     frame_block::FrameSource,
 };
-use crate::ir::{
-    BlockId,
-    generator::{
-        control_flow::Cfg,
-        error::{Error, ResultExt},
-        worklist::Worklist,
+use crate::{
+    intrinsics::Worklist,
+    ir::{
+        BlockId,
+        generator::{
+            control_flow::Cfg,
+            error::{Error, ResultExt},
+        },
     },
 };
 

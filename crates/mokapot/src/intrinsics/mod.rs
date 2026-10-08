@@ -11,9 +11,11 @@ use std::{
 
 mod hash;
 mod macros;
+mod worklist;
 
 pub(crate) use hash::HashUnordered;
 pub(crate) use macros::{attributes_into_iter, extract_attributes, see_jvm_spec};
+pub(crate) use worklist::Worklist;
 
 /// Gets the discriminant of an enum.
 ///

@@ -5,7 +5,7 @@ use std::{
     hash::Hash,
 };
 
-pub(super) struct Worklist<T> {
+pub(crate) struct Worklist<T> {
     pending: VecDeque<T>,
     queued: HashSet<T>,
 }
@@ -20,13 +20,13 @@ impl<T> Default for Worklist<T> {
 }
 
 impl<T: Copy + Eq + Hash> Worklist<T> {
-    pub(super) fn schedule(&mut self, value: T) {
+    pub fn schedule(&mut self, value: T) {
         if self.queued.insert(value) {
             self.pending.push_back(value);
         }
     }
 
-    pub(super) fn pop(&mut self) -> Option<T> {
+    pub fn pop(&mut self) -> Option<T> {
         let value = self.pending.pop_front()?;
         self.queued.remove(&value);
         Some(value)
