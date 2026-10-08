@@ -31,14 +31,14 @@
 //! // Create and format a multi-dimensional array type
 //! let matrix = FieldType::array_of(FieldType::Base(PrimitiveType::Double), 2);
 //! assert_eq!(matrix.descriptor(), "[[D");
-//! assert_eq!(matrix.qualified_name(), "double[][]");
+//! assert_eq!(matrix.jls_name(), "double[][]");
 //! ```
 use std::str::FromStr;
 
 use derive_more::{Display, From};
 
 use super::{Descriptor, method_descriptor::InvalidDescriptor};
-use crate::{intrinsics::see_jvm_spec, jvm::references::ClassRef};
+use crate::{intrinsics::see_jvm_spec, types::class_name::ClassName};
 
 /// A primitive type in Java.
 ///
@@ -208,10 +208,10 @@ impl ValueCategory {
 /// assert_eq!(FieldType::from_str("I").unwrap(), int_type); // int
 /// assert_eq!(FieldType::from_str("[[Ljava/lang/String;").unwrap(), string_2d_array); // String[][]
 ///
-/// // Convert to descriptors or qualified names
+/// // Convert to descriptors or JLS-style names
 /// assert_eq!(int_array.descriptor(), "[I");
 /// let string_type = FieldType::from_str("Ljava/lang/String;").unwrap();
-/// assert_eq!(string_type.qualified_name(), "java.lang.String");
+/// assert_eq!(string_type.jls_name(), "java.lang.String");
 /// ```
 ///
 #[doc = see_jvm_spec!(4, 3, 2)]
@@ -220,20 +220,20 @@ pub enum FieldType {
     /// A primitive type.
     Base(#[from] PrimitiveType),
     /// A reference type (except arrays).
-    Object(#[from] ClassRef),
-    /// An array type.
+    Object(#[from] ClassName),
+    /// An array of the given component type.
     #[display("{_0}[]")]
     Array(Box<FieldType>),
 }
 
 impl FieldType {
-    /// Returns the qualified name of this type.
+    /// Returns a JLS-style name, such as `int[]` or `java.util.Map$Entry`.
     #[must_use]
-    pub fn qualified_name(&self) -> String {
+    pub fn jls_name(&self) -> String {
         match self {
             Self::Base(pt) => pt.to_string(),
-            Self::Object(ClassRef(binary_name)) => binary_name.to_qualified_name(),
-            Self::Array(inner) => format!("{}[]", inner.qualified_name()),
+            Self::Object(class_name) => class_name.jls_name(),
+            Self::Array(inner) => format!("{}[]", inner.jls_name()),
         }
     }
 
@@ -246,13 +246,13 @@ impl FieldType {
                 .map(FieldType::into_array_type)
                 .inspect(|_| *input = rest)
         } else if let Some(rest) = input.strip_prefix('L') {
-            let (binary_name, after_semi) = rest.split_once(';').ok_or(InvalidDescriptor)?;
-            if binary_name.is_empty() {
+            let (class_name, after_semi) = rest.split_once(';').ok_or(InvalidDescriptor)?;
+            if class_name.is_empty() {
                 Err(InvalidDescriptor)
             } else {
-                let class_ref = ClassRef(binary_name.parse().map_err(|_| InvalidDescriptor)?);
+                let class_name: ClassName = class_name.parse().map_err(|_| InvalidDescriptor)?;
                 *input = after_semi;
-                Ok(class_ref.into())
+                Ok(class_name.into())
             }
         } else {
             Err(InvalidDescriptor)
@@ -272,7 +272,7 @@ impl FieldType {
     ///
     /// let array = FieldType::array_of(PrimitiveType::Int.into(), 2);
     /// assert_eq!(array.descriptor(), "[[I");
-    /// assert_eq!(array.qualified_name(), "int[][]");
+    /// assert_eq!(array.jls_name(), "int[][]");
     /// ```
     #[must_use]
     pub fn array_of(inner: Self, dim: u8) -> Self {
@@ -293,8 +293,8 @@ impl Descriptor for FieldType {
     fn descriptor(&self) -> String {
         match self {
             FieldType::Base(it) => it.descriptor().to_string(),
-            FieldType::Object(ClassRef(binary_name)) => {
-                format!("L{binary_name};")
+            FieldType::Object(class_name) => {
+                format!("L{class_name};")
             }
             FieldType::Array(inner) => format!("[{}", inner.descriptor()),
         }
@@ -319,7 +319,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::binary_name::BinaryName;
+    use crate::types::class_name::ClassName;
 
     impl Arbitrary for FieldType {
         type Parameters = ();
@@ -328,9 +328,7 @@ mod tests {
         fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
             let non_array = prop_oneof![
                 any::<PrimitiveType>().prop_map(FieldType::Base),
-                any::<BinaryName>()
-                    .prop_map(ClassRef)
-                    .prop_map(FieldType::from),
+                any::<ClassName>().prop_map(FieldType::from),
             ];
             let dimensions = prop_oneof![Just(0_u8), 1..=u8::MAX];
             (non_array, dimensions)
@@ -405,7 +403,7 @@ mod tests {
             let brackets = "[]".repeat(usize::from(dim));
             let expected_name = format!("{ty}{brackets}");
             prop_assert_eq!(array.to_string(), expected_name.as_str());
-            prop_assert_eq!(array.qualified_name(), expected_name);
+            prop_assert_eq!(array.jls_name(), expected_name);
             prop_assert_eq!(
                 array.descriptor(),
                 format!("{}{}", "[".repeat(usize::from(dim)), ty.descriptor()),
@@ -414,15 +412,15 @@ mod tests {
 
         #[test]
         fn object_array_names_and_descriptors(
-            class_name in any::<BinaryName>(),
+            class_name in any::<ClassName>(),
             dim in any::<u8>(),
         ) {
-            let array = FieldType::array_of(ClassRef(class_name.clone()).into(), dim);
+            let array = FieldType::array_of(class_name.clone().into(), dim);
             let descriptor = format!("{}L{class_name};", "[".repeat(usize::from(dim)));
             let brackets = "[]".repeat(usize::from(dim));
             prop_assert_eq!(array.to_string(), format!("{class_name}{brackets}"));
             prop_assert_eq!(
-                array.qualified_name(),
+                array.jls_name(),
                 format!("{}{brackets}", class_name.as_str().replace('/', ".")),
             );
             prop_assert_eq!(array.descriptor(), descriptor.as_str());
@@ -459,14 +457,14 @@ mod tests {
         }
 
         #[test]
-        fn objects_have_category_one(class_name in any::<BinaryName>()) {
-            let object = FieldType::Object(ClassRef(class_name));
+        fn objects_have_category_one(class_name in any::<ClassName>()) {
+            let object = FieldType::Object(class_name);
             prop_assert_eq!(object.value_category(), ValueCategory::Category1);
         }
 
         #[test]
         fn missing_object_semicolon_is_rejected_at_every_array_depth(
-            class_name in any::<BinaryName>(),
+            class_name in any::<ClassName>(),
             dim in any::<u8>(),
         ) {
             let descriptor = format!("{}L{class_name}", "[".repeat(usize::from(dim)));

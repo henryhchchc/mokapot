@@ -81,7 +81,7 @@ impl ClassElement for ExceptionTableEntry {
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_class_ref(catch_type_idx)?)
+            Some(ctx.constant_pool.get_class_name(catch_type_idx)?)
         };
         Ok(ExceptionTableEntry {
             covered_pc,
@@ -101,7 +101,7 @@ impl ClassElement for ExceptionTableEntry {
         let handler_pc = handler_pc.into();
         let catch_type_idx = catch_type
             .as_ref()
-            .map(|it| cp.put_class_ref(it))
+            .map(|it| cp.put_class_name(it))
             .transpose()?
             .unwrap_or(0);
         Ok(Self::Raw {
@@ -292,7 +292,7 @@ mod tests {
         let context = ParsingContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::Jdk8,
-            current_class_binary_name: "Test".parse().unwrap(),
+            current_class_name: "Test".parse().unwrap(),
         };
         let entry = ExceptionTableEntry::from_raw(
             raw_attributes::ExceptionTableEntry {
@@ -319,7 +319,7 @@ mod tests {
         let context = ParsingContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::Jdk8,
-            current_class_binary_name: "Test".parse().unwrap(),
+            current_class_name: "Test".parse().unwrap(),
         };
         let error = MethodBody::from_raw(
             raw_attributes::Code {

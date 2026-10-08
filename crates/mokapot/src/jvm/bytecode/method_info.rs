@@ -15,7 +15,6 @@ use crate::{
         bytecode::ParsingContext,
         errors::ParsingErrorContext,
         method::{self},
-        references::ClassRef,
     },
     types::{Descriptor, method_descriptor::MethodDescriptor},
 };
@@ -76,7 +75,7 @@ impl ClassElement for Method {
             .get_str(descriptor_index)?
             .parse()
             .context("Invalid method descriptor")?;
-        let owner = ClassRef(ctx.current_class_binary_name.clone());
+        let owner = ctx.current_class_name.clone();
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()

@@ -1,14 +1,13 @@
 //! Structural control flow of one decoded JVM instruction.
 
+use crate::types::class_name::ClassName;
+
 use std::collections::BTreeMap;
 
 use super::fallibility::fallthrough_may_throw;
 use crate::{
     ir::generator::error::ErrorKind,
-    jvm::{
-        code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
-        references::ClassRef,
-    },
+    jvm::code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -54,7 +53,7 @@ pub(crate) struct ExceptionArm<T> {
     /// Where the exception transfers.
     pub target: ExceptionTarget<T>,
     /// The caught type, or `None` for catch-all.
-    pub catch_type: Option<ClassRef>,
+    pub catch_type: Option<ClassName>,
 }
 
 /// An exception successor destination.

@@ -397,8 +397,8 @@ impl Instruction {
                 }
             }
             New { index } => {
-                let class_ref = constant_pool.get_class_ref(index)?;
-                Self::New(class_ref)
+                let class_name = constant_pool.get_class_name(index)?;
+                Self::New(class_name)
             }
             NewArray { atype } => {
                 let element_type = match atype {
@@ -774,8 +774,8 @@ impl Instruction {
                 let dynamic_index = cp.put_entry_dedup(entry)?;
                 InvokeDynamic { dynamic_index }
             }
-            Self::New(class_ref) => New {
-                index: cp.put_class_ref(&class_ref)?,
+            Self::New(class_name) => New {
+                index: cp.put_class_name(&class_name)?,
             },
             Self::NewArray(atype) => NewArray {
                 atype: atype.new_array_type_tag(),

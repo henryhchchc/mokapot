@@ -1,31 +1,18 @@
-//! JVM reference type — a class, interface, or array type.
-//!
-//! A `ReferenceType` is the semantic model of what `CONSTANT_Class_info` represents.
-//! It is either a class/interface name in internal form or an
-//! array type descriptor. It is a strict subset of [`FieldType`] — it excludes
-//! primitive [`Base`](crate::types::field_type::FieldType::Base) types.
-//!
+//! Class, interface, and array types.
 #![doc = see_jvm_spec!(4, 4, 1)]
 //!
 //! # Examples
 //!
 //! ```
-//! use std::str::FromStr;
 //! use mokapot::types::reference_type::ReferenceType;
-//! use mokapot::jvm::references::ClassRef;
 //!
-//! // Class types are parsed from binary names (internal form)
-//! let string_type = ReferenceType::from_str("java/lang/String").unwrap();
-//! assert!(matches!(string_type, ReferenceType::Class(_)));
+//! let class: ReferenceType = "java/lang/String".parse().unwrap();
+//! assert_eq!(class.jls_name(), "java.lang.String");
 //!
-//! // Array types are parsed from field descriptors
-//! let int_array = ReferenceType::from_str("[I").unwrap();
-//! assert!(matches!(int_array, ReferenceType::Array(_)));
+//! let array: ReferenceType = "[I".parse().unwrap();
+//! assert_eq!(array.jls_name(), "int[]");
 //!
-//! // Field descriptors (L...;) are accepted leniently and parsed as classes
-//! let class_type = ReferenceType::from_str("Ljava/lang/String;").unwrap();
-//! assert!(matches!(class_type, ReferenceType::Class(_)));
-//! assert_eq!(class_type.to_string(), "java/lang/String");
+//! assert_eq!("Ljava/lang/String;".parse::<ReferenceType>().unwrap(), class);
 //! ```
 
 use std::str::FromStr;
@@ -34,32 +21,29 @@ use derive_more::{Display, From};
 
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::references::ClassRef,
+    types::class_name::ClassName,
     types::{Descriptor, field_type::FieldType, method_descriptor::InvalidDescriptor},
 };
 
-/// A class, interface, or array type — exactly what `CONSTANT_Class_info` represents.
-///
-/// This is a strict subset of [`FieldType`]: it excludes primitive base types
-/// since `CONSTANT_Class_info` never references those.
+/// A class, interface, or array type.
 #[doc = see_jvm_spec!(4, 4, 1)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Display, From)]
 pub enum ReferenceType {
     /// A class or interface type (e.g., `java/lang/String`).
     #[display("{_0}")]
-    Class(#[from] ClassRef),
-    /// An array type (e.g., `[I`, `[Ljava/lang/Object;`).
+    Class(#[from] ClassName),
+    /// An array of the given component type.
     #[display("{_0}")]
     Array(Box<FieldType>),
 }
 
 impl ReferenceType {
-    /// Returns the qualified name of this type (`.`-separated form for classes).
+    /// Returns a JLS-style name, such as `java.lang.String[]` or `java.util.Map$Entry`.
     #[must_use]
-    pub fn qualified_name(&self) -> String {
+    pub fn jls_name(&self) -> String {
         match self {
-            Self::Class(class_ref) => class_ref.0.to_qualified_name(),
-            Self::Array(inner) => format!("{}[]", inner.qualified_name()),
+            Self::Class(class_name) => class_name.jls_name(),
+            Self::Array(inner) => format!("{}[]", inner.jls_name()),
         }
     }
 }
@@ -73,7 +57,7 @@ impl Descriptor for ReferenceType {
 impl From<ReferenceType> for FieldType {
     fn from(rt: ReferenceType) -> Self {
         match rt {
-            ReferenceType::Class(cr) => cr.into(),
+            ReferenceType::Class(class_name) => class_name.into(),
             ReferenceType::Array(ft) => FieldType::Array(ft),
         }
     }
@@ -82,22 +66,9 @@ impl From<ReferenceType> for FieldType {
 impl FromStr for ReferenceType {
     type Err = InvalidDescriptor;
 
-    /// Parses a `ReferenceType` from its constant-pool string representation.
+    /// Parses an internal class name or a class or array descriptor.
     ///
-    /// A `CONSTANT_Class_info` stores either a binary name (for
-    /// classes/interfaces) or an array descriptor (for array types).
-    ///
-    /// - Strings starting with `[` are parsed as array type descriptors.
-    ///   The outer `Array` wrapper in the resulting `FieldType` is stripped
-    ///   since `ReferenceType::Array` stores only the component type.
-    /// - Strings starting with `L` and ending with `;` (field descriptor
-    ///   form) are accepted leniently: the `L` and `;` are stripped and
-    ///   the inner string is parsed as a binary name. Although the JVM
-    ///   specification only permits binary names in `CONSTANT_Class_info`,
-    ///   some class file generators (including `javac`) emit field descriptor
-    ///   form, and the reference implementation accepts it.
-    /// - All other strings are parsed as binary names (internal form) via
-    ///   [`ClassRef::from_str`].
+    /// Accepts `java/lang/String`, `Ljava/lang/String;`, and `[I`.
     #[doc = see_jvm_spec!(4, 4, 1)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('[') {
@@ -111,11 +82,11 @@ impl FromStr for ReferenceType {
             // Real-world class files (e.g. from javac) sometimes
             // emit field descriptors here despite JVMS §4.4.1.
             let inner = &s[1..s.len() - 1];
-            let cr = ClassRef::from_str(inner).map_err(|_| InvalidDescriptor)?;
-            Ok(Self::Class(cr))
+            let class_name = ClassName::from_str(inner).map_err(|_| InvalidDescriptor)?;
+            Ok(Self::Class(class_name))
         } else {
-            let cr = ClassRef::from_str(s).map_err(|_| InvalidDescriptor)?;
-            Ok(Self::Class(cr))
+            let class_name = ClassName::from_str(s).map_err(|_| InvalidDescriptor)?;
+            Ok(Self::Class(class_name))
         }
     }
 }
@@ -125,7 +96,7 @@ impl TryFrom<FieldType> for ReferenceType {
 
     fn try_from(ft: FieldType) -> Result<Self, Self::Error> {
         match ft {
-            FieldType::Object(cr) => Ok(Self::Class(cr)),
+            FieldType::Object(class_name) => Ok(Self::Class(class_name)),
             FieldType::Array(inner) => Ok(Self::Array(inner)),
             base @ FieldType::Base(_) => Err(base),
         }
@@ -137,13 +108,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn nested_class_rendering_preserves_binary_names() {
+        for (input, expected) in [
+            ("java/util/Map$Entry", "java.util.Map$Entry"),
+            ("[Ljava/util/Map$Entry;", "java.util.Map$Entry[]"),
+            ("[[Ljava/util/Map$Entry;", "java.util.Map$Entry[][]"),
+        ] {
+            let reference_type: ReferenceType = input.parse().unwrap();
+            assert_eq!(reference_type.jls_name(), expected);
+            let field_type = FieldType::from(reference_type);
+            assert_eq!(field_type.jls_name(), expected);
+        }
+    }
+
+    #[test]
     fn parse_class() {
         // Classes are parsed from binary names (internal form), not field descriptors
         let rt = "java/lang/String".parse::<ReferenceType>().unwrap();
         assert!(matches!(rt, ReferenceType::Class(_)));
         assert_eq!(rt.to_string(), "java/lang/String");
         assert_eq!(rt.descriptor(), "Ljava/lang/String;");
-        assert_eq!(rt.qualified_name(), "java.lang.String");
+        assert_eq!(rt.jls_name(), "java.lang.String");
     }
 
     #[test]
@@ -151,7 +136,7 @@ mod tests {
         let rt = "[I".parse::<ReferenceType>().unwrap();
         assert!(matches!(rt, ReferenceType::Array(_)));
         assert_eq!(rt.descriptor(), "[I");
-        assert_eq!(rt.qualified_name(), "int[]");
+        assert_eq!(rt.jls_name(), "int[]");
     }
 
     #[test]

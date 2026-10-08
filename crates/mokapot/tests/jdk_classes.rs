@@ -118,7 +118,7 @@ fn test_a_class(class: Class, variable_count_limit: usize) {
         let ir_method = MokaIRMethod::from_method(method).unwrap_or_else(|e| {
             panic!(
                 "Failed to build {}::{}{}: {e}",
-                class.binary_name,
+                class.name,
                 method.name,
                 method.descriptor.descriptor()
             );

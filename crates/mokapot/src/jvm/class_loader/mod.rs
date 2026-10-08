@@ -3,7 +3,7 @@
 use std::ops::Deref;
 
 use super::Class;
-use crate::{intrinsics::Cache, types::binary_name::BinaryName};
+use crate::{intrinsics::Cache, types::class_name::ClassName};
 
 /// A class loader that can load classes from a list of class paths.
 #[derive(Debug)]
@@ -30,11 +30,11 @@ pub enum Error {
 
 /// A class path that can be searched for classes.
 pub trait ClassPath {
-    /// Find a class by its binary name.
+    /// Find a class by its name in JVM internal form.
     ///
     /// # Errors
     /// See [`Error`].
-    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error>;
+    fn find_class(&self, class_name: &ClassName) -> Result<Class, Error>;
 }
 
 impl<T> ClassPath for T
@@ -42,8 +42,8 @@ where
     T: Deref,
     <T as Deref>::Target: ClassPath,
 {
-    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
-        self.deref().find_class(binary_name)
+    fn find_class(&self, class_name: &ClassName) -> Result<Class, Error> {
+        self.deref().find_class(class_name)
     }
 }
 
@@ -52,12 +52,12 @@ impl<P> ClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: &BinaryName) -> Result<Class, Error>
+    pub fn load_class(&self, class_name: &ClassName) -> Result<Class, Error>
     where
         P: ClassPath,
     {
         for class_path in &self.class_path {
-            match class_path.find_class(binary_name) {
+            match class_path.find_class(class_name) {
                 Ok(class) => return Ok(class),
                 Err(Error::NotFound) => {}
                 Err(err) => return Err(err),
@@ -91,7 +91,7 @@ pub mod class_paths;
 )]
 pub struct CachingClassLoader<P> {
     class_loader: ClassLoader<P>,
-    cache: Cache<BinaryName, Class>,
+    cache: Cache<ClassName, Class>,
 }
 
 impl<P> CachingClassLoader<P> {
@@ -100,12 +100,12 @@ impl<P> CachingClassLoader<P> {
     ///
     /// # Errors
     /// See [`Error`].
-    pub fn load_class(&self, binary_name: &BinaryName) -> Result<&Class, Error>
+    pub fn load_class(&self, class_name: &ClassName) -> Result<&Class, Error>
     where
         P: ClassPath,
     {
         self.cache
-            .get_or_try_put(binary_name, |it| self.class_loader.load_class(it))
+            .get_or_try_put(class_name, |it| self.class_loader.load_class(it))
     }
 }
 

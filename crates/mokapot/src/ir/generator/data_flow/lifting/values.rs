@@ -1,3 +1,5 @@
+use crate::types::class_name::ClassName;
+
 use ValueCategory::Category1;
 
 use super::{FrameError, LiftContext};
@@ -6,7 +8,7 @@ use crate::{
         Operation,
         expression::{Expression, MathOperation},
     },
-    jvm::{ConstantValue, references::ClassRef},
+    jvm::ConstantValue,
     types::field_type::ValueCategory,
 };
 
@@ -50,10 +52,10 @@ impl LiftContext<'_, '_> {
         Ok(None)
     }
 
-    pub fn new_object(&mut self, class: &ClassRef) -> Result<Option<Operation>, FrameError> {
+    pub fn new_object(&mut self, class_name: &ClassName) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         self.frame.stack.push(value, Category1)?;
-        let expr = Expression::New(class.clone());
+        let expr = Expression::New(class_name.clone());
         Ok(Some(Operation::Definition { value, expr }))
     }
 }

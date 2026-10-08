@@ -28,6 +28,8 @@ mod terminator;
 #[cfg(test)]
 pub(crate) mod test;
 
+use crate::types::class_name::ClassName;
+
 use std::collections::HashMap;
 
 pub use basic_block::{BasicBlock, BlockKind, BlockParameter};
@@ -37,10 +39,7 @@ pub use operation::Operation;
 pub use source_map::SourceMap;
 pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
 
-use crate::{
-    jvm::{method, references::ClassRef},
-    types::method_descriptor::MethodDescriptor,
-};
+use crate::{jvm::method, types::method_descriptor::MethodDescriptor};
 
 mod id_allocation;
 use id_allocation::{IdAllocator, NumericalId};
@@ -59,7 +58,7 @@ pub struct MokaIRMethod {
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
     /// The class that owns the method.
-    pub owner: ClassRef,
+    pub owner: ClassName,
     /// The invocation of the entry block.
     pub entry: MethodEntry,
     /// The mapping between JVM bytecode and the IR.

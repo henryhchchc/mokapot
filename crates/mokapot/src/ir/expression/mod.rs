@@ -1,4 +1,6 @@
 //! Module for the expressions in Moka IR.
+use crate::types::class_name::ClassName;
+
 use std::fmt;
 
 use derive_more::From;
@@ -6,10 +8,7 @@ use itertools::Itertools;
 
 use super::ValueId;
 use crate::{
-    jvm::{
-        ConstantValue,
-        references::{ClassRef, MethodRef},
-    },
+    jvm::{ConstantValue, references::MethodRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -67,7 +66,7 @@ pub enum Expression {
     /// An operation on a monitor.
     Synchronization(#[from] LockOperation),
     /// Creates a new object.
-    New(ClassRef),
+    New(ClassName),
 }
 
 impl fmt::Display for Expression {

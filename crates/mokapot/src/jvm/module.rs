@@ -1,7 +1,10 @@
 //! Modules in the JPMS.
+use crate::types::class_name::ClassName;
+use crate::types::package_name::PackageName;
+
 use bitflags::bitflags;
 
-use super::references::{ClassRef, ModuleRef, PackageRef};
+use super::references::ModuleRef;
 use crate::intrinsics::see_jvm_spec;
 
 /// A service provided by a module.
@@ -9,9 +12,9 @@ use crate::intrinsics::see_jvm_spec;
 #[derive(Debug, Clone)]
 pub struct Provide {
     /// The reference to a class which is provided as a service.
-    pub service: ClassRef,
+    pub service: ClassName,
     /// The list of the classes which implement the service.
-    pub with: Vec<ClassRef>,
+    pub with: Vec<ClassName>,
 }
 
 /// A module opening.
@@ -19,7 +22,7 @@ pub struct Provide {
 #[derive(Debug, Clone)]
 pub struct Open {
     /// The reference to the package which is opened.
-    pub package: PackageRef,
+    pub package: PackageName,
     /// The flags of the opening.
     pub flags: OpenFlags,
     /// The list of the modules which can access the package.
@@ -31,7 +34,7 @@ pub struct Open {
 #[derive(Debug, Clone)]
 pub struct Export {
     /// The reference to the package which is exported.
-    pub package: PackageRef,
+    pub package: PackageName,
     /// The flags of the export.
     pub flags: ExportFlags,
     /// The list of the modules which can access the package.

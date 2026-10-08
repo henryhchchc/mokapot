@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     intrinsics::{HashUnordered, hashset_partial_order},
-    jvm::references::ClassRef,
+    types::class_name::ClassName,
 };
 
 /// One outgoing arm of a terminator.
@@ -260,7 +260,7 @@ pub enum ControlTransfer {
     ///
     /// `None` denotes a catch-all exception-table entry. Arm order retains
     /// JVM exception-handler precedence.
-    Exception(Option<ClassRef>),
+    Exception(Option<ClassName>),
 }
 
 /// A conjunction of literals carried by a conditional CFG edge.

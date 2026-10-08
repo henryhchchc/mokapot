@@ -2,6 +2,8 @@
 
 pub mod constant_pool;
 
+use crate::types::class_name::ClassName;
+
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
@@ -12,7 +14,7 @@ use super::{
     annotation::ElementValue,
     bytecode::ParseError,
     field,
-    references::{ClassRef, FieldRef, MethodRef},
+    references::{FieldRef, MethodRef},
 };
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
@@ -43,12 +45,6 @@ impl Class {
         self.fields
             .iter()
             .find(|f| f.name == name && &f.field_type == field_type.borrow())
-    }
-
-    /// Creates a [`ClassRef`] referring to the class.
-    #[must_use]
-    pub fn make_ref(&self) -> ClassRef {
-        ClassRef(self.binary_name.clone())
     }
 
     /// Checks if the class is an interface.
@@ -299,9 +295,9 @@ impl Version {
 #[derive(Debug, Clone)]
 pub struct InnerClassInfo {
     /// The inner class.
-    pub inner_class: ClassRef,
+    pub inner_class: ClassName,
     /// The outer class.
-    pub outer_class: Option<ClassRef>,
+    pub outer_class: Option<ClassName>,
     /// The name of the inner class.
     pub inner_name: Option<String>,
     /// The access flags of the inner class.
@@ -313,7 +309,7 @@ pub struct InnerClassInfo {
 #[derive(Debug, Clone)]
 pub struct EnclosingMethod {
     /// The class being enclosed.
-    pub class: ClassRef,
+    pub class: ClassName,
     /// The name and descriptor of the enclosing method.
     pub method_name_and_desc: Option<(String, MethodDescriptor)>,
 }

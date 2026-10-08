@@ -83,7 +83,7 @@ fn exceptional_state_excludes_the_fallible_result() {
 
 #[test]
 fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
-    let runtime = cls_r("java/lang/RuntimeException");
+    let runtime = cls_name("java/lang/RuntimeException");
     let body = [
         (0, Instruction::AConstNull),
         (1, Instruction::CheckCast(ref_t("java/lang/String"))),

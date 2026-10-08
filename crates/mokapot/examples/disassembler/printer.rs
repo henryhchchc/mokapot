@@ -54,7 +54,7 @@ impl<'a> ClassPrinter<'a> {
         }
 
         println!();
-        println!("{} {{", self.class.binary_name);
+        println!("{} {{", self.class.name);
 
         // Print fields section
         for field in &self.class.fields {
@@ -97,9 +97,9 @@ impl<'a> ClassPrinter<'a> {
 
         // Print class declaration with or without access flags
         if access_flags.is_empty() {
-            println!("class {}", self.class.binary_name);
+            println!("class {}", self.class.name);
         } else {
-            println!("{} class {}", access_flags, self.class.binary_name);
+            println!("{} class {}", access_flags, self.class.name);
         }
 
         // Print parent class if present (all classes except Object have a parent)
@@ -320,7 +320,7 @@ fn print_exception_table(body: &MethodBody) {
 
         // Get the exception type, or "any" for finally blocks (which catch all exceptions)
         let catch_type = match &entry.catch_type {
-            Some(class_ref) => class_ref.to_string(),
+            Some(class_name) => class_name.to_string(),
             None => "any".to_string(), // "any" means a finally block or catch-all handler
         };
         println!(

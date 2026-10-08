@@ -6,11 +6,7 @@ use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
 use zip::{ZipArchive, result::ZipError};
 
 use super::{ClassPath, Error};
-use crate::{
-    analysis::ClassRefs,
-    jvm::{Class, references::ClassRef},
-    types::binary_name::BinaryName,
-};
+use crate::{analysis::ClassNames, jvm::Class, types::class_name::ClassName};
 
 /// A class path that does nothing.
 ///
@@ -25,13 +21,13 @@ impl NopClassPath {
 }
 
 impl ClassPath for NopClassPath {
-    fn find_class(&self, _binary_name: &BinaryName) -> Result<Class, Error> {
+    fn find_class(&self, _class_name: &ClassName) -> Result<Class, Error> {
         Err(Error::NotFound)
     }
 }
 
-impl ClassRefs for NopClassPath {
-    fn class_refs(&self) -> HashSet<ClassRef> {
+impl ClassNames for NopClassPath {
+    fn class_names(&self) -> HashSet<ClassName> {
         HashSet::new()
     }
 }
@@ -43,10 +39,10 @@ pub struct DirectoryClassPath {
 }
 
 impl ClassPath for DirectoryClassPath {
-    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
+    fn find_class(&self, class_name: &ClassName) -> Result<Class, Error> {
         let class_file_path = self
             .directory
-            .join(binary_name.as_ref())
+            .join(class_name.as_ref())
             .with_extension("class");
         if class_file_path.exists() {
             let class_file = File::open(class_file_path)?;
@@ -68,14 +64,14 @@ impl DirectoryClassPath {
     }
 }
 
-impl ClassRefs for DirectoryClassPath {
-    fn class_refs(&self) -> HashSet<ClassRef> {
+impl ClassNames for DirectoryClassPath {
+    fn class_names(&self) -> HashSet<ClassName> {
         walkdir::WalkDir::new(&self.directory)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
             .filter_map(|it| {
-                let binary_name = it
+                let class_name = it
                     .path()
                     .strip_prefix(&self.directory)
                     .expect("The directory should start with `self.directory`")
@@ -83,7 +79,7 @@ impl ClassRefs for DirectoryClassPath {
                     .to_str()
                     .expect("The path name is not valid UTF-8")
                     .to_owned();
-                binary_name.parse().ok().map(ClassRef)
+                class_name.parse().ok()
             })
             .collect()
     }
@@ -108,7 +104,7 @@ impl JarClassPath {
 
 #[cfg(feature = "jar")]
 impl ClassPath for JarClassPath {
-    fn find_class(&self, binary_name: &BinaryName) -> Result<Class, Error> {
+    fn find_class(&self, class_name: &ClassName) -> Result<Class, Error> {
         let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
         let mut jar_archive = ZipArchive::new(jar_reader).map_err(|e| match e {
@@ -116,7 +112,7 @@ impl ClassPath for JarClassPath {
             e => Error::Other(Box::new(e)),
         })?;
         let mut class_file = jar_archive
-            .by_name(&format!("{binary_name}.class"))
+            .by_name(&format!("{class_name}.class"))
             .map_err(|e| match e {
                 ZipError::FileNotFound => Error::NotFound,
                 ZipError::Io(io_err) => Error::IO(io_err),
@@ -127,8 +123,8 @@ impl ClassPath for JarClassPath {
 }
 
 #[cfg(feature = "jar")]
-impl ClassRefs for JarClassPath {
-    fn class_refs(&self) -> HashSet<ClassRef> {
+impl ClassNames for JarClassPath {
+    fn class_names(&self) -> HashSet<ClassName> {
         let Ok(jar_file) = File::open(&self.jar_file) else {
             return HashSet::default();
         };
@@ -139,7 +135,7 @@ impl ClassRefs for JarClassPath {
         jar_archive
             .file_names()
             .filter_map(|it| it.strip_suffix(".class"))
-            .filter_map(|binary_name| binary_name.parse().ok().map(ClassRef))
+            .filter_map(|class_name| class_name.parse().ok())
             .collect()
     }
 }

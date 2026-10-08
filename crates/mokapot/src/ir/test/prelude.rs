@@ -1,5 +1,7 @@
 //! IR fixtures for unit tests, importable with `use crate::ir::test::prelude::*;`.
 
+use crate::types::class_name::ClassName;
+
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 pub(crate) use crate::ir::{
@@ -14,7 +16,7 @@ use crate::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
         method::AccessFlags,
-        references::{ClassRef, MethodRef},
+        references::MethodRef,
     },
     types::reference_type::ReferenceType,
 };
@@ -95,7 +97,7 @@ where
 }
 
 /// The class named `name`.
-pub(crate) fn cls_r(name: &str) -> ClassRef {
+pub(crate) fn cls_name(name: &str) -> ClassName {
     name.parse().expect("a valid class name")
 }
 
@@ -154,7 +156,7 @@ pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) ->
         access_flags: AccessFlags::PUBLIC | AccessFlags::STATIC,
         name: "test".to_owned(),
         descriptor: "()V".parse().expect("a valid descriptor"),
-        owner: cls_r("java/lang/Object"),
+        owner: cls_name("java/lang/Object"),
         entry: method_entry(entry, []),
         blocks,
         source_map: SourceMap::new(),

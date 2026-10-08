@@ -3,11 +3,12 @@
 #![cfg(java_fixture_tests)]
 #![allow(missing_docs, clippy::ignore_without_reason)]
 
+use mokapot::types::class_name::ClassName;
+
 use mokapot::{
     jvm::{
         Class,
         class::{self, AccessFlags, RecordComponent},
-        references::ClassRef,
     },
     types::{
         field_type::{FieldType, PrimitiveType},
@@ -33,10 +34,10 @@ fn test_parse_my_class() {
         AccessFlags::PUBLIC | AccessFlags::SUPER,
         my_class.access_flags
     );
-    assert_eq!("org/mokapot/test/MyClass", my_class.binary_name);
-    let object: ClassRef = "java/lang/Object".parse().unwrap();
+    assert_eq!("org/mokapot/test/MyClass", my_class.name);
+    let object: ClassName = "java/lang/Object".parse().unwrap();
     assert_eq!(Some(object), my_class.super_class);
-    let closeable: ClassRef = "java/io/Closeable".parse().unwrap();
+    let closeable: ClassName = "java/io/Closeable".parse().unwrap();
     assert_eq!(Some(&closeable), my_class.interfaces.first());
     assert_eq!(2, my_class.fields.len());
     assert!(
@@ -55,7 +56,7 @@ fn test_parse_my_class() {
         .expect("Cannot find main method");
     assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
     assert_eq!(
-        FieldType::from("java/lang/String".parse::<ClassRef>().unwrap()).into_array_type(),
+        FieldType::from("java/lang/String".parse::<ClassName>().unwrap()).into_array_type(),
         main_method.descriptor.parameters_types[0]
     );
 }
@@ -68,7 +69,7 @@ fn from_bytes_to_class_and_wround() {
     class.to_writer(&mut written_bytes).unwrap();
     let mut reader = written_bytes.as_slice();
     let reparsed = Class::from_reader(&mut reader).unwrap();
-    assert_eq!(reparsed.binary_name, "org/mokapot/test/MyClass");
+    assert_eq!(reparsed.name, "org/mokapot/test/MyClass");
 }
 
 #[test]
@@ -104,18 +105,43 @@ fn test_complicated_class() {
 fn parse_module_info() {
     let mut bytes = test_data_class("module-info");
     let class = Class::from_reader(&mut bytes).expect("Fail to parse module-info");
-    assert_eq!("module-info", class.binary_name);
-    let module = class.module.expect("The class is a module-info");
+    assert_eq!("module-info", class.name);
+    let module = class.module.as_ref().expect("The class is a module-info");
     assert_eq!(1, module.exports.len());
     assert_eq!(1, module.opens.len());
     assert_eq!(1, module.requires.len());
+    assert_eq!(module.exports[0].package, "org/mokapot/test");
+    assert_eq!(module.opens[0].package, "org/mokapot/test");
+
+    let mut written_bytes = Vec::new();
+    class.to_writer(&mut written_bytes).unwrap();
+    let reparsed = Class::from_reader(&mut written_bytes.as_slice()).unwrap();
+    let module = reparsed.module.unwrap();
+    assert_eq!(module.exports[0].package, "org/mokapot/test");
+    assert_eq!(module.opens[0].package, "org/mokapot/test");
+}
+
+#[test]
+fn module_packages_round_trip() {
+    let mut bytes = test_data_class("module-info");
+    let mut class = Class::from_reader(&mut bytes).unwrap();
+    let package_names = vec![
+        "org/mokapot/test".parse().unwrap(),
+        "org/mokapot/other".parse().unwrap(),
+    ];
+    class.module_packages = package_names.clone();
+
+    let mut written_bytes = Vec::new();
+    class.to_writer(&mut written_bytes).unwrap();
+    let reparsed = Class::from_reader(&mut written_bytes.as_slice()).unwrap();
+    assert_eq!(reparsed.module_packages, package_names);
 }
 
 #[test]
 fn parse_record() {
     let mut bytes = test_data_class("org/mokapot/test/RecordTest");
     let class = Class::from_reader(&mut bytes).unwrap();
-    assert_eq!("org/mokapot/test/RecordTest", class.binary_name);
+    assert_eq!("org/mokapot/test/RecordTest", class.name);
     let Some(components) = class.record else {
         panic!("Record components not found.");
     };
@@ -137,8 +163,8 @@ fn parse_record() {
     ));
     assert!(matches!(
         rec_iter.next(),
-        Some(RecordComponent { name, component_type: FieldType::Object(ClassRef(binary_name)), .. })
-        if name == "description" && *binary_name == *"java/lang/String"
+        Some(RecordComponent { name, component_type: FieldType::Object(class_name), .. })
+        if name == "description" && class_name.as_str() == "java/lang/String"
     ));
     assert!(rec_iter.next().is_none());
 }

@@ -3,6 +3,8 @@
 mod display;
 mod name;
 
+use crate::types::class_name::ClassName;
+
 use std::collections::BTreeMap;
 
 use super::ProgramCounter;
@@ -10,7 +12,7 @@ use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
         ConstantValue,
-        references::{ClassRef, FieldRef, MethodRef},
+        references::{FieldRef, MethodRef},
     },
     types::{
         field_type::PrimitiveType, method_descriptor::MethodDescriptor,
@@ -242,7 +244,7 @@ pub enum Instruction {
         name: String,
         descriptor: MethodDescriptor,
     } = 0xba,
-    New(ClassRef) = 0xbb,
+    New(ClassName) = 0xbb,
     NewArray(PrimitiveType) = 0xbc,
     ANewArray(ReferenceType) = 0xbd,
     ArrayLength = 0xbe,

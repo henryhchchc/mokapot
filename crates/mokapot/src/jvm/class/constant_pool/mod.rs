@@ -2,6 +2,9 @@
 
 mod codec;
 
+use crate::types::class_name::ClassName;
+use crate::types::package_name::PackageName;
+
 use std::{
     fmt::Display,
     io::{self, Read},
@@ -15,7 +18,7 @@ use crate::{
         bytecode::ToBytecode,
         class::MethodHandle,
         errors::{GenerationError, ParseError, ParsingErrorContext},
-        references::{ClassRef, FieldRef, MethodRef, ModuleRef, PackageRef},
+        references::{FieldRef, MethodRef, ModuleRef},
     },
     types::{Descriptor, reference_type::ReferenceType},
 };
@@ -222,20 +225,20 @@ impl ConstantPool {
         self.put_entry_dedup(entry).map_err(Into::into)
     }
 
-    pub(crate) fn get_class_ref(&self, index: u16) -> Result<ClassRef, ParseError> {
+    pub(crate) fn get_class_name(&self, index: u16) -> Result<ClassName, ParseError> {
         let entry = self
             .get_entry(index)
             .context("Invalid constant pool index")?;
         if let &Entry::Class { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(ClassRef(name.parse().context("Invalid binary name")?))
+            Ok(name.parse().context("Invalid class name")?)
         } else {
             mismatch("Class", entry)
         }
     }
 
-    pub(crate) fn put_class_ref(&mut self, value: &ClassRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.0.to_string())?;
+    pub(crate) fn put_class_name(&mut self, value: &ClassName) -> Result<u16, GenerationError> {
+        let name_index = self.put_string(value.to_string())?;
         let entry = Entry::Class { name_index };
         let idx = self.put_entry_dedup(entry)?;
         Ok(idx)
@@ -385,20 +388,20 @@ impl ConstantPool {
         self.put_entry_dedup(entry).map_err(Into::into)
     }
 
-    pub(crate) fn get_package_ref(&self, index: u16) -> Result<PackageRef, ParseError> {
+    pub(crate) fn get_package_name(&self, index: u16) -> Result<PackageName, ParseError> {
         let entry = self
             .get_entry(index)
             .context("Invalid constant pool index")?;
         if let &Entry::Package { name_index } = entry {
             let name = self.get_str(name_index)?;
-            Ok(PackageRef(name.parse().context("Invalid binary name")?))
+            Ok(name.parse().context("Invalid package name")?)
         } else {
             mismatch("Package", entry)
         }
     }
 
-    pub(crate) fn put_package_ref(&mut self, value: &PackageRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.0.to_string())?;
+    pub(crate) fn put_package_name(&mut self, value: &PackageName) -> Result<u16, GenerationError> {
+        let name_index = self.put_string(value.to_string())?;
         let entry = Entry::Package { name_index };
         self.put_entry_dedup(entry).map_err(Into::into)
     }
@@ -601,8 +604,8 @@ impl ConstantPool {
         reference_type: ReferenceType,
     ) -> Result<u16, GenerationError> {
         let name = match reference_type {
-            ReferenceType::Class(class_ref) => class_ref.0.to_string(),
-            ReferenceType::Array(arr_type) => arr_type.descriptor(),
+            ReferenceType::Class(class_name) => class_name.to_string(),
+            ReferenceType::Array(component_type) => format!("[{}", component_type.descriptor()),
         };
         let name_index = self.put_string(name)?;
         self.put_entry_dedup(Entry::Class { name_index })
@@ -800,6 +803,62 @@ mod tests {
     use super::*;
 
     const MAX_BYTES: usize = 255;
+
+    #[test]
+    fn class_and_package_names_round_trip_with_distinct_tags() {
+        let class_name: ClassName = "example/shared".parse().unwrap();
+        let package_name: PackageName = "example/shared".parse().unwrap();
+        let mut pool = ConstantPool::new();
+        let class_index = pool.put_class_name(&class_name).unwrap();
+        let package_index = pool.put_package_name(&package_name).unwrap();
+
+        assert_ne!(class_index, package_index);
+        assert_eq!(pool.count(), 4);
+        assert_eq!(pool.put_class_name(&class_name).unwrap(), class_index);
+        assert_eq!(pool.put_package_name(&package_name).unwrap(), package_index);
+        assert!(matches!(
+            pool.get_entry(class_index),
+            Some(Entry::Class { .. })
+        ));
+        assert!(matches!(
+            pool.get_entry(package_index),
+            Some(Entry::Package { .. })
+        ));
+
+        let mut bytes = Vec::new();
+        pool.to_writer(&mut bytes).unwrap();
+        let (count_bytes, contents) = bytes.split_at(2);
+        let count = u16::from_be_bytes(count_bytes.try_into().unwrap());
+        let reparsed = ConstantPool::from_reader(&mut &*contents, count).unwrap();
+        assert_eq!(reparsed.get_class_name(class_index).unwrap(), class_name);
+        assert_eq!(
+            reparsed.get_package_name(package_index).unwrap(),
+            package_name
+        );
+        assert_eq!(
+            reparsed.get_class_name(package_index).unwrap_err().kind(),
+            crate::jvm::errors::ParseErrorKind::Malformed,
+        );
+        assert_eq!(
+            reparsed.get_package_name(class_index).unwrap_err().kind(),
+            crate::jvm::errors::ParseErrorKind::Malformed,
+        );
+    }
+
+    #[test]
+    fn class_name_accessor_rejects_array_descriptors() {
+        for descriptor in ["[I", "[[I", "[Ljava/lang/String;", "[[Ljava/lang/String;"] {
+            let array_type: ReferenceType = descriptor.parse().unwrap();
+            let mut pool = ConstantPool::new();
+            let index = pool.put_type_ref(array_type.clone()).unwrap();
+
+            assert_eq!(pool.get_type_ref(index).unwrap(), array_type);
+            assert_eq!(
+                pool.get_class_name(index).unwrap_err().kind(),
+                crate::jvm::errors::ParseErrorKind::Malformed,
+            );
+        }
+    }
 
     #[test]
     fn miri_entry_tags_match_encoding() {

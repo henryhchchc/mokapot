@@ -6,7 +6,7 @@ use crate::{
         code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
         method::AccessFlags,
     },
-    types::binary_name::BinaryName,
+    types::class_name::ClassName,
 };
 
 #[rustfmt::skip]
@@ -46,7 +46,7 @@ impl Default for Class {
         Self {
             version: class::Version::Jdk27(false),
             access_flags: class::AccessFlags::empty(),
-            binary_name: BinaryName::new("$default$").unwrap(),
+            name: ClassName::new("$default$").unwrap(),
             super_class: None,
             interfaces: Vec::default(),
             fields: Vec::default(),

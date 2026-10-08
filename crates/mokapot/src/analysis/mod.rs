@@ -1,12 +1,14 @@
 //! APIs for static analysis.
 
+use crate::types::class_name::ClassName;
+
 use std::collections::{HashMap, HashSet};
 
 use derive_more::Display;
 
+use crate::jvm::Class;
 #[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use crate::jvm::class_loader::ClassPath;
-use crate::jvm::{Class, references::ClassRef};
 
 pub mod fixed_point;
 pub mod type_hierarchy;
@@ -16,20 +18,20 @@ pub mod type_hierarchy;
 #[instability::unstable(feature = "project-analyses")]
 pub struct ResolutionContext {
     /// The application classes.
-    pub application_classes: HashMap<ClassRef, Class>,
+    pub application_classes: HashMap<ClassName, Class>,
     /// The library classes.
-    pub library_classes: HashMap<ClassRef, Class>,
+    pub library_classes: HashMap<ClassName, Class>,
     /// The class hierarchy.
     pub class_hierarchy: ClassHierarchy,
     /// The interface implementations.
     pub interface_implementations: InterfaceImplHierarchy,
 }
 
-/// A trait that can provide an exhaustive list of [`ClassRef`].
+/// A trait that can provide an exhaustive list of [`ClassName`].
 #[instability::unstable(feature = "project-analyses")]
-pub trait ClassRefs {
+pub trait ClassNames {
     /// List all classes.
-    fn class_refs(&self) -> HashSet<ClassRef>;
+    fn class_names(&self) -> HashSet<ClassName>;
 }
 
 #[instability::unstable(feature = "project-analyses")]
@@ -38,8 +40,8 @@ impl ResolutionContext {
     #[must_use]
     pub fn new<ACP, LCP>(app_class_path: ACP, lib_class_path: LCP) -> Self
     where
-        ACP: IntoIterator<Item: ClassPath + ClassRefs>,
-        LCP: IntoIterator<Item: ClassPath + ClassRefs>,
+        ACP: IntoIterator<Item: ClassPath + ClassNames>,
+        LCP: IntoIterator<Item: ClassPath + ClassNames>,
     {
         let application_classes = load_classes(app_class_path);
         let library_classes = load_classes(lib_class_path);
@@ -61,20 +63,20 @@ impl ResolutionContext {
 pub enum InitError {}
 
 #[cfg(feature = "unstable-project-analyses")]
-fn load_classes<CP>(class_path: CP) -> HashMap<ClassRef, Class>
+fn load_classes<CP>(class_path: CP) -> HashMap<ClassName, Class>
 where
-    CP: IntoIterator<Item: ClassPath + ClassRefs>,
+    CP: IntoIterator<Item: ClassPath + ClassNames>,
 {
     class_path
         .into_iter()
         .flat_map(|cp| {
-            cp.class_refs()
+            cp.class_names()
                 .into_iter()
-                .map(move |cr| {
-                    cp.find_class(&cr.0)
-                        .expect("Class ref yielded by the class path must be found.")
+                .map(move |class_name| {
+                    cp.find_class(&class_name)
+                        .expect("A class name yielded by the class path must be found.")
                 })
-                .map(|it| (it.make_ref(), it))
+                .map(|it| (it.name.clone(), it))
         })
         .collect()
 }
@@ -87,8 +89,8 @@ pub struct ClassHierarchy {
         all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
         expect(dead_code)
     )]
-    inheritance: HashMap<ClassRef, HashSet<ClassRef>>,
-    super_classes: HashMap<ClassRef, ClassRef>,
+    inheritance: HashMap<ClassName, HashSet<ClassName>>,
+    super_classes: HashMap<ClassName, ClassName>,
 }
 
 /// A class hierarchy based on interface implementations.
@@ -99,10 +101,10 @@ pub struct InterfaceImplHierarchy {
         all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
         expect(dead_code)
     )]
-    implementations: HashMap<ClassRef, HashSet<ClassRef>>,
+    implementations: HashMap<ClassName, HashSet<ClassName>>,
     #[cfg_attr(
         all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
         expect(dead_code)
     )]
-    implementers: HashMap<ClassRef, HashSet<ClassRef>>,
+    implementers: HashMap<ClassName, HashSet<ClassName>>,
 }

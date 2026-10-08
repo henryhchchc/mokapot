@@ -14,7 +14,6 @@ use crate::{
         Annotations, Field,
         errors::ParsingErrorContext,
         field::{self},
-        references::ClassRef,
     },
     types::Descriptor,
 };
@@ -75,7 +74,7 @@ impl ClassElement for Field {
             .get_str(descriptor_index)?
             .parse()
             .context("Invalid field descriptor")?;
-        let owner = ClassRef(ctx.current_class_binary_name.clone());
+        let owner = ctx.current_class_name.clone();
         let attributes: Vec<Attribute> = attributes
             .into_iter()
             .map(|it| Attribute::from_raw(it, ctx))

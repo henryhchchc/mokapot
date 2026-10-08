@@ -35,7 +35,7 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
 
 #[test]
 fn throw_has_only_ordered_exceptional_outcomes() {
-    let runtime = cls_r("java/lang/RuntimeException");
+    let runtime = cls_name("java/lang/RuntimeException");
     let body = [
         (0, Instruction::ALoad0),
         (1, Instruction::AThrow),

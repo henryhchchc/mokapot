@@ -1,3 +1,5 @@
+use crate::types::class_name::ClassName;
+
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
@@ -7,10 +9,7 @@ use std::{
 use super::{Instruction, ProgramCounter, RawInstruction};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{
-        Annotations, TypeAnnotation, bytecode::ParseError, class::ConstantPool,
-        references::ClassRef,
-    },
+    jvm::{Annotations, TypeAnnotation, bytecode::ParseError, class::ConstantPool},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -309,7 +308,7 @@ pub struct ExceptionTableEntry {
     /// The location of the exception handler.
     pub handler_pc: ProgramCounter,
     /// The type of the exception to be handled.
-    pub catch_type: Option<ClassRef>,
+    pub catch_type: Option<ClassName>,
 }
 
 impl ExceptionTableEntry {
@@ -325,7 +324,7 @@ impl ExceptionTableEntry {
         const THROWABLE_NAME: &str = "java/lang/Throwable";
         self.catch_type
             .as_ref()
-            .is_none_or(|caught| caught.0 == THROWABLE_NAME)
+            .is_none_or(|caught| caught.as_str() == THROWABLE_NAME)
     }
 }
 

@@ -1,41 +1,16 @@
 //! References to JVM elements.
 
-use std::str::FromStr;
-
 use derive_more::Display;
 
 use super::Method;
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
-        binary_name::{BinaryName, InvalidBinaryName},
         field_type::FieldType,
         method_descriptor::{MethodDescriptor, ReturnType},
         reference_type::ReferenceType,
     },
 };
-
-/// A reference to a [`Class`](crate::jvm::Class).
-#[doc = see_jvm_spec!(4, 4, 1)]
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Display)]
-#[display("{_0}")]
-pub struct ClassRef(pub BinaryName);
-
-impl ClassRef {
-    /// Creates a new [`ClassRef`] from a binary name.
-    #[must_use]
-    pub const fn new(binary_name: BinaryName) -> Self {
-        ClassRef(binary_name)
-    }
-}
-
-impl FromStr for ClassRef {
-    type Err = InvalidBinaryName;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        BinaryName::from_str(s).map(ClassRef)
-    }
-}
 
 /// A reference to a [`Field`](crate::jvm::Field).
 #[doc = see_jvm_spec!(4, 4, 2)]
@@ -89,32 +64,19 @@ pub struct ModuleRef {
     pub name: String,
 }
 
-/// A reference to a package.
-#[doc = see_jvm_spec!(4, 4, 12)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
-#[display("{_0}")]
-pub struct PackageRef(pub BinaryName);
-
-impl FromStr for PackageRef {
-    type Err = InvalidBinaryName;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        BinaryName::from_str(s).map(PackageRef)
-    }
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::class_name::ClassName;
 
     proptest! {
 
         #[test]
-        fn test_is_constructor(class_name in any::<BinaryName>()) {
+        fn test_is_constructor(class_name in any::<ClassName>()) {
             let method = MethodRef {
-                owner: ReferenceType::Class(ClassRef(class_name)),
+                owner: ReferenceType::Class(class_name),
                 name: Method::CONSTRUCTOR_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };
@@ -123,9 +85,9 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn test_is_static_initializer_bolck(class_name in any::<BinaryName>()) {
+        fn test_is_static_initializer_bolck(class_name in any::<ClassName>()) {
             let method = MethodRef {
-                owner: ReferenceType::Class(ClassRef(class_name)),
+                owner: ReferenceType::Class(class_name),
                 name: Method::CLASS_INITIALIZER_NAME.to_string(),
                 descriptor: "()V".parse().unwrap(),
             };

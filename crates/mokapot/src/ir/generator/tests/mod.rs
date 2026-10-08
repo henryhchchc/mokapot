@@ -1,3 +1,5 @@
+use crate::types::class_name::ClassName;
+
 use std::ops::Range;
 
 pub(crate) use crate::ir::test::prelude::*;
@@ -6,7 +8,6 @@ use crate::{
     jvm::{
         Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
-        references::ClassRef,
     },
 };
 
@@ -72,7 +73,7 @@ pub(crate) fn block_containing_instruction(
 pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,
     handler_pc: ProgramCounter,
-    catch_type: Option<ClassRef>,
+    catch_type: Option<ClassName>,
 ) -> ExceptionTableEntry {
     ExceptionTableEntry {
         covered_pc,

@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn catch_all_preserves_precedence_and_shadows_later_handlers() {
-    let runtime = cls_r("java/lang/RuntimeException");
-    let exception = cls_r("java/lang/Exception");
+    let runtime = cls_name("java/lang/RuntimeException");
+    let exception = cls_name("java/lang/Exception");
     let body = [
         (0, Instruction::ALoad0),
         (1, Instruction::CheckCast(ref_t("java/lang/String"))),

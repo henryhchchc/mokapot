@@ -60,7 +60,7 @@ impl ClassElement for Export {
             flags,
         } = raw;
 
-        let package = ctx.constant_pool.get_package_ref(exports_index)?;
+        let package = ctx.constant_pool.get_package_name(exports_index)?;
         let flags = ClassElement::from_raw(flags, ctx)?;
         let to = to
             .into_iter()
@@ -70,7 +70,7 @@ impl ClassElement for Export {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let exports_index = cp.put_package_ref(&self.package)?;
+        let exports_index = cp.put_package_name(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
             .to
@@ -95,7 +95,7 @@ impl ClassElement for Open {
             flags,
         } = raw;
 
-        let package = ctx.constant_pool.get_package_ref(opens_index)?;
+        let package = ctx.constant_pool.get_package_name(opens_index)?;
         let flags = ClassElement::from_raw(flags, ctx)?;
         let to = to
             .into_iter()
@@ -105,7 +105,7 @@ impl ClassElement for Open {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let opens_index = cp.put_package_ref(&self.package)?;
+        let opens_index = cp.put_package_name(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
             .to
@@ -128,20 +128,20 @@ impl ClassElement for Provide {
             provides_index,
             with,
         } = raw;
-        let service = ctx.constant_pool.get_class_ref(provides_index)?;
+        let service = ctx.constant_pool.get_class_name(provides_index)?;
         let with = with
             .into_iter()
-            .map(|idx| ctx.constant_pool.get_class_ref(idx))
+            .map(|idx| ctx.constant_pool.get_class_name(idx))
             .collect::<Result<_, _>>()?;
         Ok(Provide { service, with })
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let provides_index = cp.put_class_ref(&self.service)?;
+        let provides_index = cp.put_class_name(&self.service)?;
         let with = self
             .with
             .iter()
-            .map(|it| cp.put_class_ref(it))
+            .map(|it| cp.put_class_name(it))
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             provides_index,
@@ -195,7 +195,7 @@ impl ClassElement for Module {
             .collect::<Result<_, _>>()?;
         let uses = uses
             .into_iter()
-            .map(|idx| ctx.constant_pool.get_class_ref(idx))
+            .map(|idx| ctx.constant_pool.get_class_name(idx))
             .collect::<Result<_, _>>()?;
         let provides = provides
             .into_iter()
@@ -245,7 +245,7 @@ impl ClassElement for Module {
         let uses = self
             .uses
             .iter()
-            .map(|it| cp.put_class_ref(it))
+            .map(|it| cp.put_class_name(it))
             .try_collect()?;
         Ok(Self::Raw {
             info_index,

@@ -9,19 +9,19 @@ use petgraph::{
 
 use crate::{
     analysis::{ClassHierarchy, InterfaceImplHierarchy},
-    jvm::references::ClassRef,
+    types::class_name::ClassName,
 };
 
 impl<'a> GraphBase for &'a ClassHierarchy {
-    type EdgeId = (&'a ClassRef, &'a ClassRef);
+    type EdgeId = (&'a ClassName, &'a ClassName);
 
-    type NodeId = &'a ClassRef;
+    type NodeId = &'a ClassName;
 }
 
 impl GraphRef for &ClassHierarchy {}
 
 impl<'a> IntoNeighbors for &'a ClassHierarchy {
-    type Neighbors = <HashSet<&'a ClassRef> as IntoIterator>::IntoIter;
+    type Neighbors = <HashSet<&'a ClassName> as IntoIterator>::IntoIter;
 
     fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
         self.inheritance
@@ -34,7 +34,7 @@ impl<'a> IntoNeighbors for &'a ClassHierarchy {
 }
 
 impl<'a> Visitable for &'a ClassHierarchy {
-    type Map = HashSet<&'a ClassRef>;
+    type Map = HashSet<&'a ClassName>;
 
     fn visit_map(&self) -> Self::Map {
         HashSet::default()
@@ -46,15 +46,15 @@ impl<'a> Visitable for &'a ClassHierarchy {
 }
 
 impl<'a> GraphBase for &'a InterfaceImplHierarchy {
-    type EdgeId = (&'a ClassRef, &'a ClassRef);
+    type EdgeId = (&'a ClassName, &'a ClassName);
 
-    type NodeId = &'a ClassRef;
+    type NodeId = &'a ClassName;
 }
 
 impl GraphRef for &InterfaceImplHierarchy {}
 
 impl<'a> IntoNeighbors for &'a InterfaceImplHierarchy {
-    type Neighbors = <HashSet<&'a ClassRef> as IntoIterator>::IntoIter;
+    type Neighbors = <HashSet<&'a ClassName> as IntoIterator>::IntoIter;
 
     fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
         self.implementations
@@ -67,7 +67,7 @@ impl<'a> IntoNeighbors for &'a InterfaceImplHierarchy {
 }
 
 impl<'a> IntoNeighborsDirected for &'a InterfaceImplHierarchy {
-    type NeighborsDirected = <HashSet<&'a ClassRef> as IntoIterator>::IntoIter;
+    type NeighborsDirected = <HashSet<&'a ClassName> as IntoIterator>::IntoIter;
 
     fn neighbors_directed(self, a: Self::NodeId, d: Direction) -> Self::NeighborsDirected {
         if d == Direction::Outgoing {
@@ -84,7 +84,7 @@ impl<'a> IntoNeighborsDirected for &'a InterfaceImplHierarchy {
 }
 
 impl<'a> Visitable for &'a InterfaceImplHierarchy {
-    type Map = HashSet<&'a ClassRef>;
+    type Map = HashSet<&'a ClassName>;
 
     fn visit_map(&self) -> Self::Map {
         HashSet::new()

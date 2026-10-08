@@ -23,7 +23,6 @@ use crate::{
             NestedClassAccessFlags, RecordComponent, Version,
         },
         errors::ParsingErrorContext,
-        references::ClassRef,
     },
     types::Descriptor,
 };
@@ -98,20 +97,20 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
             .ok_or(ParseError::malform("Invalid class access flags"))?;
-        let ClassRef(binary_name) = constant_pool.get_class_ref(this_class)?;
+        let class_name = constant_pool.get_class_name(this_class)?;
         let super_class = match super_class {
-            0 if binary_name == "java/lang/Object" => None,
+            0 if class_name == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
             0 => Err(ParseError::malform(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it => Some(constant_pool.get_class_ref(it)?),
+            it => Some(constant_pool.get_class_name(it)?),
         };
 
         let ctx = &ParsingContext {
             constant_pool,
             class_version: version,
-            current_class_binary_name: binary_name.clone(),
+            current_class_name: class_name.clone(),
         };
 
         let attributes: Vec<Attribute> = attributes
@@ -147,11 +146,11 @@ impl Class {
         Ok(Class {
             version,
             access_flags,
-            binary_name,
+            name: class_name,
             super_class,
             interfaces: interfaces
                 .into_iter()
-                .map(|it| ctx.constant_pool.get_class_ref(it))
+                .map(|it| ctx.constant_pool.get_class_name(it))
                 .collect::<Result<_, _>>()?,
             fields: fields
                 .into_iter()
@@ -190,18 +189,17 @@ impl Class {
 
     pub(crate) fn into_raw(self) -> Result<ClassFile, GenerationError> {
         let mut constant_pool = ConstantPool::new();
-        let class_ref = self.make_ref();
-        let this_class = constant_pool.put_class_ref(&class_ref)?;
+        let this_class = constant_pool.put_class_name(&self.name)?;
         let super_class = self
             .super_class
             .as_ref()
-            .map(|it| constant_pool.put_class_ref(it))
+            .map(|it| constant_pool.put_class_name(it))
             .transpose()?
             .unwrap_or(0);
         let interfaces = self
             .interfaces
             .iter()
-            .map(|it| constant_pool.put_class_ref(it))
+            .map(|it| constant_pool.put_class_name(it))
             .try_collect()?;
         let fields = self
             .fields
@@ -302,11 +300,11 @@ impl ClassElement for InnerClassInfo {
             inner_name_index,
             access_flags,
         } = raw;
-        let inner_class = ctx.constant_pool.get_class_ref(info_index)?;
+        let inner_class = ctx.constant_pool.get_class_name(info_index)?;
         let outer_class = if outer_class_info_index == 0 {
             None
         } else {
-            let the_class = ctx.constant_pool.get_class_ref(outer_class_info_index)?;
+            let the_class = ctx.constant_pool.get_class_name(outer_class_info_index)?;
             Some(the_class)
         };
         let inner_name = if inner_name_index == 0 {
@@ -325,11 +323,11 @@ impl ClassElement for InnerClassInfo {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let info_index = cp.put_class_ref(&self.inner_class)?;
+        let info_index = cp.put_class_name(&self.inner_class)?;
         let outer_class_info_index = self
             .outer_class
             .as_ref()
-            .map(|it| cp.put_class_ref(it))
+            .map(|it| cp.put_class_name(it))
             .transpose()?
             .unwrap_or(0);
         let inner_name_index = self
@@ -421,7 +419,7 @@ impl ClassElement for EnclosingMethod {
             class_index,
             method_index,
         } = raw;
-        let class = ctx.constant_pool.get_class_ref(class_index)?;
+        let class = ctx.constant_pool.get_class_name(class_index)?;
         let method_name_and_desc = if method_index > 0 {
             let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
             Some(name_and_desc)
@@ -435,7 +433,7 @@ impl ClassElement for EnclosingMethod {
     }
 
     fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let class_index = cp.put_class_ref(&self.class)?;
+        let class_index = cp.put_class_name(&self.class)?;
         let method_index = self
             .method_name_and_desc
             .map(|(name, desc)| cp.put_name_and_type(name, &desc))

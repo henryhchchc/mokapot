@@ -1,3 +1,5 @@
+use crate::types::class_name::ClassName;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::*;
@@ -6,7 +8,7 @@ use super::*;
 fn loader_exhausts_class_paths_after_not_found() {
     struct Missing<'a>(&'a AtomicUsize);
     impl ClassPath for Missing<'_> {
-        fn find_class(&self, _: &BinaryName) -> Result<Class, Error> {
+        fn find_class(&self, _: &ClassName) -> Result<Class, Error> {
             self.0.fetch_add(1, Ordering::Relaxed);
             Err(Error::NotFound)
         }
@@ -27,7 +29,7 @@ fn loader_exhausts_class_paths_after_not_found() {
 fn loader_propagates_non_not_found_errors() {
     struct Failure;
     impl ClassPath for Failure {
-        fn find_class(&self, _: &BinaryName) -> Result<Class, Error> {
+        fn find_class(&self, _: &ClassName) -> Result<Class, Error> {
             Err(Error::Other("failure".into()))
         }
     }
@@ -50,10 +52,10 @@ struct MockClassPath<'a> {
 }
 
 impl ClassPath for MockClassPath<'_> {
-    fn find_class(&self, name: &BinaryName) -> Result<Class, Error> {
+    fn find_class(&self, name: &ClassName) -> Result<Class, Error> {
         self.counter.fetch_add(1, Ordering::Relaxed);
         Ok(Class {
-            binary_name: name.clone(),
+            name: name.clone(),
             ..Default::default()
         })
     }
@@ -63,7 +65,7 @@ impl ClassPath for MockClassPath<'_> {
 fn caching_class_loader_load_once() {
     let counter = AtomicUsize::new(0);
     let loader = CachingClassLoader::from(ClassLoader::new([MockClassPath { counter: &counter }]));
-    let name: BinaryName = "org/mokapot/test/MyClass".parse().unwrap();
+    let name: ClassName = "org/mokapot/test/MyClass".parse().unwrap();
     std::thread::scope(|scope| {
         let handles: Vec<_> = (0..4)
             .map(|_| {
@@ -71,7 +73,7 @@ fn caching_class_loader_load_once() {
                 let name = &name;
                 scope.spawn(move || {
                     for _ in 0..25 {
-                        assert_eq!(loader.load_class(name).unwrap().binary_name, *name);
+                        assert_eq!(loader.load_class(name).unwrap().name, *name);
                     }
                 })
             })

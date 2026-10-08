@@ -1,12 +1,13 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
+use crate::types::package_name::PackageName;
+
 use derive_more::Display;
 use itertools::Itertools;
 
-use self::references::{ClassRef, PackageRef};
 use crate::{
     intrinsics::see_jvm_spec,
-    types::{binary_name::BinaryName, field_type::FieldType, method_descriptor::MethodDescriptor},
+    types::{class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 pub mod annotation;
@@ -32,13 +33,13 @@ pub struct Class {
     pub version: class::Version,
     /// The access modifiers of the class.
     pub access_flags: class::AccessFlags,
-    /// The binary name of the class (e.g., `org/mokapot/jvm/Class`).
-    pub binary_name: BinaryName,
+    /// The class or interface name in JVM internal form (e.g., `org/mokapot/jvm/Class`).
+    pub name: ClassName,
     /// A reference to the superclass of the class.
     /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
-    pub super_class: Option<ClassRef>,
+    pub super_class: Option<ClassName>,
     /// The interfaces implemented by the class.
-    pub interfaces: Vec<ClassRef>,
+    pub interfaces: Vec<ClassName>,
     /// The fields declared the class.
     pub fields: Vec<Field>,
     /// The methods declared in the class.
@@ -60,15 +61,15 @@ pub struct Class {
     /// The information of the module if the class is `module-info`.
     pub module: Option<Module>,
     /// The packages of the module.
-    pub module_packages: Vec<PackageRef>,
+    pub module_packages: Vec<PackageName>,
     /// The main class of the module.
-    pub module_main_class: Option<ClassRef>,
+    pub module_main_class: Option<ClassName>,
     /// The nearest outer class of the class.
-    pub nest_host: Option<ClassRef>,
+    pub nest_host: Option<ClassName>,
     /// The nested classes of the class.
-    pub nest_members: Vec<ClassRef>,
+    pub nest_members: Vec<ClassName>,
     /// The permitted subclasses of the class if the class is `sealed`.
-    pub permitted_subclasses: Vec<ClassRef>,
+    pub permitted_subclasses: Vec<ClassName>,
     /// Indicates whether the class is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates whether the class is deprecated.
@@ -139,7 +140,7 @@ pub struct Field {
     /// The name of the field.
     pub name: String,
     /// The class containing the field.
-    pub owner: ClassRef,
+    pub owner: ClassName,
     /// The type of the field.
     pub field_type: FieldType,
     /// The constant value of the field, if any.
@@ -169,11 +170,11 @@ pub struct Method {
     /// The descriptor of the method, encoding parameter types and return type.
     pub descriptor: MethodDescriptor,
     /// The class containing the method.
-    pub owner: ClassRef,
+    pub owner: ClassName,
     /// The body of the method if it is not `abstract` or `native`.
     pub body: Option<code::MethodBody>,
     /// The checked exceptions that may be thrown by the method.
-    pub exceptions: Vec<ClassRef>,
+    pub exceptions: Vec<ClassName>,
     /// The annotations.
     pub annotations: Annotations<Annotation>,
     /// The type annotations.
@@ -211,7 +212,7 @@ pub struct Module {
     /// A list of the modules that are opened by this module.
     pub opens: Vec<module::Open>,
     /// A list of the classes that are used by this module.
-    pub uses: Vec<ClassRef>,
+    pub uses: Vec<ClassName>,
     /// A list of the services that are provided by this module.
     pub provides: Vec<module::Provide>,
 }

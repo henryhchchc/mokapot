@@ -154,8 +154,8 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
 
 #[test]
 fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
-    let runtime = cls_r("java/lang/RuntimeException");
-    let throwable = cls_r("java/lang/Throwable");
+    let runtime = cls_name("java/lang/RuntimeException");
+    let throwable = cls_name("java/lang/Throwable");
     let table = vec![
         handler(1.into()..2.into(), 10.into(), Some(runtime)),
         handler(1.into()..2.into(), 20.into(), Some(throwable)),
@@ -181,7 +181,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         .successors()
         .skip(1)
         .map(|it| match it.transfer() {
-            Some(ControlTransfer::Exception(Some(caught))) => caught.0.as_ref(),
+            Some(ControlTransfer::Exception(Some(caught))) => caught.as_str(),
             _ => panic!(),
         })
         .collect::<Vec<_>>();

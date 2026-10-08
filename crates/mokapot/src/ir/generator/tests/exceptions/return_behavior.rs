@@ -24,7 +24,7 @@ fn synchronized_return_reports_handler_frame_overflow_at_return() {
 
 #[test]
 fn synchronized_return_has_only_exceptional_successors() {
-    let illegal = cls_r("java/lang/IllegalMonitorStateException");
+    let illegal = cls_name("java/lang/IllegalMonitorStateException");
     let body = [
         (0, Instruction::IConst1),
         (1, Instruction::IReturn),

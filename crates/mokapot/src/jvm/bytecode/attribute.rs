@@ -1,3 +1,6 @@
+use crate::types::class_name::ClassName;
+use crate::types::package_name::PackageName;
+
 use std::{
     collections::VecDeque,
     io::{self, Read},
@@ -22,7 +25,6 @@ use crate::{
         class::{BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         method::ParameterInfo,
-        references::{ClassRef, PackageRef},
     },
 };
 
@@ -76,7 +78,7 @@ pub(crate) enum Attribute {
     ConstantValue(ConstantValue),
     Code(MethodBody),
     StackMapTable(Vec<StackMapFrame>),
-    Exceptions(Vec<ClassRef>),
+    Exceptions(Vec<ClassName>),
     SourceFile(String),
     LineNumberTable(Vec<LineNumberTableEntry>),
     InnerClasses(Vec<InnerClassInfo>),
@@ -97,12 +99,12 @@ pub(crate) enum Attribute {
     BootstrapMethods(Vec<BootstrapMethod>),
     MethodParameters(Vec<ParameterInfo>),
     Module(Module),
-    ModulePackages(Vec<PackageRef>),
-    ModuleMainClass(ClassRef),
-    NestHost(ClassRef),
-    NestMembers(Vec<ClassRef>),
+    ModulePackages(Vec<PackageName>),
+    ModuleMainClass(ClassName),
+    NestHost(ClassName),
+    NestMembers(Vec<ClassName>),
     Record(Vec<RecordComponent>),
-    PermittedSubclasses(Vec<ClassRef>),
+    PermittedSubclasses(Vec<ClassName>),
     Unrecognized(String, Vec<u8>),
 }
 
@@ -177,7 +179,7 @@ impl ClassElement for Attribute {
             "StackMapTable" => parse![u16; reader, ctx => StackMapTable],
             "Exceptions" => parse![u16; reader, || {
                 let idx = reader.decode_value()?;
-                ctx.constant_pool.get_class_ref(idx)
+                ctx.constant_pool.get_class_name(idx)
             } => Exceptions],
             "InnerClasses" => parse![u16; reader, ctx => InnerClasses],
             "EnclosingMethod" => parse!(reader, ctx).map(Self::EnclosingMethod),
@@ -213,27 +215,27 @@ impl ClassElement for Attribute {
             "Module" => parse!(reader, ctx => Module),
             "ModulePackages" => parse![u16; reader, || {
                 let idx = reader.decode_value()?;
-                ctx.constant_pool.get_package_ref(idx)
+                ctx.constant_pool.get_package_name(idx)
             } => ModulePackages],
             "ModuleMainClass" => {
                 let idx = reader.decode_value()?;
                 ctx.constant_pool
-                    .get_class_ref(idx)
+                    .get_class_name(idx)
                     .map(Self::ModuleMainClass)
             }
             "NestHost" => {
                 let idx = reader.decode_value()?;
-                ctx.constant_pool.get_class_ref(idx).map(Self::NestHost)
+                ctx.constant_pool.get_class_name(idx).map(Self::NestHost)
             }
             "NestMembers" => parse![u16; reader, || {
                 let idx = reader.decode_value()?;
-                ctx.constant_pool.get_class_ref(idx)
+                ctx.constant_pool.get_class_name(idx)
             }]
             .map(Self::NestMembers),
             "Record" => parse![u16; reader, ctx => Record],
             "PermittedSubclasses" => parse![u16; reader, || {
                 let idx = reader.decode_value()?;
-                ctx.constant_pool.get_class_ref(idx)
+                ctx.constant_pool.get_class_name(idx)
             } => PermittedSubclasses],
             name => reader
                 .bytes()
@@ -271,7 +273,7 @@ impl Attribute {
                 let mut bytes = Vec::new();
                 write_length::<u16>(&mut bytes, exception_types.len())?;
                 for exception_type in &exception_types {
-                    bytes.extend(cp.put_class_ref(exception_type)?.to_be_bytes());
+                    bytes.extend(cp.put_class_name(exception_type)?.to_be_bytes());
                 }
                 bytes
             }
@@ -310,18 +312,18 @@ impl Attribute {
                 let mut buf = Vec::new();
                 write_length::<u16>(&mut buf, mod_pkg.len())?;
                 for pkg in &mod_pkg {
-                    buf.extend(cp.put_package_ref(pkg)?.to_be_bytes());
+                    buf.extend(cp.put_package_name(pkg)?.to_be_bytes());
                 }
                 buf
             }
-            Attribute::NestHost(class_ref) | Attribute::ModuleMainClass(class_ref) => {
-                cp.put_class_ref(&class_ref)?.to_be_bytes().to_vec()
+            Attribute::NestHost(class_name) | Attribute::ModuleMainClass(class_name) => {
+                cp.put_class_name(&class_name)?.to_be_bytes().to_vec()
             }
             Attribute::NestMembers(classes) | Attribute::PermittedSubclasses(classes) => {
                 let mut buf = Vec::new();
                 write_length::<u16>(&mut buf, classes.len())?;
                 for class in &classes {
-                    buf.extend(cp.put_class_ref(class)?.to_be_bytes());
+                    buf.extend(cp.put_class_name(class)?.to_be_bytes());
                 }
                 buf
             }
