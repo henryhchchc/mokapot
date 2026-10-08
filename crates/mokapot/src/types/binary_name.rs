@@ -20,6 +20,8 @@
 
 use std::str::FromStr;
 
+use derive_more::{AsRef, Deref, Display};
+
 use crate::intrinsics::see_jvm_spec;
 
 /// A validated JVM binary name.
@@ -34,9 +36,7 @@ use crate::intrinsics::see_jvm_spec;
 /// assert_eq!(name.to_qualified_name(), "java.lang.String");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 1)]
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, derive_more::Deref, derive_more::AsRef, derive_more::Display,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deref, AsRef, Display)]
 #[deref(forward)]
 #[as_ref(str)]
 #[display("{_0}")]

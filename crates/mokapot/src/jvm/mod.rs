@@ -1,5 +1,6 @@
 //! JVM elements, such as classes, methods, fields, and annotations.
 
+use derive_more::Display;
 use itertools::Itertools;
 
 use self::references::{ClassRef, PackageRef};
@@ -216,7 +217,7 @@ pub struct Module {
 }
 
 /// A string in the JVM bytecode.
-#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, derive_more::Display)]
+#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
     /// A valid UTF-8 string.

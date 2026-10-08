@@ -1,8 +1,10 @@
+use derive_more::Display;
+
 use super::ValueId;
 use crate::types::reference_type::ReferenceType;
 
 /// An operation that converts between types.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Operation {
     /// Converts an `int` to a `long`.
     #[display("{_0} as long")]

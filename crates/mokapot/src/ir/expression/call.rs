@@ -1,7 +1,9 @@
+use derive_more::Display;
+
 use super::ValueId;
 
 /// JVM invocation dispatch semantics and the required receiver, without target resolution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display)]
 pub enum InvocationKind {
     /// An `invokestatic` invocation without a receiver.
     #[display("static")]

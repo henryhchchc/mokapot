@@ -1,3 +1,4 @@
+use derive_more::{Debug, Display, From, Into};
 use std::ops::Add;
 
 /// Denotes a program counter in an instruction sequence.
@@ -10,18 +11,7 @@ use std::ops::Add;
 /// assert_eq!(pc + (-4_i32), Err(InvalidOffset));
 /// ```
 #[derive(
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    derive_more::From,
-    derive_more::Into,
-    derive_more::Display,
-    derive_more::Debug,
+    Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, From, Into, Display, Debug,
 )]
 #[repr(transparent)]
 #[display("#{_0:04X}")]

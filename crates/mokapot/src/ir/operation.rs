@@ -1,7 +1,9 @@
+use derive_more::Display;
+
 use super::{ValueId, expression::Expression};
 
 /// An ordinary non-parameter, non-terminator operation.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Operation {
     /// Evaluates an expression and defines its result.
     #[display("{value} = {expr}")]

@@ -12,6 +12,8 @@
 //!
 //! Parsing errors can also retain context describing where a failure occurred.
 
+use derive_more::Display;
+
 #[cfg(debug_assertions)]
 use std::backtrace::Backtrace;
 use std::{
@@ -103,7 +105,7 @@ impl From<io::Error> for BytecodeError<ParseErrorKind> {
 ///
 /// This enum represents the different categories of errors that can occur
 /// during parsing of a class file.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Display)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
     /// An error occurred while reading from the underlying input source.
@@ -255,7 +257,7 @@ impl From<TryFromIntError> for BytecodeError<GenerationErrorKind> {
 ///
 /// This enum represents the different categories of errors that can occur
 /// during bytecode generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
 #[non_exhaustive]
 #[instability::unstable(feature = "bytecode-generation")]
 pub enum GenerationErrorKind {

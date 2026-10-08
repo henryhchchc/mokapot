@@ -2,6 +2,8 @@
 
 use std::str::FromStr;
 
+use derive_more::Display;
+
 use super::Method;
 use crate::{
     intrinsics::see_jvm_spec,
@@ -15,7 +17,7 @@ use crate::{
 
 /// A reference to a [`Class`](crate::jvm::Class).
 #[doc = see_jvm_spec!(4, 4, 1)]
-#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Display)]
 #[display("{_0}")]
 pub struct ClassRef(pub BinaryName);
 
@@ -37,7 +39,7 @@ impl FromStr for ClassRef {
 
 /// A reference to a [`Field`](crate::jvm::Field).
 #[doc = see_jvm_spec!(4, 4, 2)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{owner}.{name}")]
 pub struct FieldRef {
     /// A reference to the class or array type that contains the field.
@@ -50,7 +52,7 @@ pub struct FieldRef {
 
 /// A reference to a [`Method`].
 #[doc = see_jvm_spec!(4, 4, 2)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{owner}::{name}")]
 pub struct MethodRef {
     /// The reference to the class or array type containing the method.
@@ -80,7 +82,7 @@ impl MethodRef {
 
 /// A reference to a [`Module`](crate::jvm::Module).
 #[doc = see_jvm_spec!(4, 4, 11)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{name}")]
 pub struct ModuleRef {
     /// The name of the module.
@@ -89,7 +91,7 @@ pub struct ModuleRef {
 
 /// A reference to a package.
 #[doc = see_jvm_spec!(4, 4, 12)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{_0}")]
 pub struct PackageRef(pub BinaryName);
 

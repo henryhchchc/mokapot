@@ -1,6 +1,7 @@
 //! Module for the expressions in Moka IR.
 use std::fmt;
 
+use derive_more::From;
 use itertools::Itertools;
 
 use super::ValueId;
@@ -31,7 +32,7 @@ pub use math::{NaNTreatment, Operation as MathOperation};
 pub use predicate::{PathValue, Predicate};
 
 /// An expression over method-local SSA values.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::From)]
+#[derive(Debug, Clone, PartialEq, Eq, From)]
 pub enum Expression {
     /// A constant value.
     Const(ConstantValue),

@@ -1,8 +1,10 @@
+use derive_more::Display;
+
 use super::ValueId;
 use crate::jvm::references::FieldRef;
 
 /// An operation on a field.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Access {
     /// Reads a static field.
     #[display("read {field}")]

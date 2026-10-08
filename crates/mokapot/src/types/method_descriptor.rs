@@ -7,6 +7,7 @@
 
 use std::str::FromStr;
 
+use derive_more::{Display, From};
 use itertools::Itertools;
 
 use super::{Descriptor, field_type::FieldType};
@@ -32,7 +33,7 @@ use crate::intrinsics::see_jvm_spec;
 /// // Parse a method descriptor for: int add(int a, int b)
 /// let add_method = MethodDescriptor::from_str("(II)I").unwrap();
 /// ```
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display(
     "({}) -> {return_type}",
     parameters_types.iter().map(FieldType::descriptor).join(", ")
@@ -91,7 +92,7 @@ impl Descriptor for MethodDescriptor {
 /// // int return type
 /// let int_return = ReturnType::Some(PrimitiveType::Int.into());
 /// ```
-#[derive(Debug, PartialEq, Eq, Hash, Clone, derive_more::Display, derive_more::From)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Display, From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ReturnType {
     /// Represents a method that returns a specific type.

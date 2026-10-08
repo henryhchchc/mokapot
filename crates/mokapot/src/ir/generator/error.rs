@@ -1,10 +1,11 @@
+use derive_more::Display;
 use thiserror::Error;
 
 use super::data_flow::FrameError;
 use crate::jvm::code::ProgramCounter;
 
 /// Why JVM bytecode cannot be converted to Moka IR.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// The method does not have a code body, or the body has no instructions.

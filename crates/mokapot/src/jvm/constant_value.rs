@@ -2,6 +2,8 @@
 
 use std::{cmp::Ordering, hash::Hash};
 
+use derive_more::Display;
+
 use super::{JavaString, class::MethodHandle};
 use crate::{
     intrinsics::see_jvm_spec,
@@ -13,7 +15,7 @@ use crate::{
 /// Denotes a compile-time constant value.
 ///
 #[doc = see_jvm_spec!(4, 4)]
-#[derive(Debug, Clone, derive_more::Display)]
+#[derive(Debug, Clone, Display)]
 pub enum ConstantValue {
     /// The `null` value.
     #[display("null")]

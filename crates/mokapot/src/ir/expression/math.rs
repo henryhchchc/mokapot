@@ -1,7 +1,9 @@
+use derive_more::Display;
+
 use super::ValueId;
 
 /// A mathematical operation.
-#[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Display)]
 pub enum Operation {
     /// Adds the two arguments (i.e., `lhs + rhs`).
     #[display("{_0} + {_1}")]
@@ -50,7 +52,7 @@ pub enum Operation {
     FloatingPointComparison(ValueId, ValueId, NaNTreatment),
 }
 /// How NaNs are treated in floating point comparisons.
-#[derive(Debug, PartialEq, Eq, Clone, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Display)]
 pub enum NaNTreatment {
     /// NaNs are treated as the largest possible value.
     #[display("NaN == Max")]

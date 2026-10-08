@@ -1,10 +1,12 @@
 use std::convert::Infallible;
 
+use derive_more::{Display, From};
+
 use super::{BooleanVariable, ValueId};
 use crate::jvm::ConstantValue;
 
 /// A branch predicate over SSA values and JVM constants.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
 pub enum Predicate {
     /// The two arguments are equal.
     #[display("{_0} == {_1}")]
@@ -91,7 +93,7 @@ impl From<Predicate> for BooleanVariable<Predicate> {
 }
 
 /// An SSA value or constant in a path predicate.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, derive_more::Display, derive_more::From)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Display, From)]
 pub enum PathValue {
     /// A value produced by the IR.
     Variable(#[from] ValueId),

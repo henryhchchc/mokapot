@@ -1,7 +1,9 @@
+use derive_more::Display;
+
 use super::ValueId;
 
 /// An operation on a lock.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Operation {
     /// Acquires the lock.
     #[display("acquire {_0}")]

@@ -1,10 +1,11 @@
+use derive_more::Display;
 use itertools::Itertools;
 
 use super::ValueId;
 use crate::types::field_type::FieldType;
 
 /// An operation on an array.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Operation {
     /// Create a new array.
     #[display("new {element_type}[{length}]")]

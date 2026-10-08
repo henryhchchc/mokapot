@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use derive_more::Display;
+
 #[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use crate::jvm::class_loader::ClassPath;
 use crate::jvm::{Class, references::ClassRef};
@@ -54,7 +56,7 @@ impl ResolutionContext {
 }
 
 /// An error that occurs during initialization of a [`ResolutionContext`].
-#[derive(Debug, derive_more::Display)]
+#[derive(Debug, Display)]
 #[instability::unstable(feature = "project-analyses")]
 pub enum InitError {}
 

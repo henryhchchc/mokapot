@@ -41,7 +41,7 @@ pub enum InstructionLocation {
 }
 
 /// The identity of a scalar value within one Moka IR method.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, derive_more::Display)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(transparent)]
 #[display("%{_0}")]
