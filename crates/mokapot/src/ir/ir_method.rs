@@ -51,3 +51,40 @@ impl MokaIRMethod {
         })
     }
 }
+
+#[cfg(feature = "petgraph")]
+mod petgraph_impl {
+    use crate::ir::{BlockId, MokaIRMethod, Successor};
+    use petgraph::visit::{GraphBase, IntoNeighbors, Visitable};
+    use std::collections::HashSet;
+
+    impl GraphBase for MokaIRMethod {
+        type EdgeId = (BlockId, BlockId);
+        type NodeId = BlockId;
+    }
+
+    impl IntoNeighbors for &MokaIRMethod {
+        type Neighbors = <Vec<BlockId> as IntoIterator>::IntoIter;
+
+        fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
+            let successors: Vec<_> = self
+                .block(a)
+                .into_iter()
+                .flat_map(|bb| bb.terminator.arms().filter_map(Successor::block_target))
+                .collect();
+            successors.into_iter()
+        }
+    }
+
+    impl Visitable for MokaIRMethod {
+        type Map = HashSet<BlockId>;
+
+        fn visit_map(&self) -> Self::Map {
+            HashSet::new()
+        }
+
+        fn reset_map(&self, map: &mut Self::Map) {
+            map.clear();
+        }
+    }
+}
