@@ -114,13 +114,13 @@ proptest! {
 
         let mut identical = lhs.clone();
         identical
-            .merge_from_with(lhs.clone(), |_, lhs, rhs| *lhs = rhs)
+            .merge_from_with(&lhs, |_, lhs, rhs| *lhs = rhs)
             .expect("a frame has the same shape as itself");
         prop_assert_eq!(&identical, &lhs, "merging a frame with itself changed it");
 
         let before = lhs.clone();
         let mut visited: Vec<(Position, ValueId, ValueId)> = Vec::new();
-        lhs.merge_from_with(rhs, |position, lhs, rhs| {
+        lhs.merge_from_with(&rhs, |position, lhs, rhs| {
             visited.push((position, *lhs, rhs));
             *lhs = rhs;
         })
@@ -189,7 +189,7 @@ proptest! {
         let before = lhs.clone();
 
         let mut visited = Vec::new();
-        let merged = lhs.merge_from_with(rhs, |position, _, _| visited.push(position));
+        let merged = lhs.merge_from_with(&rhs, |position, _, _| visited.push(position));
         prop_assert_eq!(merged, Err(FrameError::IncompatibleFrameShape));
         prop_assert!(visited.is_empty(), "a rejected merge visited a position");
         prop_assert_eq!(lhs, before, "a rejected merge changed the frame");

@@ -21,7 +21,7 @@ impl LocalSlot {
         }
     }
 
-    fn merge_from_with(&mut self, other: Self, join_values: impl FnOnce(&mut ValueId, ValueId)) {
+    fn merge_from_with(&mut self, other: &Self, join_values: impl FnOnce(&mut ValueId, ValueId)) {
         use LocalSlot::{Reserved, Unavailable, Unset, Value};
         match (self, other) {
             (Value(lhs), Value(rhs)) if lhs.category == rhs.category => {
@@ -130,10 +130,10 @@ impl LocalVariables {
 
     pub(super) fn merge_from_with(
         &mut self,
-        other: Self,
+        other: &Self,
         mut merge_values: impl FnMut(usize, &mut ValueId, ValueId),
     ) {
-        for (index, (lhs, rhs)) in self.slots.iter_mut().zip(other.slots).enumerate() {
+        for (index, (lhs, rhs)) in self.slots.iter_mut().zip(other.slots.iter()).enumerate() {
             lhs.merge_from_with(rhs, |lhs, rhs| merge_values(index, lhs, rhs));
         }
     }

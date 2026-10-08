@@ -29,17 +29,14 @@ where
             .collect::<HashSet<_>>();
     }
 
-    let mut current_cost = indexed_cover_cost(&current);
     let mut stats = HeuristicStats::default();
 
     for _round in 0..budget.heuristic_rounds {
         let expanded = heuristic_expand(&current, budget, &mut stats);
         let candidate = heuristic_irredundant(expanded, budget, &mut stats);
-        let candidate_cost = indexed_cover_cost(&candidate);
 
-        if candidate_cost < current_cost {
+        if indexed_cover_cost(&candidate) < indexed_cover_cost(&current) {
             current = candidate;
-            current_cost = candidate_cost;
         } else {
             break;
         }
@@ -73,7 +70,7 @@ fn heuristic_expand(
         for index in specified_indices {
             let generalized = candidate.generalize(index);
             let Some(is_covered) =
-                indexed_cover_covers_cube(&reference, &generalized, &mut memo, budget, stats)
+                indexed_cover_covers_cube(&reference, None, &generalized, &mut memo, budget, stats)
             else {
                 expanded.push(candidate);
                 expanded.extend(reference.iter().skip(cube_index + 1).cloned());
@@ -104,15 +101,10 @@ fn heuristic_irredundant(
     let mut irredundant = Vec::with_capacity(cover.len());
 
     for (cube_index, cube) in cover.iter().enumerate() {
-        let rest = cover
-            .iter()
-            .enumerate()
-            .filter(|(other_index, _)| *other_index != cube_index)
-            .map(|(_, other)| other.clone())
-            .collect::<Vec<_>>();
         let mut memo = HashMap::new();
 
-        let Some(is_covered) = indexed_cover_covers_cube(&rest, cube, &mut memo, budget, stats)
+        let Some(is_covered) =
+            indexed_cover_covers_cube(&cover, Some(cube_index), cube, &mut memo, budget, stats)
         else {
             irredundant.extend(cover.iter().skip(cube_index).cloned());
             return absorb_indexed(irredundant);
@@ -133,6 +125,7 @@ fn heuristic_irredundant(
 
 fn indexed_cover_covers_cube(
     cover: &[IndexedCube],
+    excluded_index: Option<usize>,
     cube: &IndexedCube,
     memo: &mut HashMap<IndexedCube, bool>,
     budget: SolvingBudget,
@@ -145,11 +138,15 @@ fn indexed_cover_covers_cube(
         return None;
     }
 
-    let result = if cover.iter().any(|existing| existing.subsumes(cube)) {
+    let included = cover
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| Some(*index) != excluded_index)
+        .map(|(_, existing)| existing);
+    let result = if included.clone().any(|existing| existing.subsumes(cube)) {
         true
     } else {
-        let split_index = cover
-            .iter()
+        let split_index = included
             .filter(|existing| !existing.conflicts_with(cube))
             .flat_map(IndexedCube::specified_indices)
             .find(|index| cube.literal(*index) == LiteralState::DontCare);
@@ -159,6 +156,7 @@ fn indexed_cover_covers_cube(
 
         let positive = indexed_cover_covers_cube(
             cover,
+            excluded_index,
             &cube.with_literal(split_index, LiteralState::Positive),
             memo,
             budget,
@@ -166,6 +164,7 @@ fn indexed_cover_covers_cube(
         )?;
         let negative = indexed_cover_covers_cube(
             cover,
+            excluded_index,
             &cube.with_literal(split_index, LiteralState::Negative),
             memo,
             budget,

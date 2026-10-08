@@ -114,11 +114,13 @@ impl BlockInterpreter<'_, '_> {
             }
         }
         let terminator_source = exit.forces_block_boundary().then_some(final_pc);
-        let mut exit_state = ExitState::new(instruction, final_pc, frame, operations);
-        let terminator = exit_state.terminate(values, exit).at_pc(final_pc)?;
+        let exit_state = ExitState::new(instruction, final_pc, frame, &exit);
+        let terminator = exit_state
+            .terminate(values, exit, &mut operations)
+            .at_pc(final_pc)?;
         Ok(FrameBlock {
             kind: BlockKind::Code,
-            operations: exit_state.into_operations(),
+            operations,
             terminator,
             terminator_source,
         })

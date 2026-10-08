@@ -45,7 +45,7 @@ pub(super) enum LiteralState {
     Negative,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) struct IndexedCube {
     literals: Vec<LiteralState>,
 }
@@ -71,13 +71,12 @@ impl IndexedCube {
     {
         let mut cube = Cube::one();
         for (index, literal) in self.literals.iter().enumerate() {
-            let predicate = atoms.atoms[index].clone();
             match literal {
                 LiteralState::Positive => {
-                    cube.insert(BooleanVariable::Positive(predicate));
+                    cube.insert(BooleanVariable::Positive(atoms.atoms[index].clone()));
                 }
                 LiteralState::Negative => {
-                    cube.insert(BooleanVariable::Negative(predicate));
+                    cube.insert(BooleanVariable::Negative(atoms.atoms[index].clone()));
                 }
                 LiteralState::DontCare => {}
             }
@@ -87,7 +86,6 @@ impl IndexedCube {
 
     pub(super) fn combine(&self, other: &Self) -> Option<Self> {
         let mut difference = None;
-        let mut literals = Vec::with_capacity(self.literals.len());
 
         for (index, (lhs, rhs)) in self.literals.iter().zip(&other.literals).enumerate() {
             match (lhs, rhs) {
@@ -97,14 +95,13 @@ impl IndexedCube {
                         return None;
                     }
                     difference = Some(index);
-                    literals.push(LiteralState::DontCare);
                 }
-                (lhs, rhs) if lhs == rhs => literals.push(*lhs),
+                (lhs, rhs) if lhs == rhs => {}
                 _ => return None,
             }
         }
 
-        difference.map(|_| Self { literals })
+        difference.map(|index| self.generalize(index))
     }
 
     pub(super) fn subsumes(&self, other: &Self) -> bool {
@@ -135,8 +132,8 @@ impl IndexedCube {
             .count()
     }
 
-    pub(super) fn sort_key(&self) -> (usize, Vec<LiteralState>) {
-        (self.literal_count(), self.literals.clone())
+    pub(super) fn sort_key(&self) -> (usize, &[LiteralState]) {
+        (self.literal_count(), &self.literals)
     }
 
     pub(super) fn specified_indices(&self) -> impl Iterator<Item = usize> + '_ {
@@ -206,30 +203,30 @@ pub(super) fn absorb_indexed(cubes: Vec<IndexedCube>) -> Vec<IndexedCube> {
         reduced.push(cube);
     }
 
-    reduced.sort_by_cached_key(IndexedCube::sort_key);
+    reduced.sort_by(|lhs, rhs| lhs.sort_key().cmp(&rhs.sort_key()));
     reduced.dedup();
     reduced
 }
 
-pub(super) fn cover_cost(
-    product: &BTreeSet<usize>,
+pub(super) fn cover_cost<'a>(
+    product: &'a BTreeSet<usize>,
     prime_implicants: &[IndexedCube],
-) -> (usize, usize, Vec<usize>) {
+) -> (usize, usize, &'a BTreeSet<usize>) {
     (
         product
             .iter()
             .map(|index| prime_implicants[*index].literal_count())
             .sum(),
         product.len(),
-        product.iter().copied().collect(),
+        product,
     )
 }
 
-pub(super) fn indexed_cover_cost(cubes: &[IndexedCube]) -> (usize, usize, Vec<Vec<LiteralState>>) {
+pub(super) fn indexed_cover_cost(cubes: &[IndexedCube]) -> (usize, usize, &[IndexedCube]) {
     (
         cubes.len(),
         cubes.iter().map(IndexedCube::literal_count).sum(),
-        cubes.iter().map(|cube| cube.literals.clone()).collect(),
+        cubes,
     )
 }
 

@@ -128,13 +128,14 @@ impl OperandStack {
         if self.slot_count < operation.consumed_slots() {
             return Err(FrameError::StackUnderflow);
         }
-        let categories = self
-            .values
-            .iter()
-            .map(|value| value.category)
-            .collect::<Vec<_>>();
+        // Every form inspects at most four operands at the top of the stack.
+        let mut categories = [Category1; 4];
+        let tail = &self.values[self.values.len().saturating_sub(categories.len())..];
+        for (category, value) in categories.iter_mut().zip(tail) {
+            *category = value.category;
+        }
         let (input_len, output_indices) = operation
-            .matching_form(&categories)
+            .matching_form(&categories[..tail.len()])
             .ok_or(FrameError::InvalidSlotLayout)?;
         let input_start = self.values.len() - input_len;
         let replaced = &self.values[input_start..];
@@ -147,12 +148,13 @@ impl OperandStack {
             return Err(FrameError::StackOverflow);
         }
 
-        let output = output_indices
-            .iter()
-            .map(|&index| replaced[index])
-            .collect::<Vec<_>>();
+        let mut input = [replaced[0]; 4];
+        for (slot, value) in input.iter_mut().zip(replaced) {
+            *slot = *value;
+        }
         self.values.truncate(input_start);
-        self.values.extend(output);
+        self.values
+            .extend(output_indices.iter().map(|&index| input[index]));
         self.slot_count = resulting_slots;
         Ok(())
     }
@@ -172,11 +174,11 @@ impl OperandStack {
 
     pub(super) fn merge_from_with(
         &mut self,
-        other: Self,
+        other: &Self,
         mut merge_values: impl FnMut(usize, &mut ValueId, ValueId),
     ) {
         let mut slot = 0;
-        for (lhs, rhs) in self.values.iter_mut().zip(other.values) {
+        for (lhs, rhs) in self.values.iter_mut().zip(&other.values) {
             slot += lhs.category.slot_count() - 1;
             merge_values(slot, &mut lhs.value, rhs.value);
             slot += 1;
@@ -277,7 +279,7 @@ mod tests {
         #[test]
         fn an_operation_moves_the_documented_depth(
             op in any::<StackOperation>(),
-            items in prop::collection::vec(any::<FrameValue>(), 0..6),
+            items in prop::collection::vec(any::<FrameValue>(), 0..32),
             extra_slots in 0..=4_usize,
         ) {
             let mut stack = stack_with(&items, extra_slots);

@@ -53,15 +53,15 @@ impl Frame {
 
     pub(super) fn merge_from_with(
         &mut self,
-        other: Self,
+        other: &Self,
         mut merge_values: impl FnMut(Position, &mut ValueId, ValueId),
     ) -> Result<(), FrameError> {
-        self.ensure_compatible_shape(&other)?;
+        self.ensure_compatible_shape(other)?;
         self.locals
-            .merge_from_with(other.locals, |index, lhs, rhs| {
+            .merge_from_with(&other.locals, |index, lhs, rhs| {
                 merge_values(Position::Local(index), lhs, rhs);
             });
-        self.stack.merge_from_with(other.stack, |index, lhs, rhs| {
+        self.stack.merge_from_with(&other.stack, |index, lhs, rhs| {
             merge_values(Position::Stack(index), lhs, rhs);
         });
         Ok(())

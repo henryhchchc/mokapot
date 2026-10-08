@@ -19,7 +19,7 @@ where
         .iter()
         .flat_map(|cube| IndexedCube::from_cube(cube, atoms).expand_minterms())
         .collect::<Vec<_>>();
-    on_set.sort_by_cached_key(IndexedCube::sort_key);
+    on_set.sort_by(|lhs, rhs| lhs.sort_key().cmp(&rhs.sort_key()));
     on_set.dedup();
     let prime_implicants = prime_implicants(on_set.clone());
     let selected = minimum_cover(&prime_implicants, &on_set);
@@ -59,7 +59,7 @@ fn prime_implicants(on_set: Vec<IndexedCube>) -> Vec<IndexedCube> {
         current = absorb_indexed(next);
     }
 
-    prime_implicants.sort_by_cached_key(IndexedCube::sort_key);
+    prime_implicants.sort_by(|lhs, rhs| lhs.sort_key().cmp(&rhs.sort_key()));
     prime_implicants.dedup();
     prime_implicants
 }
@@ -114,7 +114,9 @@ fn minimum_cover(prime_implicants: &[IndexedCube], on_set: &[IndexedCube]) -> BT
 
     let best = products
         .into_iter()
-        .min_by_key(|product| cover_cost(product, prime_implicants))
+        .min_by(|lhs, rhs| {
+            cover_cost(lhs, prime_implicants).cmp(&cover_cost(rhs, prime_implicants))
+        })
         .unwrap_or_default();
     selected.extend(best);
     selected
@@ -126,7 +128,9 @@ fn reduce_products(
 ) -> Vec<BTreeSet<usize>> {
     products
         .into_iter()
-        .sorted_by_key(|product| cover_cost(product, prime_implicants))
+        .sorted_by(|lhs, rhs| {
+            cover_cost(lhs, prime_implicants).cmp(&cover_cost(rhs, prime_implicants))
+        })
         .fold(Vec::new(), |mut reduced, product| {
             if reduced.iter().any(|existing| existing.is_subset(&product)) {
                 reduced

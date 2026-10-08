@@ -19,39 +19,48 @@ pub(super) struct ExitState<'instruction> {
     instruction: &'instruction Instruction,
     pc: ProgramCounter,
     /// The frame before the final instruction runs; handler frames derive from it.
-    pre_final_frame: Frame,
+    pre_final_frame: Option<Frame>,
     frame: Frame,
-    operations: Vec<(ProgramCounter, Operation)>,
 }
 
 impl<'instruction> ExitState<'instruction> {
-    /// Snapshots `frame` into the pre-final frame before the exit runs.
+    /// Snapshots the pre-final frame only when an exception arm enters a handler.
     pub(super) fn new(
         instruction: &'instruction Instruction,
         pc: ProgramCounter,
         frame: Frame,
-        operations: Vec<(ProgramCounter, Operation)>,
+        exit: &BlockExit<BlockId>,
     ) -> Self {
+        let exception_arms = match exit {
+            BlockExit::Continue { exception_arms, .. }
+            | BlockExit::Return { exception_arms }
+            | BlockExit::Throw { exception_arms } => exception_arms.as_slice(),
+            BlockExit::Goto { .. } | BlockExit::Branch { .. } | BlockExit::Switch { .. } => &[],
+        };
+        let pre_final_frame = exception_arms
+            .iter()
+            .any(|arm| matches!(arm.target, ExceptionTarget::Handler(_)))
+            .then(|| frame.clone());
         Self {
             instruction,
             pc,
-            pre_final_frame: frame.clone(),
+            pre_final_frame,
             frame,
-            operations,
         }
     }
 
     /// Interprets the block exit, producing the block's terminator.
     pub(super) fn terminate(
-        &mut self,
+        self,
         values: &mut ValueContext,
         exit: BlockExit<BlockId>,
+        operations: &mut Vec<(ProgramCounter, Operation)>,
     ) -> Result<FrameTerminator, FrameError> {
         match exit {
             BlockExit::Continue {
                 next,
                 exception_arms,
-            } => self.terminate_continue(values, next, exception_arms),
+            } => self.terminate_continue(values, next, exception_arms, operations),
             BlockExit::Goto { target } => Ok(self.terminate_goto(target)),
             BlockExit::Branch { taken, otherwise } => self.terminate_branch(taken, otherwise),
             BlockExit::Switch { cases, default } => self.terminate_switch(cases, default),
@@ -60,34 +69,31 @@ impl<'instruction> ExitState<'instruction> {
         }
     }
 
-    /// Consumes the state, returning the operations lifted up to the exit.
-    pub(super) fn into_operations(self) -> Vec<(ProgramCounter, Operation)> {
-        self.operations
-    }
-
     /// Interprets a continuation, whose final operation is ordinary or fallible.
     fn terminate_continue(
-        &mut self,
+        mut self,
         values: &mut ValueContext,
         next: BlockId,
         exception_arms: Vec<ExceptionArm<BlockId>>,
+        operations: &mut Vec<(ProgramCounter, Operation)>,
     ) -> Result<FrameTerminator, FrameError> {
         let operation =
             lifting::lift_instruction(values, self.instruction, self.pc, &mut self.frame)?;
+        let has_exceptions = !exception_arms.is_empty();
+        let exceptional = self.exception_arms(values, exception_arms)?;
         let normal = FrameArm::block(
             ArmKey::Continue,
             next,
             ControlTransfer::Unconditional,
-            self.frame.clone(),
+            self.frame,
         );
-        if exception_arms.is_empty() {
+        if !has_exceptions {
             if let Some(operation) = operation {
-                self.operations.push((self.pc, operation));
+                operations.push((self.pc, operation));
             }
             return Ok(FrameTerminator::Goto { target: normal });
         }
         let operation = operation.expect("a fallible instruction lifts an operation");
-        let exceptional = self.exception_arms(values, exception_arms)?;
         Ok(FrameTerminator::Try {
             operation,
             normal,
@@ -96,38 +102,34 @@ impl<'instruction> ExitState<'instruction> {
     }
 
     /// Interprets a goto, which carries the frame unchanged.
-    fn terminate_goto(&self, target: BlockId) -> FrameTerminator {
+    fn terminate_goto(self, target: BlockId) -> FrameTerminator {
         FrameTerminator::Goto {
             target: FrameArm::block(
                 ArmKey::Unconditional,
                 target,
                 ControlTransfer::Unconditional,
-                self.frame.clone(),
+                self.frame,
             ),
         }
     }
 
     /// Interprets a two-way branch, whose guard is read from the final instruction.
     fn terminate_branch(
-        &mut self,
+        mut self,
         taken: BlockId,
         otherwise: BlockId,
     ) -> Result<FrameTerminator, FrameError> {
         let (taken_transfer, otherwise_transfer) =
             effects::branch_transfers(self.instruction, &mut self.frame)?;
         let taken = FrameArm::block(ArmKey::Taken, taken, taken_transfer, self.frame.clone());
-        let otherwise = FrameArm::block(
-            ArmKey::Otherwise,
-            otherwise,
-            otherwise_transfer,
-            self.frame.clone(),
-        );
+        let otherwise =
+            FrameArm::block(ArmKey::Otherwise, otherwise, otherwise_transfer, self.frame);
         Ok(FrameTerminator::Branch { taken, otherwise })
     }
 
     /// Interprets a switch, whose selector is popped and matched by the final instruction.
     fn terminate_switch(
-        &mut self,
+        mut self,
         cases: BTreeMap<i32, BlockId>,
         default: BlockId,
     ) -> Result<FrameTerminator, FrameError> {
@@ -137,7 +139,7 @@ impl<'instruction> ExitState<'instruction> {
                 ArmKey::Default,
                 default,
                 ControlTransfer::Unconditional,
-                self.frame.clone(),
+                self.frame,
             );
             return Ok(FrameTerminator::Goto { target });
         }
@@ -149,18 +151,13 @@ impl<'instruction> ExitState<'instruction> {
                 FrameArm::block(ArmKey::Case(case), target, transfer, self.frame.clone())
             })
             .collect();
-        let default = FrameArm::block(
-            ArmKey::Default,
-            default,
-            default_transfer,
-            self.frame.clone(),
-        );
+        let default = FrameArm::block(ArmKey::Default, default, default_transfer, self.frame);
         Ok(FrameTerminator::Switch { cases, default })
     }
 
     /// Interprets a return, which may fail while exiting.
     fn terminate_return(
-        &mut self,
+        mut self,
         values: &mut ValueContext,
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, FrameError> {
@@ -171,7 +168,7 @@ impl<'instruction> ExitState<'instruction> {
 
     /// Interprets a throw, which delivers along its ordered exception arms.
     fn terminate_throw(
-        &mut self,
+        mut self,
         values: &mut ValueContext,
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, FrameError> {
@@ -194,7 +191,11 @@ impl<'instruction> ExitState<'instruction> {
                 match exception_arm.target {
                     ExceptionTarget::Handler(target) => {
                         let caught = values.caught_exception(target);
-                        let frame = self.pre_final_frame.exception_handler_frame(caught)?;
+                        let frame = self
+                            .pre_final_frame
+                            .as_ref()
+                            .expect("handler arms have a pre-final snapshot")
+                            .exception_handler_frame(caught)?;
                         let transfer = ControlTransfer::Exception(exception_arm.catch_type);
                         Ok(FrameArm::block(arm, target, transfer, frame))
                     }

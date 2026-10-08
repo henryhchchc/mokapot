@@ -50,7 +50,10 @@ impl ReferenceType {
 
 impl Descriptor for ReferenceType {
     fn descriptor(&self) -> String {
-        FieldType::from(self.clone()).descriptor()
+        match self {
+            Self::Class(class_name) => format!("L{class_name};"),
+            Self::Array(inner) => format!("[{}", inner.descriptor()),
+        }
     }
 }
 

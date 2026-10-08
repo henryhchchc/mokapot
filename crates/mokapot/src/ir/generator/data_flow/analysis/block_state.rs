@@ -109,7 +109,7 @@ impl BlockParameters {
         // even while every incoming frame transiently agrees; the `retain`
         // below drops the parameters a block does not end up needing.
         for incoming in frames {
-            merged.merge_from_with(incoming.clone(), |position, lhs, rhs| {
+            merged.merge_from_with(incoming, |position, lhs, rhs| {
                 self.join(position, lhs, rhs, values);
             })?;
         }

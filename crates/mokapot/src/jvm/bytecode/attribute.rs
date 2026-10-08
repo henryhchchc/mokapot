@@ -2,7 +2,6 @@ use crate::types::class_name::ClassName;
 use crate::types::package_name::PackageName;
 
 use std::{
-    collections::VecDeque,
     io::{self, Read},
     num::TryFromIntError,
 };
@@ -166,7 +165,7 @@ impl ClassElement for Attribute {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let reader = &mut VecDeque::from(info);
+        let reader = &mut info.as_slice();
 
         let result = match name {
             "ConstantValue" => {
@@ -188,8 +187,7 @@ impl ClassElement for Attribute {
             "Signature" => parse_string(reader, ctx).map(Self::Signature),
             "SourceFile" => parse_string(reader, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
-                let bytes = reader.bytes().try_collect()?;
-                Ok(Self::SourceDebugExtension(bytes))
+                return Ok(Self::SourceDebugExtension(info));
             }
             "LineNumberTable" => parse![u16; reader, ctx => LineNumberTable],
             "LocalVariableTable" => parse![u16; reader, ctx => LocalVariableTable],
@@ -237,11 +235,7 @@ impl ClassElement for Attribute {
                 let idx = reader.decode_value()?;
                 ctx.constant_pool.get_class_name(idx)
             } => PermittedSubclasses],
-            name => reader
-                .bytes()
-                .try_collect()
-                .map(|bytes| Attribute::Unrecognized(name.to_owned(), bytes))
-                .map_err(Into::into),
+            name => return Ok(Attribute::Unrecognized(name.to_owned(), info)),
         }?;
         if reader.is_empty() {
             Ok(result)
