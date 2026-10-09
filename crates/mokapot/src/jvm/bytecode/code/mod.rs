@@ -75,10 +75,10 @@ impl ClassElement for ExceptionTableEntry {
             catch_type_idx,
         } = raw;
         let catch_type_idx = catch_type_idx.get();
-        let start_pc = ProgramCounter::from(start_pc.get());
-        let end_pc = ProgramCounter::from(end_pc.get());
+        let start_pc = ProgramCounter::from(start_pc);
+        let end_pc = ProgramCounter::from(end_pc);
         let covered_pc = start_pc..end_pc;
-        let handler_pc = ProgramCounter::from(handler_pc.get());
+        let handler_pc = ProgramCounter::from(handler_pc);
         let catch_type = if catch_type_idx == 0 {
             None
         } else {

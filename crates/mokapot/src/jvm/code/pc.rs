@@ -1,5 +1,6 @@
 use derive_more::{Debug, Display, From, Into};
 use std::ops::Add;
+use zerocopy::byteorder::big_endian::U16;
 
 /// Denotes a program counter in an instruction sequence.
 ///
@@ -18,6 +19,12 @@ use std::ops::Add;
 #[debug("ProgramCounter(#{_0:04X})")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProgramCounter(u16);
+
+impl From<U16> for ProgramCounter {
+    fn from(value: U16) -> Self {
+        Self(value.get())
+    }
+}
 
 impl ProgramCounter {
     /// Creates a new program counter based on the given value with a given offset.
@@ -113,7 +120,8 @@ mod tests {
         #[test]
         fn i32_offset_matches_checked_arithmetic(value in any::<u16>(), offset in any::<i32>()) {
             let expected = i64::from(value) + i64::from(offset);
-            let actual = ProgramCounter::from(value) + offset;
+            let wire_value = U16::from_bytes(value.to_be_bytes());
+            let actual = ProgramCounter::from(wire_value) + offset;
 
             if let Ok(expected) = u16::try_from(expected) {
                 prop_assert_eq!(actual, Ok(ProgramCounter::from(expected)));

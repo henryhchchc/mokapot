@@ -6,7 +6,7 @@ use super::super::{ParseError, ParsingContext, class_element::ClassElement, raw_
 use crate::{
     jvm::{
         class::ConstantPool,
-        code::LocalVariableId,
+        code::{LocalVariableId, ProgramCounter},
         errors::{GenerationError, ParsingErrorContext},
     },
     types::{Descriptor, field_type::FieldType},
@@ -36,15 +36,17 @@ impl ClassElement for LocalVariableDescAttr {
             desc_or_signature_idx,
             index,
         } = raw;
+        let start_pc = ProgramCounter::from(start_pc);
+        let length: u16 = length.into();
 
         let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx)?;
+        let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
+        let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx.into())?;
         let field_type =
             FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
         let id = LocalVariableId {
             range: effective_range,
-            index,
+            index: index.into(),
         };
         Ok(LocalVariableDescAttr {
             id,
@@ -60,11 +62,11 @@ impl ClassElement for LocalVariableDescAttr {
         let desc_or_signature_idx = cp.put_string(self.field_type.descriptor())?;
         let index = self.id.index;
         Ok(Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
+            start_pc: u16::from(start_pc).into(),
+            length: length.into(),
+            name_index: name_index.into(),
+            desc_or_signature_idx: desc_or_signature_idx.into(),
+            index: index.into(),
         })
     }
 }
@@ -79,11 +81,19 @@ impl ClassElement for LocalVariableTypeAttr {
             desc_or_signature_idx,
             index,
         } = raw;
+        let start_pc = ProgramCounter::from(start_pc);
+        let length: u16 = length.into();
 
         let range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
-        let signature = ctx.constant_pool.get_str(desc_or_signature_idx)?.to_owned();
-        let id = LocalVariableId { range, index };
+        let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
+        let signature = ctx
+            .constant_pool
+            .get_str(desc_or_signature_idx.into())?
+            .to_owned();
+        let id = LocalVariableId {
+            range,
+            index: index.into(),
+        };
         Ok(LocalVariableTypeAttr {
             id,
             name,
@@ -98,11 +108,11 @@ impl ClassElement for LocalVariableTypeAttr {
         let desc_or_signature_idx = cp.put_string(self.signature)?;
         let index = self.id.index;
         Ok(Self::Raw {
-            start_pc,
-            length,
-            name_index,
-            desc_or_signature_idx,
-            index,
+            start_pc: u16::from(start_pc).into(),
+            length: length.into(),
+            name_index: name_index.into(),
+            desc_or_signature_idx: desc_or_signature_idx.into(),
+            index: index.into(),
         })
     }
 }

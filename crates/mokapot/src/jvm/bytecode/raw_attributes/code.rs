@@ -17,10 +17,7 @@ use super::super::{
     reader::{BytecodeReader, read_vec},
     write_length,
 };
-use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
-    jvm::code::ProgramCounter,
-};
+use crate::intrinsics::{enum_discriminant, see_jvm_spec};
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -313,36 +310,17 @@ impl ToBytecode for VerificationTypeInfo {
 }
 
 #[doc = see_jvm_spec!(4, 7, 13)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct LocalVariableInfo {
-    pub start_pc: ProgramCounter,
-    pub length: u16,
-    pub name_index: u16,
-    pub desc_or_signature_idx: u16,
-    pub index: u16,
+    pub start_pc: U16,
+    pub length: U16,
+    pub name_index: U16,
+    pub desc_or_signature_idx: U16,
+    pub index: U16,
 }
 
-impl FromBytecode for LocalVariableInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            start_pc: reader.decode_value()?,
-            length: reader.decode_value()?,
-            name_index: reader.decode_value()?,
-            desc_or_signature_idx: reader.decode_value()?,
-            index: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for LocalVariableInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
-        writer.write_all(&self.length.to_be_bytes())?;
-        writer.write_all(&self.name_index.to_be_bytes())?;
-        writer.write_all(&self.desc_or_signature_idx.to_be_bytes())?;
-        writer.write_all(&self.index.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for LocalVariableInfo {}
 
 #[cfg(test)]
 mod tests {
