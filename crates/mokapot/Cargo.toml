@@ -15,6 +15,11 @@ categories.workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[[bench]]
+harness = false
+name = "jdk-parsing"
+required-features = ["bench-internals"]
+
 [dependencies]
 bitflags = { workspace = true }
 cesu8 = { workspace = true }
@@ -27,7 +32,7 @@ petgraph = { workspace = true, optional = true }
 thiserror = { workspace = true }
 trait-gen = { workspace = true }
 walkdir = { workspace = true }
-zerocopy = { workspace = true }
+zerocopy = { workspace = true, features = ["simd"] }
 zip = { workspace = true, features = ["deflate"], optional = true }
 
 [dev-dependencies]
@@ -38,19 +43,14 @@ proptest = { workspace = true }
 proptest-derive = { workspace = true }
 walkdir = { workspace = true }
 
-[[bench]]
-name = "jdk-parsing"
-harness = false
-required-features = ["bench-internals"]
-
 [build-dependencies]
 anyhow.workspace = true
 glob = { workspace = true }
 
 [features]
+default = ["jar", "petgraph"]
 # Private parser adapters for the parsing benchmark target.
 bench-internals = []
-default = ["jar", "petgraph"]
 ## Enables loading classes from `.jar` files
 jar = ["dep:zip"]
 ## Enables graph analyses backed by `petgraph`.
