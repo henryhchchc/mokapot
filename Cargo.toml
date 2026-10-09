@@ -28,6 +28,7 @@ proptest-derive = "0.8"
 thiserror = "2.0"
 trait-gen = "2.0"
 walkdir = "2.5"
+zerocopy = { version = "0.8", features = ["derive"] }
 zip = { version = "8.6", default-features = false }
 
 [workspace.lints.clippy]

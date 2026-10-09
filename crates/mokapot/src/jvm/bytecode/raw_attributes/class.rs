@@ -5,6 +5,12 @@ use std::{
     result::Result,
 };
 
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
+};
+
+use super::super::fixed_layout::FixedLayout;
+
 use super::super::{
     FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo, reader::BytecodeReader,
     write_length,
@@ -12,56 +18,26 @@ use super::super::{
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 6)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct InnerClass {
-    pub info_index: u16,
-    pub outer_class_info_index: u16,
-    pub inner_name_index: u16,
-    pub access_flags: u16,
+    pub info_index: U16,
+    pub outer_class_info_index: U16,
+    pub inner_name_index: U16,
+    pub access_flags: U16,
 }
 
-impl FromBytecode for InnerClass {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            info_index: reader.decode_value()?,
-            outer_class_info_index: reader.decode_value()?,
-            inner_name_index: reader.decode_value()?,
-            access_flags: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for InnerClass {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.info_index.to_be_bytes())?;
-        writer.write_all(&self.outer_class_info_index.to_be_bytes())?;
-        writer.write_all(&self.inner_name_index.to_be_bytes())?;
-        writer.write_all(&self.access_flags.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for InnerClass {}
 
 #[doc = see_jvm_spec!(4, 7, 7)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct EnclosingMethod {
-    pub class_index: u16,
-    pub method_index: u16,
+    pub class_index: U16,
+    pub method_index: U16,
 }
 
-impl FromBytecode for EnclosingMethod {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            class_index: reader.decode_value()?,
-            method_index: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for EnclosingMethod {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.class_index.to_be_bytes())?;
-        writer.write_all(&self.method_index.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for EnclosingMethod {}
 
 #[doc = see_jvm_spec!(4, 7, 23)]
 pub struct BootstrapMethod {
@@ -95,27 +71,14 @@ impl ToBytecode for BootstrapMethod {
 }
 
 #[doc = see_jvm_spec!(4, 7, 24)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct ParameterInfo {
-    pub name_index: u16,
-    pub access_flags: u16,
+    pub name_index: U16,
+    pub access_flags: U16,
 }
 
-impl FromBytecode for ParameterInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            name_index: reader.decode_value()?,
-            access_flags: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for ParameterInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.name_index.to_be_bytes())?;
-        writer.write_all(&self.access_flags.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for ParameterInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 30)]
 pub struct RecordComponentInfo {

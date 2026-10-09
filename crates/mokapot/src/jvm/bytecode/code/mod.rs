@@ -74,10 +74,11 @@ impl ClassElement for ExceptionTableEntry {
             handler_pc,
             catch_type_idx,
         } = raw;
-        let start_pc = ProgramCounter::from(start_pc);
-        let end_pc = ProgramCounter::from(end_pc);
+        let catch_type_idx = catch_type_idx.get();
+        let start_pc = ProgramCounter::from(start_pc.get());
+        let end_pc = ProgramCounter::from(end_pc.get());
         let covered_pc = start_pc..end_pc;
-        let handler_pc = ProgramCounter::from(handler_pc);
+        let handler_pc = ProgramCounter::from(handler_pc.get());
         let catch_type = if catch_type_idx == 0 {
             None
         } else {
@@ -96,19 +97,19 @@ impl ClassElement for ExceptionTableEntry {
             handler_pc,
             catch_type,
         } = self;
-        let start_pc = covered_pc.start.into();
-        let end_pc = covered_pc.end.into();
-        let handler_pc = handler_pc.into();
+        let start_pc = u16::from(covered_pc.start);
+        let end_pc = u16::from(covered_pc.end);
+        let handler_pc = u16::from(handler_pc);
         let catch_type_idx = catch_type
             .as_ref()
             .map(|it| cp.put_class_name(it))
             .transpose()?
             .unwrap_or(0);
         Ok(Self::Raw {
-            start_pc,
-            end_pc,
-            handler_pc,
-            catch_type_idx,
+            start_pc: start_pc.into(),
+            end_pc: end_pc.into(),
+            handler_pc: handler_pc.into(),
+            catch_type_idx: catch_type_idx.into(),
         })
     }
 }
@@ -129,6 +130,8 @@ impl ClassElement for ParameterInfo {
             name_index,
             access_flags,
         } = raw;
+        let name_index = name_index.get();
+        let access_flags = access_flags.get();
         let name = if name_index == 0 {
             None
         } else {
@@ -147,8 +150,8 @@ impl ClassElement for ParameterInfo {
             .unwrap_or(0);
         let access_flags = self.access_flags.into_raw(cp)?;
         Ok(Self::Raw {
-            name_index,
-            access_flags,
+            name_index: name_index.into(),
+            access_flags: access_flags.into(),
         })
     }
 }
@@ -296,10 +299,10 @@ mod tests {
         };
         let entry = ExceptionTableEntry::from_raw(
             raw_attributes::ExceptionTableEntry {
-                start_pc: 1,
-                end_pc: 4,
-                handler_pc: 5,
-                catch_type_idx: 0,
+                start_pc: 1.into(),
+                end_pc: 4.into(),
+                handler_pc: 5.into(),
+                catch_type_idx: 0.into(),
             },
             &context,
         )
@@ -310,8 +313,8 @@ mod tests {
             ProgramCounter::from(1)..ProgramCounter::from(4)
         );
         let raw = entry.into_raw(&mut ConstantPool::new()).unwrap();
-        assert_eq!(raw.start_pc, 1);
-        assert_eq!(raw.end_pc, 4);
+        assert_eq!(raw.start_pc.get(), 1);
+        assert_eq!(raw.end_pc.get(), 4);
     }
 
     #[test]

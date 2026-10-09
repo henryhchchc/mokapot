@@ -27,6 +27,7 @@ petgraph = { workspace = true, optional = true }
 thiserror = { workspace = true }
 trait-gen = { workspace = true }
 walkdir = { workspace = true }
+zerocopy = { workspace = true }
 zip = { workspace = true, features = ["deflate"], optional = true }
 
 [dev-dependencies]

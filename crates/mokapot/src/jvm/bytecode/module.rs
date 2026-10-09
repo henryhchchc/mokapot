@@ -20,6 +20,9 @@ impl ClassElement for Require {
             flags,
             version_index,
         } = raw;
+        let requires_index = requires_index.get();
+        let flags = flags.get();
+        let version_index = version_index.get();
         let module = ctx.constant_pool.get_module_ref(requires_index)?;
         let flags = ClassElement::from_raw(flags, ctx)?;
         let version = if version_index > 0 {
@@ -43,9 +46,9 @@ impl ClassElement for Require {
             .transpose()?
             .unwrap_or(0);
         Ok(Self::Raw {
-            requires_index,
-            flags,
-            version_index,
+            requires_index: requires_index.into(),
+            flags: flags.into(),
+            version_index: version_index.into(),
         })
     }
 }

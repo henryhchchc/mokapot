@@ -5,6 +5,12 @@ use std::{
     result::Result,
 };
 
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
+};
+
+use super::super::fixed_layout::FixedLayout;
+
 use super::super::{
     FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
 };
@@ -90,30 +96,15 @@ impl ToBytecode for ModuleInfo {
 }
 
 #[doc = see_jvm_spec!(4, 7, 25)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct RequiresInfo {
-    pub requires_index: u16,
-    pub flags: u16,
-    pub version_index: u16,
+    pub requires_index: U16,
+    pub flags: U16,
+    pub version_index: U16,
 }
 
-impl FromBytecode for RequiresInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            requires_index: reader.decode_value()?,
-            flags: reader.decode_value()?,
-            version_index: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for RequiresInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.requires_index.to_be_bytes())?;
-        writer.write_all(&self.flags.to_be_bytes())?;
-        writer.write_all(&self.version_index.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for RequiresInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 25)]
 pub struct ExportsInfo {

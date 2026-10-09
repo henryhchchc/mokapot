@@ -5,6 +5,12 @@ use std::{
     result::Result,
 };
 
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
+};
+
+use super::super::fixed_layout::FixedLayout;
+
 use super::super::{
     FromBytecode, GenerationError, ToBytecode,
     attribute::AttributeInfo,
@@ -68,33 +74,16 @@ impl ToBytecode for Code {
 
 /// An entry in the exception table of a `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
 pub struct ExceptionTableEntry {
-    pub start_pc: u16,
-    pub end_pc: u16,
-    pub handler_pc: u16,
-    pub catch_type_idx: u16,
+    pub start_pc: U16,
+    pub end_pc: U16,
+    pub handler_pc: U16,
+    pub catch_type_idx: U16,
 }
 
-impl FromBytecode for ExceptionTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            start_pc: reader.decode_value()?,
-            end_pc: reader.decode_value()?,
-            handler_pc: reader.decode_value()?,
-            catch_type_idx: reader.decode_value()?,
-        })
-    }
-}
-
-impl ToBytecode for ExceptionTableEntry {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.start_pc.to_be_bytes())?;
-        writer.write_all(&self.end_pc.to_be_bytes())?;
-        writer.write_all(&self.handler_pc.to_be_bytes())?;
-        writer.write_all(&self.catch_type_idx.to_be_bytes())?;
-        Ok(())
-    }
-}
+impl FixedLayout for ExceptionTableEntry {}
 
 #[doc = see_jvm_spec!(4, 7, 4)]
 pub enum StackMapFrameInfo {

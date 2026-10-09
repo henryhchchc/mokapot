@@ -9,6 +9,7 @@ pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;
 mod field_info;
+mod fixed_layout;
 mod method_info;
 mod module;
 mod raw_attributes;

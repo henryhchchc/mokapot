@@ -475,6 +475,7 @@ dependencies = [
  "thiserror",
  "trait-gen",
  "walkdir",
+ "zerocopy",
  "zip",
 ]
 

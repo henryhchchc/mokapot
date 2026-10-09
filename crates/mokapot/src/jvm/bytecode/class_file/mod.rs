@@ -300,6 +300,10 @@ impl ClassElement for InnerClassInfo {
             inner_name_index,
             access_flags,
         } = raw;
+        let info_index = info_index.get();
+        let outer_class_info_index = outer_class_info_index.get();
+        let inner_name_index = inner_name_index.get();
+        let access_flags = access_flags.get();
         let inner_class = ctx.constant_pool.get_class_name(info_index)?;
         let outer_class = if outer_class_info_index == 0 {
             None
@@ -337,10 +341,10 @@ impl ClassElement for InnerClassInfo {
             .unwrap_or(0);
         let access_flags = self.access_flags.into_raw(cp)?;
         Ok(Self::Raw {
-            info_index,
-            outer_class_info_index,
-            inner_name_index,
-            access_flags,
+            info_index: info_index.into(),
+            outer_class_info_index: outer_class_info_index.into(),
+            inner_name_index: inner_name_index.into(),
+            access_flags: access_flags.into(),
         })
     }
 }
@@ -419,6 +423,8 @@ impl ClassElement for EnclosingMethod {
             class_index,
             method_index,
         } = raw;
+        let class_index = class_index.get();
+        let method_index = method_index.get();
         let class = ctx.constant_pool.get_class_name(class_index)?;
         let method_name_and_desc = if method_index > 0 {
             let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
@@ -441,8 +447,8 @@ impl ClassElement for EnclosingMethod {
             .unwrap_or(0);
 
         Ok(Self::Raw {
-            class_index,
-            method_index,
+            class_index: class_index.into(),
+            method_index: method_index.into(),
         })
     }
 }
