@@ -31,16 +31,24 @@ zip = { workspace = true, features = ["deflate"], optional = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }
+divan.workspace = true
 mokapot = { path = ".", features = ["unstable"] }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 walkdir = { workspace = true }
+
+[[bench]]
+name = "jdk-parsing"
+harness = false
+required-features = ["bench-internals"]
 
 [build-dependencies]
 anyhow.workspace = true
 glob = { workspace = true }
 
 [features]
+# Private parser adapters for the parsing benchmark target.
+bench-internals = []
 default = ["jar", "petgraph"]
 ## Enables loading classes from `.jar` files
 jar = ["dep:zip"]

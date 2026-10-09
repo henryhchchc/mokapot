@@ -2,6 +2,9 @@
 mod annotation;
 mod attribute;
 pub(crate) use attribute::Attribute;
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod benchmark_support;
 pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;

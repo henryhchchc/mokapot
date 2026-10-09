@@ -40,6 +40,10 @@ JDK-wide ignored tests require extracted JDK classes:
 - `export JDK_CLASSES=/path/to/jdk_classes`
 - `MOKAPOT_SKIP_JAVA_TESTS=1 cargo nextest run --cargo-profile=jdk-smoke --all-features --test jdk_classes --run-ignored=all`
 
+## Documents
+
+Markdown documents should be formatted with `rumdl`.
+
 ## Commit & Pull Request Guidelines
 
 Use Conventional Commits with a scope that matches the top-level module or area.
