@@ -175,7 +175,7 @@ mod tests {
             instance in any::<bool>(),
         ) {
             let descriptor = MethodDescriptor {
-                parameters_types: parameter_types,
+                parameters_types: parameter_types.into_boxed_slice(),
                 return_type: ReturnType::Void,
             };
             let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());

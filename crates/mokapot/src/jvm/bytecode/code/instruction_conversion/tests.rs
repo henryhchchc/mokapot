@@ -104,14 +104,20 @@ fn invokeinterface_uses_interface_method_refs() {
 #[test]
 fn invokeinterface_rejects_method_refs() {
     let mut pool = RawConstantPool::new();
-    let class_name_index = pool.put_entry(RawEntry::Utf8(b"a/b/I".to_vec())).unwrap();
+    let class_name_index = pool
+        .put_entry(RawEntry::Utf8(b"a/b/I".as_slice().into()))
+        .unwrap();
     let class_index = pool
         .put_entry(RawEntry::Class {
             name_index: class_name_index.into(),
         })
         .unwrap();
-    let name_index = pool.put_entry(RawEntry::Utf8(b"m".to_vec())).unwrap();
-    let descriptor_index = pool.put_entry(RawEntry::Utf8(b"()V".to_vec())).unwrap();
+    let name_index = pool
+        .put_entry(RawEntry::Utf8(b"m".as_slice().into()))
+        .unwrap();
+    let descriptor_index = pool
+        .put_entry(RawEntry::Utf8(b"()V".as_slice().into()))
+        .unwrap();
     let name_and_type_index = pool
         .put_entry(RawEntry::NameAndType {
             name_index: name_index.into(),

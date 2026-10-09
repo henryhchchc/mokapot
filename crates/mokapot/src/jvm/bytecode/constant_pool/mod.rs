@@ -22,7 +22,7 @@ use zerocopy::byteorder::big_endian::{F32, F64, I32, I64, U16};
 /// The indexed, unresolved representation of a JVM constant pool.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawConstantPool {
-    pub(crate) inner: PoolStorage<RawEntry>,
+    pub(crate) inner: PoolStorage<Vec<Slot<RawEntry>>>,
 }
 
 impl RawConstantPool {
@@ -301,8 +301,10 @@ impl RawConstantPool {
     }
 
     pub(crate) fn put_java_string(&mut self, value: JavaString) -> Result<u16, GenerationError> {
-        self.put_entry_dedup(RawEntry::Utf8(value.into_modified_utf8()))
-            .map_err(Into::into)
+        self.put_entry_dedup(RawEntry::Utf8(
+            value.into_modified_utf8().into_boxed_slice(),
+        ))
+        .map_err(Into::into)
     }
 }
 
@@ -338,7 +340,7 @@ pub struct Overflow(pub RawEntry);
 pub enum RawEntry {
     /// A UTF-8 string.
     #[doc = see_jvm_spec!(4, 4, 7)]
-    Utf8(Vec<u8>) = 1,
+    Utf8(Box<[u8]>) = 1,
     /// An integer.
     #[doc = see_jvm_spec!(4, 4, 4)]
     Integer(I32) = 3,
@@ -532,7 +534,10 @@ mod tests {
                 },
                 &[15, 6, 0x12, 0x34],
             ),
-            (RawEntry::Utf8(vec![0xc0, 0x80]), &[1, 0, 2, 0xc0, 0x80]),
+            (
+                RawEntry::Utf8(Box::new([0xc0, 0x80])),
+                &[1, 0, 2, 0xc0, 0x80],
+            ),
         ];
         for (entry, bytes) in cases {
             let mut reader = *bytes;

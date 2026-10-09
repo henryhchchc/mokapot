@@ -43,7 +43,7 @@ pub struct MethodDescriptor {
     /// The types of the method parameters in order of declaration.
     /// For instance, for a method `foo(int x, String y)`, this would contain
     /// `[FieldType::Int, FieldType::Object("java/lang/String")]`.
-    pub parameters_types: Vec<FieldType>,
+    pub parameters_types: Box<[FieldType]>,
     /// The return type of the method, which can be either a specific type or void.
     pub return_type: ReturnType,
 }
@@ -131,7 +131,7 @@ impl FromStr for MethodDescriptor {
 /// Consumes the leading `(` from `input`, then extracts each parameter type
 /// descriptor until `)` is reached. On success, `input` is advanced past the
 /// closing `)`.
-fn parse_params(input: &mut &str) -> Result<Vec<FieldType>, InvalidDescriptor> {
+fn parse_params(input: &mut &str) -> Result<Box<[FieldType]>, InvalidDescriptor> {
     let mut rest = input.strip_prefix('(').ok_or(InvalidDescriptor)?;
 
     let parameters_types = std::iter::from_fn(|| {

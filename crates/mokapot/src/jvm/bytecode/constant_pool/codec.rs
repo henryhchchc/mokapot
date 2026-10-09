@@ -72,7 +72,7 @@ impl RawEntry {
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let length: u16 = reader.decode_value()?;
         let bytes = read_vec(reader, length.into())?;
-        Ok(Self::Utf8(bytes))
+        Ok(Self::Utf8(bytes.into_boxed_slice()))
     }
 }
 

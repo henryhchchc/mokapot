@@ -20,7 +20,7 @@ use crate::{
 /// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstantPool {
-    inner: PoolStorage<Entry>,
+    inner: PoolStorage<Box<[Slot<Entry>]>>,
 }
 
 /// A resolved constant-pool entry. Its original tag is retained.
@@ -155,7 +155,7 @@ impl ConstantPool {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            inner: PoolStorage::with_capacity(1),
+            inner: PoolStorage::with_padding(1),
         }
     }
 
@@ -182,10 +182,10 @@ impl ConstantPool {
         for tier in 0..4 {
             for (index, entry) in pending.iter_mut().enumerate() {
                 if let Some(raw) = entry.take_if(|entry| entry.resolution_tier() == tier) {
-                    pool.inner.as_mut_slice()[index] = Slot::Entry(
-                        pool.resolve_entry(raw)
-                            .context(format!("Invalid constant pool entry at index {index}"))?,
-                    );
+                    pool.inner.as_mut_slice()[index] =
+                        Slot::Entry(pool.resolve_entry(raw).with_context(|error| {
+                            format!("Invalid constant pool entry at index {index}: {error}")
+                        })?);
                 }
             }
         }
@@ -359,7 +359,7 @@ impl ConstantPool {
 
     fn resolve_entry(&self, raw: RawEntry) -> Result<Entry, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes)),
+            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes.into_vec())),
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
@@ -678,9 +678,9 @@ mod tests {
                 name_index: 6.into(),
                 descriptor_index: 7.into(),
             },
-            RawEntry::Utf8(b"a/b/C".to_vec()),
-            RawEntry::Utf8(b"m".to_vec()),
-            RawEntry::Utf8(b"(I)V".to_vec()),
+            RawEntry::Utf8(b"a/b/C".as_slice().into()),
+            RawEntry::Utf8(b"m".as_slice().into()),
+            RawEntry::Utf8(b"(I)V".as_slice().into()),
             RawEntry::Long(42.into()),
             RawEntry::Dynamic {
                 bootstrap_method_attr_index: 3.into(),
@@ -694,7 +694,7 @@ mod tests {
                 name_index: 6.into(),
                 descriptor_index: 13.into(),
             },
-            RawEntry::Utf8(b"I".to_vec()),
+            RawEntry::Utf8(b"I".as_slice().into()),
         ] {
             raw.put_entry(entry).unwrap();
         }
@@ -751,7 +751,7 @@ mod tests {
         ] {
             let mut raw = RawConstantPool::new();
             for entry in [
-                RawEntry::Utf8(b"I".to_vec()),
+                RawEntry::Utf8(b"I".as_slice().into()),
                 RawEntry::Long(42.into()),
                 entry,
             ] {
@@ -776,7 +776,9 @@ mod tests {
             (vec![0xff], JavaString::InvalidUtf8(vec![0xff])),
         ] {
             let mut raw = RawConstantPool::new();
-            let index = raw.put_entry(RawEntry::Utf8(bytes)).unwrap();
+            let index = raw
+                .put_entry(RawEntry::Utf8(bytes.into_boxed_slice()))
+                .unwrap();
             let literal = raw
                 .put_entry(RawEntry::String {
                     string_index: index.into(),

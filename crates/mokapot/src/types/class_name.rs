@@ -1,7 +1,7 @@
 //! Class and interface names in JVM internal form.
 #![doc = see_jvm_spec!(4, 2, 1)]
 
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use derive_more::{AsRef, Display};
 
@@ -25,7 +25,7 @@ use crate::intrinsics::see_jvm_spec;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display)]
 #[as_ref(str)]
 #[display("{_0}")]
-pub struct ClassName(Box<str>);
+pub struct ClassName(Arc<str>);
 
 /// An invalid class or interface name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -41,7 +41,7 @@ impl ClassName {
     pub fn new(name: impl Into<Box<str>>) -> Result<Self, InvalidClassName> {
         let name: Box<str> = name.into();
         validate_internal_name(&name).map_err(InvalidClassName)?;
-        Ok(Self(name))
+        Ok(Self(name.into()))
     }
 
     /// Returns the name in JVM internal form.
@@ -87,7 +87,8 @@ impl FromStr for ClassName {
     type Err = InvalidClassName;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new(s)
+        validate_internal_name(s).map_err(InvalidClassName)?;
+        Ok(Self(Arc::from(s)))
     }
 }
 

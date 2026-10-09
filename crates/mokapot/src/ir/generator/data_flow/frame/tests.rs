@@ -12,7 +12,7 @@ use crate::{
 /// A local variable table of `slot_count` variables holding `items` from variable zero.
 fn locals_with(items: &[(ValueId, ValueCategory)], slot_count: u16) -> LocalVariables {
     let entry = MethodDescriptor {
-        parameters_types: Vec::new(),
+        parameters_types: Box::new([]),
         return_type: ReturnType::Void,
     };
     let mut locals = LocalVariables::for_method_entry(&entry, slot_count, None, &[])
@@ -162,7 +162,7 @@ proptest! {
 #[test]
 fn entry_frame_places_receiver_and_category_2_parameter() {
     let descriptor = MethodDescriptor {
-        parameters_types: vec![FieldType::Base(PrimitiveType::Long)],
+        parameters_types: Box::new([FieldType::Base(PrimitiveType::Long)]),
         return_type: ReturnType::Void,
     };
     let [receiver, parameter] = crate::ir::test::prelude::ids(0);

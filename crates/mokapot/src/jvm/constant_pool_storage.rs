@@ -27,36 +27,19 @@ impl<T> Slot<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PoolStorage<T> {
-    slots: Vec<Slot<T>>,
+pub(crate) struct PoolStorage<S> {
+    slots: S,
 }
 
-impl<T> PoolStorage<T> {
+impl<T> PoolStorage<Vec<Slot<T>>> {
     pub fn with_capacity(count: u16) -> Self {
         let mut slots = Vec::with_capacity(usize::from(count.max(1)));
         slots.push(Slot::Padding);
         Self { slots }
     }
 
-    pub fn with_padding(count: u16) -> Self {
-        let mut pool = Self::with_capacity(count);
-        pool.slots
-            .resize_with(usize::from(count.max(1)), || Slot::Padding);
-        pool
-    }
-
-    pub const fn as_slice(&self) -> &[Slot<T>] {
-        self.slots.as_slice()
-    }
-    pub const fn as_mut_slice(&mut self) -> &mut [Slot<T>] {
-        self.slots.as_mut_slice()
-    }
     pub fn into_slots(self) -> Vec<Slot<T>> {
         self.slots
-    }
-
-    pub fn get_entry(&self, index: u16) -> Option<&T> {
-        self.slots.get(usize::from(index)).and_then(Slot::as_ref)
     }
 
     #[allow(
@@ -65,6 +48,44 @@ impl<T> PoolStorage<T> {
     )]
     pub const fn count(&self) -> u16 {
         self.slots.len() as u16
+    }
+
+    pub fn push(&mut self, entry: T, padding: bool) -> Result<u16, T> {
+        if self.slots.len() + 1 + usize::from(padding) > usize::from(u16::MAX) {
+            return Err(entry);
+        }
+        let index = self.count();
+        self.slots.push(Slot::Entry(entry));
+        if padding {
+            self.slots.push(Slot::Padding);
+        }
+        Ok(index)
+    }
+}
+
+impl<T> PoolStorage<Box<[Slot<T>]>> {
+    pub fn with_padding(count: u16) -> Self {
+        Self {
+            slots: (0..count.max(1)).map(|_| Slot::Padding).collect(),
+        }
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "constructor bounds the slot count to u16"
+    )]
+    pub const fn count(&self) -> u16 {
+        self.slots.len() as u16
+    }
+}
+
+impl<T, S: std::ops::Deref<Target = [Slot<T>]>> PoolStorage<S> {
+    pub fn as_slice(&self) -> &[Slot<T>] {
+        &self.slots
+    }
+
+    pub fn get_entry(&self, index: u16) -> Option<&T> {
+        self.slots.get(usize::from(index)).and_then(Slot::as_ref)
     }
 
     #[allow(
@@ -78,16 +99,10 @@ impl<T> PoolStorage<T> {
                 .map(|entry| (index as u16, entry))
         })
     }
+}
 
-    pub fn push(&mut self, entry: T, padding: bool) -> Result<u16, T> {
-        if self.slots.len() + 1 + usize::from(padding) > usize::from(u16::MAX) {
-            return Err(entry);
-        }
-        let index = self.count();
-        self.slots.push(Slot::Entry(entry));
-        if padding {
-            self.slots.push(Slot::Padding);
-        }
-        Ok(index)
+impl<T, S: std::ops::DerefMut<Target = [Slot<T>]>> PoolStorage<S> {
+    pub fn as_mut_slice(&mut self) -> &mut [Slot<T>] {
+        &mut self.slots
     }
 }
