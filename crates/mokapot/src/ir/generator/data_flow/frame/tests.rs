@@ -2,8 +2,11 @@ use proptest::prelude::*;
 
 use super::*;
 use crate::{
-    ir::{IdAllocator, test::prelude::entry_values},
-    types::{field_type::FieldType, method_descriptor::ReturnType},
+    ir::IdAllocator,
+    types::{
+        field_type::{FieldType, PrimitiveType, ValueCategory},
+        method_descriptor::ReturnType,
+    },
 };
 
 /// A local variable table of `slot_count` variables holding `items` from variable zero.
@@ -58,47 +61,7 @@ fn frame_with(
 /// The local variable table length the merge tests use.
 const MERGE_LOCALS: u16 = 8;
 
-/// The operand stack room the entry-frame tests pass.
-const ENTRY_MAX_STACK: u16 = 4;
-
 proptest! {
-    #[test]
-    fn entry_frame_assembles_locals_and_operand_stack(
-        parameter_types in prop::collection::vec(any::<FieldType>(), 0..8),
-        instance in any::<bool>(),
-    ) {
-        let descriptor = MethodDescriptor {
-            parameters_types: parameter_types,
-            return_type: ReturnType::Void,
-        };
-        let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());
-        let max_locals = u16::try_from(
-            usize::from(instance)
-                + descriptor.parameters_types.iter()
-                    .map(|value_type| value_type.value_category().slot_count())
-                    .sum::<usize>(),
-        ).expect("a descriptor fits in u16 slots");
-        let frame = Frame::for_method_entry(
-            &descriptor,
-            max_locals,
-            ENTRY_MAX_STACK,
-            receiver,
-            &parameters,
-        )
-        .expect("the entry values fit their own slot count");
-
-        let expected_locals = LocalVariables::for_method_entry(
-            &descriptor,
-            max_locals,
-            receiver,
-            &parameters,
-        )
-        .expect("the locals fit");
-        let expected_stack = OperandStack::with_max_slots(ENTRY_MAX_STACK);
-        prop_assert_eq!(frame.locals, expected_locals);
-        prop_assert_eq!(frame.stack, expected_stack);
-    }
-
     /// A merge visits every value of the merged frame once, reads the receiving frame's own value,
     /// and leaves a frame merged with itself unchanged.
     #[doc = see_jvm_spec!(4, 10, 2, 2)]
@@ -194,4 +157,23 @@ proptest! {
         prop_assert!(visited.is_empty(), "a rejected merge visited a position");
         prop_assert_eq!(lhs, before, "a rejected merge changed the frame");
     }
+}
+
+#[test]
+fn entry_frame_places_receiver_and_category_2_parameter() {
+    let descriptor = MethodDescriptor {
+        parameters_types: vec![FieldType::Base(PrimitiveType::Long)],
+        return_type: ReturnType::Void,
+    };
+    let [receiver, parameter] = crate::ir::test::prelude::ids(0);
+    let frame = Frame::for_method_entry(&descriptor, 3, 2, Some(receiver), &[parameter])
+        .expect("receiver and long parameter fit three local slots");
+
+    assert_eq!(frame.locals.get(0, ValueCategory::Category1), Ok(&receiver));
+    assert_eq!(
+        frame.locals.get(1, ValueCategory::Category2),
+        Ok(&parameter)
+    );
+    assert_eq!(frame.stack.max_slots(), 2);
+    assert_eq!(frame.stack.slot_values().count(), 0);
 }

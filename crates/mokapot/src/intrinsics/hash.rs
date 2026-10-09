@@ -80,12 +80,12 @@ mod tests {
         hasher.finish()
     }
     use proptest::prelude::*;
-    use rand::seq::SliceRandom as _;
 
     proptest! {
         #[test]
         fn order_independent(
-            elements in prop::collection::vec(any::<i32>(), 0..100)
+            elements in prop::collection::vec(any::<i32>(), 0..100),
+            swaps in prop::collection::vec((0usize..100, 0usize..100), 0..100)
         ) {
             let hash1 = compute_unordered_hash(elements.iter());
 
@@ -100,7 +100,12 @@ mod tests {
             let hash3 = compute_unordered_hash(vec3.iter());
 
             let mut vec4 = elements.clone();
-            vec4.shuffle(&mut rand::rng());
+            for (left, right) in swaps {
+                let len = vec4.len();
+                if len > 0 {
+                    vec4.swap(left % len, right % len);
+                }
+            }
             let hash4 = compute_unordered_hash(vec4.iter());
 
             prop_assert_eq!(hash1, hash2);
@@ -127,19 +132,6 @@ mod tests {
         let hash_one = compute_unordered_hash([0].iter());
 
         assert_ne!(hash_empty, hash_one);
-    }
-
-    proptest! {
-        #[test]
-        fn same_elements_same_hash(element in any::<i32>(), count in 1usize..10) {
-            let vec1: Vec<_> = iter::repeat_n(element, count).collect();
-            let vec2: Vec<_> = iter::repeat_n(element, count).collect();
-
-            let hash1 = compute_unordered_hash(vec1.iter());
-            let hash2 = compute_unordered_hash(vec2.iter());
-
-            prop_assert_eq!(hash1, hash2);
-        }
     }
 
     #[test]

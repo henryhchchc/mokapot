@@ -217,14 +217,7 @@ fn visit_exception_successors(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
-    use crate::{
-        ir::{generator::control_flow, test::prelude::*},
-        jvm::code::Instruction,
-    };
-
-    use super::*;
+    use crate::{ir::test::prelude::*, jvm::code::Instruction};
 
     #[test]
     fn rejects_methods_without_bodies() {
@@ -232,39 +225,5 @@ mod tests {
         method.body = None;
         let error = super::build(&method).err().unwrap();
         assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);
-    }
-
-    #[test]
-    fn parallel_switch_edges_remain_distinct_arms() {
-        let switch = Instruction::LookupSwitch {
-            default: 8.into(),
-            match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
-        };
-        let method = method(
-            [
-                (0, Instruction::IConst0),
-                (1, Instruction::IStore1),
-                (2, Instruction::ILoad0),
-                (3, switch),
-                (8, Instruction::IConst1),
-                (9, Instruction::IStore1),
-                (10, Instruction::Goto(12.into())),
-                (12, Instruction::ILoad1),
-                (13, Instruction::IReturn),
-            ],
-            "(I)I",
-            vec![],
-        );
-        let cfg = control_flow::analyze(&method).unwrap();
-        let switch = cfg.block(cfg.entry_block());
-
-        assert_matches!(
-            switch,
-            CfgNode::Code {
-                exit: BlockExit::Switch { cases, .. },
-                ..
-            }
-            if cases.len() == 2 && cases[&1] == cases[&2]
-        );
     }
 }

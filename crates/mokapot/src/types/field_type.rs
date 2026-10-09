@@ -395,71 +395,43 @@ mod tests {
         }
 
         #[test]
-        fn primitive_array_names_and_descriptors(
-            ty in any::<PrimitiveType>(),
-            dim in any::<u8>(),
-        ) {
-            let array = FieldType::array_of(ty.into(), dim);
-            let brackets = "[]".repeat(usize::from(dim));
-            let expected_name = format!("{ty}{brackets}");
-            prop_assert_eq!(array.to_string(), expected_name.as_str());
-            prop_assert_eq!(array.jls_name(), expected_name);
-            prop_assert_eq!(
-                array.descriptor(),
-                format!("{}{}", "[".repeat(usize::from(dim)), ty.descriptor()),
-            );
-        }
-
-        #[test]
-        fn object_array_names_and_descriptors(
-            class_name in any::<ClassName>(),
-            dim in any::<u8>(),
-        ) {
-            let array = FieldType::array_of(class_name.clone().into(), dim);
-            let descriptor = format!("{}L{class_name};", "[".repeat(usize::from(dim)));
-            let brackets = "[]".repeat(usize::from(dim));
-            prop_assert_eq!(array.to_string(), format!("{class_name}{brackets}"));
-            prop_assert_eq!(
-                array.jls_name(),
-                format!("{}{brackets}", class_name.as_str().replace('/', ".")),
-            );
-            prop_assert_eq!(array.descriptor(), descriptor.as_str());
-            prop_assert_eq!(descriptor.parse(), Ok(array));
-        }
-
-        #[test]
-        fn round_trip_parses(field_type in any::<FieldType>()) {
-            let descriptor = field_type.descriptor();
-            prop_assert_eq!(descriptor.parse(), Ok(field_type));
-        }
-
-        #[test]
-        fn field_prefix_preserves_suffix(
-            field_type in any::<FieldType>(),
+        fn field_names_descriptors_and_prefixes(
+            base in prop_oneof![
+                any::<PrimitiveType>().prop_map(FieldType::Base),
+                any::<ClassName>().prop_map(FieldType::Object),
+            ],
+            dim in prop_oneof![Just(0_u8), Just(1_u8), 2..=u8::MAX],
             suffix in any::<String>(),
         ) {
-            let descriptor = format!("{}{suffix}", field_type.descriptor());
-            let mut input = descriptor.as_str();
+            let (base_descriptor, base_name, base_jls_name) = match &base {
+                FieldType::Base(ty) => (ty.descriptor().to_string(), ty.to_string(), ty.to_string()),
+                FieldType::Object(name) => (
+                    format!("L{name};"),
+                    name.to_string(),
+                    name.as_str().replace('/', "."),
+                ),
+                FieldType::Array(_) => unreachable!(),
+            };
+            let category = if dim == 0 && matches!(base, FieldType::Base(PrimitiveType::Long | PrimitiveType::Double)) {
+                ValueCategory::Category2
+            } else {
+                ValueCategory::Category1
+            };
+            let field_type = FieldType::array_of(base, dim);
+            prop_assert_eq!(field_type.value_category(), category);
+            let descriptor = format!("{}{base_descriptor}", "[".repeat(usize::from(dim)));
+            let brackets = "[]".repeat(usize::from(dim));
+            prop_assert_eq!(field_type.to_string(), format!("{base_name}{brackets}"));
+            prop_assert_eq!(field_type.jls_name(), format!("{base_jls_name}{brackets}"));
+            prop_assert_eq!(field_type.descriptor(), descriptor.as_str());
+            prop_assert_eq!(descriptor.parse::<FieldType>(), Ok(field_type.clone()));
+            let with_suffix = format!("{descriptor}{suffix}");
+            let mut input = with_suffix.as_str();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Ok(field_type));
             prop_assert_eq!(input, suffix.as_str());
             if !suffix.is_empty() {
-                prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
+                prop_assert_eq!(with_suffix.parse::<FieldType>(), Err(InvalidDescriptor));
             }
-        }
-
-        #[test]
-        fn array_construction_preserves_element(field_type in any::<FieldType>()) {
-            prop_assert_eq!(&FieldType::array_of(field_type.clone(), 0), &field_type);
-            let array = field_type.clone().into_array_type();
-            prop_assert_eq!(&array, &FieldType::Array(Box::new(field_type.clone())));
-            prop_assert_eq!(&FieldType::array_of(field_type, 1), &array);
-            prop_assert_eq!(array.value_category(), ValueCategory::Category1);
-        }
-
-        #[test]
-        fn objects_have_category_one(class_name in any::<ClassName>()) {
-            let object = FieldType::Object(class_name);
-            prop_assert_eq!(object.value_category(), ValueCategory::Category1);
         }
 
         #[test]

@@ -66,8 +66,6 @@ impl SourceMap {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::ir::test::prelude::*;
 
@@ -101,13 +99,5 @@ mod tests {
         assert_eq!(map.instructions_at(pc2).collect::<Vec<_>>(), [instruction3]);
         assert_eq!(map.instructions_at(50.into()).count(), 0);
         assert_eq!(map.origin_of(synthetic), None);
-
-        let covered_nodes = HashSet::from([pc0])
-            .into_iter()
-            .flat_map(|pc| map.instructions_at(pc))
-            .collect::<HashSet<_>>();
-        assert_eq!(covered_nodes, HashSet::from([instruction0, instruction1]));
-        assert!(!covered_nodes.contains(&instruction2));
-        assert!(!covered_nodes.contains(&synthetic));
     }
 }

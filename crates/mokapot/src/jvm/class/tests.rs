@@ -2,6 +2,27 @@ use proptest::prelude::*;
 
 use super::*;
 
+fn assert_version_matches_spec(major: u16, minor: u16) {
+    let valid = major == 45
+        || ((46..=MAX_MAJOR_VERSION).contains(&major)
+            && (minor == 0 || major >= 56 && minor == u16::MAX));
+    let expected = if valid {
+        Ok((major, minor, major >= 56 && minor == u16::MAX))
+    } else {
+        Err(crate::jvm::bytecode::ParseErrorKind::Malformed)
+    };
+    let actual = Version::from_versions(major, minor)
+        .map(|version| {
+            (
+                version.major(),
+                version.minor(),
+                version.is_preview_enabled(),
+            )
+        })
+        .map_err(|error| error.kind());
+    assert_eq!(actual, expected, "version {major}.{minor}");
+}
+
 #[test]
 fn class_reader_propagates_invalid_magic_as_io_error() {
     let error = Class::from_reader(&mut &[0, 0, 0, 0][..]).unwrap_err();
@@ -10,47 +31,24 @@ fn class_reader_propagates_invalid_magic_as_io_error() {
 
 proptest! {
     #[test]
-    fn jdk_1_1(minor in any::<u16>()) {
-        let class_version = Version::from_versions(45, minor).unwrap();
-        assert_eq!(45, class_version.major());
-        assert_eq!(minor, class_version.minor());
-    }
-
-    #[test]
-    fn jdk_1_x(major in 46u16..56) {
-        let class_version = Version::from_versions(major, 0).unwrap();
-        assert_eq!(major, class_version.major());
-        assert!(!class_version.is_preview_enabled());
-    }
-
-    #[test]
-    fn jdk_1_x_invalid(major in 46u16..56, minor in 1u16..) {
-        assert!(Version::from_versions(major, minor).is_err());
-    }
-
-    #[test]
-    fn newer_class_versions(
-        major in 56..=MAX_MAJOR_VERSION,
-        minor in prop_oneof![Just(0u16), Just(u16::MAX)],
+    fn class_version_acceptance_matches_spec(
+        (major, minor) in prop_oneof![
+            (Just(45), any::<u16>()),
+            (46..=MAX_MAJOR_VERSION, Just(0)),
+            (56..=MAX_MAJOR_VERSION, Just(u16::MAX)),
+            (any::<u16>(), any::<u16>()),
+        ]
     ) {
-        let class_version = Version::from_versions(major, minor).unwrap();
-        assert_eq!(major, class_version.major());
-        assert_eq!(class_version.is_preview_enabled(), class_version.minor() == u16::MAX);
+        assert_version_matches_spec(major, minor);
     }
+}
 
-    #[test]
-    fn too_low_class_version(major in 0u16..45) {
-        assert!(Version::from_versions(major, 0).is_err());
-    }
-
-    #[test]
-    fn too_high_class_version(major in (MAX_MAJOR_VERSION + 1)..=u16::MAX) {
-        assert!(Version::from_versions(major, 0).is_err());
-    }
-
-    #[test]
-    fn invalid_class_version(major in 46..=MAX_MAJOR_VERSION, minor in 1..u16::MAX) {
-        assert!(Version::from_versions(major, minor).is_err());
+#[test]
+fn class_version_boundaries_match_spec() {
+    for major in [44, 45, 46, 55, 56, MAX_MAJOR_VERSION, MAX_MAJOR_VERSION + 1] {
+        for minor in [0, 1, u16::MAX - 1, u16::MAX] {
+            assert_version_matches_spec(major, minor);
+        }
     }
 }
 

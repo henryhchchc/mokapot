@@ -1,5 +1,3 @@
-use proptest::prelude::*;
-
 use crate::{
     jvm::{
         Annotations, Class, Method, class,
@@ -117,8 +115,4 @@ where
         signature: None,
         other_attributes: vec![],
     }
-}
-pub(crate) fn arb_identifier() -> impl Strategy<Value = String> {
-    let arb_ident = prop::string::string_regex(r"[a-zA-Z][\w\$_]*").expect("The regex is invalid");
-    prop::collection::vec(arb_ident, 1..10).prop_map(|v| v.join("/"))
 }

@@ -34,7 +34,6 @@ clap = { workspace = true, features = ["derive"] }
 mokapot = { path = ".", features = ["unstable"] }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
-rand = { workspace = true }
 walkdir = { workspace = true }
 
 [build-dependencies]

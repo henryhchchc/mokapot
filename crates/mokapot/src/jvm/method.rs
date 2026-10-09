@@ -96,45 +96,30 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-    use crate::jvm::Annotations;
-    use crate::tests::arb_identifier;
+    use crate::jvm::code::Instruction;
 
-    fn empty_method(name: String) -> Method {
-        Method {
-            name,
-            access_flags: AccessFlags::PUBLIC,
-            descriptor: "()V".parse().unwrap(),
-            owner: "org/mokapot/Test".parse().unwrap(),
-            body: None,
-            exceptions: vec![],
-            annotations: Annotations::default(),
-            type_annotations: Annotations::default(),
-            parameter_annotations: Annotations::default(),
-            annotation_default: None,
-            parameters: vec![],
-            is_synthetic: false,
-            is_deprecated: false,
-            signature: None,
-            other_attributes: vec![],
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn not_a_constructor(name in arb_identifier()) {
-            prop_assume!(name != Method::CONSTRUCTOR_NAME);
-            let method = empty_method(name);
-            assert!(!method.is_constructor());
-        }
-
-        #[test]
-        fn not_a_static_init(name in arb_identifier()) {
-            prop_assume!(name != Method::CLASS_INITIALIZER_NAME);
-            let method = empty_method(name);
-            assert!(!method.is_static_initializer_block());
+    #[test]
+    fn special_method_checks_use_only_the_name() {
+        let mut method = crate::tests::method(
+            [(0, Instruction::Return)],
+            "()V",
+            vec![],
+            AccessFlags::PUBLIC,
+        );
+        for (name, constructor, initializer) in [
+            (Method::CONSTRUCTOR_NAME, true, false),
+            (Method::CLASS_INITIALIZER_NAME, false, true),
+            ("ordinary", false, false),
+        ] {
+            method.name = name.to_owned();
+            assert_eq!(
+                (
+                    method.is_constructor(),
+                    method.is_static_initializer_block()
+                ),
+                (constructor, initializer),
+            );
         }
     }
 }

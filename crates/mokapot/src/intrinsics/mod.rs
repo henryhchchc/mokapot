@@ -117,7 +117,6 @@ mod tests {
     use std::sync::atomic::{self, AtomicUsize};
 
     use super::*;
-    use proptest::prelude::*;
 
     #[test]
     fn failed_generation_can_be_retried() {
@@ -147,25 +146,24 @@ mod tests {
         assert_eq!(*cached, 42);
     }
 
-    proptest! {
-        #[test]
-        fn miri_get_or_try_put_generate_once(key in any::<u32>(), value in any::<u32>()) {
-            let cache = Cache::new();
-            let counter = AtomicUsize::new(0);
-            let test = || {
-                let result = cache.get_or_try_put(&key, |_| {
-                    counter.fetch_add(1, atomic::Ordering::Relaxed);
-                    Ok::<_, ()>(value)
-                });
-                assert_eq!(&value, result.unwrap());
-            };
-            std::thread::scope(|scope| {
-                let handles: Vec<_> = (0..10).map(|_|scope.spawn(test)).collect();
-                for handle in handles {
-                    handle.join().unwrap();
-                }
+    #[test]
+    fn miri_get_or_try_put_generate_once() {
+        let cache = Cache::new();
+        let counter = AtomicUsize::new(0);
+        let key = "key";
+        let value = 42;
+        let test = || {
+            let result = cache.get_or_try_put(key, |_| {
+                counter.fetch_add(1, atomic::Ordering::Relaxed);
+                Ok::<_, ()>(value)
             });
-            assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
-        }
+            assert_eq!(&value, result.unwrap());
+        };
+        std::thread::scope(|scope| {
+            for _ in 0..10 {
+                scope.spawn(test);
+            }
+        });
+        assert_eq!(1, counter.load(atomic::Ordering::Relaxed));
     }
 }

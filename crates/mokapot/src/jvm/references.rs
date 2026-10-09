@@ -66,33 +66,30 @@ pub struct ModuleRef {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-    use crate::types::class_name::ClassName;
 
-    proptest! {
-
-        #[test]
-        fn test_is_constructor(class_name in any::<ClassName>()) {
-            let method = MethodRef {
-                owner: ReferenceType::Class(class_name),
-                name: Method::CONSTRUCTOR_NAME.to_string(),
-                descriptor: "()V".parse().unwrap(),
-            };
-
-            assert!(method.is_constructor());
+    fn method_ref(name: &str, descriptor: &str) -> MethodRef {
+        MethodRef {
+            owner: ReferenceType::Class("org/mokapot/Test".parse().unwrap()),
+            name: name.to_owned(),
+            descriptor: descriptor.parse().unwrap(),
         }
+    }
 
-        #[test]
-        fn test_is_static_initializer_bolck(class_name in any::<ClassName>()) {
-            let method = MethodRef {
-                owner: ReferenceType::Class(class_name),
-                name: Method::CLASS_INITIALIZER_NAME.to_string(),
-                descriptor: "()V".parse().unwrap(),
-            };
-
-            assert!(method.is_static_initializer_block());
+    #[test]
+    fn special_method_reference_checks_include_descriptor() {
+        for (name, descriptor, constructor, initializer) in [
+            (Method::CONSTRUCTOR_NAME, "()V", true, false),
+            (Method::CONSTRUCTOR_NAME, "()I", false, false),
+            (Method::CONSTRUCTOR_NAME, "(I)V", true, false),
+            (Method::CLASS_INITIALIZER_NAME, "()V", false, true),
+            (Method::CLASS_INITIALIZER_NAME, "()I", false, false),
+            (Method::CLASS_INITIALIZER_NAME, "(I)V", false, false),
+            ("ordinary", "()V", false, false),
+        ] {
+            let method = method_ref(name, descriptor);
+            assert_eq!(method.is_constructor(), constructor);
+            assert_eq!(method.is_static_initializer_block(), initializer);
         }
     }
 }

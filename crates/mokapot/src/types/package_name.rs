@@ -99,14 +99,10 @@ mod tests {
 
     proptest! {
         #[test]
-        fn parsing_round_trip(name in any::<PackageName>()) {
-            prop_assert_eq!(name.to_string().parse::<PackageName>(), Ok(name));
-        }
-
-        #[test]
         fn jls_name_preserves_components(components in name_components()) {
             let name = PackageName::new(components.join("/")).unwrap();
             prop_assert_eq!(name.jls_name(), components.join("."));
+            prop_assert_eq!(name.to_string().parse::<PackageName>(), Ok(name));
         }
     }
 }

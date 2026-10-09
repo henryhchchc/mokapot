@@ -113,11 +113,6 @@ mod tests {
 
     proptest! {
         #[test]
-        fn parsing_round_trip(name in any::<ClassName>()) {
-            prop_assert_eq!(name.to_string().parse::<ClassName>(), Ok(name));
-        }
-
-        #[test]
         fn name_parts_preserve_components(components in name_components()) {
             let name = ClassName::new(components.join("/")).unwrap();
             let expected_package = (components.len() > 1)
@@ -126,6 +121,7 @@ mod tests {
             prop_assert_eq!(name.unqualified_name(), components.last().unwrap());
             prop_assert_eq!(name.package().map(|package| package.to_string()), expected_package);
             prop_assert_eq!(name.jls_name(), components.join("."));
+            prop_assert_eq!(name.to_string().parse::<ClassName>(), Ok(name));
         }
     }
 

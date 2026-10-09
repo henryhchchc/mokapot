@@ -29,16 +29,8 @@ fn switch_retains_parallel_successor_arms() {
         .successors()
         .map(Successor::block_target)
         .collect::<Vec<_>>();
-    // Parallel arms are retained: three arms, one target.
-    assert_eq!(targets.len(), 3);
-    assert!(targets.iter().all(|it| *it == targets[0]));
-    assert_eq!(
-        switch
-            .successors()
-            .filter_map(Successor::block_target)
-            .count(),
-        3
-    );
+    let target = targets[0].unwrap();
+    assert_eq!(targets, [Some(target); 3]);
 }
 
 #[test]
@@ -218,13 +210,4 @@ fn loop_header_takes_a_block_argument_from_its_back_edge() {
     )));
     let taken = header.terminator.successors().next().unwrap();
     assert_eq!(taken.transfer(), Some(&ControlTransfer::Conditional(guard)));
-}
-
-#[test]
-fn throw_is_a_source_backed_terminator() {
-    let body = [(0, Instruction::ALoad0), (1, Instruction::AThrow)];
-    let ir = lift(body, "(Ljava/lang/Throwable;)V", vec![]);
-    let terminator = &ir.block(ir.entry.block).unwrap().terminator;
-    assert_matches!(terminator, Terminator::Throw { .. });
-    assert_eq!(entry_origin(&ir), Some(1.into()));
 }

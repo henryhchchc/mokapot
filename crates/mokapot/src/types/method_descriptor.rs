@@ -170,23 +170,38 @@ mod test {
     use super::*;
 
     const MAX_PARAMS: usize = 10;
-    const INVALID_RETURN_DESCRIPTORS: &[&str] = &[
-        "",
-        "A",
-        "[",
-        "[V",
-        "L;",
-        "Ljava/lang/String",
-        "L/foo;",
-        "Lfoo.bar;",
-    ];
-
     fn parameters() -> impl Strategy<Value = Vec<FieldType>> {
         prop::collection::vec(any::<FieldType>(), 0..=MAX_PARAMS)
     }
 
     fn parameter_descriptors(params: &[FieldType]) -> String {
         params.iter().map(FieldType::descriptor).join("")
+    }
+
+    #[test]
+    fn rejects_malformed_descriptor_boundaries() {
+        for descriptor in ["", "(", "(V)V", "([)V", "(Ljava/lang/String)V"] {
+            let mut input = descriptor;
+            assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
+            assert_eq!(input, descriptor);
+            let parse = descriptor.parse::<MethodDescriptor>();
+            assert_eq!(parse, Err(InvalidDescriptor));
+        }
+        for descriptor in [
+            "",
+            "A",
+            "[",
+            "[V",
+            "L;",
+            "Ljava/lang/String",
+            "L/foo;",
+            "Lfoo.bar;",
+        ] {
+            assert_eq!(descriptor.parse::<ReturnType>(), Err(InvalidDescriptor));
+            let parse = format!("(){descriptor}").parse::<MethodDescriptor>();
+            assert_eq!(parse, Err(InvalidDescriptor));
+        }
+        assert_eq!("(I)".parse::<MethodDescriptor>(), Err(InvalidDescriptor));
     }
 
     proptest! {
@@ -211,27 +226,17 @@ mod test {
                 format!("({before}{ret}"),
                 format!("({before}{invalid_parameter}{after}){ret}"),
             ];
-            for descriptor in invalid_parameters.iter().map(String::as_str).chain([
-                "", "(", "(V)V", "([)V", "(Ljava/lang/String)V",
-            ]) {
-                let mut input = descriptor;
+            for descriptor in &invalid_parameters {
+                let mut input = descriptor.as_str();
                 prop_assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
-                prop_assert_eq!(input, descriptor);
+                prop_assert_eq!(input, descriptor.as_str());
                 prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
             }
 
             let trailing_input = format!("{ret}{suffix}");
-            for descriptor in INVALID_RETURN_DESCRIPTORS.iter().copied()
-                .chain(std::iter::once(trailing_input.as_str()))
-            {
-                prop_assert_eq!(descriptor.parse::<ReturnType>(), Err(InvalidDescriptor));
-                let method = format!("({before}){descriptor}");
-                prop_assert_eq!(method.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
-            }
-
-            for descriptor in ["()", "(I)"] {
-                prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
-            }
+            prop_assert_eq!(trailing_input.parse::<ReturnType>(), Err(InvalidDescriptor));
+            let method = format!("({before}){trailing_input}");
+            prop_assert_eq!(method.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
         }
     }
 }

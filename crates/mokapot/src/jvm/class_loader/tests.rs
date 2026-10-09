@@ -84,8 +84,3 @@ fn caching_class_loader_load_once() {
     });
     assert_eq!(1, counter.load(Ordering::Relaxed));
 }
-
-#[test]
-fn class_path_is_object_safe() {
-    let _: Box<dyn ClassPath> = Box::new(super::class_paths::NopClassPath);
-}

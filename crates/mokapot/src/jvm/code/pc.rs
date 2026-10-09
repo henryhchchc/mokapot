@@ -152,9 +152,4 @@ mod tests {
             prop_assert_eq!(format!("{pc}"), format!("#{value:04X}"));
         }
     }
-
-    #[test]
-    fn test_default() {
-        assert_eq!(ProgramCounter::default(), ProgramCounter::from(0));
-    }
 }

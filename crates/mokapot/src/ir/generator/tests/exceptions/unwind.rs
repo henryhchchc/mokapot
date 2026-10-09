@@ -11,25 +11,12 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
         (5, Instruction::AReturn),
     ];
     let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
-    let unwind_targets = [1, 4].map(|it| {
-        let location = ir
-            .source_map
-            .instructions_at(it.into())
-            .find(|&it| {
-                ir.instruction(it)
-                    .is_some_and(|it| matches!(it, InstructionRef::Terminator(_)))
-            })
-            .unwrap();
-        let block = block_containing_instruction(&ir, location);
-        block
-            .terminator
-            .successors()
-            .find(|it| it.block_target().is_none())
-            .unwrap()
-            .block_target()
-    });
-
-    assert_eq!(unwind_targets, [None; 2]);
+    for pc in [1, 4] {
+        assert_matches!(
+            terminator_at(&ir, pc.into()),
+            Terminator::Try { exceptional, .. } if exceptional == &[Successor::Unwind]
+        );
+    }
     assert_eq!(reachable_blocks(&ir).len(), 3);
 }
 
@@ -42,7 +29,11 @@ fn throw_has_only_ordered_exceptional_outcomes() {
         (10, Instruction::AStore1),
         (11, Instruction::Return),
     ];
-    let table = vec![handler(1.into()..2.into(), 10.into(), Some(runtime))];
+    let table = vec![handler(
+        1.into()..2.into(),
+        10.into(),
+        Some(runtime.clone()),
+    )];
     let ir = lift(body, "(Ljava/lang/Throwable;)V", table);
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
@@ -50,16 +41,8 @@ fn throw_has_only_ordered_exceptional_outcomes() {
         .map(Successor::transfer)
         .collect::<Vec<_>>();
 
-    assert!(matches!(throw, Terminator::Throw { .. }));
-    assert_eq!(transfers.len(), 2);
-    assert!(matches!(
-        transfers[0],
-        Some(ControlTransfer::Exception(Some(_)))
-    ));
-    assert_eq!(transfers[1], None);
-    assert!(
-        !transfers
-            .iter()
-            .any(|it| matches!(it, Some(ControlTransfer::Unconditional)))
-    );
+    assert_matches!(throw, Terminator::Throw { value, .. } if *value == ir.parameters[0]);
+    assert_eq!(entry_origin(&ir), Some(1.into()));
+    let caught = ControlTransfer::Exception(Some(runtime));
+    assert_eq!(transfers, [Some(&caught), None]);
 }
