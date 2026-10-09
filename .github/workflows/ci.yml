@@ -57,7 +57,7 @@ jobs:
           toolchain: stable
           components: clippy
       - name: Setup Checking Tools
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
@@ -123,7 +123,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-hack
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-hack
       - name: Checkout source code
@@ -166,7 +166,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
@@ -216,7 +216,7 @@ jobs:
           toolchain: nightly
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-llvm-cov
       - name: Checkout source code
@@ -266,7 +266,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
@@ -320,7 +320,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-nextest
       - name: Setup JDK
@@ -384,7 +384,7 @@ jobs:
           toolchain: nightly
           components: miri
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.87.22
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: cargo-nextest
       - name: Checkout source code
