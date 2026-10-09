@@ -25,8 +25,8 @@ use crate::{
         bytecode::code::raw_instruction::RawInstruction,
         class::ConstantPool,
         code::{
-            ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableTable,
-            MethodBody, ProgramCounter,
+            ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
+            ProgramCounter,
         },
         errors::GenerationError,
         method::{ParameterAccessFlags, ParameterInfo},
@@ -168,8 +168,12 @@ impl ClassElement for MethodBody {
             attributes,
         } = raw;
 
-        let raw_instructions = InstructionList::<RawInstruction>::from_bytes(instruction_bytes)?;
-        let instructions = ClassElement::from_raw(raw_instructions, ctx)?;
+        let instructions = RawInstruction::iter_from_reader(instruction_bytes.as_slice())
+            .map(|entry| {
+                let (pc, raw) = entry?;
+                Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))
+            })
+            .collect::<Result<_, ParseError>>()?;
 
         let exception_table = exception_table
             .into_iter()
@@ -290,13 +294,17 @@ mod tests {
     use super::*;
     use crate::jvm::{class::Version, errors::ParseErrorKind};
 
-    #[test]
-    fn exception_table_entry_preserves_exclusive_end_pc() {
-        let context = ParsingContext {
+    fn context() -> ParsingContext {
+        ParsingContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::Jdk8,
             current_class_name: "Test".parse().unwrap(),
-        };
+        }
+    }
+
+    #[test]
+    fn exception_table_entry_preserves_exclusive_end_pc() {
+        let context = context();
         let entry = ExceptionTableEntry::from_raw(
             raw_attributes::ExceptionTableEntry {
                 start_pc: 1.into(),
@@ -319,11 +327,7 @@ mod tests {
 
     #[test]
     fn method_body_propagates_malformed_instruction_bytes() {
-        let context = ParsingContext {
-            constant_pool: ConstantPool::new(),
-            class_version: Version::Jdk8,
-            current_class_name: "Test".parse().unwrap(),
-        };
+        let context = context();
         let error = MethodBody::from_raw(
             raw_attributes::Code {
                 max_stack: 0,

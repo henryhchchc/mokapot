@@ -4,7 +4,7 @@ mod encode;
 mod layout;
 
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::VecDeque,
     io::{self, Read},
     iter,
 };
@@ -409,12 +409,7 @@ impl InstructionList<RawInstruction> {
     /// assert_eq!(instructions.len(), 2);
     /// ```
     pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParseError> {
-        let bytes = VecDeque::from(bytes);
-        let mut reader = PositionTracker::new(bytes);
-        let inner: BTreeMap<_, _> =
-            iter::from_fn(|| RawInstruction::read_one(&mut reader).transpose())
-                .collect::<Result<_, _>>()?;
-        Ok(InstructionList::from(inner))
+        RawInstruction::iter_from_reader(VecDeque::from(bytes)).collect()
     }
 
     /// Writes a list of [`RawInstruction`]s to the given writer.
@@ -446,6 +441,14 @@ impl InstructionList<RawInstruction> {
 }
 
 impl RawInstruction {
+    /// Decodes instructions in bytecode order.
+    pub(super) fn iter_from_reader(
+        reader: impl Read,
+    ) -> impl Iterator<Item = Result<(ProgramCounter, Self), ParseError>> {
+        let mut reader = PositionTracker::new(reader);
+        iter::from_fn(move || Self::read_one(&mut reader).transpose())
+    }
+
     /// Reads and parses a single [`RawInstruction`] from the given reader.
     #[allow(clippy::too_many_lines)]
     fn read_one<R>(
