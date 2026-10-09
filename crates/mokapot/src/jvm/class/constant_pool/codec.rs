@@ -73,10 +73,14 @@ impl Entry {
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let length: u16 = reader.decode_value()?;
         let bytes = read_vec(reader, length.into())?;
-        Ok(match cesu8::from_java_cesu8(&bytes) {
-            Ok(value) => Self::Utf8(JavaString::Utf8(value.into_owned())),
-            Err(_) => Self::Utf8(JavaString::InvalidUtf8(bytes)),
-        })
+        let value = match String::from_utf8(bytes) {
+            Ok(value) => JavaString::Utf8(value),
+            Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
+                Ok(value) => JavaString::Utf8(value.into_owned()),
+                Err(_) => JavaString::InvalidUtf8(error.into_bytes()),
+            },
+        };
+        Ok(Self::Utf8(value))
     }
 }
 
