@@ -5,6 +5,12 @@ Whether you're fixing bugs, adding features, improving documentation, or sharing
 
 For questions or help, open an issue or start a [GitHub Discussion](https://github.com/henryhchchc/mokapot/discussions).
 
+## Coding Agents and AI Authorship
+
+Contributions made with the assistance of coding agents are welcome.
+However, AI agents MUST NOT be credited as authors or co-authors in source files, commit messages, or commit metadata (e.g., `Co-authored-by: Claude`).
+Human contributors MUST review and take full responsibility for the code they submit, regardless of whether AI assistance was used.
+
 ## Bug Reports and Feature Requests
 
 - **Bug Reports:** Open an issue at the [GitHub issue tracker](https://github.com/henryhchchc/mokapot/issues).
