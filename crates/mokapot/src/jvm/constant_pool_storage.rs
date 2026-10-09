@@ -1,0 +1,93 @@
+//! Shared indexed storage for raw and resolved constant pools.
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Slot<T> {
+    Entry(T),
+    Padding,
+}
+
+impl<T> Slot<T> {
+    pub const fn as_ref(&self) -> Option<&T> {
+        match self {
+            Self::Entry(entry) => Some(entry),
+            Self::Padding => None,
+        }
+    }
+
+    pub fn take_if(&mut self, predicate: impl FnOnce(&T) -> bool) -> Option<T> {
+        if let Self::Entry(entry) = self
+            && predicate(entry)
+            && let Self::Entry(entry) = std::mem::replace(self, Self::Padding)
+        {
+            Some(entry)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PoolStorage<T> {
+    slots: Vec<Slot<T>>,
+}
+
+impl<T> PoolStorage<T> {
+    pub fn with_capacity(count: u16) -> Self {
+        let mut slots = Vec::with_capacity(usize::from(count.max(1)));
+        slots.push(Slot::Padding);
+        Self { slots }
+    }
+
+    pub fn with_padding(count: u16) -> Self {
+        let mut pool = Self::with_capacity(count);
+        pool.slots
+            .resize_with(usize::from(count.max(1)), || Slot::Padding);
+        pool
+    }
+
+    pub const fn as_slice(&self) -> &[Slot<T>] {
+        self.slots.as_slice()
+    }
+    pub const fn as_mut_slice(&mut self) -> &mut [Slot<T>] {
+        self.slots.as_mut_slice()
+    }
+    pub fn into_slots(self) -> Vec<Slot<T>> {
+        self.slots
+    }
+
+    pub fn get_entry(&self, index: u16) -> Option<&T> {
+        self.slots.get(usize::from(index)).and_then(Slot::as_ref)
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "constructors and insertion bound the slot count to u16"
+    )]
+    pub const fn count(&self) -> u16 {
+        self.slots.len() as u16
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "constructors and insertion bound the slot count to u16"
+    )]
+    pub fn find(&self, predicate: impl Fn(&T) -> bool) -> Option<(u16, &T)> {
+        self.slots.iter().enumerate().find_map(|(index, slot)| {
+            slot.as_ref()
+                .filter(|entry| predicate(entry))
+                .map(|entry| (index as u16, entry))
+        })
+    }
+
+    pub fn push(&mut self, entry: T, padding: bool) -> Result<u16, T> {
+        if self.slots.len() + 1 + usize::from(padding) > usize::from(u16::MAX) {
+            return Err(entry);
+        }
+        let index = self.count();
+        self.slots.push(Slot::Entry(entry));
+        if padding {
+            self.slots.push(Slot::Padding);
+        }
+        Ok(index)
+    }
+}

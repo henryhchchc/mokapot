@@ -2,9 +2,9 @@ use itertools::Itertools;
 
 use crate::jvm::{
     bytecode::{
-        GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
+        GenerationError, ParseError, ParsingContext, class_element::ClassElement,
+        constant_pool::RawConstantPool, raw_attributes,
     },
-    class::ConstantPool,
     code::{ProgramCounter, StackMapFrame, VerificationType},
 };
 
@@ -72,7 +72,7 @@ impl ClassElement for StackMapFrame {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let raw = match self {
             Self::SameFrame { offset_delta } => {
                 if offset_delta < 64 {
@@ -146,7 +146,7 @@ impl ClassElement for VerificationType {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         match self {
             Self::TopVariable => Ok(Self::Raw::Top),
             Self::IntegerVariable => Ok(Self::Raw::Integer),

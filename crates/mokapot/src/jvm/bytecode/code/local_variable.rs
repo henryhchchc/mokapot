@@ -5,7 +5,7 @@ use std::str::FromStr;
 use super::super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
 use crate::{
     jvm::{
-        class::ConstantPool,
+        bytecode::constant_pool::RawConstantPool,
         code::{LocalVariableId, ProgramCounter},
         errors::{GenerationError, ParsingErrorContext},
     },
@@ -55,7 +55,7 @@ impl ClassElement for LocalVariableDescAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let start_pc = self.id.range.start;
         let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
@@ -101,7 +101,7 @@ impl ClassElement for LocalVariableTypeAttr {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let start_pc = self.id.range.start;
         let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;

@@ -21,6 +21,7 @@ pub mod method;
 pub mod module;
 pub mod references;
 
+mod constant_pool_storage;
 mod constant_value;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
@@ -227,4 +228,23 @@ pub enum JavaString {
     /// An string that is not valid UTF-8.
     #[display("String({}) // Invalid UTF-8", _0.iter().map(|it| format!("0x{it:02X}")).join(" "))]
     InvalidUtf8(Vec<u8>),
+}
+
+impl JavaString {
+    pub(crate) fn from_modified_utf8(bytes: Vec<u8>) -> Self {
+        match String::from_utf8(bytes) {
+            Ok(value) => Self::Utf8(value),
+            Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
+                Ok(value) => Self::Utf8(value.into_owned()),
+                Err(_) => Self::InvalidUtf8(error.into_bytes()),
+            },
+        }
+    }
+
+    pub(crate) fn into_modified_utf8(self) -> Vec<u8> {
+        match self {
+            Self::Utf8(value) => cesu8::to_java_cesu8(&value).into_owned(),
+            Self::InvalidUtf8(bytes) => bytes,
+        }
+    }
 }

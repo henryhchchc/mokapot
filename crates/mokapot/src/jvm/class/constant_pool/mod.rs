@@ -1,627 +1,514 @@
-//! Constant-pool model, typed accessors, and binary codec.
+//! Eagerly resolved JVM constant-pool values.
 
-mod codec;
-
-use crate::types::class_name::ClassName;
-use crate::types::package_name::PackageName;
-
-use std::{
-    fmt::Display,
-    io::{self, Read},
-    str::FromStr,
-};
+use std::io::Read;
 
 use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
         ConstantValue, JavaString,
-        bytecode::ToBytecode,
+        bytecode::constant_pool::{RawConstantPool, RawEntry},
         class::MethodHandle,
-        errors::{GenerationError, ParseError, ParsingErrorContext},
+        constant_pool_storage::{PoolStorage, Slot},
+        errors::{ParseError, ParsingErrorContext},
         references::{FieldRef, MethodRef, ModuleRef},
     },
-    types::{Descriptor, reference_type::ReferenceType},
+    types::{
+        class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor,
+        package_name::PackageName, reference_type::ReferenceType,
+    },
 };
 
-/// A JVM constant pool.
-#[doc = see_jvm_spec!(4, 4)]
+/// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstantPool {
-    inner: Vec<Slot>,
+    inner: PoolStorage<Entry>,
 }
 
+/// A resolved constant-pool entry. Its original tag is retained.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Entry {
+    /// A decoded string, including preserved invalid encodings.
+    Utf8(JavaString),
+    /// An integer.
+    Integer(i32),
+    /// A float.
+    Float(f32),
+    /// A long.
+    Long(i64),
+    /// A double.
+    Double(f64),
+    /// A class, interface, or array type.
+    Class {
+        /// The parsed class, interface, or array type.
+        reference_type: ReferenceType,
+        /// Whether the source name is a binary name accepted in class-name contexts.
+        is_binary_name: bool,
+    },
+    /// A string literal.
+    String(JavaString),
+    /// A field reference.
+    FieldRef(FieldRef),
+    /// A method reference.
+    MethodRef(MethodRef),
+    /// An interface method reference.
+    InterfaceMethodRef(MethodRef),
+    /// A field or method name and descriptor.
+    NameAndType(NameAndType),
+    /// A method handle.
+    MethodHandle(MethodHandle),
+    /// A method descriptor.
+    MethodType(MethodDescriptor),
+    /// A dynamic constant, retaining its bootstrap-table index.
+    Dynamic {
+        /// Index into the class's bootstrap method table.
+        bootstrap_method_attr_index: u16,
+        /// Constant name.
+        name: String,
+        /// Constant type.
+        field_type: FieldType,
+    },
+    /// A dynamic call site, retaining its bootstrap-table index.
+    InvokeDynamic {
+        /// Index into the class's bootstrap method table.
+        bootstrap_method_attr_index: u16,
+        /// Call-site name.
+        name: String,
+        /// Call-site descriptor.
+        descriptor: MethodDescriptor,
+    },
+    /// A module reference.
+    Module(ModuleRef),
+    /// A package name.
+    Package(PackageName),
+}
+
+impl Eq for Entry {}
+
+/// A resolved field or method name and descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Slot {
-    Entry(Entry),
-    Padding,
+pub enum NameAndType {
+    /// A field name and type.
+    Field(String, FieldType),
+    /// A method name and descriptor.
+    Method(String, MethodDescriptor),
 }
 
-#[inline]
-fn mismatch<T>(expected: &'static str, entry: &Entry) -> Result<T, ParseError> {
-    Err(ParseError::malform(format!(
-        "Mismatched constant pool type. Expected: {expected} but got {}.",
-        entry.constant_kind()
-    )))
+impl Entry {
+    fn type_mismatch(&self, expected: &'static str) -> ParseError {
+        ParseError::malform(format!(
+            "Mismatched constant pool type. Expected: {expected} but got {}.",
+            self.constant_kind()
+        ))
+    }
+
+    /// Returns the original JVM entry tag.
+    #[must_use]
+    pub const fn tag(&self) -> u8 {
+        match self {
+            Self::Utf8(_) => 1,
+            Self::Integer(_) => 3,
+            Self::Float(_) => 4,
+            Self::Long(_) => 5,
+            Self::Double(_) => 6,
+            Self::Class { .. } => 7,
+            Self::String(_) => 8,
+            Self::FieldRef(_) => 9,
+            Self::MethodRef(_) => 10,
+            Self::InterfaceMethodRef(_) => 11,
+            Self::NameAndType(_) => 12,
+            Self::MethodHandle(_) => 15,
+            Self::MethodType(_) => 16,
+            Self::Dynamic { .. } => 17,
+            Self::InvokeDynamic { .. } => 18,
+            Self::Module(_) => 19,
+            Self::Package(_) => 20,
+        }
+    }
+
+    /// Returns the JVM constant kind.
+    #[must_use]
+    pub const fn constant_kind(&self) -> &'static str {
+        match self {
+            Self::Utf8(_) => "CONSTANT_Utf8",
+            Self::Integer(_) => "CONSTANT_Integer",
+            Self::Float(_) => "CONSTANT_Float",
+            Self::Long(_) => "CONSTANT_Long",
+            Self::Double(_) => "CONSTANT_Double",
+            Self::Class { .. } => "CONSTANT_Class",
+            Self::String(_) => "CONSTANT_String",
+            Self::FieldRef(_) => "CONSTANT_Fieldref",
+            Self::MethodRef(_) => "CONSTANT_Methodref",
+            Self::InterfaceMethodRef(_) => "CONSTANT_InterfaceMethodref",
+            Self::NameAndType(_) => "CONSTANT_NameAndType",
+            Self::MethodHandle(_) => "CONSTANT_MethodHandle",
+            Self::MethodType(_) => "CONSTANT_MethodType",
+            Self::Dynamic { .. } => "CONSTANT_Dynamic",
+            Self::InvokeDynamic { .. } => "CONSTANT_InvokeDynamic",
+            Self::Module(_) => "CONSTANT_Module",
+            Self::Package(_) => "CONSTANT_Package",
+        }
+    }
 }
 
 impl ConstantPool {
-    /// Creates a new empty constant pool.
+    /// Creates an empty resolved pool.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            inner: vec![Slot::Padding],
+            inner: PoolStorage::with_capacity(1),
         }
     }
 
-    /// Creates a new constant pool with the given capacity.
-    /// # Parameters
-    /// - `count`: the maximum index of entries in the constant pool plus one.
-    #[must_use]
-    pub fn with_capacity(count: u16) -> Self {
-        // The `constant_pool` table is indexed from `1` to `constant_pool_count - 1`.
-        let mut inner = Vec::with_capacity((count + 1) as usize);
-        inner.push(Slot::Padding);
-        Self { inner }
+    /// Reads a pool and resolves all of its entries.
+    /// # Errors
+    /// Returns binary parsing errors or malformed constant-pool references and values.
+    pub fn from_reader<R: Read + ?Sized>(
+        reader: &mut R,
+        constant_pool_count: u16,
+    ) -> Result<Self, ParseError> {
+        Self::from_raw(RawConstantPool::from_reader(reader, constant_pool_count)?)
     }
 
-    /// Parses a constant pool from the given bytes.
-    /// - `constant_pool_count` is the maximum index of entries in the constant pool plus one.
-    #[doc = see_jvm_spec!(4, 1)]
+    /// Resolves all entries, preserving indices and reserved slots.
     /// # Errors
-    /// See [`io::Error`] for more information.
-    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
-    where
-        R: Read + ?Sized,
-    {
-        let mut constant_pool = Self::with_capacity(constant_pool_count);
-        while constant_pool.count() < constant_pool_count {
-            // NOTE: Do not use `put_entry` here since we want to maintain a one-to-one correspondence to the source constant pool
-            //       Otherwise we will get misaligned entries in subsequent parsing.
-            let entry = Entry::parse(reader)?;
-            if let entry @ (Entry::Long(_) | Entry::Double(_)) = entry {
-                constant_pool.inner.push(Slot::Entry(entry));
-                constant_pool.inner.push(Slot::Padding);
-            } else {
-                constant_pool.inner.push(Slot::Entry(entry));
+    /// Returns an error for invalid references, tags, names, descriptors, or handle kinds.
+    pub fn from_raw(raw: RawConstantPool) -> Result<Self, ParseError> {
+        let count = raw.count();
+        let mut pending = raw.inner.into_slots();
+        let mut pool = Self {
+            inner: PoolStorage::with_padding(count),
+        };
+        // Each tier depends only on earlier tiers, regardless of source entry order.
+        for tier in 0..4 {
+            for (index, entry) in pending.iter_mut().enumerate() {
+                if let Some(raw) = entry.take_if(|entry| entry.resolution_tier() == tier) {
+                    pool.inner.as_mut_slice()[index] = Slot::Entry(
+                        pool.resolve_entry(raw)
+                            .context(format!("Invalid constant pool entry at index {index}"))?,
+                    );
+                }
             }
         }
-        Ok(constant_pool)
+        Ok(pool)
     }
 
-    /// Gets the constant pool entry at the given index.
-    ///
-    /// Returns [`None`] if the index is out of bounds or the index does not point to a valid slot.
+    /// Gets an entry, or `None` for an invalid index or reserved slot.
     #[must_use]
     pub fn get_entry(&self, index: u16) -> Option<&Entry> {
-        if let Some(Slot::Entry(entry)) = self.inner.get(usize::from(index)) {
-            Some(entry)
-        } else {
-            None
-        }
+        self.inner.get_entry(index)
     }
 
-    /// Put a constant pool entry to the end of the constant pool and return the index of the inserted entry.
-    ///
-    /// # Errors
-    /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
-    ///
-    /// `long` and `double` constants occupy two slots:
-    ///
-    /// ```
-    /// use mokapot::jvm::class::constant_pool::{ConstantPool, Entry};
-    ///
-    /// let mut pool = ConstantPool::new();
-    /// let index = pool.put_entry(Entry::Long(42)).unwrap();
-    /// assert_eq!(index, 1);
-    /// assert_eq!(pool.get_entry(index), Some(&Entry::Long(42)));
-    /// assert_eq!(pool.get_entry(index + 1), None);
-    /// assert_eq!(pool.put_entry(Entry::Integer(7)).unwrap(), index + 2);
-    /// ```
-    pub fn put_entry(&mut self, entry: Entry) -> Result<u16, Overflow> {
-        let new_index = self.count();
-        if matches!(entry, Entry::Long(_) | Entry::Double(_)) {
-            if self.inner.len() + 2 > u16::MAX as usize {
-                return Err(Overflow(entry));
-            }
-            self.inner.push(Slot::Entry(entry));
-            self.inner.push(Slot::Padding);
-        } else {
-            if self.inner.len() >= u16::MAX as usize {
-                return Err(Overflow(entry));
-            }
-            self.inner.push(Slot::Entry(entry));
-        }
-        Ok(new_index)
-    }
-
-    /// Pushes a constant pool entry to the end of the constant pool if it does not already exist.
-    ///
-    /// # Return Values
-    /// [`Ok`] with a tuple indicating the index of the entry within the constant pool, and whether the entry is freshly
-    /// inserted into the pool.
-    ///
-    /// # Errors
-    /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
-    ///
-    /// ```
-    /// use mokapot::jvm::class::constant_pool::{ConstantPool, Entry};
-    ///
-    /// let mut pool = ConstantPool::new();
-    /// let (index, inserted) = pool.put_entry_deduplicated(Entry::Integer(42)).unwrap();
-    /// assert!(inserted);
-    /// assert_eq!(pool.put_entry_deduplicated(Entry::Integer(42)).unwrap(), (index, false));
-    /// assert_eq!(pool.get_entry(index), Some(&Entry::Integer(42)));
-    /// ```
-    pub fn put_entry_deduplicated(&mut self, entry: Entry) -> Result<(u16, bool), Overflow> {
-        if let Some(index) = self.find_index(|it| it == &entry) {
-            return Ok((index, false));
-        }
-        let new_index = self.put_entry(entry);
-        new_index.map(|idx| (idx, true))
-    }
-
-    pub(crate) fn put_entry_dedup(&mut self, entry: Entry) -> Result<u16, Overflow> {
-        let (idx, _) = self.put_entry_deduplicated(entry)?;
-        Ok(idx)
-    }
-
-    /// Finds the first constant pool entry that satisfies the given predicate.
-    pub fn find<P>(&self, predicate: P) -> Option<(u16, &Entry)>
-    where
-        P: Fn(&Entry) -> bool,
-    {
-        self.inner
-            .iter()
-            .enumerate()
-            .find_map(|(idx, slot)| match slot {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "When constructing the constant pool, \
-                              we ensured that the index is within the bounds of u16. \
-                              Therefore, it is safe to cast the length to u16."
-                )]
-                Slot::Entry(entry) if predicate(entry) => Some((idx as u16, entry)),
-                _ => None,
-            })
-    }
-
-    pub(crate) fn find_index<P>(&self, predicate: P) -> Option<u16>
-    where
-        P: Fn(&Entry) -> bool,
-    {
-        self.find(predicate).map(|(idx, _)| idx)
-    }
-
-    /// Gets the count of the constant pool. Note that this is NOT the number of entries.
-    #[doc = see_jvm_spec!(4, 1)]
+    /// Returns the indexed slot count, including slot zero and reserved slots.
     #[must_use]
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "When constructing the constant pool, \
-                  we ensured that the index is within the bounds of u16. \
-                  Therefore, it is safe to cast the length to u16."
-    )]
     pub const fn count(&self) -> u16 {
-        self.inner.len() as u16
+        self.inner.count()
     }
 
-    // ---------------------------------------------------------------------------
-    // Resolution methods (formerly in bytecode/constant_pool.rs)
-    // ---------------------------------------------------------------------------
+    /// Finds the first entry matching the predicate.
+    pub fn find<P: Fn(&Entry) -> bool>(&self, predicate: P) -> Option<(u16, &Entry)> {
+        self.inner.find(predicate)
+    }
+
+    fn entry(&self, index: u16) -> Result<&Entry, ParseError> {
+        self.get_entry(index).context("Invalid constant pool index")
+    }
+
+    pub(crate) fn get_java_string(&self, index: u16) -> Result<JavaString, ParseError> {
+        match self.entry(index)? {
+            Entry::Utf8(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Utf8")),
+        }
+    }
+
+    pub(crate) fn get_invoke_dynamic(
+        &self,
+        index: u16,
+    ) -> Result<(u16, String, MethodDescriptor), ParseError> {
+        match self.entry(index)? {
+            Entry::InvokeDynamic {
+                bootstrap_method_attr_index,
+                name,
+                descriptor,
+            } => Ok((
+                *bootstrap_method_attr_index,
+                name.clone(),
+                descriptor.clone(),
+            )),
+            entry => Err(entry.type_mismatch("InvokeDynamic")),
+        }
+    }
 
     pub(crate) fn get_str(&self, index: u16) -> Result<&str, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        match entry {
-            Entry::Utf8(JavaString::Utf8(string)) => Ok(string),
+        match self.entry(index)? {
+            Entry::Utf8(JavaString::Utf8(value)) => Ok(value),
             Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ParseError::malform("Broken UTF-8")),
-            it => mismatch("Utf8", it),
+            entry => Err(entry.type_mismatch("Utf8")),
         }
-    }
-
-    pub(crate) fn put_string(&mut self, value: String) -> Result<u16, GenerationError> {
-        let entry = Entry::Utf8(JavaString::Utf8(value));
-        self.put_entry_dedup(entry).map_err(Into::into)
     }
 
     pub(crate) fn get_class_name(&self, index: u16) -> Result<ClassName, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::Class { name_index } = entry {
-            let name = self.get_str(name_index)?;
-            Ok(name.parse().context("Invalid class name")?)
-        } else {
-            mismatch("Class", entry)
+        match self.entry(index)? {
+            Entry::Class {
+                reference_type: ReferenceType::Class(value),
+                is_binary_name: true,
+            } => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Class with a non-array name")),
         }
     }
 
-    pub(crate) fn put_class_name(&mut self, value: &ClassName) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.to_string())?;
-        let entry = Entry::Class { name_index };
-        let idx = self.put_entry_dedup(entry)?;
-        Ok(idx)
-    }
-
-    pub(crate) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.field_type)?;
-        self.put_entry_dedup(Entry::FieldRef {
-            class_index,
-            name_and_type_index,
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
-        self.put_entry_dedup(Entry::MethodRef {
-            class_index,
-            name_and_type_index,
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_interface_method_ref(
-        &mut self,
-        value: MethodRef,
-    ) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
-        self.put_entry_dedup(Entry::InterfaceMethodRef {
-            class_index,
-            name_and_type_index,
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn get_constant_value(&self, value_index: u16) -> Result<ConstantValue, ParseError> {
-        let entry = self
-            .get_entry(value_index)
-            .context("Invalid constant pool index")?;
-        match *entry {
-            Entry::Integer(it) => Ok(ConstantValue::Integer(it)),
-            Entry::Long(it) => Ok(ConstantValue::Long(it)),
-            Entry::Float(it) => Ok(ConstantValue::Float(it)),
-            Entry::Double(it) => Ok(ConstantValue::Double(it)),
-            Entry::String { string_index } => {
-                if let Entry::Utf8(java_str) = self
-                    .get_entry(string_index)
-                    .context("Invalid constant pool index")?
-                {
-                    Ok(ConstantValue::String(java_str.clone()))
-                } else {
-                    mismatch("Utf8", entry)
-                }
-            }
-            Entry::MethodType { descriptor_index } => self
-                .get_str(descriptor_index)
-                .and_then(|it| it.parse().context("Invalid method descriptor"))
-                .map(ConstantValue::MethodType),
-            Entry::Class { name_index } => {
-                let s = self.get_str(name_index)?;
-                Ok(ConstantValue::Class(s.parse::<ReferenceType>().map_err(
-                    |_| {
-                        ParseError::malform(format!(
-                            "Invalid type reference in constant value: {s}"
-                        ))
-                    },
-                )?))
-            }
-            Entry::MethodHandle { .. } => self
-                .get_method_handle(value_index)
-                .map(ConstantValue::Handle),
-            Entry::Dynamic {
-                bootstrap_method_attr_index,
-                name_and_type_index,
-            } => {
-                let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-                Ok(ConstantValue::Dynamic(
-                    bootstrap_method_attr_index,
-                    name,
-                    descriptor,
-                ))
-            }
-            ref unexpected => mismatch(
-                concat!(
-                    "Integer | Long | Float | Double | String ",
-                    "| MethodType | Class | MethodHandle | Dynamic"
-                ),
-                unexpected,
-            ),
+    pub(crate) fn get_type_ref(&self, index: u16) -> Result<ReferenceType, ParseError> {
+        match self.entry(index)? {
+            Entry::Class { reference_type, .. } => Ok(reference_type.clone()),
+            entry => Err(entry.type_mismatch("Class")),
         }
     }
 
-    pub(crate) fn put_constant_value(
-        &mut self,
-        value: ConstantValue,
-    ) -> Result<u16, GenerationError> {
-        let entry = match value {
-            ConstantValue::Integer(val) => Entry::Integer(val),
-            ConstantValue::Long(val) => Entry::Long(val),
-            ConstantValue::Float(val) => Entry::Float(val),
-            ConstantValue::Double(val) => Entry::Double(val),
-            ConstantValue::String(java_string) => {
-                let utf8_entry = Entry::Utf8(java_string);
-                let string_index = self.put_entry_dedup(utf8_entry)?;
-                Entry::String { string_index }
-            }
-            ConstantValue::Class(value) => return self.put_type_ref(value),
-            ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
-            ConstantValue::MethodType(method_descriptor) => {
-                let descriptor_index = self.put_string(method_descriptor.descriptor())?;
-                Entry::MethodType { descriptor_index }
-            }
-            ConstantValue::Dynamic(bsm_idx, name, field_type) => {
-                let name_and_type_index = self.put_name_and_type(name, &field_type)?;
-                Entry::Dynamic {
-                    bootstrap_method_attr_index: bsm_idx,
-                    name_and_type_index,
-                }
-            }
-            ConstantValue::Null => {
-                return Err(GenerationError::other(
-                    "Null should not be put into constant pool",
-                ));
-            }
-        };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::Module { name_index } = entry {
-            let name = self.get_str(name_index)?.to_owned();
-            Ok(ModuleRef { name })
-        } else {
-            mismatch("Module", entry)
+    pub(crate) fn get_field_name_and_type(
+        &self,
+        index: u16,
+    ) -> Result<(String, FieldType), ParseError> {
+        match self.entry(index)? {
+            Entry::NameAndType(NameAndType::Field(name, ty)) => Ok((name.clone(), ty.clone())),
+            entry => Err(entry.type_mismatch("NameAndType with a field descriptor")),
         }
     }
 
-    pub(crate) fn put_module_ref(&mut self, value: ModuleRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.name)?;
-        let entry = Entry::Module { name_index };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn get_package_name(&self, index: u16) -> Result<PackageName, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::Package { name_index } = entry {
-            let name = self.get_str(name_index)?;
-            Ok(name.parse().context("Invalid package name")?)
-        } else {
-            mismatch("Package", entry)
+    pub(crate) fn get_method_name_and_type(
+        &self,
+        index: u16,
+    ) -> Result<(String, MethodDescriptor), ParseError> {
+        match self.entry(index)? {
+            Entry::NameAndType(NameAndType::Method(name, descriptor)) => {
+                Ok((name.clone(), descriptor.clone()))
+            }
+            entry => Err(entry.type_mismatch("NameAndType with a method descriptor")),
         }
-    }
-
-    pub(crate) fn put_package_name(&mut self, value: &PackageName) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.to_string())?;
-        let entry = Entry::Package { name_index };
-        self.put_entry_dedup(entry).map_err(Into::into)
     }
 
     pub(crate) fn get_field_ref(&self, index: u16) -> Result<FieldRef, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::FieldRef {
-            class_index,
-            name_and_type_index,
-        } = entry
-        {
-            let owner = self.get_type_ref(class_index)?;
-            let (name, field_type) = self.get_name_and_type(name_and_type_index)?;
-            Ok(FieldRef {
-                owner,
-                name,
-                field_type,
-            })
-        } else {
-            mismatch("Field", entry)
+        match self.entry(index)? {
+            Entry::FieldRef(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Fieldref")),
         }
-    }
-
-    pub(crate) fn get_name_and_type<Descriptor>(
-        &self,
-        index: u16,
-    ) -> Result<(String, Descriptor), ParseError>
-    where
-        Descriptor: FromStr,
-        <Descriptor as FromStr>::Err: Display,
-    {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::NameAndType {
-            name_index,
-            descriptor_index,
-        } = entry
-        {
-            let name = self.get_str(name_index)?;
-            let descriptor = self
-                .get_str(descriptor_index)?
-                .parse()
-                .context("Invalid descriptor for name_and_type")?;
-            Ok((name.to_owned(), descriptor))
-        } else {
-            mismatch("NameAndType", entry)
-        }
-    }
-
-    pub(crate) fn put_name_and_type<T>(
-        &mut self,
-        name: String,
-        descriptor: &T,
-    ) -> Result<u16, GenerationError>
-    where
-        T: Descriptor,
-    {
-        let name_index = self.put_string(name)?;
-        let descriptor_index = self.put_string(descriptor.descriptor())?;
-        self.put_entry_dedup(Entry::NameAndType {
-            name_index,
-            descriptor_index,
-        })
-        .map_err(Into::into)
     }
 
     pub(crate) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::MethodRef {
-            class_index,
-            name_and_type_index,
-        } = entry
-        {
-            self.get_method_ref_parts(class_index, name_and_type_index)
-        } else {
-            mismatch("MethodRef", entry)
+        match self.entry(index)? {
+            Entry::MethodRef(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Methodref")),
         }
     }
 
     pub(crate) fn get_interface_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::InterfaceMethodRef {
-            class_index,
-            name_and_type_index,
-        } = entry
-        {
-            self.get_method_ref_parts(class_index, name_and_type_index)
-        } else {
-            mismatch("InterfaceMethodRef", entry)
+        match self.entry(index)? {
+            Entry::InterfaceMethodRef(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("InterfaceMethodref")),
         }
     }
 
     pub(crate) fn get_method_or_interface_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        if let &Entry::MethodRef {
-            class_index,
-            name_and_type_index,
+        match self.entry(index)? {
+            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Methodref | InterfaceMethodref")),
         }
-        | &Entry::InterfaceMethodRef {
-            class_index,
-            name_and_type_index,
-        } = entry
-        {
-            self.get_method_ref_parts(class_index, name_and_type_index)
-        } else {
-            mismatch("MethodRef | InterfaceMethodRef", entry)
-        }
-    }
-
-    fn get_method_ref_parts(
-        &self,
-        class_index: u16,
-        name_and_type_index: u16,
-    ) -> Result<MethodRef, ParseError> {
-        let owner = self.get_type_ref(class_index)?;
-        let (name, descriptor) = self.get_name_and_type(name_and_type_index)?;
-        Ok(MethodRef {
-            owner,
-            name,
-            descriptor,
-        })
     }
 
     pub(crate) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, ParseError> {
-        #[allow(clippy::enum_glob_use)]
-        use MethodHandle::*;
-
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        let &Entry::MethodHandle {
-            reference_kind,
-            reference_index: idx,
-        } = entry
-        else {
-            return mismatch("MethodHandle", entry);
-        };
-        match reference_kind {
-            1 => self.get_field_ref(idx).map(RefGetField),
-            2 => self.get_field_ref(idx).map(RefGetStatic),
-            3 => self.get_field_ref(idx).map(RefPutField),
-            4 => self.get_field_ref(idx).map(RefPutStatic),
-            5 => self.get_method_ref(idx).map(RefInvokeVirtual),
-            6 => self.get_method_or_interface_ref(idx).map(RefInvokeStatic),
-            7 => self.get_method_or_interface_ref(idx).map(RefInvokeSpecial),
-            8 => self.get_method_ref(idx).map(RefNewInvokeSpecial),
-            9 => self.get_interface_method_ref(idx).map(RefInvokeInterface),
-            _ => Err(ParseError::malform(
-                "Invalid reference kind in method handle",
-            ))?,
+        match self.entry(index)? {
+            Entry::MethodHandle(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("MethodHandle")),
         }
     }
 
-    pub(crate) fn put_method_handle(
-        &mut self,
-        value: MethodHandle,
-    ) -> Result<u16, GenerationError> {
-        let reference_kind = value.reference_kind();
-        let reference_index = match value {
-            MethodHandle::RefGetField(f)
-            | MethodHandle::RefGetStatic(f)
-            | MethodHandle::RefPutField(f)
-            | MethodHandle::RefPutStatic(f) => self.put_field_ref(f)?,
-            MethodHandle::RefInvokeVirtual(m)
-            | MethodHandle::RefInvokeStatic(m)
-            | MethodHandle::RefInvokeSpecial(m)
-            | MethodHandle::RefNewInvokeSpecial(m) => self.put_method_ref(m)?,
-            MethodHandle::RefInvokeInterface(m) => self.put_interface_method_ref(m)?,
-        };
-        self.put_entry_dedup(Entry::MethodHandle {
-            reference_kind,
-            reference_index,
+    pub(crate) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, ParseError> {
+        match self.entry(index)? {
+            Entry::Module(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Module")),
+        }
+    }
+
+    pub(crate) fn get_package_name(&self, index: u16) -> Result<PackageName, ParseError> {
+        match self.entry(index)? {
+            Entry::Package(value) => Ok(value.clone()),
+            entry => Err(entry.type_mismatch("Package")),
+        }
+    }
+
+    pub(crate) fn get_constant_value(&self, index: u16) -> Result<ConstantValue, ParseError> {
+        Ok(match self.entry(index)? {
+            Entry::Integer(value) => ConstantValue::Integer(*value),
+            Entry::Float(value) => ConstantValue::Float(*value),
+            Entry::Long(value) => ConstantValue::Long(*value),
+            Entry::Double(value) => ConstantValue::Double(*value),
+            Entry::String(value) => ConstantValue::String(value.clone()),
+            Entry::Class { reference_type, .. } => ConstantValue::Class(reference_type.clone()),
+            Entry::MethodType(value) => ConstantValue::MethodType(value.clone()),
+            Entry::MethodHandle(value) => ConstantValue::Handle(value.clone()),
+            Entry::Dynamic {
+                bootstrap_method_attr_index,
+                name,
+                field_type,
+            } => ConstantValue::Dynamic(
+                *bootstrap_method_attr_index,
+                name.clone(),
+                field_type.clone(),
+            ),
+            entry => return Err(entry.type_mismatch("Loadable constant")),
         })
-        .map_err(Into::into)
     }
 
-    pub(crate) fn get_type_ref(&self, index: u16) -> Result<ReferenceType, ParseError> {
-        let entry = self
-            .get_entry(index)
-            .context("Invalid constant pool index")?;
-        let &Entry::Class { name_index } = entry else {
-            return mismatch("Class", entry);
-        };
-        let name = self.get_str(name_index)?;
-        name.parse::<ReferenceType>()
-            .map_err(|_| ParseError::malform(format!("Invalid type reference: {name}")))
-    }
-
-    pub(crate) fn put_type_ref(
-        &mut self,
-        reference_type: ReferenceType,
-    ) -> Result<u16, GenerationError> {
-        let name = match reference_type {
-            ReferenceType::Class(class_name) => class_name.to_string(),
-            ReferenceType::Array(component_type) => format!("[{}", component_type.descriptor()),
-        };
-        let name_index = self.put_string(name)?;
-        self.put_entry_dedup(Entry::Class { name_index })
-            .map_err(Into::into)
-    }
-}
-
-impl ToBytecode for ConstantPool {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.count().to_be_bytes())?;
-        for slot in &self.inner {
-            if let Slot::Entry(entry) = slot {
-                entry.to_writer(writer)?;
+    fn resolve_entry(&self, raw: RawEntry) -> Result<Entry, ParseError> {
+        Ok(match raw {
+            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes)),
+            RawEntry::Integer(value) => Entry::Integer(value.into()),
+            RawEntry::Float(value) => Entry::Float(value.into()),
+            RawEntry::Long(value) => Entry::Long(value.into()),
+            RawEntry::Double(value) => Entry::Double(value.into()),
+            RawEntry::Class { name_index } => self.resolve_class(name_index.into())?,
+            RawEntry::String { string_index } => match self.entry(string_index.into())? {
+                Entry::Utf8(value) => Entry::String(value.clone()),
+                entry => return Err(entry.type_mismatch("Utf8")),
+            },
+            RawEntry::NameAndType {
+                name_index,
+                descriptor_index,
+            } => Entry::NameAndType(
+                self.resolve_name_and_type(name_index.into(), descriptor_index.into())?,
+            ),
+            RawEntry::MethodType { descriptor_index } => Entry::MethodType(
+                self.get_str(descriptor_index.into())?
+                    .parse()
+                    .context("Invalid method descriptor")?,
+            ),
+            RawEntry::Module { name_index } => Entry::Module(ModuleRef {
+                name: self.get_str(name_index.into())?.to_owned(),
+            }),
+            RawEntry::Package { name_index } => Entry::Package(
+                self.get_str(name_index.into())?
+                    .parse()
+                    .context("Invalid package name")?,
+            ),
+            RawEntry::FieldRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                let owner = self.get_type_ref(class_index.into())?;
+                let (name, field_type) =
+                    self.get_field_name_and_type(name_and_type_index.into())?;
+                Entry::FieldRef(FieldRef {
+                    owner,
+                    name,
+                    field_type,
+                })
             }
-        }
-        Ok(())
+            RawEntry::MethodRef {
+                class_index,
+                name_and_type_index,
+            }
+            | RawEntry::InterfaceMethodRef {
+                class_index,
+                name_and_type_index,
+            } => {
+                let interface = matches!(raw, RawEntry::InterfaceMethodRef { .. });
+                let owner = self.get_type_ref(class_index.into())?;
+                let (name, descriptor) =
+                    self.get_method_name_and_type(name_and_type_index.into())?;
+                let value = MethodRef {
+                    owner,
+                    name,
+                    descriptor,
+                };
+                if interface {
+                    Entry::InterfaceMethodRef(value)
+                } else {
+                    Entry::MethodRef(value)
+                }
+            }
+            RawEntry::Dynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                let (name, field_type) =
+                    self.get_field_name_and_type(name_and_type_index.into())?;
+                Entry::Dynamic {
+                    bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
+                    name,
+                    field_type,
+                }
+            }
+            RawEntry::InvokeDynamic {
+                bootstrap_method_attr_index,
+                name_and_type_index,
+            } => {
+                let (name, descriptor) =
+                    self.get_method_name_and_type(name_and_type_index.into())?;
+                Entry::InvokeDynamic {
+                    bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
+                    name,
+                    descriptor,
+                }
+            }
+            RawEntry::MethodHandle {
+                reference_kind,
+                reference_index,
+            } => Entry::MethodHandle(
+                self.resolve_method_handle(reference_kind, reference_index.into())?,
+            ),
+        })
+    }
+
+    fn resolve_class(&self, name_index: u16) -> Result<Entry, ParseError> {
+        let name = self.get_str(name_index)?;
+        let reference_type = name.parse().context("Invalid type reference")?;
+        let is_binary_name =
+            !(name.starts_with('[') || name.starts_with('L') && name.ends_with(';'));
+        Ok(Entry::Class {
+            reference_type,
+            is_binary_name,
+        })
+    }
+
+    fn resolve_name_and_type(
+        &self,
+        name_index: u16,
+        descriptor_index: u16,
+    ) -> Result<NameAndType, ParseError> {
+        let name = self.get_str(name_index)?.to_owned();
+        let descriptor = self.get_str(descriptor_index)?;
+        Ok(if descriptor.starts_with('(') {
+            NameAndType::Method(
+                name,
+                descriptor.parse().context("Invalid method descriptor")?,
+            )
+        } else {
+            NameAndType::Field(
+                name,
+                descriptor.parse().context("Invalid field descriptor")?,
+            )
+        })
+    }
+
+    fn resolve_method_handle(
+        &self,
+        reference_kind: u8,
+        reference_index: u16,
+    ) -> Result<MethodHandle, ParseError> {
+        Ok(match reference_kind {
+            1 => MethodHandle::RefGetField(self.get_field_ref(reference_index)?),
+            2 => MethodHandle::RefGetStatic(self.get_field_ref(reference_index)?),
+            3 => MethodHandle::RefPutField(self.get_field_ref(reference_index)?),
+            4 => MethodHandle::RefPutStatic(self.get_field_ref(reference_index)?),
+            5 => MethodHandle::RefInvokeVirtual(self.get_method_ref(reference_index)?),
+            6 => MethodHandle::RefInvokeStatic(self.get_method_or_interface_ref(reference_index)?),
+            7 => MethodHandle::RefInvokeSpecial(self.get_method_or_interface_ref(reference_index)?),
+            8 => MethodHandle::RefNewInvokeSpecial(self.get_method_ref(reference_index)?),
+            9 => MethodHandle::RefInvokeInterface(self.get_interface_method_ref(reference_index)?),
+            _ => {
+                return Err(ParseError::malform(
+                    "Invalid reference kind in method handle",
+                ));
+            }
+        })
     }
 }
 
@@ -631,184 +518,41 @@ impl Default for ConstantPool {
     }
 }
 
-/// An error when an insertion to the constant pool causes an overflow.
-#[derive(Debug, thiserror::Error)]
-#[error("The constant pool is full.")]
-pub struct Overflow(pub Entry);
-
-/// An entry in the [`ConstantPool`].
-#[derive(Debug, Clone, PartialEq)]
-#[repr(u8)]
-#[non_exhaustive]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum Entry {
-    /// A UTF-8 string.
-    #[doc = see_jvm_spec!(4, 4, 7)]
-    Utf8(JavaString) = 1,
-    /// An integer.
-    #[doc = see_jvm_spec!(4, 4, 4)]
-    Integer(i32) = 3,
-    /// A float.
-    #[doc = see_jvm_spec!(4, 4, 4)]
-    Float(f32) = 4,
-    /// A long.
-    #[doc = see_jvm_spec!(4, 4, 5)]
-    Long(i64) = 5,
-    /// A double.
-    #[doc = see_jvm_spec!(4, 4, 5)]
-    Double(f64) = 6,
-    /// A class.
-    #[doc = see_jvm_spec!(4, 4, 1)]
-    Class {
-        /// The index in the constant pool of its binary name.
-        name_index: u16,
-    } = 7,
-    /// A string.
-    #[doc = see_jvm_spec!(4, 4, 3)]
-    String {
-        /// The index in the constant pool of its UTF-8 value.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        string_index: u16,
-    } = 8,
-    /// A field reference.
-    #[doc = see_jvm_spec!(4, 4, 2)]
-    FieldRef {
-        /// The index in the constant pool of the class containing the field.
-        /// The entry at that index must be a [`Entry::Class`].
-        class_index: u16,
-        /// The index in the constant pool of the name and type of the field.
-        /// The entry at that index must be a [`Entry::NameAndType`].
-        name_and_type_index: u16,
-    } = 9,
-    /// A method reference.
-    #[doc = see_jvm_spec!(4, 4, 2)]
-    MethodRef {
-        /// The index in the constant pool of the class containing the method.
-        /// The entry at that index must be a [`Entry::Class`].
-        class_index: u16,
-        /// The index in the constant pool of the name and type of the method.
-        /// The entry at that index must be a [`Entry::NameAndType`].
-        name_and_type_index: u16,
-    } = 10,
-    /// An interface method reference.
-    #[doc = see_jvm_spec!(4, 4, 2)]
-    InterfaceMethodRef {
-        /// The index in the constant pool of the interface containing the method.
-        /// The entry at that index must be a [`Entry::Class`].
-        class_index: u16,
-        /// The index in the constant pool of the name and type of the method.
-        /// The entry at that index must be a [`Entry::NameAndType`].
-        name_and_type_index: u16,
-    } = 11,
-    /// A name and type.
-    #[doc = see_jvm_spec!(4, 4, 6)]
-    NameAndType {
-        /// The index in the constant pool of the UTF-8 string containing the name.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        name_index: u16,
-        /// The index in the constant pool of the UTF-8 string containing the descriptor.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        descriptor_index: u16,
-    } = 12,
-    /// A method handle.
-    #[doc = see_jvm_spec!(4, 4, 8)]
-    MethodHandle {
-        /// The kind of method handle.
-        reference_kind: u8,
-        /// The index in the constant pool of the method handle.
-        /// The entry at that index must be a [`Entry::MethodRef`], [`Entry::InterfaceMethodRef`] or [`Entry::FieldRef`].
-        reference_index: u16,
-    } = 15,
-    /// A method type.
-    #[doc = see_jvm_spec!(4, 4, 9)]
-    MethodType {
-        /// The index in the constant pool of the UTF-8 string containing the descriptor.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        descriptor_index: u16,
-    } = 16,
-    /// A dynamically computed constant.
-    #[doc = see_jvm_spec!(4, 4, 10)]
-    Dynamic {
-        /// The index of the bootstrap method in the bootstrap method table.
-        bootstrap_method_attr_index: u16,
-        /// The index in the constant pool of the name and type of the constant.
-        /// The entry at that index must be a [`Entry::NameAndType`].
-        name_and_type_index: u16,
-    } = 17,
-    /// An invokedynamic instruction.
-    #[doc = see_jvm_spec!(4, 4, 10)]
-    InvokeDynamic {
-        /// The index of the bootstrap method in the bootstrap method table.
-        bootstrap_method_attr_index: u16,
-        /// The index in the constant pool of the name and type of the constant.
-        /// The entry at that index must be a [`Entry::NameAndType`].
-        name_and_type_index: u16,
-    } = 18,
-    /// A module.
-    #[doc = see_jvm_spec!(4, 4, 11)]
-    Module {
-        /// The index in the constant pool of the UTF-8 string containing the name.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        name_index: u16,
-    } = 19,
-    /// A package.
-    #[doc = see_jvm_spec!(4, 4, 12)]
-    Package {
-        /// The index in the constant pool of the UTF-8 string containing the name.
-        /// The entry at that index must be a [`Entry::Utf8`].
-        name_index: u16,
-    } = 20,
-}
-
-impl Eq for Entry {}
-
-impl Entry {
-    /// Returns the tag of this constant pool entry.
-    #[must_use]
-    pub const fn tag(&self) -> u8 {
-        // Safety: Self is marked as repr(u8)
-        unsafe { enum_discriminant(self) }
-    }
-
-    /// Gets the kind of this constant pool entry.
-    #[doc = see_jvm_spec!(4, 4)]
-    #[must_use]
-    pub const fn constant_kind<'a>(&self) -> &'a str {
+impl RawEntry {
+    const fn resolution_tier(&self) -> u8 {
         match self {
-            Self::Utf8(_) => "CONSTANT_Utf8",
-            Self::Integer(_) => "CONSTANT_Integer",
-            Self::Float(_) => "CONSTANT_Float",
-            Self::Long(_) => "CONSTANT_Long",
-            Self::Double(_) => "CONSTANT_Double",
-            Self::Class { .. } => "CONSTANT_Class",
-            Self::String { .. } => "CONSTANT_String",
-            Self::FieldRef { .. } => "CONSTANT_Fieldref",
-            Self::MethodRef { .. } => "CONSTANT_Methodref",
-            Self::InterfaceMethodRef { .. } => "CONSTANT_InterfaceMethodref",
-            Self::NameAndType { .. } => "CONSTANT_NameAndType",
-            Self::MethodHandle { .. } => "CONSTANT_MethodHandle",
-            Self::MethodType { .. } => "CONSTANT_MethodType",
-            Self::Dynamic { .. } => "CONSTANT_Dynamic",
-            Self::InvokeDynamic { .. } => "CONSTANT_InvokeDynamic",
-            Self::Module { .. } => "CONSTANT_Module",
-            Self::Package { .. } => "CONSTANT_Package",
+            Self::Utf8(_) | Self::Integer(_) | Self::Float(_) | Self::Long(_) | Self::Double(_) => {
+                0
+            }
+            Self::Class { .. }
+            | Self::String { .. }
+            | Self::NameAndType { .. }
+            | Self::MethodType { .. }
+            | Self::Module { .. }
+            | Self::Package { .. } => 1,
+            Self::FieldRef { .. }
+            | Self::MethodRef { .. }
+            | Self::InterfaceMethodRef { .. }
+            | Self::Dynamic { .. }
+            | Self::InvokeDynamic { .. } => 2,
+            Self::MethodHandle { .. } => 3,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-
-    const MAX_BYTES: usize = 255;
+    use crate::jvm::{
+        bytecode::{ToBytecode, constant_pool::RawEntry},
+        errors::ParseErrorKind,
+    };
 
     #[test]
     fn class_and_package_names_round_trip_with_distinct_tags() {
-        let class_name: ClassName = "example/shared".parse().unwrap();
-        let package_name: PackageName = "example/shared".parse().unwrap();
-        let mut pool = ConstantPool::new();
+        let class_name: ClassName = "a/b/C".parse().unwrap();
+        let package_name: PackageName = "a/b/C".parse().unwrap();
+        let mut pool = RawConstantPool::new();
         let class_index = pool.put_class_name(&class_name).unwrap();
         let package_index = pool.put_package_name(&package_name).unwrap();
 
@@ -818,11 +562,11 @@ mod tests {
         assert_eq!(pool.put_package_name(&package_name).unwrap(), package_index);
         assert!(matches!(
             pool.get_entry(class_index),
-            Some(Entry::Class { .. })
+            Some(RawEntry::Class { .. })
         ));
         assert!(matches!(
             pool.get_entry(package_index),
-            Some(Entry::Package { .. })
+            Some(RawEntry::Package { .. })
         ));
 
         let mut bytes = Vec::new();
@@ -837,159 +581,48 @@ mod tests {
         );
         assert_eq!(
             reparsed.get_class_name(package_index).unwrap_err().kind(),
-            crate::jvm::errors::ParseErrorKind::Malformed,
+            ParseErrorKind::Malformed,
         );
         assert_eq!(
             reparsed.get_package_name(class_index).unwrap_err().kind(),
-            crate::jvm::errors::ParseErrorKind::Malformed,
+            ParseErrorKind::Malformed,
         );
     }
 
     #[test]
-    fn class_name_accessor_rejects_array_descriptors() {
-        for descriptor in ["[I", "[[I", "[Ljava/lang/String;", "[[Ljava/lang/String;"] {
-            let array_type: ReferenceType = descriptor.parse().unwrap();
-            let mut pool = ConstantPool::new();
-            let index = pool.put_type_ref(array_type.clone()).unwrap();
+    fn class_name_accessor_rejects_descriptors() {
+        for descriptor in ["[I", "[[I", "[La/b/C;", "[[La/b/C;", "La/b/C;"] {
+            let reference_type: ReferenceType = descriptor.parse().unwrap();
+            let mut pool = RawConstantPool::new();
+            let name_index = pool.put_string(descriptor.to_owned()).unwrap();
+            let index = pool
+                .put_entry(RawEntry::Class {
+                    name_index: name_index.into(),
+                })
+                .unwrap();
 
-            assert_eq!(pool.get_type_ref(index).unwrap(), array_type);
+            let pool = ConstantPool::from_raw(pool).unwrap();
+            assert_eq!(pool.get_type_ref(index).unwrap(), reference_type);
             assert_eq!(
                 pool.get_class_name(index).unwrap_err().kind(),
-                crate::jvm::errors::ParseErrorKind::Malformed,
+                ParseErrorKind::Malformed,
             );
-        }
-    }
-
-    #[test]
-    fn miri_entry_tags_match_encoding() {
-        assert_eq!(Entry::Integer(42).tag(), 3);
-        assert_eq!(Entry::Class { name_index: 1 }.tag(), 7);
-        let method_handle = Entry::MethodHandle {
-            reference_kind: 9,
-            reference_index: 1,
-        };
-        assert_eq!(method_handle.tag(), 15);
-    }
-
-    #[test]
-    fn deduplicated_entries_keep_the_original_index() {
-        let mut pool = ConstantPool::new();
-        let entry = Entry::Integer(42);
-
-        let first = pool.put_entry_deduplicated(entry.clone()).unwrap();
-        assert_eq!(first, (1, true));
-        assert_eq!(pool.put_entry_deduplicated(entry).unwrap(), (1, false));
-        assert_eq!(pool.count(), 2);
-    }
-
-    #[test]
-    fn long_and_double_entries_reserve_the_following_index() {
-        let mut pool = ConstantPool::new();
-
-        let long_index = pool.put_entry(Entry::Long(42)).unwrap();
-        let integer_index = pool.put_entry(Entry::Integer(7)).unwrap();
-        let double_index = pool.put_entry(Entry::Double(3.5)).unwrap();
-
-        assert_eq!((long_index, integer_index, double_index), (1, 3, 4));
-        assert_eq!(pool.get_entry(2), None);
-        assert_eq!(pool.get_entry(3), Some(&Entry::Integer(7)));
-        assert_eq!(pool.get_entry(5), None);
-        assert_eq!(pool.count(), 6);
-    }
-
-    #[test]
-    fn constant_pool_overflow_respects_reserved_slots() {
-        let mut pool = ConstantPool::new();
-        for _ in 0..(u16::MAX as usize - 2) {
-            pool.put_entry(Entry::Integer(0)).unwrap();
-        }
-
-        assert_eq!(pool.count(), u16::MAX - 1);
-        assert_eq!(pool.put_entry(Entry::Integer(1)).unwrap(), u16::MAX - 1);
-        assert_eq!(pool.count(), u16::MAX);
-        assert!(pool.put_entry(Entry::Integer(1)).is_err());
-        assert!(pool.put_entry(Entry::Long(1)).is_err());
-    }
-
-    proptest! {
-
-        #[test]
-        fn from_reader((count, bytes) in arb_constant_pool_bytes()) {
-            let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::from_reader(&mut reader, count);
-            assert!(constant_pool.is_ok());
-            assert_eq!(reader, []);
-        }
-
-        #[test]
-        fn from_reader_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
-            let mut reader = bytes.as_slice();
-            let constant_pool = ConstantPool::from_reader(&mut reader, count + 1);
-            assert!(constant_pool.is_err());
-        }
-
-        #[test]
-        fn constant_kind(entry in any::<Entry>()) {
-            let kind = entry.constant_kind();
-            assert!(kind.starts_with("CONSTANT_"));
-        }
-
-        #[test]
-        fn parse_entry(entry in arb_constant_pool_info()) {
-            let mut reader = entry.as_slice();
-            let parsed = Entry::parse(&mut reader);
-            let tag = entry.first().unwrap();
-            match tag {
-                1 => assert!(matches!(parsed, Ok(Entry::Utf8(_)))),
-                3 => assert!(matches!(parsed, Ok(Entry::Integer(_)))),
-                4 => assert!(matches!(parsed, Ok(Entry::Float(_)))),
-                5 => assert!(matches!(parsed, Ok(Entry::Long(_)))),
-                6 => assert!(matches!(parsed, Ok(Entry::Double(_)))),
-                7 => assert!(matches!(parsed, Ok(Entry::Class { .. }))),
-                8 => assert!(matches!(parsed, Ok(Entry::String { .. }))),
-                9 => assert!(matches!(parsed, Ok(Entry::FieldRef { .. }))),
-                10 => assert!(matches!(parsed, Ok(Entry::MethodRef { .. }))),
-                11 => assert!(matches!(parsed, Ok(Entry::InterfaceMethodRef { .. }))),
-                12 => assert!(matches!(parsed, Ok(Entry::NameAndType { .. }))),
-                15 => assert!(matches!(parsed, Ok(Entry::MethodHandle { .. }))),
-                16 => assert!(matches!(parsed, Ok(Entry::MethodType { .. }))),
-                17 => assert!(matches!(parsed, Ok(Entry::Dynamic { .. }))),
-                18 => assert!(matches!(parsed, Ok(Entry::InvokeDynamic { .. }))),
-                19 => assert!(matches!(parsed, Ok(Entry::Module { .. }))),
-                20 => assert!(matches!(parsed, Ok(Entry::Package { .. }))),
-                _ => unreachable!("`arb_constant_pool_info` produces only defined tags")
-            }
-        }
-
-        #[test]
-        fn read_write((count, content) in arb_constant_pool_bytes()) {
-            let mut reader = content.as_slice();
-            let pool = ConstantPool::from_reader(&mut reader, count).unwrap();
-            let mut buf = Vec::new();
-            pool.to_writer(&mut buf)?;
-            let (len_bytes, written) = buf.split_at(2);
-            let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
-            assert_eq!(len, count);
-            let mut reader = written;
-            let parsed_back = ConstantPool::from_reader(&mut reader, len).unwrap();
-            assert_eq!(pool, parsed_back);
-            // assert_eq!(written, content);
         }
     }
 
     #[test]
     fn miri_interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
-            owner: ReferenceType::Class("example/Interface".parse().unwrap()),
-            name: "method".to_owned(),
+            owner: ReferenceType::Class("a/b/I".parse().unwrap()),
+            name: "m".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
         let handle = MethodHandle::RefInvokeInterface(method);
-        let mut pool = ConstantPool::new();
+        let mut pool = RawConstantPool::new();
 
         let handle_index = pool.put_method_handle(handle.clone()).unwrap();
 
-        let Entry::MethodHandle {
+        let RawEntry::MethodHandle {
             reference_kind,
             reference_index,
         } = pool.get_entry(handle_index).unwrap()
@@ -998,274 +631,163 @@ mod tests {
         };
         assert_eq!(*reference_kind, 9);
         assert!(matches!(
-            pool.get_entry(*reference_index),
-            Some(Entry::InterfaceMethodRef { .. })
+            pool.get_entry((*reference_index).into()),
+            Some(RawEntry::InterfaceMethodRef { .. })
         ));
+        let pool = ConstantPool::from_raw(pool).unwrap();
         assert_eq!(pool.get_method_handle(handle_index).unwrap(), handle);
     }
 
     #[test]
     fn interface_method_handles_reject_method_refs() {
         let method = MethodRef {
-            owner: ReferenceType::Class("example/Interface".parse().unwrap()),
-            name: "method".to_owned(),
+            owner: ReferenceType::Class("a/b/I".parse().unwrap()),
+            name: "m".to_owned(),
             descriptor: "()V".parse().unwrap(),
         };
-        let mut pool = ConstantPool::new();
+        let mut pool = RawConstantPool::new();
         let method_index = pool.put_method_ref(method).unwrap();
-        let handle_index = pool
-            .put_entry(Entry::MethodHandle {
-                reference_kind: 9,
-                reference_index: method_index,
+        pool.put_entry(RawEntry::MethodHandle {
+            reference_kind: 9,
+            reference_index: method_index.into(),
+        })
+        .unwrap();
+
+        assert_eq!(
+            ConstantPool::from_raw(pool).unwrap_err().kind(),
+            ParseErrorKind::Malformed
+        );
+    }
+
+    #[test]
+    fn forward_references_resolve_typed_values_and_keep_indices() {
+        let mut raw = RawConstantPool::new();
+        for entry in [
+            RawEntry::MethodHandle {
+                reference_kind: 5,
+                reference_index: 2.into(),
+            },
+            RawEntry::MethodRef {
+                class_index: 3.into(),
+                name_and_type_index: 4.into(),
+            },
+            RawEntry::Class {
+                name_index: 5.into(),
+            },
+            RawEntry::NameAndType {
+                name_index: 6.into(),
+                descriptor_index: 7.into(),
+            },
+            RawEntry::Utf8(b"a/b/C".to_vec()),
+            RawEntry::Utf8(b"m".to_vec()),
+            RawEntry::Utf8(b"(I)V".to_vec()),
+            RawEntry::Long(42.into()),
+            RawEntry::Dynamic {
+                bootstrap_method_attr_index: 3.into(),
+                name_and_type_index: 12.into(),
+            },
+            RawEntry::InvokeDynamic {
+                bootstrap_method_attr_index: 4.into(),
+                name_and_type_index: 4.into(),
+            },
+            RawEntry::NameAndType {
+                name_index: 6.into(),
+                descriptor_index: 13.into(),
+            },
+            RawEntry::Utf8(b"I".to_vec()),
+        ] {
+            raw.put_entry(entry).unwrap();
+        }
+        let count = raw.count();
+        let pool = ConstantPool::from_raw(raw).unwrap();
+        assert_eq!(pool.count(), count);
+        assert_eq!(pool.get_entry(0), None);
+        assert_eq!(pool.get_entry(9), None);
+        let method = pool.get_method_ref(2).unwrap();
+        assert_eq!(method.owner, "a/b/C".parse::<ReferenceType>().unwrap());
+        assert_eq!(method.descriptor, "(I)V".parse().unwrap());
+        assert_eq!(
+            pool.get_method_handle(1).unwrap(),
+            MethodHandle::RefInvokeVirtual(method)
+        );
+        assert!(matches!(
+            pool.get_entry(10),
+            Some(Entry::Dynamic {
+                bootstrap_method_attr_index: 3,
+                ..
             })
-            .unwrap();
-
-        assert!(pool.get_method_handle(handle_index).is_err());
+        ));
+        assert!(matches!(
+            pool.get_entry(11),
+            Some(Entry::InvokeDynamic {
+                bootstrap_method_attr_index: 4,
+                ..
+            })
+        ));
     }
 
-    prop_compose! {
-        pub fn arb_constant_pool_bytes()(
-            entries in prop::collection::vec(arb_constant_pool_info(), 1..=50)
-        ) -> (u16, Vec<u8>) {
-            let count = {
-                let mut len = entries.len();
-                len += entries.iter().filter(|&it| {
-                    it.first().is_some_and(|&it| it == 5 || it == 6)
-                }).count();
-                len += 1;
-                u16::try_from(len).unwrap()
-            };
-            let bytes = entries.into_iter().flatten().collect();
-            (count, bytes)
+    #[test]
+    fn resolution_rejects_invalid_dependencies_and_descriptors() {
+        for entry in [
+            RawEntry::Class {
+                name_index: 0.into(),
+            },
+            RawEntry::Class {
+                name_index: 3.into(),
+            },
+            RawEntry::Class {
+                name_index: 2.into(),
+            },
+            RawEntry::Class {
+                name_index: u16::MAX.into(),
+            },
+            RawEntry::MethodType {
+                descriptor_index: 1.into(),
+            },
+            RawEntry::MethodHandle {
+                reference_kind: 0,
+                reference_index: 1.into(),
+            },
+        ] {
+            let mut raw = RawConstantPool::new();
+            for entry in [
+                RawEntry::Utf8(b"I".to_vec()),
+                RawEntry::Long(42.into()),
+                entry,
+            ] {
+                raw.put_entry(entry).unwrap();
+            }
+            assert_eq!(
+                ConstantPool::from_raw(raw).unwrap_err().kind(),
+                ParseErrorKind::Malformed
+            );
         }
     }
 
-    prop_compose! {
-        fn arb_constant_info_utf8()(
-            content in prop::collection::vec(any::<u8>(), 1..=MAX_BYTES)
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(content.len() + 3);
-            result.push(1);
-            let len = u16::try_from(content.len()).unwrap();
-            result.extend(len.to_be_bytes());
-            result.extend(content);
-            result
+    #[test]
+    fn utf8_conversion_preserves_strings_and_invalid_bytes() {
+        for (bytes, expected) in [
+            (b"plain".to_vec(), JavaString::Utf8("plain".to_owned())),
+            (vec![0xc0, 0x80], JavaString::Utf8("\0".to_owned())),
+            (
+                vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
+                JavaString::Utf8("😀".to_owned()),
+            ),
+            (vec![0xff], JavaString::InvalidUtf8(vec![0xff])),
+        ] {
+            let mut raw = RawConstantPool::new();
+            let index = raw.put_entry(RawEntry::Utf8(bytes)).unwrap();
+            let literal = raw
+                .put_entry(RawEntry::String {
+                    string_index: index.into(),
+                })
+                .unwrap();
+            let pool = ConstantPool::from_raw(raw).unwrap();
+            assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(expected.clone())));
+            assert_eq!(
+                pool.get_constant_value(literal).unwrap(),
+                ConstantValue::String(expected)
+            );
         }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_integer()(
-            value in any::<i32>()
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(3);
-            result.extend(value.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_float()(
-            value in any::<f32>()
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(4);
-            result.extend(value.to_be_bytes());
-            result
-        }
-
-    }
-
-    prop_compose! {
-        fn arb_constant_info_long()(
-            value in any::<i64>()
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(9);
-            result.push(5);
-            result.extend(value.to_be_bytes());
-            result
-        }
-
-    }
-
-    prop_compose! {
-        fn arb_constant_info_double()(
-            value in any::<f64>()
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(9);
-            result.push(6);
-            result.extend(value.to_be_bytes());
-            result
-        }
-
-    }
-
-    prop_compose! {
-        fn arb_constant_info_class()(
-            name_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(3);
-            result.push(7);
-            result.extend(name_index.to_be_bytes());
-            result
-        }
-
-    }
-
-    prop_compose! {
-        fn arb_constant_info_string()(
-            string_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(3);
-            result.push(8);
-            result.extend(string_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_field_ref()(
-            class_index in 1..=u16::MAX,
-            name_and_type_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(9);
-            result.extend(class_index.to_be_bytes());
-            result.extend(name_and_type_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_method_ref()(
-            class_index in 1..=u16::MAX,
-            name_and_type_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(10);
-            result.extend(class_index.to_be_bytes());
-            result.extend(name_and_type_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_interface_method_ref()(
-            class_index in 1..=u16::MAX,
-            name_and_type_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(11);
-            result.extend(class_index.to_be_bytes());
-            result.extend(name_and_type_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_name_and_type()(
-            name_index in 1..=u16::MAX,
-            descriptor_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(12);
-            result.extend(name_index.to_be_bytes());
-            result.extend(descriptor_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_method_handle()(
-            reference_kind in 1..=u8::MAX,
-            reference_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(15);
-            result.push(reference_kind);
-            result.extend(reference_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_method_type()(
-            descriptor_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(3);
-            result.push(16);
-            result.extend(descriptor_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_dynamic()(
-            bootstrap_method_attr_index in 1..=u16::MAX,
-            name_and_type_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(17);
-            result.extend(bootstrap_method_attr_index.to_be_bytes());
-            result.extend(name_and_type_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_invoke_dynamic()(
-            bootstrap_method_attr_index in 1..=u16::MAX,
-            name_and_type_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(5);
-            result.push(18);
-            result.extend(bootstrap_method_attr_index.to_be_bytes());
-            result.extend(name_and_type_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_module()(
-            name_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(3);
-            result.push(19);
-            result.extend(name_index.to_be_bytes());
-            result
-        }
-    }
-
-    prop_compose! {
-        fn arb_constant_info_package()(
-            name_index in 1..=u16::MAX
-        ) -> Vec<u8> {
-            let mut result = Vec::with_capacity(3);
-            result.push(20);
-            result.extend(name_index.to_be_bytes());
-            result
-        }
-    }
-
-    pub(crate) fn arb_constant_pool_info() -> impl Strategy<Value = Vec<u8>> {
-        prop_oneof![
-            arb_constant_info_utf8(),
-            arb_constant_info_integer(),
-            arb_constant_info_float(),
-            arb_constant_info_long(),
-            arb_constant_info_double(),
-            arb_constant_info_class(),
-            arb_constant_info_string(),
-            arb_constant_info_field_ref(),
-            arb_constant_info_method_ref(),
-            arb_constant_info_interface_method_ref(),
-            arb_constant_info_name_and_type(),
-            arb_constant_info_method_handle(),
-            arb_constant_info_method_type(),
-            arb_constant_info_dynamic(),
-            arb_constant_info_invoke_dynamic(),
-            arb_constant_info_module(),
-            arb_constant_info_package(),
-        ]
     }
 }

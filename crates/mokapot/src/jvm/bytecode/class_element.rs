@@ -1,16 +1,17 @@
 use bitflags::Flags;
 
-use super::{GenerationError, ParseError, ParsingContext, ToBytecode};
-use crate::jvm::class::ConstantPool;
+use super::{
+    GenerationError, ParseError, ParsingContext, ToBytecode, constant_pool::RawConstantPool,
+};
 
 pub(super) trait ClassElement: Sized {
     type Raw: Sized;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError>;
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError>;
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError>;
 
-    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, GenerationError>
+    fn into_bytes(self, cp: &mut RawConstantPool) -> Result<Vec<u8>, GenerationError>
     where
         Self::Raw: ToBytecode,
     {
@@ -30,7 +31,7 @@ where
         T::from_bits(raw).ok_or(ParseError::malform("Invalid access flag"))
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         Ok(self.bits())
     }
 }

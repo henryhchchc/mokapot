@@ -7,8 +7,12 @@ use itertools::Itertools;
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
-        bytecode::{GenerationError, ParseError, ParsingContext, class_element::ClassElement},
-        class::{ConstantPool, constant_pool},
+        bytecode::{
+            GenerationError, ParseError, ParsingContext,
+            class_element::ClassElement,
+            constant_pool::{RawConstantPool, RawEntry},
+        },
+        class::ConstantPool,
         code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
         errors::ParsingErrorContext,
     },
@@ -27,7 +31,7 @@ impl ClassElement for InstructionList<Instruction> {
             .try_collect()
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let (raw_instructions, _) = self.into_iter().try_fold(
             (BTreeMap::new(), Ok(ProgramCounter::default())),
             |(mut acc, pc), (_, insn)| -> Result<_, GenerationError> {
@@ -376,20 +380,8 @@ impl Instruction {
                 Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
-                let entry = constant_pool
-                    .get_entry(dynamic_index)
-                    .context("Invalid constant pool index")?;
-                let &constant_pool::Entry::InvokeDynamic {
-                    bootstrap_method_attr_index: bootstrap_method_index,
-                    name_and_type_index,
-                } = entry
-                else {
-                    Err(ParseError::malform(format!(
-                        "Mismatched constant pool type. Expected InvokeDynamic, but got {}",
-                        entry.constant_kind()
-                    )))?
-                };
-                let (name, descriptor) = constant_pool.get_name_and_type(name_and_type_index)?;
+                let (bootstrap_method_index, name, descriptor) =
+                    constant_pool.get_invoke_dynamic(dynamic_index)?;
                 Self::InvokeDynamic {
                     bootstrap_method_index,
                     name,
@@ -462,7 +454,7 @@ impl Instruction {
     pub fn into_raw_instruction(
         self,
         pc: ProgramCounter,
-        cp: &mut ConstantPool,
+        cp: &mut RawConstantPool,
     ) -> Result<RawInstruction, GenerationError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
@@ -767,9 +759,9 @@ impl Instruction {
                 ref descriptor,
             } => {
                 let name_and_type_index = cp.put_name_and_type(name, descriptor)?;
-                let entry = constant_pool::Entry::InvokeDynamic {
-                    bootstrap_method_attr_index: bootstrap_method_index,
-                    name_and_type_index,
+                let entry = RawEntry::InvokeDynamic {
+                    bootstrap_method_attr_index: bootstrap_method_index.into(),
+                    name_and_type_index: name_and_type_index.into(),
                 };
                 let dynamic_index = cp.put_entry_dedup(entry)?;
                 InvokeDynamic { dynamic_index }

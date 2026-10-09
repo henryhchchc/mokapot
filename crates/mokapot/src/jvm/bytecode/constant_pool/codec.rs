@@ -1,8 +1,7 @@
 use std::io::{self, Read, Write};
 
-use super::Entry;
+use super::RawEntry;
 use crate::jvm::{
-    JavaString,
     bytecode::{
         ToBytecode,
         reader::{BytecodeReader, read_vec},
@@ -11,7 +10,7 @@ use crate::jvm::{
     errors::GenerationError,
 };
 
-impl Entry {
+impl RawEntry {
     pub(super) fn parse<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let tag: u8 = reader.decode_value()?;
         match tag {
@@ -73,47 +72,26 @@ impl Entry {
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let length: u16 = reader.decode_value()?;
         let bytes = read_vec(reader, length.into())?;
-        let value = match String::from_utf8(bytes) {
-            Ok(value) => JavaString::Utf8(value),
-            Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
-                Ok(value) => JavaString::Utf8(value.into_owned()),
-                Err(_) => JavaString::InvalidUtf8(error.into_bytes()),
-            },
-        };
-        Ok(Self::Utf8(value))
+        Ok(Self::Utf8(bytes))
     }
 }
 
-impl ToBytecode for JavaString {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        match self {
-            Self::Utf8(value) => {
-                let bytes = cesu8::to_java_cesu8(value);
-                write_length::<u16>(writer, bytes.len())?;
-                writer.write_all(bytes.as_ref())?;
-            }
-            Self::InvalidUtf8(bytes) => {
-                write_length::<u16>(writer, bytes.len())?;
-                writer.write_all(bytes)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl ToBytecode for Entry {
+impl ToBytecode for RawEntry {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&[self.tag()])?;
         match self {
-            Self::Utf8(value) => value.to_writer(writer)?,
-            Self::Integer(value) => writer.write_all(&value.to_be_bytes())?,
-            Self::Float(value) => writer.write_all(&value.to_be_bytes())?,
-            Self::Long(value) => writer.write_all(&value.to_be_bytes())?,
-            Self::Double(value) => writer.write_all(&value.to_be_bytes())?,
+            Self::Utf8(value) => {
+                write_length::<u16>(writer, value.len())?;
+                writer.write_all(value)?;
+            }
+            Self::Integer(value) => value.to_writer(writer)?,
+            Self::Float(value) => value.to_writer(writer)?,
+            Self::Long(value) => value.to_writer(writer)?,
+            Self::Double(value) => value.to_writer(writer)?,
             Self::Class { name_index }
             | Self::Module { name_index }
-            | Self::Package { name_index } => writer.write_all(&name_index.to_be_bytes())?,
-            Self::String { string_index } => writer.write_all(&string_index.to_be_bytes())?,
+            | Self::Package { name_index } => name_index.to_writer(writer)?,
+            Self::String { string_index } => string_index.to_writer(writer)?,
             Self::FieldRef {
                 class_index,
                 name_and_type_index,
@@ -126,25 +104,25 @@ impl ToBytecode for Entry {
                 class_index,
                 name_and_type_index,
             } => {
-                writer.write_all(&class_index.to_be_bytes())?;
-                writer.write_all(&name_and_type_index.to_be_bytes())?;
+                class_index.to_writer(writer)?;
+                name_and_type_index.to_writer(writer)?;
             }
             Self::NameAndType {
                 name_index,
                 descriptor_index,
             } => {
-                writer.write_all(&name_index.to_be_bytes())?;
-                writer.write_all(&descriptor_index.to_be_bytes())?;
+                name_index.to_writer(writer)?;
+                descriptor_index.to_writer(writer)?;
             }
             Self::MethodHandle {
                 reference_kind,
                 reference_index,
             } => {
-                writer.write_all(&reference_kind.to_be_bytes())?;
-                writer.write_all(&reference_index.to_be_bytes())?;
+                writer.write_all(&[*reference_kind])?;
+                reference_index.to_writer(writer)?;
             }
             Self::MethodType { descriptor_index } => {
-                writer.write_all(&descriptor_index.to_be_bytes())?;
+                descriptor_index.to_writer(writer)?;
             }
             Self::Dynamic {
                 bootstrap_method_attr_index,
@@ -154,8 +132,8 @@ impl ToBytecode for Entry {
                 bootstrap_method_attr_index,
                 name_and_type_index,
             } => {
-                writer.write_all(&bootstrap_method_attr_index.to_be_bytes())?;
-                writer.write_all(&name_and_type_index.to_be_bytes())?;
+                bootstrap_method_attr_index.to_writer(writer)?;
+                name_and_type_index.to_writer(writer)?;
             }
         }
         Ok(())

@@ -3,13 +3,13 @@
 use itertools::Itertools;
 
 use super::{
-    GenerationError, ParseError, ParsingContext, class_element::ClassElement, raw_attributes,
+    GenerationError, ParseError, ParsingContext, class_element::ClassElement,
+    constant_pool::RawConstantPool, raw_attributes,
 };
 use crate::jvm::{
     Module,
-    class::{ConstantPool, constant_pool::Entry},
-    errors::ParsingErrorContext,
     module::{Export, Open, Provide, Require},
+    references::ModuleRef,
 };
 
 impl ClassElement for Require {
@@ -37,7 +37,7 @@ impl ClassElement for Require {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let requires_index = cp.put_module_ref(self.module)?;
         let flags = self.flags.into_raw(cp)?;
         let version_index = self
@@ -72,7 +72,7 @@ impl ClassElement for Export {
         Ok(Export { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let exports_index = cp.put_package_name(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -107,7 +107,7 @@ impl ClassElement for Open {
         Ok(Open { package, flags, to })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let opens_index = cp.put_package_name(&self.package)?;
         let flags = self.flags.into_raw(cp)?;
         let to = self
@@ -139,7 +139,7 @@ impl ClassElement for Provide {
         Ok(Provide { service, with })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let provides_index = cp.put_class_name(&self.service)?;
         let with = self
             .with
@@ -167,17 +167,7 @@ impl ClassElement for Module {
             uses,
             provides,
         } = raw;
-        let module_info_entry = ctx
-            .constant_pool
-            .get_entry(info_index)
-            .context("Invalid constant pool index")?;
-        let &Entry::Module { name_index } = module_info_entry else {
-            Err(ParseError::malform(format!(
-                "Mismatched constant pool type. Expected Module, but got {}.",
-                module_info_entry.constant_kind()
-            )))?
-        };
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let name = ctx.constant_pool.get_module_ref(info_index)?.name;
         let flags = ClassElement::from_raw(flags, ctx)?;
         let version = if version_index > 0 {
             Some(ctx.constant_pool.get_str(version_index)?.to_owned())
@@ -216,9 +206,8 @@ impl ClassElement for Module {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
-        let name_index = cp.put_string(self.name)?;
-        let info_index = cp.put_entry_dedup(Entry::Module { name_index })?;
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
+        let info_index = cp.put_module_ref(ModuleRef { name: self.name })?;
         let flags = self.flags.into_raw(cp)?;
         let version_index = self
             .version

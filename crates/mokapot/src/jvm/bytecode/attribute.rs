@@ -13,6 +13,7 @@ use super::{
     FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
     class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
+    constant_pool::RawConstantPool,
     reader::{BytecodeReader, read_vec},
     write_length,
 };
@@ -21,7 +22,7 @@ use crate::{
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
-        class::{BootstrapMethod, ConstantPool, EnclosingMethod, InnerClassInfo, RecordComponent},
+        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
         method::ParameterInfo,
     },
@@ -247,7 +248,7 @@ impl ClassElement for Attribute {
         }
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_idx = cp.put_string(self.name().to_owned())?;
         let info = self.into_bytes(cp)?;
         Ok(Self::Raw { name_idx, info })
@@ -255,7 +256,7 @@ impl ClassElement for Attribute {
 }
 
 impl Attribute {
-    fn into_bytes(self, cp: &mut ConstantPool) -> Result<Vec<u8>, GenerationError> {
+    fn into_bytes(self, cp: &mut RawConstantPool) -> Result<Vec<u8>, GenerationError> {
         let mut bytes = match self {
             Attribute::ConstantValue(constant_value) => {
                 let constant_value_idx = cp.put_constant_value(constant_value)?;
@@ -340,7 +341,7 @@ fn parse_string<R: Read + ?Sized>(
 #[inline]
 fn serialize_vec<Len>(
     items: Vec<impl ClassElement<Raw: ToBytecode>>,
-    cp: &mut ConstantPool,
+    cp: &mut RawConstantPool,
 ) -> Result<Vec<u8>, GenerationError>
 where
     usize: TryInto<Len, Error = TryFromIntError>,

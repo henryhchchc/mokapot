@@ -10,6 +10,7 @@ use super::{
     FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
     attribute::{Attribute, AttributeInfo},
     class_element::ClassElement,
+    constant_pool::RawConstantPool,
     field_info::FieldInfo,
     method_info::MethodInfo,
     raw_attributes,
@@ -33,7 +34,7 @@ use crate::{
 pub(crate) struct ClassFile {
     minor_version: u16,
     major_version: u16,
-    constant_pool: ConstantPool,
+    constant_pool: RawConstantPool,
     access_flags: u16,
     this_class: u16,
     super_class: u16,
@@ -97,6 +98,7 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags = class::AccessFlags::from_bits(access_flags)
             .ok_or(ParseError::malform("Invalid class access flags"))?;
+        let constant_pool = ConstantPool::from_raw(constant_pool)?;
         let class_name = constant_pool.get_class_name(this_class)?;
         let super_class = match super_class {
             0 if class_name == "java/lang/Object" => None,
@@ -188,7 +190,7 @@ impl Class {
     }
 
     pub(crate) fn into_raw(self) -> Result<ClassFile, GenerationError> {
-        let mut constant_pool = ConstantPool::new();
+        let mut constant_pool = RawConstantPool::new();
         let this_class = constant_pool.put_class_name(&self.name)?;
         let super_class = self
             .super_class
@@ -276,7 +278,7 @@ impl ClassElement for BootstrapMethod {
         Ok(Self { method, arguments })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let method_ref_idx = cp.put_method_handle(self.method)?;
         let arguments = self
             .arguments
@@ -326,7 +328,7 @@ impl ClassElement for InnerClassInfo {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let info_index = cp.put_class_name(&self.inner_class)?;
         let outer_class_info_index = self
             .outer_class
@@ -397,7 +399,7 @@ impl ClassElement for RecordComponent {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_index = cp.put_string(self.name)?;
         let descriptor_index = cp.put_string(self.component_type.descriptor())?;
         let attributes = self
@@ -427,7 +429,7 @@ impl ClassElement for EnclosingMethod {
         let method_index = method_index.get();
         let class = ctx.constant_pool.get_class_name(class_index)?;
         let method_name_and_desc = if method_index > 0 {
-            let name_and_desc = ctx.constant_pool.get_name_and_type(method_index)?;
+            let name_and_desc = ctx.constant_pool.get_method_name_and_type(method_index)?;
             Some(name_and_desc)
         } else {
             None
@@ -438,7 +440,7 @@ impl ClassElement for EnclosingMethod {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let class_index = cp.put_class_name(&self.class)?;
         let method_index = self
             .method_name_and_desc

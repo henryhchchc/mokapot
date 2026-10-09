@@ -8,6 +8,7 @@ pub mod benchmark_support;
 pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;
+pub mod constant_pool;
 mod field_info;
 mod fixed_layout;
 mod method_info;

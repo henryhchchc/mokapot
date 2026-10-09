@@ -165,7 +165,7 @@ impl ClassElement for Method {
 
     fn into_raw(
         self,
-        cp: &mut crate::jvm::class::ConstantPool,
+        cp: &mut crate::jvm::bytecode::constant_pool::RawConstantPool,
     ) -> Result<Self::Raw, GenerationError> {
         let access_flags = self.access_flags.into_raw(cp)?;
         let name_index = cp.put_string(self.name)?;

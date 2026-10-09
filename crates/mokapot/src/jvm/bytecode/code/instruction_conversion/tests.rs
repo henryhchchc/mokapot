@@ -1,13 +1,13 @@
 use super::*;
 use crate::{
-    jvm::{JavaString, class::constant_pool::Entry, references::MethodRef},
+    jvm::{bytecode::constant_pool::RawEntry, references::MethodRef},
     types::reference_type::ReferenceType,
 };
 
 fn interface_method() -> MethodRef {
     MethodRef {
-        owner: ReferenceType::Class("example/Interface".parse().unwrap()),
-        name: "method".to_owned(),
+        owner: ReferenceType::Class("a/b/I".parse().unwrap()),
+        name: "m".to_owned(),
         descriptor: "()V".parse().unwrap(),
     }
 }
@@ -19,7 +19,7 @@ fn tableswitch_default_can_target_backward() {
         low: 0,
         jump_targets: vec![ProgramCounter::from(10)],
     }
-    .into_raw_instruction(ProgramCounter::from(10), &mut ConstantPool::new())
+    .into_raw_instruction(ProgramCounter::from(10), &mut RawConstantPool::new())
     .unwrap();
 
     assert_eq!(
@@ -42,7 +42,7 @@ fn tableswitch_uses_inclusive_high_bound() {
         jump_targets: targets.clone(),
     };
     let raw = instruction
-        .into_raw_instruction(10.into(), &mut ConstantPool::new())
+        .into_raw_instruction(10.into(), &mut RawConstantPool::new())
         .unwrap();
 
     let raw_instruction = RawInstruction::TableSwitch {
@@ -69,7 +69,7 @@ fn tableswitch_rejects_invalid_target_counts() {
             low,
             jump_targets,
         };
-        let invalid = instruction.into_raw_instruction(0.into(), &mut ConstantPool::new());
+        let invalid = instruction.into_raw_instruction(0.into(), &mut RawConstantPool::new());
         assert!(invalid.is_err());
     }
 }
@@ -87,7 +87,7 @@ fn tableswitch_rejects_mismatched_raw_targets() {
 
 #[test]
 fn invokeinterface_uses_interface_method_refs() {
-    let mut pool = ConstantPool::new();
+    let mut pool = RawConstantPool::new();
     let raw = Instruction::InvokeInterface(interface_method(), 1)
         .into_raw_instruction(ProgramCounter::default(), &mut pool)
         .unwrap();
@@ -97,42 +97,35 @@ fn invokeinterface_uses_interface_method_refs() {
     };
     assert!(matches!(
         pool.get_entry(method_index),
-        Some(Entry::InterfaceMethodRef { .. })
+        Some(RawEntry::InterfaceMethodRef { .. })
     ));
 }
 
 #[test]
 fn invokeinterface_rejects_method_refs() {
-    let mut pool = ConstantPool::new();
-    let class_name_index = pool
-        .put_entry(Entry::Utf8(JavaString::Utf8(
-            "example/Interface".to_owned(),
-        )))
-        .unwrap();
+    let mut pool = RawConstantPool::new();
+    let class_name_index = pool.put_entry(RawEntry::Utf8(b"a/b/I".to_vec())).unwrap();
     let class_index = pool
-        .put_entry(Entry::Class {
-            name_index: class_name_index,
+        .put_entry(RawEntry::Class {
+            name_index: class_name_index.into(),
         })
         .unwrap();
-    let name_index = pool
-        .put_entry(Entry::Utf8(JavaString::Utf8("method".to_owned())))
-        .unwrap();
-    let descriptor_index = pool
-        .put_entry(Entry::Utf8(JavaString::Utf8("()V".to_owned())))
-        .unwrap();
+    let name_index = pool.put_entry(RawEntry::Utf8(b"m".to_vec())).unwrap();
+    let descriptor_index = pool.put_entry(RawEntry::Utf8(b"()V".to_vec())).unwrap();
     let name_and_type_index = pool
-        .put_entry(Entry::NameAndType {
-            name_index,
-            descriptor_index,
+        .put_entry(RawEntry::NameAndType {
+            name_index: name_index.into(),
+            descriptor_index: descriptor_index.into(),
         })
         .unwrap();
     let method_index = pool
-        .put_entry(Entry::MethodRef {
-            class_index,
-            name_and_type_index,
+        .put_entry(RawEntry::MethodRef {
+            class_index: class_index.into(),
+            name_and_type_index: name_and_type_index.into(),
         })
         .unwrap();
 
+    let pool = ConstantPool::from_raw(pool).unwrap();
     assert!(
         Instruction::from_raw_instruction(
             RawInstruction::InvokeInterface {

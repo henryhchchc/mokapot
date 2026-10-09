@@ -1,12 +1,10 @@
 use std::io::{self, Read, Write};
 
 use super::{ClassFile, JAVA_CLASS_MAGIC};
-use crate::jvm::{
-    bytecode::{
-        FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo, field_info::FieldInfo,
-        method_info::MethodInfo, reader::BytecodeReader, write_length,
-    },
-    class::ConstantPool,
+use crate::jvm::bytecode::{
+    FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo,
+    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo,
+    reader::BytecodeReader, write_length,
 };
 
 impl FromBytecode for ClassFile {
@@ -21,7 +19,7 @@ impl FromBytecode for ClassFile {
         let minor_version = reader.decode_value()?;
         let major_version = reader.decode_value()?;
         let constant_pool_count = reader.decode_value()?;
-        let constant_pool = ConstantPool::from_reader(reader, constant_pool_count)?;
+        let constant_pool = RawConstantPool::from_reader(reader, constant_pool_count)?;
         let access_flags = reader.decode_value()?;
         let this_class = reader.decode_value()?;
         let super_class = reader.decode_value()?;

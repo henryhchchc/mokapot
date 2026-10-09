@@ -23,7 +23,7 @@ use std::{
     num::TryFromIntError,
 };
 
-use crate::jvm::{class::constant_pool, code::InvalidOffset};
+use crate::jvm::{bytecode::constant_pool, code::InvalidOffset};
 
 /// A generic JVM bytecode error parameterized by its error kind.
 ///

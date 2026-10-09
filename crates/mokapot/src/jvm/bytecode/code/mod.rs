@@ -15,6 +15,7 @@ use super::{
     FromBytecode, ParseError, ParsingContext, ToBytecode,
     attribute::Attribute,
     class_element::ClassElement,
+    constant_pool::RawConstantPool,
     raw_attributes::{self, Code},
     reader::BytecodeReader,
 };
@@ -23,7 +24,6 @@ use crate::{
     jvm::{
         Annotations,
         bytecode::code::raw_instruction::RawInstruction,
-        class::ConstantPool,
         code::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
             ProgramCounter,
@@ -40,7 +40,7 @@ impl ClassElement for LineNumberTableEntry {
         Ok(raw)
     }
 
-    fn into_raw(self, _cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         Ok(self)
     }
 }
@@ -91,7 +91,7 @@ impl ClassElement for ExceptionTableEntry {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let ExceptionTableEntry {
             covered_pc,
             handler_pc,
@@ -142,7 +142,7 @@ impl ClassElement for ParameterInfo {
         Ok(ParameterInfo { name, access_flags })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let name_index = self
             .name
             .map(|it| cp.put_string(it))
@@ -224,7 +224,7 @@ impl ClassElement for MethodBody {
         })
     }
 
-    fn into_raw(self, cp: &mut ConstantPool) -> Result<Self::Raw, GenerationError> {
+    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let mut instruction_bytes = Vec::new();
         self.instructions
             .into_raw(cp)?
@@ -292,6 +292,7 @@ impl ClassElement for MethodBody {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jvm::class::ConstantPool;
     use crate::jvm::{class::Version, errors::ParseErrorKind};
 
     fn context() -> ParsingContext {
@@ -320,7 +321,7 @@ mod tests {
             entry.covered_pc,
             ProgramCounter::from(1)..ProgramCounter::from(4)
         );
-        let raw = entry.into_raw(&mut ConstantPool::new()).unwrap();
+        let raw = entry.into_raw(&mut RawConstantPool::new()).unwrap();
         assert_eq!(raw.start_pc.get(), 1);
         assert_eq!(raw.end_pc.get(), 4);
     }
