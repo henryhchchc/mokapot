@@ -1,72 +1,71 @@
 # Contributing to MokaPot
 
-We welcome all contributions to MokaPot!
-Whether you're fixing bugs, adding features, improving documentation, or sharing feedback, your help is appreciated.
+Check [existing issues](https://github.com/henryhchchc/mokapot/issues) before reporting bugs or proposing features.
+For bugs, include reproduction steps, expected and actual behavior, and your environment.
+Ask questions in [GitHub Discussions](https://github.com/henryhchchc/mokapot/discussions).
 
-For questions or help, open an issue or start a [GitHub Discussion](https://github.com/henryhchchc/mokapot/discussions).
+## Pull Requests
 
-## Coding Agents and AI Authorship
+- Branch from `main` and open a PR against `main`.
+- Add tests for behavior changes and describe the change and validation in the PR.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) with a module scope, such as `feat(jvm): ...`.
+- Sign off commits with `git commit --signoff` to certify the [Developer Certificate of Origin](https://developercertificate.org).
 
-Contributions made with the assistance of coding agents are welcome.
-However, AI agents MUST NOT be credited as authors or co-authors in source files, commit messages, or commit metadata (e.g., `Co-authored-by: Claude`).
-Human contributors MUST review and take full responsibility for the code they submit, regardless of whether AI assistance was used.
+AI-assisted contributions are welcome.
+Human contributors must review and take responsibility for submitted code.
+Do not credit AI agents as authors or co-authors in source files, commit messages, or metadata.
 
-## Bug Reports and Feature Requests
+## Development
 
-- **Bug Reports:** Open an issue at the [GitHub issue tracker](https://github.com/henryhchchc/mokapot/issues).
-  Include details: steps to reproduce, expected and actual behavior, environment info.
+Use the latest stable Rust and JDK 27 (`javac` and `jar` for Java fixtures).
+Run from the repository root:
 
-- **Feature Requests:** Open an issue describing your idea and motivation.
-  Always check [existing issues](https://github.com/henryhchchc/mokapot/issues) to avoid duplicates.
-
-## Code Contributions
-
-- Fork the repository and create a branch from `main`.
-- Write clear, conventional commit messages.
-  Follow [Conventional Commits](https://www.conventionalcommits.org/).
-  Include a scope (top-level module, e.g. `feat(jvm): ...` for changes in `src/jvm`).
-- Make sure code is correctly formatted.
-  Run `cargo fmt --check`.
-- Make sure `clippy` does not report any warnings.
-  Run `cargo clippy --all-targets --all-features -- -D warnings`.
-- Add or update tests as needed.
-- For integration tests, see instructions below.
-- Push your branch and open a Pull Request (PR) against `main`.
-- Respond to review feedback and update your branch as needed.
-- PRs are merged after passing checks and review.
-
-## Testing
-
-- Unit tests live beside the code they cover.
-- Java fixture tests live in `tests/` and run with the default test suite.
-  They require JDK 27 (`javac` and `jar`).
-- The JDK smoke test in `tests/jdk_classes.rs` is ignored by default.
-
-```bash
-# Run unit and Java fixture tests
+```sh
+cargo build --all-features
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
+```
 
-# Run tests without compiling or running Java fixtures
+Format Markdown with `rumdl fmt`.
+Unit tests live beside their source; integration tests and Java fixtures live in `crates/mokapot/tests` and `crates/mokapot/test_data`.
+To skip compiling and running Java fixtures:
+
+```sh
 MOKAPOT_SKIP_JAVA_TESTS=1 cargo test --all-features
+```
 
-# Extract JDK classes from your JDK distribution
-jimage extract --dir="<extraction path>" "$JAVA_HOME/lib/modules"
+## JDK Smoke Tests and Benchmarks
 
-# Set the path for extracted JDK classes
-export JDK_CLASSES="<extraction path>"
+Both use extracted JDK classes.
+With `JAVA_HOME` set, extract them once:
 
-# Run only the ignored JDK smoke test using its optimized profile
+```sh
+jimage extract --dir=./jdk_classes "$JAVA_HOME/lib/modules"
+export JDK_CLASSES="$PWD/jdk_classes"
+```
+
+Run the ignored smoke test with its optimized profile (requires `cargo-nextest`):
+
+```sh
 MOKAPOT_SKIP_JAVA_TESTS=1 cargo nextest run --cargo-profile=jdk-smoke --all-features --test jdk_classes --run-ignored=all
 ```
 
-## Developer Certificate of Origin (DCO)
+Run parsing benchmarks:
 
-Certify compliance with the [Developer Certificate of Origin](https://developercertificate.org) for all contributions.
-
-Sign off commits:
-
-```bash
-git commit --signoff
+```sh
+MOKAPOT_SKIP_JAVA_TESTS=1 cargo bench -p mokapot --bench jdk-parsing --all-features
 ```
 
-Thank you for contributing to MokaPot!
+The `raw_class` case leaves attribute payloads unresolved; `whole_class` also decodes attributes and instructions and resolves the public model.
+Each iteration parses and drops classes sequentially; discovery, reads, validation, and fingerprinting are outside timing.
+Results report latency per corpus pass, byte throughput, and classes per second.
+
+By default, benchmarks select shard 0 of 16 using a fixed hash of module-relative paths.
+Set `JDK_BENCH_SHARD_INDEX` to select another shard, or `JDK_BENCH_SHARD_COUNT=1` for the full corpus (index unset or 0).
+Only selected bytes remain in memory; full-corpus runs require more memory and time.
+For comparisons, record the JDK version and use matching corpus fingerprints, Rust toolchains, features, and machines.
+
+Append `-- --test` to validate cases without timing, or `-- raw_class` / `-- whole_class` to filter cases.
+Benchmarks need no Java fixtures and are ignored when `JDK_CLASSES` is unset.
+Listing benchmarks does not load the corpus.
