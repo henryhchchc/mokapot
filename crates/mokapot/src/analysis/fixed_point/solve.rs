@@ -18,7 +18,6 @@ use super::{DataflowProblem, FactsMap};
 ///
 /// Terminates when the lattice has finite height and the flow function is
 /// monotonic.
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub fn solve<P, M>(problem: &mut P) -> Result<M, P::Err>
 where
     P: DataflowProblem,

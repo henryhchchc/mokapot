@@ -19,5 +19,5 @@ cargo run --example <example-name> -- [arguments]
 For example:
 
 ```sh
-cargo run --example moka_ir --features unstable-moka-ir -- Example.class
+cargo run --example moka_ir -- Example.class
 ```

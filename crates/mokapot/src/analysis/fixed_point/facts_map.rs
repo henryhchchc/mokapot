@@ -15,7 +15,6 @@ use super::JoinSemiLattice;
 /// [`QueuedFactsMap`] (`L: Hash + Eq + Clone`).
 ///
 /// [`pop_one`]: FactsMap::pop_one
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub trait FactsMap<L, F>: Default {
     /// Joins `fact` into the fact stored at `location`, inserting it directly
     /// when absent. The join is in place, so no [`Clone`] is required.
@@ -108,7 +107,6 @@ where
 /// An unordered map picks an arbitrary key, making the work spent reaching the
 /// fixed point depend on iteration order; the queue costs a clone per location.
 #[derive(Debug)]
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub struct QueuedFactsMap<L, F> {
     entries: HashMap<L, F>,
     order: VecDeque<L>,

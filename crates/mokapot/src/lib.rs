@@ -7,11 +7,7 @@
 pub mod analysis;
 
 pub(crate) mod intrinsics;
-#[cfg(feature = "unstable-moka-ir")]
 pub mod ir;
-#[cfg(not(feature = "unstable-moka-ir"))]
-#[cfg_attr(not(feature = "unstable-moka-ir"), expect(unused))]
-pub(crate) mod ir;
 pub mod jvm;
 pub mod types;
 

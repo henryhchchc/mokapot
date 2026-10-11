@@ -1,7 +1,6 @@
 # MokaIR
 
 MokaIR is mokapot's register-based, scalar SSA representation of a JVM method, exposing semantic operations and control flow without the operand stack or local slots.
-It is unstable: enable `unstable-moka-ir` (or the umbrella `unstable`).
 
 ## Construction
 

@@ -12,8 +12,6 @@
 //! # Example
 //!
 //! ```
-//! # #[cfg(feature = "unstable-fixed-point-analyses")]
-//! # {
 //! use mokapot::analysis::fixed_point::{DataflowProblem, JoinSemiLattice, solve};
 //! use std::{collections::BTreeMap, convert::Infallible};
 //!
@@ -50,7 +48,6 @@
 //! let results: BTreeMap<_, _> = solve(&mut Reachability).unwrap();
 //! assert_eq!(results.keys().copied().collect::<Vec<_>>(), [0, 1, 2]);
 //! assert!(results.values().all(|fact| fact.0));
-//! # }
 //! ```
 
 mod facts_map;
@@ -61,11 +58,7 @@ mod solve;
 #[cfg(test)]
 mod tests;
 
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub use facts_map::{FactsMap, QueuedFactsMap};
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub use lattice::JoinSemiLattice;
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub use problem::DataflowProblem;
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub use solve::solve;

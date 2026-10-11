@@ -30,6 +30,7 @@ pub fn class_bytes(name: &str) -> Vec<u8> {
     fs::read(&path).unwrap_or_else(|error| panic!("Cannot read {}: {error}", path.display()))
 }
 
+#[cfg(feature = "jar")]
 pub fn jar_path() -> PathBuf {
     let path = output_dir().join("test_classes.jar");
     assert!(

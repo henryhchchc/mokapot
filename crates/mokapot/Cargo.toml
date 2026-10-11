@@ -25,7 +25,6 @@ bitflags = { workspace = true }
 cesu8 = { workspace = true }
 derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
 document-features = { workspace = true }
-instability = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
 petgraph = { workspace = true, optional = true }
@@ -38,7 +37,6 @@ zip = { workspace = true, features = ["deflate"], optional = true }
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }
 divan.workspace = true
-mokapot = { path = ".", features = ["unstable"] }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 walkdir = { workspace = true }
@@ -55,22 +53,3 @@ bench-internals = []
 jar = ["dep:zip"]
 ## Enables graph analyses backed by `petgraph`.
 petgraph = ["dep:petgraph"]
-#! ### Experimental APIs
-#!
-#! The following features are experimental and the APIs are unstable.
-#! The APIs provided by these features may undergo breaking changes from time to time.
-## All the experimental APIs
-unstable = [
-  "unstable-bytecode-generation",
-  "unstable-fixed-point-analyses",
-  "unstable-moka-ir",
-  "unstable-project-analyses",
-]
-## Generate JVM bytecode from MokaPot data structures.
-unstable-bytecode-generation = []
-## Fixed-point analysis framework
-unstable-fixed-point-analyses = []
-## Moka IR. A register-based, SSA intermediate representation.
-unstable-moka-ir = []
-## Project-wide analyses APIs
-unstable-project-analyses = []

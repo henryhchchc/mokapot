@@ -417,8 +417,6 @@ impl InstructionList<RawInstruction> {
     /// See [`GenerationError`] for more information.
     ///
     /// ```
-    /// # #[cfg(feature = "unstable-bytecode-generation")]
-    /// # {
     /// use mokapot::jvm::code::InstructionList;
     ///
     /// let bytes = vec![0x10, 42, 0xac]; // bipush 42; ireturn
@@ -426,9 +424,7 @@ impl InstructionList<RawInstruction> {
     /// let mut output = Vec::new();
     /// instructions.to_writer(&mut output).unwrap();
     /// assert_eq!(output, bytes);
-    /// # }
     /// ```
-    #[instability::unstable(feature = "bytecode-generation")]
     pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         let mut writer = PositionTracker::new(writer);
 

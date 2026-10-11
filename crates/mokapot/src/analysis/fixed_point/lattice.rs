@@ -10,7 +10,6 @@
 /// `{a} <= {a, b}`.
 ///
 /// [`solve`](super::solve) terminates only if the lattice has finite height.
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub trait JoinSemiLattice: PartialOrd {
     /// Joins `other` into `self` in place, reusing owned storage where
     /// practical.

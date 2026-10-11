@@ -1,21 +1,16 @@
 //! Type hierarchy analysis components.
 
-#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "petgraph")]
-#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use petgraph::visit::{Control, DfsEvent, Reversed, depth_first_search};
 
-#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use super::{ClassHierarchy, InterfaceImplHierarchy};
-#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use crate::{jvm::Class, types::class_name::ClassName};
 
 #[cfg(feature = "petgraph")]
 mod petgraph_impl;
 
-#[instability::unstable(feature = "project-analyses")]
 impl ClassHierarchy {
     /// Creates a new [`ClassHierarchy`] from a list of classes.
     #[must_use]
@@ -71,7 +66,6 @@ impl ClassHierarchy {
     }
 }
 
-#[instability::unstable(feature = "project-analyses")]
 impl InterfaceImplHierarchy {
     /// Creates a new [`InterfaceImplHierarchy`] from a list of classes.
     #[must_use]

@@ -209,7 +209,6 @@ impl<T> ParsingErrorContext for Option<T> {
 // ---------------------------------------------------------------------------
 
 /// An error that occurs during bytecode generation.
-#[instability::unstable(feature = "bytecode-generation")]
 pub type GenerationError = BytecodeError<GenerationErrorKind>;
 
 impl BytecodeError<GenerationErrorKind> {
@@ -259,7 +258,6 @@ impl From<TryFromIntError> for BytecodeError<GenerationErrorKind> {
 /// during bytecode generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
 #[non_exhaustive]
-#[instability::unstable(feature = "bytecode-generation")]
 pub enum GenerationErrorKind {
     /// An error occurred while writing to the underlying output destination.
     #[display("IO Error")]

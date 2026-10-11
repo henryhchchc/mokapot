@@ -23,9 +23,6 @@ use std::{
 
 use num_traits::ToBytes;
 
-#[cfg(not(feature = "unstable-bytecode-generation"))]
-pub(crate) use crate::jvm::errors::GenerationError;
-#[cfg(feature = "unstable-bytecode-generation")]
 pub use crate::jvm::errors::{GenerationError, GenerationErrorKind};
 pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use crate::{

@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use derive_more::Display;
 
 use crate::jvm::Class;
-#[cfg_attr(not(feature = "unstable-project-analyses"), expect(unused_imports))]
 use crate::jvm::class_loader::ClassPath;
 
 pub mod fixed_point;
@@ -15,7 +14,6 @@ pub mod type_hierarchy;
 
 /// A context for class resolution during analysis.
 #[derive(Debug)]
-#[instability::unstable(feature = "project-analyses")]
 pub struct ResolutionContext {
     /// The application classes.
     pub application_classes: HashMap<ClassName, Class>,
@@ -28,13 +26,11 @@ pub struct ResolutionContext {
 }
 
 /// A trait that can provide an exhaustive list of [`ClassName`].
-#[instability::unstable(feature = "project-analyses")]
 pub trait ClassNames {
     /// List all classes.
     fn class_names(&self) -> HashSet<ClassName>;
 }
 
-#[instability::unstable(feature = "project-analyses")]
 impl ResolutionContext {
     /// Create a new resolution context.
     #[must_use]
@@ -59,10 +55,8 @@ impl ResolutionContext {
 
 /// An error that occurs during initialization of a [`ResolutionContext`].
 #[derive(Debug, Display)]
-#[instability::unstable(feature = "project-analyses")]
 pub enum InitError {}
 
-#[cfg(feature = "unstable-project-analyses")]
 fn load_classes<CP>(class_path: CP) -> HashMap<ClassName, Class>
 where
     CP: IntoIterator<Item: ClassPath + ClassNames>,
@@ -83,11 +77,10 @@ where
 
 /// A class hierarchy based on super class relationships.
 #[derive(Debug, Clone)]
-#[instability::unstable(feature = "project-analyses")]
 pub struct ClassHierarchy {
     #[cfg_attr(
-        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
-        expect(dead_code)
+        not(feature = "petgraph"),
+        expect(dead_code, reason = "used by petgraph traversal")
     )]
     inheritance: HashMap<ClassName, HashSet<ClassName>>,
     super_classes: HashMap<ClassName, ClassName>,
@@ -95,16 +88,15 @@ pub struct ClassHierarchy {
 
 /// A class hierarchy based on interface implementations.
 #[derive(Debug, Clone)]
-#[instability::unstable(feature = "project-analyses")]
 pub struct InterfaceImplHierarchy {
     #[cfg_attr(
-        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
-        expect(dead_code)
+        not(feature = "petgraph"),
+        expect(dead_code, reason = "used by petgraph traversal")
     )]
     implementations: HashMap<ClassName, HashSet<ClassName>>,
     #[cfg_attr(
-        all(not(feature = "petgraph"), feature = "unstable-project-analyses"),
-        expect(dead_code)
+        not(feature = "petgraph"),
+        expect(dead_code, reason = "used by petgraph traversal")
     )]
     implementers: HashMap<ClassName, HashSet<ClassName>>,
 }

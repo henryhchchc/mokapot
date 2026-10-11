@@ -450,7 +450,6 @@ impl Instruction {
     /// # Errors
     /// See [`GenerationError`] for details.
     #[allow(clippy::too_many_lines)]
-    #[instability::unstable(feature = "bytecode-generation")]
     pub fn into_raw_instruction(
         self,
         pc: ProgramCounter,

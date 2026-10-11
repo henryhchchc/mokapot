@@ -11,7 +11,6 @@ use super::JoinSemiLattice;
 ///
 /// [`flow`](Self::flow) takes `&mut self`, so an analysis may accumulate state
 /// (e.g., build an IR) across the traversal.
-#[instability::unstable(feature = "fixed-point-analyses")]
 pub trait DataflowProblem {
     /// A program point where facts are computed, such as a basic block.
     type Location;

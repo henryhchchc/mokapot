@@ -21,6 +21,7 @@ fn load_classes() {
 }
 
 #[test]
+#[cfg(feature = "petgraph")]
 fn interfaces_impl() {
     let app_cp = DirectoryClassPath::new(support::classes_dir());
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);

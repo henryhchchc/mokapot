@@ -111,15 +111,12 @@ impl<P> PathCondition<P> {
     /// Boolean composition on a [`PathCondition`] does not minimize implicitly.
     ///
     /// ```
-    /// # #[cfg(feature = "unstable-moka-ir")]
-    /// # {
     /// use mokapot::ir::{BranchGuard, expression::BooleanVariable, path_condition::{PathCondition, SolvingBudget}};
     ///
     /// let positive = BranchGuard::of(BooleanVariable::Positive("ready"));
     /// let negative = BranchGuard::of(BooleanVariable::Negative("ready"));
     /// let condition = (PathCondition::one() & positive) | (PathCondition::one() & negative);
     /// assert_eq!(condition.reduce_with_budget(SolvingBudget::default()), PathCondition::one());
-    /// # }
     /// ```
     #[must_use]
     pub fn reduce_with_budget(self, budget: SolvingBudget) -> Self
