@@ -26,7 +26,7 @@ mod constant_value;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
 
-/// A JVM class
+/// A JVM class.
 #[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, Clone)]
 pub struct Class {
