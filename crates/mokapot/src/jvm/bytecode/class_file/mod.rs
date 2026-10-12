@@ -38,7 +38,7 @@ pub(crate) struct ClassFile {
     access_flags: u16,
     this_class: u16,
     super_class: u16,
-    interfaces: Vec<u16>,
+    interfaces: Box<[u16]>,
     fields: Box<[FieldInfo]>,
     methods: Box<[MethodInfo]>,
     attributes: Box<[AttributeInfo]>,
