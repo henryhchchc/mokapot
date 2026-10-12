@@ -27,7 +27,7 @@ pub(crate) struct FieldInfo {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Vec<AttributeInfo>,
+    attributes: Box<[AttributeInfo]>,
 }
 
 impl FromBytecode for FieldInfo {

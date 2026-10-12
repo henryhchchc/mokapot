@@ -41,7 +41,7 @@ pub(crate) struct ClassFile {
     interfaces: Vec<u16>,
     fields: Vec<FieldInfo>,
     methods: Vec<MethodInfo>,
-    attributes: Vec<AttributeInfo>,
+    attributes: Box<[AttributeInfo]>,
 }
 
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;

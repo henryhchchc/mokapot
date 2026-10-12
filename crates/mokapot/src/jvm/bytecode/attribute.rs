@@ -66,7 +66,7 @@ impl ToBytecode for AttributeInfo {
     }
 }
 
-impl ToBytecode for Vec<AttributeInfo> {
+impl ToBytecode for Box<[AttributeInfo]> {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         write_length::<u16>(writer, self.len())?;
         for attr in self {

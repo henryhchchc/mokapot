@@ -317,8 +317,8 @@ mod tests {
                 max_stack: 0,
                 max_locals: 0,
                 instruction_bytes: Box::from([0xcb]),
-                exception_table: Vec::new(),
-                attributes: Vec::new(),
+                exception_table: Box::new([]),
+                attributes: Box::new([]),
             },
             &context,
         )

@@ -27,8 +27,8 @@ pub struct Code {
     pub max_stack: u16,
     pub max_locals: u16,
     pub instruction_bytes: Box<[u8]>,
-    pub exception_table: Vec<ExceptionTableEntry>,
-    pub attributes: Vec<AttributeInfo>,
+    pub exception_table: Box<[ExceptionTableEntry]>,
+    pub attributes: Box<[AttributeInfo]>,
 }
 
 impl FromBytecode for Code {
@@ -41,11 +41,11 @@ impl FromBytecode for Code {
         let exception_table_length: u16 = U16::read_from_io(&mut reader)?.get();
         let exception_table = (0..exception_table_length)
             .map(|_| reader.decode_value())
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<io::Result<_>>()?;
         let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
         let attributes = (0..attributes_count)
             .map(|_| reader.decode_value())
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<io::Result<_>>()?;
         Ok(Self {
             max_stack,
             max_locals,

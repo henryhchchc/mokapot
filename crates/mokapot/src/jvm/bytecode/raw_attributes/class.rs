@@ -42,7 +42,7 @@ impl FixedLayout for EnclosingMethod {}
 #[doc = see_jvm_spec!(4, 7, 23)]
 pub struct BootstrapMethod {
     pub method_ref_idx: u16,
-    pub arguments: Vec<u16>,
+    pub arguments: Box<[u16]>,
 }
 
 impl FromBytecode for BootstrapMethod {
@@ -84,7 +84,7 @@ impl FixedLayout for ParameterInfo {}
 pub struct RecordComponentInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
-    pub attributes: Vec<AttributeInfo>,
+    pub attributes: Box<[AttributeInfo]>,
 }
 
 impl FromBytecode for RecordComponentInfo {

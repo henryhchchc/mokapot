@@ -28,7 +28,7 @@ pub(super) struct MethodInfo {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Vec<AttributeInfo>,
+    attributes: Box<[AttributeInfo]>,
 }
 
 impl FromBytecode for MethodInfo {

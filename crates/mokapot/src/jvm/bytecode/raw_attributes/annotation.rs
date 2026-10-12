@@ -19,7 +19,7 @@ use crate::{
 #[doc = see_jvm_spec!(4, 7, 16)]
 pub struct Annotation {
     pub type_index: u16,
-    pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
+    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
 }
 
 impl FromBytecode for Annotation {
@@ -61,7 +61,7 @@ pub enum ElementValueInfo {
     },
     ClassInfo(u16),
     Annotation(Annotation),
-    Array(Vec<ElementValueInfo>),
+    Array(Box<[ElementValueInfo]>),
 }
 
 impl FromBytecode for ElementValueInfo {
@@ -137,9 +137,9 @@ impl ElementValueInfo {
 #[doc = see_jvm_spec!(4, 7, 20)]
 pub struct TypeAnnotation {
     pub target_info: TargetInfo,
-    pub target_path: Vec<(u8, u8)>,
+    pub target_path: Box<[(u8, u8)]>,
     pub type_index: u16,
-    pub element_value_pairs: Vec<(u16, ElementValueInfo)>,
+    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
 }
 
 impl FromBytecode for TypeAnnotation {
@@ -218,8 +218,8 @@ pub enum TargetInfo {
     Throws {
         index: u16,
     } = 0x17,
-    LocalVariable(Vec<(ProgramCounter, u16, u16)>) = 0x40,
-    ResourceVariable(Vec<(ProgramCounter, u16, u16)>) = 0x41,
+    LocalVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x40,
+    ResourceVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x41,
     Catch {
         index: u16,
     } = 0x42,

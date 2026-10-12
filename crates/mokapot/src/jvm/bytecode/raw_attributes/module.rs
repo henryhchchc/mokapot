@@ -110,7 +110,7 @@ impl FixedLayout for RequiresInfo {}
 pub struct ExportsInfo {
     pub exports_index: u16,
     pub flags: u16,
-    pub to: Vec<u16>,
+    pub to: Box<[u16]>,
 }
 
 impl FromBytecode for ExportsInfo {
