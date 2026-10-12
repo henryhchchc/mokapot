@@ -29,27 +29,27 @@ pub struct ModuleInfo {
 }
 
 impl FromBytecode for ModuleInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let info_index = U16::read_from_io(&mut *reader)?.get();
-        let flags = U16::read_from_io(&mut *reader)?.get();
-        let version_index = U16::read_from_io(&mut *reader)?.get();
-        let requires_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let info_index = U16::read_from_io(&mut reader)?.get();
+        let flags = U16::read_from_io(&mut reader)?.get();
+        let version_index = U16::read_from_io(&mut reader)?.get();
+        let requires_count: u16 = U16::read_from_io(&mut reader)?.get();
         let requires = (0..requires_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let exports_count: u16 = U16::read_from_io(&mut *reader)?.get();
+        let exports_count: u16 = U16::read_from_io(&mut reader)?.get();
         let exports = (0..exports_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let opens_count: u16 = U16::read_from_io(&mut *reader)?.get();
+        let opens_count: u16 = U16::read_from_io(&mut reader)?.get();
         let opens = (0..opens_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
-        let uses_count: u16 = U16::read_from_io(&mut *reader)?.get();
+        let uses_count: u16 = U16::read_from_io(&mut reader)?.get();
         let uses = (0..uses_count)
-            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
+            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
-        let provides_count: u16 = U16::read_from_io(&mut *reader)?.get();
+        let provides_count: u16 = U16::read_from_io(&mut reader)?.get();
         let provides = (0..provides_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;
@@ -114,12 +114,12 @@ pub struct ExportsInfo {
 }
 
 impl FromBytecode for ExportsInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let exports_index = U16::read_from_io(&mut *reader)?.get();
-        let flags = U16::read_from_io(&mut *reader)?.get();
-        let to_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let exports_index = U16::read_from_io(&mut reader)?.get();
+        let flags = U16::read_from_io(&mut reader)?.get();
+        let to_count: u16 = U16::read_from_io(&mut reader)?.get();
         let to = (0..to_count)
-            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
+            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             exports_index,
@@ -149,12 +149,12 @@ pub struct OpensInfo {
 }
 
 impl FromBytecode for OpensInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let opens_index = U16::read_from_io(&mut *reader)?.get();
-        let flags = U16::read_from_io(&mut *reader)?.get();
-        let to_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let opens_index = U16::read_from_io(&mut reader)?.get();
+        let flags = U16::read_from_io(&mut reader)?.get();
+        let to_count: u16 = U16::read_from_io(&mut reader)?.get();
         let to = (0..to_count)
-            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
+            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             opens_index,
@@ -183,11 +183,11 @@ pub struct ProvidesInfo {
 }
 
 impl FromBytecode for ProvidesInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let provides_index = U16::read_from_io(&mut *reader)?.get();
-        let with_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let provides_index = U16::read_from_io(&mut reader)?.get();
+        let with_count: u16 = U16::read_from_io(&mut reader)?.get();
         let with = (0..with_count)
-            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
+            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             provides_index,

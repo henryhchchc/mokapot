@@ -6,7 +6,7 @@ use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
         ConstantValue, JavaString,
-        bytecode::ToBytecode,
+        bytecode::{FromBytecode, ToBytecode},
         class::MethodHandle,
         constant_pool_storage::{PoolStorage, Slot},
         errors::GenerationError,
@@ -44,11 +44,12 @@ impl RawConstantPool {
         }
     }
 
+    /// Reads a pool from the given reader.
     /// # Errors
     /// See [`io::Error`] for more information.
-    pub fn from_reader<R>(reader: &mut R, constant_pool_count: u16) -> io::Result<Self>
+    pub fn from_reader<R>(mut reader: R, constant_pool_count: u16) -> io::Result<Self>
     where
-        R: Read + ?Sized,
+        R: Read,
     {
         if constant_pool_count == 0 {
             return Err(io::Error::new(
@@ -58,7 +59,7 @@ impl RawConstantPool {
         }
         let mut constant_pool = Self::with_capacity(constant_pool_count);
         while constant_pool.count() < constant_pool_count {
-            let entry = RawEntry::parse(reader)?;
+            let entry = RawEntry::from_reader(&mut reader)?;
             if entry.slot_width() > constant_pool_count - constant_pool.count() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -539,13 +540,15 @@ mod tests {
         ];
         for (entry, bytes) in cases {
             let mut reader = *bytes;
-            assert_eq!(&RawEntry::parse(&mut reader).unwrap(), entry);
+            assert_eq!(&RawEntry::from_reader(&mut reader).unwrap(), entry);
             let mut written = Vec::new();
             entry.to_writer(&mut written).unwrap();
             assert_eq!(written, *bytes);
             for end in 0..bytes.len() {
                 assert_eq!(
-                    RawEntry::parse(&mut &bytes[..end]).unwrap_err().kind(),
+                    RawEntry::from_reader(&mut &bytes[..end])
+                        .unwrap_err()
+                        .kind(),
                     io::ErrorKind::UnexpectedEof
                 );
             }
@@ -645,7 +648,7 @@ mod tests {
             (2, vec![5, 0, 0, 0, 0, 0, 0, 0, 0]),
             (2, vec![6, 0, 0, 0, 0, 0, 0, 0, 0]),
         ] {
-            let error = RawConstantPool::from_reader(&mut bytes.as_slice(), count).unwrap_err();
+            let error = RawConstantPool::from_reader(io::Cursor::new(bytes), count).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         }
     }
@@ -669,7 +672,7 @@ mod tests {
 
         #[test]
         fn constant_kind(bytes in arb_constant_pool_info()) {
-            let entry = RawEntry::parse(&mut bytes.as_slice()).unwrap();
+            let entry = RawEntry::from_reader(&mut bytes.as_slice()).unwrap();
             let kind = entry.constant_kind();
             assert!(kind.starts_with("CONSTANT_"));
         }
@@ -677,7 +680,7 @@ mod tests {
         #[test]
         fn parse_entry(entry in arb_constant_pool_info()) {
             let mut reader = entry.as_slice();
-            let parsed = RawEntry::parse(&mut reader);
+            let parsed = RawEntry::from_reader(&mut reader);
             let tag = entry.first().unwrap();
             match tag {
                 1 => assert!(matches!(parsed, Ok(RawEntry::Utf8(_)))),

@@ -49,15 +49,13 @@ pub struct ParsingContext {
 /// Enables parsing a raw JVM element from a binary stream.
 ///
 /// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a binary input stream.
-pub(crate) trait FromBytecode {
+pub(crate) trait FromBytecode: Sized {
     /// Parses an instance of this type from the given reader.
     ///
     /// # Errors
     /// Returns an `io::Error` if reading from the stream fails or if the data
     /// is not in the expected format.
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self>
-    where
-        Self: Sized;
+    fn from_reader<R: Read>(reader: R) -> io::Result<Self>;
 }
 
 /// Enables writing a raw JVM element to a binary stream.

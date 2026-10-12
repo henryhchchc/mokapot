@@ -31,13 +31,13 @@ pub(crate) struct FieldInfo {
 }
 
 impl FromBytecode for FieldInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let access_flags = U16::read_from_io(&mut *reader)?.get();
-        let name_index = U16::read_from_io(&mut *reader)?.get();
-        let descriptor_index = U16::read_from_io(&mut *reader)?.get();
-        let attributes_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let access_flags = U16::read_from_io(&mut reader)?.get();
+        let name_index = U16::read_from_io(&mut reader)?.get();
+        let descriptor_index = U16::read_from_io(&mut reader)?.get();
+        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_reader(reader))
+            .map(|_| AttributeInfo::from_reader(&mut reader))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             access_flags,

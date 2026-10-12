@@ -162,10 +162,7 @@ impl ConstantPool {
     /// Reads a pool and resolves all of its entries.
     /// # Errors
     /// Returns binary parsing errors or malformed constant-pool references and values.
-    pub fn from_reader<R: Read + ?Sized>(
-        reader: &mut R,
-        constant_pool_count: u16,
-    ) -> Result<Self, ParseError> {
+    pub fn from_reader<R: Read>(reader: R, constant_pool_count: u16) -> Result<Self, ParseError> {
         Self::from_raw(RawConstantPool::from_reader(reader, constant_pool_count)?)
     }
 
@@ -573,7 +570,7 @@ mod tests {
         pool.to_writer(&mut bytes).unwrap();
         let (count_bytes, contents) = bytes.split_at(2);
         let count = u16::from_be_bytes(count_bytes.try_into().unwrap());
-        let reparsed = ConstantPool::from_reader(&mut &*contents, count).unwrap();
+        let reparsed = ConstantPool::from_reader(std::io::Cursor::new(contents), count).unwrap();
         assert_eq!(reparsed.get_class_name(class_index).unwrap(), class_name);
         assert_eq!(
             reparsed.get_package_name(package_index).unwrap(),

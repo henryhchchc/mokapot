@@ -49,9 +49,9 @@ impl ClassElement for LineNumberTableEntry {
 }
 
 impl FromBytecode for LineNumberTableEntry {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
         let start_pc = reader.decode_value()?;
-        let line_number = U16::read_from_io(&mut *reader)?.get();
+        let line_number = U16::read_from_io(&mut reader)?.get();
         Ok(LineNumberTableEntry {
             start_pc,
             line_number,

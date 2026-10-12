@@ -19,24 +19,22 @@ impl<R: Read + ?Sized> BytecodeReader for R {
 }
 
 impl<const N: usize> FromBytecode for [u8; N] {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let mut buf = [0u8; N];
-        reader.read_exact(&mut buf)?;
-        Ok(buf)
+    fn from_reader<R: Read>(reader: R) -> Result<Self> {
+        Self::read_from_io(reader)
     }
 }
 
 impl FromBytecode for ProgramCounter {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
+    fn from_reader<R: Read>(reader: R) -> Result<Self> {
         let inner = U16::read_from_io(reader)?.get();
         Ok(inner.into())
     }
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_bytes<R>(reader: &mut R, len: usize) -> Result<Box<[u8]>>
+pub(crate) fn read_bytes<R>(mut reader: R, len: usize) -> Result<Box<[u8]>>
 where
-    R: Read + ?Sized,
+    R: Read,
 {
     // SAFETY: zero is a valid initialized u8.
     let mut buf = unsafe { Box::new_zeroed_slice(len).assume_init() };

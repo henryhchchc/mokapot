@@ -47,12 +47,12 @@ impl AttributeInfo {
 }
 
 impl FromBytecode for AttributeInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let name_idx = U16::read_from_io(&mut *reader)?.get();
-        let attribute_length: u32 = U32::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let name_idx = U16::read_from_io(&mut reader)?.get();
+        let attribute_length: u32 = U32::read_from_io(&mut reader)?.get();
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = read_bytes(reader, attribute_length)?;
+        let info = read_bytes(&mut reader, attribute_length)?;
         Ok(Self::from_raw_parts(name_idx, info))
     }
 }
@@ -191,8 +191,8 @@ impl ClassElement for Attribute {
             "EnclosingMethod" => parse!(reader, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => parse_string(reader, ctx).map(Self::Signature),
-            "SourceFile" => parse_string(reader, ctx).map(Self::SourceFile),
+            "Signature" => parse_string(reader.by_ref(), ctx).map(Self::Signature),
+            "SourceFile" => parse_string(reader.by_ref(), ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
                 return Ok(Self::SourceDebugExtension(info));
             }
@@ -337,11 +337,8 @@ impl Attribute {
 }
 
 #[inline]
-fn parse_string<R: Read + ?Sized>(
-    reader: &mut R,
-    ctx: &ParsingContext,
-) -> Result<String, ParseError> {
-    let str_idx = U16::read_from_io(&mut *reader)?.get();
+fn parse_string<R: Read>(reader: R, ctx: &ParsingContext) -> Result<String, ParseError> {
+    let str_idx = U16::read_from_io(reader)?.get();
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 

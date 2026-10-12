@@ -46,11 +46,11 @@ pub struct BootstrapMethod {
 }
 
 impl FromBytecode for BootstrapMethod {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let method_ref_idx = U16::read_from_io(&mut *reader)?.get();
-        let num_arguments: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let method_ref_idx = U16::read_from_io(&mut reader)?.get();
+        let num_arguments: u16 = U16::read_from_io(&mut reader)?.get();
         let arguments = (0..num_arguments)
-            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
+            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
         Ok(Self {
             method_ref_idx,
@@ -88,10 +88,10 @@ pub struct RecordComponentInfo {
 }
 
 impl FromBytecode for RecordComponentInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let name_index = U16::read_from_io(&mut *reader)?.get();
-        let descriptor_index = U16::read_from_io(&mut *reader)?.get();
-        let attributes_count: u16 = U16::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let name_index = U16::read_from_io(&mut reader)?.get();
+        let descriptor_index = U16::read_from_io(&mut reader)?.get();
+        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
         let attributes = (0..attributes_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<_>>()?;

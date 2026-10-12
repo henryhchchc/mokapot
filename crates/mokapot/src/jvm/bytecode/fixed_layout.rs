@@ -19,10 +19,8 @@ impl FixedLayout for I64 {}
 impl FixedLayout for F64 {}
 
 impl<T: FixedLayout> FromBytecode for T {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let mut value = Self::new_zeroed();
-        reader.read_exact(value.as_mut_bytes())?;
-        Ok(value)
+    fn from_reader<R: Read>(reader: R) -> io::Result<Self> {
+        Self::read_from_io(reader)
     }
 }
 

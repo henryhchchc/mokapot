@@ -6,6 +6,6 @@ use super::{FromBytecode, ParseError, class_file::ClassFile};
 ///
 /// # Errors
 /// Returns class-file parsing or I/O errors.
-pub fn raw_class(mut bytes: &[u8]) -> Result<impl Sized, ParseError> {
-    Ok(ClassFile::from_reader(&mut bytes)?)
+pub fn raw_class(bytes: &[u8]) -> Result<impl Sized, ParseError> {
+    Ok(ClassFile::from_reader(bytes)?)
 }

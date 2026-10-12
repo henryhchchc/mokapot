@@ -32,17 +32,17 @@ pub struct Code {
 }
 
 impl FromBytecode for Code {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let max_stack = U16::read_from_io(&mut *reader)?.get();
-        let max_locals = U16::read_from_io(&mut *reader)?.get();
-        let code_length: u32 = U32::read_from_io(&mut *reader)?.get();
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let max_stack = U16::read_from_io(&mut reader)?.get();
+        let max_locals = U16::read_from_io(&mut reader)?.get();
+        let code_length: u32 = U32::read_from_io(&mut reader)?.get();
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let instruction_bytes = read_bytes(reader, code_length)?;
-        let exception_table_length: u16 = U16::read_from_io(&mut *reader)?.get();
+        let instruction_bytes = read_bytes(&mut reader, code_length)?;
+        let exception_table_length: u16 = U16::read_from_io(&mut reader)?.get();
         let exception_table = (0..exception_table_length)
             .map(|_| reader.decode_value())
             .collect::<io::Result<Vec<_>>>()?;
-        let attributes_count: u16 = U16::read_from_io(&mut *reader)?.get();
+        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
         let attributes = (0..attributes_count)
             .map(|_| reader.decode_value())
             .collect::<io::Result<Vec<_>>>()?;
@@ -119,8 +119,8 @@ pub enum StackMapFrameInfo {
 }
 
 impl FromBytecode for StackMapFrameInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let frame_type: u8 = u8::read_from_io(&mut *reader)?;
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let frame_type: u8 = u8::read_from_io(&mut reader)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
@@ -132,19 +132,19 @@ impl FromBytecode for StackMapFrameInfo {
                 format!("Frame type {frame_type} is reserved for future use."),
             )),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: U16::read_from_io(&mut *reader)?.get(),
+                offset_delta: U16::read_from_io(&mut reader)?.get(),
                 stack: reader.decode_value()?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: U16::read_from_io(&mut *reader)?.get(),
+                offset_delta: U16::read_from_io(&mut reader)?.get(),
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: U16::read_from_io(&mut *reader)?.get(),
+                offset_delta: U16::read_from_io(&mut reader)?.get(),
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = U16::read_from_io(&mut *reader)?.get();
+                let offset_delta = U16::read_from_io(&mut reader)?.get();
                 let locals = (0..locals_count)
                     .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
@@ -154,12 +154,12 @@ impl FromBytecode for StackMapFrameInfo {
                 })
             }
             255 => {
-                let offset_delta = U16::read_from_io(&mut *reader)?.get();
-                let number_of_locals: u16 = U16::read_from_io(&mut *reader)?.get();
+                let offset_delta = U16::read_from_io(&mut reader)?.get();
+                let number_of_locals: u16 = U16::read_from_io(&mut reader)?.get();
                 let locals = (0..number_of_locals)
                     .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
-                let number_of_stack_items: u16 = U16::read_from_io(&mut *reader)?.get();
+                let number_of_stack_items: u16 = U16::read_from_io(&mut reader)?.get();
                 let stack = (0..number_of_stack_items)
                     .map(|_| reader.decode_value())
                     .collect::<io::Result<Vec<_>>>()?;
@@ -272,8 +272,8 @@ impl VerificationTypeInfo {
 }
 
 impl FromBytecode for VerificationTypeInfo {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let tag: u8 = u8::read_from_io(&mut *reader)?;
+    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
+        let tag: u8 = u8::read_from_io(&mut reader)?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -283,10 +283,10 @@ impl FromBytecode for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                class_info_index: U16::read_from_io(&mut *reader)?.get(),
+                class_info_index: U16::read_from_io(&mut reader)?.get(),
             }),
             8 => Ok(Self::Uninitialized {
-                offset: U16::read_from_io(&mut *reader)?.get(),
+                offset: U16::read_from_io(&mut reader)?.get(),
             }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,

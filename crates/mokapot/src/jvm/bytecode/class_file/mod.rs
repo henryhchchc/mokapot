@@ -57,12 +57,12 @@ impl Class {
     /// use std::io::BufReader;
     ///
     /// let file = File::open("path/to/class/file").unwrap();
-    /// let mut reader = BufReader::new(file);
-    /// let class = Class::from_reader(&mut reader).unwrap();
+    /// let reader = BufReader::new(file);
+    /// let class = Class::from_reader(reader).unwrap();
     /// ```
-    pub fn from_reader<R>(reader: &mut R) -> Result<Class, ParseError>
+    pub fn from_reader<R>(reader: R) -> Result<Class, ParseError>
     where
-        R: std::io::Read + ?Sized,
+        R: std::io::Read,
     {
         let class_file = ClassFile::from_reader(reader)?;
         Class::from_raw(class_file)
