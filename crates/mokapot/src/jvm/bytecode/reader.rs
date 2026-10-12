@@ -42,11 +42,13 @@ impl FromBytecode for T {
 }
 
 /// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_vec<R>(reader: &mut R, len: usize) -> Result<Vec<u8>>
+pub(crate) fn read_bytes<R>(reader: &mut R, len: usize) -> Result<Box<[u8]>>
 where
     R: Read + ?Sized,
 {
-    let mut buf = vec![0; len];
+    // SAFETY: zero is a valid initialized u8.
+    let mut buf = unsafe { Box::new_zeroed_slice(len).assume_init() };
+    // TODO: Use `read_buf_exact` once stable.
     reader.read_exact(&mut buf)?;
     Ok(buf)
 }
@@ -157,7 +159,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn miri_read_bytes_vec_success(
+        fn miri_read_bytes_success(
             expected in prop::collection::vec(any::<u8>(), 0..64),
             suffix in prop::collection::vec(any::<u8>(), 0..16),
         ) {
@@ -165,21 +167,21 @@ mod test {
             bytes.extend(&suffix);
             let mut reader = bytes.as_slice();
 
-            let decoded = super::read_vec(&mut reader, expected.len()).unwrap();
+            let decoded = super::read_bytes(&mut reader, expected.len()).unwrap();
 
-            prop_assert_eq!(decoded, expected);
+            prop_assert_eq!(decoded.as_ref(), expected.as_slice());
             prop_assert_eq!(reader, suffix.as_slice());
         }
 
         #[test]
-        fn miri_read_bytes_vec_failed(
+        fn miri_read_bytes_failed(
             available in prop::collection::vec(any::<u8>(), 0..64),
             missing in 1usize..16,
         ) {
             let requested = available.len() + missing;
             let mut reader = available.as_slice();
 
-            let error = super::read_vec(&mut reader, requested).unwrap_err();
+            let error = super::read_bytes(&mut reader, requested).unwrap_err();
 
             prop_assert_eq!(error.kind(), UnexpectedEof);
         }

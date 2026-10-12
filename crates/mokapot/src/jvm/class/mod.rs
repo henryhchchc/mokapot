@@ -373,7 +373,7 @@ pub struct RecordComponent {
     /// The type annotations.
     pub type_annotations: Annotations<super::TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Box<[u8]>)>,
 }
 
 bitflags! {

@@ -14,7 +14,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     FromBytecode, GenerationError, ToBytecode,
     attribute::AttributeInfo,
-    reader::{BytecodeReader, read_vec},
+    reader::{BytecodeReader, read_bytes},
     write_length,
 };
 use crate::intrinsics::{enum_discriminant, see_jvm_spec};
@@ -24,7 +24,7 @@ use crate::intrinsics::{enum_discriminant, see_jvm_spec};
 pub struct Code {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instruction_bytes: Vec<u8>,
+    pub instruction_bytes: Box<[u8]>,
     pub exception_table: Vec<ExceptionTableEntry>,
     pub attributes: Vec<AttributeInfo>,
 }
@@ -35,7 +35,7 @@ impl FromBytecode for Code {
         let max_locals = reader.decode_value()?;
         let code_length: u32 = reader.decode_value()?;
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let instruction_bytes = read_vec(reader, code_length)?;
+        let instruction_bytes = read_bytes(reader, code_length)?;
         let exception_table_length: u16 = reader.decode_value()?;
         let exception_table = (0..exception_table_length)
             .map(|_| reader.decode_value())

@@ -52,7 +52,7 @@ pub struct Class {
     /// The outer class and method of the class.
     pub enclosing_method: Option<class::EnclosingMethod>,
     /// The source debug extension.
-    pub source_debug_extension: Option<Vec<u8>>,
+    pub source_debug_extension: Option<Box<[u8]>>,
     /// The annotations of the class.
     pub annotations: Annotations<Annotation>,
     /// The type annotations of the class.
@@ -80,7 +80,7 @@ pub struct Class {
     /// The record components of the class if the class is `record`.
     pub record: Option<Vec<class::RecordComponent>>,
     /// JVM attributes that are not specified in the JVM specification.
-    pub other_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Box<[u8]>)>,
 }
 
 /// Container for runtime-visible and runtime-invisible annotations.
@@ -157,7 +157,7 @@ pub struct Field {
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Box<[u8]>)>,
 }
 
 /// A JVM method.
@@ -193,7 +193,7 @@ pub struct Method {
     /// The generic signature for methods with type parameters or generic types.
     pub signature: Option<method::Signature>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Box<[u8]>)>,
 }
 
 /// A module in the [Java Platform Module System (JPMS)](https://openjdk.org/projects/jigsaw/spec/).
@@ -227,23 +227,23 @@ pub enum JavaString {
     Utf8(String),
     /// An string that is not valid UTF-8.
     #[display("String({}) // Invalid UTF-8", _0.iter().map(|it| format!("0x{it:02X}")).join(" "))]
-    InvalidUtf8(Vec<u8>),
+    InvalidUtf8(Box<[u8]>),
 }
 
 impl JavaString {
-    pub(crate) fn from_modified_utf8(bytes: Vec<u8>) -> Self {
-        match String::from_utf8(bytes) {
+    pub(crate) fn from_modified_utf8(bytes: Box<[u8]>) -> Self {
+        match String::from_utf8(bytes.into_vec()) {
             Ok(value) => Self::Utf8(value),
             Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
                 Ok(value) => Self::Utf8(value.into_owned()),
-                Err(_) => Self::InvalidUtf8(error.into_bytes()),
+                Err(_) => Self::InvalidUtf8(error.into_bytes().into_boxed_slice()),
             },
         }
     }
 
-    pub(crate) fn into_modified_utf8(self) -> Vec<u8> {
+    pub(crate) fn into_modified_utf8(self) -> Box<[u8]> {
         match self {
-            Self::Utf8(value) => cesu8::to_java_cesu8(&value).into_owned(),
+            Self::Utf8(value) => cesu8::to_java_cesu8(&value).into_owned().into_boxed_slice(),
             Self::InvalidUtf8(bytes) => bytes,
         }
     }

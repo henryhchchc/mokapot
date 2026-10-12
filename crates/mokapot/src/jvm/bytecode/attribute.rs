@@ -14,7 +14,7 @@ use super::{
     class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
     constant_pool::RawConstantPool,
-    reader::{BytecodeReader, read_vec},
+    reader::{BytecodeReader, read_bytes},
     write_length,
 };
 use crate::{
@@ -33,11 +33,11 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct AttributeInfo {
     name_idx: u16,
-    info: Vec<u8>,
+    info: Box<[u8]>,
 }
 
 impl AttributeInfo {
-    const fn from_raw_parts(name_idx: u16, info: Vec<u8>) -> Self {
+    const fn from_raw_parts(name_idx: u16, info: Box<[u8]>) -> Self {
         Self { name_idx, info }
     }
 }
@@ -48,7 +48,7 @@ impl FromBytecode for AttributeInfo {
         let attribute_length: u32 = reader.decode_value()?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = read_vec(reader, attribute_length)?;
+        let info = read_bytes(reader, attribute_length)?;
         Ok(Self::from_raw_parts(name_idx, info))
     }
 }
@@ -86,7 +86,7 @@ pub(crate) enum Attribute {
     Deprecated,
     EnclosingMethod(EnclosingMethod),
     Signature(String),
-    SourceDebugExtension(Vec<u8>),
+    SourceDebugExtension(Box<[u8]>),
     LocalVariableTable(Vec<LocalVariableDescAttr>),
     LocalVariableTypeTable(Vec<LocalVariableTypeAttr>),
     RuntimeVisibleAnnotations(Vec<Annotation>),
@@ -105,7 +105,7 @@ pub(crate) enum Attribute {
     NestMembers(Vec<ClassName>),
     Record(Vec<RecordComponent>),
     PermittedSubclasses(Vec<ClassName>),
-    Unrecognized(String, Vec<u8>),
+    Unrecognized(String, Box<[u8]>),
 }
 
 impl Attribute {
@@ -166,7 +166,7 @@ impl ClassElement for Attribute {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let AttributeInfo { name_idx, info } = raw;
         let name = ctx.constant_pool.get_str(name_idx)?;
-        let reader = &mut info.as_slice();
+        let reader = &mut info.as_ref();
 
         let result = match name {
             "ConstantValue" => {
@@ -256,8 +256,8 @@ impl ClassElement for Attribute {
 }
 
 impl Attribute {
-    fn into_bytes(self, cp: &mut RawConstantPool) -> Result<Vec<u8>, GenerationError> {
-        let mut bytes = match self {
+    fn into_bytes(self, cp: &mut RawConstantPool) -> Result<Box<[u8]>, GenerationError> {
+        let bytes = match self {
             Attribute::ConstantValue(constant_value) => {
                 let constant_value_idx = cp.put_constant_value(constant_value)?;
                 constant_value_idx.to_be_bytes().to_vec()
@@ -278,7 +278,9 @@ impl Attribute {
             Attribute::Signature(str_value) | Attribute::SourceFile(str_value) => {
                 cp.put_string(str_value)?.to_be_bytes().into()
             }
-            Attribute::SourceDebugExtension(data) | Attribute::Unrecognized(_, data) => data,
+            Attribute::SourceDebugExtension(data) | Attribute::Unrecognized(_, data) => {
+                return Ok(data);
+            }
             Attribute::LineNumberTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::LocalVariableTable(entries) => serialize_vec::<u16>(entries, cp)?,
             Attribute::LocalVariableTypeTable(entries) => serialize_vec::<u16>(entries, cp)?,
@@ -324,8 +326,7 @@ impl Attribute {
             }
             Attribute::Record(components) => serialize_vec::<u16>(components, cp)?,
         };
-        bytes.shrink_to_fit();
-        Ok(bytes)
+        Ok(bytes.into_boxed_slice())
     }
 }
 

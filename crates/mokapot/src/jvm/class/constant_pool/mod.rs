@@ -359,7 +359,7 @@ impl ConstantPool {
 
     fn resolve_entry(&self, raw: RawEntry) -> Result<Entry, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes.into_vec())),
+            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes)),
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
@@ -767,18 +767,18 @@ mod tests {
     #[test]
     fn utf8_conversion_preserves_strings_and_invalid_bytes() {
         for (bytes, expected) in [
+            (Vec::new(), JavaString::Utf8(String::new())),
             (b"plain".to_vec(), JavaString::Utf8("plain".to_owned())),
             (vec![0xc0, 0x80], JavaString::Utf8("\0".to_owned())),
             (
                 vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
                 JavaString::Utf8("😀".to_owned()),
             ),
-            (vec![0xff], JavaString::InvalidUtf8(vec![0xff])),
+            (vec![0xff], JavaString::InvalidUtf8(Box::from([0xff]))),
         ] {
+            let bytes = bytes.into_boxed_slice();
             let mut raw = RawConstantPool::new();
-            let index = raw
-                .put_entry(RawEntry::Utf8(bytes.into_boxed_slice()))
-                .unwrap();
+            let index = raw.put_entry(RawEntry::Utf8(bytes.clone())).unwrap();
             let literal = raw
                 .put_entry(RawEntry::String {
                     string_index: index.into(),
@@ -790,6 +790,11 @@ mod tests {
                 pool.get_constant_value(literal).unwrap(),
                 ConstantValue::String(expected)
             );
+            let mut regenerated = RawConstantPool::new();
+            let index = regenerated
+                .put_java_string(pool.get_java_string(index).unwrap())
+                .unwrap();
+            assert_eq!(regenerated.get_entry(index), Some(&RawEntry::Utf8(bytes)));
         }
     }
 }

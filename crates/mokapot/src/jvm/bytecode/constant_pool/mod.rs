@@ -301,10 +301,8 @@ impl RawConstantPool {
     }
 
     pub(crate) fn put_java_string(&mut self, value: JavaString) -> Result<u16, GenerationError> {
-        self.put_entry_dedup(RawEntry::Utf8(
-            value.into_modified_utf8().into_boxed_slice(),
-        ))
-        .map_err(Into::into)
+        self.put_entry_dedup(RawEntry::Utf8(value.into_modified_utf8()))
+            .map_err(Into::into)
     }
 }
 

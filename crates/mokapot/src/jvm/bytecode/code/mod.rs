@@ -168,7 +168,7 @@ impl ClassElement for MethodBody {
             attributes,
         } = raw;
 
-        let instructions = RawInstruction::iter_from_reader(instruction_bytes.as_slice())
+        let instructions = RawInstruction::iter_from_reader(instruction_bytes.as_ref())
             .map(|entry| {
                 let (pc, raw) = entry?;
                 Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))
@@ -282,7 +282,7 @@ impl ClassElement for MethodBody {
         Ok(Self::Raw {
             max_stack: self.max_stack,
             max_locals: self.max_locals,
-            instruction_bytes,
+            instruction_bytes: instruction_bytes.into_boxed_slice(),
             exception_table,
             attributes,
         })
@@ -333,7 +333,7 @@ mod tests {
             raw_attributes::Code {
                 max_stack: 0,
                 max_locals: 0,
-                instruction_bytes: vec![0xcb],
+                instruction_bytes: Box::from([0xcb]),
                 exception_table: Vec::new(),
                 attributes: Vec::new(),
             },

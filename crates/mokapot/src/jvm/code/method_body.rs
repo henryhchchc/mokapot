@@ -34,7 +34,7 @@ pub struct MethodBody {
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Vec<u8>)>,
+    pub other_attributes: Vec<(String, Box<[u8]>)>,
 }
 
 impl MethodBody {

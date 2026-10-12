@@ -4,7 +4,7 @@ use super::RawEntry;
 use crate::jvm::{
     bytecode::{
         ToBytecode,
-        reader::{BytecodeReader, read_vec},
+        reader::{BytecodeReader, read_bytes},
         write_length,
     },
     errors::GenerationError,
@@ -71,8 +71,8 @@ impl RawEntry {
 
     fn parse_utf8<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let length: u16 = reader.decode_value()?;
-        let bytes = read_vec(reader, length.into())?;
-        Ok(Self::Utf8(bytes.into_boxed_slice()))
+        let bytes = read_bytes(reader, length.into())?;
+        Ok(Self::Utf8(bytes))
     }
 }
 

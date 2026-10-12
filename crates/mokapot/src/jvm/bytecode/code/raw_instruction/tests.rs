@@ -164,7 +164,7 @@ proptest! {
 
 #[test]
 fn instruction_list_propagates_malformed_instruction() {
-    let error = InstructionList::<RawInstruction>::from_bytes(vec![0xcb]).unwrap_err();
+    let error = InstructionList::<RawInstruction>::from_bytes(&[0xcb]).unwrap_err();
     assert_eq!(error.kind(), ParseErrorKind::Malformed);
 }
 
@@ -232,7 +232,7 @@ fn instruction_operands_widths_and_switch_alignment_round_trip() {
 
     let mut bytes = Vec::new();
     original.to_writer(&mut bytes).unwrap();
-    let decoded = InstructionList::<RawInstruction>::from_bytes(bytes.clone()).unwrap();
+    let decoded = InstructionList::<RawInstruction>::from_bytes(&bytes).unwrap();
     let mut encoded_again = Vec::new();
     decoded.to_writer(&mut encoded_again).unwrap();
 

@@ -4,7 +4,6 @@ mod encode;
 mod layout;
 
 use std::{
-    collections::VecDeque,
     io::{self, Read},
     iter,
 };
@@ -403,13 +402,13 @@ impl InstructionList<RawInstruction> {
     /// use mokapot::jvm::code::{InstructionList, ProgramCounter, RawInstruction};
     ///
     /// // bipush 42; ireturn
-    /// let instructions = InstructionList::from_bytes(vec![0x10, 42, 0xac]).unwrap();
+    /// let instructions = InstructionList::from_bytes(&[0x10, 42, 0xac]).unwrap();
     /// assert_eq!(instructions.get(&ProgramCounter::ZERO), Some(&RawInstruction::BiPush { value: 42 }));
     /// assert_eq!(instructions.get(&ProgramCounter::from(2)), Some(&RawInstruction::IReturn));
     /// assert_eq!(instructions.len(), 2);
     /// ```
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<InstructionList<RawInstruction>, ParseError> {
-        RawInstruction::iter_from_reader(VecDeque::from(bytes)).collect()
+    pub fn from_bytes(bytes: &[u8]) -> Result<InstructionList<RawInstruction>, ParseError> {
+        RawInstruction::iter_from_reader(bytes).collect()
     }
 
     /// Writes a list of [`RawInstruction`]s to the given writer.
@@ -420,7 +419,7 @@ impl InstructionList<RawInstruction> {
     /// use mokapot::jvm::code::InstructionList;
     ///
     /// let bytes = vec![0x10, 42, 0xac]; // bipush 42; ireturn
-    /// let instructions = InstructionList::from_bytes(bytes.clone()).unwrap();
+    /// let instructions = InstructionList::from_bytes(&bytes).unwrap();
     /// let mut output = Vec::new();
     /// instructions.to_writer(&mut output).unwrap();
     /// assert_eq!(output, bytes);
