@@ -311,6 +311,17 @@ impl ToBytecode for VerificationTypeInfo {
     }
 }
 
+/// A line number table entry.
+#[doc = see_jvm_spec!(4, 7, 12)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct LineNumberTableEntry {
+    pub start_pc: U16,
+    pub line_number: U16,
+}
+
+impl FixedLayout for LineNumberTableEntry {}
+
 #[doc = see_jvm_spec!(4, 7, 13)]
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]

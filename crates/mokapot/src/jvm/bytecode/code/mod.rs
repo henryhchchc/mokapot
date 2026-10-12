@@ -1,26 +1,19 @@
-use zerocopy::FromBytes;
-use zerocopy::byteorder::big_endian::U16;
-
 pub(crate) mod instruction_conversion;
 pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
 pub(super) mod stack_map;
 
-use std::{
-    io::{self, Read, Write},
-    result::Result,
-};
+use std::{io::Write, result::Result};
 
 use itertools::Itertools;
 pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
 
 use super::{
-    FromBytecode, ParseError, ParsingContext, ToBytecode,
+    ParseError, ParsingContext, ToBytecode,
     attribute::Attribute,
     class_element::ClassElement,
     constant_pool::RawConstantPool,
     raw_attributes::{self, Code},
-    reader::BytecodeReader,
 };
 use crate::{
     intrinsics::extract_attributes,
@@ -37,33 +30,20 @@ use crate::{
 };
 
 impl ClassElement for LineNumberTableEntry {
-    type Raw = Self;
+    type Raw = raw_attributes::LineNumberTableEntry;
 
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
-        Ok(raw)
+        Ok(Self {
+            start_pc: raw.start_pc.into(),
+            line_number: raw.line_number.get(),
+        })
     }
 
     fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        Ok(self)
-    }
-}
-
-impl FromBytecode for LineNumberTableEntry {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let start_pc = reader.decode_value()?;
-        let line_number = U16::read_from_io(&mut reader)?.get();
-        Ok(LineNumberTableEntry {
-            start_pc,
-            line_number,
+        Ok(Self::Raw {
+            start_pc: u16::from(self.start_pc).into(),
+            line_number: self.line_number.into(),
         })
-    }
-}
-
-impl ToBytecode for LineNumberTableEntry {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&u16::from(self.start_pc).to_be_bytes())?;
-        writer.write_all(&self.line_number.to_be_bytes())?;
-        Ok(())
     }
 }
 

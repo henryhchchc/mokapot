@@ -11,6 +11,7 @@ mod module;
 pub use annotation::{Annotation, ElementValueInfo, TargetInfo, TypeAnnotation};
 pub use class::{BootstrapMethod, EnclosingMethod, InnerClass, ParameterInfo, RecordComponentInfo};
 pub use code::{
-    Code, ExceptionTableEntry, LocalVariableInfo, StackMapFrameInfo, VerificationTypeInfo,
+    Code, ExceptionTableEntry, LineNumberTableEntry, LocalVariableInfo, StackMapFrameInfo,
+    VerificationTypeInfo,
 };
 pub use module::{ExportsInfo, ModuleInfo, OpensInfo, ProvidesInfo, RequiresInfo};
