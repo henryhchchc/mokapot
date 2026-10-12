@@ -1,3 +1,6 @@
+use zerocopy::FromBytes;
+use zerocopy::byteorder::big_endian::U16;
+
 use std::io::{self, Read};
 
 use itertools::Itertools;
@@ -6,7 +9,6 @@ use super::{
     FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
     attribute::{Attribute, AttributeInfo},
     class_element::ClassElement,
-    reader::BytecodeReader,
 };
 use crate::{
     intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
@@ -30,10 +32,10 @@ pub(crate) struct FieldInfo {
 
 impl FromBytecode for FieldInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let access_flags = reader.decode_value()?;
-        let name_index = reader.decode_value()?;
-        let descriptor_index = reader.decode_value()?;
-        let attributes_count: u16 = reader.decode_value()?;
+        let access_flags = U16::read_from_io(&mut *reader)?.get();
+        let name_index = U16::read_from_io(&mut *reader)?.get();
+        let descriptor_index = U16::read_from_io(&mut *reader)?.get();
+        let attributes_count: u16 = U16::read_from_io(&mut *reader)?.get();
         let attributes = (0..attributes_count)
             .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;

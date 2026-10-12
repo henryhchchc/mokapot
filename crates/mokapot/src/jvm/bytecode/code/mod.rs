@@ -1,3 +1,6 @@
+use zerocopy::FromBytes;
+use zerocopy::byteorder::big_endian::U16;
+
 pub(crate) mod instruction_conversion;
 pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
@@ -48,7 +51,7 @@ impl ClassElement for LineNumberTableEntry {
 impl FromBytecode for LineNumberTableEntry {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let start_pc = reader.decode_value()?;
-        let line_number = reader.decode_value()?;
+        let line_number = U16::read_from_io(&mut *reader)?.get();
         Ok(LineNumberTableEntry {
             start_pc,
             line_number,

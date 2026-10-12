@@ -1,5 +1,8 @@
 //! Raw attribute types for annotation-related attributes.
 
+use zerocopy::FromBytes;
+use zerocopy::byteorder::big_endian::U16;
+
 use std::{
     io::{self, Read, Write},
     result::Result,
@@ -21,11 +24,11 @@ pub struct Annotation {
 
 impl FromBytecode for Annotation {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let type_index = reader.decode_value()?;
-        let num_element_value_pairs: u16 = reader.decode_value()?;
+        let type_index = U16::read_from_io(&mut *reader)?.get();
+        let num_element_value_pairs: u16 = U16::read_from_io(&mut *reader)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = reader.decode_value()?;
+                let element_name_index = U16::read_from_io(&mut *reader)?.get();
                 let element_value = reader.decode_value()?;
                 Ok((element_name_index, element_value))
             })
@@ -63,19 +66,19 @@ pub enum ElementValueInfo {
 
 impl FromBytecode for ElementValueInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let tag: u8 = reader.decode_value()?;
+        let tag: u8 = u8::read_from_io(&mut *reader)?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::Const(tag, reader.decode_value()?))
+                Ok(Self::Const(tag, U16::read_from_io(&mut *reader)?.get()))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: reader.decode_value()?,
-                const_name_index: reader.decode_value()?,
+                type_name_index: U16::read_from_io(&mut *reader)?.get(),
+                const_name_index: U16::read_from_io(&mut *reader)?.get(),
             }),
-            b'c' => Ok(Self::ClassInfo(reader.decode_value()?)),
+            b'c' => Ok(Self::ClassInfo(U16::read_from_io(&mut *reader)?.get())),
             b'@' => Ok(Self::Annotation(reader.decode_value()?)),
             b'[' => {
-                let num_values: u16 = reader.decode_value()?;
+                let num_values: u16 = U16::read_from_io(&mut *reader)?.get();
                 let values = (0..num_values)
                     .map(|_| reader.decode_value())
                     .collect::<io::Result<_>>()?;
@@ -139,19 +142,19 @@ pub struct TypeAnnotation {
 impl FromBytecode for TypeAnnotation {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         let target_info = reader.decode_value()?;
-        let target_path_length: u8 = reader.decode_value()?;
+        let target_path_length: u8 = u8::read_from_io(&mut *reader)?;
         let target_path = (0..target_path_length)
             .map(|_| {
-                let type_path_kind = reader.decode_value()?;
-                let type_argument_index = reader.decode_value()?;
+                let type_path_kind = u8::read_from_io(&mut *reader)?;
+                let type_argument_index = u8::read_from_io(&mut *reader)?;
                 Ok((type_path_kind, type_argument_index))
             })
             .collect::<io::Result<_>>()?;
-        let type_index = reader.decode_value()?;
-        let num_element_value_pairs: u16 = reader.decode_value()?;
+        let type_index = U16::read_from_io(&mut *reader)?.get();
+        let num_element_value_pairs: u16 = U16::read_from_io(&mut *reader)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = reader.decode_value()?;
+                let element_name_index = U16::read_from_io(&mut *reader)?.get();
                 let element_value = reader.decode_value()?;
                 Ok((element_name_index, element_value))
             })
@@ -253,92 +256,92 @@ pub enum TargetInfo {
 
 impl FromBytecode for TargetInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let target_type: u8 = reader.decode_value()?;
+        let target_type: u8 = u8::read_from_io(&mut *reader)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x10 => Self::SuperType {
-                index: reader.decode_value()?,
+                index: U16::read_from_io(&mut *reader)?.get(),
             },
             0x11 => Self::TypeParameterBoundOfClass {
-                type_parameter_index: reader.decode_value()?,
-                bound_index: reader.decode_value()?,
+                type_parameter_index: u8::read_from_io(&mut *reader)?,
+                bound_index: u8::read_from_io(&mut *reader)?,
             },
             0x12 => Self::TypeParameterBoundOfMethod {
-                type_parameter_index: reader.decode_value()?,
-                bound_index: reader.decode_value()?,
+                type_parameter_index: u8::read_from_io(&mut *reader)?,
+                bound_index: u8::read_from_io(&mut *reader)?,
             },
             0x13 => Self::Field,
             0x14 => Self::TypeOfField,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x17 => Self::Throws {
-                index: reader.decode_value()?,
+                index: U16::read_from_io(&mut *reader)?.get(),
             },
             0x40 => {
-                let table_length: u16 = reader.decode_value()?;
+                let table_length: u16 = U16::read_from_io(&mut *reader)?.get();
                 let table = (0..table_length)
                     .map(|_| {
                         let start_pc = reader.decode_value()?;
-                        let length = reader.decode_value()?;
-                        let index = reader.decode_value()?;
+                        let length = U16::read_from_io(&mut *reader)?.get();
+                        let index = U16::read_from_io(&mut *reader)?.get();
                         Ok((start_pc, length, index))
                     })
                     .collect::<io::Result<_>>()?;
                 Self::LocalVariable(table)
             }
             0x41 => {
-                let table_length: u16 = reader.decode_value()?;
+                let table_length: u16 = U16::read_from_io(&mut *reader)?.get();
                 let table = (0..table_length)
                     .map(|_| {
                         let start_pc = reader.decode_value()?;
-                        let length = reader.decode_value()?;
-                        let index = reader.decode_value()?;
+                        let length = U16::read_from_io(&mut *reader)?.get();
+                        let index = U16::read_from_io(&mut *reader)?.get();
                         Ok((start_pc, length, index))
                     })
                     .collect::<io::Result<_>>()?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                index: reader.decode_value()?,
+                index: U16::read_from_io(&mut *reader)?.get(),
             },
             0x43 => Self::InstanceOf {
-                offset: reader.decode_value()?,
+                offset: U16::read_from_io(&mut *reader)?.get(),
             },
             0x44 => Self::New {
-                offset: reader.decode_value()?,
+                offset: U16::read_from_io(&mut *reader)?.get(),
             },
             0x45 => Self::NewMethodReference {
-                offset: reader.decode_value()?,
+                offset: U16::read_from_io(&mut *reader)?.get(),
             },
             0x46 => Self::VarMethodReference {
-                offset: reader.decode_value()?,
+                offset: U16::read_from_io(&mut *reader)?.get(),
             },
             0x47 => Self::TypeInCast {
                 offset: reader.decode_value()?,
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x48 => Self::TypeArgumentInConstructor {
                 offset: reader.decode_value()?,
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x49 => Self::TypeArgumentInCall {
                 offset: reader.decode_value()?,
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
                 offset: reader.decode_value()?,
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
                 offset: reader.decode_value()?,
-                index: reader.decode_value()?,
+                index: u8::read_from_io(&mut *reader)?,
             },
             unexpected => Err(io::Error::new(
                 io::ErrorKind::InvalidData,

@@ -3,7 +3,7 @@ use std::{
     ops::AddAssign,
 };
 
-use trait_gen::trait_gen;
+use zerocopy::{FromBytes, byteorder::big_endian::U16};
 
 use super::FromBytecode;
 use crate::jvm::code::ProgramCounter;
@@ -28,16 +28,8 @@ impl<const N: usize> FromBytecode for [u8; N] {
 
 impl FromBytecode for ProgramCounter {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let inner = u16::from_reader(reader)?;
+        let inner = U16::read_from_io(reader)?.get();
         Ok(inner.into())
-    }
-}
-
-#[trait_gen(T -> u8, u16, u32, i8, i16, i32, i64, f32, f64)]
-impl FromBytecode for T {
-    fn from_reader<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
-        let buf = reader.decode_value()?;
-        Ok(Self::from_be_bytes(buf))
     }
 }
 
@@ -101,6 +93,10 @@ mod test {
     use std::io::ErrorKind::UnexpectedEof;
 
     use proptest::prelude::*;
+    use zerocopy::{
+        FromBytes,
+        byteorder::big_endian::{I16, I32, U16, U32},
+    };
 
     use super::BytecodeReader;
 
@@ -120,7 +116,7 @@ mod test {
     }
 
     macro_rules! integer_decode_properties {
-        ($success:ident, $truncated:ident, $type:ty) => {
+        ($success:ident, $truncated:ident, $type:ty, $wire:ty) => {
             proptest! {
                 #[test]
                 fn $success(value in any::<$type>(), suffix in prop::collection::vec(any::<u8>(), 0..8)) {
@@ -128,7 +124,7 @@ mod test {
                     bytes.extend(&suffix);
                     let mut reader = bytes.as_slice();
 
-                    let decoded: $type = reader.decode_value().unwrap();
+                    let decoded = <$wire>::read_from_io(&mut reader).map(<$type>::from).unwrap();
 
                     prop_assert_eq!(decoded, value);
                     prop_assert_eq!(reader, suffix.as_slice());
@@ -142,7 +138,7 @@ mod test {
                     let bytes = value.to_be_bytes();
                     let mut reader = &bytes[..available];
 
-                    let error = reader.decode_value::<$type>().unwrap_err();
+                    let error = <$wire>::read_from_io(&mut reader).unwrap_err();
 
                     prop_assert_eq!(error.kind(), UnexpectedEof);
                 }
@@ -150,12 +146,12 @@ mod test {
         };
     }
 
-    integer_decode_properties!(read_u32_success, read_u32_failed, u32);
-    integer_decode_properties!(read_i32_success, read_i32_failed, i32);
-    integer_decode_properties!(read_u16_success, read_u16_failed, u16);
-    integer_decode_properties!(read_i16_success, read_i16_failed, i16);
-    integer_decode_properties!(read_u8_success, read_u8_failed, u8);
-    integer_decode_properties!(read_i8_success, read_i8_failed, i8);
+    integer_decode_properties!(read_u32_success, read_u32_failed, u32, U32);
+    integer_decode_properties!(read_i32_success, read_i32_failed, i32, I32);
+    integer_decode_properties!(read_u16_success, read_u16_failed, u16, U16);
+    integer_decode_properties!(read_i16_success, read_i16_failed, i16, I16);
+    integer_decode_properties!(read_u8_success, read_u8_failed, u8, u8);
+    integer_decode_properties!(read_i8_success, read_i8_failed, i8, i8);
 
     proptest! {
         #[test]

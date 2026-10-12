@@ -1,5 +1,9 @@
 use crate::types::class_name::ClassName;
 use crate::types::package_name::PackageName;
+use zerocopy::{
+    FromBytes,
+    byteorder::big_endian::{U16, U32},
+};
 
 use std::{
     io::{self, Read},
@@ -44,8 +48,8 @@ impl AttributeInfo {
 
 impl FromBytecode for AttributeInfo {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let name_idx = reader.decode_value()?;
-        let attribute_length: u32 = reader.decode_value()?;
+        let name_idx = U16::read_from_io(&mut *reader)?.get();
+        let attribute_length: u32 = U32::read_from_io(&mut *reader)?.get();
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
         let info = read_bytes(reader, attribute_length)?;
@@ -147,15 +151,17 @@ impl Attribute {
 }
 
 macro_rules! parse {
+    (@count u8; $reader:expr) => { u8::read_from_io(&mut *$reader)? };
+    (@count u16; $reader:expr) => { U16::read_from_io(&mut *$reader)?.get() };
     ($reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
         let raw = $reader.decode_value()?;
         ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
     }};
-    ($len_type:ty; $reader:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
-        let count: $len_type = $reader.decode_value()?;
+    ($len_type:ident; $reader:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
+        let count = parse!(@count $len_type; $reader);
         (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
-    ($len_type:ty; $reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
+    ($len_type:ident; $reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
         parse![$len_type; $reader, || parse!($reader, $ctx)] $( .map(Self::$attr) )?
     };
 }
@@ -170,7 +176,7 @@ impl ClassElement for Attribute {
 
         let result = match name {
             "ConstantValue" => {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool
                     .get_constant_value(idx)
                     .map(Self::ConstantValue)
@@ -178,7 +184,7 @@ impl ClassElement for Attribute {
             "Code" => parse!(reader, ctx => Code),
             "StackMapTable" => parse![u16; reader, ctx => StackMapTable],
             "Exceptions" => parse![u16; reader, || {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool.get_class_name(idx)
             } => Exceptions],
             "InnerClasses" => parse![u16; reader, ctx => InnerClasses],
@@ -213,27 +219,27 @@ impl ClassElement for Attribute {
             "MethodParameters" => parse![u8; reader, ctx => MethodParameters],
             "Module" => parse!(reader, ctx => Module),
             "ModulePackages" => parse![u16; reader, || {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool.get_package_name(idx)
             } => ModulePackages],
             "ModuleMainClass" => {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool
                     .get_class_name(idx)
                     .map(Self::ModuleMainClass)
             }
             "NestHost" => {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool.get_class_name(idx).map(Self::NestHost)
             }
             "NestMembers" => parse![u16; reader, || {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool.get_class_name(idx)
             }]
             .map(Self::NestMembers),
             "Record" => parse![u16; reader, ctx => Record],
             "PermittedSubclasses" => parse![u16; reader, || {
-                let idx = reader.decode_value()?;
+                let idx = U16::read_from_io(&mut *reader)?.get();
                 ctx.constant_pool.get_class_name(idx)
             } => PermittedSubclasses],
             name => return Ok(Attribute::Unrecognized(name.to_owned(), info)),
@@ -335,7 +341,7 @@ fn parse_string<R: Read + ?Sized>(
     reader: &mut R,
     ctx: &ParsingContext,
 ) -> Result<String, ParseError> {
-    let str_idx = reader.decode_value()?;
+    let str_idx = U16::read_from_io(&mut *reader)?.get();
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 

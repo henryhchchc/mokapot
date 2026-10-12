@@ -1,41 +1,43 @@
+use zerocopy::FromBytes;
+use zerocopy::byteorder::big_endian::{U16, U32};
+
 use std::io::{self, Read, Write};
 
 use super::{ClassFile, JAVA_CLASS_MAGIC};
 use crate::jvm::bytecode::{
     FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo,
-    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo,
-    reader::BytecodeReader, write_length,
+    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo, write_length,
 };
 
 impl FromBytecode for ClassFile {
     fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        let magic: u32 = reader.decode_value()?;
+        let magic: u32 = U32::read_from_io(&mut *reader)?.get();
         if magic != JAVA_CLASS_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "This is not a Java class file",
             ));
         }
-        let minor_version = reader.decode_value()?;
-        let major_version = reader.decode_value()?;
-        let constant_pool_count = reader.decode_value()?;
+        let minor_version = U16::read_from_io(&mut *reader)?.get();
+        let major_version = U16::read_from_io(&mut *reader)?.get();
+        let constant_pool_count = U16::read_from_io(&mut *reader)?.get();
         let constant_pool = RawConstantPool::from_reader(reader, constant_pool_count)?;
-        let access_flags = reader.decode_value()?;
-        let this_class = reader.decode_value()?;
-        let super_class = reader.decode_value()?;
-        let interfaces_count: u16 = reader.decode_value()?;
+        let access_flags = U16::read_from_io(&mut *reader)?.get();
+        let this_class = U16::read_from_io(&mut *reader)?.get();
+        let super_class = U16::read_from_io(&mut *reader)?.get();
+        let interfaces_count: u16 = U16::read_from_io(&mut *reader)?.get();
         let interfaces = (0..interfaces_count)
-            .map(|_| reader.decode_value())
+            .map(|_| U16::read_from_io(&mut *reader).map(u16::from))
             .collect::<io::Result<_>>()?;
-        let fields_count: u16 = reader.decode_value()?;
+        let fields_count: u16 = U16::read_from_io(&mut *reader)?.get();
         let fields = (0..fields_count)
             .map(|_| FieldInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
-        let methods_count: u16 = reader.decode_value()?;
+        let methods_count: u16 = U16::read_from_io(&mut *reader)?.get();
         let methods = (0..methods_count)
             .map(|_| MethodInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
-        let attributes_count: u16 = reader.decode_value()?;
+        let attributes_count: u16 = U16::read_from_io(&mut *reader)?.get();
         let attributes = (0..attributes_count)
             .map(|_| AttributeInfo::from_reader(reader))
             .collect::<io::Result<_>>()?;
