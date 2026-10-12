@@ -23,10 +23,14 @@ use crate::intrinsics::{enum_discriminant, see_jvm_spec};
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Use JVMS item names in raw layouts"
+)]
 pub struct Code {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instruction_bytes: Box<[u8]>,
+    pub code: Box<[u8]>,
     pub exception_table: Box<[ExceptionTableEntry]>,
     pub attributes: Box<[AttributeInfo]>,
 }
@@ -37,7 +41,7 @@ impl FromBytecode for Code {
         let max_locals = U16::read_from_io(&mut reader)?.get();
         let code_length: u32 = U32::read_from_io(&mut reader)?.get();
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let instruction_bytes = read_bytes(&mut reader, code_length)?;
+        let code = read_bytes(&mut reader, code_length)?;
         let exception_table_length: u16 = U16::read_from_io(&mut reader)?.get();
         let exception_table = (0..exception_table_length)
             .map(|_| reader.decode_value())
@@ -49,7 +53,7 @@ impl FromBytecode for Code {
         Ok(Self {
             max_stack,
             max_locals,
-            instruction_bytes,
+            code,
             exception_table,
             attributes,
         })
@@ -60,8 +64,8 @@ impl ToBytecode for Code {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
         writer.write_all(&self.max_stack.to_be_bytes())?;
         writer.write_all(&self.max_locals.to_be_bytes())?;
-        write_length::<u32>(writer, self.instruction_bytes.len())?;
-        writer.write_all(&self.instruction_bytes)?;
+        write_length::<u32>(writer, self.code.len())?;
+        writer.write_all(&self.code)?;
         write_length::<u16>(writer, self.exception_table.len())?;
         for entry in &self.exception_table {
             entry.to_writer(writer)?;
@@ -79,7 +83,7 @@ pub struct ExceptionTableEntry {
     pub start_pc: U16,
     pub end_pc: U16,
     pub handler_pc: U16,
-    pub catch_type_idx: U16,
+    pub catch_type: U16,
 }
 
 impl FixedLayout for ExceptionTableEntry {}
@@ -260,7 +264,7 @@ pub enum VerificationTypeInfo {
     Long = 4,
     Null = 5,
     UninitializedThis = 6,
-    Object { class_info_index: u16 } = 7,
+    Object { cpool_index: u16 } = 7,
     Uninitialized { offset: u16 } = 8,
 }
 
@@ -283,7 +287,7 @@ impl FromBytecode for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                class_info_index: U16::read_from_io(&mut reader)?.get(),
+                cpool_index: U16::read_from_io(&mut reader)?.get(),
             }),
             8 => Ok(Self::Uninitialized {
                 offset: U16::read_from_io(&mut reader)?.get(),
@@ -301,10 +305,9 @@ impl ToBytecode for VerificationTypeInfo {
         let tag = self.tag();
         writer.write_all(&tag.to_be_bytes())?;
         match self {
-            Self::Object {
-                class_info_index: value,
+            Self::Object { cpool_index: value } | Self::Uninitialized { offset: value } => {
+                writer.write_all(&value.to_be_bytes())?;
             }
-            | Self::Uninitialized { offset: value } => writer.write_all(&value.to_be_bytes())?,
             _ => {}
         }
         Ok(())
@@ -329,11 +332,24 @@ pub struct LocalVariableInfo {
     pub start_pc: U16,
     pub length: U16,
     pub name_index: U16,
-    pub desc_or_signature_idx: U16,
+    pub descriptor_index: U16,
     pub index: U16,
 }
 
 impl FixedLayout for LocalVariableInfo {}
+
+#[doc = see_jvm_spec!(4, 7, 14)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub struct LocalVariableTypeInfo {
+    pub start_pc: U16,
+    pub length: U16,
+    pub name_index: U16,
+    pub signature_index: U16,
+    pub index: U16,
+}
+
+impl FixedLayout for LocalVariableTypeInfo {}
 
 #[cfg(test)]
 mod tests {
@@ -347,7 +363,7 @@ mod tests {
 
         bytes.clear();
         VerificationTypeInfo::Object {
-            class_info_index: 0x1234,
+            cpool_index: 0x1234,
         }
         .to_writer(&mut bytes)
         .unwrap();

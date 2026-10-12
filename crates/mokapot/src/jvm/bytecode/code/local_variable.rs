@@ -33,7 +33,7 @@ impl ClassElement for LocalVariableDescAttr {
             start_pc,
             length,
             name_index,
-            desc_or_signature_idx,
+            descriptor_index,
             index,
         } = raw;
         let start_pc = ProgramCounter::from(start_pc);
@@ -41,7 +41,7 @@ impl ClassElement for LocalVariableDescAttr {
 
         let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
         let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
-        let descriptor = ctx.constant_pool.get_str(desc_or_signature_idx.into())?;
+        let descriptor = ctx.constant_pool.get_str(descriptor_index.into())?;
         let field_type =
             FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
         let id = LocalVariableId {
@@ -59,26 +59,26 @@ impl ClassElement for LocalVariableDescAttr {
         let start_pc = self.id.range.start;
         let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
-        let desc_or_signature_idx = cp.put_string(self.field_type.descriptor())?;
+        let descriptor_index = cp.put_string(self.field_type.descriptor())?;
         let index = self.id.index;
         Ok(Self::Raw {
             start_pc: u16::from(start_pc).into(),
             length: length.into(),
             name_index: name_index.into(),
-            desc_or_signature_idx: desc_or_signature_idx.into(),
+            descriptor_index: descriptor_index.into(),
             index: index.into(),
         })
     }
 }
 
 impl ClassElement for LocalVariableTypeAttr {
-    type Raw = raw_attributes::LocalVariableInfo;
+    type Raw = raw_attributes::LocalVariableTypeInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             start_pc,
             length,
             name_index,
-            desc_or_signature_idx,
+            signature_index,
             index,
         } = raw;
         let start_pc = ProgramCounter::from(start_pc);
@@ -88,7 +88,7 @@ impl ClassElement for LocalVariableTypeAttr {
         let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
         let signature = ctx
             .constant_pool
-            .get_str(desc_or_signature_idx.into())?
+            .get_str(signature_index.into())?
             .to_owned();
         let id = LocalVariableId {
             range,
@@ -105,13 +105,13 @@ impl ClassElement for LocalVariableTypeAttr {
         let start_pc = self.id.range.start;
         let length = u16::from(self.id.range.end) - u16::from(start_pc);
         let name_index = cp.put_string(self.name)?;
-        let desc_or_signature_idx = cp.put_string(self.signature)?;
+        let signature_index = cp.put_string(self.signature)?;
         let index = self.id.index;
         Ok(Self::Raw {
             start_pc: u16::from(start_pc).into(),
             length: length.into(),
             name_index: name_index.into(),
-            desc_or_signature_idx: desc_or_signature_idx.into(),
+            signature_index: signature_index.into(),
             index: index.into(),
         })
     }

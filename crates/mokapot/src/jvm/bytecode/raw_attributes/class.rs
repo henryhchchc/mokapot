@@ -20,11 +20,15 @@ use crate::intrinsics::see_jvm_spec;
 #[doc = see_jvm_spec!(4, 7, 6)]
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Use JVMS item names in raw layouts"
+)]
 pub struct InnerClass {
-    pub info_index: U16,
+    pub inner_class_info_index: U16,
     pub outer_class_info_index: U16,
     pub inner_name_index: U16,
-    pub access_flags: U16,
+    pub inner_class_access_flags: U16,
 }
 
 impl FixedLayout for InnerClass {}
@@ -41,29 +45,29 @@ impl FixedLayout for EnclosingMethod {}
 
 #[doc = see_jvm_spec!(4, 7, 23)]
 pub struct BootstrapMethod {
-    pub method_ref_idx: u16,
-    pub arguments: Box<[u16]>,
+    pub bootstrap_method_ref: u16,
+    pub bootstrap_arguments: Box<[u16]>,
 }
 
 impl FromBytecode for BootstrapMethod {
     fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let method_ref_idx = U16::read_from_io(&mut reader)?.get();
-        let num_arguments: u16 = U16::read_from_io(&mut reader)?.get();
-        let arguments = (0..num_arguments)
+        let bootstrap_method_ref = U16::read_from_io(&mut reader)?.get();
+        let num_bootstrap_arguments: u16 = U16::read_from_io(&mut reader)?.get();
+        let bootstrap_arguments = (0..num_bootstrap_arguments)
             .map(|_| U16::read_from_io(&mut reader).map(u16::from))
             .collect::<io::Result<_>>()?;
         Ok(Self {
-            method_ref_idx,
-            arguments,
+            bootstrap_method_ref,
+            bootstrap_arguments,
         })
     }
 }
 
 impl ToBytecode for BootstrapMethod {
     fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.method_ref_idx.to_be_bytes())?;
-        write_length::<u16>(writer, self.arguments.len())?;
-        for argument in &self.arguments {
+        writer.write_all(&self.bootstrap_method_ref.to_be_bytes())?;
+        write_length::<u16>(writer, self.bootstrap_arguments.len())?;
+        for argument in &self.bootstrap_arguments {
             writer.write_all(&argument.to_be_bytes())?;
         }
         Ok(())

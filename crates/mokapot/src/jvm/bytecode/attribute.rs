@@ -36,30 +36,33 @@ use crate::{
 #[doc = see_jvm_spec!(4, 7)]
 #[derive(Debug)]
 pub(crate) struct AttributeInfo {
-    name_idx: u16,
+    attribute_name_index: u16,
     info: Box<[u8]>,
 }
 
 impl AttributeInfo {
-    const fn from_raw_parts(name_idx: u16, info: Box<[u8]>) -> Self {
-        Self { name_idx, info }
+    const fn from_raw_parts(attribute_name_index: u16, info: Box<[u8]>) -> Self {
+        Self {
+            attribute_name_index,
+            info,
+        }
     }
 }
 
 impl FromBytecode for AttributeInfo {
     fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let name_idx = U16::read_from_io(&mut reader)?.get();
+        let attribute_name_index = U16::read_from_io(&mut reader)?.get();
         let attribute_length: u32 = U32::read_from_io(&mut reader)?.get();
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
         let info = read_bytes(&mut reader, attribute_length)?;
-        Ok(Self::from_raw_parts(name_idx, info))
+        Ok(Self::from_raw_parts(attribute_name_index, info))
     }
 }
 
 impl ToBytecode for AttributeInfo {
     fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.name_idx.to_be_bytes())?;
+        writer.write_all(&self.attribute_name_index.to_be_bytes())?;
         write_length::<u32>(writer, self.info.len())?;
         writer.write_all(&self.info)?;
         Ok(())
@@ -170,8 +173,11 @@ impl ClassElement for Attribute {
     type Raw = AttributeInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
-        let AttributeInfo { name_idx, info } = raw;
-        let name = ctx.constant_pool.get_str(name_idx)?;
+        let AttributeInfo {
+            attribute_name_index,
+            info,
+        } = raw;
+        let name = ctx.constant_pool.get_str(attribute_name_index)?;
         let reader = &mut info.as_ref();
 
         let result = match name {
@@ -255,9 +261,12 @@ impl ClassElement for Attribute {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let name_idx = cp.put_string(self.name().to_owned())?;
+        let attribute_name_index = cp.put_string(self.name().to_owned())?;
         let info = self.into_bytes(cp)?;
-        Ok(Self::Raw { name_idx, info })
+        Ok(Self::Raw {
+            attribute_name_index,
+            info,
+        })
     }
 }
 

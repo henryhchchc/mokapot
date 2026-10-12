@@ -55,17 +55,17 @@ impl ClassElement for ExceptionTableEntry {
             start_pc,
             end_pc,
             handler_pc,
-            catch_type_idx,
+            catch_type,
         } = raw;
-        let catch_type_idx = catch_type_idx.get();
+        let catch_type = catch_type.get();
         let start_pc = ProgramCounter::from(start_pc);
         let end_pc = ProgramCounter::from(end_pc);
         let covered_pc = start_pc..end_pc;
         let handler_pc = ProgramCounter::from(handler_pc);
-        let catch_type = if catch_type_idx == 0 {
+        let catch_type = if catch_type == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_class_name(catch_type_idx)?)
+            Some(ctx.constant_pool.get_class_name(catch_type)?)
         };
         Ok(ExceptionTableEntry {
             covered_pc,
@@ -83,7 +83,7 @@ impl ClassElement for ExceptionTableEntry {
         let start_pc = u16::from(covered_pc.start);
         let end_pc = u16::from(covered_pc.end);
         let handler_pc = u16::from(handler_pc);
-        let catch_type_idx = catch_type
+        let catch_type = catch_type
             .as_ref()
             .map(|it| cp.put_class_name(it))
             .transpose()?
@@ -92,7 +92,7 @@ impl ClassElement for ExceptionTableEntry {
             start_pc: start_pc.into(),
             end_pc: end_pc.into(),
             handler_pc: handler_pc.into(),
-            catch_type_idx: catch_type_idx.into(),
+            catch_type: catch_type.into(),
         })
     }
 }
@@ -146,12 +146,12 @@ impl ClassElement for MethodBody {
         let Code {
             max_stack,
             max_locals,
-            instruction_bytes,
+            code,
             exception_table,
             attributes,
         } = raw;
 
-        let instructions = RawInstruction::iter_from_reader(instruction_bytes.as_ref())
+        let instructions = RawInstruction::iter_from_reader(code.as_ref())
             .map(|entry| {
                 let (pc, raw) = entry?;
                 Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))
@@ -208,10 +208,8 @@ impl ClassElement for MethodBody {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let mut instruction_bytes = Vec::new();
-        self.instructions
-            .into_raw(cp)?
-            .to_writer(&mut instruction_bytes)?;
+        let mut code = Vec::new();
+        self.instructions.into_raw(cp)?.to_writer(&mut code)?;
         let exception_table = self
             .exception_table
             .into_iter()
@@ -262,10 +260,11 @@ impl ClassElement for MethodBody {
         )
         .map(|it| it.into_raw(cp))
         .try_collect()?;
+        let code = code.into_boxed_slice();
         Ok(Self::Raw {
             max_stack: self.max_stack,
             max_locals: self.max_locals,
-            instruction_bytes: instruction_bytes.into_boxed_slice(),
+            code,
             exception_table,
             attributes,
         })
@@ -294,7 +293,7 @@ mod tests {
                 start_pc: 1.into(),
                 end_pc: 4.into(),
                 handler_pc: 5.into(),
-                catch_type_idx: 0.into(),
+                catch_type: 0.into(),
             },
             &context,
         )
@@ -316,7 +315,7 @@ mod tests {
             raw_attributes::Code {
                 max_stack: 0,
                 max_locals: 0,
-                instruction_bytes: Box::from([0xcb]),
+                code: Box::from([0xcb]),
                 exception_table: Box::new([]),
                 attributes: Box::new([]),
             },

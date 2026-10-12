@@ -266,11 +266,11 @@ impl ClassElement for BootstrapMethod {
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
-            method_ref_idx,
-            arguments,
+            bootstrap_method_ref,
+            bootstrap_arguments,
         } = raw;
-        let method = ctx.constant_pool.get_method_handle(method_ref_idx)?;
-        let arguments = arguments
+        let method = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
+        let arguments = bootstrap_arguments
             .into_iter()
             .map(|it| ctx.constant_pool.get_constant_value(it))
             .collect::<Result<_, _>>()?;
@@ -278,15 +278,15 @@ impl ClassElement for BootstrapMethod {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let method_ref_idx = cp.put_method_handle(self.method)?;
-        let arguments = self
+        let bootstrap_method_ref = cp.put_method_handle(self.method)?;
+        let bootstrap_arguments = self
             .arguments
             .into_iter()
             .map(|arg| cp.put_constant_value(arg))
             .try_collect()?;
         Ok(Self::Raw {
-            method_ref_idx,
-            arguments,
+            bootstrap_method_ref,
+            bootstrap_arguments,
         })
     }
 }
@@ -296,16 +296,16 @@ impl ClassElement for InnerClassInfo {
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
-            info_index,
+            inner_class_info_index,
             outer_class_info_index,
             inner_name_index,
-            access_flags,
+            inner_class_access_flags,
         } = raw;
-        let info_index = info_index.get();
+        let inner_class_info_index = inner_class_info_index.get();
         let outer_class_info_index = outer_class_info_index.get();
         let inner_name_index = inner_name_index.get();
-        let access_flags = access_flags.get();
-        let inner_class = ctx.constant_pool.get_class_name(info_index)?;
+        let inner_class_access_flags = inner_class_access_flags.get();
+        let inner_class = ctx.constant_pool.get_class_name(inner_class_info_index)?;
         let outer_class = if outer_class_info_index == 0 {
             None
         } else {
@@ -317,7 +317,7 @@ impl ClassElement for InnerClassInfo {
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let access_flags = NestedClassAccessFlags::from_bits(access_flags)
+        let access_flags = NestedClassAccessFlags::from_bits(inner_class_access_flags)
             .ok_or(ParseError::malform("Invalid nested class access flags"))?;
         Ok(Self {
             inner_class,
@@ -328,24 +328,26 @@ impl ClassElement for InnerClassInfo {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let info_index = cp.put_class_name(&self.inner_class)?;
+        let inner_class_info_index = cp.put_class_name(&self.inner_class)?.into();
         let outer_class_info_index = self
             .outer_class
             .as_ref()
             .map(|it| cp.put_class_name(it))
             .transpose()?
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .into();
         let inner_name_index = self
             .inner_name
             .map(|it| cp.put_string(it))
             .transpose()?
-            .unwrap_or(0);
-        let access_flags = self.access_flags.into_raw(cp)?;
+            .unwrap_or(0)
+            .into();
+        let inner_class_access_flags = self.access_flags.into_raw(cp)?.into();
         Ok(Self::Raw {
-            info_index: info_index.into(),
-            outer_class_info_index: outer_class_info_index.into(),
-            inner_name_index: inner_name_index.into(),
-            access_flags: access_flags.into(),
+            inner_class_info_index,
+            outer_class_info_index,
+            inner_name_index,
+            inner_class_access_flags,
         })
     }
 }

@@ -17,16 +17,20 @@ impl ClassElement for Require {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             requires_index,
-            flags,
-            version_index,
+            requires_flags,
+            requires_version_index,
         } = raw;
         let requires_index = requires_index.get();
-        let flags = flags.get();
-        let version_index = version_index.get();
+        let requires_flags = requires_flags.get();
+        let requires_version_index = requires_version_index.get();
         let module = ctx.constant_pool.get_module_ref(requires_index)?;
-        let flags = ClassElement::from_raw(flags, ctx)?;
-        let version = if version_index > 0 {
-            Some(ctx.constant_pool.get_str(version_index)?.to_owned())
+        let flags = ClassElement::from_raw(requires_flags, ctx)?;
+        let version = if requires_version_index > 0 {
+            Some(
+                ctx.constant_pool
+                    .get_str(requires_version_index)?
+                    .to_owned(),
+            )
         } else {
             None
         };
@@ -38,17 +42,18 @@ impl ClassElement for Require {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let requires_index = cp.put_module_ref(self.module)?;
-        let flags = self.flags.into_raw(cp)?;
-        let version_index = self
+        let requires_index = cp.put_module_ref(self.module)?.into();
+        let requires_flags = self.flags.into_raw(cp)?.into();
+        let requires_version_index = self
             .version
             .map(|it| cp.put_string(it))
             .transpose()?
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .into();
         Ok(Self::Raw {
-            requires_index: requires_index.into(),
-            flags: flags.into(),
-            version_index: version_index.into(),
+            requires_index,
+            requires_flags,
+            requires_version_index,
         })
     }
 }
@@ -59,13 +64,13 @@ impl ClassElement for Export {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             exports_index,
-            to,
-            flags,
+            exports_to,
+            exports_flags,
         } = raw;
 
         let package = ctx.constant_pool.get_package_name(exports_index)?;
-        let flags = ClassElement::from_raw(flags, ctx)?;
-        let to = to
+        let flags = ClassElement::from_raw(exports_flags, ctx)?;
+        let to = exports_to
             .into_iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
             .collect::<Result<_, _>>()?;
@@ -74,16 +79,16 @@ impl ClassElement for Export {
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let exports_index = cp.put_package_name(&self.package)?;
-        let flags = self.flags.into_raw(cp)?;
-        let to = self
+        let exports_flags = self.flags.into_raw(cp)?;
+        let exports_to = self
             .to
             .into_iter()
             .map(|it| cp.put_module_ref(it))
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             exports_index,
-            flags,
-            to,
+            exports_flags,
+            exports_to,
         })
     }
 }
@@ -94,13 +99,13 @@ impl ClassElement for Open {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             opens_index,
-            to,
-            flags,
+            opens_to,
+            opens_flags,
         } = raw;
 
         let package = ctx.constant_pool.get_package_name(opens_index)?;
-        let flags = ClassElement::from_raw(flags, ctx)?;
-        let to = to
+        let flags = ClassElement::from_raw(opens_flags, ctx)?;
+        let to = opens_to
             .into_iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
             .collect::<Result<_, _>>()?;
@@ -109,16 +114,16 @@ impl ClassElement for Open {
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let opens_index = cp.put_package_name(&self.package)?;
-        let flags = self.flags.into_raw(cp)?;
-        let to = self
+        let opens_flags = self.flags.into_raw(cp)?;
+        let opens_to = self
             .to
             .into_iter()
             .map(|it| cp.put_module_ref(it))
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             opens_index,
-            flags,
-            to,
+            opens_flags,
+            opens_to,
         })
     }
 }
@@ -129,10 +134,10 @@ impl ClassElement for Provide {
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             provides_index,
-            with,
+            provides_with,
         } = raw;
         let service = ctx.constant_pool.get_class_name(provides_index)?;
-        let with = with
+        let with = provides_with
             .into_iter()
             .map(|idx| ctx.constant_pool.get_class_name(idx))
             .collect::<Result<_, _>>()?;
@@ -141,14 +146,14 @@ impl ClassElement for Provide {
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let provides_index = cp.put_class_name(&self.service)?;
-        let with = self
+        let provides_with = self
             .with
             .iter()
             .map(|it| cp.put_class_name(it))
             .collect::<Result<_, _>>()?;
         Ok(Self::Raw {
             provides_index,
-            with,
+            provides_with,
         })
     }
 }
@@ -158,19 +163,19 @@ impl ClassElement for Module {
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
-            info_index,
-            flags,
-            version_index,
+            module_name_index,
+            module_flags,
+            module_version_index,
             requires,
             exports,
             opens,
             uses,
             provides,
         } = raw;
-        let name = ctx.constant_pool.get_module_ref(info_index)?.name;
-        let flags = ClassElement::from_raw(flags, ctx)?;
-        let version = if version_index > 0 {
-            Some(ctx.constant_pool.get_str(version_index)?.to_owned())
+        let name = ctx.constant_pool.get_module_ref(module_name_index)?.name;
+        let flags = ClassElement::from_raw(module_flags, ctx)?;
+        let version = if module_version_index > 0 {
+            Some(ctx.constant_pool.get_str(module_version_index)?.to_owned())
         } else {
             None
         };
@@ -207,9 +212,9 @@ impl ClassElement for Module {
     }
 
     fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let info_index = cp.put_module_ref(ModuleRef { name: self.name })?;
-        let flags = self.flags.into_raw(cp)?;
-        let version_index = self
+        let module_name_index = cp.put_module_ref(ModuleRef { name: self.name })?;
+        let module_flags = self.flags.into_raw(cp)?;
+        let module_version_index = self
             .version
             .map(|it| cp.put_string(it))
             .transpose()?
@@ -240,9 +245,9 @@ impl ClassElement for Module {
             .map(|it| cp.put_class_name(it))
             .try_collect()?;
         Ok(Self::Raw {
-            info_index,
-            flags,
-            version_index,
+            module_name_index,
+            module_flags,
+            module_version_index,
             requires,
             exports,
             opens,

@@ -193,13 +193,13 @@ impl ToBytecode for TypeAnnotation {
 #[repr(u8)]
 pub enum TargetInfo {
     TypeParameterOfClass {
-        index: u8,
+        type_parameter_index: u8,
     } = 0x00,
     TypeParameterOfMethod {
-        index: u8,
+        type_parameter_index: u8,
     } = 0x01,
     SuperType {
-        index: u16,
+        supertype_index: u16,
     } = 0x10,
     TypeParameterBoundOfClass {
         type_parameter_index: u8,
@@ -210,18 +210,18 @@ pub enum TargetInfo {
         bound_index: u8,
     } = 0x12,
     Field = 0x13,
-    TypeOfField = 0x14,
+    MethodReturn = 0x14,
     Receiver = 0x15,
     FormalParameter {
-        index: u8,
+        formal_parameter_index: u8,
     } = 0x16,
     Throws {
-        index: u16,
+        throws_type_index: u16,
     } = 0x17,
     LocalVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x40,
     ResourceVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x41,
     Catch {
-        index: u16,
+        exception_table_index: u16,
     } = 0x42,
     InstanceOf {
         offset: u16,
@@ -229,31 +229,31 @@ pub enum TargetInfo {
     New {
         offset: u16,
     } = 0x44,
-    NewMethodReference {
+    ConstructorReference {
         offset: u16,
     } = 0x45,
-    VarMethodReference {
+    MethodReference {
         offset: u16,
     } = 0x46,
     TypeInCast {
         offset: ProgramCounter,
-        index: u8,
+        type_argument_index: u8,
     } = 0x47,
     TypeArgumentInConstructor {
         offset: ProgramCounter,
-        index: u8,
+        type_argument_index: u8,
     } = 0x48,
     TypeArgumentInCall {
         offset: ProgramCounter,
-        index: u8,
+        type_argument_index: u8,
     } = 0x49,
     TypeArgumentInConstructorReference {
         offset: ProgramCounter,
-        index: u8,
+        type_argument_index: u8,
     } = 0x4A,
     TypeArgumentInMethodReference {
         offset: ProgramCounter,
-        index: u8,
+        type_argument_index: u8,
     } = 0x4B,
 }
 
@@ -262,13 +262,13 @@ impl FromBytecode for TargetInfo {
         let target_type: u8 = u8::read_from_io(&mut reader)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: u8::read_from_io(&mut reader)?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: u8::read_from_io(&mut reader)?,
             },
             0x10 => Self::SuperType {
-                index: U16::read_from_io(&mut reader)?.get(),
+                supertype_index: U16::read_from_io(&mut reader)?.get(),
             },
             0x11 => Self::TypeParameterBoundOfClass {
                 type_parameter_index: u8::read_from_io(&mut reader)?,
@@ -279,13 +279,13 @@ impl FromBytecode for TargetInfo {
                 bound_index: u8::read_from_io(&mut reader)?,
             },
             0x13 => Self::Field,
-            0x14 => Self::TypeOfField,
+            0x14 => Self::MethodReturn,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                index: u8::read_from_io(&mut reader)?,
+                formal_parameter_index: u8::read_from_io(&mut reader)?,
             },
             0x17 => Self::Throws {
-                index: U16::read_from_io(&mut reader)?.get(),
+                throws_type_index: U16::read_from_io(&mut reader)?.get(),
             },
             0x40 => {
                 let table_length: u16 = U16::read_from_io(&mut reader)?.get();
@@ -312,7 +312,7 @@ impl FromBytecode for TargetInfo {
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                index: U16::read_from_io(&mut reader)?.get(),
+                exception_table_index: U16::read_from_io(&mut reader)?.get(),
             },
             0x43 => Self::InstanceOf {
                 offset: U16::read_from_io(&mut reader)?.get(),
@@ -320,31 +320,31 @@ impl FromBytecode for TargetInfo {
             0x44 => Self::New {
                 offset: U16::read_from_io(&mut reader)?.get(),
             },
-            0x45 => Self::NewMethodReference {
+            0x45 => Self::ConstructorReference {
                 offset: U16::read_from_io(&mut reader)?.get(),
             },
-            0x46 => Self::VarMethodReference {
+            0x46 => Self::MethodReference {
                 offset: U16::read_from_io(&mut reader)?.get(),
             },
             0x47 => Self::TypeInCast {
                 offset: reader.decode_value()?,
-                index: u8::read_from_io(&mut reader)?,
+                type_argument_index: u8::read_from_io(&mut reader)?,
             },
             0x48 => Self::TypeArgumentInConstructor {
                 offset: reader.decode_value()?,
-                index: u8::read_from_io(&mut reader)?,
+                type_argument_index: u8::read_from_io(&mut reader)?,
             },
             0x49 => Self::TypeArgumentInCall {
                 offset: reader.decode_value()?,
-                index: u8::read_from_io(&mut reader)?,
+                type_argument_index: u8::read_from_io(&mut reader)?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
                 offset: reader.decode_value()?,
-                index: u8::read_from_io(&mut reader)?,
+                type_argument_index: u8::read_from_io(&mut reader)?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
                 offset: reader.decode_value()?,
-                index: u8::read_from_io(&mut reader)?,
+                type_argument_index: u8::read_from_io(&mut reader)?,
             },
             unexpected => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -361,9 +361,15 @@ impl ToBytecode for TargetInfo {
         let target_type: u8 = unsafe { enum_discriminant(self) };
         writer.write_all(&target_type.to_be_bytes())?;
         match self {
-            TargetInfo::TypeParameterOfClass { index }
-            | TargetInfo::TypeParameterOfMethod { index }
-            | TargetInfo::FormalParameter { index } => {
+            TargetInfo::TypeParameterOfClass {
+                type_parameter_index: index,
+            }
+            | TargetInfo::TypeParameterOfMethod {
+                type_parameter_index: index,
+            }
+            | TargetInfo::FormalParameter {
+                formal_parameter_index: index,
+            } => {
                 writer.write_all(&index.to_be_bytes())?;
             }
             TargetInfo::TypeParameterBoundOfClass {
@@ -377,7 +383,7 @@ impl ToBytecode for TargetInfo {
                 writer.write_all(&type_parameter_index.to_be_bytes())?;
                 writer.write_all(&bound_index.to_be_bytes())?;
             }
-            TargetInfo::Field | TargetInfo::TypeOfField | TargetInfo::Receiver => {}
+            TargetInfo::Field | TargetInfo::MethodReturn | TargetInfo::Receiver => {}
             TargetInfo::LocalVariable(entries) | TargetInfo::ResourceVariable(entries) => {
                 write_length::<u16>(writer, entries.len())?;
                 for &(start_pc, length, index) in entries {
@@ -386,22 +392,43 @@ impl ToBytecode for TargetInfo {
                     writer.write_all(&index.to_be_bytes())?;
                 }
             }
-            TargetInfo::SuperType { index: value }
-            | TargetInfo::Throws { index: value }
-            | TargetInfo::Catch { index: value }
+            TargetInfo::SuperType {
+                supertype_index: value,
+            }
+            | TargetInfo::Throws {
+                throws_type_index: value,
+            }
+            | TargetInfo::Catch {
+                exception_table_index: value,
+            }
             | TargetInfo::InstanceOf { offset: value }
             | TargetInfo::New { offset: value }
-            | TargetInfo::NewMethodReference { offset: value }
-            | TargetInfo::VarMethodReference { offset: value } => {
+            | TargetInfo::ConstructorReference { offset: value }
+            | TargetInfo::MethodReference { offset: value } => {
                 writer.write_all(&value.to_be_bytes())?;
             }
-            TargetInfo::TypeInCast { offset, index }
-            | TargetInfo::TypeArgumentInConstructor { offset, index }
-            | TargetInfo::TypeArgumentInCall { offset, index }
-            | TargetInfo::TypeArgumentInConstructorReference { offset, index }
-            | TargetInfo::TypeArgumentInMethodReference { offset, index } => {
+            TargetInfo::TypeInCast {
+                offset,
+                type_argument_index,
+            }
+            | TargetInfo::TypeArgumentInConstructor {
+                offset,
+                type_argument_index,
+            }
+            | TargetInfo::TypeArgumentInCall {
+                offset,
+                type_argument_index,
+            }
+            | TargetInfo::TypeArgumentInConstructorReference {
+                offset,
+                type_argument_index,
+            }
+            | TargetInfo::TypeArgumentInMethodReference {
+                offset,
+                type_argument_index,
+            } => {
                 offset.to_writer(writer)?;
-                writer.write_all(&index.to_be_bytes())?;
+                writer.write_all(&type_argument_index.to_be_bytes())?;
             }
         }
         Ok(())
@@ -419,9 +446,11 @@ mod tests {
         assert_eq!(bytes, [0x13]);
 
         bytes.clear();
-        TargetInfo::TypeParameterOfClass { index: 7 }
-            .to_writer(&mut bytes)
-            .unwrap();
+        TargetInfo::TypeParameterOfClass {
+            type_parameter_index: 7,
+        }
+        .to_writer(&mut bytes)
+        .unwrap();
         assert_eq!(bytes, [0x00, 7]);
     }
 }

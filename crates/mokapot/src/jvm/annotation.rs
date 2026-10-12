@@ -111,8 +111,8 @@ pub enum TargetInfo {
     },
     /// Indicates that an annotation appears on a field declaration or a record component declaration.
     Field,
-    /// Indicates that an annotation appears on they type of a field declaration or a record component declaration.
-    FieldType,
+    /// The return type of a method, or the type of a newly constructed object.
+    MethodReturn,
     /// Indicates that an annotation appears on the receiver type of a method.
     Receiver,
     /// Indicates that an annotation appears on the type in a formal parameter declaration of a method, constructor, or lambda expression.

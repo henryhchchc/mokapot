@@ -154,6 +154,10 @@ impl ClassElement for TargetInfo {
     type Raw = raw_attributes::TargetInfo;
 
     #[allow(clippy::enum_glob_use)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Exhaustive conversion of JVMS annotation targets"
+    )]
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         use OffsetOf::{InstanceOf, New};
         use TypeArgumentLocation::*;
@@ -161,15 +165,21 @@ impl ClassElement for TargetInfo {
         use VariableKind::*;
 
         let lifted = match raw {
-            Self::Raw::TypeParameterOfClass { index } => Self::TypeParameter {
+            Self::Raw::TypeParameterOfClass {
+                type_parameter_index,
+            } => Self::TypeParameter {
                 location: Class,
-                index,
+                index: type_parameter_index,
             },
-            Self::Raw::TypeParameterOfMethod { index } => Self::TypeParameter {
+            Self::Raw::TypeParameterOfMethod {
+                type_parameter_index,
+            } => Self::TypeParameter {
                 location: Method,
-                index,
+                index: type_parameter_index,
             },
-            Self::Raw::SuperType { index } => Self::SuperType { index },
+            Self::Raw::SuperType { supertype_index } => Self::SuperType {
+                index: supertype_index,
+            },
             Self::Raw::TypeParameterBoundOfClass {
                 type_parameter_index,
                 bound_index,
@@ -187,10 +197,16 @@ impl ClassElement for TargetInfo {
                 bound_index,
             },
             Self::Raw::Field => Self::Field,
-            Self::Raw::TypeOfField => Self::FieldType,
+            Self::Raw::MethodReturn => Self::MethodReturn,
             Self::Raw::Receiver => Self::Receiver,
-            Self::Raw::FormalParameter { index } => Self::FormalParameter { index },
-            Self::Raw::Throws { index } => Self::Throws { index },
+            Self::Raw::FormalParameter {
+                formal_parameter_index,
+            } => Self::FormalParameter {
+                index: formal_parameter_index,
+            },
+            Self::Raw::Throws { throws_type_index } => Self::Throws {
+                index: throws_type_index,
+            },
             Self::Raw::LocalVariable(table) => {
                 let table = table
                     .into_iter()
@@ -211,39 +227,58 @@ impl ClassElement for TargetInfo {
                     .try_collect()?;
                 Self::LocalVar(Resource, table)
             }
-            Self::Raw::Catch { index } => Self::Catch { index },
+            Self::Raw::Catch {
+                exception_table_index,
+            } => Self::Catch {
+                index: exception_table_index,
+            },
             Self::Raw::InstanceOf { offset } => Self::Offset(InstanceOf, offset),
             Self::Raw::New { offset } => Self::Offset(New, offset),
-            Self::Raw::NewMethodReference { offset } => {
+            Self::Raw::ConstructorReference { offset } => {
                 Self::Offset(OffsetOf::ConstructorReference, offset)
             }
-            Self::Raw::VarMethodReference { offset } => {
+            Self::Raw::MethodReference { offset } => {
                 Self::Offset(OffsetOf::MethodReference, offset)
             }
-            Self::Raw::TypeInCast { offset, index } => Self::TypeArgument {
+            Self::Raw::TypeInCast {
+                offset,
+                type_argument_index,
+            } => Self::TypeArgument {
                 location: Cast,
                 offset,
-                index,
+                index: type_argument_index,
             },
-            Self::Raw::TypeArgumentInConstructor { offset, index } => Self::TypeArgument {
+            Self::Raw::TypeArgumentInConstructor {
+                offset,
+                type_argument_index,
+            } => Self::TypeArgument {
                 location: Constructor,
                 offset,
-                index,
+                index: type_argument_index,
             },
-            Self::Raw::TypeArgumentInCall { offset, index } => Self::TypeArgument {
+            Self::Raw::TypeArgumentInCall {
+                offset,
+                type_argument_index,
+            } => Self::TypeArgument {
                 location: MethodCall,
                 offset,
-                index,
+                index: type_argument_index,
             },
-            Self::Raw::TypeArgumentInConstructorReference { offset, index } => Self::TypeArgument {
+            Self::Raw::TypeArgumentInConstructorReference {
+                offset,
+                type_argument_index,
+            } => Self::TypeArgument {
                 location: ConstructorReference,
                 offset,
-                index,
+                index: type_argument_index,
             },
-            Self::Raw::TypeArgumentInMethodReference { offset, index } => Self::TypeArgument {
+            Self::Raw::TypeArgumentInMethodReference {
+                offset,
+                type_argument_index,
+            } => Self::TypeArgument {
                 location: MethodReference,
                 offset,
-                index,
+                index: type_argument_index,
             },
         };
         Ok(lifted)
@@ -251,11 +286,20 @@ impl ClassElement for TargetInfo {
 
     fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
         let raw = match self {
-            TargetInfo::TypeParameter { location, index } => match location {
-                TypeParameterLocation::Class => Self::Raw::TypeParameterOfClass { index },
-                TypeParameterLocation::Method => Self::Raw::TypeParameterOfMethod { index },
+            TargetInfo::TypeParameter {
+                location,
+                index: type_parameter_index,
+            } => match location {
+                TypeParameterLocation::Class => Self::Raw::TypeParameterOfClass {
+                    type_parameter_index,
+                },
+                TypeParameterLocation::Method => Self::Raw::TypeParameterOfMethod {
+                    type_parameter_index,
+                },
             },
-            TargetInfo::SuperType { index } => Self::Raw::SuperType { index },
+            TargetInfo::SuperType {
+                index: supertype_index,
+            } => Self::Raw::SuperType { supertype_index },
             TargetInfo::TypeParameterBound {
                 location,
                 type_parameter_index,
@@ -271,10 +315,16 @@ impl ClassElement for TargetInfo {
                 },
             },
             TargetInfo::Field => Self::Raw::Field,
-            TargetInfo::FieldType => Self::Raw::TypeOfField,
+            TargetInfo::MethodReturn => Self::Raw::MethodReturn,
             TargetInfo::Receiver => Self::Raw::Receiver,
-            TargetInfo::FormalParameter { index } => Self::Raw::FormalParameter { index },
-            TargetInfo::Throws { index } => Self::Raw::Throws { index },
+            TargetInfo::FormalParameter {
+                index: formal_parameter_index,
+            } => Self::Raw::FormalParameter {
+                formal_parameter_index,
+            },
+            TargetInfo::Throws {
+                index: throws_type_index,
+            } => Self::Raw::Throws { throws_type_index },
             TargetInfo::LocalVar(variable_kind, table) => {
                 let table = table
                     .into_iter()
@@ -290,29 +340,44 @@ impl ClassElement for TargetInfo {
                     VariableKind::Resource => Self::Raw::ResourceVariable(table),
                 }
             }
-            TargetInfo::Catch { index } => Self::Raw::Catch { index },
+            TargetInfo::Catch {
+                index: exception_table_index,
+            } => Self::Raw::Catch {
+                exception_table_index,
+            },
             TargetInfo::Offset(offset_of, offset) => match offset_of {
                 OffsetOf::InstanceOf => Self::Raw::InstanceOf { offset },
                 OffsetOf::New => Self::Raw::New { offset },
-                OffsetOf::MethodReference => Self::Raw::VarMethodReference { offset },
-                OffsetOf::ConstructorReference => Self::Raw::NewMethodReference { offset },
+                OffsetOf::MethodReference => Self::Raw::MethodReference { offset },
+                OffsetOf::ConstructorReference => Self::Raw::ConstructorReference { offset },
             },
             TargetInfo::TypeArgument {
                 location,
                 offset,
-                index,
+                index: type_argument_index,
             } => match location {
-                TypeArgumentLocation::Cast => Self::Raw::TypeInCast { offset, index },
-                TypeArgumentLocation::Constructor => {
-                    Self::Raw::TypeArgumentInConstructor { offset, index }
-                }
-                TypeArgumentLocation::MethodCall => Self::Raw::TypeArgumentInCall { offset, index },
+                TypeArgumentLocation::Cast => Self::Raw::TypeInCast {
+                    offset,
+                    type_argument_index,
+                },
+                TypeArgumentLocation::Constructor => Self::Raw::TypeArgumentInConstructor {
+                    offset,
+                    type_argument_index,
+                },
+                TypeArgumentLocation::MethodCall => Self::Raw::TypeArgumentInCall {
+                    offset,
+                    type_argument_index,
+                },
                 TypeArgumentLocation::ConstructorReference => {
-                    Self::Raw::TypeArgumentInConstructorReference { offset, index }
+                    Self::Raw::TypeArgumentInConstructorReference {
+                        offset,
+                        type_argument_index,
+                    }
                 }
-                TypeArgumentLocation::MethodReference => {
-                    Self::Raw::TypeArgumentInMethodReference { offset, index }
-                }
+                TypeArgumentLocation::MethodReference => Self::Raw::TypeArgumentInMethodReference {
+                    offset,
+                    type_argument_index,
+                },
             },
         };
         Ok(raw)
