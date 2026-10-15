@@ -6,6 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 enum LocalSlot {
     Value(FrameValue),
     Reserved,
@@ -27,9 +28,9 @@ impl LocalSlot {
             (Value(lhs), Value(rhs)) if lhs.category == rhs.category => {
                 join_values(&mut lhs.value, rhs.value);
             }
-            (Reserved, Reserved) | (Unset, Unset | Value(_)) | (Unavailable, _) => {}
-            (slot @ Value(_), Unset) => *slot = Unset,
-            (slot, Reserved | Unavailable | Value(_)) | (slot @ Reserved, _) => *slot = Unavailable,
+            (Reserved, Reserved) | (Unset, Unset) | (Unavailable, _) => {}
+            // A value missing on either path is unusable, just like a category conflict.
+            (slot, _) => *slot = Unavailable,
         }
     }
 }
@@ -151,13 +152,51 @@ impl LocalVariables {
 mod tests {
     use super::*;
     use crate::{
-        ir::{IdAllocator, test::prelude::*},
+        ir::{IdAllocator, NumericalId, test::prelude::*},
         types::{field_type::FieldType, method_descriptor::ReturnType},
     };
     use std::iter::repeat_n;
 
+    use itertools::Itertools;
+
     use ValueCategory::{Category1, Category2};
     use proptest::prelude::*;
+
+    fn merge_slot(mut lhs: LocalSlot, rhs: &LocalSlot) -> LocalSlot {
+        lhs.merge_from_with(rhs, |_, _| {});
+        lhs
+    }
+
+    #[test]
+    fn merging_unwritten_and_incompatible_locals_is_independent_of_order() {
+        let value = ValueId::from_raw(0);
+        let c1 = FrameValue {
+            value,
+            category: Category1,
+        };
+        let c2 = FrameValue {
+            value,
+            category: Category2,
+        };
+        let slots = [LocalSlot::Unset, LocalSlot::Value(c1), LocalSlot::Value(c2)];
+        for order in slots.iter().permutations(slots.len()) {
+            let merged = order[1..]
+                .iter()
+                .fold(order[0].clone(), |lhs, rhs| merge_slot(lhs, rhs));
+            assert_eq!(merged, LocalSlot::Unavailable);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn local_slot_merging_is_associative(
+            a in any::<LocalSlot>(), b in any::<LocalSlot>(), c in any::<LocalSlot>(),
+        ) {
+            let lhs = merge_slot(merge_slot(a.clone(), &b), &c);
+            let rhs = merge_slot(a, &merge_slot(b, &c));
+            prop_assert_eq!(lhs, rhs);
+        }
+    }
 
     /// A table of `slot_count` variables, none of them written.
     fn empty_locals(slot_count: usize) -> LocalVariables {

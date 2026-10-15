@@ -38,7 +38,7 @@ pub enum ErrorKind {
     /// A local variable was read before it was initialized.
     #[display("local variable is uninitialized")]
     UninitializedLocal,
-    /// A local variable was invalidated by an overlapping write.
+    /// A local variable was invalidated by a write or control-flow merge.
     #[display("local variable is unavailable")]
     UnavailableLocal,
     /// A local or stack value has the wrong category for the requested operation.

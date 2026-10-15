@@ -9,7 +9,7 @@ pub(crate) enum FrameError {
     LocalIndexOutOfBounds,
     /// An instruction read a local slot that has never been assigned.
     UninitializedLocal,
-    /// An instruction read a local slot invalidated by an overlapping write.
+    /// An instruction read a local slot invalidated by a write or control-flow merge.
     UnavailableLocal,
     /// A local or stack value has the wrong category for the requested operation.
     InvalidSlotLayout,
