@@ -4,7 +4,7 @@ use super::*;
 
 fn assert_version_matches_spec(major: u16, minor: u16) {
     let valid = major == 45
-        || ((46..=MAX_MAJOR_VERSION).contains(&major)
+        || ((46..=Version::LATEST.major()).contains(&major)
             && (minor == 0 || major >= 56 && minor == u16::MAX));
     let expected = if valid {
         Ok((major, minor, major >= 56 && minor == u16::MAX))
@@ -35,8 +35,8 @@ proptest! {
     fn class_version_acceptance_matches_spec(
         (major, minor) in prop_oneof![
             (Just(45), any::<u16>()),
-            (46..=MAX_MAJOR_VERSION, Just(0)),
-            (56..=MAX_MAJOR_VERSION, Just(u16::MAX)),
+            (46..=Version::LATEST.major(), Just(0)),
+            (56..=Version::LATEST.major(), Just(u16::MAX)),
             (any::<u16>(), any::<u16>()),
         ]
     ) {
@@ -46,7 +46,15 @@ proptest! {
 
 #[test]
 fn class_version_boundaries_match_spec() {
-    for major in [44, 45, 46, 55, 56, MAX_MAJOR_VERSION, MAX_MAJOR_VERSION + 1] {
+    for major in [
+        44,
+        45,
+        46,
+        55,
+        56,
+        Version::LATEST.major(),
+        Version::LATEST.major() + 1,
+    ] {
         for minor in [0, 1, u16::MAX - 1, u16::MAX] {
             assert_version_matches_spec(major, minor);
         }

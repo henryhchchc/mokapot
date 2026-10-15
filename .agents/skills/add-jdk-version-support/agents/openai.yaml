@@ -1,0 +1,3 @@
+interface:
+  display_name: "Add JDK Version Support"
+  short_description: "Locate JDK compatibility changes and checks"

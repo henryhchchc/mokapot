@@ -80,9 +80,6 @@ impl Annotation {
     }
 }
 
-/// The maximum supported major version of a class file.
-pub const MAX_MAJOR_VERSION: u16 = 71;
-
 const PREVIEW_FEATURES: u16 = 0xFFFF;
 
 /// The version of a class file.
@@ -146,6 +143,9 @@ pub enum Version {
     Jdk27(bool),
 }
 impl Version {
+    /// The latest supported JDK version (non-preview).
+    pub const LATEST: Self = Self::Jdk27(false);
+
     pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
         match (major, minor) {
             (45, minor) => Ok(Self::Jdk1_1(minor)),
@@ -191,7 +191,7 @@ impl Version {
             (70, PREVIEW_FEATURES) => Ok(Self::Jdk26(true)),
             (71, 0x0000) => Ok(Self::Jdk27(false)),
             (71, PREVIEW_FEATURES) => Ok(Self::Jdk27(true)),
-            (major, _) if major > MAX_MAJOR_VERSION => {
+            (major, _) if major > Self::LATEST.major() => {
                 Err(ParseError::malform("Unsupported class version"))
             }
             _ => Err(ParseError::malform("Invalid class version")),

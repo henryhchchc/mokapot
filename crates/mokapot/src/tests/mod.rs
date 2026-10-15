@@ -42,7 +42,7 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8; 40] {
 impl Default for Class {
     fn default() -> Self {
         Self {
-            version: class::Version::Jdk27(false),
+            version: class::Version::LATEST,
             access_flags: class::AccessFlags::empty(),
             name: ClassName::new("$default$").unwrap(),
             super_class: None,

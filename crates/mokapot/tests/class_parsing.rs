@@ -27,7 +27,7 @@ fn test_parse_my_class() {
     let mut bytes = test_data_class("org/mokapot/test/MyClass");
     let my_class = Class::from_reader(&mut bytes).expect("Failed to parse class");
 
-    assert_eq!(class::MAX_MAJOR_VERSION, my_class.version.major());
+    assert_eq!(class::Version::LATEST, my_class.version);
     assert_eq!(0, my_class.version.minor());
     assert!(!my_class.version.is_preview_enabled());
     assert_eq!(

@@ -280,7 +280,7 @@ mod tests {
     fn context() -> ParsingContext {
         ParsingContext {
             constant_pool: ConstantPool::new(),
-            class_version: Version::Jdk8,
+            class_version: Version::LATEST,
             current_class_name: "Test".parse().unwrap(),
         }
     }
