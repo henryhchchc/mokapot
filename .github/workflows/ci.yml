@@ -79,9 +79,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
@@ -138,9 +138,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
@@ -179,16 +179,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
           manifest-path: Cargo.toml
       - name: Test
         env:
-          RUSTFLAGS: -C target-cpu=native
           MOKAPOT_SKIP_JAVA_TESTS: 1
         run: |
           cargo llvm-cov clean --workspace
@@ -227,16 +226,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
           manifest-path: Cargo.toml
       - name: Test
         env:
-          RUSTFLAGS: -C target-cpu=native
           MOKAPOT_SKIP_JAVA_TESTS: 1
         run: |
           cargo llvm-cov clean --workspace
@@ -280,17 +278,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
           manifest-path: Cargo.toml
       - name: Test
         timeout-minutes: 10
-        env:
-          RUSTFLAGS: -C target-cpu=native
         run: |
           cargo llvm-cov clean --workspace
           cargo llvm-cov nextest --all-features --no-report -E 'kind(test)'
@@ -347,16 +343,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Sweep target cache
         uses: BD103/cargo-sweep@v2
         with:
           manifest-path: Cargo.toml
       - name: Test
         env:
-          RUSTFLAGS: -C target-cpu=native
           MOKAPOT_SKIP_JAVA_TESTS: 1
           JDK_CLASSES: ${{ github.workspace }}/jdk_classes
         timeout-minutes: 10
@@ -365,6 +360,8 @@ jobs:
   miri_test:
     name: Tests / Miri
     runs-on: ubuntu-latest
+    env:
+      MIRI_SYSROOT: ${{ github.workspace }}/.miri-sysroot
     steps:
       - name: Setup Rust
         id: rust-toolchain
@@ -386,19 +383,22 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v2-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
       - name: Cache Miri sysroot
+        id: miri-sysroot
         uses: actions/cache@v6
         with:
-          path: ~/.cache/miri
-          key: ${{ runner.os }}-${{ runner.arch }}-miri-sysroot-v1-${{ steps.rust-toolchain.outputs.cachekey }}
+          path: ${{ env.MIRI_SYSROOT }}
+          key: ${{ runner.os }}-${{ runner.arch }}-miri-sysroot-v2-${{ steps.rust-toolchain.outputs.cachekey }}
+      # Miri fingerprints rust-src mtimes, which change across fresh runners.
+      # Reuse the sysroot directly when the compiler-keyed cache matches.
       - name: Setup Miri sysroot
+        if: steps.miri-sysroot.outputs.cache-hit != 'true'
         run: cargo +nightly miri setup
       - name: Test with Miri
         env:
-          RUSTFLAGS: -C target-cpu=native
           MIRIFLAGS: -Zmiri-env-set=PROPTEST_CASES=4 -Zmiri-env-set=PROPTEST_DISABLE_FAILURE_PERSISTENCE=1
           MOKAPOT_SKIP_JAVA_TESTS: 1
         run: cargo +nightly miri nextest run -p mokapot --all-features --lib --no-tests=fail
