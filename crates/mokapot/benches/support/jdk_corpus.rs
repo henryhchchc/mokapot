@@ -1,4 +1,21 @@
-use std::{fs, io, path::Path};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
+
+static REPORT: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+// Divan can start a result row before invoking benchmark setup.
+pub fn record_summary(message: String) {
+    REPORT.lock().expect("benchmark report lock").push(message);
+}
+
+pub fn print_summary() {
+    for message in REPORT.lock().expect("benchmark report lock").drain(..) {
+        eprintln!("{message}");
+    }
+}
 
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -74,6 +91,32 @@ pub struct Corpus {
 }
 
 impl Corpus {
+    pub fn from_env() -> Self {
+        let root = env::var_os("JDK_CLASSES").map(PathBuf::from).expect(
+            "set JDK_CLASSES to an extracted JDK image (jimage extract --dir=<path> <jdk>/lib/modules)",
+        );
+        let setting = |name| match env::var(name) {
+            Ok(value) => Some(value),
+            Err(env::VarError::NotPresent) => None,
+            Err(error) => panic!("invalid {name}: {error}"),
+        };
+        let index = setting("JDK_BENCH_SHARD_INDEX");
+        let count = setting("JDK_BENCH_SHARD_COUNT");
+        let shard = Shard::new(index.as_deref(), count.as_deref())
+            .expect("valid JDK benchmark shard configuration");
+        let corpus = Self::load(&root, shard).expect("load JDK benchmark corpus");
+        record_summary(format!(
+            "JDK corpus: {}; shard {}/{}; {} classes; {} bytes; fingerprint {:016x}",
+            root.display(),
+            shard.index,
+            shard.count,
+            corpus.classes.len(),
+            corpus.byte_count,
+            corpus.fingerprint
+        ));
+        corpus
+    }
+
     pub fn load(root: &Path, shard: Shard) -> io::Result<Self> {
         if !fs::metadata(root)?.is_dir() {
             return Err(io::Error::new(

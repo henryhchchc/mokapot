@@ -69,3 +69,29 @@ For comparisons, record the JDK version and use matching corpus fingerprints, Ru
 Append `-- --test` to validate cases without timing, or `-- raw_class` / `-- whole_class` to filter cases.
 Benchmarks need no Java fixtures and are ignored when `JDK_CLASSES` is unset.
 Listing benchmarks does not load the corpus.
+
+Run IR generation and path-condition benchmarks:
+
+```sh
+MOKAPOT_SKIP_JAVA_TESTS=1 cargo bench -p mokapot --bench jdk-ir
+MOKAPOT_SKIP_JAVA_TESTS=1 cargo bench -p mokapot --bench jdk-path-conditions
+```
+
+Both reuse the parsing benchmark's corpus selection, sharding, and fingerprint.
+Neither requires `bench-internals` or Java fixtures.
+`jdk-ir` parses classes and validates IR generation before timing construction of IR for every method with a body.
+`jdk-path-conditions` builds IR before timing `PathCondition::analyze` with its default solving budget.
+Each iteration processes a complete corpus or bin sequentially, including dropping each result.
+Results report latency per pass and methods per second; file reads, parsing, validation, and bin selection are outside timing.
+
+Path-condition cases have one bin per observed predicate-occurrence count, ordered numerically, with empty bins omitted.
+The count matches the JDK smoke tests: visit reachable blocks once and sum predicates across conditional successor guards.
+An ordinary `if` contributes two occurrences; a switch default can contribute several.
+This is a workload proxy, not a count of distinct Boolean variables.
+`JDK_BENCH_MAX_PREDICATES` sets the inclusive maximum (default 16; zero selects only methods without predicate occurrences).
+Corpus and method summaries follow the results table, including bin populations and the number of excluded methods.
+
+Append `-- --test` to validate each case without timing or `-- --list` to list cases.
+Listing path-condition cases with `JDK_CLASSES` set performs corpus setup to discover the bins.
+Use an exact filter such as `-- --exact 'jdk_path_conditions::analyze::2'` to select one bin.
+Without `JDK_CLASSES`, neither target loads inputs or runs benchmarks.

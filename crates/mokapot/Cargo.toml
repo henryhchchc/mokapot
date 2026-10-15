@@ -20,6 +20,14 @@ harness = false
 name = "jdk-parsing"
 required-features = ["bench-internals"]
 
+[[bench]]
+harness = false
+name = "jdk-ir"
+
+[[bench]]
+harness = false
+name = "jdk-path-conditions"
+
 [dependencies]
 bitflags = { workspace = true }
 cesu8 = { workspace = true }
