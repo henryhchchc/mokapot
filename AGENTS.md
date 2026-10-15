@@ -3,9 +3,10 @@
 ## Project Structure & Module Organization
 
 This repository is a Cargo workspace with the main crate in `crates/mokapot`.
-Core library code lives under `crates/mokapot/src`, organized by domain: `jvm/` for class-file parsing and models, `ir/` for Moka IR and analysis backends, `analysis/` for higher-level analyses, and `types/` for descriptors and signatures.
-Integration tests live in `crates/mokapot/tests`, while unit-style module tests sit alongside source files under `src/**/tests`.
+Core library code lives under `crates/mokapot/src`, organized by domain: `jvm/` for class-file parsing and models, `ir/` for Moka IR and analysis backends, `analysis/` for higher-level analyses, and `types/` for descriptors and names.
+Integration tests live in `crates/mokapot/tests`, while unit tests sit alongside source files in test modules or `tests.rs` files.
 Java fixtures used by Rust tests are stored in `crates/mokapot/test_data`.
+The JDK parsing benchmark lives in `crates/mokapot/benches`; the parser fuzzing package lives in `crates/mokapot/fuzz`.
 
 ## Build, Test, and Development Commands
 
@@ -17,13 +18,14 @@ Run commands from the repository root:
 - `cargo fmt --all -- --check` verifies formatting.
 - `cargo clippy --all-targets --all-features -- -D warnings` matches CI lint strictness.
 - `cargo run --example disassembler -- <class-file>` runs the example in `crates/mokapot/examples/disassembler`.
+- `cargo run --example moka_ir -- <class-file>` builds and prints scalar SSA Moka IR.
 - `cargo hack check --feature-powerset --no-dev-deps` checks feature combinations used in CI.
 - On macOS, use `/usr/libexec/java_home` (maybe outside the sandbox) to locate `JAVA_HOME`.
 
 ## Coding Style & Naming Conventions
 
 Use Rust 2024 edition defaults and keep code `rustfmt`-clean.
-The crate enables strict lints in `src/lib.rs`.
+Strict lints are configured in the root `Cargo.toml` and inherited by the crate.
 Avoid `pub(in ...)` visibility.
 Prefer `pub(super)` when possible; otherwise use `pub(crate)` and constrain visibility through module re-exports.
 When the hosting type is already private, its associated items may be `pub`: the type's own visibility already bounds them, and module re-exports guard what is exposed.
@@ -34,7 +36,8 @@ Add unit tests near the code they cover and integration tests in `crates/mokapot
 Use the shared test prelude (`crate::ir::test::prelude::*`) and its fixtures where applicable; add reusable test utilities there.
 Bind arguments to local variables when this makes calls and assertions shorter.
 Assert error kinds, variants, and structured context rather than message text; avoid `should_panic(expected = ...)`.
-Java fixture tests require the latest JDK (`javac` and `jar`); `build.rs` recompiles files from `crates/mokapot/test_data`.
+Java fixture tests require `javac` and `jar` on `PATH`; use the JDK version in `.github/workflows/ci.yml` (currently 27).
+`build.rs` recompiles files from `crates/mokapot/test_data`.
 JDK-wide ignored tests require extracted JDK classes:
 
 - `export JDK_CLASSES=/path/to/jdk_classes`
@@ -47,6 +50,6 @@ Markdown documents should be formatted with `rumdl`.
 ## Commit & Pull Request Guidelines
 
 Use Conventional Commits with a scope that matches the top-level module or area.
-Sign commits with `git commit --signoff` to satisfy the DCO.
+Add a DCO sign-off with `git commit --signoff`.
 PRs should target `main`, describe behavior changes, list verification commands, and link issues or discussions when relevant.
 Include output samples or screenshots only when the change affects user-visible CLI or docs behavior.
