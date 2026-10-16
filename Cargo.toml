@@ -27,7 +27,7 @@ proptest-derive = "0.9"
 thiserror = "2.0"
 walkdir = "2.5"
 zerocopy = { version = "0.8", features = ["derive"] }
-zip = { version = "8.6", default-features = false }
+zip = { version = "9.0", default-features = false }
 
 [workspace.lints.clippy]
 missing_const_for_fn = "warn"
