@@ -134,8 +134,7 @@ impl ClassNames for JarClassPath {
         };
         jar_archive
             .file_names()
-            .filter_map(|it| it.strip_suffix(".class"))
-            .filter_map(|class_name| class_name.parse().ok())
+            .filter_map(|it| it.ok()?.strip_suffix(".class")?.parse().ok())
             .collect()
     }
 }
