@@ -23,7 +23,7 @@ itertools = "0.15"
 num-traits = "0.2"
 petgraph = "0.8"
 proptest = "1.11"
-proptest-derive = "0.8"
+proptest-derive = "0.9"
 thiserror = "2.0"
 walkdir = "2.5"
 zerocopy = { version = "0.8", features = ["derive"] }
