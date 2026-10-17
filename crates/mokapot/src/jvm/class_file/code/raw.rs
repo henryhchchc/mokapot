@@ -7,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{borrow_bytes, borrow_slice, parse_repeated, read_u8, read_u16, read_u32},
+    decoder::{borrow_bytes, borrow_slice, decode_value, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -27,14 +27,14 @@ pub struct Code<'a> {
 
 impl<'a> Decode<'a> for Code<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let max_stack = read_u16(bytes)?;
-        let max_locals = read_u16(bytes)?;
-        let code_length: u32 = read_u32(bytes)?;
+        let max_stack = decode_value(bytes)?;
+        let max_locals = decode_value(bytes)?;
+        let code_length: u32 = decode_value(bytes)?;
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
         let code = borrow_bytes(bytes, code_length)?;
-        let exception_table_length: u16 = read_u16(bytes)?;
+        let exception_table_length: u16 = decode_value(bytes)?;
         let exception_table = borrow_slice(bytes, usize::from(exception_table_length))?;
-        let attributes_count: u16 = read_u16(bytes)?;
+        let attributes_count: u16 = decode_value(bytes)?;
         let attributes =
             parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
         Ok(Self {
@@ -96,7 +96,7 @@ pub enum StackMapFrameInfo {
 
 impl<'a> Decode<'a> for StackMapFrameInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let frame_type: u8 = read_u8(bytes)?;
+        let frame_type: u8 = decode_value(bytes)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
@@ -107,19 +107,19 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
                 "Frame type {frame_type} is reserved for future use."
             ))),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: read_u16(bytes)?,
+                offset_delta: decode_value(bytes)?,
                 stack: VerificationTypeInfo::decode(bytes)?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: read_u16(bytes)?,
+                offset_delta: decode_value(bytes)?,
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: read_u16(bytes)?,
+                offset_delta: decode_value(bytes)?,
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = read_u16(bytes)?;
+                let offset_delta = decode_value(bytes)?;
                 let locals = parse_repeated(
                     bytes,
                     usize::from(locals_count),
@@ -131,14 +131,14 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
                 })
             }
             255 => {
-                let offset_delta = read_u16(bytes)?;
-                let number_of_locals: u16 = read_u16(bytes)?;
+                let offset_delta = decode_value(bytes)?;
+                let number_of_locals: u16 = decode_value(bytes)?;
                 let locals = parse_repeated(
                     bytes,
                     usize::from(number_of_locals),
                     VerificationTypeInfo::decode,
                 )?;
-                let number_of_stack_items: u16 = read_u16(bytes)?;
+                let number_of_stack_items: u16 = decode_value(bytes)?;
                 let stack = parse_repeated(
                     bytes,
                     usize::from(number_of_stack_items),
@@ -170,7 +170,7 @@ pub enum VerificationTypeInfo {
 
 impl<'a> Decode<'a> for VerificationTypeInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let tag: u8 = read_u8(bytes)?;
+        let tag: u8 = decode_value(bytes)?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -180,10 +180,10 @@ impl<'a> Decode<'a> for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                cpool_index: read_u16(bytes)?,
+                cpool_index: decode_value(bytes)?,
             }),
             8 => Ok(Self::Uninitialized {
-                offset: read_u16(bytes)?,
+                offset: decode_value(bytes)?,
             }),
             _ => Err(ParseError::malform(format!(
                 "Unknown verification type tag: {tag}"

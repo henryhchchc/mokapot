@@ -3,7 +3,7 @@ use crate::jvm::class_file::{
     Decode, ParseError,
     attribute::AttributeInfo,
     constant_pool::RawConstantPool,
-    decoder::{borrow_slice, parse_repeated, read_u16, read_u32},
+    decoder::{borrow_slice, decode_value, parse_repeated},
     field::FieldInfo,
     method::MethodInfo,
 };
@@ -22,24 +22,24 @@ impl<'a> ClassFile<'a> {
 
 impl<'a> Decode<'a> for ClassFile<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let magic: u32 = read_u32(bytes)?;
+        let magic: u32 = decode_value(bytes)?;
         if magic != JAVA_CLASS_MAGIC {
             return Err(ParseError::malform("This is not a Java class file"));
         }
-        let minor_version = read_u16(bytes)?;
-        let major_version = read_u16(bytes)?;
-        let constant_pool_count = read_u16(bytes)?;
+        let minor_version = decode_value(bytes)?;
+        let major_version = decode_value(bytes)?;
+        let constant_pool_count: u16 = decode_value(bytes)?;
         let constant_pool = RawConstantPool::parse_prefix(bytes, constant_pool_count)?;
-        let access_flags = read_u16(bytes)?;
-        let this_class = read_u16(bytes)?;
-        let super_class = read_u16(bytes)?;
-        let interfaces_count: u16 = read_u16(bytes)?;
+        let access_flags = decode_value(bytes)?;
+        let this_class = decode_value(bytes)?;
+        let super_class = decode_value(bytes)?;
+        let interfaces_count: u16 = decode_value(bytes)?;
         let interfaces = borrow_slice(bytes, usize::from(interfaces_count))?;
-        let fields_count: u16 = read_u16(bytes)?;
+        let fields_count: u16 = decode_value(bytes)?;
         let fields = parse_repeated(bytes, usize::from(fields_count), FieldInfo::decode)?;
-        let methods_count: u16 = read_u16(bytes)?;
+        let methods_count: u16 = decode_value(bytes)?;
         let methods = parse_repeated(bytes, usize::from(methods_count), MethodInfo::decode)?;
-        let attributes_count: u16 = read_u16(bytes)?;
+        let attributes_count: u16 = decode_value(bytes)?;
         let attributes =
             parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
 

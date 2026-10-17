@@ -6,7 +6,7 @@ use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endi
 use super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{parse_repeated, read_u16},
+    decoder::{decode_value, parse_repeated},
     resolve::Resolve,
 };
 use crate::{
@@ -32,10 +32,10 @@ pub(super) struct MethodInfo<'a> {
 
 impl<'a> Decode<'a> for MethodInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let access_flags = read_u16(bytes)?;
-        let name_index = read_u16(bytes)?;
-        let descriptor_index = read_u16(bytes)?;
-        let attributes_count: u16 = read_u16(bytes)?;
+        let access_flags = decode_value(bytes)?;
+        let name_index = decode_value(bytes)?;
+        let descriptor_index = decode_value(bytes)?;
+        let attributes_count: u16 = decode_value(bytes)?;
         let attributes =
             parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
         Ok(Self {

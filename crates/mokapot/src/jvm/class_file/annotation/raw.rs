@@ -4,7 +4,7 @@ use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endi
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, parse_repeated, read_u8, read_u16},
+    decoder::{borrow_slice, decode_value, parse_repeated},
     fixed_layout::FixedLayout,
 };
 use crate::intrinsics::see_jvm_spec;
@@ -17,11 +17,11 @@ pub struct Annotation {
 
 impl<'a> Decode<'a> for Annotation {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let type_index = read_u16(bytes)?;
-        let num_element_value_pairs: u16 = read_u16(bytes)?;
+        let type_index = decode_value(bytes)?;
+        let num_element_value_pairs: u16 = decode_value(bytes)?;
         let element_value_pairs =
             parse_repeated(bytes, usize::from(num_element_value_pairs), |bytes| {
-                let element_name_index = read_u16(bytes)?;
+                let element_name_index = decode_value(bytes)?;
                 let element_value = ElementValueInfo::decode(bytes)?;
                 Ok((element_name_index, element_value))
             })?;
@@ -46,19 +46,19 @@ pub enum ElementValueInfo {
 
 impl<'a> Decode<'a> for ElementValueInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let tag: u8 = read_u8(bytes)?;
+        let tag: u8 = decode_value(bytes)?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::Const(tag, read_u16(bytes)?))
+                Ok(Self::Const(tag, decode_value(bytes)?))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: read_u16(bytes)?,
-                const_name_index: read_u16(bytes)?,
+                type_name_index: decode_value(bytes)?,
+                const_name_index: decode_value(bytes)?,
             }),
-            b'c' => Ok(Self::ClassInfo(read_u16(bytes)?)),
+            b'c' => Ok(Self::ClassInfo(decode_value(bytes)?)),
             b'@' => Ok(Self::Annotation(Annotation::decode(bytes)?)),
             b'[' => {
-                let num_values: u16 = read_u16(bytes)?;
+                let num_values: u16 = decode_value(bytes)?;
                 let values = parse_repeated(bytes, usize::from(num_values), Self::decode)?;
                 Ok(Self::Array(values))
             }
@@ -89,13 +89,13 @@ pub struct TypeAnnotation<'a> {
 impl<'a> Decode<'a> for TypeAnnotation<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let target_info = TargetInfo::decode(bytes)?;
-        let target_path_length: u8 = read_u8(bytes)?;
+        let target_path_length: u8 = decode_value(bytes)?;
         let target_path = borrow_slice(bytes, usize::from(target_path_length))?;
-        let type_index = read_u16(bytes)?;
-        let num_element_value_pairs: u16 = read_u16(bytes)?;
+        let type_index = decode_value(bytes)?;
+        let num_element_value_pairs: u16 = decode_value(bytes)?;
         let element_value_pairs =
             parse_repeated(bytes, usize::from(num_element_value_pairs), |bytes| {
-                let element_name_index = read_u16(bytes)?;
+                let element_name_index = decode_value(bytes)?;
                 let element_value = ElementValueInfo::decode(bytes)?;
                 Ok((element_name_index, element_value))
             })?;
@@ -179,78 +179,78 @@ pub enum TargetInfo<'a> {
 
 impl<'a> Decode<'a> for TargetInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let target_type: u8 = read_u8(bytes)?;
+        let target_type: u8 = decode_value(bytes)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                type_parameter_index: read_u8(bytes)?,
+                type_parameter_index: decode_value(bytes)?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                type_parameter_index: read_u8(bytes)?,
+                type_parameter_index: decode_value(bytes)?,
             },
             0x10 => Self::SuperType {
-                supertype_index: read_u16(bytes)?,
+                supertype_index: decode_value(bytes)?,
             },
             0x11 => Self::TypeParameterBoundOfClass {
-                type_parameter_index: read_u8(bytes)?,
-                bound_index: read_u8(bytes)?,
+                type_parameter_index: decode_value(bytes)?,
+                bound_index: decode_value(bytes)?,
             },
             0x12 => Self::TypeParameterBoundOfMethod {
-                type_parameter_index: read_u8(bytes)?,
-                bound_index: read_u8(bytes)?,
+                type_parameter_index: decode_value(bytes)?,
+                bound_index: decode_value(bytes)?,
             },
             0x13 => Self::Field,
             0x14 => Self::MethodReturn,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                formal_parameter_index: read_u8(bytes)?,
+                formal_parameter_index: decode_value(bytes)?,
             },
             0x17 => Self::Throws {
-                throws_type_index: read_u16(bytes)?,
+                throws_type_index: decode_value(bytes)?,
             },
             0x40 => {
-                let table_length: u16 = read_u16(bytes)?;
+                let table_length: u16 = decode_value(bytes)?;
                 let table = borrow_slice(bytes, usize::from(table_length))?;
                 Self::LocalVariable(table)
             }
             0x41 => {
-                let table_length: u16 = read_u16(bytes)?;
+                let table_length: u16 = decode_value(bytes)?;
                 let table = borrow_slice(bytes, usize::from(table_length))?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                exception_table_index: read_u16(bytes)?,
+                exception_table_index: decode_value(bytes)?,
             },
             0x43 => Self::InstanceOf {
-                offset: read_u16(bytes)?,
+                offset: decode_value(bytes)?,
             },
             0x44 => Self::New {
-                offset: read_u16(bytes)?,
+                offset: decode_value(bytes)?,
             },
             0x45 => Self::ConstructorReference {
-                offset: read_u16(bytes)?,
+                offset: decode_value(bytes)?,
             },
             0x46 => Self::MethodReference {
-                offset: read_u16(bytes)?,
+                offset: decode_value(bytes)?,
             },
             0x47 => Self::TypeInCast {
-                offset: read_u16(bytes)?,
-                type_argument_index: read_u8(bytes)?,
+                offset: decode_value(bytes)?,
+                type_argument_index: decode_value(bytes)?,
             },
             0x48 => Self::TypeArgumentInConstructor {
-                offset: read_u16(bytes)?,
-                type_argument_index: read_u8(bytes)?,
+                offset: decode_value(bytes)?,
+                type_argument_index: decode_value(bytes)?,
             },
             0x49 => Self::TypeArgumentInCall {
-                offset: read_u16(bytes)?,
-                type_argument_index: read_u8(bytes)?,
+                offset: decode_value(bytes)?,
+                type_argument_index: decode_value(bytes)?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
-                offset: read_u16(bytes)?,
-                type_argument_index: read_u8(bytes)?,
+                offset: decode_value(bytes)?,
+                type_argument_index: decode_value(bytes)?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
-                offset: read_u16(bytes)?,
-                type_argument_index: read_u8(bytes)?,
+                offset: decode_value(bytes)?,
+                type_argument_index: decode_value(bytes)?,
             },
             unexpected => Err(ParseError::malform(format!(
                 "Invalid target type: {unexpected:x}"
