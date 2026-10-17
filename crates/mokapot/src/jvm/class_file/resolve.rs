@@ -22,16 +22,12 @@ where
     R::decode(bytes)?.resolve(ctx)
 }
 
-/// Borrows a fixed-width table before resolving its entries.
-pub(super) fn resolve_table<'input, R>(
-    bytes: &mut &'input [u8],
-    count: usize,
+/// Resolves fixed-width raw entries into a boxed slice.
+pub(super) fn resolve_table<R: Copy + Resolve>(
+    entries: &[R],
     ctx: &ResolutionContext,
-) -> Result<Box<[R::Output]>, ParseError>
-where
-    R: super::fixed_layout::FixedLayout + zerocopy::KnownLayout + Copy + Resolve + 'input,
-{
-    super::decoder::borrow_slice::<R>(bytes, count)?
+) -> Result<Box<[R::Output]>, ParseError> {
+    entries
         .iter()
         .copied()
         .map(|raw| raw.resolve(ctx))
