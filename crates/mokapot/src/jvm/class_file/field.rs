@@ -23,7 +23,7 @@ pub(crate) struct FieldInfo<'a> {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Box<[AttributeInfo<'a>]>,
+    attributes: Box<[&'a AttributeInfo]>,
 }
 
 impl<'a> Decode<'a> for FieldInfo<'a> {
@@ -32,7 +32,7 @@ impl<'a> Decode<'a> for FieldInfo<'a> {
         let name_index = decode_value(bytes)?;
         let descriptor_index = decode_value(bytes)?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             access_flags,
             name_index,

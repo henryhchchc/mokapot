@@ -40,7 +40,7 @@ impl<'a> Decode<'a> for ClassFile<'a> {
         let methods_count: u16 = decode_value(bytes)?;
         let methods = parse_repeated(bytes, methods_count, MethodInfo::decode)?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
 
         Ok(Self {
             minor_version,

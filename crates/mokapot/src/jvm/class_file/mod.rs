@@ -1,4 +1,10 @@
 //! JVM class file format parsing.
+
+#![expect(
+    clippy::struct_field_names,
+    reason = "Use JVMS item names in raw layouts"
+)]
+
 mod annotation;
 mod attribute;
 pub(super) mod class;
