@@ -160,10 +160,14 @@ mod tests {
         is_static: bool,
         descriptor: &[u8],
     ) -> Result<Method, ParseError> {
-        let mut pool = RawConstantPool::new();
-        let name_index = pool.put_entry(RawEntry::Utf8(b"<clinit>")).unwrap();
-        let descriptor_index = pool.put_entry(RawEntry::Utf8(descriptor)).unwrap();
-        let attribute_name_index = pool.put_entry(RawEntry::Utf8(b"Code")).unwrap();
+        let pool = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"<clinit>"),
+            RawEntry::Utf8(descriptor),
+            RawEntry::Utf8(b"Code"),
+        ]);
+        let name_index = 1;
+        let descriptor_index = 2;
+        let attribute_name_index = 3_u16;
         let ctx = ResolutionContext {
             constant_pool: ConstantPool::from_raw(pool).unwrap(),
             class_version: Version::from_versions(major, 0).unwrap(),

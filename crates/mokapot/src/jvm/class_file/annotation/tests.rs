@@ -8,8 +8,7 @@ use crate::jvm::{
 };
 
 fn context() -> ResolutionContext {
-    let mut pool = RawConstantPool::new();
-    for entry in [
+    let pool = RawConstantPool::from_entries([
         RawEntry::Utf8(b"LExample;"),
         RawEntry::Utf8(b"value"),
         RawEntry::Integer(42.into()),
@@ -17,9 +16,7 @@ fn context() -> ResolutionContext {
         RawEntry::Utf8(b"LChoice;"),
         RawEntry::Utf8(b"YES"),
         RawEntry::Utf8(b"V"),
-    ] {
-        pool.put_entry(entry).unwrap();
-    }
+    ]);
     ResolutionContext {
         constant_pool: ConstantPool::from_raw(pool).unwrap(),
         class_version: Version::LATEST,

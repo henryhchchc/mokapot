@@ -27,66 +27,36 @@ impl<T> Slot<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PoolStorage<S> {
-    slots: S,
+pub(crate) struct PoolStorage<T> {
+    slots: Box<[Slot<T>]>,
 }
 
-impl<T> PoolStorage<Vec<Slot<T>>> {
-    pub fn with_capacity(count: u16) -> Self {
-        let mut slots = Vec::with_capacity(usize::from(count.max(1)));
-        slots.push(Slot::Padding);
+impl<T> PoolStorage<T> {
+    pub const fn from_slots(slots: Box<[Slot<T>]>) -> Self {
         Self { slots }
     }
 
-    pub fn into_slots(self) -> Vec<Slot<T>> {
+    pub fn into_slots(self) -> Box<[Slot<T>]> {
         self.slots
     }
 
     #[allow(
         clippy::cast_possible_truncation,
-        reason = "constructors and insertion bound the slot count to u16"
+        reason = "parsed pool counts and test fixtures are bounded by u16"
     )]
     pub const fn count(&self) -> u16 {
         self.slots.len() as u16
     }
 
-    pub fn push(&mut self, entry: T, padding: bool) -> Result<u16, T> {
-        if self.slots.len() + 1 + usize::from(padding) > usize::from(u16::MAX) {
-            return Err(entry);
-        }
-        let index = self.count();
-        self.slots.push(Slot::Entry(entry));
-        if padding {
-            self.slots.push(Slot::Padding);
-        }
-        Ok(index)
-    }
-}
-
-impl<T> PoolStorage<Box<[Slot<T>]>> {
     pub fn with_padding(count: u16) -> Self {
         Self {
-            slots: (0..count.max(1)).map(|_| Slot::Padding).collect(),
+            slots: (0..count).map(|_| Slot::Padding).collect(),
         }
     }
 
-    #[cfg(test)]
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "constructor bounds the slot count to u16"
-    )]
-    pub const fn count(&self) -> u16 {
-        self.slots.len() as u16
-    }
-}
-
-impl<T, S: std::ops::Deref<Target = [Slot<T>]>> PoolStorage<S> {
     pub fn get_entry(&self, index: u16) -> Option<&T> {
         self.slots.get(usize::from(index)).and_then(Slot::as_ref)
     }
-}
-
-impl<T, S: std::ops::DerefMut<Target = [Slot<T>]>> PoolStorage<S> {
     pub fn as_mut_slice(&mut self) -> &mut [Slot<T>] {
         &mut self.slots
     }

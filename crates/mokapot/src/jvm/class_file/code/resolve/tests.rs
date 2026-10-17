@@ -23,33 +23,30 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
 }
 
 fn interface_method_pool(is_interface: bool) -> ConstantPool {
-    let mut raw = RawConstantPool::new();
-    let class_name_index = raw.put_entry(RawEntry::Utf8(b"a/b/I".as_slice())).unwrap();
-    let class_index = raw
-        .put_entry(RawEntry::Class {
-            name_index: class_name_index.into(),
-        })
-        .unwrap();
-    let name_index = raw.put_entry(RawEntry::Utf8(b"m".as_slice())).unwrap();
-    let descriptor_index = raw.put_entry(RawEntry::Utf8(b"()V".as_slice())).unwrap();
-    let name_and_type_index = raw
-        .put_entry(RawEntry::NameAndType {
-            name_index: name_index.into(),
-            descriptor_index: descriptor_index.into(),
-        })
-        .unwrap();
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
-            class_index: class_index.into(),
-            name_and_type_index: name_and_type_index.into(),
+            class_index: 2.into(),
+            name_and_type_index: 5.into(),
         }
     } else {
         RawEntry::MethodRef {
-            class_index: class_index.into(),
-            name_and_type_index: name_and_type_index.into(),
+            class_index: 2.into(),
+            name_and_type_index: 5.into(),
         }
     };
-    raw.put_entry(entry).unwrap();
+    let raw = RawConstantPool::from_entries([
+        RawEntry::Utf8(b"a/b/I"),
+        RawEntry::Class {
+            name_index: 1.into(),
+        },
+        RawEntry::Utf8(b"m"),
+        RawEntry::Utf8(b"()V"),
+        RawEntry::NameAndType {
+            name_index: 3.into(),
+            descriptor_index: 4.into(),
+        },
+        entry,
+    ]);
     ConstantPool::from_raw(raw).unwrap()
 }
 
