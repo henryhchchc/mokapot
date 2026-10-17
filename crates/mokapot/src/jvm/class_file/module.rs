@@ -1,5 +1,7 @@
 //! Module decoding and resolution.
 
+use crate::intrinsics::ExactSizeIteratorExt;
+
 pub(super) mod raw;
 
 use crate::jvm::class_file::flags::parse_flags;
@@ -58,7 +60,7 @@ impl Resolve for &raw::ExportsInfo {
         let to = exports_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         Ok(Export { package, flags, to })
     }
 }
@@ -80,7 +82,7 @@ impl Resolve for &raw::OpensInfo {
         let to = opens_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         Ok(Open { package, flags, to })
     }
 }
@@ -99,7 +101,7 @@ impl Resolve for &raw::ProvidesInfo {
         let with = provides_with
             .iter()
             .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         Ok(Provide { service, with })
     }
 }
@@ -130,23 +132,23 @@ impl Resolve for raw::ModuleInfo<'_> {
             .iter()
             .copied()
             .map(|raw| raw.resolve(ctx))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         let exports = exports
             .into_iter()
             .map(|raw| raw.resolve(ctx))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         let opens = opens
             .into_iter()
             .map(|raw| raw.resolve(ctx))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         let uses = uses
             .iter()
             .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         let provides = provides
             .into_iter()
             .map(|raw| raw.resolve(ctx))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         Ok(Module {
             name,
             flags,

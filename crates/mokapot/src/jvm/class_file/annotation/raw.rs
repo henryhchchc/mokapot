@@ -1,13 +1,72 @@
-//! Raw type-annotation targets and paths.
+//! Raw attribute types for annotation-related attributes.
 
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, decode_value},
+    decoder::{borrow_slice, decode_value, parse_repeated},
     fixed_layout::FixedLayout,
 };
 use crate::intrinsics::see_jvm_spec;
+
+#[doc = see_jvm_spec!(4, 7, 16)]
+pub struct Annotation {
+    pub type_index: u16,
+    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+}
+
+impl<'a> Decode<'a> for Annotation {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        let type_index = decode_value(bytes)?;
+        let num_element_value_pairs: u16 = decode_value(bytes)?;
+        let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
+            let element_name_index = decode_value(bytes)?;
+            let element_value = ElementValueInfo::decode(bytes)?;
+            Ok((element_name_index, element_value))
+        })?;
+        Ok(Self {
+            type_index,
+            element_value_pairs,
+        })
+    }
+}
+
+#[doc = see_jvm_spec!(4, 7, 16, 1)]
+pub enum ElementValueInfo {
+    Const(u8, u16),
+    Enum {
+        type_name_index: u16,
+        const_name_index: u16,
+    },
+    ClassInfo(u16),
+    Annotation(Annotation),
+    Array(Box<[ElementValueInfo]>),
+}
+
+impl<'a> Decode<'a> for ElementValueInfo {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        let tag: u8 = decode_value(bytes)?;
+        match tag {
+            tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
+                Ok(Self::Const(tag, decode_value(bytes)?))
+            }
+            b'e' => Ok(Self::Enum {
+                type_name_index: decode_value(bytes)?,
+                const_name_index: decode_value(bytes)?,
+            }),
+            b'c' => Ok(Self::ClassInfo(decode_value(bytes)?)),
+            b'@' => Ok(Self::Annotation(Annotation::decode(bytes)?)),
+            b'[' => {
+                let num_values: u16 = decode_value(bytes)?;
+                let values = parse_repeated(bytes, num_values, Self::decode)?;
+                Ok(Self::Array(values))
+            }
+            _ => Err(ParseError::malform(format!(
+                "Unknown element value tag: {tag}"
+            ))),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
@@ -17,6 +76,35 @@ pub struct TypePathElement {
 }
 
 impl FixedLayout for TypePathElement {}
+
+#[doc = see_jvm_spec!(4, 7, 20)]
+pub struct TypeAnnotation<'a> {
+    pub target_info: TargetInfo<'a>,
+    pub target_path: &'a [TypePathElement],
+    pub type_index: u16,
+    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+}
+
+impl<'a> Decode<'a> for TypeAnnotation<'a> {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        let target_info = TargetInfo::decode(bytes)?;
+        let target_path_length: u8 = decode_value(bytes)?;
+        let target_path = borrow_slice(bytes, usize::from(target_path_length))?;
+        let type_index = decode_value(bytes)?;
+        let num_element_value_pairs: u16 = decode_value(bytes)?;
+        let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
+            let element_name_index = decode_value(bytes)?;
+            let element_value = ElementValueInfo::decode(bytes)?;
+            Ok((element_name_index, element_value))
+        })?;
+        Ok(Self {
+            target_info,
+            target_path,
+            type_index,
+            element_value_pairs,
+        })
+    }
+}
 
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug)]

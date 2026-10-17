@@ -1,4 +1,5 @@
 use super::*;
+use crate::jvm::class_file::{Decode, resolve::decode_resolved};
 use crate::jvm::{
     JavaString,
     class::Version,
@@ -27,6 +28,17 @@ fn context() -> ResolutionContext {
 }
 
 #[test]
+fn raw_annotations_preserve_constant_pool_indices() {
+    let bytes = [0x12, 0x34, 0, 1, 0xab, 0xcd, b'c', 0, 5];
+    let annotation = raw::Annotation::decode(&mut bytes.as_slice()).unwrap();
+    assert_eq!(annotation.type_index, 0x1234);
+    assert!(matches!(
+        annotation.element_value_pairs.as_ref(),
+        [(0xabcd, raw::ElementValueInfo::ClassInfo(5))]
+    ));
+}
+
+#[test]
 fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
     let bytes = [
         0, 1, 0, 1, 0, 2, // annotation with one element named value
@@ -40,7 +52,7 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
     ];
     let ctx = context();
     let mut remaining = bytes.as_slice();
-    let annotation = decode_annotation(&mut remaining, &ctx).unwrap();
+    let annotation = decode_resolved::<raw::Annotation>(&mut remaining, &ctx).unwrap();
     let nested = Annotation {
         annotation_type: "LExample;".parse().unwrap(),
         element_value_pairs: Box::new([("value".to_owned(), ElementValue::Array(Box::new([])))]),
@@ -65,7 +77,7 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
     };
     assert_eq!(annotation, expected);
     assert_eq!(
-        decode_annotation(&mut remaining, &ctx).unwrap(),
+        decode_resolved::<raw::Annotation>(&mut remaining, &ctx).unwrap(),
         Annotation {
             annotation_type: "LExample;".parse().unwrap(),
             element_value_pairs: Box::new([]),
@@ -82,7 +94,7 @@ fn decodes_type_annotation_target_path_and_values() {
         0, 1, 0, 1, 0, 2, b'I', 0, 3, // annotation and element value
     ];
     let ctx = context();
-    let annotation = decode_type_annotation(&mut bytes.as_slice(), &ctx).unwrap();
+    let annotation = decode_resolved::<raw::TypeAnnotation>(&mut bytes.as_slice(), &ctx).unwrap();
     assert_eq!(
         annotation,
         TypeAnnotation {
@@ -107,7 +119,7 @@ fn decodes_type_annotation_target_path_and_values() {
 fn rejects_unknown_value_tags_and_mismatched_primitive_constants() {
     let ctx = context();
     for mut bytes in [b"?".as_slice(), &[b'D', 0, 3]] {
-        let error = decode_element_value(&mut bytes, &ctx).unwrap_err();
+        let error = decode_resolved::<raw::ElementValueInfo>(&mut bytes, &ctx).unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::Malformed);
     }
 }

@@ -1,5 +1,7 @@
 //! Slice decoding for JVM wire values.
 
+use crate::intrinsics::ExactSizeIteratorExt;
+
 use zerocopy::{
     FromBytes, KnownLayout,
     byteorder::big_endian::{I16, I32, U16, U32},
@@ -71,24 +73,34 @@ where
 }
 
 /// Parses an explicit number of elements, stopping at the first failure.
-pub(super) fn parse_repeated<'a, Count, E, Elts>(
+pub(super) fn parse_repeated<'a, E>(
     bytes: &mut &'a [u8],
-    count: Count,
+    count: impl Into<usize>,
     mut parser: impl FnMut(&mut &'a [u8]) -> Result<E, ParseError>,
-) -> Result<Elts, ParseError>
-where
-    Count: Default,
-    std::ops::Range<Count>: Iterator,
-    Elts: FromIterator<E>,
-{
-    (Count::default()..count).map(|_| parser(bytes)).collect()
+) -> Result<Box<[E]>, ParseError> {
+    (0..count.into()).map(|_| parser(bytes)).try_collect_exact()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::borrow_slice;
+    use super::{ParseError, borrow_slice, decode_value, parse_repeated};
     use crate::jvm::errors::ParseErrorKind;
     use zerocopy::byteorder::big_endian::U16;
+
+    #[test]
+    fn repeated_parsing_stops_when_an_element_is_rejected() {
+        let mut remaining = [1, 0xff, 3].as_slice();
+        let error = parse_repeated(&mut remaining, 3_u8, |bytes| {
+            let value: u8 = decode_value(bytes)?;
+            if value == 0xff {
+                return Err(ParseError::malform("Rejected element"));
+            }
+            Ok(value)
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), ParseErrorKind::Malformed);
+        assert_eq!(remaining, [3]);
+    }
 
     #[test]
     fn miri_borrowed_table_preserves_cursor_boundaries() {

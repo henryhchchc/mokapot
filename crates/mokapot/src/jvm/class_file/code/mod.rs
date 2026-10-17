@@ -1,10 +1,12 @@
+use crate::intrinsics::ExactSizeIteratorExt;
+
 use crate::jvm::class_file::attribute::extract_attributes;
 
 pub(crate) mod local_variable;
 pub(super) mod raw;
 pub(crate) mod raw_instruction;
 mod resolve;
-pub(super) mod stack_map;
+mod stack_map;
 
 pub(crate) use local_variable::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry};
 
@@ -80,7 +82,7 @@ impl Resolve for Code<'_> {
             .iter()
             .copied()
             .map(|it| it.resolve(ctx))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
         let mut local_variable_table = None;
         extract_attributes! {

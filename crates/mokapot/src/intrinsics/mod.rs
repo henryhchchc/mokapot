@@ -10,10 +10,12 @@ use std::{
 };
 
 mod hash;
+mod iter;
 mod macros;
 mod worklist;
 
 pub(crate) use hash::HashUnordered;
+pub(crate) use iter::ExactSizeIteratorExt;
 pub(crate) use macros::see_jvm_spec;
 pub(crate) use worklist::Worklist;
 

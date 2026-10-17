@@ -1,5 +1,7 @@
 //! Resolves raw JVM instruction models.
 
+use crate::intrinsics::ExactSizeIteratorExt;
+
 use itertools::Itertools;
 
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
@@ -269,7 +271,7 @@ impl Instruction {
                     .jump_offsets
                     .iter()
                     .map(|offset| (pc + offset.get()).context("Invalid jump offset"))
-                    .try_collect()?;
+                    .try_collect_exact()?;
                 Self::TableSwitch {
                     low: info.low.get(),
                     jump_targets,
