@@ -1,19 +1,12 @@
 //! Raw attribute types for module-related attributes.
 
-use std::{
-    io::{self, Read, Write},
-    result::Result,
-};
+use std::io::{self, Read};
 
-use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
-};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
-use super::super::{
-    FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
-};
+use super::super::{FromBytecode, reader::BytecodeReader};
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 25)]
@@ -66,37 +59,8 @@ impl FromBytecode for ModuleInfo {
     }
 }
 
-impl ToBytecode for ModuleInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.module_name_index.to_be_bytes())?;
-        writer.write_all(&self.module_flags.to_be_bytes())?;
-        writer.write_all(&self.module_version_index.to_be_bytes())?;
-        write_length::<u16>(writer, self.requires.len())?;
-        for require in &self.requires {
-            require.to_writer(writer)?;
-        }
-        write_length::<u16>(writer, self.exports.len())?;
-        for export in &self.exports {
-            export.to_writer(writer)?;
-        }
-        write_length::<u16>(writer, self.opens.len())?;
-        for open in &self.opens {
-            open.to_writer(writer)?;
-        }
-        write_length::<u16>(writer, self.uses.len())?;
-        for use_ in &self.uses {
-            writer.write_all(&use_.to_be_bytes())?;
-        }
-        write_length::<u16>(writer, self.provides.len())?;
-        for provide in &self.provides {
-            provide.to_writer(writer)?;
-        }
-        Ok(())
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 25)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 #[expect(
     clippy::struct_field_names,
@@ -137,18 +101,6 @@ impl FromBytecode for ExportsInfo {
     }
 }
 
-impl ToBytecode for ExportsInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.exports_index.to_be_bytes())?;
-        writer.write_all(&self.exports_flags.to_be_bytes())?;
-        write_length::<u16>(writer, self.exports_to.len())?;
-        for module_index in &self.exports_to {
-            writer.write_all(&module_index.to_be_bytes())?;
-        }
-        Ok(())
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 25)]
 #[expect(
     clippy::struct_field_names,
@@ -176,18 +128,6 @@ impl FromBytecode for OpensInfo {
     }
 }
 
-impl ToBytecode for OpensInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.opens_index.to_be_bytes())?;
-        writer.write_all(&self.opens_flags.to_be_bytes())?;
-        write_length::<u16>(writer, self.opens_to.len())?;
-        for module_index in &self.opens_to {
-            writer.write_all(&module_index.to_be_bytes())?;
-        }
-        Ok(())
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 25)]
 pub struct ProvidesInfo {
     pub provides_index: u16,
@@ -205,16 +145,5 @@ impl FromBytecode for ProvidesInfo {
             provides_index,
             provides_with,
         })
-    }
-}
-
-impl ToBytecode for ProvidesInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.provides_index.to_be_bytes())?;
-        write_length::<u16>(writer, self.provides_with.len())?;
-        for class_index in &self.provides_with {
-            writer.write_all(&class_index.to_be_bytes())?;
-        }
-        Ok(())
     }
 }

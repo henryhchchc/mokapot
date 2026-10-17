@@ -2,24 +2,18 @@
 
 use zerocopy::byteorder::big_endian::U32;
 
-use std::{
-    io::{self, Read, Write},
-    result::Result,
-};
+use std::io::{self, Read};
 
-use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
-};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
 use super::super::{
-    FromBytecode, GenerationError, ToBytecode,
+    FromBytecode,
     attribute::AttributeInfo,
     reader::{BytecodeReader, read_bytes},
-    write_length,
 };
-use crate::intrinsics::{enum_discriminant, see_jvm_spec};
+use crate::intrinsics::see_jvm_spec;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -60,24 +54,9 @@ impl FromBytecode for Code {
     }
 }
 
-impl ToBytecode for Code {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.max_stack.to_be_bytes())?;
-        writer.write_all(&self.max_locals.to_be_bytes())?;
-        write_length::<u32>(writer, self.code.len())?;
-        writer.write_all(&self.code)?;
-        write_length::<u16>(writer, self.exception_table.len())?;
-        for entry in &self.exception_table {
-            entry.to_writer(writer)?;
-        }
-        self.attributes.to_writer(writer)?;
-        Ok(())
-    }
-}
-
 /// An entry in the exception table of a `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ExceptionTableEntry {
     pub start_pc: U16,
@@ -177,83 +156,6 @@ impl FromBytecode for StackMapFrameInfo {
     }
 }
 
-impl ToBytecode for StackMapFrameInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        match self {
-            Self::SameFrame { frame_type } => {
-                debug_assert!(
-                    (0..=63).contains(frame_type),
-                    "Invalid frame type in SameFrame"
-                );
-                writer.write_all(&frame_type.to_be_bytes())?;
-            }
-            Self::SameLocals1StackItemFrame { frame_type, stack } => {
-                debug_assert!(
-                    (64..=127).contains(frame_type),
-                    "Invalid frame type in SameLocals1StackItemFrame"
-                );
-                writer.write_all(&frame_type.to_be_bytes())?;
-                stack.to_writer(writer)?;
-            }
-            Self::SameLocals1StackItemFrameExtended {
-                offset_delta,
-                stack,
-            } => {
-                writer.write_all(&247u8.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
-                stack.to_writer(writer)?;
-            }
-            Self::ChopFrame {
-                frame_type,
-                offset_delta,
-            } => {
-                debug_assert!(
-                    (248..=250).contains(frame_type),
-                    "Invalid frame type in ChopFrame"
-                );
-                writer.write_all(&frame_type.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
-            }
-            Self::SameFrameExtended { offset_delta } => {
-                writer.write_all(&251u8.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
-            }
-            Self::AppendFrame {
-                offset_delta,
-                locals,
-            } => {
-                let frame_type = u8::try_from(locals.len() + 251)?;
-                debug_assert!(
-                    (252..=254).contains(&frame_type),
-                    "Invalid frame type in AppendFrame"
-                );
-                writer.write_all(&frame_type.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
-                for local in locals {
-                    local.to_writer(writer)?;
-                }
-            }
-            Self::FullFrame {
-                offset_delta,
-                locals,
-                stack,
-            } => {
-                writer.write_all(&255u8.to_be_bytes())?;
-                writer.write_all(&offset_delta.to_be_bytes())?;
-                write_length::<u16>(writer, locals.len())?;
-                for local in locals {
-                    local.to_writer(writer)?;
-                }
-                write_length::<u16>(writer, stack.len())?;
-                for value in stack {
-                    value.to_writer(writer)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 4)]
 #[repr(u8)]
 pub enum VerificationTypeInfo {
@@ -266,13 +168,6 @@ pub enum VerificationTypeInfo {
     UninitializedThis = 6,
     Object { cpool_index: u16 } = 7,
     Uninitialized { offset: u16 } = 8,
-}
-
-impl VerificationTypeInfo {
-    const fn tag(&self) -> u8 {
-        // SAFETY: Self is repr(u8), so it is fine to call enum_discriminant.
-        unsafe { enum_discriminant(self) }
-    }
 }
 
 impl FromBytecode for VerificationTypeInfo {
@@ -300,23 +195,9 @@ impl FromBytecode for VerificationTypeInfo {
     }
 }
 
-impl ToBytecode for VerificationTypeInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        let tag = self.tag();
-        writer.write_all(&tag.to_be_bytes())?;
-        match self {
-            Self::Object { cpool_index: value } | Self::Uninitialized { offset: value } => {
-                writer.write_all(&value.to_be_bytes())?;
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-}
-
 /// A line number table entry.
 #[doc = see_jvm_spec!(4, 7, 12)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LineNumberTableEntry {
     pub start_pc: U16,
@@ -326,7 +207,7 @@ pub struct LineNumberTableEntry {
 impl FixedLayout for LineNumberTableEntry {}
 
 #[doc = see_jvm_spec!(4, 7, 13)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableInfo {
     pub start_pc: U16,
@@ -339,7 +220,7 @@ pub struct LocalVariableInfo {
 impl FixedLayout for LocalVariableInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 14)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableTypeInfo {
     pub start_pc: U16,
@@ -350,23 +231,3 @@ pub struct LocalVariableTypeInfo {
 }
 
 impl FixedLayout for LocalVariableTypeInfo {}
-
-#[cfg(test)]
-mod tests {
-    use super::{ToBytecode, VerificationTypeInfo};
-
-    #[test]
-    fn miri_verification_type_tags_match_encoding() {
-        let mut bytes = Vec::new();
-        VerificationTypeInfo::Top.to_writer(&mut bytes).unwrap();
-        assert_eq!(bytes, [0]);
-
-        bytes.clear();
-        VerificationTypeInfo::Object {
-            cpool_index: 0x1234,
-        }
-        .to_writer(&mut bytes)
-        .unwrap();
-        assert_eq!(bytes, [7, 0x12, 0x34]);
-    }
-}

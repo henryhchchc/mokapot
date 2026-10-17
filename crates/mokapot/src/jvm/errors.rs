@@ -1,16 +1,7 @@
-//! Error handling for JVM bytecode parsing and generation.
+//! Error handling for JVM class-file parsing.
 //!
-//! This module defines error types and utilities for handling errors that
-//! can occur during parsing JVM class files and generating JVM bytecode.
-//!
-//! The main error types are:
-//! - [`ParseError`] - Errors that occur during parsing of class files
-//! - [`GenerationError`] - Errors that occur during bytecode generation
-//!
-//! Both are type aliases for [`BytecodeError`] parameterized by their
-//! respective [`ParseErrorKind`] or [`GenerationErrorKind`].
-//!
-//! Parsing errors can also retain context describing where a failure occurred.
+//! [`ParseError`] is a [`BytecodeError`] parameterized by [`ParseErrorKind`].
+//! Parsing errors can retain context describing where a failure occurred.
 
 use derive_more::Display;
 
@@ -20,15 +11,11 @@ use std::{
     error::Error,
     fmt::{self, Display},
     io,
-    num::TryFromIntError,
 };
-
-use crate::jvm::{bytecode::constant_pool, code::InvalidOffset};
 
 /// A generic JVM bytecode error parameterized by its error kind.
 ///
-/// Both [`ParseError`] and [`GenerationError`] are type aliases for this
-/// struct with different kind enums.
+/// [`ParseError`] specializes this struct with [`ParseErrorKind`].
 #[derive(Debug)]
 pub struct BytecodeError<K> {
     cause: Box<dyn Error + Send + Sync>,
@@ -202,79 +189,4 @@ impl<T> ParsingErrorContext for Option<T> {
             ParseError::malform(message)
         })
     }
-}
-
-// ---------------------------------------------------------------------------
-// GenerationError
-// ---------------------------------------------------------------------------
-
-/// An error that occurs during bytecode generation.
-pub type GenerationError = BytecodeError<GenerationErrorKind>;
-
-impl BytecodeError<GenerationErrorKind> {
-    /// Creates a new `GenerationError` with the given message and kind `Other`.
-    #[must_use]
-    pub fn other<Message>(message: Message) -> Self
-    where
-        Message: Display,
-    {
-        Self::new(format!("{message}").into(), GenerationErrorKind::Other)
-    }
-
-    /// Creates a new `GenerationError` with the kind `IO` and the given `std::io::Error` as its cause.
-    #[must_use]
-    pub fn io(error: io::Error) -> Self {
-        Self::new(error.into(), GenerationErrorKind::IO)
-    }
-}
-
-impl From<io::Error> for BytecodeError<GenerationErrorKind> {
-    fn from(error: io::Error) -> Self {
-        Self::io(error)
-    }
-}
-
-impl From<InvalidOffset> for BytecodeError<GenerationErrorKind> {
-    fn from(cause: InvalidOffset) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
-    }
-}
-
-impl From<constant_pool::Overflow> for BytecodeError<GenerationErrorKind> {
-    fn from(cause: constant_pool::Overflow) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::ConstantPool)
-    }
-}
-
-impl From<TryFromIntError> for BytecodeError<GenerationErrorKind> {
-    fn from(cause: TryFromIntError) -> Self {
-        Self::new(cause.into(), GenerationErrorKind::OutOfRange)
-    }
-}
-
-/// The kind of [`GenerationError`].
-///
-/// This enum represents the different categories of errors that can occur
-/// during bytecode generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
-#[non_exhaustive]
-pub enum GenerationErrorKind {
-    /// An error occurred while writing to the underlying output destination.
-    #[display("IO Error")]
-    IO,
-    /// A value exceeds the maximum allowed by the JVM specification.
-    ///
-    /// For example, an instruction list containing more than 65535 instructions,
-    /// which exceeds the maximum number that can be represented in a 16-bit field.
-    #[display("Out of range error")]
-    OutOfRange,
-    /// An error occurred when operating on the constant pool.
-    ///
-    /// This could be due to reaching the maximum number of entries
-    /// or trying to add an invalid entry.
-    #[display("Constant pool error")]
-    ConstantPool,
-    /// Other errors that don't fall into the above categories.
-    #[display("Other error")]
-    Other,
 }

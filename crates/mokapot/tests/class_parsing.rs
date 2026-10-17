@@ -62,28 +62,18 @@ fn test_parse_my_class() {
 }
 
 #[test]
-fn from_bytes_to_class_and_wround() {
-    let mut bytes = test_data_class("org/mokapot/test/MyClass");
-    let class = Class::from_reader(&mut bytes).unwrap();
-    let mut written_bytes = Vec::new();
-    class.to_writer(&mut written_bytes).unwrap();
-    let mut reader = written_bytes.as_slice();
-    let reparsed = Class::from_reader(&mut reader).unwrap();
-    assert_eq!(reparsed.name, "org/mokapot/test/MyClass");
-}
-
-#[test]
 fn test_anno() {
-    for mut bytes in [
-        test_data_class("org/mokapot/test/Anno"),
-        test_data_class("org/mokapot/test/Anno$Middle"),
-    ] {
-        let class = Class::from_reader(&mut bytes).unwrap();
-        let mut written_bytes = Vec::new();
-        class.to_writer(&mut written_bytes).unwrap();
-        let mut reader = written_bytes.as_slice();
-        Class::from_reader(&mut reader).unwrap();
-    }
+    let mut bytes = test_data_class("org/mokapot/test/Anno");
+    let class = Class::from_reader(&mut bytes).unwrap();
+    let field_type: FieldType = "[[Ljava/lang/String;".parse().unwrap();
+    let field = class.get_field("fa", field_type).unwrap();
+    assert_eq!(field.annotations.runtime_visible.len(), 1);
+    assert_eq!(field.type_annotations.runtime_invisible.len(), 1);
+
+    let mut bytes = test_data_class("org/mokapot/test/Anno$Middle");
+    let class = Class::from_reader(&mut bytes).unwrap();
+    assert_eq!(class.type_annotations.runtime_visible.len(), 1);
+    assert!(!class.inner_classes.is_empty());
 }
 
 #[test]
@@ -94,10 +84,7 @@ fn test_complicated_class() {
         test_data_class("org/mokapot/test/ComplicatedClass$1Test"),
     ] {
         let class = Class::from_reader(&mut bytes).unwrap();
-        let mut written_bytes = Vec::new();
-        class.to_writer(&mut written_bytes).unwrap();
-        let mut reader = written_bytes.as_slice();
-        Class::from_reader(&mut reader).unwrap();
+        assert!(!class.inner_classes.is_empty());
     }
 }
 
@@ -112,29 +99,6 @@ fn parse_module_info() {
     assert_eq!(1, module.requires.len());
     assert_eq!(module.exports[0].package, "org/mokapot/test");
     assert_eq!(module.opens[0].package, "org/mokapot/test");
-
-    let mut written_bytes = Vec::new();
-    class.to_writer(&mut written_bytes).unwrap();
-    let reparsed = Class::from_reader(&mut written_bytes.as_slice()).unwrap();
-    let module = reparsed.module.unwrap();
-    assert_eq!(module.exports[0].package, "org/mokapot/test");
-    assert_eq!(module.opens[0].package, "org/mokapot/test");
-}
-
-#[test]
-fn module_packages_round_trip() {
-    let mut bytes = test_data_class("module-info");
-    let mut class = Class::from_reader(&mut bytes).unwrap();
-    let package_names = vec![
-        "org/mokapot/test".parse().unwrap(),
-        "org/mokapot/other".parse().unwrap(),
-    ];
-    class.module_packages = package_names.clone();
-
-    let mut written_bytes = Vec::new();
-    class.to_writer(&mut written_bytes).unwrap();
-    let reparsed = Class::from_reader(&mut written_bytes.as_slice()).unwrap();
-    assert_eq!(reparsed.module_packages, package_names);
 }
 
 #[test]

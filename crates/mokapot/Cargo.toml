@@ -4,7 +4,7 @@ lints.workspace = true
 name = "mokapot"
 version.workspace = true
 edition.workspace = true
-description = "A library for analyzing and manipulating JVM bytecode"
+description = "A library for parsing and analyzing JVM bytecode"
 documentation = "https://docs.rs/mokapot"
 repository.workspace = true
 license.workspace = true
@@ -34,7 +34,6 @@ cesu8 = { workspace = true }
 derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
 document-features = { workspace = true }
 itertools = { workspace = true }
-num-traits = { workspace = true }
 petgraph = { workspace = true, optional = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }

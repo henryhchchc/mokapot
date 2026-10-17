@@ -1,4 +1,4 @@
-//! JVM class file format parsing and writing functionality.
+//! JVM class file format parsing.
 mod annotation;
 mod attribute;
 pub(crate) use attribute::Attribute;
@@ -16,14 +16,8 @@ mod module;
 mod raw_attributes;
 pub(crate) mod reader;
 
-use std::{
-    io::{self, Read, Write},
-    num::TryFromIntError,
-};
+use std::io::{self, Read};
 
-use num_traits::ToBytes;
-
-pub use crate::jvm::errors::{GenerationError, GenerationErrorKind};
 pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use crate::{
     jvm::class::{ConstantPool, Version},
@@ -56,45 +50,4 @@ pub(crate) trait FromBytecode: Sized {
     /// Returns an `io::Error` if reading from the stream fails or if the data
     /// is not in the expected format.
     fn from_reader<R: Read>(reader: R) -> io::Result<Self>;
-}
-
-/// Enables writing a raw JVM element to a binary stream.
-///
-/// This trait is implemented by raw JVM elements (after putting all the constants in the constant pool) that can be serialized to a class file format.
-/// It provides a standardized way to write JVM elements back to binary form.
-pub(crate) trait ToBytecode {
-    /// Writes this element to the given writer in JVM class file format.
-    ///
-    /// # Errors
-    /// Returns a `ToWriterError` if writing to the stream fails or if the data
-    /// cannot be properly serialized (e.g., if a numeric value is out of range).
-    fn to_writer<W>(&self, writer: &mut W) -> Result<(), GenerationError>
-    where
-        W: Write + ?Sized;
-}
-
-/// Writes a length value in the appropriate binary format for JVM class files.
-///
-/// This utility function handles the conversion of Rust `usize` values to the appropriate
-/// fixed-width type used in the class file format, writing the result in big-endian order.
-///
-/// # Type Parameters
-/// * `Len` - The target numeric type for the length (e.g., u16 for method parameter counts)
-///
-/// # Errors
-/// Returns a `ToWriterError` if:
-/// - The length value cannot fit in the target type
-/// - Writing to the output stream fails
-pub(crate) fn write_length<Len>(
-    writer: &mut (impl Write + ?Sized),
-    length: usize,
-) -> Result<(), GenerationError>
-where
-    usize: TryInto<Len, Error = TryFromIntError>,
-    Len: ToBytes,
-    <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
-{
-    let length = length.try_into()?;
-    writer.write_all(length.to_be_bytes().as_ref())?;
-    Ok(())
 }

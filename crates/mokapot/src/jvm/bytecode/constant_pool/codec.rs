@@ -3,13 +3,10 @@ use zerocopy::{
     byteorder::big_endian::{F32, F64, I32, I64, U16},
 };
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 
 use super::RawEntry;
-use crate::jvm::{
-    bytecode::{FromBytecode, ToBytecode, reader::read_bytes, write_length},
-    errors::GenerationError,
-};
+use crate::jvm::bytecode::{FromBytecode, reader::read_bytes};
 
 impl FromBytecode for RawEntry {
     fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
@@ -64,69 +61,5 @@ impl FromBytecode for RawEntry {
                 format!("Invalid constant pool tag: {tag}"),
             )),
         }
-    }
-}
-
-impl ToBytecode for RawEntry {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&[self.tag()])?;
-        match self {
-            Self::Utf8(value) => {
-                write_length::<u16>(writer, value.len())?;
-                writer.write_all(value)?;
-            }
-            Self::Integer(value) => value.to_writer(writer)?,
-            Self::Float(value) => value.to_writer(writer)?,
-            Self::Long(value) => value.to_writer(writer)?,
-            Self::Double(value) => value.to_writer(writer)?,
-            Self::Class { name_index }
-            | Self::Module { name_index }
-            | Self::Package { name_index } => name_index.to_writer(writer)?,
-            Self::String { string_index } => string_index.to_writer(writer)?,
-            Self::FieldRef {
-                class_index,
-                name_and_type_index,
-            }
-            | Self::MethodRef {
-                class_index,
-                name_and_type_index,
-            }
-            | Self::InterfaceMethodRef {
-                class_index,
-                name_and_type_index,
-            } => {
-                class_index.to_writer(writer)?;
-                name_and_type_index.to_writer(writer)?;
-            }
-            Self::NameAndType {
-                name_index,
-                descriptor_index,
-            } => {
-                name_index.to_writer(writer)?;
-                descriptor_index.to_writer(writer)?;
-            }
-            Self::MethodHandle {
-                reference_kind,
-                reference_index,
-            } => {
-                writer.write_all(&[*reference_kind])?;
-                reference_index.to_writer(writer)?;
-            }
-            Self::MethodType { descriptor_index } => {
-                descriptor_index.to_writer(writer)?;
-            }
-            Self::Dynamic {
-                bootstrap_method_attr_index,
-                name_and_type_index,
-            }
-            | Self::InvokeDynamic {
-                bootstrap_method_attr_index,
-                name_and_type_index,
-            } => {
-                bootstrap_method_attr_index.to_writer(writer)?;
-                name_and_type_index.to_writer(writer)?;
-            }
-        }
-        Ok(())
     }
 }

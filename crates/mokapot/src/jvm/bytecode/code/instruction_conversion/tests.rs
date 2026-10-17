@@ -1,77 +1,42 @@
 use super::*;
-use crate::{
-    jvm::{bytecode::constant_pool::RawEntry, references::MethodRef},
-    types::reference_type::ReferenceType,
-};
-
-fn interface_method() -> MethodRef {
-    MethodRef {
-        owner: ReferenceType::Class("a/b/I".parse().unwrap()),
-        name: "m".to_owned(),
-        descriptor: "()V".parse().unwrap(),
-    }
-}
+use crate::jvm::bytecode::constant_pool::{RawConstantPool, RawEntry};
 
 #[test]
 fn tableswitch_default_can_target_backward() {
-    let raw = Instruction::TableSwitch {
-        default: ProgramCounter::from(5),
+    let raw = RawInstruction::TableSwitch {
+        default: -5,
         low: 0,
-        jump_targets: vec![ProgramCounter::from(10)],
-    }
-    .into_raw_instruction(ProgramCounter::from(10), &mut RawConstantPool::new())
-    .unwrap();
-
+        high: 0,
+        jump_offsets: vec![0],
+    };
+    let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
     assert_eq!(
-        raw,
-        RawInstruction::TableSwitch {
-            default: -5,
+        actual,
+        Instruction::TableSwitch {
+            default: 5.into(),
             low: 0,
-            high: 0,
-            jump_offsets: vec![0],
+            jump_targets: vec![10.into()],
         }
     );
 }
 
 #[test]
 fn tableswitch_uses_inclusive_high_bound() {
-    let targets = vec![10.into(), 11.into()];
-    let instruction = Instruction::TableSwitch {
-        default: 12.into(),
-        low: -1,
-        jump_targets: targets.clone(),
-    };
-    let raw = instruction
-        .into_raw_instruction(10.into(), &mut RawConstantPool::new())
-        .unwrap();
-
-    let raw_instruction = RawInstruction::TableSwitch {
+    let raw = RawInstruction::TableSwitch {
         default: 2,
         low: -1,
         high: 0,
         jump_offsets: vec![0, 1],
     };
-    assert_eq!(raw, raw_instruction);
-    let expected = Instruction::TableSwitch {
-        default: 12.into(),
-        low: -1,
-        jump_targets: targets,
-    };
     let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
-    assert_eq!(actual, expected);
-}
-
-#[test]
-fn tableswitch_rejects_invalid_target_counts() {
-    for (low, jump_targets) in [(0, vec![]), (i32::MAX, vec![0.into(), 0.into()])] {
-        let instruction = Instruction::TableSwitch {
-            default: 0.into(),
-            low,
-            jump_targets,
-        };
-        let invalid = instruction.into_raw_instruction(0.into(), &mut RawConstantPool::new());
-        assert!(invalid.is_err());
-    }
+    assert_eq!(
+        actual,
+        Instruction::TableSwitch {
+            default: 12.into(),
+            low: -1,
+            jump_targets: vec![10.into(), 11.into()],
+        }
+    );
 }
 
 #[test]
@@ -82,65 +47,70 @@ fn tableswitch_rejects_mismatched_raw_targets() {
         high: 2,
         jump_offsets: vec![0],
     };
-    assert!(Instruction::from_raw_instruction(raw, 0.into(), &ConstantPool::new()).is_err());
+    let error = Instruction::from_raw_instruction(raw, 0.into(), &ConstantPool::new()).unwrap_err();
+    assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
 }
 
-#[test]
-fn invokeinterface_uses_interface_method_refs() {
-    let mut pool = RawConstantPool::new();
-    let raw = Instruction::InvokeInterface(interface_method(), 1)
-        .into_raw_instruction(ProgramCounter::default(), &mut pool)
-        .unwrap();
-
-    let RawInstruction::InvokeInterface { method_index, .. } = raw else {
-        panic!("expected invokeinterface instruction");
-    };
-    assert!(matches!(
-        pool.get_entry(method_index),
-        Some(RawEntry::InterfaceMethodRef { .. })
-    ));
-}
-
-#[test]
-fn invokeinterface_rejects_method_refs() {
-    let mut pool = RawConstantPool::new();
-    let class_name_index = pool
+fn interface_method_pool(is_interface: bool) -> ConstantPool {
+    let mut raw = RawConstantPool::new();
+    let class_name_index = raw
         .put_entry(RawEntry::Utf8(b"a/b/I".as_slice().into()))
         .unwrap();
-    let class_index = pool
+    let class_index = raw
         .put_entry(RawEntry::Class {
             name_index: class_name_index.into(),
         })
         .unwrap();
-    let name_index = pool
+    let name_index = raw
         .put_entry(RawEntry::Utf8(b"m".as_slice().into()))
         .unwrap();
-    let descriptor_index = pool
+    let descriptor_index = raw
         .put_entry(RawEntry::Utf8(b"()V".as_slice().into()))
         .unwrap();
-    let name_and_type_index = pool
+    let name_and_type_index = raw
         .put_entry(RawEntry::NameAndType {
             name_index: name_index.into(),
             descriptor_index: descriptor_index.into(),
         })
         .unwrap();
-    let method_index = pool
-        .put_entry(RawEntry::MethodRef {
+    let entry = if is_interface {
+        RawEntry::InterfaceMethodRef {
             class_index: class_index.into(),
             name_and_type_index: name_and_type_index.into(),
-        })
-        .unwrap();
+        }
+    } else {
+        RawEntry::MethodRef {
+            class_index: class_index.into(),
+            name_and_type_index: name_and_type_index.into(),
+        }
+    };
+    raw.put_entry(entry).unwrap();
+    ConstantPool::from_raw(raw).unwrap()
+}
 
-    let pool = ConstantPool::from_raw(pool).unwrap();
-    assert!(
-        Instruction::from_raw_instruction(
-            RawInstruction::InvokeInterface {
-                method_index,
-                count: 1,
+#[test]
+fn invokeinterface_parses_interface_method_refs() {
+    let raw = InstructionList::<RawInstruction>::from_bytes(&[0xb9, 0, 6, 1, 0]).unwrap();
+    let (pc, instruction) = raw.iter().next().unwrap();
+    assert_eq!(
+        Instruction::from_raw_instruction(instruction.clone(), pc, &interface_method_pool(true))
+            .unwrap(),
+        Instruction::InvokeInterface(
+            crate::jvm::references::MethodRef {
+                owner: crate::types::reference_type::ReferenceType::Class("a/b/I".parse().unwrap()),
+                name: "m".to_owned(),
+                descriptor: "()V".parse().unwrap(),
             },
-            ProgramCounter::default(),
-            &pool,
-        )
-        .is_err()
+            1,
+        ),
     );
+}
+
+#[test]
+fn invokeinterface_rejects_method_refs() {
+    let raw = InstructionList::<RawInstruction>::from_bytes(&[0xb9, 0, 6, 1, 0]).unwrap();
+    let (pc, instruction) = raw.iter().next().unwrap();
+    let pool = interface_method_pool(false);
+    let error = Instruction::from_raw_instruction(instruction.clone(), pc, &pool).unwrap_err();
+    assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
 }

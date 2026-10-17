@@ -447,7 +447,6 @@ dependencies = [
  "document-features",
  "glob",
  "itertools",
- "num-traits",
  "petgraph",
  "proptest",
  "proptest-derive",

@@ -1,19 +1,12 @@
-//! Indexed constant-pool entries and binary encoding.
+//! Indexed constant-pool entries and binary parsing.
 
 mod codec;
 
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        ConstantValue, JavaString,
-        bytecode::{FromBytecode, ToBytecode},
-        class::MethodHandle,
+        bytecode::FromBytecode,
         constant_pool_storage::{PoolStorage, Slot},
-        errors::GenerationError,
-        references::{FieldRef, MethodRef, ModuleRef},
-    },
-    types::{
-        Descriptor, class_name::ClassName, package_name::PackageName, reference_type::ReferenceType,
     },
 };
 use std::io::{self, Read};
@@ -128,10 +121,6 @@ impl RawConstantPool {
         self.put_entry(entry).map(|index| (index, true))
     }
 
-    pub(crate) fn put_entry_dedup(&mut self, entry: RawEntry) -> Result<u16, Overflow> {
-        self.put_entry_deduplicated(entry).map(|(index, _)| index)
-    }
-
     /// Finds the first constant pool entry that satisfies the given predicate.
     pub fn find<P>(&self, predicate: P) -> Option<(u16, &RawEntry)>
     where
@@ -144,178 +133,6 @@ impl RawConstantPool {
     #[must_use]
     pub const fn count(&self) -> u16 {
         self.inner.count()
-    }
-
-    pub(crate) fn put_string(&mut self, value: String) -> Result<u16, GenerationError> {
-        self.put_java_string(JavaString::Utf8(value))
-    }
-
-    pub(crate) fn put_class_name(&mut self, value: &ClassName) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.to_string())?;
-        let entry = RawEntry::Class {
-            name_index: name_index.into(),
-        };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn put_field_ref(&mut self, value: FieldRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.field_type)?;
-        self.put_entry_dedup(RawEntry::FieldRef {
-            class_index: class_index.into(),
-            name_and_type_index: name_and_type_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_method_ref(&mut self, value: MethodRef) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
-        self.put_entry_dedup(RawEntry::MethodRef {
-            class_index: class_index.into(),
-            name_and_type_index: name_and_type_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_interface_method_ref(
-        &mut self,
-        value: MethodRef,
-    ) -> Result<u16, GenerationError> {
-        let class_index = self.put_type_ref(value.owner)?;
-        let name_and_type_index = self.put_name_and_type(value.name, &value.descriptor)?;
-        self.put_entry_dedup(RawEntry::InterfaceMethodRef {
-            class_index: class_index.into(),
-            name_and_type_index: name_and_type_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_constant_value(
-        &mut self,
-        value: ConstantValue,
-    ) -> Result<u16, GenerationError> {
-        let entry = match value {
-            ConstantValue::Integer(val) => RawEntry::Integer(val.into()),
-            ConstantValue::Long(val) => RawEntry::Long(val.into()),
-            ConstantValue::Float(val) => RawEntry::Float(val.into()),
-            ConstantValue::Double(val) => RawEntry::Double(val.into()),
-            ConstantValue::String(java_string) => {
-                let string_index = self.put_java_string(java_string)?;
-                RawEntry::String {
-                    string_index: string_index.into(),
-                }
-            }
-            ConstantValue::Class(value) => return self.put_type_ref(value),
-            ConstantValue::Handle(method_handle) => return self.put_method_handle(method_handle),
-            ConstantValue::MethodType(method_descriptor) => {
-                let descriptor_index = self.put_string(method_descriptor.descriptor())?;
-                RawEntry::MethodType {
-                    descriptor_index: descriptor_index.into(),
-                }
-            }
-            ConstantValue::Dynamic(bsm_idx, name, field_type) => {
-                let name_and_type_index = self.put_name_and_type(name, &field_type)?;
-                RawEntry::Dynamic {
-                    bootstrap_method_attr_index: bsm_idx.into(),
-                    name_and_type_index: name_and_type_index.into(),
-                }
-            }
-            ConstantValue::Null => {
-                return Err(GenerationError::other(
-                    "Null should not be put into constant pool",
-                ));
-            }
-        };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn put_module_ref(&mut self, value: ModuleRef) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.name)?;
-        let entry = RawEntry::Module {
-            name_index: name_index.into(),
-        };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn put_package_name(&mut self, value: &PackageName) -> Result<u16, GenerationError> {
-        let name_index = self.put_string(value.to_string())?;
-        let entry = RawEntry::Package {
-            name_index: name_index.into(),
-        };
-        self.put_entry_dedup(entry).map_err(Into::into)
-    }
-
-    pub(crate) fn put_name_and_type<T>(
-        &mut self,
-        name: String,
-        descriptor: &T,
-    ) -> Result<u16, GenerationError>
-    where
-        T: Descriptor,
-    {
-        let name_index = self.put_string(name)?;
-        let descriptor_index = self.put_string(descriptor.descriptor())?;
-        self.put_entry_dedup(RawEntry::NameAndType {
-            name_index: name_index.into(),
-            descriptor_index: descriptor_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_method_handle(
-        &mut self,
-        value: MethodHandle,
-    ) -> Result<u16, GenerationError> {
-        let reference_kind = value.reference_kind();
-        let reference_index = match value {
-            MethodHandle::RefGetField(f)
-            | MethodHandle::RefGetStatic(f)
-            | MethodHandle::RefPutField(f)
-            | MethodHandle::RefPutStatic(f) => self.put_field_ref(f)?,
-            MethodHandle::RefInvokeVirtual(m)
-            | MethodHandle::RefInvokeStatic(m)
-            | MethodHandle::RefInvokeSpecial(m)
-            | MethodHandle::RefNewInvokeSpecial(m) => self.put_method_ref(m)?,
-            MethodHandle::RefInvokeInterface(m) => self.put_interface_method_ref(m)?,
-        };
-        self.put_entry_dedup(RawEntry::MethodHandle {
-            reference_kind,
-            reference_index: reference_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_type_ref(
-        &mut self,
-        reference_type: ReferenceType,
-    ) -> Result<u16, GenerationError> {
-        let name = match reference_type {
-            ReferenceType::Class(class_name) => class_name.to_string(),
-            ReferenceType::Array(component_type) => format!("[{}", component_type.descriptor()),
-        };
-        let name_index = self.put_string(name)?;
-        self.put_entry_dedup(RawEntry::Class {
-            name_index: name_index.into(),
-        })
-        .map_err(Into::into)
-    }
-
-    pub(crate) fn put_java_string(&mut self, value: JavaString) -> Result<u16, GenerationError> {
-        self.put_entry_dedup(RawEntry::Utf8(value.into_modified_utf8()))
-            .map_err(Into::into)
-    }
-}
-
-impl ToBytecode for RawConstantPool {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.count().to_be_bytes())?;
-        for slot in self.inner.as_slice() {
-            if let Slot::Entry(entry) = slot {
-                entry.to_writer(writer)?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -541,9 +358,6 @@ mod tests {
         for (entry, bytes) in cases {
             let mut reader = *bytes;
             assert_eq!(&RawEntry::from_reader(&mut reader).unwrap(), entry);
-            let mut written = Vec::new();
-            entry.to_writer(&mut written).unwrap();
-            assert_eq!(written, *bytes);
             for end in 0..bytes.len() {
                 assert_eq!(
                     RawEntry::from_reader(&mut &bytes[..end])
@@ -704,20 +518,6 @@ mod tests {
             }
         }
 
-        #[test]
-        fn read_write((count, content) in arb_constant_pool_bytes()) {
-            let mut reader = content.as_slice();
-            let pool = RawConstantPool::from_reader(&mut reader, count).unwrap();
-            let mut buf = Vec::new();
-            pool.to_writer(&mut buf)?;
-            let (len_bytes, written) = buf.split_at(2);
-            let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]);
-            assert_eq!(len, count);
-            let mut reader = written;
-            let parsed_back = RawConstantPool::from_reader(&mut reader, len).unwrap();
-            assert_eq!(pool, parsed_back);
-            assert_eq!(written, content);
-        }
     }
 
     prop_compose! {

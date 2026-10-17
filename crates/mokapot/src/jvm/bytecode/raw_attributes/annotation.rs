@@ -3,18 +3,10 @@
 use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian::U16;
 
-use std::{
-    io::{self, Read, Write},
-    result::Result,
-};
+use std::io::{self, Read};
 
-use super::super::{
-    FromBytecode, GenerationError, ToBytecode, reader::BytecodeReader, write_length,
-};
-use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
-    jvm::code::ProgramCounter,
-};
+use super::super::{FromBytecode, reader::BytecodeReader};
+use crate::{intrinsics::see_jvm_spec, jvm::code::ProgramCounter};
 
 #[doc = see_jvm_spec!(4, 7, 16)]
 pub struct Annotation {
@@ -37,18 +29,6 @@ impl FromBytecode for Annotation {
             type_index,
             element_value_pairs,
         })
-    }
-}
-
-impl ToBytecode for Annotation {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.type_index.to_be_bytes())?;
-        write_length::<u16>(writer, self.element_value_pairs.len())?;
-        for (element_name_index, element_value) in &self.element_value_pairs {
-            writer.write_all(&element_name_index.to_be_bytes())?;
-            element_value.to_writer(writer)?;
-        }
-        Ok(())
     }
 }
 
@@ -95,45 +75,6 @@ impl FromBytecode for ElementValueInfo {
     }
 }
 
-impl ToBytecode for ElementValueInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        let tag = self.tag();
-        writer.write_all(&tag.to_be_bytes())?;
-        match self {
-            Self::Const(_, index) | Self::ClassInfo(index) => {
-                writer.write_all(&index.to_be_bytes())?;
-            }
-            Self::Enum {
-                type_name_index,
-                const_name_index,
-            } => {
-                writer.write_all(&type_name_index.to_be_bytes())?;
-                writer.write_all(&const_name_index.to_be_bytes())?;
-            }
-            Self::Annotation(annotation) => annotation.to_writer(writer)?,
-            Self::Array(values) => {
-                write_length::<u16>(writer, values.len())?;
-                for value in values {
-                    value.to_writer(writer)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-impl ElementValueInfo {
-    const fn tag(&self) -> u8 {
-        match self {
-            Self::Const(tag, _) => *tag,
-            Self::Enum { .. } => b'e',
-            Self::ClassInfo { .. } => b'c',
-            Self::Annotation(..) => b'@',
-            Self::Array(..) => b'[',
-        }
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 20)]
 pub struct TypeAnnotation {
     pub target_info: TargetInfo,
@@ -168,24 +109,6 @@ impl FromBytecode for TypeAnnotation {
             type_index,
             element_value_pairs,
         })
-    }
-}
-
-impl ToBytecode for TypeAnnotation {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        self.target_info.to_writer(writer)?;
-        write_length::<u8>(writer, self.target_path.len())?;
-        for (type_path_kind, type_argument_index) in &self.target_path {
-            writer.write_all(&type_path_kind.to_be_bytes())?;
-            writer.write_all(&type_argument_index.to_be_bytes())?;
-        }
-        writer.write_all(&self.type_index.to_be_bytes())?;
-        write_length::<u16>(writer, self.element_value_pairs.len())?;
-        for (element_name_index, element_value) in &self.element_value_pairs {
-            writer.write_all(&element_name_index.to_be_bytes())?;
-            element_value.to_writer(writer)?;
-        }
-        Ok(())
     }
 }
 
@@ -352,105 +275,5 @@ impl FromBytecode for TargetInfo {
             ))?,
         };
         Ok(target_info)
-    }
-}
-
-impl ToBytecode for TargetInfo {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        // SAFETY: Self is marked as repr(u8) so it is fine to use enum_discriminant
-        let target_type: u8 = unsafe { enum_discriminant(self) };
-        writer.write_all(&target_type.to_be_bytes())?;
-        match self {
-            TargetInfo::TypeParameterOfClass {
-                type_parameter_index: index,
-            }
-            | TargetInfo::TypeParameterOfMethod {
-                type_parameter_index: index,
-            }
-            | TargetInfo::FormalParameter {
-                formal_parameter_index: index,
-            } => {
-                writer.write_all(&index.to_be_bytes())?;
-            }
-            TargetInfo::TypeParameterBoundOfClass {
-                type_parameter_index,
-                bound_index,
-            }
-            | TargetInfo::TypeParameterBoundOfMethod {
-                type_parameter_index,
-                bound_index,
-            } => {
-                writer.write_all(&type_parameter_index.to_be_bytes())?;
-                writer.write_all(&bound_index.to_be_bytes())?;
-            }
-            TargetInfo::Field | TargetInfo::MethodReturn | TargetInfo::Receiver => {}
-            TargetInfo::LocalVariable(entries) | TargetInfo::ResourceVariable(entries) => {
-                write_length::<u16>(writer, entries.len())?;
-                for &(start_pc, length, index) in entries {
-                    start_pc.to_writer(writer)?;
-                    writer.write_all(&length.to_be_bytes())?;
-                    writer.write_all(&index.to_be_bytes())?;
-                }
-            }
-            TargetInfo::SuperType {
-                supertype_index: value,
-            }
-            | TargetInfo::Throws {
-                throws_type_index: value,
-            }
-            | TargetInfo::Catch {
-                exception_table_index: value,
-            }
-            | TargetInfo::InstanceOf { offset: value }
-            | TargetInfo::New { offset: value }
-            | TargetInfo::ConstructorReference { offset: value }
-            | TargetInfo::MethodReference { offset: value } => {
-                writer.write_all(&value.to_be_bytes())?;
-            }
-            TargetInfo::TypeInCast {
-                offset,
-                type_argument_index,
-            }
-            | TargetInfo::TypeArgumentInConstructor {
-                offset,
-                type_argument_index,
-            }
-            | TargetInfo::TypeArgumentInCall {
-                offset,
-                type_argument_index,
-            }
-            | TargetInfo::TypeArgumentInConstructorReference {
-                offset,
-                type_argument_index,
-            }
-            | TargetInfo::TypeArgumentInMethodReference {
-                offset,
-                type_argument_index,
-            } => {
-                offset.to_writer(writer)?;
-                writer.write_all(&type_argument_index.to_be_bytes())?;
-            }
-        }
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{TargetInfo, ToBytecode};
-
-    #[test]
-    fn miri_target_info_tags_match_encoding() {
-        let mut bytes = Vec::new();
-        TargetInfo::Field.to_writer(&mut bytes).unwrap();
-        assert_eq!(bytes, [0x13]);
-
-        bytes.clear();
-        TargetInfo::TypeParameterOfClass {
-            type_parameter_index: 7,
-        }
-        .to_writer(&mut bytes)
-        .unwrap();
-        assert_eq!(bytes, [0x00, 7]);
     }
 }

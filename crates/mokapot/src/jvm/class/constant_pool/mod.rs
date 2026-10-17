@@ -540,48 +540,24 @@ impl RawEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvm::{
-        bytecode::{ToBytecode, constant_pool::RawEntry},
-        errors::ParseErrorKind,
-    };
+    use crate::jvm::{bytecode::constant_pool::RawEntry, errors::ParseErrorKind};
 
     #[test]
-    fn class_and_package_names_round_trip_with_distinct_tags() {
+    fn class_and_package_names_parse_with_distinct_tags() {
+        // Utf8 "a/b/C", Class #1, Package #1.
+        let bytes = [1, 0, 5, b'a', b'/', b'b', b'/', b'C', 7, 0, 1, 20, 0, 1];
+        let pool = ConstantPool::from_reader(bytes.as_slice(), 4).unwrap();
         let class_name: ClassName = "a/b/C".parse().unwrap();
         let package_name: PackageName = "a/b/C".parse().unwrap();
-        let mut pool = RawConstantPool::new();
-        let class_index = pool.put_class_name(&class_name).unwrap();
-        let package_index = pool.put_package_name(&package_name).unwrap();
-
-        assert_ne!(class_index, package_index);
         assert_eq!(pool.count(), 4);
-        assert_eq!(pool.put_class_name(&class_name).unwrap(), class_index);
-        assert_eq!(pool.put_package_name(&package_name).unwrap(), package_index);
-        assert!(matches!(
-            pool.get_entry(class_index),
-            Some(RawEntry::Class { .. })
-        ));
-        assert!(matches!(
-            pool.get_entry(package_index),
-            Some(RawEntry::Package { .. })
-        ));
-
-        let mut bytes = Vec::new();
-        pool.to_writer(&mut bytes).unwrap();
-        let (count_bytes, contents) = bytes.split_at(2);
-        let count = u16::from_be_bytes(count_bytes.try_into().unwrap());
-        let reparsed = ConstantPool::from_reader(std::io::Cursor::new(contents), count).unwrap();
-        assert_eq!(reparsed.get_class_name(class_index).unwrap(), class_name);
+        assert_eq!(pool.get_class_name(2).unwrap(), class_name);
+        assert_eq!(pool.get_package_name(3).unwrap(), package_name);
         assert_eq!(
-            reparsed.get_package_name(package_index).unwrap(),
-            package_name
-        );
-        assert_eq!(
-            reparsed.get_class_name(package_index).unwrap_err().kind(),
+            pool.get_class_name(3).unwrap_err().kind(),
             ParseErrorKind::Malformed,
         );
         assert_eq!(
-            reparsed.get_package_name(class_index).unwrap_err().kind(),
+            pool.get_package_name(2).unwrap_err().kind(),
             ParseErrorKind::Malformed,
         );
     }
@@ -591,7 +567,9 @@ mod tests {
         for descriptor in ["[I", "[[I", "[La/b/C;", "[[La/b/C;", "La/b/C;"] {
             let reference_type: ReferenceType = descriptor.parse().unwrap();
             let mut pool = RawConstantPool::new();
-            let name_index = pool.put_string(descriptor.to_owned()).unwrap();
+            let name_index = pool
+                .put_entry(RawEntry::Utf8(descriptor.as_bytes().into()))
+                .unwrap();
             let index = pool
                 .put_entry(RawEntry::Class {
                     name_index: name_index.into(),
@@ -607,6 +585,49 @@ mod tests {
         }
     }
 
+    fn interface_method_handle_pool(reference_tag: u8) -> RawConstantPool {
+        // Utf8 owner, Class #1, Utf8 name, Utf8 descriptor, NameAndType #3:#4,
+        // method reference #2:#5, REF_invokeInterface handle #6.
+        let bytes = [
+            1,
+            0,
+            5,
+            b'a',
+            b'/',
+            b'b',
+            b'/',
+            b'I',
+            7,
+            0,
+            1,
+            1,
+            0,
+            1,
+            b'm',
+            1,
+            0,
+            3,
+            b'(',
+            b')',
+            b'V',
+            12,
+            0,
+            3,
+            0,
+            4,
+            reference_tag,
+            0,
+            2,
+            0,
+            5,
+            15,
+            9,
+            0,
+            6,
+        ];
+        RawConstantPool::from_reader(bytes.as_slice(), 8).unwrap()
+    }
+
     #[test]
     fn miri_interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
@@ -615,43 +636,16 @@ mod tests {
             descriptor: "()V".parse().unwrap(),
         };
         let handle = MethodHandle::RefInvokeInterface(method);
-        let mut pool = RawConstantPool::new();
-
-        let handle_index = pool.put_method_handle(handle.clone()).unwrap();
-
-        let RawEntry::MethodHandle {
-            reference_kind,
-            reference_index,
-        } = pool.get_entry(handle_index).unwrap()
-        else {
-            panic!("expected method handle entry");
-        };
-        assert_eq!(*reference_kind, 9);
-        assert!(matches!(
-            pool.get_entry((*reference_index).into()),
-            Some(RawEntry::InterfaceMethodRef { .. })
-        ));
-        let pool = ConstantPool::from_raw(pool).unwrap();
-        assert_eq!(pool.get_method_handle(handle_index).unwrap(), handle);
+        let pool = ConstantPool::from_raw(interface_method_handle_pool(11)).unwrap();
+        assert_eq!(pool.get_method_handle(7).unwrap(), handle);
     }
 
     #[test]
     fn interface_method_handles_reject_method_refs() {
-        let method = MethodRef {
-            owner: ReferenceType::Class("a/b/I".parse().unwrap()),
-            name: "m".to_owned(),
-            descriptor: "()V".parse().unwrap(),
-        };
-        let mut pool = RawConstantPool::new();
-        let method_index = pool.put_method_ref(method).unwrap();
-        pool.put_entry(RawEntry::MethodHandle {
-            reference_kind: 9,
-            reference_index: method_index.into(),
-        })
-        .unwrap();
-
         assert_eq!(
-            ConstantPool::from_raw(pool).unwrap_err().kind(),
+            ConstantPool::from_raw(interface_method_handle_pool(10))
+                .unwrap_err()
+                .kind(),
             ParseErrorKind::Malformed
         );
     }
@@ -775,7 +769,7 @@ mod tests {
         ] {
             let bytes = bytes.into_boxed_slice();
             let mut raw = RawConstantPool::new();
-            let index = raw.put_entry(RawEntry::Utf8(bytes.clone())).unwrap();
+            let index = raw.put_entry(RawEntry::Utf8(bytes)).unwrap();
             let literal = raw
                 .put_entry(RawEntry::String {
                     string_index: index.into(),
@@ -787,11 +781,6 @@ mod tests {
                 pool.get_constant_value(literal).unwrap(),
                 ConstantValue::String(expected)
             );
-            let mut regenerated = RawConstantPool::new();
-            let index = regenerated
-                .put_java_string(pool.get_java_string(index).unwrap())
-                .unwrap();
-            assert_eq!(regenerated.get_entry(index), Some(&RawEntry::Utf8(bytes)));
         }
     }
 }

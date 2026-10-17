@@ -94,10 +94,6 @@ impl ProgramCounter {
     pub const fn is_entry_point(&self) -> bool {
         self.0 == 0
     }
-
-    pub(crate) const fn into_inner(self) -> u16 {
-        self.0
-    }
 }
 
 /// An error occurring when trying to offset a program counter.

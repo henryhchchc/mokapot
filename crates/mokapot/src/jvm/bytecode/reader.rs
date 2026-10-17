@@ -1,7 +1,4 @@
-use std::{
-    io::{Read, Result, Write},
-    ops::AddAssign,
-};
+use std::io::{Read, Result};
 
 use zerocopy::{FromBytes, byteorder::big_endian::U16};
 
@@ -68,21 +65,7 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let Self { inner, position } = self;
-        inner.read(buf).inspect(|n| position.add_assign(n))
-    }
-}
-
-impl<W> Write for PositionTracker<W>
-where
-    W: Write,
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let Self { inner, position } = self;
-        inner.write(buf).inspect(|n| position.add_assign(n))
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
+        inner.read(buf).inspect(|n| *position += n)
     }
 }
 

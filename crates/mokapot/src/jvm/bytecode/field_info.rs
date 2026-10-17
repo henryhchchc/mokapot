@@ -3,21 +3,16 @@ use zerocopy::byteorder::big_endian::U16;
 
 use std::io::{self, Read};
 
-use itertools::Itertools;
-
 use super::{
-    FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
-    attribute::{Attribute, AttributeInfo},
-    class_element::ClassElement,
+    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo, class_element::ClassElement,
 };
 use crate::{
-    intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
+    intrinsics::{extract_attributes, see_jvm_spec},
     jvm::{
         Annotations, Field,
         errors::ParsingErrorContext,
         field::{self},
     },
-    types::Descriptor,
 };
 
 /// The raw representation of a `field_info` structure.
@@ -45,16 +40,6 @@ impl FromBytecode for FieldInfo {
             descriptor_index,
             attributes,
         })
-    }
-}
-
-impl ToBytecode for FieldInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.access_flags.to_be_bytes())?;
-        writer.write_all(&self.name_index.to_be_bytes())?;
-        writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        self.attributes.to_writer(writer)?;
-        Ok(())
     }
 }
 
@@ -118,32 +103,6 @@ impl ClassElement for Field {
                 runtime_invisible: runtime_invisible_type_annotations,
             },
             other_attributes,
-        })
-    }
-
-    fn into_raw(
-        self,
-        cp: &mut crate::jvm::bytecode::constant_pool::RawConstantPool,
-    ) -> Result<Self::Raw, GenerationError> {
-        let access_flags = self.access_flags.into_raw(cp)?;
-        let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.field_type.descriptor())?;
-        let attributes = [
-            self.constant_value.map(Attribute::ConstantValue),
-            self.signature.map(Attribute::Signature),
-            self.is_synthetic.then_some(Attribute::Synthetic),
-            self.is_deprecated.then_some(Attribute::Deprecated),
-        ]
-        .into_iter()
-        .flatten()
-        .chain(attributes_into_iter!(self))
-        .map(|it| it.into_raw(cp))
-        .try_collect()?;
-        Ok(Self::Raw {
-            access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
         })
     }
 }

@@ -1,10 +1,7 @@
-//! Raw JVM instruction model and binary codec.
+//! Raw JVM instruction model and parser.
 
 use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian::{I16, I32, U16};
-
-mod encode;
-mod layout;
 
 use std::{
     io::{self, Read},
@@ -15,7 +12,7 @@ use super::super::ParseError;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        bytecode::{GenerationError, reader::PositionTracker},
+        bytecode::reader::PositionTracker,
         code::{InstructionList, ProgramCounter},
     },
 };
@@ -412,29 +409,6 @@ impl InstructionList<RawInstruction> {
     /// ```
     pub fn from_bytes(bytes: &[u8]) -> Result<InstructionList<RawInstruction>, ParseError> {
         RawInstruction::iter_from_reader(bytes).collect()
-    }
-
-    /// Writes a list of [`RawInstruction`]s to the given writer.
-    /// # Errors
-    /// See [`GenerationError`] for more information.
-    ///
-    /// ```
-    /// use mokapot::jvm::code::InstructionList;
-    ///
-    /// let bytes = vec![0x10, 42, 0xac]; // bipush 42; ireturn
-    /// let instructions = InstructionList::from_bytes(&bytes).unwrap();
-    /// let mut output = Vec::new();
-    /// instructions.to_writer(&mut output).unwrap();
-    /// assert_eq!(output, bytes);
-    /// ```
-    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        let mut writer = PositionTracker::new(writer);
-
-        for (_, insn) in self.iter() {
-            insn.write_one(&mut writer)?;
-        }
-
-        Ok(())
     }
 }
 
