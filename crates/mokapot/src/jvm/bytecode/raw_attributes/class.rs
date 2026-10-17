@@ -7,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     FromBytecode, ParseError,
     attribute::AttributeInfo,
-    decoder::{BytecodeSlice, read_slice, read_value},
+    decoder::{borrow_slice, parse_repeated, read_u16},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -45,9 +45,9 @@ pub struct BootstrapMethod<'a> {
 
 impl<'a> FromBytecode<'a> for BootstrapMethod<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let bootstrap_method_ref = read_value::<U16>(bytes)?.get();
-        let num_bootstrap_arguments: u16 = read_value::<U16>(bytes)?.get();
-        let bootstrap_arguments = read_slice(bytes, usize::from(num_bootstrap_arguments))?;
+        let bootstrap_method_ref = read_u16(bytes)?;
+        let num_bootstrap_arguments: u16 = read_u16(bytes)?;
+        let bootstrap_arguments = borrow_slice(bytes, usize::from(num_bootstrap_arguments))?;
         Ok(Self {
             bootstrap_method_ref,
             bootstrap_arguments,
@@ -74,12 +74,14 @@ pub struct RecordComponentInfo<'a> {
 
 impl<'a> FromBytecode<'a> for RecordComponentInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let name_index = read_value::<U16>(bytes)?.get();
-        let descriptor_index = read_value::<U16>(bytes)?.get();
-        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
-        let attributes = (0..attributes_count)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
+        let name_index = read_u16(bytes)?;
+        let descriptor_index = read_u16(bytes)?;
+        let attributes_count: u16 = read_u16(bytes)?;
+        let attributes = parse_repeated(
+            bytes,
+            usize::from(attributes_count),
+            AttributeInfo::from_bytes,
+        )?;
         Ok(Self {
             name_index,
             descriptor_index,
@@ -97,7 +99,7 @@ mod tests {
         let bytes = [0, 3, 0, 2, 0, 4, 0, 5];
         let mut remaining = bytes.as_slice();
         let method = BootstrapMethod::from_bytes(&mut remaining).unwrap();
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
         assert_eq!(method.bootstrap_arguments[0].get(), 4);
         assert_eq!(method.bootstrap_arguments[1].get(), 5);
         assert!(std::ptr::eq(

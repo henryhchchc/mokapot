@@ -1,14 +1,11 @@
 use crate::types::class_name::ClassName;
 use crate::types::package_name::PackageName;
-use zerocopy::byteorder::big_endian::{U16, U32};
-
-use itertools::Itertools;
 
 use super::{
     FromBytecode, ParseError, ParsingContext,
-    class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    decoder::{BytecodeSlice, read_bytes, read_value},
+    decoder::{borrow_bytes, parse_element, parse_repeated, read_u8, read_u16, read_u32},
+    from_raw::FromRaw,
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -31,11 +28,11 @@ pub(crate) struct AttributeInfo<'a> {
 
 impl<'a> FromBytecode<'a> for AttributeInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let attribute_name_index = read_value::<U16>(bytes)?.get();
-        let attribute_length: u32 = read_value::<U32>(bytes)?.get();
+        let attribute_name_index = read_u16(bytes)?;
+        let attribute_length: u32 = read_u32(bytes)?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = read_bytes(bytes, attribute_length)?;
+        let info = borrow_bytes(bytes, attribute_length)?;
         Ok(AttributeInfo {
             attribute_name_index,
             info,
@@ -117,25 +114,13 @@ impl Attribute {
     }
 }
 
-macro_rules! parse {
-    (@count u8; $bytes:expr) => { read_value::<u8>(&mut *$bytes)? };
-    (@count u16; $bytes:expr) => { read_value::<U16>(&mut *$bytes)?.get() };
-    ($bytes:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
-        let raw = $bytes.decode_value()?;
-        ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
-    }};
-    ($len_type:ident; $bytes:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
-        let count = parse!(@count $len_type; $bytes);
-        (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
-    }};
-    ($len_type:ident; $bytes:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
-        parse![$len_type; $bytes, || parse!($bytes, $ctx)] $( .map(Self::$attr) )?
-    };
-}
-
-impl<'a> ClassElement<'a> for Attribute {
+impl<'a> FromRaw<'a> for Attribute {
     type Raw = AttributeInfo<'a>;
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Dispatches JVM attributes with explicit wire counts"
+    )]
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let AttributeInfo {
             attribute_name_index,
@@ -146,88 +131,154 @@ impl<'a> ClassElement<'a> for Attribute {
 
         let result = match name {
             "ConstantValue" => {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
+                let index = read_u16(bytes)?;
                 ctx.constant_pool
-                    .get_constant_value(idx)
+                    .get_constant_value(index)
                     .map(Self::ConstantValue)
             }
-            "Code" => parse!(bytes, ctx => Code),
-            "StackMapTable" => parse![u16; bytes, ctx => StackMapTable],
-            "Exceptions" => parse![u16; bytes, || {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
-                ctx.constant_pool.get_class_name(idx)
-            } => Exceptions],
-            "InnerClasses" => parse![u16; bytes, ctx => InnerClasses],
-            "EnclosingMethod" => parse!(bytes, ctx).map(Self::EnclosingMethod),
-            "Synthetic" => Ok(Attribute::Synthetic),
-            "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => parse_string(bytes, ctx).map(Self::Signature),
-            "SourceFile" => parse_string(bytes, ctx).map(Self::SourceFile),
-            "SourceDebugExtension" => {
-                return Ok(Self::SourceDebugExtension(info.into()));
+            "Code" => parse_element(bytes, ctx).map(Self::Code),
+            "StackMapTable" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::StackMapTable)
             }
-            "LineNumberTable" => parse![u16; bytes, ctx => LineNumberTable],
-            "LocalVariableTable" => parse![u16; bytes, ctx => LocalVariableTable],
-            "LocalVariableTypeTable" => parse![u16; bytes, ctx => LocalVariableTypeTable],
-            "RuntimeVisibleAnnotations" => parse![u16; bytes, ctx => RuntimeVisibleAnnotations],
+            "Exceptions" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| {
+                    ctx.constant_pool.get_class_name(read_u16(bytes)?)
+                })
+                .map(Self::Exceptions)
+            }
+            "InnerClasses" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::InnerClasses)
+            }
+            "EnclosingMethod" => parse_element(bytes, ctx).map(Self::EnclosingMethod),
+            "Synthetic" => Ok(Self::Synthetic),
+            "Deprecated" => Ok(Self::Deprecated),
+            "Signature" => {
+                let index = read_u16(bytes)?;
+                ctx.constant_pool
+                    .get_str(index)
+                    .map(str::to_owned)
+                    .map(Self::Signature)
+            }
+            "SourceFile" => {
+                let index = read_u16(bytes)?;
+                ctx.constant_pool
+                    .get_str(index)
+                    .map(str::to_owned)
+                    .map(Self::SourceFile)
+            }
+            "SourceDebugExtension" => return Ok(Self::SourceDebugExtension(info.into())),
+            "LineNumberTable" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::LineNumberTable)
+            }
+            "LocalVariableTable" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::LocalVariableTable)
+            }
+            "LocalVariableTypeTable" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::LocalVariableTypeTable)
+            }
+            "RuntimeVisibleAnnotations" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::RuntimeVisibleAnnotations)
+            }
             "RuntimeInvisibleAnnotations" => {
-                parse![u16; bytes, ctx => RuntimeInvisibleAnnotations]
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::RuntimeInvisibleAnnotations)
             }
-            "RuntimeVisibleParameterAnnotations" => parse![u8; bytes, || parse![u16; bytes, ctx]]
-                .map(Self::RuntimeVisibleParameterAnnotations),
+            "RuntimeVisibleParameterAnnotations" => {
+                let count = read_u8(bytes)?;
+                parse_repeated(bytes, count, |bytes| {
+                    let count = read_u16(bytes)?;
+                    parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                })
+                .map(Self::RuntimeVisibleParameterAnnotations)
+            }
             "RuntimeInvisibleParameterAnnotations" => {
-                parse![u8; bytes, || parse![u16; bytes, ctx] => RuntimeInvisibleParameterAnnotations]
+                let count = read_u8(bytes)?;
+                parse_repeated(bytes, usize::from(count), |bytes| {
+                    let count = read_u16(bytes)?;
+                    parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                })
+                .map(Self::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
-                parse![u16; bytes, ctx => RuntimeVisibleTypeAnnotations]
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                parse![u16; bytes, ctx => RuntimeInvisibleTypeAnnotations]
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => parse!(bytes, ctx => AnnotationDefault),
-            "BootstrapMethods" => parse![u16; bytes, ctx => BootstrapMethods],
-            "MethodParameters" => parse![u8; bytes, ctx => MethodParameters],
-            "Module" => parse!(bytes, ctx => Module),
-            "ModulePackages" => parse![u16; bytes, || {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
-                ctx.constant_pool.get_package_name(idx)
-            } => ModulePackages],
+            "AnnotationDefault" => parse_element(bytes, ctx).map(Self::AnnotationDefault),
+            "BootstrapMethods" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::BootstrapMethods)
+            }
+            "MethodParameters" => {
+                let count = read_u8(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx))
+                    .map(Self::MethodParameters)
+            }
+            "Module" => parse_element(bytes, ctx).map(Self::Module),
+            "ModulePackages" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| {
+                    ctx.constant_pool.get_package_name(read_u16(bytes)?)
+                })
+                .map(Self::ModulePackages)
+            }
             "ModuleMainClass" => {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
+                let index = read_u16(bytes)?;
                 ctx.constant_pool
-                    .get_class_name(idx)
+                    .get_class_name(index)
                     .map(Self::ModuleMainClass)
             }
             "NestHost" => {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
-                ctx.constant_pool.get_class_name(idx).map(Self::NestHost)
+                let index = read_u16(bytes)?;
+                ctx.constant_pool.get_class_name(index).map(Self::NestHost)
             }
-            "NestMembers" => parse![u16; bytes, || {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
-                ctx.constant_pool.get_class_name(idx)
-            }]
-            .map(Self::NestMembers),
-            "Record" => parse![u16; bytes, ctx => Record],
-            "PermittedSubclasses" => parse![u16; bytes, || {
-                let idx = read_value::<U16>(&mut *bytes)?.get();
-                ctx.constant_pool.get_class_name(idx)
-            } => PermittedSubclasses],
-            name => return Ok(Attribute::Unrecognized(name.to_owned(), info.into())),
+            "NestMembers" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| {
+                    ctx.constant_pool.get_class_name(read_u16(bytes)?)
+                })
+                .map(Self::NestMembers)
+            }
+            "Record" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| parse_element(bytes, ctx)).map(Self::Record)
+            }
+            "PermittedSubclasses" => {
+                let count = read_u16(bytes)?;
+                parse_repeated(bytes, count, |bytes| {
+                    ctx.constant_pool.get_class_name(read_u16(bytes)?)
+                })
+                .map(Self::PermittedSubclasses)
+            }
+            name => return Ok(Self::Unrecognized(name.to_owned(), info.into())),
         }?;
-        if bytes.is_empty() {
-            Ok(result)
-        } else {
-            Err(ParseError::malform(
+        if !bytes.is_empty() {
+            return Err(ParseError::malform(
                 "Extra data at the end of the attribute",
-            ))
+            ));
         }
+        Ok(result)
     }
-}
-
-#[inline]
-fn parse_string(bytes: &mut &[u8], ctx: &ParsingContext) -> Result<String, ParseError> {
-    let str_idx = read_value::<U16>(bytes)?.get();
-    ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 
 #[cfg(test)]
@@ -253,7 +304,7 @@ mod tests {
         bytes.extend(payload);
         let mut remaining = &bytes[1..];
         let attribute = AttributeInfo::from_bytes(&mut remaining).unwrap();
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
         let original_payload = &bytes[7..];
         assert!(std::ptr::eq(
             attribute.info.as_ptr(),
@@ -262,7 +313,7 @@ mod tests {
 
         let mut remaining = attribute.info;
         let code = super::super::raw_attributes::Code::from_bytes(&mut remaining).unwrap();
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
         assert_eq!(code.code, [0xb1]);
         assert!(std::ptr::eq(
             code.code.as_ptr(),

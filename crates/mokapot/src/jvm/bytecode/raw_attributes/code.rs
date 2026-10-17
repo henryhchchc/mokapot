@@ -1,7 +1,5 @@
 //! Raw attribute types for the `Code` attribute and its sub-attributes.
 
-use zerocopy::byteorder::big_endian::U32;
-
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
@@ -9,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     FromBytecode, ParseError,
     attribute::AttributeInfo,
-    decoder::{BytecodeSlice, read_bytes, read_slice, read_value},
+    decoder::{borrow_bytes, borrow_slice, parse_repeated, read_u8, read_u16, read_u32},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -29,17 +27,19 @@ pub struct Code<'a> {
 
 impl<'a> FromBytecode<'a> for Code<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let max_stack = read_value::<U16>(bytes)?.get();
-        let max_locals = read_value::<U16>(bytes)?.get();
-        let code_length: u32 = read_value::<U32>(bytes)?.get();
+        let max_stack = read_u16(bytes)?;
+        let max_locals = read_u16(bytes)?;
+        let code_length: u32 = read_u32(bytes)?;
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let code = read_bytes(bytes, code_length)?;
-        let exception_table_length: u16 = read_value::<U16>(bytes)?.get();
-        let exception_table = read_slice(bytes, usize::from(exception_table_length))?;
-        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
-        let attributes = (0..attributes_count)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
+        let code = borrow_bytes(bytes, code_length)?;
+        let exception_table_length: u16 = read_u16(bytes)?;
+        let exception_table = borrow_slice(bytes, usize::from(exception_table_length))?;
+        let attributes_count: u16 = read_u16(bytes)?;
+        let attributes = parse_repeated(
+            bytes,
+            usize::from(attributes_count),
+            AttributeInfo::from_bytes,
+        )?;
         Ok(Self {
             max_stack,
             max_locals,
@@ -99,48 +99,54 @@ pub enum StackMapFrameInfo {
 
 impl<'a> FromBytecode<'a> for StackMapFrameInfo {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let frame_type: u8 = read_value::<u8>(bytes)?;
+        let frame_type: u8 = read_u8(bytes)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
                 frame_type,
-                stack: bytes.decode_value()?,
+                stack: VerificationTypeInfo::from_bytes(bytes)?,
             }),
             frame_type @ 128..=246 => Err(ParseError::malform(format!(
                 "Frame type {frame_type} is reserved for future use."
             ))),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: read_value::<U16>(bytes)?.get(),
-                stack: bytes.decode_value()?,
+                offset_delta: read_u16(bytes)?,
+                stack: VerificationTypeInfo::from_bytes(bytes)?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: read_value::<U16>(bytes)?.get(),
+                offset_delta: read_u16(bytes)?,
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: read_value::<U16>(bytes)?.get(),
+                offset_delta: read_u16(bytes)?,
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = read_value::<U16>(bytes)?.get();
-                let locals = (0..locals_count)
-                    .map(|_| bytes.decode_value())
-                    .collect::<Result<Box<[_]>, ParseError>>()?;
+                let offset_delta = read_u16(bytes)?;
+                let locals = parse_repeated(
+                    bytes,
+                    usize::from(locals_count),
+                    VerificationTypeInfo::from_bytes,
+                )?;
                 Ok(Self::AppendFrame {
                     offset_delta,
                     locals,
                 })
             }
             255 => {
-                let offset_delta = read_value::<U16>(bytes)?.get();
-                let number_of_locals: u16 = read_value::<U16>(bytes)?.get();
-                let locals = (0..number_of_locals)
-                    .map(|_| bytes.decode_value())
-                    .collect::<Result<Box<[_]>, ParseError>>()?;
-                let number_of_stack_items: u16 = read_value::<U16>(bytes)?.get();
-                let stack = (0..number_of_stack_items)
-                    .map(|_| bytes.decode_value())
-                    .collect::<Result<Box<[_]>, ParseError>>()?;
+                let offset_delta = read_u16(bytes)?;
+                let number_of_locals: u16 = read_u16(bytes)?;
+                let locals = parse_repeated(
+                    bytes,
+                    usize::from(number_of_locals),
+                    VerificationTypeInfo::from_bytes,
+                )?;
+                let number_of_stack_items: u16 = read_u16(bytes)?;
+                let stack = parse_repeated(
+                    bytes,
+                    usize::from(number_of_stack_items),
+                    VerificationTypeInfo::from_bytes,
+                )?;
                 Ok(Self::FullFrame {
                     offset_delta,
                     locals,
@@ -167,7 +173,7 @@ pub enum VerificationTypeInfo {
 
 impl<'a> FromBytecode<'a> for VerificationTypeInfo {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let tag: u8 = read_value::<u8>(bytes)?;
+        let tag: u8 = read_u8(bytes)?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -177,10 +183,10 @@ impl<'a> FromBytecode<'a> for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                cpool_index: read_value::<U16>(bytes)?.get(),
+                cpool_index: read_u16(bytes)?,
             }),
             8 => Ok(Self::Uninitialized {
-                offset: read_value::<U16>(bytes)?.get(),
+                offset: read_u16(bytes)?,
             }),
             _ => Err(ParseError::malform(format!(
                 "Unknown verification type tag: {tag}"
