@@ -71,15 +71,17 @@ where
 }
 
 /// Parses an explicit number of elements, stopping at the first failure.
-pub(super) fn parse_repeated<'a, E, Elts>(
+pub(super) fn parse_repeated<'a, Count, E, Elts>(
     bytes: &mut &'a [u8],
-    count: usize,
+    count: Count,
     mut parser: impl FnMut(&mut &'a [u8]) -> Result<E, ParseError>,
 ) -> Result<Elts, ParseError>
 where
+    Count: Default,
+    std::ops::Range<Count>: Iterator,
     Elts: FromIterator<E>,
 {
-    (0..count).map(|_| parser(bytes)).collect()
+    (Count::default()..count).map(|_| parser(bytes)).collect()
 }
 
 #[cfg(test)]

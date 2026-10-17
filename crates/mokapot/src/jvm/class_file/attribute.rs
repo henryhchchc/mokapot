@@ -147,7 +147,7 @@ impl Resolve for AttributeInfo<'_> {
             "Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
             "StackMapTable" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<code_raw::StackMapFrameInfo>(bytes, ctx)
                 })
                 .map(Attribute::StackMapTable)
@@ -205,23 +205,23 @@ impl Resolve for AttributeInfo<'_> {
             }
             "RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, usize::from(count), |bytes| {
+                    parse_repeated(bytes, count, |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
                 })
@@ -229,9 +229,9 @@ impl Resolve for AttributeInfo<'_> {
             }
             "RuntimeInvisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, usize::from(count), |bytes| {
+                    parse_repeated(bytes, count, |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
                 })
@@ -239,14 +239,14 @@ impl Resolve for AttributeInfo<'_> {
             }
             "RuntimeVisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleTypeAnnotations)
@@ -255,7 +255,7 @@ impl Resolve for AttributeInfo<'_> {
                 .map(Attribute::AnnotationDefault),
             "BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<class_raw::BootstrapMethod>(bytes, ctx)
                 })
                 .map(Attribute::BootstrapMethods)
@@ -296,7 +296,7 @@ impl Resolve for AttributeInfo<'_> {
             }
             "Record" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, usize::from(count), |bytes| {
+                parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<class_raw::RecordComponentInfo>(bytes, ctx)
                 })
                 .map(Attribute::Record)

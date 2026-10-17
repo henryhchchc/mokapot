@@ -36,12 +36,11 @@ impl<'a> Decode<'a> for ClassFile<'a> {
         let interfaces_count: u16 = decode_value(bytes)?;
         let interfaces = borrow_slice(bytes, usize::from(interfaces_count))?;
         let fields_count: u16 = decode_value(bytes)?;
-        let fields = parse_repeated(bytes, usize::from(fields_count), FieldInfo::decode)?;
+        let fields = parse_repeated(bytes, fields_count, FieldInfo::decode)?;
         let methods_count: u16 = decode_value(bytes)?;
-        let methods = parse_repeated(bytes, usize::from(methods_count), MethodInfo::decode)?;
+        let methods = parse_repeated(bytes, methods_count, MethodInfo::decode)?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes =
-            parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
 
         Ok(Self {
             minor_version,

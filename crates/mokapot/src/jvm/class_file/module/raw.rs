@@ -30,13 +30,13 @@ impl<'a> Decode<'a> for ModuleInfo<'a> {
         let requires_count: u16 = decode_value(bytes)?;
         let requires = borrow_slice(bytes, usize::from(requires_count))?;
         let exports_count: u16 = decode_value(bytes)?;
-        let exports = parse_repeated(bytes, usize::from(exports_count), ExportsInfo::decode)?;
+        let exports = parse_repeated(bytes, exports_count, ExportsInfo::decode)?;
         let opens_count: u16 = decode_value(bytes)?;
-        let opens = parse_repeated(bytes, usize::from(opens_count), OpensInfo::decode)?;
+        let opens = parse_repeated(bytes, opens_count, OpensInfo::decode)?;
         let uses_count: u16 = decode_value(bytes)?;
         let uses = borrow_slice(bytes, usize::from(uses_count))?;
         let provides_count: u16 = decode_value(bytes)?;
-        let provides = parse_repeated(bytes, usize::from(provides_count), ProvidesInfo::decode)?;
+        let provides = parse_repeated(bytes, provides_count, ProvidesInfo::decode)?;
         Ok(Self {
             module_name_index,
             module_flags,

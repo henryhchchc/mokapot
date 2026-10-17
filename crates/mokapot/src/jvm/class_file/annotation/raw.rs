@@ -19,12 +19,11 @@ impl<'a> Decode<'a> for Annotation {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let type_index = decode_value(bytes)?;
         let num_element_value_pairs: u16 = decode_value(bytes)?;
-        let element_value_pairs =
-            parse_repeated(bytes, usize::from(num_element_value_pairs), |bytes| {
-                let element_name_index = decode_value(bytes)?;
-                let element_value = ElementValueInfo::decode(bytes)?;
-                Ok((element_name_index, element_value))
-            })?;
+        let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
+            let element_name_index = decode_value(bytes)?;
+            let element_value = ElementValueInfo::decode(bytes)?;
+            Ok((element_name_index, element_value))
+        })?;
         Ok(Self {
             type_index,
             element_value_pairs,
@@ -59,7 +58,7 @@ impl<'a> Decode<'a> for ElementValueInfo {
             b'@' => Ok(Self::Annotation(Annotation::decode(bytes)?)),
             b'[' => {
                 let num_values: u16 = decode_value(bytes)?;
-                let values = parse_repeated(bytes, usize::from(num_values), Self::decode)?;
+                let values = parse_repeated(bytes, num_values, Self::decode)?;
                 Ok(Self::Array(values))
             }
             _ => Err(ParseError::malform(format!(
@@ -93,12 +92,11 @@ impl<'a> Decode<'a> for TypeAnnotation<'a> {
         let target_path = borrow_slice(bytes, usize::from(target_path_length))?;
         let type_index = decode_value(bytes)?;
         let num_element_value_pairs: u16 = decode_value(bytes)?;
-        let element_value_pairs =
-            parse_repeated(bytes, usize::from(num_element_value_pairs), |bytes| {
-                let element_name_index = decode_value(bytes)?;
-                let element_value = ElementValueInfo::decode(bytes)?;
-                Ok((element_name_index, element_value))
-            })?;
+        let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
+            let element_name_index = decode_value(bytes)?;
+            let element_value = ElementValueInfo::decode(bytes)?;
+            Ok((element_name_index, element_value))
+        })?;
         Ok(Self {
             target_info,
             target_path,
