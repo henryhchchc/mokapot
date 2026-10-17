@@ -14,7 +14,7 @@ pub struct Provide {
     /// The reference to a class which is provided as a service.
     pub service: ClassName,
     /// The list of the classes which implement the service.
-    pub with: Vec<ClassName>,
+    pub with: Box<[ClassName]>,
 }
 
 /// A module opening.
@@ -26,7 +26,7 @@ pub struct Open {
     /// The flags of the opening.
     pub flags: OpenFlags,
     /// The list of the modules which can access the package.
-    pub to: Vec<ModuleRef>,
+    pub to: Box<[ModuleRef]>,
 }
 
 /// A module export.
@@ -38,7 +38,7 @@ pub struct Export {
     /// The flags of the export.
     pub flags: ExportFlags,
     /// The list of the modules which can access the package.
-    pub to: Vec<ModuleRef>,
+    pub to: Box<[ModuleRef]>,
 }
 
 /// A module require.

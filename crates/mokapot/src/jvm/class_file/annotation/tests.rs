@@ -43,13 +43,13 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
     let annotation = decode_annotation(&mut remaining, &ctx).unwrap();
     let nested = Annotation {
         annotation_type: "LExample;".parse().unwrap(),
-        element_value_pairs: vec![("value".to_owned(), ElementValue::Array(vec![]))],
+        element_value_pairs: Box::new([("value".to_owned(), ElementValue::Array(Box::new([])))]),
     };
     let expected = Annotation {
         annotation_type: "LExample;".parse().unwrap(),
-        element_value_pairs: vec![(
+        element_value_pairs: Box::new([(
             "value".to_owned(),
-            ElementValue::Array(vec![
+            ElementValue::Array(Box::new([
                 ElementValue::Primitive(PrimitiveType::Int, ConstantValue::Integer(42)),
                 ElementValue::String(JavaString::Utf8("hello".to_owned())),
                 ElementValue::EnumConstant {
@@ -60,15 +60,15 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
                     return_descriptor: "V".parse().unwrap(),
                 },
                 ElementValue::AnnotationInterface(nested),
-            ]),
-        )],
+            ])),
+        )]),
     };
     assert_eq!(annotation, expected);
     assert_eq!(
         decode_annotation(&mut remaining, &ctx).unwrap(),
         Annotation {
             annotation_type: "LExample;".parse().unwrap(),
-            element_value_pairs: vec![],
+            element_value_pairs: Box::new([]),
         }
     );
     assert_eq!(remaining, b"");
@@ -89,16 +89,16 @@ fn decodes_type_annotation_target_path_and_values() {
             annotation_type: "LExample;".parse().unwrap(),
             target_info: TargetInfo::LocalVar(
                 VariableKind::Local,
-                vec![LocalVariableId {
+                Box::new([LocalVariableId {
                     range: 2.into()..5.into(),
                     index: 4,
-                }],
+                }]),
             ),
-            target_path: vec![TypePathElement::Array],
-            element_value_pairs: vec![(
+            target_path: Box::new([TypePathElement::Array]),
+            element_value_pairs: Box::new([(
                 "value".to_owned(),
                 ElementValue::Primitive(PrimitiveType::Int, ConstantValue::Integer(42)),
-            )],
+            )]),
         }
     );
 }

@@ -25,7 +25,7 @@ pub(super) fn resolve_table<'input, R>(
     bytes: &mut &'input [u8],
     count: usize,
     ctx: &ResolutionContext,
-) -> Result<Vec<R::Output>, ParseError>
+) -> Result<Box<[R::Output]>, ParseError>
 where
     R: super::fixed_layout::FixedLayout + zerocopy::KnownLayout + Copy + Resolve + 'input,
 {
