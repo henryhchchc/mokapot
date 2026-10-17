@@ -1,12 +1,14 @@
 //! Raw attribute types for class-level and method-level attributes.
 
-use std::io::{self, Read};
-
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
-use super::super::{FromBytecode, attribute::AttributeInfo, reader::BytecodeReader};
+use super::super::{
+    FromBytecode, ParseError,
+    attribute::AttributeInfo,
+    decoder::{BytecodeSlice, read_value},
+};
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 6)]
@@ -42,12 +44,12 @@ pub struct BootstrapMethod {
 }
 
 impl FromBytecode for BootstrapMethod {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let bootstrap_method_ref = U16::read_from_io(&mut reader)?.get();
-        let num_bootstrap_arguments: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let bootstrap_method_ref = read_value::<U16>(bytes)?.get();
+        let num_bootstrap_arguments: u16 = read_value::<U16>(bytes)?.get();
         let bootstrap_arguments = (0..num_bootstrap_arguments)
-            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
-            .collect::<io::Result<_>>()?;
+            .map(|_| read_value::<U16>(bytes).map(u16::from))
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             bootstrap_method_ref,
             bootstrap_arguments,
@@ -73,13 +75,13 @@ pub struct RecordComponentInfo {
 }
 
 impl FromBytecode for RecordComponentInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let name_index = U16::read_from_io(&mut reader)?.get();
-        let descriptor_index = U16::read_from_io(&mut reader)?.get();
-        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let name_index = read_value::<U16>(bytes)?.get();
+        let descriptor_index = read_value::<U16>(bytes)?.get();
+        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
         let attributes = (0..attributes_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             name_index,
             descriptor_index,

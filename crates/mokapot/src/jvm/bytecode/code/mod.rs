@@ -97,7 +97,7 @@ impl ClassElement for MethodBody {
             attributes,
         } = raw;
 
-        let instructions = RawInstruction::iter_from_reader(code.as_ref())
+        let instructions = RawInstruction::iter_from_bytes(code.as_ref())
             .map(|entry| {
                 let (pc, raw) = entry?;
                 Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))

@@ -1,12 +1,13 @@
 //! Raw attribute types for module-related attributes.
 
-use std::io::{self, Read};
-
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
-use super::super::{FromBytecode, reader::BytecodeReader};
+use super::super::{
+    FromBytecode, ParseError,
+    decoder::{BytecodeSlice, read_value},
+};
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 25)]
@@ -22,30 +23,30 @@ pub struct ModuleInfo {
 }
 
 impl FromBytecode for ModuleInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let module_name_index = U16::read_from_io(&mut reader)?.get();
-        let module_flags = U16::read_from_io(&mut reader)?.get();
-        let module_version_index = U16::read_from_io(&mut reader)?.get();
-        let requires_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let module_name_index = read_value::<U16>(bytes)?.get();
+        let module_flags = read_value::<U16>(bytes)?.get();
+        let module_version_index = read_value::<U16>(bytes)?.get();
+        let requires_count: u16 = read_value::<U16>(bytes)?.get();
         let requires = (0..requires_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
-        let exports_count: u16 = U16::read_from_io(&mut reader)?.get();
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
+        let exports_count: u16 = read_value::<U16>(bytes)?.get();
         let exports = (0..exports_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
-        let opens_count: u16 = U16::read_from_io(&mut reader)?.get();
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
+        let opens_count: u16 = read_value::<U16>(bytes)?.get();
         let opens = (0..opens_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
-        let uses_count: u16 = U16::read_from_io(&mut reader)?.get();
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
+        let uses_count: u16 = read_value::<U16>(bytes)?.get();
         let uses = (0..uses_count)
-            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
-            .collect::<io::Result<_>>()?;
-        let provides_count: u16 = U16::read_from_io(&mut reader)?.get();
+            .map(|_| read_value::<U16>(bytes).map(u16::from))
+            .collect::<Result<_, ParseError>>()?;
+        let provides_count: u16 = read_value::<U16>(bytes)?.get();
         let provides = (0..provides_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             module_name_index,
             module_flags,
@@ -86,13 +87,13 @@ pub struct ExportsInfo {
 }
 
 impl FromBytecode for ExportsInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let exports_index = U16::read_from_io(&mut reader)?.get();
-        let exports_flags = U16::read_from_io(&mut reader)?.get();
-        let exports_to_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let exports_index = read_value::<U16>(bytes)?.get();
+        let exports_flags = read_value::<U16>(bytes)?.get();
+        let exports_to_count: u16 = read_value::<U16>(bytes)?.get();
         let exports_to = (0..exports_to_count)
-            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
-            .collect::<io::Result<_>>()?;
+            .map(|_| read_value::<U16>(bytes).map(u16::from))
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             exports_index,
             exports_flags,
@@ -113,13 +114,13 @@ pub struct OpensInfo {
 }
 
 impl FromBytecode for OpensInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let opens_index = U16::read_from_io(&mut reader)?.get();
-        let opens_flags = U16::read_from_io(&mut reader)?.get();
-        let opens_to_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let opens_index = read_value::<U16>(bytes)?.get();
+        let opens_flags = read_value::<U16>(bytes)?.get();
+        let opens_to_count: u16 = read_value::<U16>(bytes)?.get();
         let opens_to = (0..opens_to_count)
-            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
-            .collect::<io::Result<_>>()?;
+            .map(|_| read_value::<U16>(bytes).map(u16::from))
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             opens_index,
             opens_flags,
@@ -135,12 +136,12 @@ pub struct ProvidesInfo {
 }
 
 impl FromBytecode for ProvidesInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let provides_index = U16::read_from_io(&mut reader)?.get();
-        let provides_with_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let provides_index = read_value::<U16>(bytes)?.get();
+        let provides_with_count: u16 = read_value::<U16>(bytes)?.get();
         let provides_with = (0..provides_with_count)
-            .map(|_| U16::read_from_io(&mut reader).map(u16::from))
-            .collect::<io::Result<_>>()?;
+            .map(|_| read_value::<U16>(bytes).map(u16::from))
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             provides_index,
             provides_with,

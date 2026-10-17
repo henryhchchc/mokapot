@@ -2,16 +2,14 @@
 
 use zerocopy::byteorder::big_endian::U32;
 
-use std::io::{self, Read};
-
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
 use super::super::{
-    FromBytecode,
+    FromBytecode, ParseError,
     attribute::AttributeInfo,
-    reader::{BytecodeReader, read_bytes},
+    decoder::{BytecodeSlice, read_bytes, read_value},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -30,20 +28,20 @@ pub struct Code {
 }
 
 impl FromBytecode for Code {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let max_stack = U16::read_from_io(&mut reader)?.get();
-        let max_locals = U16::read_from_io(&mut reader)?.get();
-        let code_length: u32 = U32::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let max_stack = read_value::<U16>(bytes)?.get();
+        let max_locals = read_value::<U16>(bytes)?.get();
+        let code_length: u32 = read_value::<U32>(bytes)?.get();
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
-        let code = read_bytes(&mut reader, code_length)?;
-        let exception_table_length: u16 = U16::read_from_io(&mut reader)?.get();
+        let code = read_bytes(bytes, code_length)?;
+        let exception_table_length: u16 = read_value::<U16>(bytes)?.get();
         let exception_table = (0..exception_table_length)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
-        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
+        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
         let attributes = (0..attributes_count)
-            .map(|_| reader.decode_value())
-            .collect::<io::Result<_>>()?;
+            .map(|_| bytes.decode_value())
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             max_stack,
             max_locals,
@@ -102,50 +100,49 @@ pub enum StackMapFrameInfo {
 }
 
 impl FromBytecode for StackMapFrameInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let frame_type: u8 = u8::read_from_io(&mut reader)?;
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let frame_type: u8 = read_value::<u8>(bytes)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
                 frame_type,
-                stack: reader.decode_value()?,
+                stack: bytes.decode_value()?,
             }),
-            frame_type @ 128..=246 => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Frame type {frame_type} is reserved for future use."),
-            )),
+            frame_type @ 128..=246 => Err(ParseError::malform(format!(
+                "Frame type {frame_type} is reserved for future use."
+            ))),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: U16::read_from_io(&mut reader)?.get(),
-                stack: reader.decode_value()?,
+                offset_delta: read_value::<U16>(bytes)?.get(),
+                stack: bytes.decode_value()?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: U16::read_from_io(&mut reader)?.get(),
+                offset_delta: read_value::<U16>(bytes)?.get(),
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: U16::read_from_io(&mut reader)?.get(),
+                offset_delta: read_value::<U16>(bytes)?.get(),
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = U16::read_from_io(&mut reader)?.get();
+                let offset_delta = read_value::<U16>(bytes)?.get();
                 let locals = (0..locals_count)
-                    .map(|_| reader.decode_value())
-                    .collect::<io::Result<Vec<_>>>()?;
+                    .map(|_| bytes.decode_value())
+                    .collect::<Result<Vec<_>, ParseError>>()?;
                 Ok(Self::AppendFrame {
                     offset_delta,
                     locals,
                 })
             }
             255 => {
-                let offset_delta = U16::read_from_io(&mut reader)?.get();
-                let number_of_locals: u16 = U16::read_from_io(&mut reader)?.get();
+                let offset_delta = read_value::<U16>(bytes)?.get();
+                let number_of_locals: u16 = read_value::<U16>(bytes)?.get();
                 let locals = (0..number_of_locals)
-                    .map(|_| reader.decode_value())
-                    .collect::<io::Result<Vec<_>>>()?;
-                let number_of_stack_items: u16 = U16::read_from_io(&mut reader)?.get();
+                    .map(|_| bytes.decode_value())
+                    .collect::<Result<Vec<_>, ParseError>>()?;
+                let number_of_stack_items: u16 = read_value::<U16>(bytes)?.get();
                 let stack = (0..number_of_stack_items)
-                    .map(|_| reader.decode_value())
-                    .collect::<io::Result<Vec<_>>>()?;
+                    .map(|_| bytes.decode_value())
+                    .collect::<Result<Vec<_>, ParseError>>()?;
                 Ok(Self::FullFrame {
                     offset_delta,
                     locals,
@@ -171,8 +168,8 @@ pub enum VerificationTypeInfo {
 }
 
 impl FromBytecode for VerificationTypeInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let tag: u8 = u8::read_from_io(&mut reader)?;
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let tag: u8 = read_value::<u8>(bytes)?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -182,15 +179,14 @@ impl FromBytecode for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                cpool_index: U16::read_from_io(&mut reader)?.get(),
+                cpool_index: read_value::<U16>(bytes)?.get(),
             }),
             8 => Ok(Self::Uninitialized {
-                offset: U16::read_from_io(&mut reader)?.get(),
+                offset: read_value::<U16>(bytes)?.get(),
             }),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Unknown verification type tag: {tag}"),
-            )),
+            _ => Err(ParseError::malform(format!(
+                "Unknown verification type tag: {tag}"
+            ))),
         }
     }
 }

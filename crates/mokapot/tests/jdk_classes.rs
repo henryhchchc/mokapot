@@ -4,7 +4,6 @@ use std::{
     collections::HashSet,
     env, fs,
     hash::{DefaultHasher, Hash, Hasher},
-    io::BufReader,
     path::{Path, PathBuf},
 };
 
@@ -69,8 +68,8 @@ fn test_jdk_classes<const BIN: u64>() {
     // Process classes sequentially within each shard to bound memory use.
     // Nextest runs the shards in separate processes.
     for class_file in shard {
-        let mut reader = BufReader::new(fs::File::open(&class_file).unwrap());
-        match Class::from_reader(&mut reader) {
+        let bytes = fs::read(&class_file).unwrap();
+        match Class::from_bytes(&bytes) {
             Ok(class) => test_a_class(&class, variable_count_limit),
             Err(e) => panic!("Failed to parse {}: {e}", class_file.display()),
         }

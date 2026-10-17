@@ -1,10 +1,8 @@
-use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian::U16;
 
-use std::io::{self, Read};
-
 use super::{
-    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo, class_element::ClassElement,
+    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo,
+    class_element::ClassElement, decoder::read_value,
 };
 use crate::{
     intrinsics::{extract_attributes, see_jvm_spec},
@@ -26,14 +24,14 @@ pub(crate) struct FieldInfo {
 }
 
 impl FromBytecode for FieldInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let access_flags = U16::read_from_io(&mut reader)?.get();
-        let name_index = U16::read_from_io(&mut reader)?.get();
-        let descriptor_index = U16::read_from_io(&mut reader)?.get();
-        let attributes_count: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let access_flags = read_value::<U16>(bytes)?.get();
+        let name_index = read_value::<U16>(bytes)?.get();
+        let descriptor_index = read_value::<U16>(bytes)?.get();
+        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
         let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_reader(&mut reader))
-            .collect::<io::Result<_>>()?;
+            .map(|_| AttributeInfo::from_bytes(bytes))
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             access_flags,
             name_index,

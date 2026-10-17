@@ -1,7 +1,5 @@
 //! Eagerly resolved JVM constant-pool values.
 
-use std::io::Read;
-
 use crate::{
     jvm::{
         ConstantValue, JavaString,
@@ -159,11 +157,12 @@ impl ConstantPool {
         }
     }
 
-    /// Reads a pool and resolves all of its entries.
+    /// Parses a pool and resolves all of its entries.
+    /// Bytes following the specified pool are ignored.
     /// # Errors
     /// Returns binary parsing errors or malformed constant-pool references and values.
-    pub fn from_reader<R: Read>(reader: R, constant_pool_count: u16) -> Result<Self, ParseError> {
-        Self::from_raw(RawConstantPool::from_reader(reader, constant_pool_count)?)
+    pub fn from_bytes(bytes: &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+        Self::from_raw(RawConstantPool::from_bytes(bytes, constant_pool_count)?)
     }
 
     /// Resolves all entries, preserving indices and reserved slots.
@@ -546,7 +545,7 @@ mod tests {
     fn class_and_package_names_parse_with_distinct_tags() {
         // Utf8 "a/b/C", Class #1, Package #1.
         let bytes = [1, 0, 5, b'a', b'/', b'b', b'/', b'C', 7, 0, 1, 20, 0, 1];
-        let pool = ConstantPool::from_reader(bytes.as_slice(), 4).unwrap();
+        let pool = ConstantPool::from_bytes(bytes.as_slice(), 4).unwrap();
         let class_name: ClassName = "a/b/C".parse().unwrap();
         let package_name: PackageName = "a/b/C".parse().unwrap();
         assert_eq!(pool.count(), 4);
@@ -625,7 +624,7 @@ mod tests {
             0,
             6,
         ];
-        RawConstantPool::from_reader(bytes.as_slice(), 8).unwrap()
+        RawConstantPool::from_bytes(bytes.as_slice(), 8).unwrap()
     }
 
     #[test]

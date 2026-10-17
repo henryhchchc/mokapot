@@ -10,7 +10,6 @@ use std::backtrace::Backtrace;
 use std::{
     error::Error,
     fmt::{self, Display},
-    io,
 };
 
 /// A generic JVM bytecode error parameterized by its error kind.
@@ -75,17 +74,6 @@ impl BytecodeError<ParseErrorKind> {
     pub(crate) fn malform(message: impl fmt::Display) -> Self {
         Self::new(format!("{message}").into(), ParseErrorKind::Malformed)
     }
-
-    /// Creates a new `ParseError` with the kind `IO` and the given `std::io::Error` as its cause.
-    pub(crate) fn io(error: io::Error) -> Self {
-        Self::new(error.into(), ParseErrorKind::IO)
-    }
-}
-
-impl From<io::Error> for BytecodeError<ParseErrorKind> {
-    fn from(error: io::Error) -> Self {
-        Self::io(error)
-    }
 }
 
 /// The kind of [`ParseError`].
@@ -95,9 +83,6 @@ impl From<io::Error> for BytecodeError<ParseErrorKind> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Display)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
-    /// An error occurred while reading from the underlying input source.
-    #[display("IO Error")]
-    IO,
     /// The class file is malformed and does not conform to the JVM specification.
     #[display("Malformed class file")]
     Malformed,

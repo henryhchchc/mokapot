@@ -5,11 +5,10 @@ mod codec;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        bytecode::FromBytecode,
+        bytecode::{FromBytecode, ParseError},
         constant_pool_storage::{PoolStorage, Slot},
     },
 };
-use std::io::{self, Read};
 use zerocopy::byteorder::big_endian::{F32, F64, I32, I64, U16};
 
 /// The indexed, unresolved representation of a JVM constant pool.
@@ -37,31 +36,27 @@ impl RawConstantPool {
         }
     }
 
-    /// Reads a pool from the given reader.
+    /// Parses the specified number of constant-pool slots from a byte slice.
+    /// Bytes following the pool are ignored.
     /// # Errors
-    /// See [`io::Error`] for more information.
-    pub fn from_reader<R>(mut reader: R, constant_pool_count: u16) -> io::Result<Self>
-    where
-        R: Read,
-    {
+    /// Returns a [`ParseError`] for malformed or truncated entries.
+    pub fn from_bytes(mut bytes: &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+        Self::parse(&mut bytes, constant_pool_count)
+    }
+
+    pub(super) fn parse(bytes: &mut &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
         if constant_pool_count == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Zero constant pool count",
-            ));
+            return Err(ParseError::malform("Zero constant pool count"));
         }
         let mut constant_pool = Self::with_capacity(constant_pool_count);
         while constant_pool.count() < constant_pool_count {
-            let entry = RawEntry::from_reader(&mut reader)?;
+            let entry = RawEntry::from_bytes(bytes)?;
             if entry.slot_width() > constant_pool_count - constant_pool.count() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Missing constant pool padding slot",
-                ));
+                return Err(ParseError::malform("Missing constant pool padding slot"));
             }
             constant_pool
                 .put_entry(entry)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                .map_err(ParseError::malform)?;
         }
         Ok(constant_pool)
     }
@@ -316,6 +311,7 @@ impl RawEntry {
 
 #[cfg(test)]
 mod tests {
+    use crate::jvm::bytecode::ParseErrorKind;
     use proptest::prelude::*;
 
     use super::*;
@@ -357,13 +353,11 @@ mod tests {
         ];
         for (entry, bytes) in cases {
             let mut reader = *bytes;
-            assert_eq!(&RawEntry::from_reader(&mut reader).unwrap(), entry);
+            assert_eq!(&RawEntry::from_bytes(&mut reader).unwrap(), entry);
             for end in 0..bytes.len() {
                 assert_eq!(
-                    RawEntry::from_reader(&mut &bytes[..end])
-                        .unwrap_err()
-                        .kind(),
-                    io::ErrorKind::UnexpectedEof
+                    RawEntry::from_bytes(&mut &bytes[..end]).unwrap_err().kind(),
+                    ParseErrorKind::Malformed
                 );
             }
         }
@@ -462,31 +456,32 @@ mod tests {
             (2, vec![5, 0, 0, 0, 0, 0, 0, 0, 0]),
             (2, vec![6, 0, 0, 0, 0, 0, 0, 0, 0]),
         ] {
-            let error = RawConstantPool::from_reader(io::Cursor::new(bytes), count).unwrap_err();
-            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            let error = RawConstantPool::from_bytes(&bytes, count).unwrap_err();
+            assert_eq!(error.kind(), ParseErrorKind::Malformed);
         }
     }
 
     proptest! {
 
         #[test]
-        fn from_reader((count, bytes) in arb_constant_pool_bytes()) {
-            let mut reader = bytes.as_slice();
-            let constant_pool = RawConstantPool::from_reader(&mut reader, count);
-            assert!(constant_pool.is_ok());
-            assert_eq!(reader, []);
+        fn from_bytes((count, bytes) in arb_constant_pool_bytes()) {
+            let mut remaining = bytes.as_slice();
+            let constant_pool = RawConstantPool::parse(&mut remaining, count).unwrap();
+            prop_assert!(remaining.is_empty());
+            let public_pool = RawConstantPool::from_bytes(&bytes, count).unwrap();
+            prop_assert_eq!(constant_pool, public_pool);
         }
 
         #[test]
-        fn from_reader_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
-            let mut reader = bytes.as_slice();
-            let constant_pool = RawConstantPool::from_reader(&mut reader, count + 1);
+        fn from_bytes_err_on_wrong_count((count, bytes) in arb_constant_pool_bytes()) {
+            let reader = bytes.as_slice();
+            let constant_pool = RawConstantPool::from_bytes(reader, count + 1);
             assert!(constant_pool.is_err());
         }
 
         #[test]
         fn constant_kind(bytes in arb_constant_pool_info()) {
-            let entry = RawEntry::from_reader(&mut bytes.as_slice()).unwrap();
+            let entry = RawEntry::from_bytes(&mut bytes.as_slice()).unwrap();
             let kind = entry.constant_kind();
             assert!(kind.starts_with("CONSTANT_"));
         }
@@ -494,7 +489,7 @@ mod tests {
         #[test]
         fn parse_entry(entry in arb_constant_pool_info()) {
             let mut reader = entry.as_slice();
-            let parsed = RawEntry::from_reader(&mut reader);
+            let parsed = RawEntry::from_bytes(&mut reader);
             let tag = entry.first().unwrap();
             match tag {
                 1 => assert!(matches!(parsed, Ok(RawEntry::Utf8(_)))),

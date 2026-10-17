@@ -3,20 +3,20 @@ use std::iter;
 use proptest::prelude::*;
 
 use super::*;
-use crate::jvm::bytecode::{ParseErrorKind, reader::PositionTracker};
+use crate::jvm::bytecode::ParseErrorKind;
 
 fn assert_malformed(bytes: &[u8]) {
     assert_malformed_at(bytes, 0);
 }
 
 fn assert_malformed_at(bytes: &[u8], prefix_len: usize) {
-    let mut reader = PositionTracker::new(bytes);
+    let mut reader = bytes;
     for _ in 0..prefix_len {
-        RawInstruction::read_one(&mut reader)
+        RawInstruction::read_one(&mut reader, bytes.len())
             .expect("prefix Nop should parse")
             .expect("prefix Nop should be present");
     }
-    let error = RawInstruction::read_one(&mut reader).unwrap_err();
+    let error = RawInstruction::read_one(&mut reader, bytes.len()).unwrap_err();
     assert_eq!(error.kind(), ParseErrorKind::Malformed);
 }
 
@@ -58,11 +58,15 @@ fn decodes_every_defined_opcode_and_rejects_undefined_opcodes() {
             assert_malformed(&[opcode]);
             continue;
         };
-        let mut reader = PositionTracker::new(bytes.as_slice());
-        let decoded = RawInstruction::read_one(&mut reader)
+        let mut reader = bytes.as_slice();
+        let decoded = RawInstruction::read_one(&mut reader, bytes.len())
             .unwrap_or_else(|error| panic!("opcode 0x{opcode:02x} failed to parse: {error}"))
             .unwrap();
-        assert_eq!(reader.position(), bytes.len(), "opcode 0x{opcode:02x}");
+        assert_eq!(
+            bytes.len() - reader.len(),
+            bytes.len(),
+            "opcode 0x{opcode:02x}"
+        );
         assert_eq!(decoded.0, ProgramCounter::default());
         assert_eq!(decoded.1.opcode(), opcode);
     }
@@ -78,9 +82,12 @@ fn operand_bearing_opcodes_reject_truncated_encodings() {
             continue;
         }
         bytes.pop();
-        let error =
-            RawInstruction::read_one(&mut PositionTracker::new(bytes.as_slice())).unwrap_err();
-        assert_eq!(error.kind(), ParseErrorKind::IO, "opcode 0x{opcode:02x}");
+        let error = RawInstruction::read_one(&mut bytes.as_slice(), bytes.len()).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::Malformed,
+            "opcode 0x{opcode:02x}"
+        );
     }
 }
 

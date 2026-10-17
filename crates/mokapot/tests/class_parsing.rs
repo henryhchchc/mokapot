@@ -18,14 +18,14 @@ use mokapot::{
 
 mod support;
 
-fn test_data_class(name: &str) -> std::io::Cursor<Vec<u8>> {
-    std::io::Cursor::new(support::class_bytes(name))
+fn test_data_class(name: &str) -> Vec<u8> {
+    support::class_bytes(name)
 }
 
 #[test]
 fn test_parse_my_class() {
-    let mut bytes = test_data_class("org/mokapot/test/MyClass");
-    let my_class = Class::from_reader(&mut bytes).expect("Failed to parse class");
+    let bytes = test_data_class("org/mokapot/test/MyClass");
+    let my_class = Class::from_bytes(&bytes).expect("Failed to parse class");
 
     assert_eq!(class::Version::LATEST, my_class.version);
     assert_eq!(0, my_class.version.minor());
@@ -63,35 +63,35 @@ fn test_parse_my_class() {
 
 #[test]
 fn test_anno() {
-    let mut bytes = test_data_class("org/mokapot/test/Anno");
-    let class = Class::from_reader(&mut bytes).unwrap();
+    let bytes = test_data_class("org/mokapot/test/Anno");
+    let class = Class::from_bytes(&bytes).unwrap();
     let field_type: FieldType = "[[Ljava/lang/String;".parse().unwrap();
     let field = class.get_field("fa", field_type).unwrap();
     assert_eq!(field.annotations.runtime_visible.len(), 1);
     assert_eq!(field.type_annotations.runtime_invisible.len(), 1);
 
-    let mut bytes = test_data_class("org/mokapot/test/Anno$Middle");
-    let class = Class::from_reader(&mut bytes).unwrap();
+    let bytes = test_data_class("org/mokapot/test/Anno$Middle");
+    let class = Class::from_bytes(&bytes).unwrap();
     assert_eq!(class.type_annotations.runtime_visible.len(), 1);
     assert!(!class.inner_classes.is_empty());
 }
 
 #[test]
 fn test_complicated_class() {
-    for mut bytes in [
+    for bytes in [
         test_data_class("org/mokapot/test/ComplicatedClass"),
         test_data_class("org/mokapot/test/ComplicatedClass$InnerClass"),
         test_data_class("org/mokapot/test/ComplicatedClass$1Test"),
     ] {
-        let class = Class::from_reader(&mut bytes).unwrap();
+        let class = Class::from_bytes(&bytes).unwrap();
         assert!(!class.inner_classes.is_empty());
     }
 }
 
 #[test]
 fn parse_module_info() {
-    let mut bytes = test_data_class("module-info");
-    let class = Class::from_reader(&mut bytes).expect("Fail to parse module-info");
+    let bytes = test_data_class("module-info");
+    let class = Class::from_bytes(&bytes).expect("Fail to parse module-info");
     assert_eq!("module-info", class.name);
     let module = class.module.as_ref().expect("The class is a module-info");
     assert_eq!(1, module.exports.len());
@@ -103,8 +103,8 @@ fn parse_module_info() {
 
 #[test]
 fn parse_record() {
-    let mut bytes = test_data_class("org/mokapot/test/RecordTest");
-    let class = Class::from_reader(&mut bytes).unwrap();
+    let bytes = test_data_class("org/mokapot/test/RecordTest");
+    let class = Class::from_bytes(&bytes).unwrap();
     assert_eq!("org/mokapot/test/RecordTest", class.name);
     let Some(components) = class.record else {
         panic!("Record components not found.");

@@ -1,11 +1,11 @@
 //! Raw attribute types for annotation-related attributes.
 
-use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian::U16;
 
-use std::io::{self, Read};
-
-use super::super::{FromBytecode, reader::BytecodeReader};
+use super::super::{
+    FromBytecode, ParseError,
+    decoder::{BytecodeSlice, read_value},
+};
 use crate::{intrinsics::see_jvm_spec, jvm::code::ProgramCounter};
 
 #[doc = see_jvm_spec!(4, 7, 16)]
@@ -15,16 +15,16 @@ pub struct Annotation {
 }
 
 impl FromBytecode for Annotation {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let type_index = U16::read_from_io(&mut reader)?.get();
-        let num_element_value_pairs: u16 = U16::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let type_index = read_value::<U16>(bytes)?.get();
+        let num_element_value_pairs: u16 = read_value::<U16>(bytes)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = U16::read_from_io(&mut reader)?.get();
-                let element_value = reader.decode_value()?;
+                let element_name_index = read_value::<U16>(bytes)?.get();
+                let element_value = bytes.decode_value()?;
                 Ok((element_name_index, element_value))
             })
-            .collect::<io::Result<_>>()?;
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             type_index,
             element_value_pairs,
@@ -45,32 +45,28 @@ pub enum ElementValueInfo {
 }
 
 impl FromBytecode for ElementValueInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let tag: u8 = u8::read_from_io(&mut reader)?;
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let tag: u8 = read_value::<u8>(bytes)?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::Const(tag, U16::read_from_io(&mut reader)?.get()))
+                Ok(Self::Const(tag, read_value::<U16>(bytes)?.get()))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: U16::read_from_io(&mut reader)?.get(),
-                const_name_index: U16::read_from_io(&mut reader)?.get(),
+                type_name_index: read_value::<U16>(bytes)?.get(),
+                const_name_index: read_value::<U16>(bytes)?.get(),
             }),
-            b'c' => Ok(Self::ClassInfo(U16::read_from_io(&mut reader)?.get())),
-            // Erase the reader type at recursive calls to keep monomorphization finite.
-            b'@' => Ok(Self::Annotation(Annotation::from_reader(
-                reader.by_ref() as &mut dyn Read
-            )?)),
+            b'c' => Ok(Self::ClassInfo(read_value::<U16>(bytes)?.get())),
+            b'@' => Ok(Self::Annotation(Annotation::from_bytes(bytes)?)),
             b'[' => {
-                let num_values: u16 = U16::read_from_io(&mut reader)?.get();
+                let num_values: u16 = read_value::<U16>(bytes)?.get();
                 let values = (0..num_values)
-                    .map(|_| Self::from_reader(reader.by_ref() as &mut dyn Read))
-                    .collect::<io::Result<_>>()?;
+                    .map(|_| Self::from_bytes(bytes))
+                    .collect::<Result<_, ParseError>>()?;
                 Ok(Self::Array(values))
             }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Unknown element value tag: {tag}"),
-            )),
+            _ => Err(ParseError::malform(format!(
+                "Unknown element value tag: {tag}"
+            ))),
         }
     }
 }
@@ -84,25 +80,25 @@ pub struct TypeAnnotation {
 }
 
 impl FromBytecode for TypeAnnotation {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let target_info = reader.decode_value()?;
-        let target_path_length: u8 = u8::read_from_io(&mut reader)?;
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let target_info = bytes.decode_value()?;
+        let target_path_length: u8 = read_value::<u8>(bytes)?;
         let target_path = (0..target_path_length)
             .map(|_| {
-                let type_path_kind = u8::read_from_io(&mut reader)?;
-                let type_argument_index = u8::read_from_io(&mut reader)?;
+                let type_path_kind = read_value::<u8>(bytes)?;
+                let type_argument_index = read_value::<u8>(bytes)?;
                 Ok((type_path_kind, type_argument_index))
             })
-            .collect::<io::Result<_>>()?;
-        let type_index = U16::read_from_io(&mut reader)?.get();
-        let num_element_value_pairs: u16 = U16::read_from_io(&mut reader)?.get();
+            .collect::<Result<_, ParseError>>()?;
+        let type_index = read_value::<U16>(bytes)?.get();
+        let num_element_value_pairs: u16 = read_value::<U16>(bytes)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
             .map(|_| {
-                let element_name_index = U16::read_from_io(&mut reader)?.get();
-                let element_value = reader.decode_value()?;
+                let element_name_index = read_value::<U16>(bytes)?.get();
+                let element_value = bytes.decode_value()?;
                 Ok((element_name_index, element_value))
             })
-            .collect::<io::Result<_>>()?;
+            .collect::<Result<_, ParseError>>()?;
         Ok(Self {
             target_info,
             target_path,
@@ -181,98 +177,97 @@ pub enum TargetInfo {
 }
 
 impl FromBytecode for TargetInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let target_type: u8 = u8::read_from_io(&mut reader)?;
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let target_type: u8 = read_value::<u8>(bytes)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                type_parameter_index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: read_value::<u8>(bytes)?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                type_parameter_index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: read_value::<u8>(bytes)?,
             },
             0x10 => Self::SuperType {
-                supertype_index: U16::read_from_io(&mut reader)?.get(),
+                supertype_index: read_value::<U16>(bytes)?.get(),
             },
             0x11 => Self::TypeParameterBoundOfClass {
-                type_parameter_index: u8::read_from_io(&mut reader)?,
-                bound_index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: read_value::<u8>(bytes)?,
+                bound_index: read_value::<u8>(bytes)?,
             },
             0x12 => Self::TypeParameterBoundOfMethod {
-                type_parameter_index: u8::read_from_io(&mut reader)?,
-                bound_index: u8::read_from_io(&mut reader)?,
+                type_parameter_index: read_value::<u8>(bytes)?,
+                bound_index: read_value::<u8>(bytes)?,
             },
             0x13 => Self::Field,
             0x14 => Self::MethodReturn,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                formal_parameter_index: u8::read_from_io(&mut reader)?,
+                formal_parameter_index: read_value::<u8>(bytes)?,
             },
             0x17 => Self::Throws {
-                throws_type_index: U16::read_from_io(&mut reader)?.get(),
+                throws_type_index: read_value::<U16>(bytes)?.get(),
             },
             0x40 => {
-                let table_length: u16 = U16::read_from_io(&mut reader)?.get();
+                let table_length: u16 = read_value::<U16>(bytes)?.get();
                 let table = (0..table_length)
                     .map(|_| {
-                        let start_pc = reader.decode_value()?;
-                        let length = U16::read_from_io(&mut reader)?.get();
-                        let index = U16::read_from_io(&mut reader)?.get();
+                        let start_pc = bytes.decode_value()?;
+                        let length = read_value::<U16>(bytes)?.get();
+                        let index = read_value::<U16>(bytes)?.get();
                         Ok((start_pc, length, index))
                     })
-                    .collect::<io::Result<_>>()?;
+                    .collect::<Result<_, ParseError>>()?;
                 Self::LocalVariable(table)
             }
             0x41 => {
-                let table_length: u16 = U16::read_from_io(&mut reader)?.get();
+                let table_length: u16 = read_value::<U16>(bytes)?.get();
                 let table = (0..table_length)
                     .map(|_| {
-                        let start_pc = reader.decode_value()?;
-                        let length = U16::read_from_io(&mut reader)?.get();
-                        let index = U16::read_from_io(&mut reader)?.get();
+                        let start_pc = bytes.decode_value()?;
+                        let length = read_value::<U16>(bytes)?.get();
+                        let index = read_value::<U16>(bytes)?.get();
                         Ok((start_pc, length, index))
                     })
-                    .collect::<io::Result<_>>()?;
+                    .collect::<Result<_, ParseError>>()?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                exception_table_index: U16::read_from_io(&mut reader)?.get(),
+                exception_table_index: read_value::<U16>(bytes)?.get(),
             },
             0x43 => Self::InstanceOf {
-                offset: U16::read_from_io(&mut reader)?.get(),
+                offset: read_value::<U16>(bytes)?.get(),
             },
             0x44 => Self::New {
-                offset: U16::read_from_io(&mut reader)?.get(),
+                offset: read_value::<U16>(bytes)?.get(),
             },
             0x45 => Self::ConstructorReference {
-                offset: U16::read_from_io(&mut reader)?.get(),
+                offset: read_value::<U16>(bytes)?.get(),
             },
             0x46 => Self::MethodReference {
-                offset: U16::read_from_io(&mut reader)?.get(),
+                offset: read_value::<U16>(bytes)?.get(),
             },
             0x47 => Self::TypeInCast {
-                offset: reader.decode_value()?,
-                type_argument_index: u8::read_from_io(&mut reader)?,
+                offset: bytes.decode_value()?,
+                type_argument_index: read_value::<u8>(bytes)?,
             },
             0x48 => Self::TypeArgumentInConstructor {
-                offset: reader.decode_value()?,
-                type_argument_index: u8::read_from_io(&mut reader)?,
+                offset: bytes.decode_value()?,
+                type_argument_index: read_value::<u8>(bytes)?,
             },
             0x49 => Self::TypeArgumentInCall {
-                offset: reader.decode_value()?,
-                type_argument_index: u8::read_from_io(&mut reader)?,
+                offset: bytes.decode_value()?,
+                type_argument_index: read_value::<u8>(bytes)?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
-                offset: reader.decode_value()?,
-                type_argument_index: u8::read_from_io(&mut reader)?,
+                offset: bytes.decode_value()?,
+                type_argument_index: read_value::<u8>(bytes)?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
-                offset: reader.decode_value()?,
-                type_argument_index: u8::read_from_io(&mut reader)?,
+                offset: bytes.decode_value()?,
+                type_argument_index: read_value::<u8>(bytes)?,
             },
-            unexpected => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid target type: {unexpected:x}"),
-            ))?,
+            unexpected => Err(ParseError::malform(format!(
+                "Invalid target type: {unexpected:x}"
+            )))?,
         };
         Ok(target_info)
     }

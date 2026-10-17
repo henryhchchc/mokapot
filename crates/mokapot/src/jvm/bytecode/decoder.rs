@@ -1,85 +1,56 @@
-use std::io::{Read, Result};
+//! Slice decoding for JVM wire values.
 
 use zerocopy::{FromBytes, byteorder::big_endian::U16};
 
-use super::FromBytecode;
+use super::{FromBytecode, ParseError};
 use crate::jvm::code::ProgramCounter;
 
-pub(crate) trait BytecodeReader: Read {
-    fn decode_value<T: FromBytecode>(&mut self) -> Result<T>;
+pub(crate) fn read_value<T: FromBytes>(bytes: &mut &[u8]) -> Result<T, ParseError> {
+    let (value, remaining) =
+        T::read_from_prefix(bytes).map_err(|_| ParseError::malform("Truncated bytecode value"))?;
+    *bytes = remaining;
+    Ok(value)
 }
 
-impl<R: Read + ?Sized> BytecodeReader for R {
-    fn decode_value<T: FromBytecode>(&mut self) -> Result<T> {
-        T::from_reader(self)
+pub(crate) trait BytecodeSlice {
+    fn decode_value<T: FromBytecode>(&mut self) -> Result<T, ParseError>;
+}
+
+impl BytecodeSlice for &[u8] {
+    fn decode_value<T: FromBytecode>(&mut self) -> Result<T, ParseError> {
+        T::from_bytes(self)
     }
 }
 
 impl<const N: usize> FromBytecode for [u8; N] {
-    fn from_reader<R: Read>(reader: R) -> Result<Self> {
-        Self::read_from_io(reader)
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        read_value(bytes)
     }
 }
 
 impl FromBytecode for ProgramCounter {
-    fn from_reader<R: Read>(reader: R) -> Result<Self> {
-        let inner = U16::read_from_io(reader)?.get();
-        Ok(inner.into())
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        Ok(read_value::<U16>(bytes)?.get().into())
     }
 }
 
-/// Reads [len] bytes and advances the reader by [`len`] bytes.
-pub(crate) fn read_bytes<R>(mut reader: R, len: usize) -> Result<Box<[u8]>>
-where
-    R: Read,
-{
-    // SAFETY: zero is a valid initialized u8.
-    let mut buf = unsafe { Box::new_zeroed_slice(len).assume_init() };
-    // TODO: Use `read_buf_exact` once stable.
-    reader.read_exact(&mut buf)?;
-    Ok(buf)
-}
-
-#[derive(Debug)]
-pub(super) struct PositionTracker<Inner> {
-    inner: Inner,
-    position: usize,
-}
-
-impl<Inner> PositionTracker<Inner> {
-    pub const fn new(reader: Inner) -> Self {
-        Self {
-            inner: reader,
-            position: 0,
-        }
-    }
-
-    pub const fn position(&self) -> usize {
-        self.position
-    }
-}
-
-impl<R> Read for PositionTracker<R>
-where
-    R: Read,
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let Self { inner, position } = self;
-        inner.read(buf).inspect(|n| *position += n)
-    }
+/// Copies `len` bytes after checking availability and advances the slice.
+pub(crate) fn read_bytes(bytes: &mut &[u8], len: usize) -> Result<Box<[u8]>, ParseError> {
+    let (value, remaining) = bytes
+        .split_at_checked(len)
+        .ok_or_else(|| ParseError::malform("Truncated bytecode payload"))?;
+    *bytes = remaining;
+    Ok(value.into())
 }
 
 #[cfg(test)]
 mod test {
-    use std::io::ErrorKind::UnexpectedEof;
+    use crate::jvm::bytecode::ParseErrorKind::Malformed;
 
     use proptest::prelude::*;
-    use zerocopy::{
-        FromBytes,
-        byteorder::big_endian::{I16, I32, U16, U32},
-    };
+    use zerocopy::byteorder::big_endian::{I16, I32, U16, U32};
 
-    use super::BytecodeReader;
+    use super::{BytecodeSlice, read_value};
 
     #[test]
     fn read_bytes_success() {
@@ -93,7 +64,7 @@ mod test {
     fn read_bytes_failed() {
         let mut reader = [0x01, 0x02].as_slice();
         let err = reader.decode_value::<[u8; 3]>().unwrap_err();
-        assert_eq!(err.kind(), UnexpectedEof);
+        assert_eq!(err.kind(), Malformed);
     }
 
     macro_rules! integer_decode_properties {
@@ -105,7 +76,7 @@ mod test {
                     bytes.extend(&suffix);
                     let mut reader = bytes.as_slice();
 
-                    let decoded = <$wire>::read_from_io(&mut reader).map(<$type>::from).unwrap();
+                    let decoded = read_value::<$wire>(&mut reader).map(<$type>::from).unwrap();
 
                     prop_assert_eq!(decoded, value);
                     prop_assert_eq!(reader, suffix.as_slice());
@@ -119,9 +90,9 @@ mod test {
                     let bytes = value.to_be_bytes();
                     let mut reader = &bytes[..available];
 
-                    let error = <$wire>::read_from_io(&mut reader).unwrap_err();
+                    let error = read_value::<$wire>(&mut reader).unwrap_err();
 
-                    prop_assert_eq!(error.kind(), UnexpectedEof);
+                    prop_assert_eq!(error.kind(), Malformed);
                 }
             }
         };
@@ -160,7 +131,7 @@ mod test {
 
             let error = super::read_bytes(&mut reader, requested).unwrap_err();
 
-            prop_assert_eq!(error.kind(), UnexpectedEof);
+            prop_assert_eq!(error.kind(), Malformed);
         }
     }
 }

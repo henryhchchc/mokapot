@@ -1,11 +1,6 @@
 use crate::types::class_name::ClassName;
 use crate::types::package_name::PackageName;
-use zerocopy::{
-    FromBytes,
-    byteorder::big_endian::{U16, U32},
-};
-
-use std::io::{self, Read};
+use zerocopy::byteorder::big_endian::{U16, U32};
 
 use itertools::Itertools;
 
@@ -13,7 +8,7 @@ use super::{
     FromBytecode, ParseError, ParsingContext,
     class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    reader::{BytecodeReader, read_bytes},
+    decoder::{BytecodeSlice, read_bytes, read_value},
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -44,12 +39,12 @@ impl AttributeInfo {
 }
 
 impl FromBytecode for AttributeInfo {
-    fn from_reader<R: Read>(mut reader: R) -> io::Result<Self> {
-        let attribute_name_index = U16::read_from_io(&mut reader)?.get();
-        let attribute_length: u32 = U32::read_from_io(&mut reader)?.get();
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+        let attribute_name_index = read_value::<U16>(bytes)?.get();
+        let attribute_length: u32 = read_value::<U32>(bytes)?.get();
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = read_bytes(&mut reader, attribute_length)?;
+        let info = read_bytes(bytes, attribute_length)?;
         Ok(Self::from_raw_parts(attribute_name_index, info))
     }
 }
@@ -129,18 +124,18 @@ impl Attribute {
 }
 
 macro_rules! parse {
-    (@count u8; $reader:expr) => { u8::read_from_io(&mut *$reader)? };
-    (@count u16; $reader:expr) => { U16::read_from_io(&mut *$reader)?.get() };
-    ($reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
-        let raw = $reader.decode_value()?;
+    (@count u8; $bytes:expr) => { read_value::<u8>(&mut *$bytes)? };
+    (@count u16; $bytes:expr) => { read_value::<U16>(&mut *$bytes)?.get() };
+    ($bytes:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {{
+        let raw = $bytes.decode_value()?;
         ClassElement::from_raw(raw, $ctx)$( .map(Self::$attr) )?
     }};
-    ($len_type:ident; $reader:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
-        let count = parse!(@count $len_type; $reader);
+    ($len_type:ident; $bytes:expr_2021, || $with:expr_2021 $(=> $attr:ident )?) => {{
+        let count = parse!(@count $len_type; $bytes);
         (0..count).map(|_| $with).try_collect()$( .map(Self::$attr) )?
     }};
-    ($len_type:ident; $reader:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
-        parse![$len_type; $reader, || parse!($reader, $ctx)] $( .map(Self::$attr) )?
+    ($len_type:ident; $bytes:expr_2021, $ctx:expr_2021 $(=> $attr:ident )?) => {
+        parse![$len_type; $bytes, || parse!($bytes, $ctx)] $( .map(Self::$attr) )?
     };
 }
 
@@ -153,92 +148,91 @@ impl ClassElement for Attribute {
             info,
         } = raw;
         let name = ctx.constant_pool.get_str(attribute_name_index)?;
-        let reader = &mut info.as_ref();
+        let bytes = &mut info.as_ref();
 
         let result = match name {
             "ConstantValue" => {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool
                     .get_constant_value(idx)
                     .map(Self::ConstantValue)
             }
-            "Code" => parse!(reader, ctx => Code),
-            "StackMapTable" => parse![u16; reader, ctx => StackMapTable],
-            "Exceptions" => parse![u16; reader, || {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+            "Code" => parse!(bytes, ctx => Code),
+            "StackMapTable" => parse![u16; bytes, ctx => StackMapTable],
+            "Exceptions" => parse![u16; bytes, || {
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_class_name(idx)
             } => Exceptions],
-            "InnerClasses" => parse![u16; reader, ctx => InnerClasses],
-            "EnclosingMethod" => parse!(reader, ctx).map(Self::EnclosingMethod),
+            "InnerClasses" => parse![u16; bytes, ctx => InnerClasses],
+            "EnclosingMethod" => parse!(bytes, ctx).map(Self::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => parse_string(reader.by_ref(), ctx).map(Self::Signature),
-            "SourceFile" => parse_string(reader.by_ref(), ctx).map(Self::SourceFile),
+            "Signature" => parse_string(bytes, ctx).map(Self::Signature),
+            "SourceFile" => parse_string(bytes, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
                 return Ok(Self::SourceDebugExtension(info));
             }
-            "LineNumberTable" => parse![u16; reader, ctx => LineNumberTable],
-            "LocalVariableTable" => parse![u16; reader, ctx => LocalVariableTable],
-            "LocalVariableTypeTable" => parse![u16; reader, ctx => LocalVariableTypeTable],
-            "RuntimeVisibleAnnotations" => parse![u16; reader, ctx => RuntimeVisibleAnnotations],
+            "LineNumberTable" => parse![u16; bytes, ctx => LineNumberTable],
+            "LocalVariableTable" => parse![u16; bytes, ctx => LocalVariableTable],
+            "LocalVariableTypeTable" => parse![u16; bytes, ctx => LocalVariableTypeTable],
+            "RuntimeVisibleAnnotations" => parse![u16; bytes, ctx => RuntimeVisibleAnnotations],
             "RuntimeInvisibleAnnotations" => {
-                parse![u16; reader, ctx => RuntimeInvisibleAnnotations]
+                parse![u16; bytes, ctx => RuntimeInvisibleAnnotations]
             }
-            "RuntimeVisibleParameterAnnotations" => parse![u8; reader, || parse![u16; reader, ctx]]
+            "RuntimeVisibleParameterAnnotations" => parse![u8; bytes, || parse![u16; bytes, ctx]]
                 .map(Self::RuntimeVisibleParameterAnnotations),
             "RuntimeInvisibleParameterAnnotations" => {
-                parse![u8; reader, || parse![u16; reader, ctx] => RuntimeInvisibleParameterAnnotations]
+                parse![u8; bytes, || parse![u16; bytes, ctx] => RuntimeInvisibleParameterAnnotations]
             }
             "RuntimeVisibleTypeAnnotations" => {
-                parse![u16; reader, ctx => RuntimeVisibleTypeAnnotations]
+                parse![u16; bytes, ctx => RuntimeVisibleTypeAnnotations]
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                parse![u16; reader, ctx => RuntimeInvisibleTypeAnnotations]
+                parse![u16; bytes, ctx => RuntimeInvisibleTypeAnnotations]
             }
-            "AnnotationDefault" => parse!(reader, ctx => AnnotationDefault),
-            "BootstrapMethods" => parse![u16; reader, ctx => BootstrapMethods],
-            "MethodParameters" => parse![u8; reader, ctx => MethodParameters],
-            "Module" => parse!(reader, ctx => Module),
-            "ModulePackages" => parse![u16; reader, || {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+            "AnnotationDefault" => parse!(bytes, ctx => AnnotationDefault),
+            "BootstrapMethods" => parse![u16; bytes, ctx => BootstrapMethods],
+            "MethodParameters" => parse![u8; bytes, ctx => MethodParameters],
+            "Module" => parse!(bytes, ctx => Module),
+            "ModulePackages" => parse![u16; bytes, || {
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_package_name(idx)
             } => ModulePackages],
             "ModuleMainClass" => {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool
                     .get_class_name(idx)
                     .map(Self::ModuleMainClass)
             }
             "NestHost" => {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_class_name(idx).map(Self::NestHost)
             }
-            "NestMembers" => parse![u16; reader, || {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+            "NestMembers" => parse![u16; bytes, || {
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_class_name(idx)
             }]
             .map(Self::NestMembers),
-            "Record" => parse![u16; reader, ctx => Record],
-            "PermittedSubclasses" => parse![u16; reader, || {
-                let idx = U16::read_from_io(&mut *reader)?.get();
+            "Record" => parse![u16; bytes, ctx => Record],
+            "PermittedSubclasses" => parse![u16; bytes, || {
+                let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_class_name(idx)
             } => PermittedSubclasses],
             name => return Ok(Attribute::Unrecognized(name.to_owned(), info)),
         }?;
-        if reader.is_empty() {
+        if bytes.is_empty() {
             Ok(result)
         } else {
-            Err(ParseError::from(io::Error::new(
-                io::ErrorKind::InvalidData,
+            Err(ParseError::malform(
                 "Extra data at the end of the attribute",
-            )))
+            ))
         }
     }
 }
 
 #[inline]
-fn parse_string<R: Read>(reader: R, ctx: &ParsingContext) -> Result<String, ParseError> {
-    let str_idx = U16::read_from_io(reader)?.get();
+fn parse_string(bytes: &mut &[u8], ctx: &ParsingContext) -> Result<String, ParseError> {
+    let str_idx = read_value::<U16>(bytes)?.get();
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 
@@ -249,6 +243,27 @@ mod tests {
         bytecode::constant_pool::{RawConstantPool, RawEntry},
         class::Version,
     };
+
+    #[test]
+    fn rejects_trailing_bytes_in_known_attribute() {
+        let mut raw_pool = RawConstantPool::new();
+        let attribute_name_index = raw_pool
+            .put_entry(RawEntry::Utf8(b"Synthetic".as_slice().into()))
+            .unwrap();
+        let ctx = ParsingContext {
+            constant_pool: crate::jvm::class::ConstantPool::from_raw(raw_pool).unwrap(),
+            class_version: Version::LATEST,
+            current_class_name: "Test".parse().unwrap(),
+        };
+        let attribute_info = AttributeInfo::from_raw_parts(attribute_name_index, [0].into());
+
+        let error = Attribute::from_raw(attribute_info, &ctx).unwrap_err();
+
+        assert_eq!(
+            error.kind(),
+            crate::jvm::bytecode::ParseErrorKind::Malformed
+        );
+    }
 
     #[test]
     fn parses_module_packages_with_package_constant_pool_entries() {
