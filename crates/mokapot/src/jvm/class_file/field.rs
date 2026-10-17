@@ -1,3 +1,5 @@
+use zerocopy::byteorder::big_endian::U16;
+
 use crate::jvm::class_file::attribute::extract_attributes;
 use crate::jvm::class_file::flags::parse_flags;
 
@@ -28,10 +30,8 @@ pub(crate) struct FieldInfo<'a> {
 
 impl<'a> Decode<'a> for FieldInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let access_flags = decode_value(bytes)?;
-        let name_index = decode_value(bytes)?;
-        let descriptor_index = decode_value(bytes)?;
-        let attributes_count: u16 = decode_value(bytes)?;
+        let [access_flags, name_index, descriptor_index, attributes_count] =
+            decode_value::<[U16; 4]>(bytes)?.map(U16::get);
         let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             access_flags,
