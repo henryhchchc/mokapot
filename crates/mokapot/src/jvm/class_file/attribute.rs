@@ -4,6 +4,8 @@ use zerocopy::{
 };
 
 mod extract;
+mod raw;
+mod resolve;
 pub(super) use extract::extract_attributes;
 
 use crate::types::class_name::ClassName;
@@ -15,13 +17,12 @@ use super::{
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    decoder::{borrow_slice, decode_value, parse_repeated},
-    method::MethodParameterInfo,
+    decoder::{decode_value, parse_repeated},
     module::raw as module_raw,
-    resolve::{Resolve, decode_resolved, resolve_table},
+    resolve::{Resolve, decode_resolved},
 };
 use crate::{
-    intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
+    intrinsics::see_jvm_spec,
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
@@ -144,10 +145,7 @@ impl Resolve for &AttributeInfo {
 
         let result = match name {
             "ConstantValue" => {
-                let index = decode_value(bytes)?;
-                ctx.constant_pool
-                    .get_constant_value(index)
-                    .map(Attribute::ConstantValue)
+                decode_resolved::<raw::ConstantValue>(bytes, ctx).map(Attribute::ConstantValue)
             }
             "Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
             "StackMapTable" => {
@@ -158,56 +156,27 @@ impl Resolve for &AttributeInfo {
                 .map(Attribute::StackMapTable)
             }
             "Exceptions" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_indices(bytes, usize::from(count), |index| {
-                    ctx.constant_pool.get_class_name(index)
-                })
-                .map(Attribute::Exceptions)
+                decode_resolved::<&raw::Exceptions>(bytes, ctx).map(Attribute::Exceptions)
             }
             "InnerClasses" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_table::<class_raw::InnerClass>(bytes, usize::from(count), ctx)
-                    .map(Attribute::InnerClasses)
+                decode_resolved::<&raw::InnerClasses>(bytes, ctx).map(Attribute::InnerClasses)
             }
             "EnclosingMethod" => decode_resolved::<class_raw::EnclosingMethod>(bytes, ctx)
                 .map(Attribute::EnclosingMethod),
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => {
-                let index = decode_value(bytes)?;
-                ctx.constant_pool
-                    .get_str(index)
-                    .map(str::to_owned)
-                    .map(Attribute::Signature)
-            }
+            "Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
             "SourceFile" => {
-                let index = decode_value(bytes)?;
-                ctx.constant_pool
-                    .get_str(index)
-                    .map(str::to_owned)
-                    .map(Attribute::SourceFile)
+                decode_resolved::<raw::SourceFile>(bytes, ctx).map(Attribute::SourceFile)
             }
             "SourceDebugExtension" => return Ok(Attribute::SourceDebugExtension(info.into())),
             "LineNumberTable" => {
-                let count: u16 = decode_value(bytes)?;
-                Ok(Attribute::LineNumberTable(
-                    borrow_slice::<code_raw::LineNumberTableEntry>(bytes, usize::from(count))?
-                        .iter()
-                        .copied()
-                        .map(Into::into)
-                        .collect(),
-                ))
+                decode_resolved::<&raw::LineNumberTable>(bytes, ctx).map(Attribute::LineNumberTable)
             }
-            "LocalVariableTable" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_table::<code_raw::LocalVariableInfo>(bytes, usize::from(count), ctx)
-                    .map(Attribute::LocalVariableTable)
-            }
-            "LocalVariableTypeTable" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_table::<code_raw::LocalVariableTypeInfo>(bytes, usize::from(count), ctx)
-                    .map(Attribute::LocalVariableTypeTable)
-            }
+            "LocalVariableTable" => decode_resolved::<&raw::LocalVariableTable>(bytes, ctx)
+                .map(Attribute::LocalVariableTable),
+            "LocalVariableTypeTable" => decode_resolved::<&raw::LocalVariableTypeTable>(bytes, ctx)
+                .map(Attribute::LocalVariableTypeTable),
             "RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
@@ -265,39 +234,20 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::BootstrapMethods)
             }
-            "MethodParameters" => {
-                let count: u8 = decode_value(bytes)?;
-                resolve_table::<MethodParameterInfo>(bytes, usize::from(count), ctx)
-                    .map(Attribute::MethodParameters)
-            }
+            "MethodParameters" => decode_resolved::<&raw::MethodParameters>(bytes, ctx)
+                .map(Attribute::MethodParameters),
             "Module" => {
                 decode_resolved::<module_raw::ModuleInfo>(bytes, ctx).map(Attribute::Module)
             }
             "ModulePackages" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_indices(bytes, usize::from(count), |index| {
-                    ctx.constant_pool.get_package_name(index)
-                })
-                .map(Attribute::ModulePackages)
+                decode_resolved::<&raw::ModulePackages>(bytes, ctx).map(Attribute::ModulePackages)
             }
             "ModuleMainClass" => {
-                let index = decode_value(bytes)?;
-                ctx.constant_pool
-                    .get_class_name(index)
-                    .map(Attribute::ModuleMainClass)
+                decode_resolved::<raw::ModuleMainClass>(bytes, ctx).map(Attribute::ModuleMainClass)
             }
-            "NestHost" => {
-                let index = decode_value(bytes)?;
-                ctx.constant_pool
-                    .get_class_name(index)
-                    .map(Attribute::NestHost)
-            }
+            "NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
             "NestMembers" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_indices(bytes, usize::from(count), |index| {
-                    ctx.constant_pool.get_class_name(index)
-                })
-                .map(Attribute::NestMembers)
+                decode_resolved::<&raw::NestMembers>(bytes, ctx).map(Attribute::NestMembers)
             }
             "Record" => {
                 let count: u16 = decode_value(bytes)?;
@@ -306,13 +256,8 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::Record)
             }
-            "PermittedSubclasses" => {
-                let count: u16 = decode_value(bytes)?;
-                resolve_indices(bytes, usize::from(count), |index| {
-                    ctx.constant_pool.get_class_name(index)
-                })
-                .map(Attribute::PermittedSubclasses)
-            }
+            "PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
+                .map(Attribute::PermittedSubclasses),
             name => return Ok(Attribute::Unrecognized(name.to_owned(), info.into())),
         }?;
         if !bytes.is_empty() {
@@ -322,18 +267,6 @@ impl Resolve for &AttributeInfo {
         }
         Ok(result)
     }
-}
-
-fn resolve_indices<T>(
-    bytes: &mut &[u8],
-    count: usize,
-    mut resolve: impl FnMut(u16) -> Result<T, ParseError>,
-) -> Result<Box<[T]>, ParseError> {
-    use zerocopy::byteorder::big_endian::U16;
-    borrow_slice::<U16>(bytes, count)?
-        .iter()
-        .map(|index| resolve(index.get()))
-        .try_collect_exact()
 }
 
 #[cfg(test)]
@@ -395,23 +328,38 @@ mod tests {
     }
 
     #[test]
-    fn rejects_trailing_bytes_in_known_attribute() {
-        let mut raw_pool = RawConstantPool::new();
-        let attribute_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"Synthetic".as_slice()))
-            .unwrap();
-        let ctx = ResolutionContext {
-            constant_pool: crate::jvm::class_file::constant_pool::ConstantPool::from_raw(raw_pool)
-                .unwrap(),
-            class_version: Version::LATEST,
-            current_class_name: "Test".parse().unwrap(),
-        };
-        let bytes = attribute_bytes(attribute_name_index, &[0]);
-        let attribute_info = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
-
-        let error = attribute_info.resolve(&ctx).unwrap_err();
-
-        assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
+    fn rejects_trailing_bytes_in_known_attributes() {
+        for name in [
+            "Synthetic",
+            "Exceptions",
+            "InnerClasses",
+            "LineNumberTable",
+            "LocalVariableTable",
+            "LocalVariableTypeTable",
+            "MethodParameters",
+            "ModulePackages",
+            "NestMembers",
+            "PermittedSubclasses",
+        ] {
+            let mut pool = RawConstantPool::new();
+            let index = pool.put_entry(RawEntry::Utf8(name.as_bytes())).unwrap();
+            let ctx = ResolutionContext {
+                constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
+                class_version: Version::LATEST,
+                current_class_name: "Test".parse().unwrap(),
+            };
+            let count_width = match name {
+                "Synthetic" => 0,
+                "MethodParameters" => 1,
+                _ => 2,
+            };
+            let mut payload = vec![0; count_width];
+            payload.push(0xff);
+            let bytes = attribute_bytes(index, &payload);
+            let raw = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
+            let error = raw.resolve(&ctx).unwrap_err();
+            assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
+        }
     }
 
     #[test]

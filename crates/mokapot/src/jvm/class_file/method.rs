@@ -1,7 +1,5 @@
-use super::fixed_layout::FixedLayout;
 use crate::jvm::class_file::attribute::extract_attributes;
 use crate::jvm::class_file::flags::parse_flags;
-use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::{
     Decode, ParseError,
@@ -12,10 +10,7 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Annotations, Method,
-        class_file::ResolutionContext,
-        errors::ParsingErrorContext,
-        method::{self, ParameterAccessFlags, ParameterInfo},
+        Annotations, Method, class_file::ResolutionContext, errors::ParsingErrorContext, method,
     },
     types::method_descriptor::MethodDescriptor,
 };
@@ -148,38 +143,6 @@ impl Resolve for MethodInfo<'_> {
             signature,
             other_attributes,
         })
-    }
-}
-
-#[doc = see_jvm_spec!(4, 7, 24)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub(super) struct MethodParameterInfo {
-    pub name_index: U16,
-    pub access_flags: U16,
-}
-
-impl FixedLayout for MethodParameterInfo {}
-
-impl Resolve for MethodParameterInfo {
-    type Output = ParameterInfo;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let MethodParameterInfo {
-            name_index,
-            access_flags,
-        } = raw;
-        let name_index = name_index.get();
-        let access_flags = access_flags.get();
-        let name = if name_index == 0 {
-            None
-        } else {
-            Some(ctx.constant_pool.get_str(name_index)?.to_owned())
-        };
-        let access_flags =
-            parse_flags::<ParameterAccessFlags>(access_flags, "Invalid parameter access flags")?;
-        Ok(ParameterInfo { name, access_flags })
     }
 }
 
