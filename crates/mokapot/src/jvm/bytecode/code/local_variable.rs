@@ -5,11 +5,10 @@ use std::str::FromStr;
 use super::super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
 use crate::{
     jvm::{
-        bytecode::constant_pool::RawConstantPool,
         code::{LocalVariableId, ProgramCounter},
-        errors::{GenerationError, ParsingErrorContext},
+        errors::ParsingErrorContext,
     },
-    types::{Descriptor, field_type::FieldType},
+    types::field_type::FieldType,
 };
 
 #[derive(Debug)]
@@ -54,21 +53,6 @@ impl ClassElement for LocalVariableDescAttr {
             field_type,
         })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.range.start;
-        let length = u16::from(self.id.range.end) - u16::from(start_pc);
-        let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.field_type.descriptor())?;
-        let index = self.id.index;
-        Ok(Self::Raw {
-            start_pc: u16::from(start_pc).into(),
-            length: length.into(),
-            name_index: name_index.into(),
-            descriptor_index: descriptor_index.into(),
-            index: index.into(),
-        })
-    }
 }
 
 impl ClassElement for LocalVariableTypeAttr {
@@ -98,21 +82,6 @@ impl ClassElement for LocalVariableTypeAttr {
             id,
             name,
             signature,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let start_pc = self.id.range.start;
-        let length = u16::from(self.id.range.end) - u16::from(start_pc);
-        let name_index = cp.put_string(self.name)?;
-        let signature_index = cp.put_string(self.signature)?;
-        let index = self.id.index;
-        Ok(Self::Raw {
-            start_pc: u16::from(start_pc).into(),
-            length: length.into(),
-            name_index: name_index.into(),
-            signature_index: signature_index.into(),
-            index: index.into(),
         })
     }
 }

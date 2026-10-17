@@ -240,11 +240,4 @@ impl JavaString {
             },
         }
     }
-
-    pub(crate) fn into_modified_utf8(self) -> Box<[u8]> {
-        match self {
-            Self::Utf8(value) => cesu8::to_java_cesu8(&value).into_owned().into_boxed_slice(),
-            Self::InvalidUtf8(bytes) => bytes,
-        }
-    }
 }

@@ -2,10 +2,7 @@
 
 use itertools::Itertools;
 
-use super::{
-    GenerationError, ParseError, ParsingContext, class_element::ClassElement,
-    constant_pool::RawConstantPool, raw_attributes,
-};
+use super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
@@ -16,7 +13,7 @@ use crate::{
         code::LocalVariableId,
         errors::ParsingErrorContext,
     },
-    types::{Descriptor, field_type::PrimitiveType},
+    types::field_type::PrimitiveType,
 };
 
 impl ClassElement for TypePathElement {
@@ -29,15 +26,6 @@ impl ClassElement for TypePathElement {
             (2, 0) => Ok(Self::Bound),
             (3, idx) => Ok(Self::TypeArgument(idx)),
             _ => Err(ParseError::malform("Invalid type path kind")),
-        }
-    }
-
-    fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        match self {
-            Self::Array => Ok((0, 0)),
-            Self::Nested => Ok((1, 0)),
-            Self::Bound => Ok((2, 0)),
-            Self::TypeArgument(idx) => Ok((3, idx)),
         }
     }
 }
@@ -65,23 +53,6 @@ impl ClassElement for Annotation {
             .collect::<Result<_, ParseError>>()?;
         Ok(Annotation {
             annotation_type,
-            element_value_pairs,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let type_index = cp.put_string(self.annotation_type.descriptor())?;
-        let element_value_pairs = self
-            .element_value_pairs
-            .into_iter()
-            .map(|(name, value)| -> Result<_, GenerationError> {
-                let name_index = cp.put_string(name)?;
-                let raw_value = value.into_raw(cp)?;
-                Ok((name_index, raw_value))
-            })
-            .try_collect()?;
-        Ok(Self::Raw {
-            type_index,
             element_value_pairs,
         })
     }
@@ -120,31 +91,6 @@ impl ClassElement for TypeAnnotation {
             annotation_type,
             target_info,
             target_path,
-            element_value_pairs,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let target_info = self.target_info.into_raw(cp)?;
-        let target_path = self
-            .target_path
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let type_index = cp.put_string(self.annotation_type.descriptor())?;
-        let element_value_pairs = self
-            .element_value_pairs
-            .into_iter()
-            .map(|(name, value)| -> Result<_, GenerationError> {
-                let name_index = cp.put_string(name)?;
-                let value = value.into_raw(cp)?;
-                Ok((name_index, value))
-            })
-            .try_collect()?;
-        Ok(Self::Raw {
-            target_info,
-            target_path,
-            type_index,
             element_value_pairs,
         })
     }
@@ -283,105 +229,6 @@ impl ClassElement for TargetInfo {
         };
         Ok(lifted)
     }
-
-    fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let raw = match self {
-            TargetInfo::TypeParameter {
-                location,
-                index: type_parameter_index,
-            } => match location {
-                TypeParameterLocation::Class => Self::Raw::TypeParameterOfClass {
-                    type_parameter_index,
-                },
-                TypeParameterLocation::Method => Self::Raw::TypeParameterOfMethod {
-                    type_parameter_index,
-                },
-            },
-            TargetInfo::SuperType {
-                index: supertype_index,
-            } => Self::Raw::SuperType { supertype_index },
-            TargetInfo::TypeParameterBound {
-                location,
-                type_parameter_index,
-                bound_index,
-            } => match location {
-                TypeParameterLocation::Class => Self::Raw::TypeParameterBoundOfClass {
-                    type_parameter_index,
-                    bound_index,
-                },
-                TypeParameterLocation::Method => Self::Raw::TypeParameterBoundOfMethod {
-                    type_parameter_index,
-                    bound_index,
-                },
-            },
-            TargetInfo::Field => Self::Raw::Field,
-            TargetInfo::MethodReturn => Self::Raw::MethodReturn,
-            TargetInfo::Receiver => Self::Raw::Receiver,
-            TargetInfo::FormalParameter {
-                index: formal_parameter_index,
-            } => Self::Raw::FormalParameter {
-                formal_parameter_index,
-            },
-            TargetInfo::Throws {
-                index: throws_type_index,
-            } => Self::Raw::Throws { throws_type_index },
-            TargetInfo::LocalVar(variable_kind, table) => {
-                let table = table
-                    .into_iter()
-                    .map(|entry| {
-                        let start_pc = entry.range.start;
-                        let length = u16::from(entry.range.end) - u16::from(start_pc);
-                        let index = entry.index;
-                        (start_pc, length, index)
-                    })
-                    .collect();
-                match variable_kind {
-                    VariableKind::Local => Self::Raw::LocalVariable(table),
-                    VariableKind::Resource => Self::Raw::ResourceVariable(table),
-                }
-            }
-            TargetInfo::Catch {
-                index: exception_table_index,
-            } => Self::Raw::Catch {
-                exception_table_index,
-            },
-            TargetInfo::Offset(offset_of, offset) => match offset_of {
-                OffsetOf::InstanceOf => Self::Raw::InstanceOf { offset },
-                OffsetOf::New => Self::Raw::New { offset },
-                OffsetOf::MethodReference => Self::Raw::MethodReference { offset },
-                OffsetOf::ConstructorReference => Self::Raw::ConstructorReference { offset },
-            },
-            TargetInfo::TypeArgument {
-                location,
-                offset,
-                index: type_argument_index,
-            } => match location {
-                TypeArgumentLocation::Cast => Self::Raw::TypeInCast {
-                    offset,
-                    type_argument_index,
-                },
-                TypeArgumentLocation::Constructor => Self::Raw::TypeArgumentInConstructor {
-                    offset,
-                    type_argument_index,
-                },
-                TypeArgumentLocation::MethodCall => Self::Raw::TypeArgumentInCall {
-                    offset,
-                    type_argument_index,
-                },
-                TypeArgumentLocation::ConstructorReference => {
-                    Self::Raw::TypeArgumentInConstructorReference {
-                        offset,
-                        type_argument_index,
-                    }
-                }
-                TypeArgumentLocation::MethodReference => Self::Raw::TypeArgumentInMethodReference {
-                    offset,
-                    type_argument_index,
-                },
-            },
-        };
-        Ok(raw)
-    }
 }
 
 impl ClassElement for ElementValue {
@@ -442,54 +289,5 @@ impl ClassElement for ElementValue {
                 Ok(Self::Array(values))
             }
         }
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let raw = match self {
-            ElementValue::Primitive(primitive_type, constant_value) => {
-                let tag = match (primitive_type, &constant_value) {
-                    (PrimitiveType::Byte, ConstantValue::Integer(_)) => b'B',
-                    (PrimitiveType::Char, ConstantValue::Integer(_)) => b'C',
-                    (PrimitiveType::Double, ConstantValue::Double(_)) => b'D',
-                    (PrimitiveType::Float, ConstantValue::Float(_)) => b'F',
-                    (PrimitiveType::Int, ConstantValue::Integer(_)) => b'I',
-                    (PrimitiveType::Long, ConstantValue::Long(_)) => b'J',
-                    (PrimitiveType::Short, ConstantValue::Integer(_)) => b'S',
-                    (PrimitiveType::Boolean, ConstantValue::Integer(_)) => b'Z',
-                    _ => return Err(GenerationError::other("Constant value type mismatch")),
-                };
-                let value_idx = cp.put_constant_value(constant_value)?;
-                Self::Raw::Const(tag, value_idx)
-            }
-            ElementValue::String(string) => {
-                let value_idx = cp.put_java_string(string)?;
-                Self::Raw::Const(b's', value_idx)
-            }
-            ElementValue::EnumConstant {
-                enum_type,
-                const_name,
-            } => {
-                let type_name_index = cp.put_string(enum_type.descriptor())?;
-                let const_name_index = cp.put_string(const_name)?;
-                Self::Raw::Enum {
-                    type_name_index,
-                    const_name_index,
-                }
-            }
-            ElementValue::Class { return_descriptor } => {
-                let class_name_index = cp.put_string(return_descriptor.descriptor())?;
-                Self::Raw::ClassInfo(class_name_index)
-            }
-            ElementValue::AnnotationInterface(annotation) => {
-                Self::Raw::Annotation(annotation.into_raw(cp)?)
-            }
-            ElementValue::Array(elements) => Self::Raw::Array(
-                elements
-                    .into_iter()
-                    .map(|it| it.into_raw(cp))
-                    .try_collect()?,
-            ),
-        };
-        Ok(raw)
     }
 }

@@ -1,12 +1,12 @@
 use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian::{U16, U32};
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 
 use super::{ClassFile, JAVA_CLASS_MAGIC};
 use crate::jvm::bytecode::{
-    FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo,
-    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo, write_length,
+    FromBytecode, attribute::AttributeInfo, constant_pool::RawConstantPool, field_info::FieldInfo,
+    method_info::MethodInfo,
 };
 
 impl FromBytecode for ClassFile {
@@ -54,32 +54,6 @@ impl FromBytecode for ClassFile {
             methods,
             attributes,
         })
-    }
-}
-
-impl ToBytecode for ClassFile {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&JAVA_CLASS_MAGIC.to_be_bytes())?;
-        writer.write_all(&self.minor_version.to_be_bytes())?;
-        writer.write_all(&self.major_version.to_be_bytes())?;
-        self.constant_pool.to_writer(writer)?;
-        writer.write_all(&self.access_flags.to_be_bytes())?;
-        writer.write_all(&self.this_class.to_be_bytes())?;
-        writer.write_all(&self.super_class.to_be_bytes())?;
-        write_length::<u16>(writer, self.interfaces.len())?;
-        for interface_idx in &self.interfaces {
-            writer.write_all(&interface_idx.to_be_bytes())?;
-        }
-        write_length::<u16>(writer, self.fields.len())?;
-        for field in &self.fields {
-            field.to_writer(writer)?;
-        }
-        write_length::<u16>(writer, self.methods.len())?;
-        for method in &self.methods {
-            method.to_writer(writer)?;
-        }
-        self.attributes.to_writer(writer)?;
-        Ok(())
     }
 }
 

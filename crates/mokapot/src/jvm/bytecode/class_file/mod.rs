@@ -1,22 +1,14 @@
-//! Class-file parsing, generation, and model conversion.
+//! Class-file parsing and model conversion.
 
 mod io;
 
-use std::io::Write;
-
-use itertools::Itertools;
-
 use super::{
-    FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
-    attribute::{Attribute, AttributeInfo},
-    class_element::ClassElement,
-    constant_pool::RawConstantPool,
-    field_info::FieldInfo,
-    method_info::MethodInfo,
-    raw_attributes,
+    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo,
+    class_element::ClassElement, constant_pool::RawConstantPool, field_info::FieldInfo,
+    method_info::MethodInfo, raw_attributes,
 };
 use crate::{
-    intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
+    intrinsics::{extract_attributes, see_jvm_spec},
     jvm::{
         Annotations, Class,
         class::{
@@ -25,7 +17,6 @@ use crate::{
         },
         errors::ParsingErrorContext,
     },
-    types::Descriptor,
 };
 
 /// The raw representation of a class file.
@@ -66,17 +57,6 @@ impl Class {
     {
         let class_file = ClassFile::from_reader(reader)?;
         Class::from_raw(class_file)
-    }
-
-    /// Writes the class file to the given writer.
-    /// # Errors
-    /// See [`GenerationError`] for more information.
-    pub fn to_writer<W>(self, writer: &mut W) -> Result<(), GenerationError>
-    where
-        W: Write + ?Sized,
-    {
-        let class_file = self.into_raw()?;
-        class_file.to_writer(writer)
     }
 }
 
@@ -187,78 +167,6 @@ impl Class {
             other_attributes,
         })
     }
-
-    pub(crate) fn into_raw(self) -> Result<ClassFile, GenerationError> {
-        let mut constant_pool = RawConstantPool::new();
-        let this_class = constant_pool.put_class_name(&self.name)?;
-        let super_class = self
-            .super_class
-            .as_ref()
-            .map(|it| constant_pool.put_class_name(it))
-            .transpose()?
-            .unwrap_or(0);
-        let interfaces = self
-            .interfaces
-            .iter()
-            .map(|it| constant_pool.put_class_name(it))
-            .try_collect()?;
-        let fields = self
-            .fields
-            .into_iter()
-            .map(|it| it.into_raw(&mut constant_pool))
-            .try_collect()?;
-        let methods = self
-            .methods
-            .into_iter()
-            .map(|it| it.into_raw(&mut constant_pool))
-            .try_collect()?;
-        let attributes = [
-            self.source_file.map(Attribute::SourceFile),
-            Some(self.inner_classes)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::InnerClasses),
-            self.enclosing_method.map(Attribute::EnclosingMethod),
-            self.source_debug_extension
-                .map(Attribute::SourceDebugExtension),
-            Some(self.bootstrap_methods)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::BootstrapMethods),
-            self.module.map(Attribute::Module),
-            Some(self.module_packages)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::ModulePackages),
-            self.module_main_class.map(Attribute::ModuleMainClass),
-            self.nest_host.map(Attribute::NestHost),
-            Some(self.nest_members)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::NestMembers),
-            Some(self.permitted_subclasses)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::PermittedSubclasses),
-            self.signature.map(Attribute::Signature),
-            self.record.map(Attribute::Record),
-            self.is_synthetic.then_some(Attribute::Synthetic),
-            self.is_deprecated.then_some(Attribute::Deprecated),
-        ]
-        .into_iter()
-        .flatten()
-        .chain(attributes_into_iter!(self))
-        .map(|it| it.into_raw(&mut constant_pool))
-        .try_collect()?;
-        let raw = ClassFile {
-            minor_version: self.version.minor(),
-            major_version: self.version.major(),
-            constant_pool,
-            access_flags: self.access_flags.bits(),
-            this_class,
-            super_class,
-            interfaces,
-            fields,
-            methods,
-            attributes,
-        };
-        Ok(raw)
-    }
 }
 
 impl ClassElement for BootstrapMethod {
@@ -275,19 +183,6 @@ impl ClassElement for BootstrapMethod {
             .map(|it| ctx.constant_pool.get_constant_value(it))
             .collect::<Result<_, _>>()?;
         Ok(Self { method, arguments })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let bootstrap_method_ref = cp.put_method_handle(self.method)?;
-        let bootstrap_arguments = self
-            .arguments
-            .into_iter()
-            .map(|arg| cp.put_constant_value(arg))
-            .try_collect()?;
-        Ok(Self::Raw {
-            bootstrap_method_ref,
-            bootstrap_arguments,
-        })
     }
 }
 
@@ -324,30 +219,6 @@ impl ClassElement for InnerClassInfo {
             outer_class,
             inner_name,
             access_flags,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let inner_class_info_index = cp.put_class_name(&self.inner_class)?.into();
-        let outer_class_info_index = self
-            .outer_class
-            .as_ref()
-            .map(|it| cp.put_class_name(it))
-            .transpose()?
-            .unwrap_or(0)
-            .into();
-        let inner_name_index = self
-            .inner_name
-            .map(|it| cp.put_string(it))
-            .transpose()?
-            .unwrap_or(0)
-            .into();
-        let inner_class_access_flags = self.access_flags.into_raw(cp)?.into();
-        Ok(Self::Raw {
-            inner_class_info_index,
-            outer_class_info_index,
-            inner_name_index,
-            inner_class_access_flags,
         })
     }
 }
@@ -399,23 +270,6 @@ impl ClassElement for RecordComponent {
             other_attributes,
         })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.component_type.descriptor())?;
-        let attributes = self
-            .signature
-            .map(Attribute::Signature)
-            .into_iter()
-            .chain(attributes_into_iter!(self))
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        Ok(Self::Raw {
-            name_index,
-            descriptor_index,
-            attributes,
-        })
-    }
 }
 
 impl ClassElement for EnclosingMethod {
@@ -438,20 +292,6 @@ impl ClassElement for EnclosingMethod {
         Ok(EnclosingMethod {
             class,
             method_name_and_desc,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let class_index = cp.put_class_name(&self.class)?;
-        let method_index = self
-            .method_name_and_desc
-            .map(|(name, desc)| cp.put_name_and_type(name, &desc))
-            .transpose()?
-            .unwrap_or(0);
-
-        Ok(Self::Raw {
-            class_index: class_index.into(),
-            method_index: method_index.into(),
         })
     }
 }

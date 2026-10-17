@@ -80,10 +80,6 @@ impl<T> PoolStorage<Box<[Slot<T>]>> {
 }
 
 impl<T, S: std::ops::Deref<Target = [Slot<T>]>> PoolStorage<S> {
-    pub fn as_slice(&self) -> &[Slot<T>] {
-        &self.slots
-    }
-
     pub fn get_entry(&self, index: u16) -> Option<&T> {
         self.slots.get(usize::from(index)).and_then(Slot::as_ref)
     }

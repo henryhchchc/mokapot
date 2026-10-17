@@ -3,22 +3,16 @@ use zerocopy::byteorder::big_endian::U16;
 
 use std::io::{self, Read};
 
-use itertools::Itertools;
-
-use super::{
-    FromBytecode, GenerationError, ParseError, ToBytecode,
-    attribute::{Attribute, AttributeInfo},
-    class_element::ClassElement,
-};
+use super::{FromBytecode, ParseError, attribute::AttributeInfo, class_element::ClassElement};
 use crate::{
-    intrinsics::{attributes_into_iter, extract_attributes, see_jvm_spec},
+    intrinsics::{extract_attributes, see_jvm_spec},
     jvm::{
         Annotations, Method,
         bytecode::ParsingContext,
         errors::ParsingErrorContext,
         method::{self},
     },
-    types::{Descriptor, method_descriptor::MethodDescriptor},
+    types::method_descriptor::MethodDescriptor,
 };
 
 /// The raw representation of a `method_info` structure.
@@ -46,16 +40,6 @@ impl FromBytecode for MethodInfo {
             descriptor_index,
             attributes,
         })
-    }
-}
-
-impl ToBytecode for MethodInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.access_flags.to_be_bytes())?;
-        writer.write_all(&self.name_index.to_be_bytes())?;
-        writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        self.attributes.to_writer(writer)?;
-        Ok(())
     }
 }
 
@@ -162,46 +146,6 @@ impl ClassElement for Method {
             is_deprecated,
             signature,
             other_attributes,
-        })
-    }
-
-    fn into_raw(
-        self,
-        cp: &mut crate::jvm::bytecode::constant_pool::RawConstantPool,
-    ) -> Result<Self::Raw, GenerationError> {
-        let access_flags = self.access_flags.into_raw(cp)?;
-        let name_index = cp.put_string(self.name)?;
-        let descriptor_index = cp.put_string(self.descriptor.descriptor())?;
-        let attributes = [
-            self.body.map(Attribute::Code),
-            Some(self.exceptions)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::Exceptions),
-            Some(self.parameters)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::MethodParameters),
-            Some(self.parameter_annotations.runtime_visible)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::RuntimeVisibleParameterAnnotations),
-            Some(self.parameter_annotations.runtime_invisible)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::RuntimeInvisibleParameterAnnotations),
-            self.annotation_default.map(Attribute::AnnotationDefault),
-            self.is_synthetic.then_some(Attribute::Synthetic),
-            self.is_deprecated.then_some(Attribute::Deprecated),
-            self.signature.map(Attribute::Signature),
-        ]
-        .into_iter()
-        .flatten()
-        .chain(attributes_into_iter!(self))
-        .map(|it| it.into_raw(cp))
-        .try_collect()?;
-
-        Ok(Self::Raw {
-            access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
         })
     }
 }

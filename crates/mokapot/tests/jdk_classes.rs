@@ -71,7 +71,7 @@ fn test_jdk_classes<const BIN: u64>() {
     for class_file in shard {
         let mut reader = BufReader::new(fs::File::open(&class_file).unwrap());
         match Class::from_reader(&mut reader) {
-            Ok(class) => test_a_class(class, variable_count_limit),
+            Ok(class) => test_a_class(&class, variable_count_limit),
             Err(e) => panic!("Failed to parse {}: {e}", class_file.display()),
         }
     }
@@ -103,7 +103,7 @@ fn reachable_predicate_count(ir_method: &MokaIRMethod) -> usize {
     count
 }
 
-fn test_a_class(class: Class, variable_count_limit: usize) {
+fn test_a_class(class: &Class, variable_count_limit: usize) {
     for method in &class.methods {
         let Some(body) = method.body.as_ref() else {
             continue;
@@ -128,9 +128,4 @@ fn test_a_class(class: Class, variable_count_limit: usize) {
             let _ = PathCondition::analyze(&ir_method);
         }
     }
-
-    // Round-trip the class to exercise generation as well as parsing.
-    let mut class_bytes = Vec::new();
-    class.to_writer(&mut class_bytes).unwrap();
-    Class::from_reader(&mut class_bytes.as_slice()).unwrap();
 }

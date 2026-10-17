@@ -1,6 +1,6 @@
 # MokaPot Examples
 
-This directory contains example applications that demonstrate how to use the Mokapot library for JVM bytecode analysis and manipulation.
+This directory contains example applications that demonstrate how to use the Mokapot library for JVM bytecode parsing and analysis.
 Each example showcases different features of the library and provides a practical reference for common tasks.
 
 ## Available Examples

@@ -5,21 +5,15 @@ use zerocopy::{
     byteorder::big_endian::{U16, U32},
 };
 
-use std::{
-    io::{self, Read},
-    num::TryFromIntError,
-};
+use std::io::{self, Read};
 
 use itertools::Itertools;
-use num_traits::ToBytes;
 
 use super::{
-    FromBytecode, GenerationError, ParseError, ParsingContext, ToBytecode,
+    FromBytecode, ParseError, ParsingContext,
     class_element::ClassElement,
     code::{LocalVariableDescAttr, LocalVariableTypeAttr},
-    constant_pool::RawConstantPool,
     reader::{BytecodeReader, read_bytes},
-    write_length,
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -57,25 +51,6 @@ impl FromBytecode for AttributeInfo {
             .expect("32-bit size is not supported on the current platform");
         let info = read_bytes(&mut reader, attribute_length)?;
         Ok(Self::from_raw_parts(attribute_name_index, info))
-    }
-}
-
-impl ToBytecode for AttributeInfo {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.attribute_name_index.to_be_bytes())?;
-        write_length::<u32>(writer, self.info.len())?;
-        writer.write_all(&self.info)?;
-        Ok(())
-    }
-}
-
-impl ToBytecode for Box<[AttributeInfo]> {
-    fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        write_length::<u16>(writer, self.len())?;
-        for attr in self {
-            attr.to_writer(writer)?;
-        }
-        Ok(())
     }
 }
 
@@ -259,90 +234,6 @@ impl ClassElement for Attribute {
             )))
         }
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let attribute_name_index = cp.put_string(self.name().to_owned())?;
-        let info = self.into_bytes(cp)?;
-        Ok(Self::Raw {
-            attribute_name_index,
-            info,
-        })
-    }
-}
-
-impl Attribute {
-    fn into_bytes(self, cp: &mut RawConstantPool) -> Result<Box<[u8]>, GenerationError> {
-        let bytes = match self {
-            Attribute::ConstantValue(constant_value) => {
-                let constant_value_idx = cp.put_constant_value(constant_value)?;
-                constant_value_idx.to_be_bytes().to_vec()
-            }
-            Attribute::Code(method_body) => method_body.into_bytes(cp)?,
-            Attribute::StackMapTable(entries) => serialize_vec::<u16>(entries, cp)?,
-            Attribute::Exceptions(exception_types) => {
-                let mut bytes = Vec::new();
-                write_length::<u16>(&mut bytes, exception_types.len())?;
-                for exception_type in &exception_types {
-                    bytes.extend(cp.put_class_name(exception_type)?.to_be_bytes());
-                }
-                bytes
-            }
-            Attribute::InnerClasses(classes) => serialize_vec::<u16>(classes, cp)?,
-            Attribute::EnclosingMethod(enclosing_method) => enclosing_method.into_bytes(cp)?,
-            Attribute::Synthetic | Attribute::Deprecated => Vec::default(),
-            Attribute::Signature(str_value) | Attribute::SourceFile(str_value) => {
-                cp.put_string(str_value)?.to_be_bytes().into()
-            }
-            Attribute::SourceDebugExtension(data) | Attribute::Unrecognized(_, data) => {
-                return Ok(data);
-            }
-            Attribute::LineNumberTable(entries) => serialize_vec::<u16>(entries, cp)?,
-            Attribute::LocalVariableTable(entries) => serialize_vec::<u16>(entries, cp)?,
-            Attribute::LocalVariableTypeTable(entries) => serialize_vec::<u16>(entries, cp)?,
-            Attribute::RuntimeVisibleAnnotations(annotations)
-            | Attribute::RuntimeInvisibleAnnotations(annotations) => {
-                serialize_vec::<u16>(annotations, cp)?
-            }
-            Attribute::RuntimeVisibleTypeAnnotations(annotations)
-            | Attribute::RuntimeInvisibleTypeAnnotations(annotations) => {
-                serialize_vec::<u16>(annotations, cp)?
-            }
-            Attribute::RuntimeVisibleParameterAnnotations(outer)
-            | Attribute::RuntimeInvisibleParameterAnnotations(outer) => {
-                let mut buf = Vec::new();
-                write_length::<u8>(&mut buf, outer.len())?;
-                for inner in outer {
-                    buf.extend(serialize_vec::<u16>(inner, cp)?);
-                }
-                buf
-            }
-            Attribute::AnnotationDefault(value) => value.into_bytes(cp)?,
-            Attribute::BootstrapMethods(bsms) => serialize_vec::<u16>(bsms, cp)?,
-            Attribute::MethodParameters(params) => serialize_vec::<u8>(params, cp)?,
-            Attribute::Module(module) => module.into_bytes(cp)?,
-            Attribute::ModulePackages(mod_pkg) => {
-                let mut buf = Vec::new();
-                write_length::<u16>(&mut buf, mod_pkg.len())?;
-                for pkg in &mod_pkg {
-                    buf.extend(cp.put_package_name(pkg)?.to_be_bytes());
-                }
-                buf
-            }
-            Attribute::NestHost(class_name) | Attribute::ModuleMainClass(class_name) => {
-                cp.put_class_name(&class_name)?.to_be_bytes().to_vec()
-            }
-            Attribute::NestMembers(classes) | Attribute::PermittedSubclasses(classes) => {
-                let mut buf = Vec::new();
-                write_length::<u16>(&mut buf, classes.len())?;
-                for class in &classes {
-                    buf.extend(cp.put_class_name(class)?.to_be_bytes());
-                }
-                buf
-            }
-            Attribute::Record(components) => serialize_vec::<u16>(components, cp)?,
-        };
-        Ok(bytes.into_boxed_slice())
-    }
 }
 
 #[inline]
@@ -351,21 +242,52 @@ fn parse_string<R: Read>(reader: R, ctx: &ParsingContext) -> Result<String, Pars
     ctx.constant_pool.get_str(str_idx).map(str::to_owned)
 }
 
-#[inline]
-fn serialize_vec<Len>(
-    items: Vec<impl ClassElement<Raw: ToBytecode>>,
-    cp: &mut RawConstantPool,
-) -> Result<Vec<u8>, GenerationError>
-where
-    usize: TryInto<Len, Error = TryFromIntError>,
-    Len: ToBytes,
-    <Len as ToBytes>::Bytes: IntoIterator<Item = u8>,
-{
-    let mut buf = Vec::new();
-    let len = items.len().try_into()?;
-    buf.extend(len.to_be_bytes());
-    for item in items {
-        buf.extend(item.into_bytes(cp)?);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jvm::{
+        bytecode::constant_pool::{RawConstantPool, RawEntry},
+        class::Version,
+    };
+
+    #[test]
+    fn parses_module_packages_with_package_constant_pool_entries() {
+        let mut raw_pool = RawConstantPool::new();
+        let attribute_name_index = raw_pool
+            .put_entry(RawEntry::Utf8(b"ModulePackages".as_slice().into()))
+            .unwrap();
+        let package_name_index = raw_pool
+            .put_entry(RawEntry::Utf8(b"example/api".as_slice().into()))
+            .unwrap();
+        raw_pool
+            .put_entry(RawEntry::Package {
+                name_index: package_name_index.into(),
+            })
+            .unwrap();
+        let other_name_index = raw_pool
+            .put_entry(RawEntry::Utf8(b"example/internal".as_slice().into()))
+            .unwrap();
+        raw_pool
+            .put_entry(RawEntry::Package {
+                name_index: other_name_index.into(),
+            })
+            .unwrap();
+        let constant_pool = crate::jvm::class::ConstantPool::from_raw(raw_pool).unwrap();
+        let ctx = ParsingContext {
+            constant_pool,
+            class_version: Version::LATEST,
+            current_class_name: "module-info".parse().unwrap(),
+        };
+        let attribute_info =
+            AttributeInfo::from_raw_parts(attribute_name_index, [0, 2, 0, 3, 0, 5].into());
+
+        let attribute = Attribute::from_raw(attribute_info, &ctx).unwrap();
+
+        let Attribute::ModulePackages(packages) = attribute else {
+            panic!("expected ModulePackages attribute");
+        };
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].as_str(), "example/api");
+        assert_eq!(packages[1].as_str(), "example/internal");
     }
-    Ok(buf)
 }

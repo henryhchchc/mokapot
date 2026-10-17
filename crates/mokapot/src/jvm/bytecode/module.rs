@@ -1,15 +1,9 @@
 //! [`ClassElement`] implementations for module types.
 
-use itertools::Itertools;
-
-use super::{
-    GenerationError, ParseError, ParsingContext, class_element::ClassElement,
-    constant_pool::RawConstantPool, raw_attributes,
-};
+use super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
 use crate::jvm::{
     Module,
     module::{Export, Open, Provide, Require},
-    references::ModuleRef,
 };
 
 impl ClassElement for Require {
@@ -40,22 +34,6 @@ impl ClassElement for Require {
             version,
         })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let requires_index = cp.put_module_ref(self.module)?.into();
-        let requires_flags = self.flags.into_raw(cp)?.into();
-        let requires_version_index = self
-            .version
-            .map(|it| cp.put_string(it))
-            .transpose()?
-            .unwrap_or(0)
-            .into();
-        Ok(Self::Raw {
-            requires_index,
-            requires_flags,
-            requires_version_index,
-        })
-    }
 }
 
 impl ClassElement for Export {
@@ -75,21 +53,6 @@ impl ClassElement for Export {
             .map(|idx| ctx.constant_pool.get_module_ref(idx))
             .collect::<Result<_, _>>()?;
         Ok(Export { package, flags, to })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let exports_index = cp.put_package_name(&self.package)?;
-        let exports_flags = self.flags.into_raw(cp)?;
-        let exports_to = self
-            .to
-            .into_iter()
-            .map(|it| cp.put_module_ref(it))
-            .collect::<Result<_, _>>()?;
-        Ok(Self::Raw {
-            exports_index,
-            exports_flags,
-            exports_to,
-        })
     }
 }
 
@@ -111,21 +74,6 @@ impl ClassElement for Open {
             .collect::<Result<_, _>>()?;
         Ok(Open { package, flags, to })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let opens_index = cp.put_package_name(&self.package)?;
-        let opens_flags = self.flags.into_raw(cp)?;
-        let opens_to = self
-            .to
-            .into_iter()
-            .map(|it| cp.put_module_ref(it))
-            .collect::<Result<_, _>>()?;
-        Ok(Self::Raw {
-            opens_index,
-            opens_flags,
-            opens_to,
-        })
-    }
 }
 
 impl ClassElement for Provide {
@@ -142,19 +90,6 @@ impl ClassElement for Provide {
             .map(|idx| ctx.constant_pool.get_class_name(idx))
             .collect::<Result<_, _>>()?;
         Ok(Provide { service, with })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let provides_index = cp.put_class_name(&self.service)?;
-        let provides_with = self
-            .with
-            .iter()
-            .map(|it| cp.put_class_name(it))
-            .collect::<Result<_, _>>()?;
-        Ok(Self::Raw {
-            provides_index,
-            provides_with,
-        })
     }
 }
 
@@ -203,51 +138,6 @@ impl ClassElement for Module {
             name,
             flags,
             version,
-            requires,
-            exports,
-            opens,
-            uses,
-            provides,
-        })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let module_name_index = cp.put_module_ref(ModuleRef { name: self.name })?;
-        let module_flags = self.flags.into_raw(cp)?;
-        let module_version_index = self
-            .version
-            .map(|it| cp.put_string(it))
-            .transpose()?
-            .unwrap_or(0);
-        let requires = self
-            .requires
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let exports = self
-            .exports
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let opens = self
-            .opens
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let provides = self
-            .provides
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let uses = self
-            .uses
-            .iter()
-            .map(|it| cp.put_class_name(it))
-            .try_collect()?;
-        Ok(Self::Raw {
-            module_name_index,
-            module_flags,
-            module_version_index,
             requires,
             exports,
             opens,

@@ -3,16 +3,13 @@ pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
 pub(super) mod stack_map;
 
-use std::{io::Write, result::Result};
+use std::result::Result;
 
-use itertools::Itertools;
 pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
 
 use super::{
-    ParseError, ParsingContext, ToBytecode,
-    attribute::Attribute,
+    ParseError, ParsingContext,
     class_element::ClassElement,
-    constant_pool::RawConstantPool,
     raw_attributes::{self, Code},
 };
 use crate::{
@@ -24,7 +21,6 @@ use crate::{
             ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
             ProgramCounter,
         },
-        errors::GenerationError,
         method::{ParameterAccessFlags, ParameterInfo},
     },
 };
@@ -36,13 +32,6 @@ impl ClassElement for LineNumberTableEntry {
         Ok(Self {
             start_pc: raw.start_pc.into(),
             line_number: raw.line_number.get(),
-        })
-    }
-
-    fn into_raw(self, _cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        Ok(Self::Raw {
-            start_pc: u16::from(self.start_pc).into(),
-            line_number: self.line_number.into(),
         })
     }
 }
@@ -73,36 +62,6 @@ impl ClassElement for ExceptionTableEntry {
             catch_type,
         })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let ExceptionTableEntry {
-            covered_pc,
-            handler_pc,
-            catch_type,
-        } = self;
-        let start_pc = u16::from(covered_pc.start);
-        let end_pc = u16::from(covered_pc.end);
-        let handler_pc = u16::from(handler_pc);
-        let catch_type = catch_type
-            .as_ref()
-            .map(|it| cp.put_class_name(it))
-            .transpose()?
-            .unwrap_or(0);
-        Ok(Self::Raw {
-            start_pc: start_pc.into(),
-            end_pc: end_pc.into(),
-            handler_pc: handler_pc.into(),
-            catch_type: catch_type.into(),
-        })
-    }
-}
-
-impl ToBytecode for ProgramCounter {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        let inner = u16::from(*self);
-        writer.write_all(&inner.to_be_bytes())?;
-        Ok(())
-    }
 }
 
 impl ClassElement for ParameterInfo {
@@ -123,19 +82,6 @@ impl ClassElement for ParameterInfo {
         let access_flags = ParameterAccessFlags::from_bits(access_flags)
             .ok_or(ParseError::malform("Invalid parameter access flags"))?;
         Ok(ParameterInfo { name, access_flags })
-    }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let name_index = self
-            .name
-            .map(|it| cp.put_string(it))
-            .transpose()?
-            .unwrap_or(0);
-        let access_flags = self.access_flags.into_raw(cp)?;
-        Ok(Self::Raw {
-            name_index: name_index.into(),
-            access_flags: access_flags.into(),
-        })
     }
 }
 
@@ -206,69 +152,6 @@ impl ClassElement for MethodBody {
             other_attributes,
         })
     }
-
-    fn into_raw(self, cp: &mut RawConstantPool) -> Result<Self::Raw, GenerationError> {
-        let mut code = Vec::new();
-        self.instructions.into_raw(cp)?.to_writer(&mut code)?;
-        let exception_table = self
-            .exception_table
-            .into_iter()
-            .map(|it| it.into_raw(cp))
-            .try_collect()?;
-        let (local_variable_table, local_variable_type_table) =
-            if let Some(local_var_table) = self.local_variable_table {
-                let mut lvt = Vec::new();
-                let mut lvtt = Vec::new();
-                for (id, entry) in local_var_table {
-                    if let (Some(name), Some(field_type)) = (&entry.name, entry.var_type) {
-                        lvt.push(LocalVariableDescAttr {
-                            id: id.clone(),
-                            name: name.clone(),
-                            field_type,
-                        });
-                    }
-                    if let (Some(name), Some(signature)) = (entry.name, entry.signature) {
-                        lvtt.push(LocalVariableTypeAttr {
-                            id,
-                            name,
-                            signature,
-                        });
-                    }
-                }
-                (Some(lvt), Some(lvtt))
-            } else {
-                (None, None)
-            };
-        let attributes = [
-            self.line_number_table.map(Attribute::LineNumberTable),
-            self.stack_map_table.map(Attribute::StackMapTable),
-            Some(self.type_annotations.runtime_visible)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::RuntimeVisibleTypeAnnotations),
-            Some(self.type_annotations.runtime_invisible)
-                .filter(|it| !it.is_empty())
-                .map(Attribute::RuntimeInvisibleTypeAnnotations),
-            local_variable_table.map(Attribute::LocalVariableTable),
-            local_variable_type_table.map(Attribute::LocalVariableTypeTable),
-        ]
-        .into_iter()
-        .flatten()
-        .chain(
-            self.other_attributes
-                .into_iter()
-                .map(|(name, data)| Attribute::Unrecognized(name, data)),
-        )
-        .map(|it| it.into_raw(cp))
-        .try_collect()?;
-        let code = code.into_boxed_slice();
-        Ok(Self::Raw {
-            max_stack: self.max_stack,
-            max_locals: self.max_locals,
-            code,
-            exception_table,
-            attributes,
-        })
-    }
 }
 
 #[cfg(test)]
@@ -303,9 +186,6 @@ mod tests {
             entry.covered_pc,
             ProgramCounter::from(1)..ProgramCounter::from(4)
         );
-        let raw = entry.into_raw(&mut RawConstantPool::new()).unwrap();
-        assert_eq!(raw.start_pc.get(), 1);
-        assert_eq!(raw.end_pc.get(), 4);
     }
 
     #[test]

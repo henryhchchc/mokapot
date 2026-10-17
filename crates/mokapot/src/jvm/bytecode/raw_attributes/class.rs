@@ -1,24 +1,16 @@
 //! Raw attribute types for class-level and method-level attributes.
 
-use std::{
-    io::{self, Read, Write},
-    result::Result,
-};
+use std::io::{self, Read};
 
-use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::big_endian::U16,
-};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::fixed_layout::FixedLayout;
 
-use super::super::{
-    FromBytecode, GenerationError, ToBytecode, attribute::AttributeInfo, reader::BytecodeReader,
-    write_length,
-};
+use super::super::{FromBytecode, attribute::AttributeInfo, reader::BytecodeReader};
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 6)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 #[expect(
     clippy::struct_field_names,
@@ -34,7 +26,7 @@ pub struct InnerClass {
 impl FixedLayout for InnerClass {}
 
 #[doc = see_jvm_spec!(4, 7, 7)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct EnclosingMethod {
     pub class_index: U16,
@@ -63,19 +55,8 @@ impl FromBytecode for BootstrapMethod {
     }
 }
 
-impl ToBytecode for BootstrapMethod {
-    fn to_writer<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), GenerationError> {
-        writer.write_all(&self.bootstrap_method_ref.to_be_bytes())?;
-        write_length::<u16>(writer, self.bootstrap_arguments.len())?;
-        for argument in &self.bootstrap_arguments {
-            writer.write_all(&argument.to_be_bytes())?;
-        }
-        Ok(())
-    }
-}
-
 #[doc = see_jvm_spec!(4, 7, 24)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ParameterInfo {
     pub name_index: U16,
@@ -104,17 +85,5 @@ impl FromBytecode for RecordComponentInfo {
             descriptor_index,
             attributes,
         })
-    }
-}
-
-impl ToBytecode for RecordComponentInfo {
-    fn to_writer<W>(&self, writer: &mut W) -> Result<(), GenerationError>
-    where
-        W: Write + ?Sized,
-    {
-        writer.write_all(&self.name_index.to_be_bytes())?;
-        writer.write_all(&self.descriptor_index.to_be_bytes())?;
-        self.attributes.to_writer(writer)?;
-        Ok(())
     }
 }

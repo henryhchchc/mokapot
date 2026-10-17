@@ -185,57 +185,86 @@ fn miri_opcode_matches_encoding() {
 }
 
 #[test]
-fn instruction_operands_widths_and_switch_alignment_round_trip() {
+fn parses_instruction_operands_and_switch_alignment() {
     use RawInstruction::*;
 
-    let instructions = [
-        IConst0,
-        BiPush { value: 0xFE },
-        SiPush { value: 0xFEDC },
-        Ldc { const_index: 0xFE },
-        LdcW {
-            const_index: 0xFEDC,
-        },
-        ILoad { index: 0xFE },
-        IInc {
-            index: 0xFE,
-            constant: -2,
-        },
-        Wide(RawWideInstruction::IInc {
-            index: 0xFEDC,
-            increment: -1234,
-        }),
-        InvokeInterface {
-            method_index: 0xFEDC,
-            count: 7,
-        },
-        TableSwitch {
-            default: -12,
-            low: -1,
-            high: 1,
-            jump_offsets: vec![10, -20, 30],
-        },
-        LookupSwitch {
-            default: 40,
-            match_offsets: vec![(-3, -30), (2, 20), (9, 90)],
-        },
-        GotoW { offset: -123_456 },
+    let bytes = [
+        0x03, // iconst_0
+        0x10, 0xfe, // bipush
+        0x11, 0xfe, 0xdc, // sipush
+        0x12, 0xfe, // ldc
+        0x13, 0xfe, 0xdc, // ldc_w
+        0x15, 0xfe, // iload
+        0x84, 0xfe, 0xfe, // iinc
+        0xc4, 0x84, 0xfe, 0xdc, 0xfb, 0x2e, // wide iinc
+        0xb9, 0xfe, 0xdc, 7, 0,    // invokeinterface
+        0xaa, // tableswitch at pc 27, no padding
+        0xff, 0xff, 0xff, 0xf4, // default -12
+        0xff, 0xff, 0xff, 0xff, // low -1
+        0, 0, 0, 1, // high 1
+        0, 0, 0, 10, 0xff, 0xff, 0xff, 0xec, 0, 0, 0, 30, // offsets
+        0xab, 0, 0, 0, // lookupswitch at pc 52, three padding bytes
+        0, 0, 0, 40, // default
+        0, 0, 0, 3, // pair count
+        0xff, 0xff, 0xff, 0xfd, 0xff, 0xff, 0xff, 0xe2, // -3: -30
+        0, 0, 0, 2, 0, 0, 0, 20, // 2: 20
+        0, 0, 0, 9, 0, 0, 0, 90, // 9: 90
+        0xc8, 0xff, 0xfe, 0x1d, 0xc0, // goto_w
     ];
-    let mut pc = ProgramCounter::default();
-    let mut positioned = Vec::with_capacity(instructions.len());
-    for instruction in instructions {
-        let length = instruction.num_bytes(pc).unwrap();
-        positioned.push((pc, instruction));
-        pc = (u16::from(pc) + length).into();
-    }
-    let original = InstructionList::from_iter(positioned);
-
-    let mut bytes = Vec::new();
-    original.to_writer(&mut bytes).unwrap();
     let decoded = InstructionList::<RawInstruction>::from_bytes(&bytes).unwrap();
-    let mut encoded_again = Vec::new();
-    decoded.to_writer(&mut encoded_again).unwrap();
 
-    assert_eq!(encoded_again, bytes);
-    assert!(decoded.iter().eq(original.iter()));
+    assert_eq!(
+        decoded.into_iter().collect::<Vec<_>>(),
+        vec![
+            (0.into(), IConst0),
+            (1.into(), BiPush { value: 0xfe }),
+            (3.into(), SiPush { value: 0xfedc }),
+            (6.into(), Ldc { const_index: 0xfe }),
+            (
+                8.into(),
+                LdcW {
+                    const_index: 0xfedc
+                }
+            ),
+            (11.into(), ILoad { index: 0xfe }),
+            (
+                13.into(),
+                IInc {
+                    index: 0xfe,
+                    constant: -2
+                }
+            ),
+            (
+                16.into(),
+                Wide(RawWideInstruction::IInc {
+                    index: 0xfedc,
+                    increment: -1234
+                })
+            ),
+            (
+                22.into(),
+                InvokeInterface {
+                    method_index: 0xfedc,
+                    count: 7
+                }
+            ),
+            (
+                27.into(),
+                TableSwitch {
+                    default: -12,
+                    low: -1,
+                    high: 1,
+                    jump_offsets: vec![10, -20, 30],
+                },
+            ),
+            (
+                52.into(),
+                LookupSwitch {
+                    default: 40,
+                    match_offsets: vec![(-3, -30), (2, 20), (9, 90)],
+                },
+            ),
+            (88.into(), GotoW { offset: -123_456 }),
+        ]
+    );
 }
