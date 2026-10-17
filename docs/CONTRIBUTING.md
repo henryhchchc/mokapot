@@ -95,3 +95,15 @@ Append `-- --test` to validate each case without timing or `-- --list` to list c
 Listing path-condition cases with `JDK_CLASSES` set performs corpus setup to discover the bins.
 Use an exact filter such as `-- --exact 'jdk_path_conditions::analyze::2'` to select one bin.
 Without `JDK_CLASSES`, neither target loads inputs or runs benchmarks.
+
+### Continuous Benchmarking with CodSpeed
+
+The benchmarks use `codspeed-divan-compat`, so `cargo bench` behaves as plain divan locally.
+The `CodSpeed` workflow runs them on every push to `main` and on pull requests in CPU simulation mode, using shard 0 of 64 of the JDK corpus.
+To reproduce a CodSpeed run locally (requires `cargo-codspeed` and the `codspeed` CLI):
+
+```sh
+export MOKAPOT_SKIP_JAVA_TESTS=1 JDK_BENCH_SHARD_COUNT=64
+cargo codspeed build -m simulation -p mokapot --features bench-internals
+codspeed run -m simulation -- cargo codspeed run -p mokapot
+```

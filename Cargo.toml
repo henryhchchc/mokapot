@@ -16,7 +16,7 @@ bitflags = "2.12"
 cesu8 = "1.1"
 clap = "4.6"
 derive_more = "2.0"
-divan = "0.1.21"
+divan = { package = "codspeed-divan-compat", version = "5.0.3" }
 document-features = "0.2"
 glob = "0.3"
 itertools = "0.15"

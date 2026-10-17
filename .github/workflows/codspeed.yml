@@ -1,0 +1,92 @@
+name: CodSpeed
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - docs/**
+      - "**/*.md"
+      - "LICENSE"
+  pull_request:
+    paths-ignore:
+      - docs/**
+      - "**/*.md"
+      - "LICENSE"
+  # Allows CodSpeed to trigger backtest performance analysis
+  # in order to generate initial data.
+  workflow_dispatch:
+
+concurrency:
+  group: codspeed-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  JAVA_VERSION: 27
+
+permissions:
+  contents: read
+  id-token: write # for OpenID Connect authentication with CodSpeed
+
+jobs:
+  benchmarks:
+    name: Benchmarks / CodSpeed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Rust
+        id: rust-toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Setup cargo-codspeed
+        uses: taiki-e/install-action@v2.87.28
+        with:
+          tool: cargo-codspeed
+      - name: Setup JDK
+        uses: actions/setup-java@v6.0.1
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: corretto
+      - name: Checkout source code
+        uses: actions/checkout@v7
+      - name: Hash JDK modules
+        id: hash-jdk-modules
+        run: |
+          file_path="${{ env.JAVA_HOME }}/lib/modules"
+          hash=$(sha256sum "$file_path" | awk '{print $1}')
+          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
+      - name: Cache JDK classes
+        id: cache-jdk-classes
+        uses: actions/cache@v6
+        with:
+          key: ${{ runner.os }}-${{ runner.arch }}-jdk-classes-${{ steps.hash-jdk-modules.outputs.hash }}
+          path: jdk_classes/
+      - name: Extract JDK classes
+        if: steps.cache-jdk-classes.outputs.cache-hit != 'true'
+        run: jimage extract --verbose --dir=./jdk_classes "$JAVA_HOME/lib/modules"
+      - name: Cache Rust Build Stuff
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-target-v3-${{ github.job }}-${{ steps.rust-toolchain.outputs.cachekey }}-
+      - name: Build benchmarks
+        env:
+          MOKAPOT_SKIP_JAVA_TESTS: 1
+        run: cargo codspeed build -m simulation -p mokapot --features bench-internals
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v5
+        env:
+          MOKAPOT_SKIP_JAVA_TESTS: 1
+          JDK_CLASSES: ${{ github.workspace }}/jdk_classes
+          # Benchmark a fixed 1/64 slice of the JDK so simulation runs stay fast.
+          JDK_BENCH_SHARD_COUNT: 64
+          JDK_BENCH_SHARD_INDEX: 0
+        with:
+          mode: simulation
+          run: cargo codspeed run -p mokapot
