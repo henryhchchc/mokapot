@@ -47,7 +47,7 @@ enum DisassemblerError {
     /// Error when parsing class files - occurs when file content is invalid
     /// or doesn't conform to the Java class file format specification
     #[error("Class parse error: {0}")]
-    ClassParseError(#[from] jvm::bytecode::ParseError),
+    ClassParseError(#[from] jvm::errors::ParseError),
 }
 
 /// Entry point for the disassembler

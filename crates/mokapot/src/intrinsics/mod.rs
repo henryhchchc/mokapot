@@ -14,7 +14,7 @@ mod macros;
 mod worklist;
 
 pub(crate) use hash::HashUnordered;
-pub(crate) use macros::{extract_attributes, see_jvm_spec};
+pub(crate) use macros::see_jvm_spec;
 pub(crate) use worklist::Worklist;
 
 /// Gets the discriminant of an enum.

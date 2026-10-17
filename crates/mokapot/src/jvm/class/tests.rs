@@ -9,7 +9,7 @@ fn assert_version_matches_spec(major: u16, minor: u16) {
     let expected = if valid {
         Ok((major, minor, major >= 56 && minor == u16::MAX))
     } else {
-        Err(crate::jvm::bytecode::ParseErrorKind::Malformed)
+        Err(crate::jvm::errors::ParseErrorKind::Malformed)
     };
     let actual = Version::from_versions(major, minor)
         .map(|version| {
@@ -27,10 +27,7 @@ fn assert_version_matches_spec(major: u16, minor: u16) {
 fn class_bytes_reject_invalid_magic() {
     let reader = &[0, 0, 0, 0][..];
     let error = Class::from_bytes(reader).unwrap_err();
-    assert_eq!(
-        error.kind(),
-        crate::jvm::bytecode::ParseErrorKind::Malformed
-    );
+    assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
 }
 
 proptest! {
