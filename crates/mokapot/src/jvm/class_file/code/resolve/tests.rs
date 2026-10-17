@@ -3,12 +3,14 @@ use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
-    let raw = RawInstruction::TableSwitch {
-        default: -5,
-        low: -1,
-        high: 0,
-        jump_offsets: &[0.into(), 1.into()],
-    };
+    let bytes = [
+        0xaa, 0, 0, 0, 0xff, 0xff, 0xff, 0xfb, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 1,
+    ];
+    let (_, raw) = RawInstruction::iter_from_bytes(&bytes)
+        .next()
+        .unwrap()
+        .unwrap();
     let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
     assert_eq!(
         actual,

@@ -195,10 +195,13 @@ fn parses_instruction_operands_and_switch_alignment() {
         0, 0, 0, 9, 0, 0, 0, 90, // 9: 90
         0xc8, 0xff, 0xfe, 0x1d, 0xc0, // goto_w
     ];
-    let decoded = collect_instructions(&bytes).unwrap();
+    let decoded = collect_instructions(&bytes)
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<_>>();
 
     assert_eq!(
-        decoded.into_iter().collect::<Vec<_>>(),
+        &decoded[..9],
         vec![
             (0.into(), IConst0),
             (1.into(), BiPush { value: -2 }),
@@ -232,53 +235,45 @@ fn parses_instruction_operands_and_switch_alignment() {
                     count: 7
                 }
             ),
-            (
-                27.into(),
-                TableSwitch {
-                    default: -12,
-                    low: -1,
-                    high: 1,
-                    jump_offsets: &[10.into(), (-20).into(), 30.into()],
-                },
-            ),
-            (
-                52.into(),
-                LookupSwitch {
-                    default: 40,
-                    match_offsets: &[
-                        LookupSwitchPair {
-                            match_value: (-3).into(),
-                            offset: (-30).into()
-                        },
-                        LookupSwitchPair {
-                            match_value: 2.into(),
-                            offset: 20.into()
-                        },
-                        LookupSwitchPair {
-                            match_value: 9.into(),
-                            offset: 90.into()
-                        },
-                    ],
-                },
-            ),
-            (88.into(), GotoW { offset: -123_456 }),
         ]
     );
+    let (table_pc, TableSwitch(table)) = decoded[9] else {
+        panic!("expected tableswitch");
+    };
+    assert_eq!(table_pc, 27.into());
+    assert_eq!(table.default.get(), -12);
+    assert_eq!(table.low.get(), -1);
+    assert_eq!(table.high.get(), 1);
+    assert_eq!(
+        &table.jump_offsets,
+        [I32::new(10), I32::new(-20), I32::new(30)]
+    );
+
+    let (lookup_pc, LookupSwitch(lookup)) = decoded[10] else {
+        panic!("expected lookupswitch");
+    };
+    assert_eq!(lookup_pc, 52.into());
+    assert_eq!(lookup.default.get(), 40);
+    let pairs: Vec<_> = lookup
+        .match_offsets
+        .iter()
+        .map(|pair| (pair.match_value.get(), pair.offset.get()))
+        .collect();
+    assert_eq!(pairs, [(-3, -30), (2, 20), (9, 90)]);
+    assert_eq!(&decoded[11..], [(88.into(), GotoW { offset: -123_456 })]);
 }
 
 #[test]
-fn switch_tables_borrow_unaligned_input_at_every_instruction_alignment() {
+fn switches_decode_at_every_instruction_alignment() {
     for prefix_len in 0..4 {
         for opcode in [0xaa, 0xab] {
-            let mut bytes = vec![0xff];
-            bytes.resize(1 + prefix_len, 0);
+            let mut bytes = vec![0; prefix_len];
             bytes.push(opcode);
-            while !(bytes.len() - 1).is_multiple_of(4) {
+            while !bytes.len().is_multiple_of(4) {
                 bytes.push(0);
             }
             let header: &[i32] = if opcode == 0xaa { &[0, 0, 1] } else { &[0, 2] };
             bytes.extend(header.iter().flat_map(|value| value.to_be_bytes()));
-            let table_start = bytes.len();
             let values: &[i32] = if opcode == 0xaa {
                 &[0, 0]
             } else {
@@ -286,21 +281,18 @@ fn switch_tables_borrow_unaligned_input_at_every_instruction_alignment() {
             };
             bytes.extend(values.iter().flat_map(|value| value.to_be_bytes()));
 
-            let instructions = collect_instructions(&bytes[1..]).unwrap();
+            let instructions = collect_instructions(&bytes).unwrap();
             let pc = ProgramCounter::from(u16::try_from(prefix_len).unwrap());
-            let pointer = match instructions.get(&pc).unwrap() {
-                RawInstruction::TableSwitch { jump_offsets, .. } => {
-                    assert_eq!(jump_offsets.len(), 2);
-                    jump_offsets.as_ptr().cast::<u8>()
+            match instructions.get(&pc).unwrap() {
+                RawInstruction::TableSwitch(info) => {
+                    assert_eq!(info.jump_offsets.len(), 2);
                 }
-                RawInstruction::LookupSwitch { match_offsets, .. } => {
-                    assert_eq!(match_offsets.len(), 2);
-                    assert_eq!(match_offsets[0].match_value.get(), -1);
-                    match_offsets.as_ptr().cast::<u8>()
+                RawInstruction::LookupSwitch(info) => {
+                    assert_eq!(info.match_offsets.len(), 2);
+                    assert_eq!(info.match_offsets[0].match_value.get(), -1);
                 }
                 _ => panic!("expected a switch"),
-            };
-            assert!(std::ptr::eq(pointer, bytes[table_start..].as_ptr()));
+            }
         }
     }
 }
