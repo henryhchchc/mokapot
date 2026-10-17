@@ -42,7 +42,7 @@ pub(crate) struct ClassFile<'a> {
     interfaces: &'a [U16],
     fields: Box<[FieldInfo<'a>]>,
     methods: Box<[MethodInfo<'a>]>,
-    attributes: Box<[AttributeInfo<'a>]>,
+    attributes: Box<[&'a AttributeInfo]>,
 }
 
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
@@ -169,7 +169,7 @@ impl Class {
     }
 }
 
-impl Resolve for raw::BootstrapMethod<'_> {
+impl Resolve for &raw::BootstrapMethod {
     type Output = BootstrapMethod;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
@@ -177,8 +177,11 @@ impl Resolve for raw::BootstrapMethod<'_> {
         let raw::BootstrapMethod {
             bootstrap_method_ref,
             bootstrap_arguments,
+            ..
         } = raw;
-        let method = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
+        let method = ctx
+            .constant_pool
+            .get_method_handle(bootstrap_method_ref.get())?;
         let arguments = bootstrap_arguments
             .iter()
             .map(|it| ctx.constant_pool.get_constant_value(it.get()))

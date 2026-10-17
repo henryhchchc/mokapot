@@ -41,7 +41,7 @@ impl Resolve for raw::RequiresInfo {
     }
 }
 
-impl Resolve for raw::ExportsInfo<'_> {
+impl Resolve for &raw::ExportsInfo {
     type Output = Export;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
@@ -50,10 +50,11 @@ impl Resolve for raw::ExportsInfo<'_> {
             exports_index,
             exports_to,
             exports_flags,
+            ..
         } = raw;
 
-        let package = ctx.constant_pool.get_package_name(exports_index)?;
-        let flags = parse_flags(exports_flags, "Invalid access flag")?;
+        let package = ctx.constant_pool.get_package_name(exports_index.get())?;
+        let flags = parse_flags(exports_flags.get(), "Invalid access flag")?;
         let to = exports_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
@@ -62,7 +63,7 @@ impl Resolve for raw::ExportsInfo<'_> {
     }
 }
 
-impl Resolve for raw::OpensInfo<'_> {
+impl Resolve for &raw::OpensInfo {
     type Output = Open;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
@@ -71,10 +72,11 @@ impl Resolve for raw::OpensInfo<'_> {
             opens_index,
             opens_to,
             opens_flags,
+            ..
         } = raw;
 
-        let package = ctx.constant_pool.get_package_name(opens_index)?;
-        let flags = parse_flags(opens_flags, "Invalid access flag")?;
+        let package = ctx.constant_pool.get_package_name(opens_index.get())?;
+        let flags = parse_flags(opens_flags.get(), "Invalid access flag")?;
         let to = opens_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
@@ -83,7 +85,7 @@ impl Resolve for raw::OpensInfo<'_> {
     }
 }
 
-impl Resolve for raw::ProvidesInfo<'_> {
+impl Resolve for &raw::ProvidesInfo {
     type Output = Provide;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
@@ -91,8 +93,9 @@ impl Resolve for raw::ProvidesInfo<'_> {
         let raw::ProvidesInfo {
             provides_index,
             provides_with,
+            ..
         } = raw;
-        let service = ctx.constant_pool.get_class_name(provides_index)?;
+        let service = ctx.constant_pool.get_class_name(provides_index.get())?;
         let with = provides_with
             .iter()
             .map(|idx| ctx.constant_pool.get_class_name(idx.get()))

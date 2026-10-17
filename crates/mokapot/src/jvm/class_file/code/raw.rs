@@ -13,16 +13,12 @@ use crate::intrinsics::see_jvm_spec;
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "Use JVMS item names in raw layouts"
-)]
 pub struct Code<'a> {
     pub max_stack: u16,
     pub max_locals: u16,
     pub code: &'a [u8],
     pub exception_table: &'a [ExceptionTableEntry],
-    pub attributes: Box<[AttributeInfo<'a>]>,
+    pub attributes: Box<[&'a AttributeInfo]>,
 }
 
 impl<'a> Decode<'a> for Code<'a> {
@@ -35,7 +31,7 @@ impl<'a> Decode<'a> for Code<'a> {
         let exception_table_length: u16 = decode_value(bytes)?;
         let exception_table = borrow_slice(bytes, usize::from(exception_table_length))?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             max_stack,
             max_locals,

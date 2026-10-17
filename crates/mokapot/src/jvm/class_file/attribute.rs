@@ -1,3 +1,8 @@
+use zerocopy::{
+    FromBytes, Immutable, KnownLayout, Unaligned,
+    byteorder::big_endian::{U16, U32},
+};
+
 mod extract;
 pub(super) use extract::extract_attributes;
 
@@ -10,7 +15,7 @@ use super::{
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    decoder::{borrow_bytes, borrow_slice, decode_value, parse_repeated},
+    decoder::{borrow_slice, decode_value, parse_repeated},
     method::MethodParameterInfo,
     module::raw as module_raw,
     resolve::{Resolve, decode_resolved, resolve_table},
@@ -28,23 +33,27 @@ use crate::{
 
 /// Represent an attribute of a class file, method, field, or code.
 #[doc = see_jvm_spec!(4, 7)]
-#[derive(Debug)]
-pub(crate) struct AttributeInfo<'a> {
-    attribute_name_index: u16,
-    info: &'a [u8],
+#[derive(Debug, FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C)]
+pub(crate) struct AttributeInfo {
+    attribute_name_index: U16,
+    attribute_length: U32,
+    info: [u8],
 }
 
-impl<'a> Decode<'a> for AttributeInfo<'a> {
+impl<'a> Decode<'a> for &'a AttributeInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let attribute_name_index = decode_value(bytes)?;
-        let attribute_length: u32 = decode_value(bytes)?;
+        // Probe the header to bound the borrowed view to this attribute.
+        let mut header = *bytes;
+        let _: u16 = decode_value(&mut header)?;
+        let attribute_length: u32 = decode_value(&mut header)?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let info = borrow_bytes(bytes, attribute_length)?;
-        Ok(AttributeInfo {
-            attribute_name_index,
-            info,
-        })
+        let (attribute, remaining) =
+            AttributeInfo::ref_from_prefix_with_elems(bytes, attribute_length)
+                .map_err(|_| ParseError::malform("Truncated class-file attribute"))?;
+        *bytes = remaining;
+        Ok(attribute)
     }
 }
 
@@ -121,7 +130,7 @@ impl Attribute {
     }
 }
 
-impl Resolve for AttributeInfo<'_> {
+impl Resolve for &AttributeInfo {
     type Output = Attribute;
 
     #[expect(
@@ -129,12 +138,8 @@ impl Resolve for AttributeInfo<'_> {
         reason = "Dispatches JVM attributes with explicit wire counts"
     )]
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let AttributeInfo {
-            attribute_name_index,
-            mut info,
-        } = raw;
-        let name = ctx.constant_pool.get_str(attribute_name_index)?;
+        let name = ctx.constant_pool.get_str(self.attribute_name_index.get())?;
+        let mut info = &self.info;
         let bytes = &mut info;
 
         let result = match name {
@@ -256,7 +261,7 @@ impl Resolve for AttributeInfo<'_> {
             "BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
-                    decode_resolved::<class_raw::BootstrapMethod>(bytes, ctx)
+                    decode_resolved::<&class_raw::BootstrapMethod>(bytes, ctx)
                 })
                 .map(Attribute::BootstrapMethods)
             }
@@ -339,6 +344,28 @@ mod tests {
         class_file::constant_pool::{RawConstantPool, RawEntry},
     };
 
+    fn attribute_bytes(name_index: u16, info: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(name_index.to_be_bytes());
+        bytes.extend(u32::try_from(info.len()).unwrap().to_be_bytes());
+        bytes.extend(info);
+        bytes
+    }
+
+    #[test]
+    fn decodes_consecutive_attributes_using_declared_lengths() {
+        let bytes = [0x12, 0x34, 0, 0, 0, 2, 0xaa, 0xbb, 0, 1, 0, 0, 0, 0];
+        let mut remaining = bytes.as_slice();
+        let attribute = <&AttributeInfo>::decode(&mut remaining).unwrap();
+        assert_eq!(attribute.attribute_name_index.get(), 0x1234);
+        assert_eq!(&attribute.info, [0xaa, 0xbb]);
+
+        let empty = <&AttributeInfo>::decode(&mut remaining).unwrap();
+        assert_eq!(empty.attribute_name_index.get(), 1);
+        assert_eq!(&empty.info, []);
+        assert_eq!(remaining, []);
+    }
+
     #[test]
     fn retains_opaque_attribute_payloads() {
         for name in ["SourceDebugExtension", "VendorData"] {
@@ -353,10 +380,8 @@ mod tests {
                 current_class_name: "Test".parse().unwrap(),
             };
             let payload = [0xaa, 0xbb];
-            let raw = AttributeInfo {
-                attribute_name_index: index,
-                info: &payload,
-            };
+            let bytes = attribute_bytes(index, &payload);
+            let raw = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
             let attribute = raw.resolve(&ctx).unwrap();
             match attribute {
                 Attribute::SourceDebugExtension(bytes) => assert_eq!(&*bytes, [0xaa, 0xbb]),
@@ -381,10 +406,8 @@ mod tests {
             class_version: Version::LATEST,
             current_class_name: "Test".parse().unwrap(),
         };
-        let attribute_info = AttributeInfo {
-            attribute_name_index,
-            info: &[0],
-        };
+        let bytes = attribute_bytes(attribute_name_index, &[0]);
+        let attribute_info = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
 
         let error = attribute_info.resolve(&ctx).unwrap_err();
 
@@ -420,10 +443,8 @@ mod tests {
             class_version: Version::LATEST,
             current_class_name: "module-info".parse().unwrap(),
         };
-        let attribute_info = AttributeInfo {
-            attribute_name_index,
-            info: &[0, 2, 0, 3, 0, 5],
-        };
+        let bytes = attribute_bytes(attribute_name_index, &[0, 2, 0, 3, 0, 5]);
+        let attribute_info = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
 
         let attribute = attribute_info.resolve(&ctx).unwrap();
 
@@ -448,11 +469,8 @@ mod tests {
         };
         let bytes = [0xff, 1, 0, 2, 0, 0x10];
         let resolve = |info| {
-            AttributeInfo {
-                attribute_name_index,
-                info,
-            }
-            .resolve(&ctx)
+            let bytes = attribute_bytes(attribute_name_index, info);
+            <&AttributeInfo>::decode(&mut bytes.as_slice())?.resolve(&ctx)
         };
         let Attribute::MethodParameters(parameters) = resolve(&bytes[1..]).unwrap() else {
             panic!("expected method parameters");

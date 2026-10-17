@@ -27,7 +27,7 @@ pub(super) struct MethodInfo<'a> {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Box<[AttributeInfo<'a>]>,
+    attributes: Box<[&'a AttributeInfo]>,
 }
 
 impl<'a> Decode<'a> for MethodInfo<'a> {
@@ -36,7 +36,7 @@ impl<'a> Decode<'a> for MethodInfo<'a> {
         let name_index = decode_value(bytes)?;
         let descriptor_index = decode_value(bytes)?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             access_flags,
             name_index,
@@ -210,7 +210,7 @@ mod tests {
         attribute.extend(attribute_name_index.to_be_bytes());
         attribute.extend(13_u32.to_be_bytes());
         attribute.extend([0, 0, 0, 1, 0, 0, 0, 1, 0xb1, 0, 0, 0, 0]);
-        let attribute = AttributeInfo::decode(&mut attribute.as_slice()).unwrap();
+        let attribute = <&AttributeInfo>::decode(&mut attribute.as_slice()).unwrap();
         MethodInfo {
             access_flags: if is_static {
                 method::AccessFlags::STATIC.bits()
