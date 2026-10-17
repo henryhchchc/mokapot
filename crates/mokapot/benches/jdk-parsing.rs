@@ -6,11 +6,14 @@ use divan::{
     Bencher,
     counter::{BytesCount, ItemsCount},
 };
-use mokapot::jvm::{Class, bytecode::benchmark_support};
+use mokapot::jvm::{Class, benchmark_support};
 
 #[path = "support/jdk_corpus.rs"]
 mod jdk_corpus;
 use jdk_corpus::Corpus;
+
+#[global_allocator]
+static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
 
 static CORPUS: LazyLock<Corpus> = LazyLock::new(Corpus::from_env);
 

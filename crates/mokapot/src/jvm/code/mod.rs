@@ -9,7 +9,3 @@ pub use method_body::{
     LocalVariableTable, LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType,
 };
 pub use pc::{InvalidOffset, ProgramCounter};
-
-pub use super::bytecode::code::raw_instruction::{
-    LookupSwitchPair, RawInstruction, RawWideInstruction,
-};

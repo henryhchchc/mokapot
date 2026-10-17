@@ -6,10 +6,10 @@ use std::{
     ops::{Bound, Range, RangeBounds},
 };
 
-use super::{Instruction, ProgramCounter, RawInstruction};
+use super::{Instruction, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Annotations, TypeAnnotation, bytecode::ParseError, class::ConstantPool},
+    jvm::{Annotations, TypeAnnotation, errors::ParseError},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -48,13 +48,13 @@ impl MethodBody {
 /// A list of instructions.
 ///
 /// ```
-/// use mokapot::jvm::code::{InstructionList, ProgramCounter, RawInstruction};
+/// use mokapot::jvm::code::{InstructionList, ProgramCounter, Instruction};
 ///
 /// let start = ProgramCounter::ZERO;
 /// let end = ProgramCounter::from(3);
 /// let instructions: InstructionList<_> =
-///     [(end, RawInstruction::Return), (start, RawInstruction::Nop)].into_iter().collect();
-/// assert_eq!(instructions.entry_point(), Some((start, &RawInstruction::Nop)));
+///     [(end, Instruction::Return), (start, Instruction::Nop)].into_iter().collect();
+/// assert_eq!(instructions.entry_point(), Some((start, &Instruction::Nop)));
 /// assert_eq!(instructions.iter().map(|(pc, _)| pc).collect::<Vec<_>>(), [start, end]);
 /// assert_eq!(instructions.next_pc_of(&start), Some(end));
 /// assert_eq!(instructions.prev_pc_of(&end), Some(start));
@@ -181,24 +181,6 @@ impl<I> InstructionList<I> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
-    }
-}
-
-impl InstructionList<RawInstruction<'_>> {
-    /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
-    /// # Errors
-    /// See [`ParseError`] for possible errors.
-    pub fn lift(
-        self,
-        constant_pool: &ConstantPool,
-    ) -> Result<InstructionList<Instruction>, ParseError> {
-        let mut instructions = BTreeMap::new();
-        for (pc, raw_instruction) in self {
-            let instruction =
-                Instruction::from_raw_instruction(raw_instruction, pc, constant_pool)?;
-            instructions.insert(pc, instruction);
-        }
-        Ok(InstructionList(instructions))
     }
 }
 

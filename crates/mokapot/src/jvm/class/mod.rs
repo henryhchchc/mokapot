@@ -1,18 +1,15 @@
 //! JVM classes and interfaces
 
-pub mod constant_pool;
-
 use crate::types::class_name::ClassName;
 
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
-pub use constant_pool::ConstantPool;
 
 use super::{
     Annotation, Annotations, Class, ConstantValue, Field, Method,
     annotation::ElementValue,
-    bytecode::ParseError,
+    errors::ParseError,
     field,
     references::{FieldRef, MethodRef},
 };

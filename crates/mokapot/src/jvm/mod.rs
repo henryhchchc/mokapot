@@ -11,8 +11,11 @@ use crate::{
 };
 
 pub mod annotation;
-pub mod bytecode;
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod benchmark_support;
 pub mod class;
+mod class_file;
 pub mod class_loader;
 pub mod code;
 pub mod errors;
@@ -21,7 +24,6 @@ pub mod method;
 pub mod module;
 pub mod references;
 
-mod constant_pool_storage;
 mod constant_value;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
@@ -218,7 +220,7 @@ pub struct Module {
     pub provides: Vec<module::Provide>,
 }
 
-/// A string in the JVM bytecode.
+/// A JVM string decoded from modified UTF-8.
 #[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
