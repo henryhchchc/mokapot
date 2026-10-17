@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-impl ClassElement for LineNumberTableEntry {
+impl ClassElement<'_> for LineNumberTableEntry {
     type Raw = raw_attributes::LineNumberTableEntry;
 
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -36,7 +36,7 @@ impl ClassElement for LineNumberTableEntry {
     }
 }
 
-impl ClassElement for ExceptionTableEntry {
+impl ClassElement<'_> for ExceptionTableEntry {
     type Raw = raw_attributes::ExceptionTableEntry;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -64,7 +64,7 @@ impl ClassElement for ExceptionTableEntry {
     }
 }
 
-impl ClassElement for ParameterInfo {
+impl ClassElement<'_> for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -85,8 +85,8 @@ impl ClassElement for ParameterInfo {
     }
 }
 
-impl ClassElement for MethodBody {
-    type Raw = Code;
+impl<'a> ClassElement<'a> for MethodBody {
+    type Raw = Code<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Code {
@@ -97,7 +97,7 @@ impl ClassElement for MethodBody {
             attributes,
         } = raw;
 
-        let instructions = RawInstruction::iter_from_bytes(code.as_ref())
+        let instructions = RawInstruction::iter_from_bytes(code)
             .map(|entry| {
                 let (pc, raw) = entry?;
                 Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))
@@ -105,7 +105,8 @@ impl ClassElement for MethodBody {
             .collect::<Result<_, ParseError>>()?;
 
         let exception_table = exception_table
-            .into_iter()
+            .iter()
+            .copied()
             .map(|it| ClassElement::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let attributes: Vec<Attribute> = attributes
@@ -195,8 +196,8 @@ mod tests {
             raw_attributes::Code {
                 max_stack: 0,
                 max_locals: 0,
-                code: Box::from([0xcb]),
-                exception_table: Box::new([]),
+                code: &[0xcb],
+                exception_table: &[],
                 attributes: Box::new([]),
             },
             &context,

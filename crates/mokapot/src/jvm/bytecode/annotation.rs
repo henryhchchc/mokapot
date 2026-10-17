@@ -16,7 +16,7 @@ use crate::{
     types::field_type::PrimitiveType,
 };
 
-impl ClassElement for TypePathElement {
+impl ClassElement<'_> for TypePathElement {
     type Raw = (u8, u8);
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         let (kind, argument_index) = raw;
@@ -30,7 +30,7 @@ impl ClassElement for TypePathElement {
     }
 }
 
-impl ClassElement for Annotation {
+impl ClassElement<'_> for Annotation {
     type Raw = raw_attributes::Annotation;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -58,8 +58,8 @@ impl ClassElement for Annotation {
     }
 }
 
-impl ClassElement for TypeAnnotation {
-    type Raw = raw_attributes::TypeAnnotation;
+impl<'a> ClassElement<'a> for TypeAnnotation {
+    type Raw = raw_attributes::TypeAnnotation<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -71,8 +71,8 @@ impl ClassElement for TypeAnnotation {
 
         let target_info = TargetInfo::from_raw(target_info, ctx)?;
         let target_path = target_path
-            .into_iter()
-            .map(|raw| ClassElement::from_raw(raw, ctx))
+            .iter()
+            .map(|&[kind, index]| ClassElement::from_raw((kind, index), ctx))
             .collect::<Result<_, _>>()?;
         let annotation_type = ctx
             .constant_pool
@@ -96,8 +96,8 @@ impl ClassElement for TypeAnnotation {
     }
 }
 
-impl ClassElement for TargetInfo {
-    type Raw = raw_attributes::TargetInfo;
+impl<'a> ClassElement<'a> for TargetInfo {
+    type Raw = raw_attributes::TargetInfo<'a>;
 
     #[allow(clippy::enum_glob_use)]
     #[expect(
@@ -155,8 +155,11 @@ impl ClassElement for TargetInfo {
             },
             Self::Raw::LocalVariable(table) => {
                 let table = table
-                    .into_iter()
-                    .map(|(start, len, index)| -> Result<_, ParseError> {
+                    .iter()
+                    .map(|entry| -> Result<_, ParseError> {
+                        let start = crate::jvm::code::ProgramCounter::from(entry.start_pc);
+                        let len = entry.length.get();
+                        let index = entry.index.get();
                         let range = start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId { range, index })
                     })
@@ -165,8 +168,11 @@ impl ClassElement for TargetInfo {
             }
             Self::Raw::ResourceVariable(table) => {
                 let table = table
-                    .into_iter()
-                    .map(|(start, len, index)| -> Result<_, ParseError> {
+                    .iter()
+                    .map(|entry| -> Result<_, ParseError> {
+                        let start = crate::jvm::code::ProgramCounter::from(entry.start_pc);
+                        let len = entry.length.get();
+                        let index = entry.index.get();
                         let range = start..(start + len).context("Invalid jump offset")?;
                         Ok(LocalVariableId { range, index })
                     })
@@ -231,7 +237,7 @@ impl ClassElement for TargetInfo {
     }
 }
 
-impl ClassElement for ElementValue {
+impl ClassElement<'_> for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {

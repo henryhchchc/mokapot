@@ -6,6 +6,6 @@ use super::{ParseError, class_file::ClassFile};
 ///
 /// # Errors
 /// Returns class-file parsing errors.
-pub fn raw_class(bytes: &[u8]) -> Result<impl Sized, ParseError> {
+pub fn raw_class(bytes: &[u8]) -> Result<impl Sized + '_, ParseError> {
     ClassFile::parse(bytes)
 }

@@ -1,10 +1,10 @@
 //! Raw attribute types for annotation-related attributes.
 
-use zerocopy::byteorder::big_endian::U16;
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::{
     FromBytecode, ParseError,
-    decoder::{BytecodeSlice, read_value},
+    decoder::{BytecodeSlice, read_slice, read_value},
 };
 use crate::{intrinsics::see_jvm_spec, jvm::code::ProgramCounter};
 
@@ -14,8 +14,8 @@ pub struct Annotation {
     pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
 }
 
-impl FromBytecode for Annotation {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for Annotation {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let type_index = read_value::<U16>(bytes)?.get();
         let num_element_value_pairs: u16 = read_value::<U16>(bytes)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
@@ -44,8 +44,8 @@ pub enum ElementValueInfo {
     Array(Box<[ElementValueInfo]>),
 }
 
-impl FromBytecode for ElementValueInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for ElementValueInfo {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let tag: u8 = read_value::<u8>(bytes)?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
@@ -72,24 +72,18 @@ impl FromBytecode for ElementValueInfo {
 }
 
 #[doc = see_jvm_spec!(4, 7, 20)]
-pub struct TypeAnnotation {
-    pub target_info: TargetInfo,
-    pub target_path: Box<[(u8, u8)]>,
+pub struct TypeAnnotation<'a> {
+    pub target_info: TargetInfo<'a>,
+    pub target_path: &'a [[u8; 2]],
     pub type_index: u16,
     pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
 }
 
-impl FromBytecode for TypeAnnotation {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for TypeAnnotation<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let target_info = bytes.decode_value()?;
         let target_path_length: u8 = read_value::<u8>(bytes)?;
-        let target_path = (0..target_path_length)
-            .map(|_| {
-                let type_path_kind = read_value::<u8>(bytes)?;
-                let type_argument_index = read_value::<u8>(bytes)?;
-                Ok((type_path_kind, type_argument_index))
-            })
-            .collect::<Result<_, ParseError>>()?;
+        let target_path = read_slice(bytes, usize::from(target_path_length))?;
         let type_index = read_value::<U16>(bytes)?.get();
         let num_element_value_pairs: u16 = read_value::<U16>(bytes)?.get();
         let element_value_pairs = (0..num_element_value_pairs)
@@ -110,7 +104,7 @@ impl FromBytecode for TypeAnnotation {
 
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[repr(u8)]
-pub enum TargetInfo {
+pub enum TargetInfo<'a> {
     TypeParameterOfClass {
         type_parameter_index: u8,
     } = 0x00,
@@ -137,8 +131,8 @@ pub enum TargetInfo {
     Throws {
         throws_type_index: u16,
     } = 0x17,
-    LocalVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x40,
-    ResourceVariable(Box<[(ProgramCounter, u16, u16)]>) = 0x41,
+    LocalVariable(&'a [LocalVariableTarget]) = 0x40,
+    ResourceVariable(&'a [LocalVariableTarget]) = 0x41,
     Catch {
         exception_table_index: u16,
     } = 0x42,
@@ -176,8 +170,8 @@ pub enum TargetInfo {
     } = 0x4B,
 }
 
-impl FromBytecode for TargetInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for TargetInfo<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let target_type: u8 = read_value::<u8>(bytes)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
@@ -208,26 +202,12 @@ impl FromBytecode for TargetInfo {
             },
             0x40 => {
                 let table_length: u16 = read_value::<U16>(bytes)?.get();
-                let table = (0..table_length)
-                    .map(|_| {
-                        let start_pc = bytes.decode_value()?;
-                        let length = read_value::<U16>(bytes)?.get();
-                        let index = read_value::<U16>(bytes)?.get();
-                        Ok((start_pc, length, index))
-                    })
-                    .collect::<Result<_, ParseError>>()?;
+                let table = read_slice(bytes, usize::from(table_length))?;
                 Self::LocalVariable(table)
             }
             0x41 => {
                 let table_length: u16 = read_value::<U16>(bytes)?.get();
-                let table = (0..table_length)
-                    .map(|_| {
-                        let start_pc = bytes.decode_value()?;
-                        let length = read_value::<U16>(bytes)?.get();
-                        let index = read_value::<U16>(bytes)?.get();
-                        Ok((start_pc, length, index))
-                    })
-                    .collect::<Result<_, ParseError>>()?;
+                let table = read_slice(bytes, usize::from(table_length))?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
@@ -270,5 +250,41 @@ impl FromBytecode for TargetInfo {
             )))?,
         };
         Ok(target_info)
+    }
+}
+
+#[derive(Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C)]
+pub struct LocalVariableTarget {
+    pub start_pc: U16,
+    pub length: U16,
+    pub index: U16,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn annotation_tables_borrow_their_input() {
+        let bytes = [0xff, 0x40, 0, 1, 0, 2, 0, 3, 0, 4, 1, 0, 0, 0, 1, 0, 0];
+        let mut remaining = &bytes[1..];
+        let annotation = TypeAnnotation::from_bytes(&mut remaining).unwrap();
+        assert_eq!(remaining, []);
+        let TargetInfo::LocalVariable(table) = annotation.target_info else {
+            panic!("expected a local-variable target");
+        };
+        assert_eq!(table[0].start_pc.get(), 2);
+        assert_eq!(table[0].length.get(), 3);
+        assert_eq!(table[0].index.get(), 4);
+        assert!(std::ptr::eq(
+            table.as_ptr().cast::<u8>(),
+            bytes[4..].as_ptr()
+        ));
+        assert_eq!(annotation.target_path, [[0, 0]]);
+        assert!(std::ptr::eq(
+            annotation.target_path.as_ptr().cast::<u8>(),
+            bytes[11..].as_ptr()
+        ));
     }
 }

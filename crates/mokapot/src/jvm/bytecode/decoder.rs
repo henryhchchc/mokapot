@@ -1,6 +1,6 @@
 //! Slice decoding for JVM wire values.
 
-use zerocopy::{FromBytes, byteorder::big_endian::U16};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::{FromBytecode, ParseError};
 use crate::jvm::code::ProgramCounter;
@@ -12,35 +12,46 @@ pub(crate) fn read_value<T: FromBytes>(bytes: &mut &[u8]) -> Result<T, ParseErro
     Ok(value)
 }
 
-pub(crate) trait BytecodeSlice {
-    fn decode_value<T: FromBytecode>(&mut self) -> Result<T, ParseError>;
+pub(crate) trait BytecodeSlice<'a> {
+    fn decode_value<T: FromBytecode<'a>>(&mut self) -> Result<T, ParseError>;
 }
 
-impl BytecodeSlice for &[u8] {
-    fn decode_value<T: FromBytecode>(&mut self) -> Result<T, ParseError> {
+impl<'a> BytecodeSlice<'a> for &'a [u8] {
+    fn decode_value<T: FromBytecode<'a>>(&mut self) -> Result<T, ParseError> {
         T::from_bytes(self)
     }
 }
 
-impl<const N: usize> FromBytecode for [u8; N] {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a, const N: usize> FromBytecode<'a> for [u8; N] {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         read_value(bytes)
     }
 }
 
-impl FromBytecode for ProgramCounter {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for ProgramCounter {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         Ok(read_value::<U16>(bytes)?.get().into())
     }
 }
 
-/// Copies `len` bytes after checking availability and advances the slice.
-pub(crate) fn read_bytes(bytes: &mut &[u8], len: usize) -> Result<Box<[u8]>, ParseError> {
+/// Borrows `len` bytes and advances the slice after checking availability.
+pub(crate) fn read_bytes<'a>(bytes: &mut &'a [u8], len: usize) -> Result<&'a [u8], ParseError> {
     let (value, remaining) = bytes
         .split_at_checked(len)
         .ok_or_else(|| ParseError::malform("Truncated bytecode payload"))?;
     *bytes = remaining;
-    Ok(value.into())
+    Ok(value)
+}
+
+/// Borrows `count` fixed-width wire values and advances the slice.
+pub(crate) fn read_slice<'a, T>(bytes: &mut &'a [u8], count: usize) -> Result<&'a [T], ParseError>
+where
+    T: FromBytes + KnownLayout + Immutable + Unaligned,
+{
+    let (values, remaining) = <[T]>::ref_from_prefix_with_elems(bytes, count)
+        .map_err(|_| ParseError::malform("Truncated bytecode table"))?;
+    *bytes = remaining;
+    Ok(values)
 }
 
 #[cfg(test)]
@@ -50,7 +61,7 @@ mod test {
     use proptest::prelude::*;
     use zerocopy::byteorder::big_endian::{I16, I32, U16, U32};
 
-    use super::{BytecodeSlice, read_value};
+    use super::{BytecodeSlice, read_slice, read_value};
 
     #[test]
     fn read_bytes_success() {
@@ -65,6 +76,42 @@ mod test {
         let mut reader = [0x01, 0x02].as_slice();
         let err = reader.decode_value::<[u8; 3]>().unwrap_err();
         assert_eq!(err.kind(), Malformed);
+    }
+
+    #[test]
+    fn typed_tables_borrow_unaligned_input_and_advance() {
+        let bytes = [0xff, 0x12, 0x34, 0xab, 0xcd, 0xee];
+        let mut remaining = &bytes[1..];
+        let table = read_slice::<U16>(&mut remaining, 2).unwrap();
+        assert_eq!(
+            table.iter().map(|value| value.get()).collect::<Vec<_>>(),
+            [0x1234, 0xabcd]
+        );
+        assert!(std::ptr::eq(
+            table.as_ptr().cast::<u8>(),
+            bytes[1..].as_ptr()
+        ));
+        assert_eq!(remaining, [0xee]);
+    }
+
+    #[test]
+    fn empty_typed_table_preserves_input() {
+        let bytes = [0x12, 0x34];
+        let mut remaining = bytes.as_slice();
+        let empty: &[U16] = &[];
+        assert_eq!(read_slice::<U16>(&mut remaining, 0).unwrap(), empty);
+        assert_eq!(remaining, bytes);
+    }
+
+    #[test]
+    fn typed_tables_reject_unavailable_or_overflowing_lengths() {
+        for count in [1, usize::MAX] {
+            let bytes = [0];
+            let mut remaining = bytes.as_slice();
+            let error = read_slice::<U16>(&mut remaining, count).unwrap_err();
+            assert_eq!(error.kind(), Malformed);
+            assert_eq!(remaining, bytes);
+        }
     }
 
     macro_rules! integer_decode_properties {
@@ -117,7 +164,8 @@ mod test {
 
             let decoded = super::read_bytes(&mut reader, expected.len()).unwrap();
 
-            prop_assert_eq!(decoded.as_ref(), expected.as_slice());
+            prop_assert_eq!(decoded, expected.as_slice());
+            prop_assert!(std::ptr::eq(decoded.as_ptr(), bytes.as_ptr()));
             prop_assert_eq!(reader, suffix.as_slice());
         }
 

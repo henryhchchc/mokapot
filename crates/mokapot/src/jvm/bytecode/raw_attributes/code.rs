@@ -9,7 +9,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     FromBytecode, ParseError,
     attribute::AttributeInfo,
-    decoder::{BytecodeSlice, read_bytes, read_value},
+    decoder::{BytecodeSlice, read_bytes, read_slice, read_value},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -19,25 +19,23 @@ use crate::intrinsics::see_jvm_spec;
     clippy::struct_field_names,
     reason = "Use JVMS item names in raw layouts"
 )]
-pub struct Code {
+pub struct Code<'a> {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub code: Box<[u8]>,
-    pub exception_table: Box<[ExceptionTableEntry]>,
-    pub attributes: Box<[AttributeInfo]>,
+    pub code: &'a [u8],
+    pub exception_table: &'a [ExceptionTableEntry],
+    pub attributes: Box<[AttributeInfo<'a>]>,
 }
 
-impl FromBytecode for Code {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for Code<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let max_stack = read_value::<U16>(bytes)?.get();
         let max_locals = read_value::<U16>(bytes)?.get();
         let code_length: u32 = read_value::<U32>(bytes)?.get();
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
         let code = read_bytes(bytes, code_length)?;
         let exception_table_length: u16 = read_value::<U16>(bytes)?.get();
-        let exception_table = (0..exception_table_length)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
+        let exception_table = read_slice(bytes, usize::from(exception_table_length))?;
         let attributes_count: u16 = read_value::<U16>(bytes)?.get();
         let attributes = (0..attributes_count)
             .map(|_| bytes.decode_value())
@@ -54,7 +52,7 @@ impl FromBytecode for Code {
 
 /// An entry in the exception table of a `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ExceptionTableEntry {
     pub start_pc: U16,
@@ -89,18 +87,18 @@ pub enum StackMapFrameInfo {
     },
     AppendFrame {
         offset_delta: u16,
-        locals: Vec<VerificationTypeInfo>,
+        locals: Box<[VerificationTypeInfo]>,
     },
     FullFrame {
         // frame_type: u8 = 255,
         offset_delta: u16,
-        locals: Vec<VerificationTypeInfo>,
-        stack: Vec<VerificationTypeInfo>,
+        locals: Box<[VerificationTypeInfo]>,
+        stack: Box<[VerificationTypeInfo]>,
     },
 }
 
-impl FromBytecode for StackMapFrameInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for StackMapFrameInfo {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let frame_type: u8 = read_value::<u8>(bytes)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
@@ -127,7 +125,7 @@ impl FromBytecode for StackMapFrameInfo {
                 let offset_delta = read_value::<U16>(bytes)?.get();
                 let locals = (0..locals_count)
                     .map(|_| bytes.decode_value())
-                    .collect::<Result<Vec<_>, ParseError>>()?;
+                    .collect::<Result<Box<[_]>, ParseError>>()?;
                 Ok(Self::AppendFrame {
                     offset_delta,
                     locals,
@@ -138,11 +136,11 @@ impl FromBytecode for StackMapFrameInfo {
                 let number_of_locals: u16 = read_value::<U16>(bytes)?.get();
                 let locals = (0..number_of_locals)
                     .map(|_| bytes.decode_value())
-                    .collect::<Result<Vec<_>, ParseError>>()?;
+                    .collect::<Result<Box<[_]>, ParseError>>()?;
                 let number_of_stack_items: u16 = read_value::<U16>(bytes)?.get();
                 let stack = (0..number_of_stack_items)
                     .map(|_| bytes.decode_value())
-                    .collect::<Result<Vec<_>, ParseError>>()?;
+                    .collect::<Result<Box<[_]>, ParseError>>()?;
                 Ok(Self::FullFrame {
                     offset_delta,
                     locals,
@@ -167,8 +165,8 @@ pub enum VerificationTypeInfo {
     Uninitialized { offset: u16 } = 8,
 }
 
-impl FromBytecode for VerificationTypeInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for VerificationTypeInfo {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let tag: u8 = read_value::<u8>(bytes)?;
         match tag {
             0 => Ok(Self::Top),
@@ -193,7 +191,7 @@ impl FromBytecode for VerificationTypeInfo {
 
 /// A line number table entry.
 #[doc = see_jvm_spec!(4, 7, 12)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LineNumberTableEntry {
     pub start_pc: U16,
@@ -203,7 +201,7 @@ pub struct LineNumberTableEntry {
 impl FixedLayout for LineNumberTableEntry {}
 
 #[doc = see_jvm_spec!(4, 7, 13)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableInfo {
     pub start_pc: U16,
@@ -216,7 +214,7 @@ pub struct LocalVariableInfo {
 impl FixedLayout for LocalVariableInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 14)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableTypeInfo {
     pub start_pc: U16,

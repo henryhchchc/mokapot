@@ -7,7 +7,7 @@ fn tableswitch_default_can_target_backward() {
         default: -5,
         low: 0,
         high: 0,
-        jump_offsets: vec![0],
+        jump_offsets: &[0.into()],
     };
     let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
     assert_eq!(
@@ -26,7 +26,7 @@ fn tableswitch_uses_inclusive_high_bound() {
         default: 2,
         low: -1,
         high: 0,
-        jump_offsets: vec![0, 1],
+        jump_offsets: &[0.into(), 1.into()],
     };
     let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
     assert_eq!(
@@ -45,7 +45,7 @@ fn tableswitch_rejects_mismatched_raw_targets() {
         default: 0,
         low: 1,
         high: 2,
-        jump_offsets: vec![0],
+        jump_offsets: &[0.into()],
     };
     let error = Instruction::from_raw_instruction(raw, 0.into(), &ConstantPool::new()).unwrap_err();
     assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
@@ -53,20 +53,14 @@ fn tableswitch_rejects_mismatched_raw_targets() {
 
 fn interface_method_pool(is_interface: bool) -> ConstantPool {
     let mut raw = RawConstantPool::new();
-    let class_name_index = raw
-        .put_entry(RawEntry::Utf8(b"a/b/I".as_slice().into()))
-        .unwrap();
+    let class_name_index = raw.put_entry(RawEntry::Utf8(b"a/b/I".as_slice())).unwrap();
     let class_index = raw
         .put_entry(RawEntry::Class {
             name_index: class_name_index.into(),
         })
         .unwrap();
-    let name_index = raw
-        .put_entry(RawEntry::Utf8(b"m".as_slice().into()))
-        .unwrap();
-    let descriptor_index = raw
-        .put_entry(RawEntry::Utf8(b"()V".as_slice().into()))
-        .unwrap();
+    let name_index = raw.put_entry(RawEntry::Utf8(b"m".as_slice())).unwrap();
+    let descriptor_index = raw.put_entry(RawEntry::Utf8(b"()V".as_slice())).unwrap();
     let name_and_type_index = raw
         .put_entry(RawEntry::NameAndType {
             name_index: name_index.into(),
@@ -93,8 +87,7 @@ fn invokeinterface_parses_interface_method_refs() {
     let raw = InstructionList::<RawInstruction>::from_bytes(&[0xb9, 0, 6, 1, 0]).unwrap();
     let (pc, instruction) = raw.iter().next().unwrap();
     assert_eq!(
-        Instruction::from_raw_instruction(instruction.clone(), pc, &interface_method_pool(true))
-            .unwrap(),
+        Instruction::from_raw_instruction(*instruction, pc, &interface_method_pool(true)).unwrap(),
         Instruction::InvokeInterface(
             crate::jvm::references::MethodRef {
                 owner: crate::types::reference_type::ReferenceType::Class("a/b/I".parse().unwrap()),
@@ -111,6 +104,6 @@ fn invokeinterface_rejects_method_refs() {
     let raw = InstructionList::<RawInstruction>::from_bytes(&[0xb9, 0, 6, 1, 0]).unwrap();
     let (pc, instruction) = raw.iter().next().unwrap();
     let pool = interface_method_pool(false);
-    let error = Instruction::from_raw_instruction(instruction.clone(), pc, &pool).unwrap_err();
+    let error = Instruction::from_raw_instruction(*instruction, pc, &pool).unwrap_err();
     assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
 }

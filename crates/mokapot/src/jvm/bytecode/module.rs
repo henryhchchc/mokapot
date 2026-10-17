@@ -6,7 +6,7 @@ use crate::jvm::{
     module::{Export, Open, Provide, Require},
 };
 
-impl ClassElement for Require {
+impl ClassElement<'_> for Require {
     type Raw = raw_attributes::RequiresInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -36,8 +36,8 @@ impl ClassElement for Require {
     }
 }
 
-impl ClassElement for Export {
-    type Raw = raw_attributes::ExportsInfo;
+impl<'a> ClassElement<'a> for Export {
+    type Raw = raw_attributes::ExportsInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -49,15 +49,15 @@ impl ClassElement for Export {
         let package = ctx.constant_pool.get_package_name(exports_index)?;
         let flags = ClassElement::from_raw(exports_flags, ctx)?;
         let to = exports_to
-            .into_iter()
-            .map(|idx| ctx.constant_pool.get_module_ref(idx))
+            .iter()
+            .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
             .collect::<Result<_, _>>()?;
         Ok(Export { package, flags, to })
     }
 }
 
-impl ClassElement for Open {
-    type Raw = raw_attributes::OpensInfo;
+impl<'a> ClassElement<'a> for Open {
+    type Raw = raw_attributes::OpensInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -69,15 +69,15 @@ impl ClassElement for Open {
         let package = ctx.constant_pool.get_package_name(opens_index)?;
         let flags = ClassElement::from_raw(opens_flags, ctx)?;
         let to = opens_to
-            .into_iter()
-            .map(|idx| ctx.constant_pool.get_module_ref(idx))
+            .iter()
+            .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
             .collect::<Result<_, _>>()?;
         Ok(Open { package, flags, to })
     }
 }
 
-impl ClassElement for Provide {
-    type Raw = raw_attributes::ProvidesInfo;
+impl<'a> ClassElement<'a> for Provide {
+    type Raw = raw_attributes::ProvidesInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -86,15 +86,15 @@ impl ClassElement for Provide {
         } = raw;
         let service = ctx.constant_pool.get_class_name(provides_index)?;
         let with = provides_with
-            .into_iter()
-            .map(|idx| ctx.constant_pool.get_class_name(idx))
+            .iter()
+            .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
             .collect::<Result<_, _>>()?;
         Ok(Provide { service, with })
     }
 }
 
-impl ClassElement for Module {
-    type Raw = raw_attributes::ModuleInfo;
+impl<'a> ClassElement<'a> for Module {
+    type Raw = raw_attributes::ModuleInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -115,7 +115,8 @@ impl ClassElement for Module {
             None
         };
         let requires = requires
-            .into_iter()
+            .iter()
+            .copied()
             .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let exports = exports
@@ -127,8 +128,8 @@ impl ClassElement for Module {
             .map(|raw| ClassElement::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let uses = uses
-            .into_iter()
-            .map(|idx| ctx.constant_pool.get_class_name(idx))
+            .iter()
+            .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
             .collect::<Result<_, _>>()?;
         let provides = provides
             .into_iter()

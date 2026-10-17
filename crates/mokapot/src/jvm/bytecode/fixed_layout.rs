@@ -16,8 +16,8 @@ impl FixedLayout for F32 {}
 impl FixedLayout for I64 {}
 impl FixedLayout for F64 {}
 
-impl<T: FixedLayout> FromBytecode for T {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a, T: FixedLayout> FromBytecode<'a> for T {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         read_value::<Self>(bytes)
     }
 }

@@ -2,13 +2,13 @@ use bitflags::Flags;
 
 use super::{ParseError, ParsingContext};
 
-pub(super) trait ClassElement: Sized {
+pub(super) trait ClassElement<'a>: Sized {
     type Raw: Sized;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError>;
 }
 
-impl<T> ClassElement for T
+impl<T> ClassElement<'_> for T
 where
     T: Flags<Bits = u16>,
 {

@@ -13,8 +13,8 @@ use crate::{
     types::field_type::PrimitiveType,
 };
 
-impl ClassElement for InstructionList<Instruction> {
-    type Raw = InstructionList<RawInstruction>;
+impl<'a> ClassElement<'a> for InstructionList<Instruction> {
+    type Raw = InstructionList<RawInstruction<'a>>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         raw.into_iter()
@@ -29,7 +29,7 @@ impl ClassElement for InstructionList<Instruction> {
 impl Instruction {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn from_raw_instruction(
-        raw_instruction: RawInstruction,
+        raw_instruction: RawInstruction<'_>,
         pc: ProgramCounter,
         constant_pool: &ConstantPool,
     ) -> Result<Self, ParseError> {
@@ -290,8 +290,8 @@ impl Instruction {
                     return Err(ParseError::malform("Invalid tableswitch range"));
                 }
                 let jump_targets = jump_offsets
-                    .into_iter()
-                    .map(|offset| (pc + offset).context("Invalid jump offset"))
+                    .iter()
+                    .map(|offset| (pc + offset.get()).context("Invalid jump offset"))
                     .try_collect()?;
                 Self::TableSwitch {
                     low,
@@ -304,8 +304,10 @@ impl Instruction {
                 match_offsets,
             } => {
                 let targets = match_offsets
-                    .into_iter()
-                    .map(|(value, offset)| {
+                    .iter()
+                    .map(|pair| {
+                        let value = pair.match_value.get();
+                        let offset = pair.offset.get();
                         (pc + offset)
                             .map(|target| (value, target))
                             .context("Invalid jump offset")
@@ -406,7 +408,7 @@ impl Instruction {
             MonitorExit => Self::MonitorExit,
 
             // Extended
-            Wide(ref raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
+            Wide(raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
             MultiANewArray { index, dimensions } => {
                 let type_ref = constant_pool.get_type_ref(index)?;
                 Self::MultiANewArray(type_ref, dimensions)
@@ -426,8 +428,8 @@ impl Instruction {
     }
 }
 
-fn lift_wide_instruction(raw_wide: &RawWideInstruction) -> WideInstruction {
-    match *raw_wide {
+fn lift_wide_instruction(raw_wide: RawWideInstruction) -> WideInstruction {
+    match raw_wide {
         RawWideInstruction::ILoad { index } => WideInstruction::ILoad(index),
         RawWideInstruction::LLoad { index } => WideInstruction::LLoad(index),
         RawWideInstruction::FLoad { index } => WideInstruction::FLoad(index),

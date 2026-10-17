@@ -16,19 +16,19 @@ use crate::{
 /// The raw representation of a `field_info` structure.
 #[doc = see_jvm_spec!(4, 5)]
 #[derive(Debug)]
-pub(crate) struct FieldInfo {
+pub(crate) struct FieldInfo<'a> {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Box<[AttributeInfo]>,
+    attributes: Box<[AttributeInfo<'a>]>,
 }
 
-impl FromBytecode for FieldInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for FieldInfo<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let access_flags = read_value::<U16>(bytes)?.get();
         let name_index = read_value::<U16>(bytes)?.get();
         let descriptor_index = read_value::<U16>(bytes)?.get();
-        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
+        let attributes_count = read_value::<U16>(bytes)?.get();
         let attributes = (0..attributes_count)
             .map(|_| AttributeInfo::from_bytes(bytes))
             .collect::<Result<_, ParseError>>()?;
@@ -41,8 +41,8 @@ impl FromBytecode for FieldInfo {
     }
 }
 
-impl ClassElement for Field {
-    type Raw = FieldInfo;
+impl<'a> ClassElement<'a> for Field {
+    type Raw = FieldInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let FieldInfo {

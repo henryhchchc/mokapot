@@ -2,12 +2,16 @@ use zerocopy::byteorder::big_endian::{U16, U32};
 
 use super::{ClassFile, JAVA_CLASS_MAGIC};
 use crate::jvm::bytecode::{
-    FromBytecode, ParseError, attribute::AttributeInfo, constant_pool::RawConstantPool,
-    decoder::read_value, field_info::FieldInfo, method_info::MethodInfo,
+    FromBytecode, ParseError,
+    attribute::AttributeInfo,
+    constant_pool::RawConstantPool,
+    decoder::{read_slice, read_value},
+    field_info::FieldInfo,
+    method_info::MethodInfo,
 };
 
-impl ClassFile {
-    pub fn parse(mut bytes: &[u8]) -> Result<Self, ParseError> {
+impl<'a> ClassFile<'a> {
+    pub fn parse(mut bytes: &'a [u8]) -> Result<Self, ParseError> {
         let class = Self::from_bytes(&mut bytes)?;
         if !bytes.is_empty() {
             return Err(ParseError::malform(
@@ -18,8 +22,8 @@ impl ClassFile {
     }
 }
 
-impl FromBytecode for ClassFile {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for ClassFile<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let magic: u32 = read_value::<U32>(bytes)?.get();
         if magic != JAVA_CLASS_MAGIC {
             return Err(ParseError::malform("This is not a Java class file"));
@@ -32,9 +36,7 @@ impl FromBytecode for ClassFile {
         let this_class = read_value::<U16>(bytes)?.get();
         let super_class = read_value::<U16>(bytes)?.get();
         let interfaces_count: u16 = read_value::<U16>(bytes)?.get();
-        let interfaces = (0..interfaces_count)
-            .map(|_| read_value::<U16>(bytes).map(u16::from))
-            .collect::<Result<_, ParseError>>()?;
+        let interfaces = read_slice(bytes, usize::from(interfaces_count))?;
         let fields_count: u16 = read_value::<U16>(bytes)?.get();
         let fields = (0..fields_count)
             .map(|_| FieldInfo::from_bytes(bytes))

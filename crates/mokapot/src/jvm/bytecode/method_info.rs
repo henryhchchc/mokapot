@@ -18,15 +18,15 @@ use crate::{
 /// The raw representation of a `method_info` structure.
 #[doc = see_jvm_spec!(4, 6)]
 #[derive(Debug)]
-pub(super) struct MethodInfo {
+pub(super) struct MethodInfo<'a> {
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
-    attributes: Box<[AttributeInfo]>,
+    attributes: Box<[AttributeInfo<'a>]>,
 }
 
-impl FromBytecode for MethodInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for MethodInfo<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let access_flags = read_value::<U16>(bytes)?.get();
         let name_index = read_value::<U16>(bytes)?.get();
         let descriptor_index = read_value::<U16>(bytes)?.get();
@@ -43,8 +43,8 @@ impl FromBytecode for MethodInfo {
     }
 }
 
-impl ClassElement for Method {
-    type Raw = MethodInfo;
+impl<'a> ClassElement<'a> for Method {
+    type Raw = MethodInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let MethodInfo {
