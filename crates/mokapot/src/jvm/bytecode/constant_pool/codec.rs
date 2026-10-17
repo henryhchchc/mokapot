@@ -6,8 +6,8 @@ use crate::jvm::bytecode::{
     decoder::{read_bytes, read_value},
 };
 
-impl FromBytecode for RawEntry {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for RawEntry<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let tag: u8 = read_value::<u8>(bytes)?;
         match tag {
             1 => {

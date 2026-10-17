@@ -1,7 +1,10 @@
 //! Raw JVM instruction model and parser.
 
-use crate::jvm::bytecode::decoder::read_value;
-use zerocopy::byteorder::big_endian::{I16, I32, U16};
+use crate::jvm::bytecode::decoder::{read_slice, read_value};
+use zerocopy::{
+    FromBytes, Immutable, KnownLayout, Unaligned,
+    byteorder::big_endian::{I16, I32, U16},
+};
 
 use std::iter;
 
@@ -11,15 +14,16 @@ use crate::{
     jvm::code::{InstructionList, ProgramCounter},
 };
 
-/// A raw JVM instruction without the information form the constant pool.
+/// A JVM instruction before resolving constant-pool references.
+/// Switch tables borrow their wire data from the input bytecode.
 #[doc = see_jvm_spec!(6, 5)]
 #[repr(u8)]
 #[allow(
     missing_docs,
     reason = "This maps one-to-one to those in the JVM spec."
 )]
-#[derive(Debug, PartialEq, Clone)]
-pub enum RawInstruction {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum RawInstruction<'a> {
     Nop = 0x00,
     AConstNull = 0x01,
     IConstM1 = 0x02,
@@ -261,11 +265,11 @@ pub enum RawInstruction {
         default: i32,
         low: i32,
         high: i32,
-        jump_offsets: Vec<i32>,
+        jump_offsets: &'a [I32],
     } = 0xAA,
     LookupSwitch {
         default: i32,
-        match_offsets: Vec<(i32, i32)>,
+        match_offsets: &'a [LookupSwitchPair],
     } = 0xAB,
     IReturn = 0xAC,
     LReturn = 0xAD,
@@ -352,7 +356,7 @@ pub enum RawInstruction {
     clippy::module_name_repetitions,
     reason = "For consistent type names with the JVM spec."
 )]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u8)]
 pub enum RawWideInstruction {
     ILoad { index: u16 } = 0x15,
@@ -369,7 +373,17 @@ pub enum RawWideInstruction {
     IInc { index: u16, increment: i16 } = 0x84,
 }
 
-impl RawInstruction {
+/// A match value and relative jump offset in a lookup-switch wire table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C)]
+pub struct LookupSwitchPair {
+    /// The signed match value, in JVM byte order.
+    pub match_value: I32,
+    /// The signed jump offset relative to the switch instruction.
+    pub offset: I32,
+}
+
+impl RawInstruction<'_> {
     /// Gets the opcode.
     #[must_use]
     pub const fn opcode(&self) -> u8 {
@@ -387,7 +401,7 @@ impl RawWideInstruction {
     }
 }
 
-impl InstructionList<RawInstruction> {
+impl<'a> InstructionList<RawInstruction<'a>> {
     /// Parses a list of [`RawInstruction`]s from the given bytes.
     /// # Errors
     /// See [`ParseError`] for more information.
@@ -401,15 +415,15 @@ impl InstructionList<RawInstruction> {
     /// assert_eq!(instructions.get(&ProgramCounter::from(2)), Some(&RawInstruction::IReturn));
     /// assert_eq!(instructions.len(), 2);
     /// ```
-    pub fn from_bytes(bytes: &[u8]) -> Result<InstructionList<RawInstruction>, ParseError> {
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<InstructionList<RawInstruction<'a>>, ParseError> {
         RawInstruction::iter_from_bytes(bytes).collect()
     }
 }
 
-impl RawInstruction {
+impl<'a> RawInstruction<'a> {
     /// Decodes instructions in bytecode order.
     pub(super) fn iter_from_bytes(
-        mut bytes: &[u8],
+        mut bytes: &'a [u8],
     ) -> impl Iterator<Item = Result<(ProgramCounter, Self), ParseError>> {
         let original_len = bytes.len();
         iter::from_fn(move || Self::read_one(&mut bytes, original_len).transpose())
@@ -418,7 +432,7 @@ impl RawInstruction {
     /// Decodes one instruction using its offset within the complete code array.
     #[allow(clippy::too_many_lines)]
     fn read_one(
-        bytes: &mut &[u8],
+        bytes: &mut &'a [u8],
         original_len: usize,
     ) -> Result<Option<(ProgramCounter, Self)>, ParseError> {
         #[allow(clippy::enum_glob_use)]
@@ -716,19 +730,14 @@ impl RawInstruction {
                 let npairs: i32 = read_value::<I32>(&mut *bytes)?.get();
                 let npairs = usize::try_from(npairs)
                     .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
-                let mut match_offsets = Vec::new();
-                for _ in 0..npairs {
-                    let match_value = read_value::<I32>(&mut *bytes)?.get();
-                    if match_offsets
-                        .last()
-                        .is_some_and(|(previous, _)| match_value <= *previous)
-                    {
-                        Err(ParseError::malform(
-                            "Lookupswitch match values are not strictly increasing",
-                        ))?;
-                    }
-                    let offset = read_value::<I32>(&mut *bytes)?.get();
-                    match_offsets.push((match_value, offset));
+                let match_offsets: &[LookupSwitchPair] = read_slice(bytes, npairs)?;
+                if match_offsets
+                    .windows(2)
+                    .any(|pair| pair[0].match_value.get() >= pair[1].match_value.get())
+                {
+                    return Err(ParseError::malform(
+                        "Lookupswitch match values are not strictly increasing",
+                    ));
                 }
                 LookupSwitch {
                     default,
@@ -748,9 +757,9 @@ impl RawInstruction {
                 if low > high {
                     Err(ParseError::malform("Invalid tableswitch range"))?;
                 }
-                let jump_offsets = (low..=high)
-                    .map(|_| read_value::<I32>(&mut *bytes).map(i32::from))
-                    .collect::<Result<_, ParseError>>()?;
+                let count = usize::try_from(i64::from(high) - i64::from(low) + 1)
+                    .map_err(|_| ParseError::malform("Invalid tableswitch range"))?;
+                let jump_offsets = read_slice(bytes, count)?;
                 TableSwitch {
                     default,
                     low,

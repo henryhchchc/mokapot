@@ -3,7 +3,7 @@ use crate::jvm::{
     code::{ProgramCounter, StackMapFrame, VerificationType},
 };
 
-impl ClassElement for StackMapFrame {
+impl ClassElement<'_> for StackMapFrame {
     type Raw = raw_attributes::StackMapFrameInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -68,7 +68,7 @@ impl ClassElement for StackMapFrame {
     }
 }
 
-impl ClassElement for VerificationType {
+impl ClassElement<'_> for VerificationType {
     type Raw = raw_attributes::VerificationTypeInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         match raw {

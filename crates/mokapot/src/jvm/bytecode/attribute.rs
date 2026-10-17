@@ -24,28 +24,22 @@ use crate::{
 /// Represent an attribute of a class file, method, field, or code.
 #[doc = see_jvm_spec!(4, 7)]
 #[derive(Debug)]
-pub(crate) struct AttributeInfo {
+pub(crate) struct AttributeInfo<'a> {
     attribute_name_index: u16,
-    info: Box<[u8]>,
+    info: &'a [u8],
 }
 
-impl AttributeInfo {
-    const fn from_raw_parts(attribute_name_index: u16, info: Box<[u8]>) -> Self {
-        Self {
-            attribute_name_index,
-            info,
-        }
-    }
-}
-
-impl FromBytecode for AttributeInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for AttributeInfo<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let attribute_name_index = read_value::<U16>(bytes)?.get();
         let attribute_length: u32 = read_value::<U32>(bytes)?.get();
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
         let info = read_bytes(bytes, attribute_length)?;
-        Ok(Self::from_raw_parts(attribute_name_index, info))
+        Ok(AttributeInfo {
+            attribute_name_index,
+            info,
+        })
     }
 }
 
@@ -139,16 +133,16 @@ macro_rules! parse {
     };
 }
 
-impl ClassElement for Attribute {
-    type Raw = AttributeInfo;
+impl<'a> ClassElement<'a> for Attribute {
+    type Raw = AttributeInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let AttributeInfo {
             attribute_name_index,
-            info,
+            mut info,
         } = raw;
         let name = ctx.constant_pool.get_str(attribute_name_index)?;
-        let bytes = &mut info.as_ref();
+        let bytes = &mut info;
 
         let result = match name {
             "ConstantValue" => {
@@ -170,7 +164,7 @@ impl ClassElement for Attribute {
             "Signature" => parse_string(bytes, ctx).map(Self::Signature),
             "SourceFile" => parse_string(bytes, ctx).map(Self::SourceFile),
             "SourceDebugExtension" => {
-                return Ok(Self::SourceDebugExtension(info));
+                return Ok(Self::SourceDebugExtension(info.into()));
             }
             "LineNumberTable" => parse![u16; bytes, ctx => LineNumberTable],
             "LocalVariableTable" => parse![u16; bytes, ctx => LocalVariableTable],
@@ -218,7 +212,7 @@ impl ClassElement for Attribute {
                 let idx = read_value::<U16>(&mut *bytes)?.get();
                 ctx.constant_pool.get_class_name(idx)
             } => PermittedSubclasses],
-            name => return Ok(Attribute::Unrecognized(name.to_owned(), info)),
+            name => return Ok(Attribute::Unrecognized(name.to_owned(), info.into())),
         }?;
         if bytes.is_empty() {
             Ok(result)
@@ -245,17 +239,90 @@ mod tests {
     };
 
     #[test]
+    fn code_payload_and_nested_tables_borrow_original_input() {
+        let payload = [
+            0, 1, 0, 1, // max stack and locals
+            0, 0, 0, 1, 0xb1, // one return instruction
+            0, 1, // one exception handler
+            0, 0, 0, 1, 0, 0, 0, 0, // handler entry
+            0, 1, // one nested attribute
+            0, 2, 0, 0, 0, 2, 0xaa, 0xbb,
+        ];
+        let mut bytes = vec![0xff, 0, 1];
+        bytes.extend(u32::try_from(payload.len()).unwrap().to_be_bytes());
+        bytes.extend(payload);
+        let mut remaining = &bytes[1..];
+        let attribute = AttributeInfo::from_bytes(&mut remaining).unwrap();
+        assert_eq!(remaining, []);
+        let original_payload = &bytes[7..];
+        assert!(std::ptr::eq(
+            attribute.info.as_ptr(),
+            original_payload.as_ptr()
+        ));
+
+        let mut remaining = attribute.info;
+        let code = super::super::raw_attributes::Code::from_bytes(&mut remaining).unwrap();
+        assert_eq!(remaining, []);
+        assert_eq!(code.code, [0xb1]);
+        assert!(std::ptr::eq(
+            code.code.as_ptr(),
+            original_payload[8..].as_ptr()
+        ));
+        assert!(std::ptr::eq(
+            code.exception_table.as_ptr().cast::<u8>(),
+            original_payload[11..].as_ptr()
+        ));
+        assert_eq!(code.exception_table[0].end_pc.get(), 1);
+        assert_eq!(code.attributes[0].info, [0xaa, 0xbb]);
+        assert!(std::ptr::eq(
+            code.attributes[0].info.as_ptr(),
+            original_payload[27..].as_ptr()
+        ));
+    }
+
+    #[test]
+    fn retained_payloads_own_their_bytes_after_conversion() {
+        for name in ["SourceDebugExtension", "VendorData"] {
+            let mut raw_pool = RawConstantPool::new();
+            let index = raw_pool.put_entry(RawEntry::Utf8(name.as_bytes())).unwrap();
+            let ctx = ParsingContext {
+                constant_pool: crate::jvm::class::ConstantPool::from_raw(raw_pool).unwrap(),
+                class_version: Version::LATEST,
+                current_class_name: "Test".parse().unwrap(),
+            };
+            let payload = vec![0xaa, 0xbb];
+            let raw = AttributeInfo {
+                attribute_name_index: index,
+                info: &payload,
+            };
+            let attribute = Attribute::from_raw(raw, &ctx).unwrap();
+            drop(payload);
+            match attribute {
+                Attribute::SourceDebugExtension(bytes) => assert_eq!(&*bytes, [0xaa, 0xbb]),
+                Attribute::Unrecognized(name, bytes) => {
+                    assert_eq!(name, "VendorData");
+                    assert_eq!(&*bytes, [0xaa, 0xbb]);
+                }
+                _ => panic!("expected a retained byte payload"),
+            }
+        }
+    }
+
+    #[test]
     fn rejects_trailing_bytes_in_known_attribute() {
         let mut raw_pool = RawConstantPool::new();
         let attribute_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"Synthetic".as_slice().into()))
+            .put_entry(RawEntry::Utf8(b"Synthetic".as_slice()))
             .unwrap();
         let ctx = ParsingContext {
             constant_pool: crate::jvm::class::ConstantPool::from_raw(raw_pool).unwrap(),
             class_version: Version::LATEST,
             current_class_name: "Test".parse().unwrap(),
         };
-        let attribute_info = AttributeInfo::from_raw_parts(attribute_name_index, [0].into());
+        let attribute_info = AttributeInfo {
+            attribute_name_index,
+            info: &[0],
+        };
 
         let error = Attribute::from_raw(attribute_info, &ctx).unwrap_err();
 
@@ -269,10 +336,10 @@ mod tests {
     fn parses_module_packages_with_package_constant_pool_entries() {
         let mut raw_pool = RawConstantPool::new();
         let attribute_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"ModulePackages".as_slice().into()))
+            .put_entry(RawEntry::Utf8(b"ModulePackages".as_slice()))
             .unwrap();
         let package_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"example/api".as_slice().into()))
+            .put_entry(RawEntry::Utf8(b"example/api".as_slice()))
             .unwrap();
         raw_pool
             .put_entry(RawEntry::Package {
@@ -280,7 +347,7 @@ mod tests {
             })
             .unwrap();
         let other_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"example/internal".as_slice().into()))
+            .put_entry(RawEntry::Utf8(b"example/internal".as_slice()))
             .unwrap();
         raw_pool
             .put_entry(RawEntry::Package {
@@ -293,8 +360,10 @@ mod tests {
             class_version: Version::LATEST,
             current_class_name: "module-info".parse().unwrap(),
         };
-        let attribute_info =
-            AttributeInfo::from_raw_parts(attribute_name_index, [0, 2, 0, 3, 0, 5].into());
+        let attribute_info = AttributeInfo {
+            attribute_name_index,
+            info: &[0, 2, 0, 3, 0, 5],
+        };
 
         let attribute = Attribute::from_raw(attribute_info, &ctx).unwrap();
 

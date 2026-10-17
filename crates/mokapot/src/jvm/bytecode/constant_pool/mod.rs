@@ -12,12 +12,23 @@ use crate::{
 use zerocopy::byteorder::big_endian::{F32, F64, I32, I64, U16};
 
 /// The indexed, unresolved representation of a JVM constant pool.
+/// UTF-8 entries borrow the input buffer and cannot outlive it.
+///
+/// ```compile_fail
+/// use mokapot::jvm::bytecode::constant_pool::RawConstantPool;
+///
+/// let pool = {
+///     let bytes = vec![1, 0, 1, b'A'];
+///     RawConstantPool::from_bytes(&bytes, 2).unwrap()
+/// };
+/// assert!(pool.get_entry(1).is_some());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RawConstantPool {
-    pub(crate) inner: PoolStorage<Vec<Slot<RawEntry>>>,
+pub struct RawConstantPool<'a> {
+    pub(crate) inner: PoolStorage<Vec<Slot<RawEntry<'a>>>>,
 }
 
-impl RawConstantPool {
+impl<'a> RawConstantPool<'a> {
     /// Creates a new empty constant pool.
     #[must_use]
     pub fn new() -> Self {
@@ -40,11 +51,14 @@ impl RawConstantPool {
     /// Bytes following the pool are ignored.
     /// # Errors
     /// Returns a [`ParseError`] for malformed or truncated entries.
-    pub fn from_bytes(mut bytes: &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+    pub fn from_bytes(mut bytes: &'a [u8], constant_pool_count: u16) -> Result<Self, ParseError> {
         Self::parse(&mut bytes, constant_pool_count)
     }
 
-    pub(super) fn parse(bytes: &mut &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+    pub(super) fn parse(
+        bytes: &mut &'a [u8],
+        constant_pool_count: u16,
+    ) -> Result<Self, ParseError> {
         if constant_pool_count == 0 {
             return Err(ParseError::malform("Zero constant pool count"));
         }
@@ -65,7 +79,7 @@ impl RawConstantPool {
     ///
     /// Returns [`None`] if the index is out of bounds or the index does not point to a valid slot.
     #[must_use]
-    pub fn get_entry(&self, index: u16) -> Option<&RawEntry> {
+    pub fn get_entry(&self, index: u16) -> Option<&RawEntry<'a>> {
         self.inner.get_entry(index)
     }
 
@@ -86,7 +100,7 @@ impl RawConstantPool {
     /// assert_eq!(pool.get_entry(index + 1), None);
     /// assert_eq!(pool.put_entry(RawEntry::Integer(7.into())).unwrap(), index + 2);
     /// ```
-    pub fn put_entry(&mut self, entry: RawEntry) -> Result<u16, Overflow> {
+    pub fn put_entry(&mut self, entry: RawEntry<'a>) -> Result<u16, Overflow<'a>> {
         let padding = entry.slot_width() == 2;
         self.inner.push(entry, padding).map_err(Overflow)
     }
@@ -109,7 +123,10 @@ impl RawConstantPool {
     /// assert_eq!(pool.put_entry_deduplicated(RawEntry::Integer(42.into())).unwrap(), (index, false));
     /// assert_eq!(pool.get_entry(index), Some(&RawEntry::Integer(42.into())));
     /// ```
-    pub fn put_entry_deduplicated(&mut self, entry: RawEntry) -> Result<(u16, bool), Overflow> {
+    pub fn put_entry_deduplicated(
+        &mut self,
+        entry: RawEntry<'a>,
+    ) -> Result<(u16, bool), Overflow<'a>> {
         if let Some((index, _)) = self.find(|it| it == &entry) {
             return Ok((index, false));
         }
@@ -117,9 +134,9 @@ impl RawConstantPool {
     }
 
     /// Finds the first constant pool entry that satisfies the given predicate.
-    pub fn find<P>(&self, predicate: P) -> Option<(u16, &RawEntry)>
+    pub fn find<P>(&self, predicate: P) -> Option<(u16, &RawEntry<'a>)>
     where
-        P: Fn(&RawEntry) -> bool,
+        P: Fn(&RawEntry<'a>) -> bool,
     {
         self.inner.find(predicate)
     }
@@ -131,7 +148,7 @@ impl RawConstantPool {
     }
 }
 
-impl Default for RawConstantPool {
+impl Default for RawConstantPool<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -140,18 +157,18 @@ impl Default for RawConstantPool {
 /// An error when an insertion to the constant pool causes an overflow.
 #[derive(Debug, thiserror::Error)]
 #[error("The constant pool is full.")]
-pub struct Overflow(pub RawEntry);
+pub struct Overflow<'a>(pub RawEntry<'a>);
 
 /// An entry in the [`RawConstantPool`].
 ///
 /// Equality compares wire bytes, including floating-point sign and NaN payload bits.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 #[non_exhaustive]
-pub enum RawEntry {
-    /// A UTF-8 string.
+pub enum RawEntry<'a> {
+    /// Modified UTF-8 bytes borrowed from the input.
     #[doc = see_jvm_spec!(4, 4, 7)]
-    Utf8(Box<[u8]>) = 1,
+    Utf8(&'a [u8]) = 1,
     /// An integer.
     #[doc = see_jvm_spec!(4, 4, 4)]
     Integer(I32) = 3,
@@ -267,7 +284,7 @@ pub enum RawEntry {
     } = 20,
 }
 
-impl RawEntry {
+impl RawEntry<'_> {
     const fn slot_width(&self) -> u16 {
         if matches!(self, Self::Long(_) | Self::Double(_)) {
             2
@@ -346,10 +363,7 @@ mod tests {
                 },
                 &[15, 6, 0x12, 0x34],
             ),
-            (
-                RawEntry::Utf8(Box::new([0xc0, 0x80])),
-                &[1, 0, 2, 0xc0, 0x80],
-            ),
+            (RawEntry::Utf8(&[0xc0, 0x80]), &[1, 0, 2, 0xc0, 0x80]),
         ];
         for (entry, bytes) in cases {
             let mut reader = *bytes;
@@ -378,7 +392,7 @@ mod tests {
         ] {
             let mut pool = RawConstantPool::new();
             for entry in entries {
-                let (index, inserted) = pool.put_entry_deduplicated(entry.clone()).unwrap();
+                let (index, inserted) = pool.put_entry_deduplicated(entry).unwrap();
                 assert!(inserted);
                 assert_eq!(pool.put_entry_deduplicated(entry).unwrap(), (index, false));
             }
@@ -409,7 +423,7 @@ mod tests {
         let mut pool = RawConstantPool::new();
         let entry = RawEntry::Integer(42.into());
 
-        let first = pool.put_entry_deduplicated(entry.clone()).unwrap();
+        let first = pool.put_entry_deduplicated(entry).unwrap();
         assert_eq!(first, (1, true));
         assert_eq!(pool.put_entry_deduplicated(entry).unwrap(), (1, false));
         assert_eq!(pool.count(), 2);
@@ -459,6 +473,17 @@ mod tests {
             let error = RawConstantPool::from_bytes(&bytes, count).unwrap_err();
             assert_eq!(error.kind(), ParseErrorKind::Malformed);
         }
+    }
+
+    #[test]
+    fn utf8_entries_borrow_input() {
+        let bytes = vec![1, 0, 3, b'a', b'b', b'c'];
+        let pool = RawConstantPool::from_bytes(&bytes, 2).unwrap();
+        let Some(RawEntry::Utf8(value)) = pool.get_entry(1) else {
+            panic!("expected a UTF-8 entry");
+        };
+        assert_eq!(*value, b"abc");
+        assert!(std::ptr::eq(value.as_ptr(), bytes[3..].as_ptr()));
     }
 
     proptest! {

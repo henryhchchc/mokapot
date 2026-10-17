@@ -261,17 +261,81 @@ fn parses_instruction_operands_and_switch_alignment() {
                     default: -12,
                     low: -1,
                     high: 1,
-                    jump_offsets: vec![10, -20, 30],
+                    jump_offsets: &[10.into(), (-20).into(), 30.into()],
                 },
             ),
             (
                 52.into(),
                 LookupSwitch {
                     default: 40,
-                    match_offsets: vec![(-3, -30), (2, 20), (9, 90)],
+                    match_offsets: &[
+                        LookupSwitchPair {
+                            match_value: (-3).into(),
+                            offset: (-30).into()
+                        },
+                        LookupSwitchPair {
+                            match_value: 2.into(),
+                            offset: 20.into()
+                        },
+                        LookupSwitchPair {
+                            match_value: 9.into(),
+                            offset: 90.into()
+                        },
+                    ],
                 },
             ),
             (88.into(), GotoW { offset: -123_456 }),
         ]
     );
+}
+
+#[test]
+fn switch_tables_borrow_unaligned_input_at_every_instruction_alignment() {
+    for prefix_len in 0..4 {
+        for opcode in [0xaa, 0xab] {
+            let mut bytes = vec![0xff];
+            bytes.resize(1 + prefix_len, 0);
+            bytes.push(opcode);
+            while !(bytes.len() - 1).is_multiple_of(4) {
+                bytes.push(0);
+            }
+            let header: &[i32] = if opcode == 0xaa { &[0, 0, 1] } else { &[0, 2] };
+            bytes.extend(header.iter().flat_map(|value| value.to_be_bytes()));
+            let table_start = bytes.len();
+            let values: &[i32] = if opcode == 0xaa {
+                &[0, 0]
+            } else {
+                &[-1, 0, 1, 0]
+            };
+            bytes.extend(values.iter().flat_map(|value| value.to_be_bytes()));
+
+            let instructions = InstructionList::<RawInstruction>::from_bytes(&bytes[1..]).unwrap();
+            let pc = ProgramCounter::from(u16::try_from(prefix_len).unwrap());
+            let pointer = match instructions.get(&pc).unwrap() {
+                RawInstruction::TableSwitch { jump_offsets, .. } => {
+                    assert_eq!(jump_offsets.len(), 2);
+                    jump_offsets.as_ptr().cast::<u8>()
+                }
+                RawInstruction::LookupSwitch { match_offsets, .. } => {
+                    assert_eq!(match_offsets.len(), 2);
+                    assert_eq!(match_offsets[0].match_value.get(), -1);
+                    match_offsets.as_ptr().cast::<u8>()
+                }
+                _ => panic!("expected a switch"),
+            };
+            assert!(std::ptr::eq(pointer, bytes[table_start..].as_ptr()));
+        }
+    }
+}
+
+#[test]
+fn switches_reject_unavailable_large_tables() {
+    for (opcode, header) in [
+        (0xaa, vec![0_i32, i32::MIN, i32::MAX]),
+        (0xab, vec![0_i32, i32::MAX]),
+    ] {
+        let mut bytes = vec![opcode, 0, 0, 0];
+        bytes.extend(header.into_iter().flat_map(i32::to_be_bytes));
+        assert_malformed(&bytes);
+    }
 }

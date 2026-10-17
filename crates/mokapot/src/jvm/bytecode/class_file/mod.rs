@@ -21,17 +21,17 @@ use crate::{
 /// The raw representation of a class file.
 #[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug)]
-pub(crate) struct ClassFile {
+pub(crate) struct ClassFile<'a> {
     minor_version: u16,
     major_version: u16,
-    constant_pool: RawConstantPool,
+    constant_pool: RawConstantPool<'a>,
     access_flags: u16,
     this_class: u16,
     super_class: u16,
-    interfaces: Box<[u16]>,
-    fields: Box<[FieldInfo]>,
-    methods: Box<[MethodInfo]>,
-    attributes: Box<[AttributeInfo]>,
+    interfaces: &'a [zerocopy::byteorder::big_endian::U16],
+    fields: Box<[FieldInfo<'a>]>,
+    methods: Box<[MethodInfo<'a>]>,
+    attributes: Box<[AttributeInfo<'a>]>,
 }
 
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
@@ -53,7 +53,7 @@ impl Class {
 }
 
 impl Class {
-    pub(crate) fn from_raw(raw: ClassFile) -> Result<Self, ParseError> {
+    pub(crate) fn from_raw(raw: ClassFile<'_>) -> Result<Self, ParseError> {
         let ClassFile {
             minor_version,
             major_version,
@@ -122,8 +122,8 @@ impl Class {
             name: class_name,
             super_class,
             interfaces: interfaces
-                .into_iter()
-                .map(|it| ctx.constant_pool.get_class_name(it))
+                .iter()
+                .map(|it| ctx.constant_pool.get_class_name(it.get()))
                 .collect::<Result<_, _>>()?,
             fields: fields
                 .into_iter()
@@ -161,8 +161,8 @@ impl Class {
     }
 }
 
-impl ClassElement for BootstrapMethod {
-    type Raw = raw_attributes::BootstrapMethod;
+impl<'a> ClassElement<'a> for BootstrapMethod {
+    type Raw = raw_attributes::BootstrapMethod<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -171,14 +171,14 @@ impl ClassElement for BootstrapMethod {
         } = raw;
         let method = ctx.constant_pool.get_method_handle(bootstrap_method_ref)?;
         let arguments = bootstrap_arguments
-            .into_iter()
-            .map(|it| ctx.constant_pool.get_constant_value(it))
+            .iter()
+            .map(|it| ctx.constant_pool.get_constant_value(it.get()))
             .collect::<Result<_, _>>()?;
         Ok(Self { method, arguments })
     }
 }
 
-impl ClassElement for InnerClassInfo {
+impl ClassElement<'_> for InnerClassInfo {
     type Raw = raw_attributes::InnerClass;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -215,8 +215,8 @@ impl ClassElement for InnerClassInfo {
     }
 }
 
-impl ClassElement for RecordComponent {
-    type Raw = raw_attributes::RecordComponentInfo;
+impl<'a> ClassElement<'a> for RecordComponent {
+    type Raw = raw_attributes::RecordComponentInfo<'a>;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
             name_index,
@@ -264,7 +264,7 @@ impl ClassElement for RecordComponent {
     }
 }
 
-impl ClassElement for EnclosingMethod {
+impl ClassElement<'_> for EnclosingMethod {
     type Raw = raw_attributes::EnclosingMethod;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {

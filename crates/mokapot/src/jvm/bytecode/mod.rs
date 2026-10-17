@@ -41,10 +41,10 @@ pub struct ParsingContext {
 /// Enables parsing a raw JVM element from a byte slice.
 ///
 /// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a byte slice.
-pub(crate) trait FromBytecode: Sized {
+pub(crate) trait FromBytecode<'a>: Sized {
     /// Parses an instance of this type from the given slice, advancing it past the parsed element.
     ///
     /// # Errors
     /// Returns a parsing error if the input is truncated or malformed.
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError>;
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError>;
 }

@@ -7,12 +7,12 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     FromBytecode, ParseError,
     attribute::AttributeInfo,
-    decoder::{BytecodeSlice, read_value},
+    decoder::{BytecodeSlice, read_slice, read_value},
 };
 use crate::intrinsics::see_jvm_spec;
 
 #[doc = see_jvm_spec!(4, 7, 6)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 #[expect(
     clippy::struct_field_names,
@@ -28,7 +28,7 @@ pub struct InnerClass {
 impl FixedLayout for InnerClass {}
 
 #[doc = see_jvm_spec!(4, 7, 7)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct EnclosingMethod {
     pub class_index: U16,
@@ -38,18 +38,16 @@ pub struct EnclosingMethod {
 impl FixedLayout for EnclosingMethod {}
 
 #[doc = see_jvm_spec!(4, 7, 23)]
-pub struct BootstrapMethod {
+pub struct BootstrapMethod<'a> {
     pub bootstrap_method_ref: u16,
-    pub bootstrap_arguments: Box<[u16]>,
+    pub bootstrap_arguments: &'a [U16],
 }
 
-impl FromBytecode for BootstrapMethod {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for BootstrapMethod<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let bootstrap_method_ref = read_value::<U16>(bytes)?.get();
         let num_bootstrap_arguments: u16 = read_value::<U16>(bytes)?.get();
-        let bootstrap_arguments = (0..num_bootstrap_arguments)
-            .map(|_| read_value::<U16>(bytes).map(u16::from))
-            .collect::<Result<_, ParseError>>()?;
+        let bootstrap_arguments = read_slice(bytes, usize::from(num_bootstrap_arguments))?;
         Ok(Self {
             bootstrap_method_ref,
             bootstrap_arguments,
@@ -58,7 +56,7 @@ impl FromBytecode for BootstrapMethod {
 }
 
 #[doc = see_jvm_spec!(4, 7, 24)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ParameterInfo {
     pub name_index: U16,
@@ -68,14 +66,14 @@ pub struct ParameterInfo {
 impl FixedLayout for ParameterInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 30)]
-pub struct RecordComponentInfo {
+pub struct RecordComponentInfo<'a> {
     pub name_index: u16,
     pub descriptor_index: u16,
-    pub attributes: Box<[AttributeInfo]>,
+    pub attributes: Box<[AttributeInfo<'a>]>,
 }
 
-impl FromBytecode for RecordComponentInfo {
-    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError> {
+impl<'a> FromBytecode<'a> for RecordComponentInfo<'a> {
+    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let name_index = read_value::<U16>(bytes)?.get();
         let descriptor_index = read_value::<U16>(bytes)?.get();
         let attributes_count: u16 = read_value::<U16>(bytes)?.get();
@@ -87,5 +85,24 @@ impl FromBytecode for RecordComponentInfo {
             descriptor_index,
             attributes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_arguments_borrow_their_input() {
+        let bytes = [0, 3, 0, 2, 0, 4, 0, 5];
+        let mut remaining = bytes.as_slice();
+        let method = BootstrapMethod::from_bytes(&mut remaining).unwrap();
+        assert_eq!(remaining, []);
+        assert_eq!(method.bootstrap_arguments[0].get(), 4);
+        assert_eq!(method.bootstrap_arguments[1].get(), 5);
+        assert!(std::ptr::eq(
+            method.bootstrap_arguments.as_ptr().cast::<u8>(),
+            bytes[4..].as_ptr()
+        ));
     }
 }

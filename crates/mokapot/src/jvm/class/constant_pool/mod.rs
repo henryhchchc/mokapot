@@ -168,7 +168,7 @@ impl ConstantPool {
     /// Resolves all entries, preserving indices and reserved slots.
     /// # Errors
     /// Returns an error for invalid references, tags, names, descriptors, or handle kinds.
-    pub fn from_raw(raw: RawConstantPool) -> Result<Self, ParseError> {
+    pub fn from_raw(raw: RawConstantPool<'_>) -> Result<Self, ParseError> {
         let count = raw.count();
         let mut pending = raw.inner.into_slots();
         let mut pool = Self {
@@ -353,7 +353,7 @@ impl ConstantPool {
         })
     }
 
-    fn resolve_entry(&self, raw: RawEntry) -> Result<Entry, ParseError> {
+    fn resolve_entry(&self, raw: RawEntry<'_>) -> Result<Entry, ParseError> {
         Ok(match raw {
             RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes)),
             RawEntry::Integer(value) => Entry::Integer(value.into()),
@@ -514,7 +514,7 @@ impl Default for ConstantPool {
     }
 }
 
-impl RawEntry {
+impl RawEntry<'_> {
     const fn resolution_tier(&self) -> u8 {
         match self {
             Self::Utf8(_) | Self::Integer(_) | Self::Float(_) | Self::Long(_) | Self::Double(_) => {
@@ -567,7 +567,7 @@ mod tests {
             let reference_type: ReferenceType = descriptor.parse().unwrap();
             let mut pool = RawConstantPool::new();
             let name_index = pool
-                .put_entry(RawEntry::Utf8(descriptor.as_bytes().into()))
+                .put_entry(RawEntry::Utf8(descriptor.as_bytes()))
                 .unwrap();
             let index = pool
                 .put_entry(RawEntry::Class {
@@ -584,7 +584,7 @@ mod tests {
         }
     }
 
-    fn interface_method_handle_pool(reference_tag: u8) -> RawConstantPool {
+    fn interface_method_handle_bytes(reference_tag: u8) -> Vec<u8> {
         // Utf8 owner, Class #1, Utf8 name, Utf8 descriptor, NameAndType #3:#4,
         // method reference #2:#5, REF_invokeInterface handle #6.
         let bytes = [
@@ -624,7 +624,7 @@ mod tests {
             0,
             6,
         ];
-        RawConstantPool::from_bytes(bytes.as_slice(), 8).unwrap()
+        bytes.to_vec()
     }
 
     #[test]
@@ -635,16 +635,16 @@ mod tests {
             descriptor: "()V".parse().unwrap(),
         };
         let handle = MethodHandle::RefInvokeInterface(method);
-        let pool = ConstantPool::from_raw(interface_method_handle_pool(11)).unwrap();
+        let bytes = interface_method_handle_bytes(11);
+        let pool = ConstantPool::from_bytes(&bytes, 8).unwrap();
         assert_eq!(pool.get_method_handle(7).unwrap(), handle);
     }
 
     #[test]
     fn interface_method_handles_reject_method_refs() {
+        let bytes = interface_method_handle_bytes(10);
         assert_eq!(
-            ConstantPool::from_raw(interface_method_handle_pool(10))
-                .unwrap_err()
-                .kind(),
+            ConstantPool::from_bytes(&bytes, 8).unwrap_err().kind(),
             ParseErrorKind::Malformed
         );
     }
@@ -668,9 +668,9 @@ mod tests {
                 name_index: 6.into(),
                 descriptor_index: 7.into(),
             },
-            RawEntry::Utf8(b"a/b/C".as_slice().into()),
-            RawEntry::Utf8(b"m".as_slice().into()),
-            RawEntry::Utf8(b"(I)V".as_slice().into()),
+            RawEntry::Utf8(b"a/b/C".as_slice()),
+            RawEntry::Utf8(b"m".as_slice()),
+            RawEntry::Utf8(b"(I)V".as_slice()),
             RawEntry::Long(42.into()),
             RawEntry::Dynamic {
                 bootstrap_method_attr_index: 3.into(),
@@ -684,7 +684,7 @@ mod tests {
                 name_index: 6.into(),
                 descriptor_index: 13.into(),
             },
-            RawEntry::Utf8(b"I".as_slice().into()),
+            RawEntry::Utf8(b"I".as_slice()),
         ] {
             raw.put_entry(entry).unwrap();
         }
@@ -741,7 +741,7 @@ mod tests {
         ] {
             let mut raw = RawConstantPool::new();
             for entry in [
-                RawEntry::Utf8(b"I".as_slice().into()),
+                RawEntry::Utf8(b"I".as_slice()),
                 RawEntry::Long(42.into()),
                 entry,
             ] {
@@ -766,15 +766,15 @@ mod tests {
             ),
             (vec![0xff], JavaString::InvalidUtf8(Box::from([0xff]))),
         ] {
-            let bytes = bytes.into_boxed_slice();
             let mut raw = RawConstantPool::new();
-            let index = raw.put_entry(RawEntry::Utf8(bytes)).unwrap();
+            let index = raw.put_entry(RawEntry::Utf8(&bytes)).unwrap();
             let literal = raw
                 .put_entry(RawEntry::String {
                     string_index: index.into(),
                 })
                 .unwrap();
             let pool = ConstantPool::from_raw(raw).unwrap();
+            drop(bytes);
             assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(expected.clone())));
             assert_eq!(
                 pool.get_constant_value(literal).unwrap(),

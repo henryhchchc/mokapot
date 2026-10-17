@@ -25,7 +25,7 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl ClassElement for LocalVariableDescAttr {
+impl ClassElement<'_> for LocalVariableDescAttr {
     type Raw = raw_attributes::LocalVariableInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -55,7 +55,7 @@ impl ClassElement for LocalVariableDescAttr {
     }
 }
 
-impl ClassElement for LocalVariableTypeAttr {
+impl ClassElement<'_> for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableTypeInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {

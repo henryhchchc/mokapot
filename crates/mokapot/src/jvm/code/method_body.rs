@@ -184,7 +184,7 @@ impl<I> InstructionList<I> {
     }
 }
 
-impl InstructionList<RawInstruction> {
+impl InstructionList<RawInstruction<'_>> {
     /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
     /// # Errors
     /// See [`ParseError`] for possible errors.

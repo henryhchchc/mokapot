@@ -231,12 +231,12 @@ pub enum JavaString {
 }
 
 impl JavaString {
-    pub(crate) fn from_modified_utf8(bytes: Box<[u8]>) -> Self {
-        match String::from_utf8(bytes.into_vec()) {
-            Ok(value) => Self::Utf8(value),
-            Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
+    pub(crate) fn from_modified_utf8(bytes: &[u8]) -> Self {
+        match std::str::from_utf8(bytes) {
+            Ok(value) => Self::Utf8(value.to_owned()),
+            Err(_) => match cesu8::from_java_cesu8(bytes) {
                 Ok(value) => Self::Utf8(value.into_owned()),
-                Err(_) => Self::InvalidUtf8(error.into_bytes().into_boxed_slice()),
+                Err(_) => Self::InvalidUtf8(bytes.into()),
             },
         }
     }

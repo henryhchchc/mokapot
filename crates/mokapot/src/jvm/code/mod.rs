@@ -10,4 +10,6 @@ pub use method_body::{
 };
 pub use pc::{InvalidOffset, ProgramCounter};
 
-pub use super::bytecode::code::raw_instruction::{RawInstruction, RawWideInstruction};
+pub use super::bytecode::code::raw_instruction::{
+    LookupSwitchPair, RawInstruction, RawWideInstruction,
+};
