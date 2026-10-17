@@ -92,6 +92,6 @@ mod tests {
         let method = <&BootstrapMethod>::decode(&mut remaining).unwrap();
         assert_eq!(method.bootstrap_method_ref.get(), 2);
         assert_eq!(&method.bootstrap_arguments, [U16::new(3), U16::new(4)]);
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
     }
 }

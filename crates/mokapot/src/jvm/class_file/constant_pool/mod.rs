@@ -249,7 +249,7 @@ mod tests {
     fn assert_entry_decoding(entry: &RawEntry<'_>, bytes: &[u8]) {
         let mut reader = bytes;
         assert_eq!(&RawEntry::decode(&mut reader).unwrap(), entry);
-        assert_eq!(reader, []);
+        assert_eq!(reader, b"");
         for end in 0..bytes.len() {
             assert_eq!(
                 RawEntry::decode(&mut &bytes[..end]).unwrap_err().kind(),

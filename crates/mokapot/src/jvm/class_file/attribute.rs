@@ -11,7 +11,7 @@ use crate::types::package_name::PackageName;
 
 use super::{
     Decode, ParseError, ResolutionContext,
-    annotation::raw as annotation_raw,
+    annotation::{decode_annotation, decode_element_value, decode_type_annotation},
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
@@ -210,25 +210,19 @@ impl Resolve for &AttributeInfo {
             }
             "RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| {
-                    decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
-                })
-                .map(Attribute::RuntimeVisibleAnnotations)
+                parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
+                    .map(Attribute::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| {
-                    decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
-                })
-                .map(Attribute::RuntimeInvisibleAnnotations)
+                parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
+                    .map(Attribute::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, count, |bytes| {
-                        decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
-                    })
+                    parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
                 })
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
@@ -236,28 +230,23 @@ impl Resolve for &AttributeInfo {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, count, |bytes| {
-                        decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
-                    })
+                    parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
                 })
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| {
-                    decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
-                })
-                .map(Attribute::RuntimeVisibleTypeAnnotations)
+                parse_repeated(bytes, count, |bytes| decode_type_annotation(bytes, ctx))
+                    .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| {
-                    decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
-                })
-                .map(Attribute::RuntimeInvisibleTypeAnnotations)
+                parse_repeated(bytes, count, |bytes| decode_type_annotation(bytes, ctx))
+                    .map(Attribute::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
-                .map(Attribute::AnnotationDefault),
+            "AnnotationDefault" => {
+                decode_element_value(bytes, ctx).map(Attribute::AnnotationDefault)
+            }
             "BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
@@ -362,8 +351,8 @@ mod tests {
 
         let empty = <&AttributeInfo>::decode(&mut remaining).unwrap();
         assert_eq!(empty.attribute_name_index.get(), 1);
-        assert_eq!(&empty.info, []);
-        assert_eq!(remaining, []);
+        assert_eq!(&empty.info, b"");
+        assert_eq!(remaining, b"");
     }
 
     #[test]
