@@ -84,7 +84,7 @@ fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
     let jump_targets = vec![10.into(), 10.into()];
     let instruction = Instruction::TableSwitch {
         low: 3,
-        jump_targets,
+        jump_targets: jump_targets.into(),
         default: 10.into(),
     };
     let body = [

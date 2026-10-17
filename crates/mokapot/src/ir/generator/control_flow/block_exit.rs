@@ -204,7 +204,7 @@ mod tests {
         for (low, jump_targets) in [(i32::MAX, vec![10.into(), 10.into()]), (0, vec![])] {
             let switch = Instruction::TableSwitch {
                 low,
-                jump_targets,
+                jump_targets: jump_targets.into(),
                 default: 10.into(),
             };
             let instructions = [(0, switch.clone()), (10, Instruction::Return)];

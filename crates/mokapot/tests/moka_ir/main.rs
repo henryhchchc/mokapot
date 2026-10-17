@@ -21,8 +21,7 @@ mod support;
 
 fn get_test_class() -> Class {
     let bytes = support::class_bytes("org/mokapot/test/TestAnalysis");
-    let mut bytes = bytes.as_slice();
-    Class::from_reader(&mut bytes).unwrap()
+    Class::from_bytes(&bytes).unwrap()
 }
 
 fn get_test_method() -> Method {
@@ -102,8 +101,7 @@ fn corpus_methods() -> Vec<(String, Method)> {
     let mut methods = Vec::new();
     for path in class_files {
         let bytes = std::fs::read(&path).expect("a fixture class is readable");
-        let mut reader: &[u8] = &bytes;
-        let class = Class::from_reader(&mut reader)
+        let class = Class::from_bytes(&bytes)
             .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
         for method in class.methods {
             if method.body.is_some() {

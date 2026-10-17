@@ -6,10 +6,10 @@ use std::{
     ops::{Bound, Range, RangeBounds},
 };
 
-use super::{Instruction, ProgramCounter, RawInstruction};
+use super::{Instruction, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Annotations, TypeAnnotation, bytecode::ParseError, class::ConstantPool},
+    jvm::{Annotations, TypeAnnotation, errors::ParseError},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -24,17 +24,17 @@ pub struct MethodBody {
     /// The executable instructions.
     pub instructions: InstructionList<Instruction>,
     /// The exception handlers table.
-    pub exception_table: Vec<ExceptionTableEntry>,
+    pub exception_table: Box<[ExceptionTableEntry]>,
     /// The line number table.
-    pub line_number_table: Option<Vec<LineNumberTableEntry>>,
+    pub line_number_table: Option<Box<[LineNumberTableEntry]>>,
     /// The local variable table.
     pub local_variable_table: Option<LocalVariableTable>,
     /// The stack map table.
-    pub stack_map_table: Option<Vec<StackMapFrame>>,
+    pub stack_map_table: Option<Box<[StackMapFrame]>>,
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 impl MethodBody {
@@ -48,13 +48,13 @@ impl MethodBody {
 /// A list of instructions.
 ///
 /// ```
-/// use mokapot::jvm::code::{InstructionList, ProgramCounter, RawInstruction};
+/// use mokapot::jvm::code::{InstructionList, ProgramCounter, Instruction};
 ///
 /// let start = ProgramCounter::ZERO;
 /// let end = ProgramCounter::from(3);
 /// let instructions: InstructionList<_> =
-///     [(end, RawInstruction::Return), (start, RawInstruction::Nop)].into_iter().collect();
-/// assert_eq!(instructions.entry_point(), Some((start, &RawInstruction::Nop)));
+///     [(end, Instruction::Return), (start, Instruction::Nop)].into_iter().collect();
+/// assert_eq!(instructions.entry_point(), Some((start, &Instruction::Nop)));
 /// assert_eq!(instructions.iter().map(|(pc, _)| pc).collect::<Vec<_>>(), [start, end]);
 /// assert_eq!(instructions.next_pc_of(&start), Some(end));
 /// assert_eq!(instructions.prev_pc_of(&end), Some(start));
@@ -184,24 +184,6 @@ impl<I> InstructionList<I> {
     }
 }
 
-impl InstructionList<RawInstruction> {
-    /// Lifts an [`InstructionList<RawInstruction>`] to an [`InstructionList<Instruction>`] given the constant pool.
-    /// # Errors
-    /// See [`ParseError`] for possible errors.
-    pub fn lift(
-        self,
-        constant_pool: &ConstantPool,
-    ) -> Result<InstructionList<Instruction>, ParseError> {
-        let mut instructions = BTreeMap::new();
-        for (pc, raw_instruction) in self {
-            let instruction =
-                Instruction::from_raw_instruction(raw_instruction, pc, constant_pool)?;
-            instructions.insert(pc, instruction);
-        }
-        Ok(InstructionList(instructions))
-    }
-}
-
 pub mod instruction_list {
     use std::collections::btree_map;
 
@@ -263,12 +245,12 @@ mod test {
             ]),
             max_stack: 0,
             max_locals: 0,
-            exception_table: vec![],
+            exception_table: Box::new([]),
             line_number_table: None,
             local_variable_table: None,
             stack_map_table: None,
             type_annotations: Annotations::default(),
-            other_attributes: vec![],
+            other_attributes: Box::new([]),
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
     }
@@ -472,7 +454,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of additional local variables.
-        locals: Vec<VerificationType>,
+        locals: Box<[VerificationType]>,
     },
     /// Indicates a new frame.
     /// Corresponds to `full_frame`.
@@ -480,8 +462,8 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of the local variables.
-        locals: Vec<VerificationType>,
+        locals: Box<[VerificationType]>,
         /// The verification information of the operand stack.
-        stack: Vec<VerificationType>,
+        stack: Box<[VerificationType]>,
     },
 }

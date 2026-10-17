@@ -6,11 +6,14 @@ use divan::{
     Bencher,
     counter::{BytesCount, ItemsCount},
 };
-use mokapot::jvm::{Class, bytecode::benchmark_support};
+use mokapot::jvm::{Class, benchmark_support};
 
 #[path = "support/jdk_corpus.rs"]
 mod jdk_corpus;
 use jdk_corpus::Corpus;
+
+#[global_allocator]
+static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
 
 static CORPUS: LazyLock<Corpus> = LazyLock::new(Corpus::from_env);
 
@@ -37,7 +40,7 @@ fn raw_class(bencher: Bencher) {
 fn whole_class(bencher: Bencher) {
     let corpus = &*CORPUS;
     for input in &corpus.classes {
-        Class::from_reader(&mut input.bytes.as_slice())
+        Class::from_bytes(&input.bytes)
             .unwrap_or_else(|error| panic!("cannot parse {}: {error}", input.name));
     }
     bencher
@@ -45,7 +48,7 @@ fn whole_class(bencher: Bencher) {
         .counter(ItemsCount::new(corpus.classes.len()))
         .bench_local(|| {
             for input in &corpus.classes {
-                let parsed = Class::from_reader(&mut black_box(input.bytes.as_slice()))
+                let parsed = Class::from_bytes(black_box(&input.bytes))
                     .unwrap_or_else(|error| panic!("cannot parse {}: {error}", input.name));
                 drop(black_box(parsed));
             }

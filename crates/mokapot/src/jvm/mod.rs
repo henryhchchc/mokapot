@@ -11,8 +11,11 @@ use crate::{
 };
 
 pub mod annotation;
-pub mod bytecode;
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod benchmark_support;
 pub mod class;
+mod class_file;
 pub mod class_loader;
 pub mod code;
 pub mod errors;
@@ -21,7 +24,6 @@ pub mod method;
 pub mod module;
 pub mod references;
 
-mod constant_pool_storage;
 mod constant_value;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
@@ -40,15 +42,15 @@ pub struct Class {
     /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
     pub super_class: Option<ClassName>,
     /// The interfaces implemented by the class.
-    pub interfaces: Vec<ClassName>,
+    pub interfaces: Box<[ClassName]>,
     /// The fields declared the class.
-    pub fields: Vec<Field>,
+    pub fields: Box<[Field]>,
     /// The methods declared in the class.
-    pub methods: Vec<Method>,
+    pub methods: Box<[Method]>,
     /// The path to the source file of the class.
     pub source_file: Option<String>,
     /// The inner classes.
-    pub inner_classes: Vec<class::InnerClassInfo>,
+    pub inner_classes: Box<[class::InnerClassInfo]>,
     /// The outer class and method of the class.
     pub enclosing_method: Option<class::EnclosingMethod>,
     /// The source debug extension.
@@ -58,19 +60,19 @@ pub struct Class {
     /// The type annotations of the class.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// The bootstrap methods of the class, which are used to generate dynamic callsites.
-    pub bootstrap_methods: Vec<class::BootstrapMethod>,
+    pub bootstrap_methods: Box<[class::BootstrapMethod]>,
     /// The information of the module if the class is `module-info`.
     pub module: Option<Module>,
     /// The packages of the module.
-    pub module_packages: Vec<PackageName>,
+    pub module_packages: Box<[PackageName]>,
     /// The main class of the module.
     pub module_main_class: Option<ClassName>,
     /// The nearest outer class of the class.
     pub nest_host: Option<ClassName>,
     /// The nested classes of the class.
-    pub nest_members: Vec<ClassName>,
+    pub nest_members: Box<[ClassName]>,
     /// The permitted subclasses of the class if the class is `sealed`.
-    pub permitted_subclasses: Vec<ClassName>,
+    pub permitted_subclasses: Box<[ClassName]>,
     /// Indicates whether the class is synthesized by the compiler.
     pub is_synthetic: bool,
     /// Indicates whether the class is deprecated.
@@ -78,25 +80,25 @@ pub struct Class {
     /// The generic signature of the class.
     pub signature: Option<class::Signature>,
     /// The record components of the class if the class is `record`.
-    pub record: Option<Vec<class::RecordComponent>>,
+    pub record: Option<Box<[class::RecordComponent]>>,
     /// JVM attributes that are not specified in the JVM specification.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 /// Container for runtime-visible and runtime-invisible annotations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Annotations<T> {
     /// The runtime-visible annotations.
-    pub runtime_visible: Vec<T>,
+    pub runtime_visible: Box<[T]>,
     /// The runtime-invisible annotations.
-    pub runtime_invisible: Vec<T>,
+    pub runtime_invisible: Box<[T]>,
 }
 
 impl<T> Default for Annotations<T> {
     fn default() -> Self {
         Self {
-            runtime_visible: Vec::new(),
-            runtime_invisible: Vec::new(),
+            runtime_visible: Box::default(),
+            runtime_invisible: Box::default(),
         }
     }
 }
@@ -108,7 +110,7 @@ pub struct Annotation {
     /// The type of the annotation.
     pub annotation_type: FieldType,
     /// The names and values of the annotation's fields.
-    pub element_value_pairs: Vec<(String, annotation::ElementValue)>,
+    pub element_value_pairs: Box<[(String, annotation::ElementValue)]>,
 }
 
 /// An type annotation on a class, field, method, or parameter.
@@ -127,9 +129,9 @@ pub struct TypeAnnotation {
     /// The path to the annotated type, describing precisely which part of a compound
     /// type is annotated (e.g., which type argument in a generic type).
     #[doc = see_jvm_spec!(4, 7, 20, 2)]
-    pub target_path: Vec<annotation::TypePathElement>,
+    pub target_path: Box<[annotation::TypePathElement]>,
     /// The names and values of the annotation's fields.
-    pub element_value_pairs: Vec<(String, annotation::ElementValue)>,
+    pub element_value_pairs: Box<[(String, annotation::ElementValue)]>,
 }
 
 /// A JVM field.
@@ -157,7 +159,7 @@ pub struct Field {
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 /// A JVM method.
@@ -175,17 +177,17 @@ pub struct Method {
     /// The body of the method if it is not `abstract` or `native`.
     pub body: Option<code::MethodBody>,
     /// The checked exceptions that may be thrown by the method.
-    pub exceptions: Vec<ClassName>,
+    pub exceptions: Box<[ClassName]>,
     /// The annotations.
     pub annotations: Annotations<Annotation>,
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// The annotations on method parameters.
-    pub parameter_annotations: Annotations<Vec<Annotation>>,
+    pub parameter_annotations: Annotations<Box<[Annotation]>>,
     /// The default value of the annotation (only for annotation interface methods).
     pub annotation_default: Option<annotation::ElementValue>,
     /// The parameters of the method, including names and access flags.
-    pub parameters: Vec<method::ParameterInfo>,
+    pub parameters: Box<[method::ParameterInfo]>,
     /// Indicates if the method is synthesized by the compiler (not in source).
     pub is_synthetic: bool,
     /// Indicates if the method is deprecated and should no longer be used.
@@ -193,7 +195,7 @@ pub struct Method {
     /// The generic signature for methods with type parameters or generic types.
     pub signature: Option<method::Signature>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 /// A module in the [Java Platform Module System (JPMS)](https://openjdk.org/projects/jigsaw/spec/).
@@ -207,18 +209,18 @@ pub struct Module {
     /// The version of the module.
     pub version: Option<String>,
     /// A list of the modules that are required by this module.
-    pub requires: Vec<module::Require>,
+    pub requires: Box<[module::Require]>,
     /// A list of the modules that are exported by this module.
-    pub exports: Vec<module::Export>,
+    pub exports: Box<[module::Export]>,
     /// A list of the modules that are opened by this module.
-    pub opens: Vec<module::Open>,
+    pub opens: Box<[module::Open]>,
     /// A list of the classes that are used by this module.
-    pub uses: Vec<ClassName>,
+    pub uses: Box<[ClassName]>,
     /// A list of the services that are provided by this module.
-    pub provides: Vec<module::Provide>,
+    pub provides: Box<[module::Provide]>,
 }
 
-/// A string in the JVM bytecode.
+/// A JVM string decoded from modified UTF-8.
 #[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum JavaString {
@@ -231,12 +233,12 @@ pub enum JavaString {
 }
 
 impl JavaString {
-    pub(crate) fn from_modified_utf8(bytes: Box<[u8]>) -> Self {
-        match String::from_utf8(bytes.into_vec()) {
-            Ok(value) => Self::Utf8(value),
-            Err(error) => match cesu8::from_java_cesu8(error.as_bytes()) {
+    pub(crate) fn from_modified_utf8(bytes: &[u8]) -> Self {
+        match std::str::from_utf8(bytes) {
+            Ok(value) => Self::Utf8(value.to_owned()),
+            Err(_) => match cesu8::from_java_cesu8(bytes) {
                 Ok(value) => Self::Utf8(value.into_owned()),
-                Err(_) => Self::InvalidUtf8(error.into_bytes().into_boxed_slice()),
+                Err(_) => Self::InvalidUtf8(bytes.into()),
             },
         }
     }

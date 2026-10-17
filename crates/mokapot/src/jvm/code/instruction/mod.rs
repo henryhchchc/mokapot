@@ -46,8 +46,8 @@ pub enum Instruction {
     FConst2 = 0x0d,
     DConst0 = 0x0e,
     DConst1 = 0x0f,
-    BiPush(u8) = 0x10,
-    SiPush(u16) = 0x11,
+    BiPush(i8) = 0x10,
+    SiPush(i16) = 0x11,
     Ldc(ConstantValue) = 0x12,
     LdcW(ConstantValue) = 0x13,
     Ldc2W(ConstantValue) = 0x14,
@@ -216,7 +216,7 @@ pub enum Instruction {
     Ret(u8) = 0xa9,
     TableSwitch {
         low: i32,
-        jump_targets: Vec<ProgramCounter>,
+        jump_targets: Box<[ProgramCounter]>,
         default: ProgramCounter,
     } = 0xaa,
     LookupSwitch {
