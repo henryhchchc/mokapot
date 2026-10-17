@@ -1,5 +1,6 @@
 use super::*;
 use crate::jvm::bytecode::constant_pool::{RawConstantPool, RawEntry};
+use crate::jvm::code::InstructionList;
 
 #[test]
 fn tableswitch_default_can_target_backward() {

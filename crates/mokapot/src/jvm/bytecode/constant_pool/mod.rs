@@ -52,10 +52,10 @@ impl<'a> RawConstantPool<'a> {
     /// # Errors
     /// Returns a [`ParseError`] for malformed or truncated entries.
     pub fn from_bytes(mut bytes: &'a [u8], constant_pool_count: u16) -> Result<Self, ParseError> {
-        Self::parse(&mut bytes, constant_pool_count)
+        Self::parse_prefix(&mut bytes, constant_pool_count)
     }
 
-    pub(super) fn parse(
+    pub(super) fn parse_prefix(
         bytes: &mut &'a [u8],
         constant_pool_count: u16,
     ) -> Result<Self, ParseError> {
@@ -491,8 +491,8 @@ mod tests {
         #[test]
         fn from_bytes((count, bytes) in arb_constant_pool_bytes()) {
             let mut remaining = bytes.as_slice();
-            let constant_pool = RawConstantPool::parse(&mut remaining, count).unwrap();
-            prop_assert!(remaining.is_empty());
+            let constant_pool = RawConstantPool::parse_prefix(&mut remaining, count).unwrap();
+            prop_assert_eq!(remaining, b"");
             let public_pool = RawConstantPool::from_bytes(&bytes, count).unwrap();
             prop_assert_eq!(constant_pool, public_pool);
         }

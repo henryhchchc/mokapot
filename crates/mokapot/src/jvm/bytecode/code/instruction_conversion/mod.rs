@@ -5,26 +5,13 @@ use itertools::Itertools;
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
-        bytecode::{ParseError, ParsingContext, class_element::ClassElement},
+        bytecode::ParseError,
         class::ConstantPool,
-        code::{Instruction, InstructionList, ProgramCounter, WideInstruction},
+        code::{Instruction, ProgramCounter, WideInstruction},
         errors::ParsingErrorContext,
     },
     types::field_type::PrimitiveType,
 };
-
-impl<'a> ClassElement<'a> for InstructionList<Instruction> {
-    type Raw = InstructionList<RawInstruction<'a>>;
-
-    fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
-        raw.into_iter()
-            .map(|(pc, raw_insn)| {
-                Instruction::from_raw_instruction(raw_insn, pc, &ctx.constant_pool)
-                    .map(|it| (pc, it))
-            })
-            .try_collect()
-    }
-}
 
 impl Instruction {
     #[allow(clippy::too_many_lines)]

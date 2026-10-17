@@ -1,17 +1,15 @@
-use zerocopy::byteorder::big_endian::{U16, U32};
-
 use super::{ClassFile, JAVA_CLASS_MAGIC};
 use crate::jvm::bytecode::{
     FromBytecode, ParseError,
     attribute::AttributeInfo,
     constant_pool::RawConstantPool,
-    decoder::{read_slice, read_value},
+    decoder::{borrow_slice, parse_repeated, read_u16, read_u32},
     field_info::FieldInfo,
     method_info::MethodInfo,
 };
 
 impl<'a> ClassFile<'a> {
-    pub fn parse(mut bytes: &'a [u8]) -> Result<Self, ParseError> {
+    pub fn parse_complete(mut bytes: &'a [u8]) -> Result<Self, ParseError> {
         let class = Self::from_bytes(&mut bytes)?;
         if !bytes.is_empty() {
             return Err(ParseError::malform(
@@ -24,31 +22,25 @@ impl<'a> ClassFile<'a> {
 
 impl<'a> FromBytecode<'a> for ClassFile<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let magic: u32 = read_value::<U32>(bytes)?.get();
+        let magic: u32 = read_u32(bytes)?;
         if magic != JAVA_CLASS_MAGIC {
             return Err(ParseError::malform("This is not a Java class file"));
         }
-        let minor_version = read_value::<U16>(bytes)?.get();
-        let major_version = read_value::<U16>(bytes)?.get();
-        let constant_pool_count = read_value::<U16>(bytes)?.get();
-        let constant_pool = RawConstantPool::parse(bytes, constant_pool_count)?;
-        let access_flags = read_value::<U16>(bytes)?.get();
-        let this_class = read_value::<U16>(bytes)?.get();
-        let super_class = read_value::<U16>(bytes)?.get();
-        let interfaces_count: u16 = read_value::<U16>(bytes)?.get();
-        let interfaces = read_slice(bytes, usize::from(interfaces_count))?;
-        let fields_count: u16 = read_value::<U16>(bytes)?.get();
-        let fields = (0..fields_count)
-            .map(|_| FieldInfo::from_bytes(bytes))
-            .collect::<Result<_, ParseError>>()?;
-        let methods_count: u16 = read_value::<U16>(bytes)?.get();
-        let methods = (0..methods_count)
-            .map(|_| MethodInfo::from_bytes(bytes))
-            .collect::<Result<_, ParseError>>()?;
-        let attributes_count: u16 = read_value::<U16>(bytes)?.get();
-        let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_bytes(bytes))
-            .collect::<Result<_, ParseError>>()?;
+        let minor_version = read_u16(bytes)?;
+        let major_version = read_u16(bytes)?;
+        let constant_pool_count = read_u16(bytes)?;
+        let constant_pool = RawConstantPool::parse_prefix(bytes, constant_pool_count)?;
+        let access_flags = read_u16(bytes)?;
+        let this_class = read_u16(bytes)?;
+        let super_class = read_u16(bytes)?;
+        let interfaces_count: u16 = read_u16(bytes)?;
+        let interfaces = borrow_slice(bytes, usize::from(interfaces_count))?;
+        let fields_count: u16 = read_u16(bytes)?;
+        let fields = parse_repeated(bytes, fields_count, FieldInfo::from_bytes)?;
+        let methods_count: u16 = read_u16(bytes)?;
+        let methods = parse_repeated(bytes, methods_count, MethodInfo::from_bytes)?;
+        let attributes_count: u16 = read_u16(bytes)?;
+        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::from_bytes)?;
 
         Ok(Self {
             minor_version,
@@ -73,7 +65,7 @@ mod tests {
     #[test]
     fn rejects_invalid_magic() {
         let reader = &[0, 0, 0, 0][..];
-        let error = ClassFile::parse(reader).unwrap_err();
+        let error = ClassFile::parse_complete(reader).unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::Malformed);
     }
 

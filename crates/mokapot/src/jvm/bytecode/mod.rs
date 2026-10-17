@@ -5,13 +5,14 @@ pub(crate) use attribute::Attribute;
 #[cfg(feature = "bench-internals")]
 #[doc(hidden)]
 pub mod benchmark_support;
-pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;
 pub mod constant_pool;
 pub(crate) mod decoder;
 mod field_info;
 mod fixed_layout;
+mod flags;
+pub(super) mod from_raw;
 mod method_info;
 mod module;
 mod raw_attributes;
@@ -38,13 +39,4 @@ pub struct ParsingContext {
     pub current_class_name: ClassName,
 }
 
-/// Enables parsing a raw JVM element from a byte slice.
-///
-/// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a byte slice.
-pub(crate) trait FromBytecode<'a>: Sized {
-    /// Parses an instance of this type from the given slice, advancing it past the parsed element.
-    ///
-    /// # Errors
-    /// Returns a parsing error if the input is truncated or malformed.
-    fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError>;
-}
+pub(crate) use decoder::FromBytecode;

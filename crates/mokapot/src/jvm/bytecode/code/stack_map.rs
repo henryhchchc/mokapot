@@ -1,9 +1,9 @@
 use crate::jvm::{
-    bytecode::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes},
+    bytecode::{ParseError, ParsingContext, from_raw::FromRaw, raw_attributes},
     code::{ProgramCounter, StackMapFrame, VerificationType},
 };
 
-impl ClassElement<'_> for StackMapFrame {
+impl FromRaw<'_> for StackMapFrame {
     type Raw = raw_attributes::StackMapFrameInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -15,7 +15,7 @@ impl ClassElement<'_> for StackMapFrame {
             Self::Raw::SameLocals1StackItemFrame { frame_type, stack } => {
                 Ok(Self::SameLocals1StackItemFrame {
                     offset_delta: u16::from(frame_type) - 64,
-                    stack: ClassElement::from_raw(stack, ctx)?,
+                    stack: FromRaw::from_raw(stack, ctx)?,
                 })
             }
             Self::Raw::SameLocals1StackItemFrameExtended {
@@ -23,7 +23,7 @@ impl ClassElement<'_> for StackMapFrame {
                 stack,
             } => Ok(Self::SameLocals1StackItemFrame {
                 offset_delta,
-                stack: ClassElement::from_raw(stack, ctx)?,
+                stack: FromRaw::from_raw(stack, ctx)?,
             }),
             Self::Raw::ChopFrame {
                 frame_type,
@@ -42,7 +42,7 @@ impl ClassElement<'_> for StackMapFrame {
                 offset_delta,
                 locals: locals
                     .into_iter()
-                    .map(|it| ClassElement::from_raw(it, ctx))
+                    .map(|it| FromRaw::from_raw(it, ctx))
                     .collect::<Result<_, _>>()?,
             }),
             Self::Raw::FullFrame {
@@ -52,11 +52,11 @@ impl ClassElement<'_> for StackMapFrame {
             } => {
                 let locals = locals
                     .into_iter()
-                    .map(|it| ClassElement::from_raw(it, ctx))
+                    .map(|it| FromRaw::from_raw(it, ctx))
                     .collect::<Result<_, _>>()?;
                 let stack = stack
                     .into_iter()
-                    .map(|it| ClassElement::from_raw(it, ctx))
+                    .map(|it| FromRaw::from_raw(it, ctx))
                     .collect::<Result<_, _>>()?;
                 Ok(Self::FullFrame {
                     offset_delta,
@@ -68,7 +68,7 @@ impl ClassElement<'_> for StackMapFrame {
     }
 }
 
-impl ClassElement<'_> for VerificationType {
+impl FromRaw<'_> for VerificationType {
     type Raw = raw_attributes::VerificationTypeInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         match raw {

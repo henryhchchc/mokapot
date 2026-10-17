@@ -1,8 +1,8 @@
-//! [`ClassElement`] implementations for annotation types.
+//! [`FromRaw`] implementations for annotation types.
 
 use itertools::Itertools;
 
-use super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
+use super::{ParseError, ParsingContext, from_raw::FromRaw, raw_attributes};
 use crate::{
     jvm::{
         Annotation, ConstantValue, TypeAnnotation,
@@ -16,7 +16,7 @@ use crate::{
     types::field_type::PrimitiveType,
 };
 
-impl ClassElement<'_> for TypePathElement {
+impl FromRaw<'_> for TypePathElement {
     type Raw = (u8, u8);
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
         let (kind, argument_index) = raw;
@@ -30,7 +30,7 @@ impl ClassElement<'_> for TypePathElement {
     }
 }
 
-impl ClassElement<'_> for Annotation {
+impl FromRaw<'_> for Annotation {
     type Raw = raw_attributes::Annotation;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -58,7 +58,7 @@ impl ClassElement<'_> for Annotation {
     }
 }
 
-impl<'a> ClassElement<'a> for TypeAnnotation {
+impl<'a> FromRaw<'a> for TypeAnnotation {
     type Raw = raw_attributes::TypeAnnotation<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -72,7 +72,7 @@ impl<'a> ClassElement<'a> for TypeAnnotation {
         let target_info = TargetInfo::from_raw(target_info, ctx)?;
         let target_path = target_path
             .iter()
-            .map(|&[kind, index]| ClassElement::from_raw((kind, index), ctx))
+            .map(|&[kind, index]| FromRaw::from_raw((kind, index), ctx))
             .collect::<Result<_, _>>()?;
         let annotation_type = ctx
             .constant_pool
@@ -83,7 +83,7 @@ impl<'a> ClassElement<'a> for TypeAnnotation {
             .into_iter()
             .map(|(name_idx, value)| {
                 let element_name = ctx.constant_pool.get_str(name_idx)?;
-                let element_value = ClassElement::from_raw(value, ctx)?;
+                let element_value = FromRaw::from_raw(value, ctx)?;
                 Ok((element_name.to_owned(), element_value))
             })
             .collect::<Result<_, ParseError>>()?;
@@ -96,7 +96,7 @@ impl<'a> ClassElement<'a> for TypeAnnotation {
     }
 }
 
-impl<'a> ClassElement<'a> for TargetInfo {
+impl<'a> FromRaw<'a> for TargetInfo {
     type Raw = raw_attributes::TargetInfo<'a>;
 
     #[allow(clippy::enum_glob_use)]
@@ -237,7 +237,7 @@ impl<'a> ClassElement<'a> for TargetInfo {
     }
 }
 
-impl ClassElement<'_> for ElementValue {
+impl FromRaw<'_> for ElementValue {
     type Raw = raw_attributes::ElementValueInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -290,7 +290,7 @@ impl ClassElement<'_> for ElementValue {
             Self::Raw::Array(values) => {
                 let values = values
                     .into_iter()
-                    .map(|raw_value| ClassElement::from_raw(raw_value, ctx))
+                    .map(|raw_value| FromRaw::from_raw(raw_value, ctx))
                     .collect::<Result<_, _>>()?;
                 Ok(Self::Array(values))
             }

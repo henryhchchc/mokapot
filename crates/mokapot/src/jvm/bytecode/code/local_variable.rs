@@ -2,7 +2,7 @@
 
 use std::str::FromStr;
 
-use super::super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
+use super::super::{ParseError, ParsingContext, from_raw::FromRaw, raw_attributes};
 use crate::{
     jvm::{
         code::{LocalVariableId, ProgramCounter},
@@ -25,7 +25,7 @@ pub(crate) struct LocalVariableTypeAttr {
     pub signature: String,
 }
 
-impl ClassElement<'_> for LocalVariableDescAttr {
+impl FromRaw<'_> for LocalVariableDescAttr {
     type Raw = raw_attributes::LocalVariableInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -55,7 +55,7 @@ impl ClassElement<'_> for LocalVariableDescAttr {
     }
 }
 
-impl ClassElement<'_> for LocalVariableTypeAttr {
+impl FromRaw<'_> for LocalVariableTypeAttr {
     type Raw = raw_attributes::LocalVariableTypeInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {

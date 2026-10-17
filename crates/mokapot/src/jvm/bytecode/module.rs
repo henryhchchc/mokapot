@@ -1,12 +1,14 @@
-//! [`ClassElement`] implementations for module types.
+//! [`FromRaw`] implementations for module types.
 
-use super::{ParseError, ParsingContext, class_element::ClassElement, raw_attributes};
+use crate::jvm::bytecode::flags::parse_flags;
+
+use super::{ParseError, ParsingContext, from_raw::FromRaw, raw_attributes};
 use crate::jvm::{
     Module,
     module::{Export, Open, Provide, Require},
 };
 
-impl ClassElement<'_> for Require {
+impl FromRaw<'_> for Require {
     type Raw = raw_attributes::RequiresInfo;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -18,7 +20,7 @@ impl ClassElement<'_> for Require {
         let requires_flags = requires_flags.get();
         let requires_version_index = requires_version_index.get();
         let module = ctx.constant_pool.get_module_ref(requires_index)?;
-        let flags = ClassElement::from_raw(requires_flags, ctx)?;
+        let flags = parse_flags(requires_flags, "Invalid access flag")?;
         let version = if requires_version_index > 0 {
             Some(
                 ctx.constant_pool
@@ -36,7 +38,7 @@ impl ClassElement<'_> for Require {
     }
 }
 
-impl<'a> ClassElement<'a> for Export {
+impl<'a> FromRaw<'a> for Export {
     type Raw = raw_attributes::ExportsInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -47,7 +49,7 @@ impl<'a> ClassElement<'a> for Export {
         } = raw;
 
         let package = ctx.constant_pool.get_package_name(exports_index)?;
-        let flags = ClassElement::from_raw(exports_flags, ctx)?;
+        let flags = parse_flags(exports_flags, "Invalid access flag")?;
         let to = exports_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
@@ -56,7 +58,7 @@ impl<'a> ClassElement<'a> for Export {
     }
 }
 
-impl<'a> ClassElement<'a> for Open {
+impl<'a> FromRaw<'a> for Open {
     type Raw = raw_attributes::OpensInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -67,7 +69,7 @@ impl<'a> ClassElement<'a> for Open {
         } = raw;
 
         let package = ctx.constant_pool.get_package_name(opens_index)?;
-        let flags = ClassElement::from_raw(opens_flags, ctx)?;
+        let flags = parse_flags(opens_flags, "Invalid access flag")?;
         let to = opens_to
             .iter()
             .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
@@ -76,7 +78,7 @@ impl<'a> ClassElement<'a> for Open {
     }
 }
 
-impl<'a> ClassElement<'a> for Provide {
+impl<'a> FromRaw<'a> for Provide {
     type Raw = raw_attributes::ProvidesInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -93,7 +95,7 @@ impl<'a> ClassElement<'a> for Provide {
     }
 }
 
-impl<'a> ClassElement<'a> for Module {
+impl<'a> FromRaw<'a> for Module {
     type Raw = raw_attributes::ModuleInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -108,7 +110,7 @@ impl<'a> ClassElement<'a> for Module {
             provides,
         } = raw;
         let name = ctx.constant_pool.get_module_ref(module_name_index)?.name;
-        let flags = ClassElement::from_raw(module_flags, ctx)?;
+        let flags = parse_flags(module_flags, "Invalid access flag")?;
         let version = if module_version_index > 0 {
             Some(ctx.constant_pool.get_str(module_version_index)?.to_owned())
         } else {
@@ -117,15 +119,15 @@ impl<'a> ClassElement<'a> for Module {
         let requires = requires
             .iter()
             .copied()
-            .map(|raw| ClassElement::from_raw(raw, ctx))
+            .map(|raw| FromRaw::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let exports = exports
             .into_iter()
-            .map(|raw| ClassElement::from_raw(raw, ctx))
+            .map(|raw| FromRaw::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let opens = opens
             .into_iter()
-            .map(|raw| ClassElement::from_raw(raw, ctx))
+            .map(|raw| FromRaw::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         let uses = uses
             .iter()
@@ -133,7 +135,7 @@ impl<'a> ClassElement<'a> for Module {
             .collect::<Result<_, _>>()?;
         let provides = provides
             .into_iter()
-            .map(|raw| ClassElement::from_raw(raw, ctx))
+            .map(|raw| FromRaw::from_raw(raw, ctx))
             .collect::<Result<_, _>>()?;
         Ok(Module {
             name,

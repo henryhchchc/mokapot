@@ -1,8 +1,10 @@
-use zerocopy::byteorder::big_endian::U16;
+use crate::jvm::bytecode::flags::parse_flags;
 
 use super::{
-    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo,
-    class_element::ClassElement, decoder::read_value,
+    FromBytecode, ParseError, ParsingContext,
+    attribute::AttributeInfo,
+    decoder::{parse_repeated, read_u16},
+    from_raw::FromRaw,
 };
 use crate::{
     intrinsics::{extract_attributes, see_jvm_spec},
@@ -25,13 +27,15 @@ pub(crate) struct FieldInfo<'a> {
 
 impl<'a> FromBytecode<'a> for FieldInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let access_flags = read_value::<U16>(bytes)?.get();
-        let name_index = read_value::<U16>(bytes)?.get();
-        let descriptor_index = read_value::<U16>(bytes)?.get();
-        let attributes_count = read_value::<U16>(bytes)?.get();
-        let attributes = (0..attributes_count)
-            .map(|_| AttributeInfo::from_bytes(bytes))
-            .collect::<Result<_, ParseError>>()?;
+        let access_flags = read_u16(bytes)?;
+        let name_index = read_u16(bytes)?;
+        let descriptor_index = read_u16(bytes)?;
+        let attributes_count = read_u16(bytes)?;
+        let attributes = parse_repeated(
+            bytes,
+            usize::from(attributes_count),
+            AttributeInfo::from_bytes,
+        )?;
         Ok(Self {
             access_flags,
             name_index,
@@ -41,7 +45,7 @@ impl<'a> FromBytecode<'a> for FieldInfo<'a> {
     }
 }
 
-impl<'a> ClassElement<'a> for Field {
+impl<'a> FromRaw<'a> for Field {
     type Raw = FieldInfo<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -51,8 +55,8 @@ impl<'a> ClassElement<'a> for Field {
             descriptor_index,
             attributes,
         } = raw;
-        let access_flags = field::AccessFlags::from_bits(access_flags)
-            .ok_or(ParseError::malform("Invalid field access flags"))?;
+        let access_flags =
+            parse_flags::<field::AccessFlags>(access_flags, "Invalid field access flags")?;
         let name = ctx.constant_pool.get_str(name_index)?.to_owned();
         let field_type = ctx
             .constant_pool

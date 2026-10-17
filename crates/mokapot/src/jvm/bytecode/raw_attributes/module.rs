@@ -6,7 +6,7 @@ use super::super::fixed_layout::FixedLayout;
 
 use super::super::{
     FromBytecode, ParseError,
-    decoder::{BytecodeSlice, read_slice, read_value},
+    decoder::{borrow_slice, parse_repeated, read_u16},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -24,25 +24,20 @@ pub struct ModuleInfo<'a> {
 
 impl<'a> FromBytecode<'a> for ModuleInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let module_name_index = read_value::<U16>(bytes)?.get();
-        let module_flags = read_value::<U16>(bytes)?.get();
-        let module_version_index = read_value::<U16>(bytes)?.get();
-        let requires_count: u16 = read_value::<U16>(bytes)?.get();
-        let requires = read_slice(bytes, usize::from(requires_count))?;
-        let exports_count: u16 = read_value::<U16>(bytes)?.get();
-        let exports = (0..exports_count)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
-        let opens_count: u16 = read_value::<U16>(bytes)?.get();
-        let opens = (0..opens_count)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
-        let uses_count: u16 = read_value::<U16>(bytes)?.get();
-        let uses = read_slice(bytes, usize::from(uses_count))?;
-        let provides_count: u16 = read_value::<U16>(bytes)?.get();
-        let provides = (0..provides_count)
-            .map(|_| bytes.decode_value())
-            .collect::<Result<_, ParseError>>()?;
+        let module_name_index = read_u16(bytes)?;
+        let module_flags = read_u16(bytes)?;
+        let module_version_index = read_u16(bytes)?;
+        let requires_count: u16 = read_u16(bytes)?;
+        let requires = borrow_slice(bytes, usize::from(requires_count))?;
+        let exports_count: u16 = read_u16(bytes)?;
+        let exports = parse_repeated(bytes, usize::from(exports_count), ExportsInfo::from_bytes)?;
+        let opens_count: u16 = read_u16(bytes)?;
+        let opens = parse_repeated(bytes, usize::from(opens_count), OpensInfo::from_bytes)?;
+        let uses_count: u16 = read_u16(bytes)?;
+        let uses = borrow_slice(bytes, usize::from(uses_count))?;
+        let provides_count: u16 = read_u16(bytes)?;
+        let provides =
+            parse_repeated(bytes, usize::from(provides_count), ProvidesInfo::from_bytes)?;
         Ok(Self {
             module_name_index,
             module_flags,
@@ -84,10 +79,10 @@ pub struct ExportsInfo<'a> {
 
 impl<'a> FromBytecode<'a> for ExportsInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let exports_index = read_value::<U16>(bytes)?.get();
-        let exports_flags = read_value::<U16>(bytes)?.get();
-        let exports_to_count: u16 = read_value::<U16>(bytes)?.get();
-        let exports_to = read_slice(bytes, usize::from(exports_to_count))?;
+        let exports_index = read_u16(bytes)?;
+        let exports_flags = read_u16(bytes)?;
+        let exports_to_count: u16 = read_u16(bytes)?;
+        let exports_to = borrow_slice(bytes, usize::from(exports_to_count))?;
         Ok(Self {
             exports_index,
             exports_flags,
@@ -109,10 +104,10 @@ pub struct OpensInfo<'a> {
 
 impl<'a> FromBytecode<'a> for OpensInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let opens_index = read_value::<U16>(bytes)?.get();
-        let opens_flags = read_value::<U16>(bytes)?.get();
-        let opens_to_count: u16 = read_value::<U16>(bytes)?.get();
-        let opens_to = read_slice(bytes, usize::from(opens_to_count))?;
+        let opens_index = read_u16(bytes)?;
+        let opens_flags = read_u16(bytes)?;
+        let opens_to_count: u16 = read_u16(bytes)?;
+        let opens_to = borrow_slice(bytes, usize::from(opens_to_count))?;
         Ok(Self {
             opens_index,
             opens_flags,
@@ -129,9 +124,9 @@ pub struct ProvidesInfo<'a> {
 
 impl<'a> FromBytecode<'a> for ProvidesInfo<'a> {
     fn from_bytes(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let provides_index = read_value::<U16>(bytes)?.get();
-        let provides_with_count: u16 = read_value::<U16>(bytes)?.get();
-        let provides_with = read_slice(bytes, usize::from(provides_with_count))?;
+        let provides_index = read_u16(bytes)?;
+        let provides_with_count: u16 = read_u16(bytes)?;
+        let provides_with = borrow_slice(bytes, usize::from(provides_with_count))?;
         Ok(Self {
             provides_index,
             provides_with,
@@ -158,7 +153,7 @@ mod tests {
         let input = &bytes[1..];
         let mut remaining = input;
         let module = ModuleInfo::from_bytes(&mut remaining).unwrap();
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
         for (pointer, word_offset) in [
             (module.requires.as_ptr().cast::<u8>(), 4),
             (module.exports[0].exports_to.as_ptr().cast::<u8>(), 11),

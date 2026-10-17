@@ -1,14 +1,11 @@
 //! Raw JVM instruction model and parser.
 
-use crate::jvm::bytecode::decoder::{read_slice, read_value};
-use zerocopy::{
-    FromBytes, Immutable, KnownLayout, Unaligned,
-    byteorder::big_endian::{I16, I32, U16},
-};
+use crate::jvm::bytecode::decoder::{borrow_slice, read_i8, read_i16, read_i32, read_u8, read_u16};
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::I32};
 
 use std::iter;
 
-use super::super::ParseError;
+use super::super::{ParseError, fixed_layout::FixedLayout};
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::code::{InstructionList, ProgramCounter},
@@ -383,6 +380,8 @@ pub struct LookupSwitchPair {
     pub offset: I32,
 }
 
+impl FixedLayout for LookupSwitchPair {}
+
 impl RawInstruction<'_> {
     /// Gets the opcode.
     #[must_use]
@@ -444,25 +443,25 @@ impl<'a> RawInstruction<'a> {
         if bytes.is_empty() {
             return Ok(None);
         }
-        let opcode: u8 = read_value(bytes)?;
+        let opcode = read_u8(bytes)?;
         let instruction = match opcode {
             0x32 => AALoad,
             0x53 => AAStore,
             0x01 => AConstNull,
             0x19 => ALoad {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x2a => ALoad0,
             0x2b => ALoad1,
             0x2c => ALoad2,
             0x2d => ALoad3,
             0xbd => ANewArray {
-                index: read_value::<U16>(&mut *bytes)?.get(),
+                index: read_u16(bytes)?,
             },
             0xb0 => AReturn,
             0xbe => ArrayLength,
             0x3a => AStore {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x4b => AStore0,
             0x4c => AStore1,
@@ -472,12 +471,12 @@ impl<'a> RawInstruction<'a> {
             0x33 => BALoad,
             0x54 => BAStore,
             0x10 => BiPush {
-                value: read_value::<u8>(&mut *bytes)?,
+                value: read_u8(bytes)?,
             },
             0x34 => CALoad,
             0x55 => CAStore,
             0xc0 => CheckCast {
-                target_type_index: read_value::<U16>(&mut *bytes)?.get(),
+                target_type_index: read_u16(bytes)?,
             },
             0x90 => D2F,
             0x8e => D2I,
@@ -491,7 +490,7 @@ impl<'a> RawInstruction<'a> {
             0x0f => DConst1,
             0x6f => DDiv,
             0x18 => DLoad {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x26 => DLoad0,
             0x27 => DLoad1,
@@ -502,7 +501,7 @@ impl<'a> RawInstruction<'a> {
             0x73 => DRem,
             0xaf => DReturn,
             0x39 => DStore {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x47 => DStore0,
             0x48 => DStore1,
@@ -528,7 +527,7 @@ impl<'a> RawInstruction<'a> {
             0x0d => FConst2,
             0x6e => FDiv,
             0x17 => FLoad {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x22 => FLoad0,
             0x23 => FLoad1,
@@ -539,7 +538,7 @@ impl<'a> RawInstruction<'a> {
             0x72 => FRem,
             0xae => FReturn,
             0x38 => FStore {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x43 => FStore0,
             0x44 => FStore1,
@@ -547,16 +546,16 @@ impl<'a> RawInstruction<'a> {
             0x46 => FStore3,
             0x66 => FSub,
             0xb4 => GetField {
-                field_ref_index: read_value::<U16>(&mut *bytes)?.get(),
+                field_ref_index: read_u16(bytes)?,
             },
             0xb2 => GetStatic {
-                field_ref_index: read_value::<U16>(&mut *bytes)?.get(),
+                field_ref_index: read_u16(bytes)?,
             },
             0xa7 => Goto {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xc8 => GotoW {
-                offset: read_value::<I32>(&mut *bytes)?.get(),
+                offset: read_i32(bytes)?,
             },
             0x91 => I2B,
             0x92 => I2C,
@@ -577,59 +576,59 @@ impl<'a> RawInstruction<'a> {
             0x08 => IConst5,
             0x6c => IDiv,
             0xa5 => IfACmpEq {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa6 => IfACmpNe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9f => IfICmpEq {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa0 => IfICmpNe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa1 => IfICmpLt {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa2 => IfICmpGe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa3 => IfICmpGt {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xa4 => IfICmpLe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x99 => IfEq {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9a => IfNe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9b => IfLt {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9c => IfGe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9d => IfGt {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x9e => IfLe {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xc7 => IfNonNull {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xc6 => IfNull {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0x84 => IInc {
-                index: read_value::<u8>(&mut *bytes)?,
-                constant: read_value::<i8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
+                constant: read_i8(bytes)?,
             },
             0x15 => ILoad {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x1a => ILoad0,
             0x1b => ILoad1,
@@ -638,20 +637,20 @@ impl<'a> RawInstruction<'a> {
             0x68 => IMul,
             0x74 => INeg,
             0xc1 => InstanceOf {
-                target_type_index: read_value::<U16>(&mut *bytes)?.get(),
+                target_type_index: read_u16(bytes)?,
             },
             0xba => {
-                let dynamic_index = read_value::<U16>(&mut *bytes)?.get();
-                let zero: u16 = read_value::<U16>(&mut *bytes)?.get();
+                let dynamic_index = read_u16(bytes)?;
+                let zero: u16 = read_u16(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
                 InvokeDynamic { dynamic_index }
             }
             0xb9 => {
-                let method_index = read_value::<U16>(&mut *bytes)?.get();
-                let count: u8 = read_value::<u8>(&mut *bytes)?;
-                let zero: u8 = read_value::<u8>(&mut *bytes)?;
+                let method_index = read_u16(bytes)?;
+                let count: u8 = read_u8(bytes)?;
+                let zero: u8 = read_u8(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
@@ -661,13 +660,13 @@ impl<'a> RawInstruction<'a> {
                 }
             }
             0xb7 => InvokeSpecial {
-                method_index: read_value::<U16>(&mut *bytes)?.get(),
+                method_index: read_u16(bytes)?,
             },
             0xb8 => InvokeStatic {
-                method_index: read_value::<U16>(&mut *bytes)?.get(),
+                method_index: read_u16(bytes)?,
             },
             0xb6 => InvokeVirtual {
-                method_index: read_value::<U16>(&mut *bytes)?.get(),
+                method_index: read_u16(bytes)?,
             },
             0x80 => IOr,
             0x70 => IRem,
@@ -675,7 +674,7 @@ impl<'a> RawInstruction<'a> {
             0x78 => IShl,
             0x7a => IShr,
             0x36 => IStore {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x3b => IStore0,
             0x3c => IStore1,
@@ -685,10 +684,10 @@ impl<'a> RawInstruction<'a> {
             0x7c => IUShr,
             0x82 => IXor,
             0xa8 => Jsr {
-                offset: read_value::<I16>(&mut *bytes)?.get(),
+                offset: read_i16(bytes)?,
             },
             0xc9 => JsrW {
-                offset: read_value::<I32>(&mut *bytes)?.get(),
+                offset: read_i32(bytes)?,
             },
             0x8a => L2D,
             0x89 => L2F,
@@ -701,17 +700,17 @@ impl<'a> RawInstruction<'a> {
             0x09 => LConst0,
             0x0a => LConst1,
             0x12 => Ldc {
-                const_index: read_value::<u8>(&mut *bytes)?,
+                const_index: read_u8(bytes)?,
             },
             0x13 => LdcW {
-                const_index: read_value::<U16>(&mut *bytes)?.get(),
+                const_index: read_u16(bytes)?,
             },
             0x14 => Ldc2W {
-                const_index: read_value::<U16>(&mut *bytes)?.get(),
+                const_index: read_u16(bytes)?,
             },
             0x6d => LDiv,
             0x16 => LLoad {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x1e => LLoad0,
             0x1f => LLoad1,
@@ -721,16 +720,16 @@ impl<'a> RawInstruction<'a> {
             0x75 => LNeg,
             0xab => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let padding_byte: u8 = read_value::<u8>(&mut *bytes)?;
+                    let padding_byte: u8 = read_u8(bytes)?;
                     if padding_byte != 0 {
                         Err(ParseError::malform("Switch padding is not zero"))?;
                     }
                 }
-                let default = read_value::<I32>(&mut *bytes)?.get();
-                let npairs: i32 = read_value::<I32>(&mut *bytes)?.get();
+                let default = read_i32(bytes)?;
+                let npairs: i32 = read_i32(bytes)?;
                 let npairs = usize::try_from(npairs)
                     .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
-                let match_offsets: &[LookupSwitchPair] = read_slice(bytes, npairs)?;
+                let match_offsets: &[LookupSwitchPair] = borrow_slice(bytes, npairs)?;
                 if match_offsets
                     .windows(2)
                     .any(|pair| pair[0].match_value.get() >= pair[1].match_value.get())
@@ -746,20 +745,20 @@ impl<'a> RawInstruction<'a> {
             }
             0xaa => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let padding_byte: u8 = read_value::<u8>(&mut *bytes)?;
+                    let padding_byte: u8 = read_u8(bytes)?;
                     if padding_byte != 0 {
                         Err(ParseError::malform("Switch padding is not zero"))?;
                     }
                 }
-                let default = read_value::<I32>(&mut *bytes)?.get();
-                let low = read_value::<I32>(&mut *bytes)?.get();
-                let high = read_value::<I32>(&mut *bytes)?.get();
+                let default = read_i32(bytes)?;
+                let low = read_i32(bytes)?;
+                let high = read_i32(bytes)?;
                 if low > high {
                     Err(ParseError::malform("Invalid tableswitch range"))?;
                 }
                 let count = usize::try_from(i64::from(high) - i64::from(low) + 1)
                     .map_err(|_| ParseError::malform("Invalid tableswitch range"))?;
-                let jump_offsets = read_slice(bytes, count)?;
+                let jump_offsets = borrow_slice(bytes, count)?;
                 TableSwitch {
                     default,
                     low,
@@ -773,7 +772,7 @@ impl<'a> RawInstruction<'a> {
             0x79 => LShl,
             0x7b => LShr,
             0x37 => LStore {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0x3f => LStore0,
             0x40 => LStore1,
@@ -788,73 +787,73 @@ impl<'a> RawInstruction<'a> {
             0xfe => ImpDep1,
             0xff => ImpDep2,
             0xc5 => MultiANewArray {
-                index: read_value::<U16>(&mut *bytes)?.get(),
-                dimensions: read_value::<u8>(&mut *bytes)?,
+                index: read_u16(bytes)?,
+                dimensions: read_u8(bytes)?,
             },
             0xbb => New {
-                index: read_value::<U16>(&mut *bytes)?.get(),
+                index: read_u16(bytes)?,
             },
             0xbc => NewArray {
-                atype: read_value::<u8>(&mut *bytes)?,
+                atype: read_u8(bytes)?,
             },
             0x00 => Nop,
             0x57 => Pop,
             0x58 => Pop2,
             0xb5 => PutField {
-                field_ref_index: read_value::<U16>(&mut *bytes)?.get(),
+                field_ref_index: read_u16(bytes)?,
             },
             0xb3 => PutStatic {
-                field_ref_index: read_value::<U16>(&mut *bytes)?.get(),
+                field_ref_index: read_u16(bytes)?,
             },
             0xa9 => Ret {
-                index: read_value::<u8>(&mut *bytes)?,
+                index: read_u8(bytes)?,
             },
             0xb1 => Return,
             0x35 => SALoad,
             0x56 => SAStore,
             0x11 => SiPush {
-                value: read_value::<U16>(&mut *bytes)?.get(),
+                value: read_u16(bytes)?,
             },
             0x5f => Swap,
             0xc4 => {
-                let wide_opcode: u8 = read_value::<u8>(&mut *bytes)?;
+                let wide_opcode: u8 = read_u8(bytes)?;
                 let wide_insn = match wide_opcode {
                     0x15 => RawWideInstruction::ILoad {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x16 => RawWideInstruction::LLoad {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x17 => RawWideInstruction::FLoad {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x18 => RawWideInstruction::DLoad {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x19 => RawWideInstruction::ALoad {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x36 => RawWideInstruction::IStore {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x37 => RawWideInstruction::LStore {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x38 => RawWideInstruction::FStore {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x39 => RawWideInstruction::DStore {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x3a => RawWideInstruction::AStore {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     0x84 => RawWideInstruction::IInc {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
-                        increment: read_value::<I16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
+                        increment: read_i16(bytes)?,
                     },
                     0xa9 => RawWideInstruction::Ret {
-                        index: read_value::<U16>(&mut *bytes)?.get(),
+                        index: read_u16(bytes)?,
                     },
                     _ => Err(ParseError::malform("Invalid opcode"))?,
                 };

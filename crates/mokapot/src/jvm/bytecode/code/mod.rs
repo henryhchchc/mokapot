@@ -1,3 +1,4 @@
+use crate::jvm::bytecode::flags::parse_flags;
 pub(crate) mod instruction_conversion;
 pub(crate) mod local_variable;
 pub(crate) mod raw_instruction;
@@ -9,7 +10,7 @@ pub(crate) use local_variable::{LocalVariableDescAttr, LocalVariableTypeAttr};
 
 use super::{
     ParseError, ParsingContext,
-    class_element::ClassElement,
+    from_raw::FromRaw,
     raw_attributes::{self, Code},
 };
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
     },
 };
 
-impl ClassElement<'_> for LineNumberTableEntry {
+impl FromRaw<'_> for LineNumberTableEntry {
     type Raw = raw_attributes::LineNumberTableEntry;
 
     fn from_raw(raw: Self::Raw, _ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -36,7 +37,7 @@ impl ClassElement<'_> for LineNumberTableEntry {
     }
 }
 
-impl ClassElement<'_> for ExceptionTableEntry {
+impl FromRaw<'_> for ExceptionTableEntry {
     type Raw = raw_attributes::ExceptionTableEntry;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -64,7 +65,7 @@ impl ClassElement<'_> for ExceptionTableEntry {
     }
 }
 
-impl ClassElement<'_> for ParameterInfo {
+impl FromRaw<'_> for ParameterInfo {
     type Raw = raw_attributes::ParameterInfo;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -79,13 +80,13 @@ impl ClassElement<'_> for ParameterInfo {
         } else {
             Some(ctx.constant_pool.get_str(name_index)?.to_owned())
         };
-        let access_flags = ParameterAccessFlags::from_bits(access_flags)
-            .ok_or(ParseError::malform("Invalid parameter access flags"))?;
+        let access_flags =
+            parse_flags::<ParameterAccessFlags>(access_flags, "Invalid parameter access flags")?;
         Ok(ParameterInfo { name, access_flags })
     }
 }
 
-impl<'a> ClassElement<'a> for MethodBody {
+impl<'a> FromRaw<'a> for MethodBody {
     type Raw = Code<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -107,11 +108,11 @@ impl<'a> ClassElement<'a> for MethodBody {
         let exception_table = exception_table
             .iter()
             .copied()
-            .map(|it| ClassElement::from_raw(it, ctx))
+            .map(|it| FromRaw::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| ClassElement::from_raw(it, ctx))
+            .map(|it| FromRaw::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         let mut local_variable_table = None;
         extract_attributes! {

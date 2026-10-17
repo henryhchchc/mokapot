@@ -1,10 +1,12 @@
 //! Class-file parsing and model conversion.
 
+use crate::jvm::bytecode::flags::parse_flags;
+
 mod decode;
 
 use super::{
-    ParseError, ParsingContext, attribute::AttributeInfo, class_element::ClassElement,
-    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo, raw_attributes,
+    ParseError, ParsingContext, attribute::AttributeInfo, constant_pool::RawConstantPool,
+    field_info::FieldInfo, from_raw::FromRaw, method_info::MethodInfo, raw_attributes,
 };
 use crate::{
     intrinsics::{extract_attributes, see_jvm_spec},
@@ -48,7 +50,7 @@ impl Class {
     /// let class = Class::from_bytes(&bytes).unwrap();
     /// ```
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
-        Self::from_raw(ClassFile::parse(bytes)?)
+        Self::from_raw(ClassFile::parse_complete(bytes)?)
     }
 }
 
@@ -67,8 +69,8 @@ impl Class {
             attributes,
         } = raw;
         let version = Version::from_versions(major_version, minor_version)?;
-        let access_flags = class::AccessFlags::from_bits(access_flags)
-            .ok_or(ParseError::malform("Invalid class access flags"))?;
+        let access_flags =
+            parse_flags::<class::AccessFlags>(access_flags, "Invalid class access flags")?;
         let constant_pool = ConstantPool::from_raw(constant_pool)?;
         let class_name = constant_pool.get_class_name(this_class)?;
         let super_class = match super_class {
@@ -88,7 +90,7 @@ impl Class {
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| ClassElement::from_raw(it, ctx))
+            .map(|it| FromRaw::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
 
         extract_attributes! {
@@ -127,11 +129,11 @@ impl Class {
                 .collect::<Result<_, _>>()?,
             fields: fields
                 .into_iter()
-                .map(|it| ClassElement::from_raw(it, ctx))
+                .map(|it| FromRaw::from_raw(it, ctx))
                 .collect::<Result<_, _>>()?,
             methods: methods
                 .into_iter()
-                .map(|it| ClassElement::from_raw(it, ctx))
+                .map(|it| FromRaw::from_raw(it, ctx))
                 .collect::<Result<_, _>>()?,
             source_file,
             inner_classes,
@@ -161,7 +163,7 @@ impl Class {
     }
 }
 
-impl<'a> ClassElement<'a> for BootstrapMethod {
+impl<'a> FromRaw<'a> for BootstrapMethod {
     type Raw = raw_attributes::BootstrapMethod<'a>;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -178,7 +180,7 @@ impl<'a> ClassElement<'a> for BootstrapMethod {
     }
 }
 
-impl ClassElement<'_> for InnerClassInfo {
+impl FromRaw<'_> for InnerClassInfo {
     type Raw = raw_attributes::InnerClass;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
@@ -204,8 +206,10 @@ impl ClassElement<'_> for InnerClassInfo {
         } else {
             Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
         };
-        let access_flags = NestedClassAccessFlags::from_bits(inner_class_access_flags)
-            .ok_or(ParseError::malform("Invalid nested class access flags"))?;
+        let access_flags = parse_flags::<NestedClassAccessFlags>(
+            inner_class_access_flags,
+            "Invalid nested class access flags",
+        )?;
         Ok(Self {
             inner_class,
             outer_class,
@@ -215,7 +219,7 @@ impl ClassElement<'_> for InnerClassInfo {
     }
 }
 
-impl<'a> ClassElement<'a> for RecordComponent {
+impl<'a> FromRaw<'a> for RecordComponent {
     type Raw = raw_attributes::RecordComponentInfo<'a>;
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
         let Self::Raw {
@@ -232,7 +236,7 @@ impl<'a> ClassElement<'a> for RecordComponent {
 
         let attributes: Vec<Attribute> = attributes
             .into_iter()
-            .map(|it| ClassElement::from_raw(it, ctx))
+            .map(|it| FromRaw::from_raw(it, ctx))
             .collect::<Result<_, _>>()?;
         extract_attributes! {
             for attributes in "record_component" {
@@ -264,7 +268,7 @@ impl<'a> ClassElement<'a> for RecordComponent {
     }
 }
 
-impl ClassElement<'_> for EnclosingMethod {
+impl FromRaw<'_> for EnclosingMethod {
     type Raw = raw_attributes::EnclosingMethod;
 
     fn from_raw(raw: Self::Raw, ctx: &ParsingContext) -> Result<Self, ParseError> {
