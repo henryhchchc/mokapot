@@ -39,7 +39,7 @@ petgraph = { workspace = true, optional = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
 zerocopy = { workspace = true, features = ["simd", "std"] }
-zip = { workspace = true, features = ["deflate"], optional = true }
+zip = { workspace = true, features = ["deflate-flate2-zlib-rs"], optional = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }
