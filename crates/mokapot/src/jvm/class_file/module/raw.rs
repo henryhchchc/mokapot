@@ -161,6 +161,6 @@ mod tests {
             &module.provides[1].provides_with,
             [U16::new(13), U16::new(14)]
         );
-        assert_eq!(remaining, []);
+        assert_eq!(remaining, b"");
     }
 }
