@@ -18,7 +18,7 @@ use crate::{
 /// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstantPool {
-    inner: PoolStorage<Box<[Slot<Entry>]>>,
+    inner: PoolStorage<Entry>,
 }
 
 /// A resolved constant-pool entry.
@@ -537,15 +537,13 @@ mod tests {
     fn class_name_accessor_rejects_descriptors() {
         for descriptor in ["[I", "[La/b/C;", "La/b/C;"] {
             let reference_type: ReferenceType = descriptor.parse().unwrap();
-            let mut pool = RawConstantPool::new();
-            let name_index = pool
-                .put_entry(RawEntry::Utf8(descriptor.as_bytes()))
-                .unwrap();
-            let index = pool
-                .put_entry(RawEntry::Class {
-                    name_index: name_index.into(),
-                })
-                .unwrap();
+            let pool = RawConstantPool::from_entries([
+                RawEntry::Utf8(descriptor.as_bytes()),
+                RawEntry::Class {
+                    name_index: 1.into(),
+                },
+            ]);
+            let index = 2;
 
             let pool = ConstantPool::from_raw(pool).unwrap();
             assert_eq!(pool.get_type_ref(index).unwrap(), reference_type);
@@ -623,8 +621,7 @@ mod tests {
 
     #[test]
     fn forward_references_resolve_typed_values_and_keep_indices() {
-        let mut raw = RawConstantPool::new();
-        for entry in [
+        let raw = RawConstantPool::from_entries([
             RawEntry::MethodHandle {
                 reference_kind: 5,
                 reference_index: 2.into(),
@@ -657,9 +654,7 @@ mod tests {
                 descriptor_index: 13.into(),
             },
             RawEntry::Utf8(b"I".as_slice()),
-        ] {
-            raw.put_entry(entry).unwrap();
-        }
+        ]);
         let count = raw.count();
         let pool = ConstantPool::from_raw(raw).unwrap();
         assert_eq!(pool.count(), count);
@@ -711,14 +706,11 @@ mod tests {
                 reference_index: 1.into(),
             },
         ] {
-            let mut raw = RawConstantPool::new();
-            for entry in [
+            let raw = RawConstantPool::from_entries([
                 RawEntry::Utf8(b"I".as_slice()),
                 RawEntry::Long(42.into()),
                 entry,
-            ] {
-                raw.put_entry(entry).unwrap();
-            }
+            ]);
             assert_eq!(
                 ConstantPool::from_raw(raw).unwrap_err().kind(),
                 ParseErrorKind::Malformed
@@ -738,13 +730,14 @@ mod tests {
             ),
             (vec![0xff], JavaString::InvalidUtf8(Box::from([0xff]))),
         ] {
-            let mut raw = RawConstantPool::new();
-            let index = raw.put_entry(RawEntry::Utf8(&bytes)).unwrap();
-            let literal = raw
-                .put_entry(RawEntry::String {
-                    string_index: index.into(),
-                })
-                .unwrap();
+            let raw = RawConstantPool::from_entries([
+                RawEntry::Utf8(&bytes),
+                RawEntry::String {
+                    string_index: 1.into(),
+                },
+            ]);
+            let index = 1;
+            let literal = 2;
             let pool = ConstantPool::from_raw(raw).unwrap();
             drop(bytes);
             assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(expected.clone())));

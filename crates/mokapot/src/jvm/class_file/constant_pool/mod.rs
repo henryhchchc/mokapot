@@ -16,29 +16,10 @@ use zerocopy::byteorder::big_endian::{F32, F64, I32, I64, U16};
 /// UTF-8 entries borrow the input buffer and cannot outlive it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawConstantPool<'a> {
-    inner: PoolStorage<Vec<Slot<RawEntry<'a>>>>,
+    inner: PoolStorage<RawEntry<'a>>,
 }
 
 impl<'a> RawConstantPool<'a> {
-    /// Creates a new empty constant pool.
-    #[must_use]
-    #[cfg(test)]
-    pub fn new() -> Self {
-        Self {
-            inner: PoolStorage::with_capacity(1),
-        }
-    }
-
-    /// Creates a new constant pool with the given capacity.
-    /// # Parameters
-    /// - `count`: the initial capacity, including slot zero and reserved slots.
-    #[must_use]
-    pub fn with_capacity(count: u16) -> Self {
-        Self {
-            inner: PoolStorage::with_capacity(count),
-        }
-    }
-
     /// Parses the specified number of constant-pool slots from a byte slice.
     /// Bytes following the pool are ignored.
     /// # Errors
@@ -55,17 +36,23 @@ impl<'a> RawConstantPool<'a> {
         if constant_pool_count == 0 {
             return Err(ParseError::malform("Zero constant pool count"));
         }
-        let mut constant_pool = Self::with_capacity(constant_pool_count);
-        while constant_pool.count() < constant_pool_count {
+        let count = usize::from(constant_pool_count);
+        let mut slots = Vec::with_capacity(count);
+        slots.push(Slot::Padding);
+        while slots.len() < count {
             let entry = RawEntry::decode(bytes)?;
-            if entry.slot_width() > constant_pool_count - constant_pool.count() {
-                return Err(ParseError::malform("Missing constant pool padding slot"));
+            let padding = entry.slot_width() == 2;
+            slots.push(Slot::Entry(entry));
+            if padding {
+                if slots.len() == count {
+                    return Err(ParseError::malform("Missing constant pool padding slot"));
+                }
+                slots.push(Slot::Padding);
             }
-            constant_pool
-                .put_entry(entry)
-                .map_err(ParseError::malform)?;
         }
-        Ok(constant_pool)
+        Ok(Self {
+            inner: PoolStorage::from_slots(slots.into_boxed_slice()),
+        })
     }
 
     /// Gets the constant pool entry at the given index.
@@ -77,17 +64,6 @@ impl<'a> RawConstantPool<'a> {
         self.inner.get_entry(index)
     }
 
-    /// Put a constant pool entry to the end of the constant pool and return the index of the inserted entry.
-    ///
-    /// # Errors
-    /// Returns back the entry if the constant pool is full (i.e., contains more than 65535 slots).
-    ///
-    /// `long` and `double` constants occupy two slots.
-    pub fn put_entry(&mut self, entry: RawEntry<'a>) -> Result<u16, Overflow<'a>> {
-        let padding = entry.slot_width() == 2;
-        self.inner.push(entry, padding).map_err(Overflow)
-    }
-
     /// Returns the indexed slot count, including slot zero and reserved slots.
     #[must_use]
     pub const fn count(&self) -> u16 {
@@ -96,16 +72,20 @@ impl<'a> RawConstantPool<'a> {
 }
 
 #[cfg(test)]
-impl Default for RawConstantPool<'_> {
-    fn default() -> Self {
-        Self::new()
+impl<'a> RawConstantPool<'a> {
+    pub fn from_entries(entries: impl IntoIterator<Item = RawEntry<'a>>) -> Self {
+        let slots: Box<[_]> = std::iter::once(Slot::Padding)
+            .chain(entries.into_iter().flat_map(|entry| {
+                std::iter::once(Slot::Entry(entry))
+                    .chain((entry.slot_width() == 2).then_some(Slot::Padding))
+            }))
+            .collect();
+        assert!(u16::try_from(slots.len()).is_ok());
+        Self {
+            inner: PoolStorage::from_slots(slots),
+        }
     }
 }
-
-/// An error when an insertion to the constant pool causes an overflow.
-#[derive(Debug, thiserror::Error)]
-#[error("The constant pool is full.")]
-pub struct Overflow<'a>(pub RawEntry<'a>);
 
 /// An entry in the [`RawConstantPool`].
 ///

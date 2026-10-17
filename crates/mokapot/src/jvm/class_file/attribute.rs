@@ -302,8 +302,8 @@ mod tests {
     #[test]
     fn retains_opaque_attribute_payloads() {
         for name in ["SourceDebugExtension", "VendorData"] {
-            let mut raw_pool = RawConstantPool::new();
-            let index = raw_pool.put_entry(RawEntry::Utf8(name.as_bytes())).unwrap();
+            let raw_pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
+            let index = 1;
             let ctx = ResolutionContext {
                 constant_pool: crate::jvm::class_file::constant_pool::ConstantPool::from_raw(
                     raw_pool,
@@ -341,8 +341,8 @@ mod tests {
             "NestMembers",
             "PermittedSubclasses",
         ] {
-            let mut pool = RawConstantPool::new();
-            let index = pool.put_entry(RawEntry::Utf8(name.as_bytes())).unwrap();
+            let pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
+            let index = 1;
             let ctx = ResolutionContext {
                 constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
                 class_version: Version::LATEST,
@@ -364,26 +364,18 @@ mod tests {
 
     #[test]
     fn parses_module_packages_with_package_constant_pool_entries() {
-        let mut raw_pool = RawConstantPool::new();
-        let attribute_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"ModulePackages".as_slice()))
-            .unwrap();
-        let package_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"example/api".as_slice()))
-            .unwrap();
-        raw_pool
-            .put_entry(RawEntry::Package {
-                name_index: package_name_index.into(),
-            })
-            .unwrap();
-        let other_name_index = raw_pool
-            .put_entry(RawEntry::Utf8(b"example/internal".as_slice()))
-            .unwrap();
-        raw_pool
-            .put_entry(RawEntry::Package {
-                name_index: other_name_index.into(),
-            })
-            .unwrap();
+        let raw_pool = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"ModulePackages"),
+            RawEntry::Utf8(b"example/api"),
+            RawEntry::Package {
+                name_index: 2.into(),
+            },
+            RawEntry::Utf8(b"example/internal"),
+            RawEntry::Package {
+                name_index: 4.into(),
+            },
+        ]);
+        let attribute_name_index = 1;
         let constant_pool =
             crate::jvm::class_file::constant_pool::ConstantPool::from_raw(raw_pool).unwrap();
         let ctx = ResolutionContext {
@@ -407,9 +399,11 @@ mod tests {
     #[test]
     fn miri_method_parameters_resolve_borrowed_records() {
         use crate::jvm::{errors::ParseErrorKind, method::ParameterAccessFlags};
-        let mut pool = RawConstantPool::new();
-        let attribute_name_index = pool.put_entry(RawEntry::Utf8(b"MethodParameters")).unwrap();
-        pool.put_entry(RawEntry::Utf8(b"value")).unwrap();
+        let pool = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"MethodParameters"),
+            RawEntry::Utf8(b"value"),
+        ]);
+        let attribute_name_index = 1;
         let ctx = ResolutionContext {
             constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
             class_version: Version::LATEST,
