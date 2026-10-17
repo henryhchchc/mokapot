@@ -1,4 +1,6 @@
 //! Class-file parsing and model conversion.
+use zerocopy::byteorder::big_endian::U16;
+
 use crate::jvm::class_file::attribute::extract_attributes;
 
 pub(super) mod raw;
@@ -37,7 +39,7 @@ pub(crate) struct ClassFile<'a> {
     access_flags: u16,
     this_class: u16,
     super_class: u16,
-    interfaces: &'a [zerocopy::byteorder::big_endian::U16],
+    interfaces: &'a [U16],
     fields: Box<[FieldInfo<'a>]>,
     methods: Box<[MethodInfo<'a>]>,
     attributes: Box<[AttributeInfo<'a>]>,

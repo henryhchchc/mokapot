@@ -10,7 +10,7 @@ use super::{
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    decoder::{borrow_bytes, borrow_slice, parse_repeated, read_u8, read_u16, read_u32},
+    decoder::{borrow_bytes, borrow_slice, decode_value, parse_repeated},
     method::MethodParameterInfo,
     module::raw as module_raw,
     resolve::{Resolve, decode_resolved, resolve_table},
@@ -36,8 +36,8 @@ pub(crate) struct AttributeInfo<'a> {
 
 impl<'a> Decode<'a> for AttributeInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let attribute_name_index = read_u16(bytes)?;
-        let attribute_length: u32 = read_u32(bytes)?;
+        let attribute_name_index = decode_value(bytes)?;
+        let attribute_length: u32 = decode_value(bytes)?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
         let info = borrow_bytes(bytes, attribute_length)?;
@@ -139,28 +139,28 @@ impl Resolve for AttributeInfo<'_> {
 
         let result = match name {
             "ConstantValue" => {
-                let index = read_u16(bytes)?;
+                let index = decode_value(bytes)?;
                 ctx.constant_pool
                     .get_constant_value(index)
                     .map(Attribute::ConstantValue)
             }
             "Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
             "StackMapTable" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<code_raw::StackMapFrameInfo>(bytes, ctx)
                 })
                 .map(Attribute::StackMapTable)
             }
             "Exceptions" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_indices(bytes, usize::from(count), |index| {
                     ctx.constant_pool.get_class_name(index)
                 })
                 .map(Attribute::Exceptions)
             }
             "InnerClasses" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_table::<class_raw::InnerClass>(bytes, usize::from(count), ctx)
                     .map(Attribute::InnerClasses)
             }
@@ -169,14 +169,14 @@ impl Resolve for AttributeInfo<'_> {
             "Synthetic" => Ok(Attribute::Synthetic),
             "Deprecated" => Ok(Attribute::Deprecated),
             "Signature" => {
-                let index = read_u16(bytes)?;
+                let index = decode_value(bytes)?;
                 ctx.constant_pool
                     .get_str(index)
                     .map(str::to_owned)
                     .map(Attribute::Signature)
             }
             "SourceFile" => {
-                let index = read_u16(bytes)?;
+                let index = decode_value(bytes)?;
                 ctx.constant_pool
                     .get_str(index)
                     .map(str::to_owned)
@@ -184,7 +184,7 @@ impl Resolve for AttributeInfo<'_> {
             }
             "SourceDebugExtension" => return Ok(Attribute::SourceDebugExtension(info.into())),
             "LineNumberTable" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 Ok(Attribute::LineNumberTable(
                     borrow_slice::<code_raw::LineNumberTableEntry>(bytes, usize::from(count))?
                         .iter()
@@ -194,33 +194,33 @@ impl Resolve for AttributeInfo<'_> {
                 ))
             }
             "LocalVariableTable" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_table::<code_raw::LocalVariableInfo>(bytes, usize::from(count), ctx)
                     .map(Attribute::LocalVariableTable)
             }
             "LocalVariableTypeTable" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_table::<code_raw::LocalVariableTypeInfo>(bytes, usize::from(count), ctx)
                     .map(Attribute::LocalVariableTypeTable)
             }
             "RuntimeVisibleAnnotations" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                let count = read_u8(bytes)?;
+                let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
-                    let count = read_u16(bytes)?;
+                    let count: u16 = decode_value(bytes)?;
                     parse_repeated(bytes, usize::from(count), |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
@@ -228,9 +228,9 @@ impl Resolve for AttributeInfo<'_> {
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                let count = read_u8(bytes)?;
+                let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
-                    let count = read_u16(bytes)?;
+                    let count: u16 = decode_value(bytes)?;
                     parse_repeated(bytes, usize::from(count), |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
@@ -238,14 +238,14 @@ impl Resolve for AttributeInfo<'_> {
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
@@ -254,14 +254,14 @@ impl Resolve for AttributeInfo<'_> {
             "AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
                 .map(Attribute::AnnotationDefault),
             "BootstrapMethods" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<class_raw::BootstrapMethod>(bytes, ctx)
                 })
                 .map(Attribute::BootstrapMethods)
             }
             "MethodParameters" => {
-                let count = read_u8(bytes)?;
+                let count: u8 = decode_value(bytes)?;
                 resolve_table::<MethodParameterInfo>(bytes, usize::from(count), ctx)
                     .map(Attribute::MethodParameters)
             }
@@ -269,40 +269,40 @@ impl Resolve for AttributeInfo<'_> {
                 decode_resolved::<module_raw::ModuleInfo>(bytes, ctx).map(Attribute::Module)
             }
             "ModulePackages" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_indices(bytes, usize::from(count), |index| {
                     ctx.constant_pool.get_package_name(index)
                 })
                 .map(Attribute::ModulePackages)
             }
             "ModuleMainClass" => {
-                let index = read_u16(bytes)?;
+                let index = decode_value(bytes)?;
                 ctx.constant_pool
                     .get_class_name(index)
                     .map(Attribute::ModuleMainClass)
             }
             "NestHost" => {
-                let index = read_u16(bytes)?;
+                let index = decode_value(bytes)?;
                 ctx.constant_pool
                     .get_class_name(index)
                     .map(Attribute::NestHost)
             }
             "NestMembers" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_indices(bytes, usize::from(count), |index| {
                     ctx.constant_pool.get_class_name(index)
                 })
                 .map(Attribute::NestMembers)
             }
             "Record" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, usize::from(count), |bytes| {
                     decode_resolved::<class_raw::RecordComponentInfo>(bytes, ctx)
                 })
                 .map(Attribute::Record)
             }
             "PermittedSubclasses" => {
-                let count = read_u16(bytes)?;
+                let count: u16 = decode_value(bytes)?;
                 resolve_indices(bytes, usize::from(count), |index| {
                     ctx.constant_pool.get_class_name(index)
                 })

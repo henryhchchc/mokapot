@@ -21,28 +21,33 @@ pub(super) fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseErr
     Ok(value)
 }
 
-pub(super) fn read_u8(bytes: &mut &[u8]) -> Result<u8, ParseError> {
-    read_wire(bytes)
+/// Decodes one value, advancing the input past it.
+pub(super) fn decode_value<'a, T: Decode<'a>>(bytes: &mut &'a [u8]) -> Result<T, ParseError> {
+    T::decode(bytes)
 }
 
-pub(super) fn read_i8(bytes: &mut &[u8]) -> Result<i8, ParseError> {
-    read_wire(bytes)
+impl<'a> Decode<'a> for u16 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Ok(read_wire::<U16>(bytes)?.get())
+    }
 }
 
-pub(super) fn read_u16(bytes: &mut &[u8]) -> Result<u16, ParseError> {
-    Ok(read_wire::<U16>(bytes)?.get())
+impl<'a> Decode<'a> for i16 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Ok(read_wire::<I16>(bytes)?.get())
+    }
 }
 
-pub(super) fn read_i16(bytes: &mut &[u8]) -> Result<i16, ParseError> {
-    Ok(read_wire::<I16>(bytes)?.get())
+impl<'a> Decode<'a> for u32 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Ok(read_wire::<U32>(bytes)?.get())
+    }
 }
 
-pub(super) fn read_u32(bytes: &mut &[u8]) -> Result<u32, ParseError> {
-    Ok(read_wire::<U32>(bytes)?.get())
-}
-
-pub(super) fn read_i32(bytes: &mut &[u8]) -> Result<i32, ParseError> {
-    Ok(read_wire::<I32>(bytes)?.get())
+impl<'a> Decode<'a> for i32 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Ok(read_wire::<I32>(bytes)?.get())
+    }
 }
 
 /// Borrows `len` bytes. Leaves the input unchanged on failure.

@@ -7,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{borrow_slice, parse_repeated, read_u16},
+    decoder::{borrow_slice, decode_value, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -45,8 +45,8 @@ pub struct BootstrapMethod<'a> {
 
 impl<'a> Decode<'a> for BootstrapMethod<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let bootstrap_method_ref = read_u16(bytes)?;
-        let num_bootstrap_arguments: u16 = read_u16(bytes)?;
+        let bootstrap_method_ref = decode_value(bytes)?;
+        let num_bootstrap_arguments: u16 = decode_value(bytes)?;
         let bootstrap_arguments = borrow_slice(bytes, usize::from(num_bootstrap_arguments))?;
         Ok(Self {
             bootstrap_method_ref,
@@ -64,9 +64,9 @@ pub struct RecordComponentInfo<'a> {
 
 impl<'a> Decode<'a> for RecordComponentInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let name_index = read_u16(bytes)?;
-        let descriptor_index = read_u16(bytes)?;
-        let attributes_count: u16 = read_u16(bytes)?;
+        let name_index = decode_value(bytes)?;
+        let descriptor_index = decode_value(bytes)?;
+        let attributes_count: u16 = decode_value(bytes)?;
         let attributes =
             parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
         Ok(Self {
