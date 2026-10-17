@@ -35,8 +35,7 @@ impl<'a> Decode<'a> for Code<'a> {
         let exception_table_length: u16 = decode_value(bytes)?;
         let exception_table = borrow_slice(bytes, usize::from(exception_table_length))?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes =
-            parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
         Ok(Self {
             max_stack,
             max_locals,
@@ -120,11 +119,7 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
                 let offset_delta = decode_value(bytes)?;
-                let locals = parse_repeated(
-                    bytes,
-                    usize::from(locals_count),
-                    VerificationTypeInfo::decode,
-                )?;
+                let locals = parse_repeated(bytes, locals_count, VerificationTypeInfo::decode)?;
                 Ok(Self::AppendFrame {
                     offset_delta,
                     locals,
@@ -133,17 +128,10 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
             255 => {
                 let offset_delta = decode_value(bytes)?;
                 let number_of_locals: u16 = decode_value(bytes)?;
-                let locals = parse_repeated(
-                    bytes,
-                    usize::from(number_of_locals),
-                    VerificationTypeInfo::decode,
-                )?;
+                let locals = parse_repeated(bytes, number_of_locals, VerificationTypeInfo::decode)?;
                 let number_of_stack_items: u16 = decode_value(bytes)?;
-                let stack = parse_repeated(
-                    bytes,
-                    usize::from(number_of_stack_items),
-                    VerificationTypeInfo::decode,
-                )?;
+                let stack =
+                    parse_repeated(bytes, number_of_stack_items, VerificationTypeInfo::decode)?;
                 Ok(Self::FullFrame {
                     offset_delta,
                     locals,

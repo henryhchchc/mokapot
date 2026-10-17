@@ -67,8 +67,7 @@ impl<'a> Decode<'a> for RecordComponentInfo<'a> {
         let name_index = decode_value(bytes)?;
         let descriptor_index = decode_value(bytes)?;
         let attributes_count: u16 = decode_value(bytes)?;
-        let attributes =
-            parse_repeated(bytes, usize::from(attributes_count), AttributeInfo::decode)?;
+        let attributes = parse_repeated(bytes, attributes_count, AttributeInfo::decode)?;
         Ok(Self {
             name_index,
             descriptor_index,
