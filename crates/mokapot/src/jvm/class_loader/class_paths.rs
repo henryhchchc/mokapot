@@ -1,6 +1,11 @@
 //! Implementations of [`ClassPath`].
 
-use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
+#[cfg(feature = "jar")]
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+};
 
 #[cfg(feature = "jar")]
 use zip::{ZipArchive, result::ZipError};
@@ -45,9 +50,8 @@ impl ClassPath for DirectoryClassPath {
             .join(class_name.as_ref())
             .with_extension("class");
         if class_file_path.exists() {
-            let class_file = File::open(class_file_path)?;
-            let mut buf_read = BufReader::new(class_file);
-            let class = Class::from_reader(&mut buf_read)?;
+            let bytes = std::fs::read(class_file_path)?;
+            let class = Class::from_bytes(&bytes)?;
             Ok(class)
         } else {
             Err(Error::NotFound)
@@ -118,7 +122,9 @@ impl ClassPath for JarClassPath {
                 ZipError::Io(io_err) => Error::IO(io_err),
                 e => Error::Other(Box::new(e)),
             })?;
-        Class::from_reader(&mut class_file).map_err(Into::into)
+        let mut bytes = Vec::new();
+        class_file.read_to_end(&mut bytes)?;
+        Class::from_bytes(&bytes).map_err(Into::into)
     }
 }
 

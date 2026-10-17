@@ -39,12 +39,11 @@ cargo update
 ### Parse a JVM class file
 
 ```rust
-use mokapot::jvm::class::Class;
-use std::fs::File;
+use mokapot::jvm::Class;
 
 fn parse_class_file(path: &str) -> Result<Class, Box<dyn std::error::Error>> {
-    let mut file = File::open(path)?;
-    let class = Class::from_reader(&mut file)?;
+    let bytes = std::fs::read(path)?;
+    let class = Class::from_bytes(&bytes)?;
     Ok(class)
 }
 ```

@@ -1,11 +1,10 @@
 //! Class-file parsing and model conversion.
 
-mod io;
+mod decode;
 
 use super::{
-    FromBytecode, ParseError, ParsingContext, attribute::AttributeInfo,
-    class_element::ClassElement, constant_pool::RawConstantPool, field_info::FieldInfo,
-    method_info::MethodInfo, raw_attributes,
+    ParseError, ParsingContext, attribute::AttributeInfo, class_element::ClassElement,
+    constant_pool::RawConstantPool, field_info::FieldInfo, method_info::MethodInfo, raw_attributes,
 };
 use crate::{
     intrinsics::{extract_attributes, see_jvm_spec},
@@ -38,25 +37,18 @@ pub(crate) struct ClassFile {
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
 
 impl Class {
-    /// Parses a class file from the given reader.
+    /// Parses exactly one class file from the given bytes.
     /// # Errors
-    /// See [`ParseError`] for more information.
+    /// Returns a [`ParseError`] for malformed, truncated, or trailing data.
     /// # Example
     /// ```no_run
     /// use mokapot::jvm::Class;
-    /// use std::fs::File;
-    /// use std::io::BufReader;
     ///
-    /// let file = File::open("path/to/class/file").unwrap();
-    /// let reader = BufReader::new(file);
-    /// let class = Class::from_reader(reader).unwrap();
+    /// let bytes = std::fs::read("path/to/class/file").unwrap();
+    /// let class = Class::from_bytes(&bytes).unwrap();
     /// ```
-    pub fn from_reader<R>(reader: R) -> Result<Class, ParseError>
-    where
-        R: std::io::Read,
-    {
-        let class_file = ClassFile::from_reader(reader)?;
-        Class::from_raw(class_file)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
+        Self::from_raw(ClassFile::parse(bytes)?)
     }
 }
 

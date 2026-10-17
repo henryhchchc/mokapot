@@ -5,7 +5,7 @@
 //! similar to the Java `javap` tool, showing class structure, fields,
 //! methods, and bytecode instructions.
 
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use mokapot::jvm::{self, Class};
@@ -139,14 +139,8 @@ fn process_class_files(class_files: &[PathBuf], verbose: bool) {
 /// into the appropriate [`DisassemblerError`] variant through the ? operator
 /// and the From trait implementations on [`DisassemblerError`].
 fn parse_class_file(path: &PathBuf) -> Result<Class, DisassemblerError> {
-    // Open the file (may fail with IoError)
-    let file = File::open(path)?;
-
-    // Create a buffered reader for efficient reading
-    let mut reader = BufReader::new(file);
-
-    // Parse the class file (may fail with ParseError)
-    let class = Class::from_reader(&mut reader)?;
+    let bytes = std::fs::read(path)?;
+    let class = Class::from_bytes(&bytes)?;
 
     Ok(class)
 }

@@ -9,7 +9,7 @@ use crate::jdk_corpus::Corpus;
 pub fn for_each_method(mut visit: impl FnMut(Method)) {
     // Consume inputs so only one parsed class and the retained benchmark inputs remain live.
     for input in Corpus::from_env().classes {
-        let class = Class::from_reader(&mut input.bytes.as_slice())
+        let class = Class::from_bytes(&input.bytes)
             .unwrap_or_else(|error| panic!("cannot parse {}: {error}", input.name));
         for method in class.methods {
             if method.body.is_some() {

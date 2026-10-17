@@ -1,6 +1,6 @@
 //! Builds and prints `MokaIR` for each concrete method in a class file.
 
-use std::{collections::HashSet, env, fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashSet, env, fs, path::PathBuf};
 
 use mokapot::{
     ir::{InstructionLocation, MokaIRMethod},
@@ -12,8 +12,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map(PathBuf::from)
         .ok_or("usage: moka_ir <class-file>")?;
-    let mut reader = BufReader::new(File::open(path)?);
-    let class = Class::from_reader(&mut reader)?;
+    let bytes = fs::read(path)?;
+    let class = Class::from_bytes(&bytes)?;
 
     for method in &class.methods {
         if method.body.is_none() {

@@ -9,14 +9,12 @@ pub(super) mod class_element;
 pub(super) mod class_file;
 pub(super) mod code;
 pub mod constant_pool;
+pub(crate) mod decoder;
 mod field_info;
 mod fixed_layout;
 mod method_info;
 mod module;
 mod raw_attributes;
-pub(crate) mod reader;
-
-use std::io::{self, Read};
 
 pub use crate::jvm::errors::{ParseError, ParseErrorKind};
 use crate::{
@@ -40,14 +38,13 @@ pub struct ParsingContext {
     pub current_class_name: ClassName,
 }
 
-/// Enables parsing a raw JVM element from a binary stream.
+/// Enables parsing a raw JVM element from a byte slice.
 ///
-/// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a binary input stream.
+/// This trait is implemented by raw JVM elements (without resolving constant pool references) that can be parsed from a byte slice.
 pub(crate) trait FromBytecode: Sized {
-    /// Parses an instance of this type from the given reader.
+    /// Parses an instance of this type from the given slice, advancing it past the parsed element.
     ///
     /// # Errors
-    /// Returns an `io::Error` if reading from the stream fails or if the data
-    /// is not in the expected format.
-    fn from_reader<R: Read>(reader: R) -> io::Result<Self>;
+    /// Returns a parsing error if the input is truncated or malformed.
+    fn from_bytes(bytes: &mut &[u8]) -> Result<Self, ParseError>;
 }
