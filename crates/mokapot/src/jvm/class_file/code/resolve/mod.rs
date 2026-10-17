@@ -264,33 +264,21 @@ impl Instruction {
                 Self::Jsr(target)
             }
             Ret { index } => Self::Ret(index),
-            TableSwitch {
-                default,
-                low,
-                high,
-                jump_offsets,
-            } => {
-                if low > high
-                    || i64::try_from(jump_offsets.len()).ok()
-                        != Some(i64::from(high) - i64::from(low) + 1)
-                {
-                    return Err(ParseError::malform("Invalid tableswitch range"));
-                }
-                let jump_targets = jump_offsets
+            TableSwitch(info) => {
+                let jump_targets = info
+                    .jump_offsets
                     .iter()
                     .map(|offset| (pc + offset.get()).context("Invalid jump offset"))
                     .try_collect()?;
                 Self::TableSwitch {
-                    low,
+                    low: info.low.get(),
                     jump_targets,
-                    default: (pc + default).context("Invalid jump offset")?,
+                    default: (pc + info.default.get()).context("Invalid jump offset")?,
                 }
             }
-            LookupSwitch {
-                default,
-                match_offsets,
-            } => {
-                let targets = match_offsets
+            LookupSwitch(info) => {
+                let targets = info
+                    .match_offsets
                     .iter()
                     .map(|pair| {
                         let value = pair.match_value.get();
@@ -301,7 +289,7 @@ impl Instruction {
                     })
                     .try_collect()?;
                 Self::LookupSwitch {
-                    default: (pc + default).context("Invalid jump offset")?,
+                    default: (pc + info.default.get()).context("Invalid jump offset")?,
                     match_targets: targets,
                 }
             }
