@@ -54,6 +54,7 @@ macro_rules! extract_attributes {
                 }
             }
         }
+        let $unrecognized = $unrecognized.into_boxed_slice();
         $( $(let $var = $var.$uw();)? )*
     };
 }

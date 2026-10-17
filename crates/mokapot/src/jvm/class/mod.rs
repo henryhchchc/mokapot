@@ -318,7 +318,7 @@ pub struct BootstrapMethod {
     /// The method handle of the bootstrap method.
     pub method: MethodHandle,
     /// The argument that are passed to the bootstrap method.
-    pub arguments: Vec<ConstantValue>,
+    pub arguments: Box<[ConstantValue]>,
 }
 
 /// A method handle.
@@ -370,7 +370,7 @@ pub struct RecordComponent {
     /// The type annotations.
     pub type_annotations: Annotations<super::TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 bitflags! {

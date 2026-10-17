@@ -24,17 +24,17 @@ pub struct MethodBody {
     /// The executable instructions.
     pub instructions: InstructionList<Instruction>,
     /// The exception handlers table.
-    pub exception_table: Vec<ExceptionTableEntry>,
+    pub exception_table: Box<[ExceptionTableEntry]>,
     /// The line number table.
-    pub line_number_table: Option<Vec<LineNumberTableEntry>>,
+    pub line_number_table: Option<Box<[LineNumberTableEntry]>>,
     /// The local variable table.
     pub local_variable_table: Option<LocalVariableTable>,
     /// The stack map table.
-    pub stack_map_table: Option<Vec<StackMapFrame>>,
+    pub stack_map_table: Option<Box<[StackMapFrame]>>,
     /// The type annotations.
     pub type_annotations: Annotations<TypeAnnotation>,
     /// Unrecognized JVM attributes.
-    pub other_attributes: Vec<(String, Box<[u8]>)>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 impl MethodBody {
@@ -245,12 +245,12 @@ mod test {
             ]),
             max_stack: 0,
             max_locals: 0,
-            exception_table: vec![],
+            exception_table: Box::new([]),
             line_number_table: None,
             local_variable_table: None,
             stack_map_table: None,
             type_annotations: Annotations::default(),
-            other_attributes: vec![],
+            other_attributes: Box::new([]),
         };
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
     }
@@ -454,7 +454,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of additional local variables.
-        locals: Vec<VerificationType>,
+        locals: Box<[VerificationType]>,
     },
     /// Indicates a new frame.
     /// Corresponds to `full_frame`.
@@ -462,8 +462,8 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of the local variables.
-        locals: Vec<VerificationType>,
+        locals: Box<[VerificationType]>,
         /// The verification information of the operand stack.
-        stack: Vec<VerificationType>,
+        stack: Box<[VerificationType]>,
     },
 }

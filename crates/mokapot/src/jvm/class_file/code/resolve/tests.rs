@@ -17,7 +17,7 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
         Instruction::TableSwitch {
             default: 5.into(),
             low: -1,
-            jump_targets: vec![10.into(), 11.into()],
+            jump_targets: Box::new([10.into(), 11.into()]),
         }
     );
 }

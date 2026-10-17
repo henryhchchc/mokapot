@@ -34,7 +34,7 @@ pub enum ElementValue {
     /// Another annotation.
     AnnotationInterface(Annotation),
     /// An array of values.
-    Array(Vec<ElementValue>),
+    Array(Box<[ElementValue]>),
 }
 
 /// Represents the location of a type parameter in a class or method.
@@ -126,7 +126,7 @@ pub enum TargetInfo {
         index: u16,
     },
     /// Indicates that an annotation appears on the type in a local variable declaration, including a variable declared as a resource in a `try-with-resources` statement.
-    LocalVar(VariableKind, Vec<LocalVariableId>),
+    LocalVar(VariableKind, Box<[LocalVariableId]>),
 
     /// Indicates that an annotation appears on a type in an exception parameter declaration.
     Catch {

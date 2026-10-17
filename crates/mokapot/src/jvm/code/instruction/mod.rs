@@ -216,7 +216,7 @@ pub enum Instruction {
     Ret(u8) = 0xa9,
     TableSwitch {
         low: i32,
-        jump_targets: Vec<ProgramCounter>,
+        jump_targets: Box<[ProgramCounter]>,
         default: ProgramCounter,
     } = 0xaa,
     LookupSwitch {

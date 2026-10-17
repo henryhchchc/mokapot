@@ -26,23 +26,23 @@ fn ir(instructions: impl IntoIterator<Item = (u16, Instruction)>) -> MokaIRMetho
                 .into_iter()
                 .map(|(pc, instruction)| (pc.into(), instruction))
                 .collect(),
-            exception_table: vec![],
+            exception_table: Box::new([]),
             line_number_table: None,
             local_variable_table: None,
             stack_map_table: None,
             type_annotations: Annotations::default(),
-            other_attributes: vec![],
+            other_attributes: Box::new([]),
         }),
-        exceptions: vec![],
+        exceptions: Box::new([]),
         annotations: Annotations::default(),
         type_annotations: Annotations::default(),
         parameter_annotations: Annotations::default(),
         annotation_default: None,
-        parameters: vec![],
+        parameters: Box::new([]),
         is_synthetic: false,
         is_deprecated: false,
         signature: None,
-        other_attributes: vec![],
+        other_attributes: Box::new([]),
     };
     MokaIRMethod::from_method(&method).unwrap()
 }
