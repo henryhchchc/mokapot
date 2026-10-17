@@ -11,7 +11,7 @@ use crate::types::package_name::PackageName;
 
 use super::{
     Decode, ParseError, ResolutionContext,
-    annotation::{decode_annotation, decode_element_value, decode_type_annotation},
+    annotation::raw as annotation_raw,
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
@@ -21,7 +21,7 @@ use super::{
     resolve::{Resolve, decode_resolved, resolve_table},
 };
 use crate::{
-    intrinsics::see_jvm_spec,
+    intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
     jvm::{
         Annotation, ConstantValue, Module, TypeAnnotation,
         annotation::ElementValue,
@@ -210,19 +210,25 @@ impl Resolve for &AttributeInfo {
             }
             "RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
-                    .map(Attribute::RuntimeVisibleAnnotations)
+                parse_repeated(bytes, count, |bytes| {
+                    decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
+                })
+                .map(Attribute::RuntimeVisibleAnnotations)
             }
             "RuntimeInvisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
-                    .map(Attribute::RuntimeInvisibleAnnotations)
+                parse_repeated(bytes, count, |bytes| {
+                    decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
+                })
+                .map(Attribute::RuntimeInvisibleAnnotations)
             }
             "RuntimeVisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
+                    parse_repeated(bytes, count, |bytes| {
+                        decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
+                    })
                 })
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
@@ -230,23 +236,28 @@ impl Resolve for &AttributeInfo {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
-                    parse_repeated(bytes, count, |bytes| decode_annotation(bytes, ctx))
+                    parse_repeated(bytes, count, |bytes| {
+                        decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
+                    })
                 })
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
             "RuntimeVisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| decode_type_annotation(bytes, ctx))
-                    .map(Attribute::RuntimeVisibleTypeAnnotations)
+                parse_repeated(bytes, count, |bytes| {
+                    decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
+                })
+                .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
             "RuntimeInvisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
-                parse_repeated(bytes, count, |bytes| decode_type_annotation(bytes, ctx))
-                    .map(Attribute::RuntimeInvisibleTypeAnnotations)
+                parse_repeated(bytes, count, |bytes| {
+                    decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
+                })
+                .map(Attribute::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => {
-                decode_element_value(bytes, ctx).map(Attribute::AnnotationDefault)
-            }
+            "AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
+                .map(Attribute::AnnotationDefault),
             "BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
@@ -322,7 +333,7 @@ fn resolve_indices<T>(
     borrow_slice::<U16>(bytes, count)?
         .iter()
         .map(|index| resolve(index.get()))
-        .collect()
+        .try_collect_exact()
 }
 
 #[cfg(test)]

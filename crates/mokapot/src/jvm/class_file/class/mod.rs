@@ -1,4 +1,5 @@
 //! Class-file parsing and model conversion.
+
 use zerocopy::byteorder::big_endian::U16;
 
 use crate::jvm::class_file::attribute::extract_attributes;
@@ -18,7 +19,7 @@ use super::{
     resolve::Resolve,
 };
 use crate::{
-    intrinsics::see_jvm_spec,
+    intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
     jvm::{
         Annotations, Class,
         class::{
@@ -132,15 +133,15 @@ impl Class {
             interfaces: interfaces
                 .iter()
                 .map(|it| ctx.constant_pool.get_class_name(it.get()))
-                .collect::<Result<_, _>>()?,
+                .try_collect_exact()?,
             fields: fields
                 .into_iter()
                 .map(|it| it.resolve(ctx))
-                .collect::<Result<_, _>>()?,
+                .try_collect_exact()?,
             methods: methods
                 .into_iter()
                 .map(|it| it.resolve(ctx))
-                .collect::<Result<_, _>>()?,
+                .try_collect_exact()?,
             source_file,
             inner_classes,
             enclosing_method,
@@ -185,7 +186,7 @@ impl Resolve for &raw::BootstrapMethod {
         let arguments = bootstrap_arguments
             .iter()
             .map(|it| ctx.constant_pool.get_constant_value(it.get()))
-            .collect::<Result<_, _>>()?;
+            .try_collect_exact()?;
         Ok(BootstrapMethod { method, arguments })
     }
 }

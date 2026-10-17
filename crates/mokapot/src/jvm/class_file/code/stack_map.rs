@@ -1,3 +1,7 @@
+//! Resolution of raw stack-map frames and verification types.
+
+use crate::intrinsics::ExactSizeIteratorExt;
+
 use super::raw;
 use crate::jvm::{
     class_file::{ParseError, ResolutionContext, resolve::Resolve},
@@ -47,7 +51,7 @@ impl Resolve for raw::StackMapFrameInfo {
                 locals: locals
                     .into_iter()
                     .map(|it| it.resolve(ctx))
-                    .collect::<Result<_, _>>()?,
+                    .try_collect_exact()?,
             }),
             raw::StackMapFrameInfo::FullFrame {
                 offset_delta,
@@ -57,11 +61,11 @@ impl Resolve for raw::StackMapFrameInfo {
                 let locals = locals
                     .into_iter()
                     .map(|it| it.resolve(ctx))
-                    .collect::<Result<_, _>>()?;
+                    .try_collect_exact()?;
                 let stack = stack
                     .into_iter()
                     .map(|it| it.resolve(ctx))
-                    .collect::<Result<_, _>>()?;
+                    .try_collect_exact()?;
                 Ok(StackMapFrame::FullFrame {
                     offset_delta,
                     locals,
@@ -97,3 +101,6 @@ impl Resolve for raw::VerificationTypeInfo {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

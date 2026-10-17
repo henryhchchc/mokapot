@@ -1,5 +1,7 @@
 //! Resolution of decoded class-file structures.
 
+use crate::intrinsics::ExactSizeIteratorExt;
+
 use super::{Decode, ParseError, ResolutionContext};
 
 /// Resolves constant-pool references and validates a decoded structure.
@@ -33,5 +35,5 @@ where
         .iter()
         .copied()
         .map(|raw| raw.resolve(ctx))
-        .collect()
+        .try_collect_exact()
 }
