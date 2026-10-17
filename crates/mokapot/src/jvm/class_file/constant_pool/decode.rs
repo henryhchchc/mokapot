@@ -1,8 +1,20 @@
+use zerocopy::{FromBytes, Immutable, Unaligned, byteorder::big_endian::U16};
+
 use super::RawEntry;
 use crate::jvm::class_file::{
     Decode, ParseError,
     decoder::{borrow_bytes, decode_value},
+    fixed_layout::FixedLayout,
 };
+
+#[derive(FromBytes, Immutable, Unaligned)]
+#[repr(C)]
+struct MethodHandlePayload {
+    reference_kind: u8,
+    reference_index: U16,
+}
+
+impl FixedLayout for MethodHandlePayload {}
 
 impl<'a> Decode<'a> for RawEntry<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
@@ -19,37 +31,49 @@ impl<'a> Decode<'a> for RawEntry<'a> {
             6 => decode_value(bytes).map(Self::Double),
             7 => decode_value(bytes).map(|name_index| Self::Class { name_index }),
             8 => decode_value(bytes).map(|string_index| Self::String { string_index }),
-            9 => Ok(Self::FieldRef {
-                class_index: decode_value(bytes)?,
-                name_and_type_index: decode_value(bytes)?,
+            9 => decode_value::<[U16; 2]>(bytes).map(|[class_index, name_and_type_index]| {
+                Self::FieldRef {
+                    class_index,
+                    name_and_type_index,
+                }
             }),
-            10 => Ok(Self::MethodRef {
-                class_index: decode_value(bytes)?,
-                name_and_type_index: decode_value(bytes)?,
+            10 => decode_value::<[U16; 2]>(bytes).map(|[class_index, name_and_type_index]| {
+                Self::MethodRef {
+                    class_index,
+                    name_and_type_index,
+                }
             }),
-            11 => Ok(Self::InterfaceMethodRef {
-                class_index: decode_value(bytes)?,
-                name_and_type_index: decode_value(bytes)?,
+            11 => decode_value::<[U16; 2]>(bytes).map(|[class_index, name_and_type_index]| {
+                Self::InterfaceMethodRef {
+                    class_index,
+                    name_and_type_index,
+                }
             }),
-            12 => Ok(Self::NameAndType {
-                name_index: decode_value(bytes)?,
-                descriptor_index: decode_value(bytes)?,
+            12 => decode_value::<[U16; 2]>(bytes).map(|[name_index, descriptor_index]| {
+                Self::NameAndType {
+                    name_index,
+                    descriptor_index,
+                }
             }),
-            15 => Ok(Self::MethodHandle {
-                reference_kind: decode_value(bytes)?,
-                reference_index: decode_value(bytes)?,
+            15 => decode_value::<MethodHandlePayload>(bytes).map(|payload| Self::MethodHandle {
+                reference_kind: payload.reference_kind,
+                reference_index: payload.reference_index,
             }),
             16 => Ok(Self::MethodType {
                 descriptor_index: decode_value(bytes)?,
             }),
-            17 => Ok(Self::Dynamic {
-                bootstrap_method_attr_index: decode_value(bytes)?,
-                name_and_type_index: decode_value(bytes)?,
-            }),
-            18 => Ok(Self::InvokeDynamic {
-                bootstrap_method_attr_index: decode_value(bytes)?,
-                name_and_type_index: decode_value(bytes)?,
-            }),
+            17 => decode_value::<[U16; 2]>(bytes).map(
+                |[bootstrap_method_attr_index, name_and_type_index]| Self::Dynamic {
+                    bootstrap_method_attr_index,
+                    name_and_type_index,
+                },
+            ),
+            18 => decode_value::<[U16; 2]>(bytes).map(
+                |[bootstrap_method_attr_index, name_and_type_index]| Self::InvokeDynamic {
+                    bootstrap_method_attr_index,
+                    name_and_type_index,
+                },
+            ),
             19 => decode_value(bytes).map(|name_index| Self::Module { name_index }),
             20 => decode_value(bytes).map(|name_index| Self::Package { name_index }),
             tag => Err(ParseError::malform(format!(

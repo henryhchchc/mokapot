@@ -15,7 +15,7 @@ pub(super) trait FixedLayout: FromBytes + Immutable + Unaligned {}
 
 impl FixedLayout for u8 {}
 impl FixedLayout for i8 {}
-impl<const N: usize> FixedLayout for [u8; N] {}
+impl<T: FixedLayout, const N: usize> FixedLayout for [T; N] {}
 impl FixedLayout for U16 {}
 impl FixedLayout for U32 {}
 impl FixedLayout for I16 {}
