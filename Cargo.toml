@@ -21,6 +21,7 @@ itertools = "0.15"
 petgraph = "0.8"
 proptest = "1.11"
 proptest-derive = "0.9"
+simd_cesu8 = "1.2"
 thiserror = "2.0"
 walkdir = "2.5"
 zerocopy = { version = "0.8", features = ["derive"] }
