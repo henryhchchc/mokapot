@@ -598,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn miri_interface_method_handles_use_interface_method_refs() {
+    fn interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
             owner: ReferenceType::Class("a/b/I".parse().unwrap()),
             name: "m".to_owned(),
@@ -719,15 +719,10 @@ mod tests {
     }
 
     #[test]
-    fn utf8_conversion_preserves_strings_and_invalid_bytes() {
+    fn string_entries_resolve_utf8_cesu8_and_invalid_bytes() {
         for (bytes, expected) in [
-            (Vec::new(), JavaString::Utf8(String::new())),
             (b"plain".to_vec(), JavaString::Utf8("plain".to_owned())),
             (vec![0xc0, 0x80], JavaString::Utf8("\0".to_owned())),
-            (
-                vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
-                JavaString::Utf8("😀".to_owned()),
-            ),
             (vec![0xff], JavaString::InvalidUtf8(Box::from([0xff]))),
         ] {
             let raw = RawConstantPool::from_entries([
@@ -739,7 +734,6 @@ mod tests {
             let index = 1;
             let literal = 2;
             let pool = ConstantPool::from_raw(raw).unwrap();
-            drop(bytes);
             assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(expected.clone())));
             assert_eq!(
                 pool.get_constant_value(literal).unwrap(),

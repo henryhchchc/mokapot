@@ -32,6 +32,10 @@ When the hosting type is already private, its associated items may be `pub`: the
 
 ## Testing Guidelines
 
+Keep tests only when they validate functional invariants of code we write.
+Assume third-party libraries are correct; drop tests that only validate their guarantees.
+Opt tests into Miri only when they exercise unsafe code we write.
+
 Add unit tests near the code they cover and integration tests in `crates/mokapot/tests/<feature>.rs`.
 Use the shared test prelude (`crate::ir::test::prelude::*`) and its fixtures where applicable; add reusable test utilities there.
 Bind arguments to local variables when this makes calls and assertions shorter.

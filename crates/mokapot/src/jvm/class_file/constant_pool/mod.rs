@@ -241,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn miri_entry_layouts_decode_values_and_reject_truncation() {
+    fn entry_tags_decode_payloads_and_reject_truncation() {
         let cases: &[(RawEntry, &[u8])] = &[
             (
                 RawEntry::Integer((-0x123_4567).into()),
@@ -319,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn miri_utf8_entries_borrow_input() {
+    fn utf8_entries_borrow_input() {
         let bytes = vec![1, 0, 3, b'a', b'b', b'c'];
         let pool = RawConstantPool::from_bytes(&bytes, 2).unwrap();
         let Some(RawEntry::Utf8(value)) = pool.get_entry(1) else {
