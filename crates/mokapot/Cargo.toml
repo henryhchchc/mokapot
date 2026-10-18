@@ -28,16 +28,13 @@ name = "jdk-ir"
 harness = false
 name = "jdk-path-conditions"
 
-[[bench]]
-harness = false
-name = "jvm-string"
-
 [dependencies]
 bitflags = { workspace = true }
 derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
 document-features = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true, optional = true }
+simd_cesu8 = { workspace = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
 zerocopy = { workspace = true, features = ["simd", "std"] }
