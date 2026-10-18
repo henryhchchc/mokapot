@@ -45,7 +45,6 @@ zip = { workspace = true, features = ["deflate-flate2-zlib-rs"], optional = true
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }
-divan.workspace = true
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 walkdir = { workspace = true }
@@ -53,6 +52,12 @@ walkdir = { workspace = true }
 [build-dependencies]
 anyhow.workspace = true
 glob = { workspace = true }
+
+[target."cfg(codspeed)".dev-dependencies]
+divan = { package = "codspeed-divan-compat", version = "5.0" }
+
+[target."cfg(not(codspeed))".dev-dependencies]
+divan = "0.1"
 
 [features]
 default = ["jar", "petgraph"]
