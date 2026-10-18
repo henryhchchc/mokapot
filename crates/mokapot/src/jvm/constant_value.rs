@@ -4,7 +4,7 @@ use std::{cmp::Ordering, hash::Hash};
 
 use derive_more::Display;
 
-use super::{JavaString, class::MethodHandle};
+use super::{JString, class::MethodHandle};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
@@ -34,7 +34,7 @@ pub enum ConstantValue {
     Double(f64),
     /// A string literal.
     #[display("{_0}")]
-    String(JavaString),
+    String(JString),
     /// A class literal.
     #[display("{_0}.class")]
     Class(ReferenceType),

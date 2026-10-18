@@ -55,7 +55,7 @@ impl Resolve for FieldInfo<'_> {
         } = raw;
         let access_flags =
             parse_flags::<field::AccessFlags>(access_flags, "Invalid field access flags")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
         let field_type = ctx
             .constant_pool
             .get_str(descriptor_index)?

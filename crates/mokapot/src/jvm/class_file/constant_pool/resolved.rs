@@ -1,8 +1,10 @@
 //! Eagerly resolved JVM constant-pool values.
 
+use std::borrow::Cow;
+
 use crate::{
     jvm::{
-        ConstantValue, JavaString,
+        ConstantValue, JStr, JString,
         class::MethodHandle,
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
@@ -17,15 +19,15 @@ use crate::{
 
 /// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConstantPool {
-    inner: PoolStorage<Entry>,
+pub struct ConstantPool<'input> {
+    inner: PoolStorage<Entry<'input>>,
 }
 
 /// A resolved constant-pool entry.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Entry {
-    /// A decoded string, including preserved invalid encodings.
-    Utf8(JavaString),
+enum Entry<'input> {
+    /// A string in JVM modified UTF-8 encoding.
+    Utf8(&'input JStr),
     /// An integer.
     Integer(i32),
     /// A float.
@@ -42,7 +44,7 @@ pub enum Entry {
         is_binary_name: bool,
     },
     /// A string literal.
-    String(JavaString),
+    String(&'input JStr),
     /// A field reference.
     FieldRef(FieldRef),
     /// A method reference.
@@ -88,7 +90,7 @@ pub enum NameAndType {
     Method(String, MethodDescriptor),
 }
 
-impl Entry {
+impl Entry<'_> {
     fn type_mismatch(&self, expected: &'static str) -> ParseError {
         ParseError::malform(format!(
             "Mismatched constant pool type. Expected: {expected} but got {}.",
@@ -121,7 +123,7 @@ impl Entry {
     }
 }
 
-impl ConstantPool {
+impl<'input> ConstantPool<'input> {
     /// Creates an empty resolved pool.
     #[must_use]
     #[cfg(test)]
@@ -136,14 +138,14 @@ impl ConstantPool {
     /// # Errors
     /// Returns binary parsing errors or malformed constant-pool references and values.
     #[cfg(test)]
-    pub fn from_bytes(bytes: &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+    pub fn from_bytes(bytes: &'input [u8], constant_pool_count: u16) -> Result<Self, ParseError> {
         Self::from_raw(RawConstantPool::from_bytes(bytes, constant_pool_count)?)
     }
 
     /// Resolves all entries, preserving indices and reserved slots.
     /// # Errors
     /// Returns an error for invalid references, tags, names, descriptors, or handle kinds.
-    pub fn from_raw(raw: RawConstantPool<'_>) -> Result<Self, ParseError> {
+    pub fn from_raw(raw: RawConstantPool<'input>) -> Result<Self, ParseError> {
         let count = raw.count();
         let mut pending = raw.inner.into_slots();
         let mut pool = Self {
@@ -165,7 +167,7 @@ impl ConstantPool {
 
     /// Gets an entry, or `None` for an invalid index or reserved slot.
     #[must_use]
-    pub fn get_entry(&self, index: u16) -> Option<&Entry> {
+    fn get_entry(&self, index: u16) -> Option<&Entry<'input>> {
         self.inner.get_entry(index)
     }
 
@@ -176,13 +178,13 @@ impl ConstantPool {
         self.inner.count()
     }
 
-    fn entry(&self, index: u16) -> Result<&Entry, ParseError> {
+    fn entry(&self, index: u16) -> Result<&Entry<'input>, ParseError> {
         self.get_entry(index).context("Invalid constant pool index")
     }
 
-    pub(crate) fn get_java_string(&self, index: u16) -> Result<JavaString, ParseError> {
+    pub(crate) fn get_java_string(&self, index: u16) -> Result<JString, ParseError> {
         match self.entry(index)? {
-            Entry::Utf8(value) => Ok(value.clone()),
+            Entry::Utf8(value) => Ok((*value).to_owned()),
             entry => Err(entry.type_mismatch("Utf8")),
         }
     }
@@ -205,10 +207,11 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_str(&self, index: u16) -> Result<&str, ParseError> {
+    pub(crate) fn get_str(&self, index: u16) -> Result<Cow<'_, str>, ParseError> {
         match self.entry(index)? {
-            Entry::Utf8(JavaString::Utf8(value)) => Ok(value),
-            Entry::Utf8(JavaString::InvalidUtf8(_)) => Err(ParseError::malform("Broken UTF-8")),
+            Entry::Utf8(value) => value
+                .to_str()
+                .map_err(|_| ParseError::malform("Broken UTF-8")),
             entry => Err(entry.type_mismatch("Utf8")),
         }
     }
@@ -307,7 +310,7 @@ impl ConstantPool {
             Entry::Float(value) => ConstantValue::Float(*value),
             Entry::Long(value) => ConstantValue::Long(*value),
             Entry::Double(value) => ConstantValue::Double(*value),
-            Entry::String(value) => ConstantValue::String(value.clone()),
+            Entry::String(value) => ConstantValue::String((*value).to_owned()),
             Entry::Class { reference_type, .. } => ConstantValue::Class(reference_type.clone()),
             Entry::MethodType(value) => ConstantValue::MethodType(value.clone()),
             Entry::MethodHandle(value) => ConstantValue::Handle(value.clone()),
@@ -324,16 +327,16 @@ impl ConstantPool {
         })
     }
 
-    fn resolve_entry(&self, raw: RawEntry<'_>) -> Result<Entry, ParseError> {
+    fn resolve_entry(&self, raw: RawEntry<'input>) -> Result<Entry<'input>, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => Entry::Utf8(JavaString::from_modified_utf8(bytes)),
+            RawEntry::Utf8(bytes) => Entry::Utf8(JStr::from_bytes(bytes)),
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
             RawEntry::Double(value) => Entry::Double(value.into()),
             RawEntry::Class { name_index } => self.resolve_class(name_index.into())?,
             RawEntry::String { string_index } => match self.entry(string_index.into())? {
-                Entry::Utf8(value) => Entry::String(value.clone()),
+                Entry::Utf8(value) => Entry::String(value),
                 entry => return Err(entry.type_mismatch("Utf8")),
             },
             RawEntry::NameAndType {
@@ -348,7 +351,7 @@ impl ConstantPool {
                     .context("Invalid method descriptor")?,
             ),
             RawEntry::Module { name_index } => Entry::Module(ModuleRef {
-                name: self.get_str(name_index.into())?.to_owned(),
+                name: self.get_str(name_index.into())?.into_owned(),
             }),
             RawEntry::Package { name_index } => Entry::Package(
                 self.get_str(name_index.into())?
@@ -424,7 +427,7 @@ impl ConstantPool {
         })
     }
 
-    fn resolve_class(&self, name_index: u16) -> Result<Entry, ParseError> {
+    fn resolve_class(&self, name_index: u16) -> Result<Entry<'input>, ParseError> {
         let name = self.get_str(name_index)?;
         let reference_type = name.parse().context("Invalid type reference")?;
         let is_binary_name =
@@ -440,7 +443,7 @@ impl ConstantPool {
         name_index: u16,
         descriptor_index: u16,
     ) -> Result<NameAndType, ParseError> {
-        let name = self.get_str(name_index)?.to_owned();
+        let name = self.get_str(name_index)?.into_owned();
         let descriptor = self.get_str(descriptor_index)?;
         Ok(if descriptor.starts_with('(') {
             NameAndType::Method(
@@ -480,7 +483,7 @@ impl ConstantPool {
 }
 
 #[cfg(test)]
-impl Default for ConstantPool {
+impl Default for ConstantPool<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -719,11 +722,15 @@ mod tests {
     }
 
     #[test]
-    fn string_entries_resolve_utf8_cesu8_and_invalid_bytes() {
+    fn string_entries_preserve_jvm_bytes() {
         for (bytes, expected) in [
-            (b"plain".to_vec(), JavaString::Utf8("plain".to_owned())),
-            (vec![0xc0, 0x80], JavaString::Utf8("\0".to_owned())),
-            (vec![0xff], JavaString::InvalidUtf8(Box::from([0xff]))),
+            (b"plain".to_vec(), JString::from("plain")),
+            (vec![0xc0, 0x80], JString::from("\0")),
+            (
+                vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
+                JString::from("😀"),
+            ),
+            (vec![0xff], JString::from(vec![0xff])),
         ] {
             let raw = RawConstantPool::from_entries([
                 RawEntry::Utf8(&bytes),
@@ -734,7 +741,8 @@ mod tests {
             let index = 1;
             let literal = 2;
             let pool = ConstantPool::from_raw(raw).unwrap();
-            assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(expected.clone())));
+            assert_eq!(pool.get_java_string(index).unwrap().to_bytes(), bytes);
+            assert_eq!(pool.get_java_string(index).unwrap(), expected);
             assert_eq!(
                 pool.get_constant_value(literal).unwrap(),
                 ConstantValue::String(expected)

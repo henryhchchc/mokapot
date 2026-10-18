@@ -30,7 +30,7 @@ impl Resolve for raw::RequiresInfo {
             Some(
                 ctx.constant_pool
                     .get_str(requires_version_index)?
-                    .to_owned(),
+                    .into_owned(),
             )
         } else {
             None
@@ -124,7 +124,11 @@ impl Resolve for raw::ModuleInfo<'_> {
         let name = ctx.constant_pool.get_module_ref(module_name_index)?.name;
         let flags = parse_flags(module_flags, "Invalid access flag")?;
         let version = if module_version_index > 0 {
-            Some(ctx.constant_pool.get_str(module_version_index)?.to_owned())
+            Some(
+                ctx.constant_pool
+                    .get_str(module_version_index)?
+                    .into_owned(),
+            )
         } else {
             None
         };

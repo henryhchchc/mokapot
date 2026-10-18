@@ -216,7 +216,7 @@ impl Resolve for raw::InnerClass {
         let inner_name = if inner_name_index == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_str(inner_name_index)?.to_owned())
+            Some(ctx.constant_pool.get_str(inner_name_index)?.into_owned())
         };
         let access_flags = parse_flags::<NestedClassAccessFlags>(
             inner_class_access_flags,
@@ -240,7 +240,7 @@ impl Resolve for raw::RecordComponentInfo<'_> {
             descriptor_index,
             attributes,
         } = raw;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
         let component_type = ctx
             .constant_pool
             .get_str(descriptor_index)?

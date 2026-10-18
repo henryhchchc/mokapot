@@ -2,9 +2,6 @@
 
 use crate::types::package_name::PackageName;
 
-use derive_more::Display;
-use itertools::Itertools;
-
 use crate::{
     intrinsics::see_jvm_spec,
     types::{class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor},
@@ -25,8 +22,10 @@ pub mod module;
 pub mod references;
 
 mod constant_value;
+mod string;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
+pub use string::{JStr, JStrDecodeError, JString};
 
 /// A JVM class.
 #[doc = see_jvm_spec!(4, 1)]
@@ -218,28 +217,4 @@ pub struct Module {
     pub uses: Box<[ClassName]>,
     /// A list of the services that are provided by this module.
     pub provides: Box<[module::Provide]>,
-}
-
-/// A JVM string decoded from modified UTF-8.
-#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Clone, Hash, Display)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum JavaString {
-    /// A valid UTF-8 string.
-    #[display("String(\"{_0}\")")]
-    Utf8(String),
-    /// An string that is not valid UTF-8.
-    #[display("String({}) // Invalid UTF-8", _0.iter().map(|it| format!("0x{it:02X}")).join(" "))]
-    InvalidUtf8(Box<[u8]>),
-}
-
-impl JavaString {
-    pub(crate) fn from_modified_utf8(bytes: &[u8]) -> Self {
-        match std::str::from_utf8(bytes) {
-            Ok(value) => Self::Utf8(value.to_owned()),
-            Err(_) => match cesu8::from_java_cesu8(bytes) {
-                Ok(value) => Self::Utf8(value.into_owned()),
-                Err(_) => Self::InvalidUtf8(bytes.into()),
-            },
-        }
-    }
 }

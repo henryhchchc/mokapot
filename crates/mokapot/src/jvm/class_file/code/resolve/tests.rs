@@ -22,7 +22,7 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
     );
 }
 
-fn interface_method_pool(is_interface: bool) -> ConstantPool {
+fn interface_method_pool(is_interface: bool) -> ConstantPool<'static> {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
             class_index: 2.into(),

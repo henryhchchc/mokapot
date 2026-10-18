@@ -41,10 +41,10 @@ impl Resolve for raw::LocalVariableInfo {
         let length: u16 = length.into();
 
         let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index.into())?.into_owned();
         let descriptor = ctx.constant_pool.get_str(descriptor_index.into())?;
         let field_type =
-            FieldType::from_str(descriptor).context("Invalid field type descriptor")?;
+            FieldType::from_str(&descriptor).context("Invalid field type descriptor")?;
         let id = LocalVariableId {
             range: effective_range,
             index: index.into(),
@@ -72,11 +72,11 @@ impl Resolve for raw::LocalVariableTypeInfo {
         let length: u16 = length.into();
 
         let range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index.into())?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index.into())?.into_owned();
         let signature = ctx
             .constant_pool
             .get_str(signature_index.into())?
-            .to_owned();
+            .into_owned();
         let id = LocalVariableId {
             range,
             index: index.into(),
