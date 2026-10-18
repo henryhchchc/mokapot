@@ -114,13 +114,18 @@ fn corpus_methods() -> Vec<(String, Method)> {
     methods
 }
 
-fn corpus_ir() -> Vec<(String, MokaIRMethod)> {
-    corpus_methods()
-        .into_iter()
-        .map(|(label, method)| {
-            let ir = MokaIRMethod::from_method(&method)
-                .unwrap_or_else(|error| panic!("Failed to build {label}: {error}"));
-            (label, ir)
-        })
-        .collect()
+fn corpus_ir() -> impl Iterator<Item = (String, MokaIRMethod)> {
+    corpus_methods().into_iter().map(|(label, method)| {
+        let ir = MokaIRMethod::from_method(&method)
+            .unwrap_or_else(|error| panic!("Failed to build {label}: {error}"));
+        (label, ir)
+    })
+}
+
+#[test]
+fn fixture_corpus_preserves_ssa_and_source_mapping() {
+    for (label, ir) in corpus_ir() {
+        ssa::assert_well_formed(&label, &ir);
+        source_map::assert_consistent(&label, &ir);
+    }
 }

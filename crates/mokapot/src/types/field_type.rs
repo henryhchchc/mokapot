@@ -469,14 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_void_and_incomplete_field_descriptors() {
-        for descriptor in ["", "V", "[", "[V", "[A", "L;"] {
-            assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
-        }
-    }
-
-    #[test]
-    fn empty_primitive_descriptor_is_rejected() {
+    fn empty_primitive_and_field_descriptors_are_rejected() {
         let mut input = "";
         assert_eq!(
             PrimitiveType::parse_prefix(&mut input),
@@ -484,5 +477,6 @@ mod tests {
         );
         assert_eq!(input, "");
         assert_eq!(input.parse::<PrimitiveType>(), Err(InvalidDescriptor));
+        assert_eq!(input.parse::<FieldType>(), Err(InvalidDescriptor));
     }
 }

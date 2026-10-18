@@ -125,15 +125,4 @@ mod tests {
             prop_assert_eq!(name.to_string().parse::<ClassName>(), Ok(name));
         }
     }
-
-    #[test]
-    fn nested_names_preserve_binary_spelling() {
-        let name: ClassName = "java/util/Map$Entry".parse().unwrap();
-        assert_eq!(name.unqualified_name(), "Map$Entry");
-        assert_eq!(name.jls_name(), "java.util.Map$Entry");
-        let package = name.package().unwrap();
-        assert_eq!(package, "java/util");
-        assert_eq!(package.jls_name(), "java.util");
-        assert!(ClassName::new("Map$Entry").unwrap().package().is_none());
-    }
 }

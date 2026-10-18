@@ -105,10 +105,10 @@ mod explicit_reduction {
             BranchGuard::from_iter([a.clone(), !b]),
         ]);
         let budget = SolvingBudget::default();
-        let expected = structural.cover.clone().reduce(budget);
-        assert_ne!(structural.cover, expected);
+        let expected = PathCondition::from_branch_guards([BranchGuard::of(a)]);
+        assert_ne!(structural, expected);
         let reduced = structural.reduce_with_budget(budget);
-        assert_eq!(reduced.cover, expected);
+        assert_eq!(reduced, expected);
     }
 }
 

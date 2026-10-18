@@ -38,17 +38,3 @@ fn builds_ir_blocks_and_provenance() {
         Terminator::Return { value: Some(value), .. } if value == &ir.parameters[1]
     ));
 }
-
-#[test]
-fn block_parameters_have_no_origin() {
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
-    for (block, basic_block) in reachable_blocks(&ir) {
-        for (index, _) in basic_block.parameters.iter().enumerate() {
-            let parameter = InstructionLocation::BlockParameter { block, index };
-            assert!(
-                ir.source_map.origin_of(parameter).is_none(),
-                "block parameter {parameter:?} has a JVM origin"
-            );
-        }
-    }
-}

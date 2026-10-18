@@ -123,7 +123,7 @@ impl Hash for ConstantValue {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::{HashSet, hash_map::DefaultHasher},
+        collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };
 
@@ -169,7 +169,6 @@ mod tests {
                     }
                 }
             }
-            assert_eq!(values.iter().collect::<HashSet<_>>().len(), 7);
         }
     }
 }

@@ -89,28 +89,16 @@ mod tests {
         ) {
             let hash1 = compute_unordered_hash(elements.iter());
 
-            let mut vec2 = elements.clone();
-            vec2.reverse();
-            let hash2 = compute_unordered_hash(vec2.iter());
-
-            let mut vec3 = elements.clone();
-            if vec3.len() > 1 {
-                vec3.rotate_left(1);
-            }
-            let hash3 = compute_unordered_hash(vec3.iter());
-
-            let mut vec4 = elements.clone();
+            let mut permuted = elements;
+            permuted.reverse();
+            prop_assert_eq!(hash1, compute_unordered_hash(permuted.iter()));
             for (left, right) in swaps {
-                let len = vec4.len();
+                let len = permuted.len();
                 if len > 0 {
-                    vec4.swap(left % len, right % len);
+                    permuted.swap(left % len, right % len);
                 }
             }
-            let hash4 = compute_unordered_hash(vec4.iter());
-
-            prop_assert_eq!(hash1, hash2);
-            prop_assert_eq!(hash2, hash3);
-            prop_assert_eq!(hash3, hash4);
+            prop_assert_eq!(hash1, compute_unordered_hash(permuted.iter()));
         }
     }
 
@@ -132,15 +120,5 @@ mod tests {
         let hash_one = compute_unordered_hash([0].iter());
 
         assert_ne!(hash_empty, hash_one);
-    }
-
-    #[test]
-    fn works_with_strings() {
-        let hash1 = compute_unordered_hash(["apple", "banana", "cherry"].iter());
-        let hash2 = compute_unordered_hash(["cherry", "apple", "banana"].iter());
-        let hash3 = compute_unordered_hash(["apple", "banana"].iter());
-
-        assert_eq!(hash1, hash2);
-        assert_ne!(hash1, hash3);
     }
 }

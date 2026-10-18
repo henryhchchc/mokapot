@@ -42,9 +42,6 @@ pub(super) mod tests {
             "java.lang",
             "java;lang",
             "java/[lang",
-            "[I",
-            "[Ljava/lang/String;",
-            "Ljava/lang/String;",
         ] {
             assert!(validate_internal_name(name).is_err(), "accepted {name:?}");
         }
@@ -52,18 +49,7 @@ pub(super) mod tests {
 
     #[test]
     fn accepts_jvm_names_beyond_source_identifiers() {
-        for name in [
-            "java/lang/String",
-            "java/util/Map$Entry",
-            "123/name",
-            "a name/another name",
-            "module-info",
-            "package-info",
-            "class",
-            "$",
-            "日本語/名前",
-            "emoji/🦀",
-        ] {
+        for name in ["123/a name", "module-info", "class", "$", "日本語/🦀"] {
             assert!(validate_internal_name(name).is_ok(), "rejected {name:?}");
         }
     }

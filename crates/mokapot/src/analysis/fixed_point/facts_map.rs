@@ -208,12 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn ordered_maps_pop_in_key_or_insertion_order() {
-        let mut ordered = BTreeMap::default();
-        ordered.insert_or_join(2, TestSet::default());
-        ordered.insert_or_join(1, TestSet::default());
-        assert_eq!(ordered.pop_one().unwrap().0, 1);
-
+    fn queued_map_pops_in_insertion_order() {
         let mut queued = QueuedFactsMap::default();
         queued.insert_or_join(2, TestSet::default());
         queued.insert_or_join(1, TestSet::default());

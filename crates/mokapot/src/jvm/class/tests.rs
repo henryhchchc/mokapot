@@ -62,31 +62,45 @@ fn class_version_boundaries_match_spec() {
 }
 
 #[test]
-fn class_is_abstract() {
-    let class = Class {
-        access_flags: AccessFlags::PUBLIC | AccessFlags::ABSTRACT,
-        ..Default::default()
-    };
-    assert!(class.is_abstract());
-
-    let class = Class {
-        access_flags: AccessFlags::PUBLIC,
-        ..Default::default()
-    };
-    assert!(!class.is_abstract());
+fn class_predicates_select_their_access_flags() {
+    for (flag, abstract_class, interface) in [
+        (AccessFlags::empty(), false, false),
+        (AccessFlags::ABSTRACT, true, false),
+        (AccessFlags::INTERFACE, false, true),
+    ] {
+        let class = Class {
+            access_flags: AccessFlags::PUBLIC | flag,
+            ..Default::default()
+        };
+        assert_eq!(class.is_abstract(), abstract_class);
+        assert_eq!(class.is_interface(), interface);
+    }
 }
 
 #[test]
-fn class_is_interface() {
-    let class = Class {
-        access_flags: AccessFlags::PUBLIC | AccessFlags::INTERFACE,
-        ..Default::default()
+fn miri_method_handle_reference_kinds_match_jvm_tags() {
+    let owner = crate::types::reference_type::ReferenceType::Class("Example".parse().unwrap());
+    let field = FieldRef {
+        owner: owner.clone(),
+        name: "value".to_owned(),
+        field_type: "I".parse().unwrap(),
     };
-    assert!(class.is_interface());
-
-    let class = Class {
-        access_flags: AccessFlags::PUBLIC,
-        ..Default::default()
+    let method = MethodRef {
+        owner,
+        name: "method".to_owned(),
+        descriptor: "()V".parse().unwrap(),
     };
-    assert!(!class.is_interface());
+    for (handle, expected) in [
+        (MethodHandle::RefGetField(field.clone()), 1),
+        (MethodHandle::RefGetStatic(field.clone()), 2),
+        (MethodHandle::RefPutField(field.clone()), 3),
+        (MethodHandle::RefPutStatic(field), 4),
+        (MethodHandle::RefInvokeVirtual(method.clone()), 5),
+        (MethodHandle::RefInvokeStatic(method.clone()), 6),
+        (MethodHandle::RefInvokeSpecial(method.clone()), 7),
+        (MethodHandle::RefNewInvokeSpecial(method.clone()), 8),
+        (MethodHandle::RefInvokeInterface(method), 9),
+    ] {
+        assert_eq!(handle.reference_kind(), expected);
+    }
 }

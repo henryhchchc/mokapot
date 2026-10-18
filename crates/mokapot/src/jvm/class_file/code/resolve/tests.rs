@@ -81,7 +81,7 @@ fn invokeinterface_rejects_method_refs() {
 }
 
 #[test]
-fn miri_push_immediates_preserve_signed_values_through_ir() {
+fn push_immediates_preserve_signed_values_through_ir() {
     use crate::ir::test::prelude::*;
     use crate::jvm::ConstantValue;
 

@@ -111,66 +111,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nested_class_rendering_preserves_binary_names() {
-        for (input, expected) in [
-            ("java/util/Map$Entry", "java.util.Map$Entry"),
-            ("[Ljava/util/Map$Entry;", "java.util.Map$Entry[]"),
-            ("[[Ljava/util/Map$Entry;", "java.util.Map$Entry[][]"),
+    fn parses_reference_forms_and_preserves_binary_names() {
+        for (input, descriptor, jls_name) in [
+            ("java/lang/String", "Ljava/lang/String;", "java.lang.String"),
+            (
+                "Ljava/lang/String;",
+                "Ljava/lang/String;",
+                "java.lang.String",
+            ),
+            (
+                "java/util/Map$Entry",
+                "Ljava/util/Map$Entry;",
+                "java.util.Map$Entry",
+            ),
+            (
+                "Ljava/util/Map$Entry;",
+                "Ljava/util/Map$Entry;",
+                "java.util.Map$Entry",
+            ),
+            ("[I", "[I", "int[]"),
+            (
+                "[Ljava/util/Map$Entry;",
+                "[Ljava/util/Map$Entry;",
+                "java.util.Map$Entry[]",
+            ),
+            (
+                "[[Ljava/util/Map$Entry;",
+                "[[Ljava/util/Map$Entry;",
+                "java.util.Map$Entry[][]",
+            ),
+            // A single letter is a class name here, even if it is a primitive descriptor.
+            ("I", "LI;", "I"),
         ] {
             let reference_type: ReferenceType = input.parse().unwrap();
-            assert_eq!(reference_type.jls_name(), expected);
+            assert_eq!(reference_type.descriptor(), descriptor);
+            assert_eq!(reference_type.jls_name(), jls_name);
+            match &reference_type {
+                ReferenceType::Class(name) => {
+                    assert!(!input.starts_with('['));
+                    assert_eq!(name.as_str(), &descriptor[1..descriptor.len() - 1]);
+                }
+                ReferenceType::Array(_) => assert!(input.starts_with('[')),
+            }
             let field_type = FieldType::from(reference_type);
-            assert_eq!(field_type.jls_name(), expected);
+            assert_eq!(field_type.descriptor(), descriptor);
+            assert_eq!(field_type.jls_name(), jls_name);
         }
-    }
-
-    #[test]
-    fn parse_class() {
-        // Classes are parsed from binary names (internal form), not field descriptors
-        let rt = "java/lang/String".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Class(_)));
-        assert_eq!(rt.to_string(), "java/lang/String");
-        assert_eq!(rt.descriptor(), "Ljava/lang/String;");
-        assert_eq!(rt.jls_name(), "java.lang.String");
-    }
-
-    #[test]
-    fn parse_array() {
-        let rt = "[I".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Array(_)));
-        assert_eq!(rt.descriptor(), "[I");
-        assert_eq!(rt.jls_name(), "int[]");
-    }
-
-    #[test]
-    fn parse_multidimensional() {
-        let rt = "[[Ljava/lang/String;".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Array(_)));
-        assert_eq!(rt.descriptor(), "[[Ljava/lang/String;");
-    }
-
-    #[test]
-    fn accepts_field_descriptor_leniently() {
-        // Field descriptors (L...;) are not strictly valid per JVMS §4.4.1,
-        // but real-world class files (including from javac) emit them, so
-        // we accept them leniently and parse them as class references.
-        let rt = "Ljava/lang/String;".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Class(_)));
-        assert_eq!(rt.to_string(), "java/lang/String");
-        assert_eq!(rt.descriptor(), "Ljava/lang/String;");
-
-        // Inner classes
-        let rt = "Ljava/util/Map$Entry;".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Class(_)));
-        assert_eq!(rt.to_string(), "java/util/Map$Entry");
-    }
-
-    #[test]
-    fn single_letter_is_class_not_primitive() {
-        // "I" in the constant pool is a binary name for a class named I,
-        // not the primitive type int (which would be a Base FieldType).
-        let rt = "I".parse::<ReferenceType>().unwrap();
-        assert!(matches!(rt, ReferenceType::Class(_)));
-        assert_eq!(rt.to_string(), "I");
     }
 }

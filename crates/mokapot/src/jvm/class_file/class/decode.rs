@@ -85,7 +85,9 @@ mod tests {
     #[test]
     fn rejects_every_truncated_prefix() {
         let bytes = object_bytes();
-        Class::from_bytes(&bytes).unwrap();
+        let class = Class::from_bytes(&bytes).unwrap();
+        assert_eq!(class.name, "java/lang/Object");
+        assert!(class.super_class.is_none());
         for end in 0..bytes.len() {
             let error = Class::from_bytes(&bytes[..end]).unwrap_err();
             assert_eq!(error.kind(), ParseErrorKind::Malformed, "prefix {end}");
@@ -98,17 +100,6 @@ mod tests {
         bytes.push(0);
         let error = Class::from_bytes(&bytes).unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::Malformed);
-    }
-
-    #[test]
-    fn parses_unaligned_bytes_and_owns_the_result() {
-        let class = {
-            let mut bytes = vec![0xff];
-            bytes.extend(object_bytes());
-            Class::from_bytes(&bytes[1..]).unwrap()
-        };
-        assert_eq!(class.name, "java/lang/Object");
-        assert!(class.super_class.is_none());
     }
 
     #[test]

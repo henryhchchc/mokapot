@@ -397,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn miri_method_parameters_resolve_borrowed_records() {
+    fn method_parameters_resolve_borrowed_records() {
         use crate::jvm::{errors::ParseErrorKind, method::ParameterAccessFlags};
         let pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"MethodParameters"),

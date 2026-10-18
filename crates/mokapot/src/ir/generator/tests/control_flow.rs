@@ -10,30 +10,6 @@ use crate::{
 };
 
 #[test]
-fn switch_retains_parallel_successor_arms() {
-    let match_targets = BTreeMap::from([(1, 10.into()), (2, 10.into())]);
-    let instruction = Instruction::LookupSwitch {
-        default: 10.into(),
-        match_targets,
-    };
-    let body = [
-        (0, Instruction::ILoad0),
-        (1, instruction),
-        (10, Instruction::Return),
-    ];
-    let ir = lift(body, "(I)V", vec![]);
-    let switch = &ir.block(ir.entry.block).unwrap().terminator;
-
-    assert_matches!(switch, Terminator::Switch { .. });
-    let targets = switch
-        .successors()
-        .map(Successor::block_target)
-        .collect::<Vec<_>>();
-    let target = targets[0].unwrap();
-    assert_eq!(targets, [Some(target); 3]);
-}
-
-#[test]
 fn branch_preserves_taken_then_fallthrough_guards() {
     let body = [
         (0, Instruction::ILoad0),
@@ -80,37 +56,43 @@ fn comparison_branch_preserves_operand_order() {
 }
 
 #[test]
-fn tableswitch_preserves_ordered_parallel_arms_and_case_guards() {
-    let jump_targets = vec![10.into(), 10.into()];
-    let instruction = Instruction::TableSwitch {
+fn switches_preserve_ordered_parallel_arms_and_case_guards() {
+    let table = Instruction::TableSwitch {
         low: 3,
-        jump_targets: jump_targets.into(),
+        jump_targets: Box::new([10.into(), 10.into()]),
         default: 10.into(),
     };
-    let body = [
-        (0, Instruction::ILoad0),
-        (1, instruction),
-        (10, Instruction::Return),
-    ];
-    let ir = lift(body, "(I)V", vec![]);
-    let switch = &ir.block(ir.entry.block).unwrap().terminator;
-    let match_value = PathValue::Variable(ir.parameters[0]);
-    let case_guard = |it| {
-        let case = PathValue::Constant(ConstantValue::Integer(it));
-        let predicate = BooleanVariable::Positive(Predicate::Equal(match_value.clone(), case));
-        ControlTransfer::Conditional(BranchGuard::of(predicate))
+    let lookup = Instruction::LookupSwitch {
+        default: 10.into(),
+        match_targets: BTreeMap::from([(1, 10.into()), (5, 10.into())]),
     };
+    for (instruction, cases) in [(table, [3, 4]), (lookup, [1, 5])] {
+        let body = [
+            (0, Instruction::ILoad0),
+            (1, instruction),
+            (10, Instruction::Return),
+        ];
+        let ir = lift(body, "(I)V", vec![]);
+        let switch = &ir.block(ir.entry.block).unwrap().terminator;
+        let match_value = PathValue::Variable(ir.parameters[0]);
+        let case_guard = |it| {
+            let case = PathValue::Constant(ConstantValue::Integer(it));
+            let predicate = BooleanVariable::Positive(Predicate::Equal(match_value.clone(), case));
+            ControlTransfer::Conditional(BranchGuard::of(predicate))
+        };
 
-    assert_matches!(switch, Terminator::Switch { .. });
-    let arms = switch.successors().collect::<Vec<_>>();
-    assert_eq!(arms.len(), 3);
-    let check = |it| it == arms[0].block_target();
-    assert!(arms.iter().map(|it| it.block_target()).all(check));
-    assert_eq!(arms[0].transfer(), Some(&case_guard(3)));
-    assert_eq!(arms[1].transfer(), Some(&case_guard(4)));
-    let default = arms[2].transfer().unwrap();
-    assert_matches!(default, ControlTransfer::Conditional(guard) if guard.predicate_count() == 2);
-    assert_eq!(entry_origin(&ir), Some(1.into()));
+        assert_matches!(switch, Terminator::Switch { .. });
+        let arms = switch.successors().collect::<Vec<_>>();
+        assert_eq!(arms.len(), 3);
+        let target = arms[0].block_target().unwrap();
+        assert!(arms.iter().all(|arm| arm.block_target() == Some(target)));
+        for (arm, case) in arms.iter().zip(cases) {
+            assert_eq!(arm.transfer(), Some(&case_guard(case)));
+        }
+        let default = arms[2].transfer().unwrap();
+        assert_matches!(default, ControlTransfer::Conditional(guard) if guard.predicate_count() == 2);
+        assert_eq!(entry_origin(&ir), Some(1.into()));
+    }
 }
 
 #[test]
