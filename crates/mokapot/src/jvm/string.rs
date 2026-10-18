@@ -4,6 +4,7 @@ use std::{
     borrow::{Borrow, Cow},
     fmt,
     ops::Deref,
+    sync::Arc,
 };
 
 use derive_more::Display;
@@ -49,6 +50,27 @@ impl JavaStr {
     /// Returns an error if the string contains unpaired surrogates.
     pub fn to_str(&self) -> Result<Cow<'_, str>, JavaStrDecodeError> {
         mutf8::decode_strict(&self.bytes).map_err(|_| JavaStrDecodeError)
+    }
+
+    pub(crate) fn split_ascii(&self, separator: u8) -> impl DoubleEndedIterator<Item = &Self> {
+        assert!(separator.is_ascii());
+        self.bytes
+            .split(move |&byte| byte == separator)
+            .map(|bytes| {
+                // SAFETY: ASCII separators cannot occur inside a multibyte sequence.
+                unsafe { Self::from_cesu8_unchecked(bytes) }
+            })
+    }
+
+    pub(crate) fn replace_ascii(&self, from: u8, to: u8) -> JavaString {
+        assert!(from.is_ascii() && to.is_ascii() && from != 0 && to != 0);
+        JavaString {
+            bytes: self
+                .bytes
+                .iter()
+                .map(|&byte| if byte == from { to } else { byte })
+                .collect(),
+        }
     }
 }
 
@@ -181,6 +203,16 @@ impl JavaString {
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
+
+    /// Appends a Java string.
+    pub fn push_java_str(&mut self, value: &JavaStr) {
+        self.bytes.extend_from_slice(value.as_bytes());
+    }
+
+    /// Encodes and appends Rust text.
+    pub fn push_str(&mut self, value: &str) {
+        self.bytes.extend_from_slice(&mutf8::encode(value));
+    }
 }
 
 impl Borrow<JavaStr> for JavaString {
@@ -225,6 +257,63 @@ impl From<&str> for JavaString {
 impl From<&JavaStr> for JavaString {
     fn from(value: &JavaStr) -> Self {
         value.to_owned()
+    }
+}
+
+impl From<&String> for JavaString {
+    fn from(value: &String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl From<JavaString> for Arc<JavaStr> {
+    fn from(value: JavaString) -> Self {
+        Self::from(value.as_java_str())
+    }
+}
+
+impl From<&JavaStr> for Arc<JavaStr> {
+    fn from(value: &JavaStr) -> Self {
+        let bytes: Arc<[u8]> = Arc::from(value.as_bytes());
+        // SAFETY: JavaStr is transparent over [u8], and the source guarantees
+        // valid encoding. The allocation layout and reference counts are unchanged.
+        unsafe { Self::from_raw(Arc::into_raw(bytes) as *const JavaStr) }
+    }
+}
+
+impl PartialEq<str> for JavaStr {
+    fn eq(&self, other: &str) -> bool {
+        self.as_bytes() == mutf8::encode(other).as_ref()
+    }
+}
+
+impl PartialEq<&str> for JavaStr {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
+impl PartialEq<str> for JavaString {
+    fn eq(&self, other: &str) -> bool {
+        self.as_java_str() == other
+    }
+}
+
+impl PartialEq<&str> for JavaString {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_java_str() == *other
+    }
+}
+
+impl PartialEq<String> for JavaStr {
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl PartialEq<String> for JavaString {
+    fn eq(&self, other: &String) -> bool {
+        self.as_java_str() == other.as_str()
     }
 }
 
@@ -275,6 +364,8 @@ mod tests {
         for bytes in [
             b"".as_slice(),
             b"text",
+            b"/x/",
+            b"a/\xed\xa0\x80/b",
             &[0xc0, 0x80],
             &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
             &[0xed, 0xa0, 0x80],
@@ -284,6 +375,11 @@ mod tests {
             &[0xe0, 0xa0, 0x80, 0xed, 0x9f, 0xbf, 0xef, 0xbf, 0xbf],
         ] {
             let view = JavaStr::from_cesu8(bytes).unwrap();
+            for part in view.split_ascii(b'/') {
+                assert!(JavaStr::from_cesu8(part.as_bytes()).is_ok());
+            }
+            let replaced = view.replace_ascii(b'/', b'.');
+            assert!(JavaStr::from_cesu8(replaced.as_bytes()).is_ok());
             let owned = view.to_owned();
             let borrowed: &JavaStr = owned.borrow();
             assert_eq!(view.as_bytes(), bytes);
@@ -295,6 +391,10 @@ mod tests {
             let checked = JavaString::from_cesu8(input).unwrap();
             assert_eq!(checked.as_bytes().as_ptr(), pointer);
             assert_eq!(checked.as_java_str(), view);
+            let shared: Arc<JavaStr> = checked.into();
+            let clone = Arc::clone(&shared);
+            drop(shared);
+            assert_eq!(clone.as_bytes(), bytes);
         }
     }
 

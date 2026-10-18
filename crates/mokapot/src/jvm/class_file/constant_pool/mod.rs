@@ -3,7 +3,7 @@
 mod decode;
 mod resolved;
 mod storage;
-pub(crate) use resolved::ConstantPool;
+pub(crate) use resolved::{ConstantPool, MethodDescriptorId, Utf8Id};
 
 use self::storage::{PoolStorage, Slot};
 use crate::{

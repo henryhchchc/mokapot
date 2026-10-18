@@ -22,7 +22,7 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
     );
 }
 
-fn interface_method_pool(is_interface: bool) -> ConstantPool<'static> {
+fn interface_method_pool(is_interface: bool) -> ConstantPool {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
             class_index: 2.into(),
@@ -61,7 +61,7 @@ fn invokeinterface_parses_interface_method_refs() {
         Instruction::InvokeInterface(
             crate::jvm::references::MethodRef {
                 owner: crate::types::reference_type::ReferenceType::Class("a/b/I".parse().unwrap()),
-                name: "m".to_owned(),
+                name: "m".into(),
                 descriptor: "()V".parse().unwrap(),
             },
             1,
@@ -102,7 +102,7 @@ fn push_immediates_preserve_signed_values_through_ir() {
             .collect::<Result<Vec<_>, ParseError>>()
             .unwrap();
         let method = method(instructions, "()I", vec![]);
-        let ir = MokaIRMethod::from_method(&method).unwrap();
+        let ir = MokaIRMethod::from_method(method.as_method()).unwrap();
         let definitions = operations(&ir).collect::<Vec<_>>();
         assert_matches!(definitions.as_slice(), [Operation::Definition { value, expr: Expression::Const(ConstantValue::Integer(actual)) }]
             if *actual == expected && matches!(&ir.block(ir.entry.block).unwrap().terminator, Terminator::Return { value: Some(returned), .. } if returned == value));

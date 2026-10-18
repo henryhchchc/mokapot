@@ -10,7 +10,7 @@ use mokapot::{
         BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, Operation,
         Successor, Terminator, expression::Expression,
     },
-    jvm::{Class, ConstantValue, Method, code::ProgramCounter},
+    jvm::{Class, ConstantValue, code::ProgramCounter},
 };
 
 mod provenance;
@@ -24,12 +24,13 @@ fn get_test_class() -> Class {
     Class::from_bytes(&bytes).unwrap()
 }
 
-fn get_test_method() -> Method {
-    get_test_class()
-        .methods
-        .into_iter()
-        .find(|method| method.name == "test")
-        .unwrap()
+fn get_test_ir() -> MokaIRMethod {
+    let class = get_test_class();
+    let method = class
+        .methods()
+        .find(|method| method.name() == "test")
+        .unwrap();
+    MokaIRMethod::from_method(method).unwrap()
 }
 
 fn terminator(method: &MokaIRMethod, location: InstructionLocation) -> Option<&Terminator> {
@@ -81,7 +82,7 @@ fn live_locations(ir: &MokaIRMethod) -> Vec<InstructionLocation> {
 
 /// Every method with a body in the fixture corpus (`OUT_DIR/mokapot/java_classes`,
 /// compiled by `build.rs`).
-fn corpus_methods() -> Vec<(String, Method)> {
+fn corpus_ir() -> Vec<(String, MokaIRMethod)> {
     let mut directories = vec![support::classes_dir()];
     let mut class_files = Vec::new();
     while let Some(directory) = directories.pop() {
@@ -103,23 +104,17 @@ fn corpus_methods() -> Vec<(String, Method)> {
         let bytes = std::fs::read(&path).expect("a fixture class is readable");
         let class = Class::from_bytes(&bytes)
             .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
-        for method in class.methods {
-            if method.body.is_some() {
-                let label = format!("{}::{}", path.display(), method.name);
-                methods.push((label, method));
+        for method in class.methods() {
+            if method.body().is_some() {
+                let label = format!("{}::{}", path.display(), method.name());
+                let ir = MokaIRMethod::from_method(method)
+                    .unwrap_or_else(|error| panic!("Failed to build {label}: {error}"));
+                methods.push((label, ir));
             }
         }
     }
     assert!(!methods.is_empty(), "the fixture corpus is empty");
     methods
-}
-
-fn corpus_ir() -> impl Iterator<Item = (String, MokaIRMethod)> {
-    corpus_methods().into_iter().map(|(label, method)| {
-        let ir = MokaIRMethod::from_method(&method)
-            .unwrap_or_else(|error| panic!("Failed to build {label}: {error}"));
-        (label, ir)
-    })
 }
 
 #[test]

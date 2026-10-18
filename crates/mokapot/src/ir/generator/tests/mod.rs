@@ -5,15 +5,12 @@ use std::ops::Range;
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
-    jvm::{
-        Method,
-        code::{ExceptionTableEntry, Instruction, ProgramCounter},
-    },
+    jvm::code::{ExceptionTableEntry, Instruction, ProgramCounter},
 };
 
 /// Builds `method` into [`MokaIRMethod`].
-pub(crate) fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    MokaIRMethod::from_method(method)
+pub(crate) fn build(method: &crate::tests::TestMethod) -> Result<MokaIRMethod, MokaIRBuildError> {
+    MokaIRMethod::from_method(method.as_method())
 }
 
 /// Lifts `instructions` into IR, panicking on a build failure.
@@ -83,7 +80,9 @@ pub(crate) fn handler(
 }
 
 /// Returns the diagnostic location and kind reported for `method`.
-pub(crate) fn build_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
+pub(crate) fn build_failure(
+    method: &crate::tests::TestMethod,
+) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
     let error = build(method).expect_err("method should fail to build");
     (error.pc, error.kind)
 }

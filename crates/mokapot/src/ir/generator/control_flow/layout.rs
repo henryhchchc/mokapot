@@ -140,8 +140,8 @@ mod tests {
     #[test]
     fn rejects_empty_bodies() {
         let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
-        let body = method.body.unwrap();
-        let error = BlockLayout::of(&body).err().unwrap();
+        let body = method.body.as_ref().unwrap();
+        let error = BlockLayout::of(body).err().unwrap();
         assert_eq!(error.kind, ErrorKind::MissingOrEmptyBody);
     }
 
@@ -150,8 +150,8 @@ mod tests {
         for entry in [Instruction::Nop, Instruction::Return] {
             let instructions = [(0, entry), (1, Instruction::Goto(10.into()))];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.unwrap();
-            let error = BlockLayout::of(&body).err().unwrap();
+            let body = method.body.as_ref().unwrap();
+            let error = BlockLayout::of(body).err().unwrap();
             assert_eq!(error.kind, ErrorKind::MissingInstruction);
         }
     }
@@ -160,8 +160,8 @@ mod tests {
     fn validates_unreachable_instructions() {
         let instructions = [(0, Instruction::Return), (1, Instruction::Nop)];
         let method = method(instructions, "()V", vec![]);
-        let body = method.body.unwrap();
-        let error = BlockLayout::of(&body).err().unwrap();
+        let body = method.body.as_ref().unwrap();
+        let error = BlockLayout::of(body).err().unwrap();
         assert_eq!(error.kind, ErrorKind::MissingFallthrough);
     }
 }

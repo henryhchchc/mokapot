@@ -39,7 +39,10 @@ pub use operation::Operation;
 pub use source_map::SourceMap;
 pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
 
-use crate::{jvm::method, types::method_descriptor::MethodDescriptor};
+use crate::{
+    jvm::{JavaString, method},
+    types::method_descriptor::MethodDescriptor,
+};
 
 mod id_allocation;
 use id_allocation::{IdAllocator, NumericalId};
@@ -54,7 +57,7 @@ pub struct MokaIRMethod {
     /// The access flags of the method.
     pub access_flags: method::AccessFlags,
     /// The name of the method.
-    pub name: String,
+    pub name: JavaString,
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
     /// The class that owns the method.

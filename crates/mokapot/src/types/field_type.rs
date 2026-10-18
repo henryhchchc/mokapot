@@ -38,7 +38,11 @@ use std::str::FromStr;
 use derive_more::{Display, From};
 
 use super::{Descriptor, method_descriptor::InvalidDescriptor};
-use crate::{intrinsics::see_jvm_spec, types::class_name::ClassName};
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{JavaStr, JavaString},
+    types::class_name::ClassName,
+};
 
 /// A primitive type in Java.
 ///
@@ -122,9 +126,9 @@ impl PrimitiveType {
 
     /// Parses a primitive type from the beginning of `input`, advancing it past the parsed
     /// descriptor character on success.
-    fn parse_prefix(input: &mut &str) -> Result<Self, InvalidDescriptor> {
-        let first_char = input.chars().next().ok_or(InvalidDescriptor)?;
-        Self::try_from(first_char).inspect(|_| *input = &input[first_char.len_utf8()..])
+    fn parse_prefix(input: &mut &[u8]) -> Result<Self, InvalidDescriptor> {
+        let (&first_byte, rest) = input.split_first().ok_or(InvalidDescriptor)?;
+        Self::try_from(char::from(first_byte)).inspect(|_| *input = rest)
     }
 }
 
@@ -149,9 +153,11 @@ impl TryFrom<char> for PrimitiveType {
 impl FromStr for PrimitiveType {
     type Err = InvalidDescriptor;
 
-    fn from_str(mut descriptor: &str) -> Result<Self, Self::Err> {
-        let pt = Self::parse_prefix(&mut descriptor)?;
-        if descriptor.is_empty() {
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
+        let descriptor = JavaString::from(descriptor);
+        let mut bytes = descriptor.as_java_str().as_bytes();
+        let pt = Self::parse_prefix(&mut bytes)?;
+        if bytes.is_empty() {
             Ok(pt)
         } else {
             Err(InvalidDescriptor)
@@ -229,28 +235,38 @@ pub enum FieldType {
 impl FieldType {
     /// Returns a JLS-style name, such as `int[]` or `java.util.Map$Entry`.
     #[must_use]
-    pub fn jls_name(&self) -> String {
+    pub fn jls_name(&self) -> JavaString {
         match self {
-            Self::Base(pt) => pt.to_string(),
+            Self::Base(pt) => JavaString::from(pt.to_string()),
             Self::Object(class_name) => class_name.jls_name(),
-            Self::Array(inner) => format!("{}[]", inner.jls_name()),
+            Self::Array(inner) => {
+                let mut name = inner.jls_name();
+                name.push_str("[]");
+                name
+            }
         }
     }
 
     /// Parses a field type from the beginning of `input`, advancing it past the parsed type.
-    pub(crate) fn parse_prefix(input: &mut &str) -> Result<Self, InvalidDescriptor> {
+    pub(crate) fn parse_prefix(input: &mut &[u8]) -> Result<Self, InvalidDescriptor> {
         if let Ok(pt) = PrimitiveType::parse_prefix(input) {
             Ok(Self::Base(pt))
-        } else if let Some(mut rest) = input.strip_prefix('[') {
+        } else if let Some(mut rest) = input.strip_prefix(b"[") {
             Self::parse_prefix(&mut rest)
                 .map(FieldType::into_array_type)
                 .inspect(|_| *input = rest)
-        } else if let Some(rest) = input.strip_prefix('L') {
-            let (class_name, after_semi) = rest.split_once(';').ok_or(InvalidDescriptor)?;
+        } else if let Some(rest) = input.strip_prefix(b"L") {
+            let semicolon = rest
+                .iter()
+                .position(|byte| *byte == b';')
+                .ok_or(InvalidDescriptor)?;
+            let (class_name, after_semi) = rest.split_at(semicolon);
+            let after_semi = &after_semi[1..];
             if class_name.is_empty() {
                 Err(InvalidDescriptor)
             } else {
-                let class_name: ClassName = class_name.parse().map_err(|_| InvalidDescriptor)?;
+                let class_name = JavaStr::from_cesu8(class_name).map_err(|_| InvalidDescriptor)?;
+                let class_name = ClassName::try_from(class_name).map_err(|_| InvalidDescriptor)?;
                 *input = after_semi;
                 Ok(class_name.into())
             }
@@ -290,13 +306,40 @@ impl FieldType {
 }
 
 impl Descriptor for FieldType {
-    fn descriptor(&self) -> String {
+    fn descriptor(&self) -> JavaString {
+        let mut bytes = Vec::new();
+        self.push_descriptor(&mut bytes);
+        JavaString::from_cesu8(bytes).expect("type descriptors contain valid modified UTF-8")
+    }
+}
+
+impl FieldType {
+    pub(super) fn push_descriptor(&self, bytes: &mut Vec<u8>) {
         match self {
-            FieldType::Base(it) => it.descriptor().to_string(),
-            FieldType::Object(class_name) => {
-                format!("L{class_name};")
+            Self::Base(it) => bytes.push(it.descriptor() as u8),
+            Self::Object(class_name) => {
+                bytes.push(b'L');
+                bytes.extend_from_slice(class_name.as_java_str().as_bytes());
+                bytes.push(b';');
             }
-            FieldType::Array(inner) => format!("[{}", inner.descriptor()),
+            Self::Array(inner) => {
+                bytes.push(b'[');
+                inner.push_descriptor(bytes);
+            }
+        }
+    }
+}
+
+impl TryFrom<&JavaStr> for FieldType {
+    type Error = InvalidDescriptor;
+
+    fn try_from(descriptor: &JavaStr) -> Result<Self, Self::Error> {
+        let mut bytes = descriptor.as_bytes();
+        let field_type = Self::parse_prefix(&mut bytes)?;
+        if bytes.is_empty() {
+            Ok(field_type)
+        } else {
+            Err(InvalidDescriptor)
         }
     }
 }
@@ -304,13 +347,9 @@ impl Descriptor for FieldType {
 impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
-    fn from_str(mut descriptor: &str) -> Result<Self, Self::Err> {
-        let ty = Self::parse_prefix(&mut descriptor)?;
-        if descriptor.is_empty() {
-            Ok(ty)
-        } else {
-            Err(InvalidDescriptor)
-        }
+    fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
+        let descriptor = JavaString::from(descriptor);
+        Self::try_from(descriptor.as_java_str())
     }
 }
 
@@ -374,9 +413,9 @@ mod tests {
             let ch = c.chars().next().unwrap();
             prop_assert_eq!(PrimitiveType::try_from(ch), Err(InvalidDescriptor));
             let descriptor = format!("{c}{suffix}");
-            let mut input = descriptor.as_str();
+            let mut input = descriptor.as_bytes();
             prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(input, descriptor.as_bytes());
             prop_assert_eq!(descriptor.parse::<PrimitiveType>(), Err(InvalidDescriptor));
         }
 
@@ -385,12 +424,15 @@ mod tests {
             ty in any::<PrimitiveType>(),
             suffix in any::<String>(),
         ) {
-            let descriptor = format!("{}{suffix}", ty.descriptor());
-            let mut input = descriptor.as_str();
+            let descriptor_text = format!("{}{suffix}", ty.descriptor());
+            let descriptor = JavaString::from(descriptor_text.as_str());
+            let mut input = descriptor.as_java_str().as_bytes();
             prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Ok(ty));
-            prop_assert_eq!(input, suffix.as_str());
-            if !suffix.is_empty() {
-                prop_assert_eq!(descriptor.parse::<PrimitiveType>(), Err(InvalidDescriptor));
+            let has_suffix = !suffix.is_empty();
+            let suffix = JavaString::from(suffix);
+            prop_assert_eq!(input, suffix.as_java_str().as_bytes());
+            if has_suffix {
+                prop_assert_eq!(descriptor_text.parse::<PrimitiveType>(), Err(InvalidDescriptor));
             }
         }
 
@@ -408,7 +450,7 @@ mod tests {
                 FieldType::Object(name) => (
                     format!("L{name};"),
                     name.to_string(),
-                    name.as_str().replace('/', "."),
+                    name.as_java_str().to_string().replace('/', "."),
                 ),
                 FieldType::Array(_) => unreachable!(),
             };
@@ -423,14 +465,22 @@ mod tests {
             let brackets = "[]".repeat(usize::from(dim));
             prop_assert_eq!(field_type.to_string(), format!("{base_name}{brackets}"));
             prop_assert_eq!(field_type.jls_name(), format!("{base_jls_name}{brackets}"));
-            prop_assert_eq!(field_type.descriptor(), descriptor.as_str());
+            let expected_descriptor = JavaString::from(descriptor.as_str());
+            let encoded = field_type.descriptor();
+            prop_assert_eq!(
+                encoded.as_java_str().as_bytes(),
+                expected_descriptor.as_java_str().as_bytes()
+            );
             prop_assert_eq!(descriptor.parse::<FieldType>(), Ok(field_type.clone()));
-            let with_suffix = format!("{descriptor}{suffix}");
-            let mut input = with_suffix.as_str();
+            let with_suffix_text = format!("{descriptor}{suffix}");
+            let with_suffix = JavaString::from(with_suffix_text.as_str());
+            let mut input = with_suffix.as_java_str().as_bytes();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Ok(field_type));
-            prop_assert_eq!(input, suffix.as_str());
-            if !suffix.is_empty() {
-                prop_assert_eq!(with_suffix.parse::<FieldType>(), Err(InvalidDescriptor));
+            let has_suffix = !suffix.is_empty();
+            let suffix = JavaString::from(suffix);
+            prop_assert_eq!(input, suffix.as_java_str().as_bytes());
+            if has_suffix {
+                prop_assert_eq!(with_suffix_text.parse::<FieldType>(), Err(InvalidDescriptor));
             }
         }
 
@@ -440,9 +490,10 @@ mod tests {
             dim in any::<u8>(),
         ) {
             let descriptor = format!("{}L{class_name}", "[".repeat(usize::from(dim)));
-            let mut input = descriptor.as_str();
+            let encoded = JavaString::from(descriptor.as_str());
+            let mut input = encoded.as_java_str().as_bytes();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(input, encoded.as_java_str().as_bytes());
             prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
         }
 
@@ -461,22 +512,38 @@ mod tests {
             dim in any::<u8>(),
         ) {
             let descriptor = format!("{}{element}", "[".repeat(usize::from(dim)));
-            let mut input = descriptor.as_str();
+            let encoded = JavaString::from(descriptor.as_str());
+            let mut input = encoded.as_java_str().as_bytes();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, descriptor.as_str());
+            prop_assert_eq!(input, encoded.as_java_str().as_bytes());
             prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
         }
     }
 
     #[test]
     fn empty_primitive_and_field_descriptors_are_rejected() {
-        let mut input = "";
+        let mut input = b"".as_slice();
         assert_eq!(
             PrimitiveType::parse_prefix(&mut input),
             Err(InvalidDescriptor)
         );
-        assert_eq!(input, "");
-        assert_eq!(input.parse::<PrimitiveType>(), Err(InvalidDescriptor));
-        assert_eq!(input.parse::<FieldType>(), Err(InvalidDescriptor));
+        assert_eq!(input, b"");
+        assert_eq!("".parse::<PrimitiveType>(), Err(InvalidDescriptor));
+        assert_eq!("".parse::<FieldType>(), Err(InvalidDescriptor));
+    }
+
+    #[test]
+    fn parses_and_emits_modified_utf8_class_names() {
+        let bytes = [b'L', b'p', b'/', 0xed, 0xa0, 0x80, b';'];
+        let descriptor = JavaStr::from_cesu8(&bytes).unwrap();
+        let field_type = FieldType::try_from(descriptor).unwrap();
+        let FieldType::Object(class_name) = &field_type else {
+            panic!("descriptor is an object type");
+        };
+        assert_eq!(
+            class_name.as_java_str().as_bytes(),
+            &[b'p', b'/', 0xed, 0xa0, 0x80]
+        );
+        assert_eq!(field_type.descriptor().as_java_str().as_bytes(), bytes);
     }
 }

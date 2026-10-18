@@ -82,12 +82,12 @@ fn miri_method_handle_reference_kinds_match_jvm_tags() {
     let owner = crate::types::reference_type::ReferenceType::Class("Example".parse().unwrap());
     let field = FieldRef {
         owner: owner.clone(),
-        name: "value".to_owned(),
+        name: "value".into(),
         field_type: "I".parse().unwrap(),
     };
     let method = MethodRef {
         owner,
-        name: "method".to_owned(),
+        name: "method".into(),
         descriptor: "()V".parse().unwrap(),
     };
     for (handle, expected) in [

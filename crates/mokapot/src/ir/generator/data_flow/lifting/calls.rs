@@ -6,7 +6,7 @@ use crate::{
         Operation, ValueId,
         expression::{Expression, InvocationKind},
     },
-    jvm::references::MethodRef,
+    jvm::{JavaStr, references::MethodRef},
     types::{
         field_type::ValueCategory,
         method_descriptor::{MethodDescriptor, ReturnType},
@@ -50,7 +50,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
-        name: &str,
+        name: &JavaStr,
     ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {

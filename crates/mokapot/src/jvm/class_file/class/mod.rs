@@ -65,6 +65,10 @@ impl Class {
 }
 
 impl Class {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Class members and attributes are resolved together"
+    )]
     pub(crate) fn from_raw(raw: ClassFile<'_>) -> Result<Self, ParseError> {
         let ClassFile {
             minor_version,
@@ -81,7 +85,10 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags =
             parse_flags::<class::AccessFlags>(access_flags, "Invalid class access flags")?;
-        let constant_pool = ConstantPool::from_raw(constant_pool)?;
+        let mut constant_pool = ConstantPool::from_raw(constant_pool)?;
+        for method in &methods {
+            constant_pool.intern_method_descriptor(method.descriptor_index())?;
+        }
         let class_name = constant_pool.get_class_name(this_class)?;
         let super_class = match super_class {
             0 if class_name == "java/lang/Object" => None,
@@ -92,13 +99,13 @@ impl Class {
             it => Some(constant_pool.get_class_name(it)?),
         };
 
-        let ctx = &ResolutionContext {
+        let ctx = ResolutionContext {
             constant_pool,
             class_version: version,
             current_class_name: class_name.clone(),
         };
 
-        let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
+        let attributes = attributes.into_iter().map(|it| it.resolve(&ctx));
 
         extract_attributes! {
             for attributes in "class_file" {
@@ -136,11 +143,11 @@ impl Class {
                 .try_collect_exact()?,
             fields: fields
                 .into_iter()
-                .map(|it| it.resolve(ctx))
+                .map(|it| it.resolve(&ctx))
                 .try_collect_exact()?,
             methods: methods
                 .into_iter()
-                .map(|it| it.resolve(ctx))
+                .map(|it| it.resolve(&ctx))
                 .try_collect_exact()?,
             source_file,
             inner_classes,
@@ -166,6 +173,7 @@ impl Class {
             signature,
             record,
             other_attributes,
+            constant_pool: ctx.constant_pool.finish(),
         })
     }
 }

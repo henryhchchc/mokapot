@@ -2,14 +2,130 @@
 
 use bitflags::bitflags;
 
-use super::{Method, references::MethodRef};
+use super::{
+    Annotation, Annotations, Class, JavaStr, JavaString, Method, TypeAnnotation, annotation,
+    class_file::constant_pool::{MethodDescriptorId, Utf8Id},
+    code,
+    references::MethodRef,
+};
 use crate::intrinsics::see_jvm_spec;
 use crate::types::reference_type::ReferenceType;
+use crate::types::{class_name::ClassName, method_descriptor::MethodDescriptor};
 
 /// A generic type signature for a method.
-pub type Signature = String;
+pub type Signature = JavaString;
 
-impl Method {
+#[derive(Debug, Clone)]
+pub(crate) struct MethodData {
+    pub access_flags: AccessFlags,
+    pub name: Utf8Id,
+    pub descriptor: MethodDescriptorId,
+    pub body: Option<code::MethodBody>,
+    pub exceptions: Box<[ClassName]>,
+    pub annotations: Annotations<Annotation>,
+    pub type_annotations: Annotations<TypeAnnotation>,
+    pub parameter_annotations: Annotations<Box<[Annotation]>>,
+    pub annotation_default: Option<annotation::ElementValue>,
+    pub parameters: Box<[ParameterInfo]>,
+    pub is_synthetic: bool,
+    pub is_deprecated: bool,
+    pub signature: Option<Signature>,
+    pub other_attributes: Box<[(String, Box<[u8]>)]>,
+}
+
+impl<'class> Method<'class> {
+    /// The class declaring this method.
+    #[must_use]
+    pub const fn owner(&self) -> &'class Class {
+        self.class
+    }
+
+    /// The method access flags.
+    #[must_use]
+    pub const fn access_flags(&self) -> AccessFlags {
+        self.data.access_flags
+    }
+
+    /// The method name.
+    #[must_use]
+    pub fn name(&self) -> &'class JavaStr {
+        self.class.constant_pool.utf8(self.data.name)
+    }
+
+    /// The method descriptor.
+    #[must_use]
+    pub fn descriptor(&self) -> &'class MethodDescriptor {
+        self.class
+            .constant_pool
+            .method_descriptor(self.data.descriptor)
+    }
+
+    /// The method body, if present.
+    #[must_use]
+    pub const fn body(&self) -> Option<&'class code::MethodBody> {
+        self.data.body.as_ref()
+    }
+
+    /// The declared checked exceptions.
+    #[must_use]
+    pub fn exceptions(&self) -> &'class [ClassName] {
+        &self.data.exceptions
+    }
+
+    /// The method annotations.
+    #[must_use]
+    pub const fn annotations(&self) -> &'class Annotations<Annotation> {
+        &self.data.annotations
+    }
+
+    /// The method type annotations.
+    #[must_use]
+    pub const fn type_annotations(&self) -> &'class Annotations<TypeAnnotation> {
+        &self.data.type_annotations
+    }
+
+    /// The parameter annotations.
+    #[must_use]
+    pub const fn parameter_annotations(&self) -> &'class Annotations<Box<[Annotation]>> {
+        &self.data.parameter_annotations
+    }
+
+    /// The default annotation value, if present.
+    #[must_use]
+    pub const fn annotation_default(&self) -> Option<&'class annotation::ElementValue> {
+        self.data.annotation_default.as_ref()
+    }
+
+    /// The method parameter information.
+    #[must_use]
+    pub fn parameters(&self) -> &'class [ParameterInfo] {
+        &self.data.parameters
+    }
+
+    /// Whether the method is synthetic.
+    #[must_use]
+    pub const fn is_synthetic(&self) -> bool {
+        self.data.is_synthetic
+    }
+
+    /// Whether the method is deprecated.
+    #[must_use]
+    pub const fn is_deprecated(&self) -> bool {
+        self.data.is_deprecated
+    }
+
+    /// The generic signature, if present.
+    #[must_use]
+    pub fn signature(&self) -> Option<&'class JavaStr> {
+        self.data.signature.as_deref()
+    }
+
+    /// The unrecognized method attributes.
+    #[must_use]
+    pub fn other_attributes(&self) -> &'class [(String, Box<[u8]>)] {
+        &self.data.other_attributes
+    }
+
     /// The method of a static initializer block.
     pub const CLASS_INITIALIZER_NAME: &'static str = "<clinit>";
     /// The method of a constructor.
@@ -18,23 +134,45 @@ impl Method {
     /// Checks if the method is a constructor.
     #[must_use]
     pub fn is_constructor(&self) -> bool {
-        self.name == Self::CONSTRUCTOR_NAME
+        self.name() == Self::CONSTRUCTOR_NAME
     }
 
     /// Checks if the method is a static initializer block.
     #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
-        self.name == Self::CLASS_INITIALIZER_NAME
+        self.name() == Self::CLASS_INITIALIZER_NAME
     }
 
     /// Creates a [`MethodRef`] pointting to this method.
     #[must_use]
     pub fn as_ref(&self) -> MethodRef {
         MethodRef {
-            owner: ReferenceType::Class(self.owner.clone()),
-            name: self.name.clone(),
-            descriptor: self.descriptor.clone(),
+            owner: ReferenceType::Class(self.owner().name.clone()),
+            name: self.name().to_owned(),
+            descriptor: self.descriptor().clone(),
         }
+    }
+}
+
+impl std::fmt::Debug for Method<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Method")
+            .field("owner", &self.owner().name)
+            .field("access_flags", &self.access_flags())
+            .field("name", &self.name())
+            .field("descriptor", &self.descriptor())
+            .field("body", &self.body())
+            .field("exceptions", &self.exceptions())
+            .field("annotations", &self.annotations())
+            .field("type_annotations", &self.type_annotations())
+            .field("parameter_annotations", &self.parameter_annotations())
+            .field("annotation_default", &self.annotation_default())
+            .field("parameters", &self.parameters())
+            .field("is_synthetic", &self.is_synthetic())
+            .field("is_deprecated", &self.is_deprecated())
+            .field("signature", &self.signature())
+            .field("other_attributes", &self.other_attributes())
+            .finish()
     }
 }
 
@@ -98,6 +236,65 @@ bitflags! {
 mod tests {
     use super::*;
     use crate::jvm::code::Instruction;
+    use crate::types::Descriptor;
+
+    #[test]
+    fn pool_backed_methods_preserve_jvm_names_after_input_is_dropped() {
+        let name = &[0xed, 0xa0, 0x80];
+        let descriptor = b"()Lpkg/\xed\xa0\x80;";
+        let class = {
+            let mut bytes = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 61, 0, 6];
+            for value in [b"java/lang/Object".as_slice(), name, descriptor, b"Code"] {
+                if value == name {
+                    bytes.extend([7, 0, 1]);
+                }
+                bytes.push(1);
+                bytes.extend(u16::try_from(value.len()).unwrap().to_be_bytes());
+                bytes.extend(value);
+            }
+            bytes.extend([
+                0, 0x21, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 9, 0, 3, 0, 4, 0, 1, 0, 5, 0, 0, 0, 14,
+                0, 1, 0, 0, 0, 0, 0, 2, 1, 0xb0, 0, 0, 0, 0, 0, 0,
+            ]);
+            Class::from_bytes(&bytes).unwrap()
+        };
+        let method = class.methods().next().unwrap();
+        assert_eq!(method.name().as_bytes(), name);
+        assert_eq!(method.descriptor().descriptor().as_bytes(), descriptor);
+        let reference = method.as_ref();
+        let ir = crate::ir::MokaIRMethod::from_method(method).unwrap();
+        drop(class);
+        assert_eq!(reference.name.as_bytes(), name);
+        assert_eq!(ir.name.as_bytes(), name);
+        assert_eq!(ir.descriptor.descriptor().as_bytes(), descriptor);
+    }
+
+    #[test]
+    fn method_views_use_the_containing_class() {
+        let fixture = crate::tests::method(
+            [(0, Instruction::Return)],
+            "()V",
+            vec![],
+            AccessFlags::PUBLIC,
+        );
+        let mut class = fixture.as_method().owner().clone();
+        class.name = "Other".parse().unwrap();
+        let descriptor: MethodDescriptor = "()V".parse().unwrap();
+        let method = class.get_method_str("test", &descriptor).unwrap();
+        assert!(std::ptr::eq(method.owner(), &raw const class));
+        assert_eq!(
+            method.as_ref().owner,
+            ReferenceType::Class(class.name.clone())
+        );
+        assert!(class.get_method_str("missing", &descriptor).is_none());
+        assert!(
+            class
+                .get_method_str("test", "()I".parse::<MethodDescriptor>().unwrap())
+                .is_none()
+        );
+        let body = class.methods().next().unwrap().body().unwrap();
+        assert_eq!(body.instructions.get(&0.into()), Some(&Instruction::Return));
+    }
 
     #[test]
     fn special_method_checks_use_only_the_name() {
@@ -112,11 +309,11 @@ mod tests {
             (Method::CLASS_INITIALIZER_NAME, false, true),
             ("ordinary", false, false),
         ] {
-            method.name = name.to_owned();
+            method.set_name(name);
             assert_eq!(
                 (
-                    method.is_constructor(),
-                    method.is_static_initializer_block()
+                    method.as_method().is_constructor(),
+                    method.as_method().is_static_initializer_block()
                 ),
                 (constructor, initializer),
             );

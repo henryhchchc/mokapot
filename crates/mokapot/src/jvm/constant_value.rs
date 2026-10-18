@@ -47,7 +47,7 @@ pub enum ConstantValue {
     /// A dynamic constant.
     // TODO: Extract the BSM from constant pool
     #[display("Dynamic({_0}, {_1}, {_2})")]
-    Dynamic(u16, String, FieldType),
+    Dynamic(u16, JavaString, FieldType),
 }
 
 impl PartialEq<Self> for ConstantValue {

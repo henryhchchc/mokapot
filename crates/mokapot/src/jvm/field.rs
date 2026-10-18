@@ -1,6 +1,6 @@
 //! JVM fields and constant values.
 
-use super::{Field, references::FieldRef};
+use super::{Field, JavaString, references::FieldRef};
 use crate::intrinsics::see_jvm_spec;
 use crate::types::reference_type::ReferenceType;
 
@@ -17,7 +17,7 @@ impl Field {
 }
 
 /// A generic type signature for a field, a formal parameter, a local variable, or a record component.
-pub type Signature = String;
+pub type Signature = JavaString;
 
 use bitflags::bitflags;
 
