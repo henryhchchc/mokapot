@@ -19,18 +19,31 @@ use crate::{
 };
 
 /// A generic type signature for a class.
-pub type Signature = String;
+pub type Signature = super::JavaString;
 
 impl Class {
+    /// Iterates over the methods declared by this class.
+    pub fn methods(&self) -> impl ExactSizeIterator<Item = Method<'_>> + DoubleEndedIterator {
+        self.methods.iter().map(|data| Method { class: self, data })
+    }
+
     /// Gets a method of the class by its name and descriptor.
     #[must_use]
-    pub fn get_method<D>(&self, name: &str, descriptor: D) -> Option<&Method>
+    pub fn get_method<D>(&self, name: &super::JavaStr, descriptor: D) -> Option<Method<'_>>
     where
         D: Borrow<MethodDescriptor>,
     {
-        self.methods
-            .iter()
-            .find(|m| m.name == name && &m.descriptor == descriptor.borrow())
+        self.methods()
+            .find(|m| m.name() == name && m.descriptor() == descriptor.borrow())
+    }
+
+    /// Gets a method using a Rust string name.
+    #[must_use]
+    pub fn get_method_str<D>(&self, name: &str, descriptor: D) -> Option<Method<'_>>
+    where
+        D: Borrow<MethodDescriptor>,
+    {
+        self.get_method(super::JavaString::from(name).as_java_str(), descriptor)
     }
 
     /// Gets a field of the class by its name and type.
@@ -308,7 +321,7 @@ pub struct EnclosingMethod {
     /// The class being enclosed.
     pub class: ClassName,
     /// The name and descriptor of the enclosing method.
-    pub method_name_and_desc: Option<(String, MethodDescriptor)>,
+    pub method_name_and_desc: Option<(super::JavaString, MethodDescriptor)>,
 }
 
 /// The information of a bootstrap method.

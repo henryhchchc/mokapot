@@ -11,10 +11,7 @@ use super::{
 };
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{
-        Annotations, Method, class_file::ResolutionContext, errors::ParsingErrorContext, method,
-    },
-    types::method_descriptor::MethodDescriptor,
+    jvm::{Annotations, Method, class_file::ResolutionContext, method},
 };
 
 /// The raw representation of a `method_info` structure.
@@ -25,6 +22,12 @@ pub(super) struct MethodInfo<'a> {
     name_index: u16,
     descriptor_index: u16,
     attributes: Box<[&'a AttributeInfo]>,
+}
+
+impl MethodInfo<'_> {
+    pub(super) const fn descriptor_index(&self) -> u16 {
+        self.descriptor_index
+    }
 }
 
 impl<'a> Decode<'a> for MethodInfo<'a> {
@@ -42,7 +45,7 @@ impl<'a> Decode<'a> for MethodInfo<'a> {
 }
 
 impl Resolve for MethodInfo<'_> {
-    type Output = Method;
+    type Output = method::MethodData;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
@@ -54,13 +57,21 @@ impl Resolve for MethodInfo<'_> {
         } = raw;
         let access_flags =
             parse_flags::<method::AccessFlags>(access_flags, "Invalid method access flags")?;
-        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
-        let descriptor: MethodDescriptor = ctx
-            .constant_pool
-            .get_str(descriptor_index)?
-            .parse()
-            .context("Invalid method descriptor")?;
-        let owner = ctx.current_class_name.clone();
+        let name = ctx.constant_pool.utf8_id(name_index)?;
+        let descriptor = ctx.constant_pool.method_descriptor_id(descriptor_index)?;
+        let name_value = ctx.constant_pool.utf8(name);
+        let descriptor_value = ctx.constant_pool.method_descriptor(descriptor);
+        let bytes = name_value.as_bytes();
+        if bytes.is_empty()
+            || bytes
+                .iter()
+                .any(|byte| matches!(byte, b'.' | b';' | b'[' | b'/'))
+            || (bytes.iter().any(|byte| matches!(byte, b'<' | b'>'))
+                && name_value != Method::CONSTRUCTOR_NAME
+                && name_value != Method::CLASS_INITIALIZER_NAME)
+        {
+            return Err(ParseError::malform("Invalid method name"));
+        }
 
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
         extract_attributes! {
@@ -92,7 +103,7 @@ impl Resolve for MethodInfo<'_> {
         // If the method is either `native` or `abstract`, and is not a class or interface initialization method
         if (access_flags.contains(method::AccessFlags::NATIVE)
             || access_flags.contains(method::AccessFlags::ABSTRACT))
-            && name != Method::CLASS_INITIALIZER_NAME
+            && name_value != Method::CLASS_INITIALIZER_NAME
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
@@ -105,10 +116,10 @@ impl Resolve for MethodInfo<'_> {
             }
         }
 
-        if ctx.class_version.major() >= 51 && name == Method::CLASS_INITIALIZER_NAME {
+        if ctx.class_version.major() >= 51 && name_value == Method::CLASS_INITIALIZER_NAME {
             // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
             if !access_flags.contains(method::AccessFlags::STATIC)
-                || !descriptor.parameters_types.is_empty()
+                || !descriptor_value.parameters_types.is_empty()
             {
                 Err(ParseError::malform(
                     "Class initializer in class version 51 or above\
@@ -117,11 +128,10 @@ impl Resolve for MethodInfo<'_> {
             }
         }
 
-        Ok(Method {
+        Ok(method::MethodData {
             access_flags,
             name,
             descriptor,
-            owner,
             body,
             exceptions,
             annotations: Annotations {
@@ -159,7 +169,7 @@ mod tests {
         major: u16,
         is_static: bool,
         descriptor: &[u8],
-    ) -> Result<Method, ParseError> {
+    ) -> Result<method::MethodData, ParseError> {
         let pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"<clinit>"),
             RawEntry::Utf8(descriptor),
@@ -168,8 +178,10 @@ mod tests {
         let name_index = 1;
         let descriptor_index = 2;
         let attribute_name_index = 3_u16;
+        let mut constant_pool = ConstantPool::from_raw(pool).unwrap();
+        constant_pool.intern_method_descriptor(descriptor_index)?;
         let ctx = ResolutionContext {
-            constant_pool: ConstantPool::from_raw(pool).unwrap(),
+            constant_pool,
             class_version: Version::from_versions(major, 0).unwrap(),
             current_class_name: "Test".parse().unwrap(),
         };
@@ -199,8 +211,7 @@ mod tests {
             {
                 let result = class_initializer(major, is_static, descriptor);
                 if major < 51 || (is_static && descriptor == b"()V") {
-                    let method = result.unwrap();
-                    assert_eq!(method.name, Method::CLASS_INITIALIZER_NAME);
+                    result.unwrap();
                 } else {
                     assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
                 }

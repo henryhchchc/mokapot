@@ -24,7 +24,7 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Annotation, ConstantValue, Module, TypeAnnotation,
+        Annotation, ConstantValue, JavaString, Module, TypeAnnotation,
         annotation::ElementValue,
         class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
         code::{LineNumberTableEntry, MethodBody, StackMapFrame},
@@ -70,7 +70,7 @@ pub(crate) enum Attribute {
     Synthetic,
     Deprecated,
     EnclosingMethod(EnclosingMethod),
-    Signature(String),
+    Signature(JavaString),
     SourceDebugExtension(Box<[u8]>),
     LocalVariableTable(Box<[LocalVariableDescriptorEntry]>),
     LocalVariableTypeTable(Box<[LocalVariableSignatureEntry]>),
@@ -392,8 +392,8 @@ mod tests {
             panic!("expected ModulePackages attribute");
         };
         assert_eq!(packages.len(), 2);
-        assert_eq!(packages[0].as_str(), "example/api");
-        assert_eq!(packages[1].as_str(), "example/internal");
+        assert_eq!(packages[0].as_java_str(), "example/api");
+        assert_eq!(packages[1].as_java_str(), "example/internal");
     }
 
     #[test]

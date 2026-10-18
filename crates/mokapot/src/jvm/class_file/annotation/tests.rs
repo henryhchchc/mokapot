@@ -7,7 +7,7 @@ use crate::jvm::{
     errors::ParseErrorKind,
 };
 
-fn context() -> ResolutionContext<'static> {
+fn context() -> ResolutionContext {
     let pool = RawConstantPool::from_entries([
         RawEntry::Utf8(b"LExample;"),
         RawEntry::Utf8(b"value"),

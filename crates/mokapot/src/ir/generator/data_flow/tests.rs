@@ -4,11 +4,11 @@ use super::{
     analysis::{BlockSolution, DataflowSolver, FrameSource},
     *,
 };
-use crate::{ir::generator::control_flow, jvm::Method};
+use crate::{ir::generator::control_flow, tests::TestMethod};
 
 /// Asserts the frame-flow invariant of `method`'s solutions.
-fn verify_method(method: &Method) {
-    let cfg = control_flow::analyze(method).expect("the test method has a valid CFG");
+fn verify_method(method: &TestMethod) {
+    let cfg = control_flow::analyze(method.as_method()).expect("the test method has a valid CFG");
     let solver = DataflowSolver::new(&cfg).expect("the test method has a valid entry frame");
     let parts = solver.solve().expect("the test method has valid dataflow");
     verify_frames(parts.entry, &parts.blocks);
@@ -41,7 +41,7 @@ mod cases {
             (13, Instruction::IReturn),
         ];
         let method = method(body, "(I)I", vec![]);
-        let cfg = control_flow::analyze(&method).unwrap();
+        let cfg = control_flow::analyze(method.as_method()).unwrap();
         let parts = analyze(&cfg).unwrap();
         let (&target, block) = parts
             .blocks

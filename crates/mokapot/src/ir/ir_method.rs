@@ -15,7 +15,7 @@ impl MokaIRMethod {
     /// Returns [`MokaIRBuildError`] when the method has no body, uses unsupported
     /// bytecode, has invalid bytecode structure or reachable frame state, or an
     /// internal construction invariant is violated.
-    pub fn from_method(method: &Method) -> Result<Self, MokaIRBuildError> {
+    pub fn from_method(method: Method<'_>) -> Result<Self, MokaIRBuildError> {
         super::generator::generate(method)
     }
 

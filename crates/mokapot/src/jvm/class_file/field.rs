@@ -16,6 +16,7 @@ use crate::{
         errors::ParsingErrorContext,
         field::{self},
     },
+    types::field_type::FieldType,
 };
 
 /// The raw representation of a `field_info` structure.
@@ -55,11 +56,8 @@ impl Resolve for FieldInfo<'_> {
         } = raw;
         let access_flags =
             parse_flags::<field::AccessFlags>(access_flags, "Invalid field access flags")?;
-        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
-        let field_type = ctx
-            .constant_pool
-            .get_str(descriptor_index)?
-            .parse()
+        let name = ctx.constant_pool.get_java_string(name_index)?;
+        let field_type = FieldType::try_from(ctx.constant_pool.get_utf8(descriptor_index)?)
             .context("Invalid field descriptor")?;
         let owner = ctx.current_class_name.clone();
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));

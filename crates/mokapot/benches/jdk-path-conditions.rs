@@ -22,7 +22,9 @@ static CORPUS: LazyLock<PathCorpus> = LazyLock::new(|| {
     })
     .expect("valid predicate limit");
     let mut corpus = PathCorpus::default();
-    jdk_methods::for_each_method(|method| corpus.insert(jdk_methods::build_ir(&method), limit));
+    jdk_methods::for_each_method(|method| {
+        corpus.insert(jdk_methods::build_ir(method), limit);
+    });
     let included: usize = corpus.bins.values().map(Vec::len).sum();
     jdk_corpus::record_summary(format!(
         "Path conditions: {included} methods included; {} excluded; maximum {limit} predicate occurrences",

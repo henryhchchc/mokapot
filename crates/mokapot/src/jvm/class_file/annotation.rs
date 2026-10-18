@@ -15,7 +15,10 @@ use crate::{
         code::LocalVariableId,
         errors::ParsingErrorContext,
     },
-    types::field_type::PrimitiveType,
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::ReturnType,
+    },
 };
 
 impl TryFrom<raw::TypePathElement> for TypePathElement {
@@ -44,10 +47,7 @@ impl Resolve for raw::Annotation {
             type_index,
             element_value_pairs,
         } = raw;
-        let annotation_type = ctx
-            .constant_pool
-            .get_str(type_index)?
-            .parse()
+        let annotation_type = FieldType::try_from(ctx.constant_pool.get_utf8(type_index)?)
             .context("Invalid annotation type descriptor")?;
         let element_value_pairs = element_value_pairs
             .into_iter()
@@ -82,10 +82,7 @@ impl Resolve for raw::TypeAnnotation<'_> {
             .copied()
             .map(TypePathElement::try_from)
             .try_collect_exact()?;
-        let annotation_type = ctx
-            .constant_pool
-            .get_str(type_index)?
-            .parse()
+        let annotation_type = FieldType::try_from(ctx.constant_pool.get_utf8(type_index)?)
             .context("Invalid annotation type descriptor")?;
         let element_value_pairs = element_value_pairs
             .into_iter()
@@ -286,9 +283,7 @@ impl Resolve for raw::ElementValueInfo {
                 type_name_index,
                 const_name_index,
             } => {
-                let enum_type = cp
-                    .get_str(type_name_index)?
-                    .parse()
+                let enum_type = FieldType::try_from(cp.get_utf8(type_name_index)?)
                     .context("Invalid enum type descriptor")?;
                 let const_name = cp.get_str(const_name_index)?.into_owned();
                 Ok(ElementValue::EnumConstant {
@@ -297,9 +292,7 @@ impl Resolve for raw::ElementValueInfo {
                 })
             }
             raw::ElementValueInfo::ClassInfo(idx) => {
-                let return_descriptor = cp
-                    .get_str(idx)?
-                    .parse()
+                let return_descriptor = ReturnType::try_from(cp.get_utf8(idx)?)
                     .context("Invalid return type descriptor")?;
                 Ok(ElementValue::Class { return_descriptor })
             }

@@ -1,8 +1,8 @@
 use crate::{
     jvm::{
-        Annotations, Class, Method, class,
+        Annotations, Class, ConstantPool, Method, class,
         code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
-        method::AccessFlags,
+        method::{AccessFlags, MethodData},
     },
     types::class_name::ClassName,
 };
@@ -43,6 +43,7 @@ impl Default for Class {
     fn default() -> Self {
         Self {
             version: class::Version::LATEST,
+            constant_pool: ConstantPool::new(),
             access_flags: class::AccessFlags::empty(),
             name: ClassName::new("$default$").unwrap(),
             super_class: None,
@@ -71,13 +72,52 @@ impl Default for Class {
     }
 }
 
-/// Builds a method named `test` and owned by `org/mokapot/Test` from its body.
+#[derive(Debug, Clone)]
+pub(crate) struct TestMethod {
+    class: Class,
+}
+
+impl TestMethod {
+    pub(crate) fn set_name(&mut self, name: &str) {
+        let id = self.class.constant_pool.insert_utf8(name.into());
+        self.class.methods[0].name = id;
+    }
+
+    pub(crate) fn as_method(&self) -> Method<'_> {
+        self.class
+            .methods()
+            .next()
+            .expect("the test class contains one method")
+    }
+}
+
+impl std::ops::Deref for TestMethod {
+    type Target = MethodData;
+
+    fn deref(&self) -> &Self::Target {
+        self.class
+            .methods
+            .first()
+            .expect("the test class contains one method")
+    }
+}
+
+impl std::ops::DerefMut for TestMethod {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.class
+            .methods
+            .first_mut()
+            .expect("the test class contains one method")
+    }
+}
+
+/// Builds a method named `test` in `org/mokapot/Test` from its body.
 pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<ExceptionTableEntry>,
     access_flags: AccessFlags,
-) -> Method
+) -> TestMethod
 where
     I: IntoIterator<Item = (PC, Instruction)>,
     PC: Into<ProgramCounter>,
@@ -86,33 +126,42 @@ where
         .into_iter()
         .map(|(pc, instruction)| (pc.into(), instruction))
         .collect();
-    Method {
-        access_flags,
-        name: "test".to_owned(),
-        descriptor: descriptor.parse().expect("the descriptor must be valid"),
-        owner: "org/mokapot/Test"
+    let mut constant_pool = ConstantPool::new();
+    let name = constant_pool.insert_utf8("test".into());
+    let descriptor =
+        constant_pool.insert_method_descriptor(descriptor.parse().expect("valid test descriptor"));
+    let class = Class {
+        constant_pool,
+        name: "org/mokapot/Test"
             .parse()
             .expect("the owner must be a valid class reference"),
-        body: Some(MethodBody {
-            max_stack: 4,
-            max_locals: 4,
-            instructions,
-            exception_table: exception_table.into_boxed_slice(),
-            line_number_table: None,
-            local_variable_table: None,
-            stack_map_table: None,
+        methods: Box::new([MethodData {
+            access_flags,
+            name,
+            descriptor,
+            body: Some(MethodBody {
+                max_stack: 4,
+                max_locals: 4,
+                instructions,
+                exception_table: exception_table.into_boxed_slice(),
+                line_number_table: None,
+                local_variable_table: None,
+                stack_map_table: None,
+                type_annotations: Annotations::default(),
+                other_attributes: Box::new([]),
+            }),
+            exceptions: Box::new([]),
+            annotations: Annotations::default(),
             type_annotations: Annotations::default(),
+            parameter_annotations: Annotations::default(),
+            annotation_default: None,
+            parameters: Box::new([]),
+            is_synthetic: false,
+            is_deprecated: false,
+            signature: None,
             other_attributes: Box::new([]),
-        }),
-        exceptions: Box::new([]),
-        annotations: Annotations::default(),
-        type_annotations: Annotations::default(),
-        parameter_annotations: Annotations::default(),
-        annotation_default: None,
-        parameters: Box::new([]),
-        is_synthetic: false,
-        is_deprecated: false,
-        signature: None,
-        other_attributes: Box::new([]),
-    }
+        }]),
+        ..Class::default()
+    };
+    TestMethod { class }
 }

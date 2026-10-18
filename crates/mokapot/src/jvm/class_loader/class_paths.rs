@@ -45,10 +45,11 @@ pub struct DirectoryClassPath {
 
 impl ClassPath for DirectoryClassPath {
     fn find_class(&self, class_name: &ClassName) -> Result<Class, Error> {
-        let class_file_path = self
-            .directory
-            .join(class_name.as_ref())
-            .with_extension("class");
+        let class_name = class_name
+            .as_java_str()
+            .to_str()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+        let class_file_path = self.directory.join(&*class_name).with_extension("class");
         if class_file_path.exists() {
             let bytes = std::fs::read(class_file_path)?;
             let class = Class::from_bytes(&bytes)?;
@@ -109,6 +110,10 @@ impl JarClassPath {
 #[cfg(feature = "jar")]
 impl ClassPath for JarClassPath {
     fn find_class(&self, class_name: &ClassName) -> Result<Class, Error> {
+        let class_name = class_name
+            .as_java_str()
+            .to_str()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
         let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
         let mut jar_archive = ZipArchive::new(jar_reader).map_err(|e| match e {

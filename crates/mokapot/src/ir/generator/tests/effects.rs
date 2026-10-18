@@ -217,7 +217,7 @@ fn dynamic_invocations_remain_closures() {
     let descriptor: MethodDescriptor = "(IJ)Ljava/lang/Object;".parse().unwrap();
     let invocation = Instruction::InvokeDynamic {
         bootstrap_method_index: 7,
-        name: "accept".to_owned(),
+        name: "accept".into(),
         descriptor: descriptor.clone(),
     };
     let body = [
@@ -230,7 +230,7 @@ fn dynamic_invocations_remain_closures() {
     let operation = terminator_at(&ir, 2.into()).operation().unwrap();
     let (value, expression) = definition(operation);
     let expected = Expression::Closure {
-        name: "accept".to_owned(),
+        name: "accept".into(),
         captures: ir.parameters.clone(),
         bootstrap_method_index: 7,
         closure_descriptor: descriptor,
@@ -243,7 +243,7 @@ fn dynamic_invocations_remain_closures() {
 fn field_reads_define_values_and_writes_are_effects() {
     let field = FieldRef {
         owner: ref_t("java/lang/Object"),
-        name: "count".to_owned(),
+        name: "count".into(),
         field_type: FieldType::Base(PrimitiveType::Int),
     };
     let body = [

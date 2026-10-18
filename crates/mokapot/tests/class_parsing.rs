@@ -46,18 +46,18 @@ fn test_parse_my_class() {
             .is_some()
     );
 
-    let main_method = &my_class
-        .get_method(
+    let main_method = my_class
+        .get_method_str(
             "main",
             "([Ljava/lang/String;)V"
                 .parse::<MethodDescriptor>()
                 .unwrap(),
         )
         .expect("Cannot find main method");
-    assert_eq!(ReturnType::Void, main_method.descriptor.return_type);
+    assert_eq!(ReturnType::Void, main_method.descriptor().return_type);
     assert_eq!(
         FieldType::from("java/lang/String".parse::<ClassName>().unwrap()).into_array_type(),
-        main_method.descriptor.parameters_types[0]
+        main_method.descriptor().parameters_types[0]
     );
 }
 
@@ -128,7 +128,7 @@ fn parse_record() {
     assert!(matches!(
         rec_iter.next(),
         Some(RecordComponent { name, component_type: FieldType::Object(class_name), .. })
-        if name == "description" && class_name.as_str() == "java/lang/String"
+        if name == "description" && class_name.as_java_str() == "java/lang/String"
     ));
     assert!(rec_iter.next().is_none());
 }

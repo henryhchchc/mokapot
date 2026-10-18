@@ -209,9 +209,9 @@ mod tests {
             };
             let instructions = [(0, switch.clone()), (10, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.unwrap();
+            let body = method.body.as_ref().unwrap();
             assert_eq!(
-                BlockExit::of(&body, 0.into(), &switch),
+                BlockExit::of(body, 0.into(), &switch),
                 Err(ErrorKind::InvalidTableSwitchRange)
             );
         }
@@ -223,9 +223,9 @@ mod tests {
             let allocation = Instruction::MultiANewArray(ref_t(array_type), dimensions);
             let instructions = [(0, allocation.clone()), (1, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.unwrap();
+            let body = method.body.as_ref().unwrap();
             assert_eq!(
-                BlockExit::of(&body, 0.into(), &allocation),
+                BlockExit::of(body, 0.into(), &allocation),
                 Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
@@ -241,9 +241,9 @@ mod tests {
         ];
         for instruction in instructions {
             let method = method([(0, instruction.clone())], "()V", vec![]);
-            let body = method.body.unwrap();
+            let body = method.body.as_ref().unwrap();
             assert_eq!(
-                BlockExit::of(&body, 0.into(), &instruction),
+                BlockExit::of(body, 0.into(), &instruction),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
             );
         }
@@ -252,9 +252,9 @@ mod tests {
     #[test]
     fn rejects_missing_fallthrough() {
         let method = method([(4, Instruction::Nop)], "()V", vec![]);
-        let body = method.body.unwrap();
+        let body = method.body.as_ref().unwrap();
         assert_eq!(
-            BlockExit::of(&body, 4.into(), &Instruction::Nop),
+            BlockExit::of(body, 4.into(), &Instruction::Nop),
             Err(ErrorKind::MissingFallthrough)
         );
     }

@@ -3,10 +3,11 @@
 
 use std::{str::FromStr, sync::Arc};
 
-use derive_more::{AsRef, Display};
-
 use super::{name_validation::validate_internal_name, package_name::PackageName};
-use crate::intrinsics::see_jvm_spec;
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{JavaStr, JavaString},
+};
 
 /// A class or interface name in JVM internal form, such as `java/lang/String`.
 ///
@@ -16,16 +17,14 @@ use crate::intrinsics::see_jvm_spec;
 /// use mokapot::types::class_name::ClassName;
 ///
 /// let name: ClassName = "java/util/Map$Entry".parse().unwrap();
-/// assert_eq!(name.as_str(), "java/util/Map$Entry");
+/// assert_eq!(name.as_java_str(), "java/util/Map$Entry");
 /// assert_eq!(name.jls_name(), "java.util.Map$Entry");
 /// assert_eq!(name.unqualified_name(), "Map$Entry");
-/// assert_eq!(name.package().unwrap().as_str(), "java/util");
+/// assert_eq!(name.package().unwrap().as_java_str(), "java/util");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display)]
-#[as_ref(str)]
-#[display("{_0}")]
-pub struct ClassName(Arc<str>);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ClassName(Arc<JavaStr>);
 
 /// An invalid class or interface name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -38,15 +37,15 @@ impl ClassName {
     /// # Errors
     /// Returns [`InvalidClassName`] for empty components or `.`, `;`, or `[`.
     #[doc = see_jvm_spec!(4, 2, 1)]
-    pub fn new(name: impl Into<Box<str>>) -> Result<Self, InvalidClassName> {
-        let name: Box<str> = name.into();
-        validate_internal_name(&name).map_err(InvalidClassName)?;
-        Ok(Self(name.into()))
+    pub fn new(name: impl Into<JavaString>) -> Result<Self, InvalidClassName> {
+        let name = name.into();
+        validate_internal_name(name.as_java_str()).map_err(InvalidClassName)?;
+        Ok(Self(Arc::from(name)))
     }
 
     /// Returns the name in JVM internal form.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub fn as_java_str(&self) -> &JavaStr {
         &self.0
     }
 
@@ -54,8 +53,8 @@ impl ClassName {
     ///
     /// Preserves `$`, for example `java.util.Map$Entry`.
     #[must_use]
-    pub fn jls_name(&self) -> String {
-        self.0.replace('/', ".")
+    pub fn jls_name(&self) -> JavaString {
+        self.as_java_str().replace_ascii(b'/', b'.')
     }
 
     /// Returns the named package, or `None` for the unnamed package.
@@ -66,20 +65,35 @@ impl ClassName {
 
     /// Returns the unqualified name, preserving `$`, for example `Map$Entry`.
     #[must_use]
-    pub fn unqualified_name(&self) -> &str {
-        self.0.rsplit_once('/').map_or(&self.0, |(_, name)| name)
+    pub fn unqualified_name(&self) -> &JavaStr {
+        self.as_java_str()
+            .split_ascii(b'/')
+            .next_back()
+            .unwrap_or(self.as_java_str())
+    }
+}
+
+impl AsRef<JavaStr> for ClassName {
+    fn as_ref(&self) -> &JavaStr {
+        self.as_java_str()
+    }
+}
+
+impl std::fmt::Display for ClassName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.as_java_str(), f)
     }
 }
 
 impl PartialEq<&str> for ClassName {
     fn eq(&self, other: &&str) -> bool {
-        self.0.as_ref() == *other
+        self.as_java_str() == *other
     }
 }
 
 impl PartialEq<ClassName> for &str {
     fn eq(&self, other: &ClassName) -> bool {
-        *self == other.0.as_ref()
+        other == self
     }
 }
 
@@ -87,8 +101,16 @@ impl FromStr for ClassName {
     type Err = InvalidClassName;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        validate_internal_name(s).map_err(InvalidClassName)?;
-        Ok(Self(Arc::from(s)))
+        Self::new(JavaString::from(s))
+    }
+}
+
+impl TryFrom<&JavaStr> for ClassName {
+    type Error = InvalidClassName;
+
+    fn try_from(name: &JavaStr) -> Result<Self, Self::Error> {
+        validate_internal_name(name).map_err(InvalidClassName)?;
+        Ok(Self(Arc::from(name)))
     }
 }
 
@@ -119,10 +141,23 @@ mod tests {
             let expected_package = (components.len() > 1)
                 .then(|| components[..components.len() - 1].join("/"));
 
-            prop_assert_eq!(name.unqualified_name(), components.last().unwrap());
+            let expected_unqualified = JavaString::from(components.last().unwrap().as_str());
+            prop_assert_eq!(name.unqualified_name(), expected_unqualified.as_java_str());
             prop_assert_eq!(name.package().map(|package| package.to_string()), expected_package);
-            prop_assert_eq!(name.jls_name(), components.join("."));
+            prop_assert_eq!(name.jls_name().to_string(), components.join("."));
             prop_assert_eq!(name.to_string().parse::<ClassName>(), Ok(name));
         }
+    }
+
+    #[test]
+    fn copies_class_names_with_unpaired_surrogates() {
+        let name = JavaString::from_cesu8(vec![b'p', b'/', 0xed, 0xa0, 0x80]).unwrap();
+        let name = ClassName::new(name).unwrap();
+        assert_eq!(name.unqualified_name().as_bytes(), &[0xed, 0xa0, 0x80]);
+        assert_eq!(
+            name.jls_name().as_java_str().as_bytes(),
+            &[b'p', b'.', 0xed, 0xa0, 0x80]
+        );
+        assert_eq!(name.package().unwrap().as_java_str().as_bytes(), b"p");
     }
 }

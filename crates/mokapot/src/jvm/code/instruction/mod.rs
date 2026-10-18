@@ -11,7 +11,7 @@ use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        ConstantValue,
+        ConstantValue, JavaString,
         references::{FieldRef, MethodRef},
     },
     types::{
@@ -241,7 +241,7 @@ pub enum Instruction {
     InvokeInterface(MethodRef, u8) = 0xb9,
     InvokeDynamic {
         bootstrap_method_index: u16,
-        name: String,
+        name: JavaString,
         descriptor: MethodDescriptor,
     } = 0xba,
     New(ClassName) = 0xbb,

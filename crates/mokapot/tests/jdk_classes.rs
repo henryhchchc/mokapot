@@ -103,8 +103,8 @@ fn reachable_predicate_count(ir_method: &MokaIRMethod) -> usize {
 }
 
 fn test_a_class(class: &Class, variable_count_limit: usize) {
-    for method in &class.methods {
-        let Some(body) = method.body.as_ref() else {
+    for method in class.methods() {
+        let Some(body) = method.body() else {
             continue;
         };
 
@@ -118,8 +118,8 @@ fn test_a_class(class: &Class, variable_count_limit: usize) {
             panic!(
                 "Failed to build {}::{}{}: {e}",
                 class.name,
-                method.name,
-                method.descriptor.descriptor()
+                method.name(),
+                method.descriptor().descriptor()
             );
         });
 

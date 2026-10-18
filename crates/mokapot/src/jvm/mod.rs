@@ -4,7 +4,7 @@ use crate::types::package_name::PackageName;
 
 use crate::{
     intrinsics::see_jvm_spec,
-    types::{class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor},
+    types::{class_name::ClassName, field_type::FieldType},
 };
 
 pub mod annotation;
@@ -22,6 +22,8 @@ pub mod module;
 pub mod references;
 
 mod constant_value;
+pub(crate) use class_file::constant_pool::ConstantPool;
+
 mod string;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
@@ -31,6 +33,7 @@ pub use string::{Cesu8Error, FromCesu8Error, JavaStr, JavaStrDecodeError, JavaSt
 #[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, Clone)]
 pub struct Class {
+    pub(crate) constant_pool: ConstantPool,
     /// The version of the class file.
     pub version: class::Version,
     /// The access modifiers of the class.
@@ -45,7 +48,7 @@ pub struct Class {
     /// The fields declared the class.
     pub fields: Box<[Field]>,
     /// The methods declared in the class.
-    pub methods: Box<[Method]>,
+    pub(crate) methods: Box<[method::MethodData]>,
     /// The path to the source file of the class.
     pub source_file: Option<String>,
     /// The inner classes.
@@ -140,7 +143,7 @@ pub struct Field {
     /// The access modifiers of the field.
     pub access_flags: field::AccessFlags,
     /// The name of the field.
-    pub name: String,
+    pub name: JavaString,
     /// The class containing the field.
     pub owner: ClassName,
     /// The type of the field.
@@ -161,40 +164,12 @@ pub struct Field {
     pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
-/// A JVM method.
+/// A method declared by a JVM class.
 #[doc = see_jvm_spec!(4, 6)]
-#[derive(Debug, Clone)]
-pub struct Method {
-    /// The access flags of the method.
-    pub access_flags: method::AccessFlags,
-    /// The name of the method.
-    pub name: String,
-    /// The descriptor of the method, encoding parameter types and return type.
-    pub descriptor: MethodDescriptor,
-    /// The class containing the method.
-    pub owner: ClassName,
-    /// The body of the method if it is not `abstract` or `native`.
-    pub body: Option<code::MethodBody>,
-    /// The checked exceptions that may be thrown by the method.
-    pub exceptions: Box<[ClassName]>,
-    /// The annotations.
-    pub annotations: Annotations<Annotation>,
-    /// The type annotations.
-    pub type_annotations: Annotations<TypeAnnotation>,
-    /// The annotations on method parameters.
-    pub parameter_annotations: Annotations<Box<[Annotation]>>,
-    /// The default value of the annotation (only for annotation interface methods).
-    pub annotation_default: Option<annotation::ElementValue>,
-    /// The parameters of the method, including names and access flags.
-    pub parameters: Box<[method::ParameterInfo]>,
-    /// Indicates if the method is synthesized by the compiler (not in source).
-    pub is_synthetic: bool,
-    /// Indicates if the method is deprecated and should no longer be used.
-    pub is_deprecated: bool,
-    /// The generic signature for methods with type parameters or generic types.
-    pub signature: Option<method::Signature>,
-    /// Unrecognized JVM attributes.
-    pub other_attributes: Box<[(String, Box<[u8]>)]>,
+#[derive(Clone, Copy)]
+pub struct Method<'class> {
+    class: &'class Class,
+    data: &'class method::MethodData,
 }
 
 /// A module in the [Java Platform Module System (JPMS)](https://openjdk.org/projects/jigsaw/spec/).

@@ -12,7 +12,7 @@ use super::raw;
 use crate::{
     intrinsics::ExactSizeIteratorExt,
     jvm::{
-        ConstantValue,
+        ConstantValue, JavaString,
         class::InnerClassInfo,
         code::LineNumberTableEntry,
         method::{ParameterAccessFlags, ParameterInfo},
@@ -30,12 +30,11 @@ impl Resolve for raw::ConstantValue {
 }
 
 impl Resolve for raw::Signature {
-    type Output = String;
+    type Output = JavaString;
 
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
-            .get_str(self.signature_index.get())
-            .map(std::borrow::Cow::into_owned)
+            .get_java_string(self.signature_index.get())
     }
 }
 
