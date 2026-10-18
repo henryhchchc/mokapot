@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     jvm::{
-        ConstantValue, JStr, JString,
+        ConstantValue, JavaStr, JavaString,
         class::MethodHandle,
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
@@ -27,7 +27,7 @@ pub struct ConstantPool<'input> {
 #[derive(Debug, Clone, PartialEq)]
 enum Entry<'input> {
     /// A string in JVM modified UTF-8 encoding.
-    Utf8(&'input JStr),
+    Utf8(&'input JavaStr),
     /// An integer.
     Integer(i32),
     /// A float.
@@ -44,7 +44,7 @@ enum Entry<'input> {
         is_binary_name: bool,
     },
     /// A string literal.
-    String(&'input JStr),
+    String(&'input JavaStr),
     /// A field reference.
     FieldRef(FieldRef),
     /// A method reference.
@@ -182,7 +182,7 @@ impl<'input> ConstantPool<'input> {
         self.get_entry(index).context("Invalid constant pool index")
     }
 
-    pub(crate) fn get_java_string(&self, index: u16) -> Result<JString, ParseError> {
+    pub(crate) fn get_java_string(&self, index: u16) -> Result<JavaString, ParseError> {
         match self.entry(index)? {
             Entry::Utf8(value) => Ok((*value).to_owned()),
             entry => Err(entry.type_mismatch("Utf8")),
@@ -329,7 +329,9 @@ impl<'input> ConstantPool<'input> {
 
     fn resolve_entry(&self, raw: RawEntry<'input>) -> Result<Entry<'input>, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => Entry::Utf8(JStr::from_bytes(bytes)),
+            RawEntry::Utf8(bytes) => {
+                Entry::Utf8(JavaStr::from_cesu8(bytes).context("Invalid JVM modified UTF-8")?)
+            }
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
@@ -723,30 +725,28 @@ mod tests {
 
     #[test]
     fn string_entries_preserve_jvm_bytes() {
-        for (bytes, expected) in [
-            (b"plain".to_vec(), JString::from("plain")),
-            (vec![0xc0, 0x80], JString::from("\0")),
-            (
-                vec![0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
-                JString::from("😀"),
-            ),
-            (vec![0xff], JString::from(vec![0xff])),
-        ] {
-            let raw = RawConstantPool::from_entries([
-                RawEntry::Utf8(&bytes),
-                RawEntry::String {
-                    string_index: 1.into(),
-                },
-            ]);
-            let index = 1;
-            let literal = 2;
-            let pool = ConstantPool::from_raw(raw).unwrap();
-            assert_eq!(pool.get_java_string(index).unwrap().to_bytes(), bytes);
-            assert_eq!(pool.get_java_string(index).unwrap(), expected);
-            assert_eq!(
-                pool.get_constant_value(literal).unwrap(),
-                ConstantValue::String(expected)
-            );
-        }
+        let bytes = b"a\xc0\x80\xed\xa0\xbd\xed\xb8\x80\xed\xa0\x80";
+        let expected = JavaString::from_cesu8(bytes.to_vec()).unwrap();
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(bytes),
+            RawEntry::String {
+                string_index: 1.into(),
+            },
+        ]);
+        let pool = ConstantPool::from_raw(raw).unwrap();
+        assert_eq!(pool.get_java_string(1).unwrap().as_bytes(), bytes);
+        assert_eq!(
+            pool.get_constant_value(2).unwrap(),
+            ConstantValue::String(expected)
+        );
+    }
+
+    #[test]
+    fn malformed_utf8_entries_are_rejected_without_references() {
+        let raw = RawConstantPool::from_entries([RawEntry::Utf8(b"\xff")]);
+        assert_eq!(
+            ConstantPool::from_raw(raw).unwrap_err().kind(),
+            ParseErrorKind::Malformed
+        );
     }
 }

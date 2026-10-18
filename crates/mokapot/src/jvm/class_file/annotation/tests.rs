@@ -1,7 +1,7 @@
 use super::*;
 use crate::jvm::class_file::{Decode, resolve::decode_resolved};
 use crate::jvm::{
-    JString,
+    JavaString,
     class::Version,
     class_file::constant_pool::{ConstantPool, RawConstantPool, RawEntry},
     errors::ParseErrorKind,
@@ -60,7 +60,7 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
             "value".to_owned(),
             ElementValue::Array(Box::new([
                 ElementValue::Primitive(PrimitiveType::Int, ConstantValue::Integer(42)),
-                ElementValue::String(JString::from("hello")),
+                ElementValue::String(JavaString::from("hello")),
                 ElementValue::EnumConstant {
                     enum_type: "LChoice;".parse().unwrap(),
                     const_name: "YES".to_owned(),

@@ -25,7 +25,7 @@ mod constant_value;
 mod string;
 pub use class_loader::ClassLoader;
 pub use constant_value::ConstantValue;
-pub use string::{JStr, JStrDecodeError, JString};
+pub use string::{Cesu8Error, FromCesu8Error, JavaStr, JavaStrDecodeError, JavaString};
 
 /// A JVM class.
 #[doc = see_jvm_spec!(4, 1)]

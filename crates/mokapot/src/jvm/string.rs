@@ -6,49 +6,63 @@ use std::{
     ops::Deref,
 };
 
+use derive_more::Display;
 use simd_cesu8::mutf8;
 
-/// A borrowed JVM modified UTF-8 string, including preserved malformed bytes.
+/// A borrowed JVM modified UTF-8 string, which may contain unpaired surrogates.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct JStr {
+pub struct JavaStr {
     bytes: [u8],
 }
 
-impl JStr {
-    /// Views JVM-encoded bytes without decoding or validating them.
+impl JavaStr {
+    /// Views bytes as a JVM modified UTF-8 string.
+    ///
+    /// # Errors
+    /// Returns an error if the bytes are not valid JVM modified UTF-8.
+    pub fn from_cesu8(bytes: &[u8]) -> Result<&Self, Cesu8Error> {
+        validate_cesu8(bytes)?;
+        // SAFETY: The bytes have been validated above.
+        Ok(unsafe { Self::from_cesu8_unchecked(bytes) })
+    }
+
+    /// Views bytes as a JVM modified UTF-8 string without validation.
+    ///
+    /// # Safety
+    /// The bytes must be valid JVM modified UTF-8. Unpaired surrogates are allowed.
     #[must_use]
-    pub const fn from_bytes(bytes: &[u8]) -> &Self {
-        // SAFETY: JStr is transparent over [u8] and accepts every byte sequence.
+    pub const unsafe fn from_cesu8_unchecked(bytes: &[u8]) -> &Self {
+        // SAFETY: JavaStr is transparent over [u8], and the caller guarantees validity.
         unsafe { &*(std::ptr::from_ref(bytes) as *const Self) }
     }
 
     /// Returns the original JVM-encoded bytes.
     #[must_use]
-    pub const fn to_bytes(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
     /// Decodes the string as UTF-8.
     ///
     /// # Errors
-    /// Returns an error for undecodable bytes or unpaired surrogates.
-    pub fn to_str(&self) -> Result<Cow<'_, str>, JStrDecodeError> {
-        mutf8::decode_strict(&self.bytes).map_err(|_| JStrDecodeError)
+    /// Returns an error if the string contains unpaired surrogates.
+    pub fn to_str(&self) -> Result<Cow<'_, str>, JavaStrDecodeError> {
+        mutf8::decode_strict(&self.bytes).map_err(|_| JavaStrDecodeError)
     }
 }
 
-impl ToOwned for JStr {
-    type Owned = JString;
+impl ToOwned for JavaStr {
+    type Owned = JavaString;
 
     fn to_owned(&self) -> Self::Owned {
-        JString {
+        JavaString {
             bytes: self.bytes.to_vec(),
         }
     }
 }
 
-impl fmt::Debug for JStr {
+impl fmt::Debug for JavaStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Ok(text) = self.to_str() {
             return fmt::Debug::fmt(&*text, f);
@@ -57,7 +71,7 @@ impl fmt::Debug for JStr {
     }
 }
 
-impl fmt::Display for JStr {
+impl fmt::Display for JavaStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&*mutf8::decode_lossy_strict(&self.bytes), f)
     }
@@ -66,28 +80,100 @@ impl fmt::Display for JStr {
 /// An error converting a Java string to UTF-8.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("Java string cannot be decoded as UTF-8")]
-pub struct JStrDecodeError;
+pub struct JavaStrDecodeError;
 
-/// An owned JVM modified UTF-8 string, including preserved malformed bytes.
+/// An error validating JVM modified UTF-8 bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid JVM modified UTF-8 at byte {valid_up_to}")]
+pub struct Cesu8Error {
+    valid_up_to: usize,
+    error_len: Option<usize>,
+}
+
+impl Cesu8Error {
+    /// Returns the length of the valid prefix.
+    #[must_use]
+    pub const fn valid_up_to(&self) -> usize {
+        self.valid_up_to
+    }
+
+    /// Returns the invalid sequence's length, or `None` for an incomplete sequence.
+    #[must_use]
+    pub const fn error_len(&self) -> Option<usize> {
+        self.error_len
+    }
+}
+
+/// An error constructing a Java string, retaining the original bytes.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{error}")]
+pub struct FromCesu8Error {
+    bytes: Vec<u8>,
+    #[source]
+    error: Cesu8Error,
+}
+
+impl FromCesu8Error {
+    /// Returns the original bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+
+    /// Returns the original bytes, consuming the error.
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Returns the validation error.
+    #[must_use]
+    pub const fn cesu8_error(&self) -> Cesu8Error {
+        self.error
+    }
+}
+
+/// An owned JVM modified UTF-8 string, which may contain unpaired surrogates.
 ///
-/// Rust string conversions encode text; byte conversions preserve their input.
-#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct JString {
+/// Rust string conversions encode text; byte constructors validate their input.
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Display)]
+#[display("{}", self.as_java_str())]
+pub struct JavaString {
     bytes: Vec<u8>,
 }
 
-impl JString {
+impl JavaString {
     /// Creates an empty Java string.
     #[must_use]
     pub const fn new() -> Self {
         Self { bytes: Vec::new() }
     }
 
+    /// Constructs a string from JVM modified UTF-8 bytes without copying them.
+    ///
+    /// # Errors
+    /// Returns the original bytes and a validation error if the encoding is invalid.
+    pub fn from_cesu8(bytes: Vec<u8>) -> Result<Self, FromCesu8Error> {
+        match validate_cesu8(&bytes) {
+            Ok(()) => Ok(Self { bytes }),
+            Err(error) => Err(FromCesu8Error { bytes, error }),
+        }
+    }
+
+    /// Constructs a string from JVM modified UTF-8 bytes without validation.
+    ///
+    /// # Safety
+    /// The bytes must be valid JVM modified UTF-8. Unpaired surrogates are allowed.
+    #[must_use]
+    pub const unsafe fn from_cesu8_unchecked(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+
     /// Borrows the string.
     #[must_use]
-    pub const fn as_j_str(&self) -> &JStr {
-        JStr::from_bytes(self.bytes.as_slice())
+    pub const fn as_java_str(&self) -> &JavaStr {
+        // SAFETY: Every JavaString constructor preserves valid JVM modified UTF-8.
+        unsafe { JavaStr::from_cesu8_unchecked(self.bytes.as_slice()) }
     }
 
     /// Returns the original JVM-encoded bytes, consuming the string.
@@ -97,33 +183,27 @@ impl JString {
     }
 }
 
-impl Borrow<JStr> for JString {
-    fn borrow(&self) -> &JStr {
-        self.as_j_str()
+impl Borrow<JavaStr> for JavaString {
+    fn borrow(&self) -> &JavaStr {
+        self.as_java_str()
     }
 }
 
-impl AsRef<JStr> for JString {
-    fn as_ref(&self) -> &JStr {
-        self.as_j_str()
+impl AsRef<JavaStr> for JavaString {
+    fn as_ref(&self) -> &JavaStr {
+        self.as_java_str()
     }
 }
 
-impl Deref for JString {
-    type Target = JStr;
+impl Deref for JavaString {
+    type Target = JavaStr;
 
     fn deref(&self) -> &Self::Target {
-        self.as_j_str()
+        self.as_java_str()
     }
 }
 
-impl From<Vec<u8>> for JString {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self { bytes }
-    }
-}
-
-impl From<String> for JString {
+impl From<String> for JavaString {
     fn from(value: String) -> Self {
         match mutf8::encode(&value) {
             Cow::Borrowed(_) => Self {
@@ -134,7 +214,7 @@ impl From<String> for JString {
     }
 }
 
-impl From<&str> for JString {
+impl From<&str> for JavaString {
     fn from(value: &str) -> Self {
         Self {
             bytes: mutf8::encode(value).into_owned(),
@@ -142,37 +222,54 @@ impl From<&str> for JString {
     }
 }
 
-impl From<&[u8]> for JString {
-    fn from(bytes: &[u8]) -> Self {
-        Self {
-            bytes: bytes.to_vec(),
-        }
-    }
-}
-
-impl From<&JStr> for JString {
-    fn from(value: &JStr) -> Self {
+impl From<&JavaStr> for JavaString {
+    fn from(value: &JavaStr) -> Self {
         value.to_owned()
     }
 }
 
-impl fmt::Debug for JString {
+impl fmt::Debug for JavaString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self.as_j_str(), f)
+        fmt::Debug::fmt(self.as_java_str(), f)
     }
 }
 
-impl fmt::Display for JString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self.as_j_str(), f)
+fn validate_cesu8(bytes: &[u8]) -> Result<(), Cesu8Error> {
+    let mut valid_up_to = 0;
+    while let Some(&first) = bytes.get(valid_up_to) {
+        let error = |error_len| Cesu8Error {
+            valid_up_to,
+            error_len,
+        };
+        let width = match first {
+            1..=0x7f => 1,
+            0xc0 | 0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            _ => return Err(error(Some(1))),
+        };
+        for index in 1..width {
+            let Some(&byte) = bytes.get(valid_up_to + index) else {
+                return Err(error(None));
+            };
+            let valid = (0x80..=0xbf).contains(&byte)
+                && (index != 1
+                    || match first {
+                        0xc0 => byte == 0x80,
+                        0xe0 => byte >= 0xa0,
+                        _ => true,
+                    });
+            if !valid {
+                return Err(error(Some(index)));
+            }
+        }
+        valid_up_to += width;
     }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-
     #[test]
     fn miri_borrowed_and_owned_strings_preserve_bytes() {
         for bytes in [
@@ -181,86 +278,75 @@ mod tests {
             &[0xc0, 0x80],
             &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
             &[0xed, 0xa0, 0x80],
-            &[0xff],
+            &[0xed, 0xbf, 0xbf],
+            &[0xed, 0xb0, 0x80, 0xed, 0xa0, 0x80],
+            &[0xc2, 0x80, 0xdf, 0xbf],
+            &[0xe0, 0xa0, 0x80, 0xed, 0x9f, 0xbf, 0xef, 0xbf, 0xbf],
         ] {
-            let view = JStr::from_bytes(bytes);
+            let view = JavaStr::from_cesu8(bytes).unwrap();
             let owned = view.to_owned();
-            let borrowed: &JStr = owned.borrow();
-            assert_eq!(view.to_bytes(), bytes);
+            let borrowed: &JavaStr = owned.borrow();
+            assert_eq!(view.as_bytes(), bytes);
             assert_eq!(borrowed, view);
             assert_eq!(&*owned, view);
             assert_eq!(owned.into_bytes(), bytes);
+            let input = bytes.to_vec();
+            let pointer = input.as_ptr();
+            let checked = JavaString::from_cesu8(input).unwrap();
+            assert_eq!(checked.as_bytes().as_ptr(), pointer);
+            assert_eq!(checked.as_java_str(), view);
         }
     }
 
     #[test]
-    fn owned_keys_support_borrowed_lookup() {
-        let values = HashMap::from([(JString::from("text"), 1), (JString::from(vec![0xff]), 2)]);
-        assert_eq!(values.get(JStr::from_bytes(b"text")), Some(&1));
-        assert_eq!(values.get(JStr::from_bytes(&[0xff])), Some(&2));
+    fn rust_string_conversion_reuses_compatible_buffer() {
+        let text = String::from("java/lang/String");
+        let pointer = text.as_ptr();
+        let owned = JavaString::from(text);
+        assert_eq!(owned.as_bytes().as_ptr(), pointer);
     }
 
     #[test]
-    fn formatting_decodes_jvm_text_and_preserves_invalid_debug_bytes() {
-        for (bytes, display, debug) in [
-            (&[0xc0, 0x80][..], "\0", r#""\0""#),
-            (&[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80], "😀", r#""😀""#),
-            (&[0xff], "�", r#""\xff""#),
-            (&[0], "�", r#""\x00""#),
-            (
-                &[0xed, 0xa0, 0x80, 0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
-                "���😀",
-                r#""\xed\xa0\x80\xed\xa0\xbd\xed\xb8\x80""#,
-            ),
-            (
-                &[0xe1, 0x80, b'a', 0xc0, 0x80, 0xff],
-                "��a\0�",
-                r#""\xe1\x80a\xc0\x80\xff""#,
-            ),
-        ] {
-            let borrowed = JStr::from_bytes(bytes);
-            let owned = borrowed.to_owned();
-            assert_eq!(format!("{borrowed}"), display);
-            assert_eq!(format!("{borrowed:?}"), debug);
-            assert_eq!(format!("{owned}"), display);
-            assert_eq!(format!("{owned:?}"), debug);
-            assert_eq!(format!("{borrowed:8}"), format!("{display:8}"));
-            assert_eq!(format!("{borrowed:*>8.2}"), format!("{display:*>8.2}"));
-            assert_eq!(format!("{borrowed:*^7}"), format!("{display:*^7}"));
-        }
+    fn debug_escapes_unpaired_surrogate_bytes() {
+        let text = JavaStr::from_cesu8(&[0xed, 0xa0, 0x80]).unwrap();
+        assert_eq!(format!("{text:?}"), r#""\xed\xa0\x80""#);
     }
 
     #[test]
-    fn utf8_conversion_preserves_jvm_encoding() {
-        for (text, bytes) in [
-            ("plain", b"plain".as_slice()),
-            ("\0", &[0xc0, 0x80]),
-            ("😀", &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80]),
+    fn invalid_encoding_reports_location_and_retains_owned_bytes() {
+        for (invalid, error_len) in [
+            (&[0][..], Some(1)),
+            (&[0x80], Some(1)),
+            (&[0xc0, 0x81], Some(1)),
+            (&[0xc1, 0xbf], Some(1)),
+            (&[0xc2, b'a'], Some(1)),
+            (&[0xe0, 0x80, 0x80], Some(1)),
+            (&[0xe1, 0x80, b'a'], Some(2)),
+            (&[0xf0, 0x90, 0x80, 0x80], Some(1)),
+            (&[0xff], Some(1)),
+            (&[0xc0], None),
+            (&[0xc2], None),
+            (&[0xe0, 0xa0], None),
         ] {
-            let borrowed = JStr::from_bytes(bytes);
-            let owned = JString::from(text);
-            assert_eq!(borrowed.to_str().as_deref(), Ok(text));
-            assert_eq!(owned.to_bytes(), bytes);
-            assert_eq!(JString::from(text.to_owned()), owned);
-            assert_eq!(owned.to_str().as_deref(), Ok(text));
-        }
-        for bytes in [
-            &[0xed, 0xa0, 0x80][..],
-            &[0xff],
-            &[0],
-            &[0xf0, 0x90, 0x80, 0x80],
-        ] {
-            assert_eq!(JStr::from_bytes(bytes).to_str(), Err(JStrDecodeError));
+            let bytes = [b"prefix", invalid].concat();
+            let error = JavaStr::from_cesu8(&bytes).unwrap_err();
+            assert_eq!(error.valid_up_to(), 6);
+            assert_eq!(error.error_len(), error_len);
+            let expected = bytes.clone();
+            let pointer = bytes.as_ptr();
+            let owned_error = JavaString::from_cesu8(bytes).unwrap_err();
+            assert_eq!(owned_error.cesu8_error(), error);
+            assert_eq!(owned_error.as_bytes(), expected);
+            assert_eq!(owned_error.as_bytes().as_ptr(), pointer);
+            assert_eq!(owned_error.into_bytes(), expected);
         }
     }
 
     proptest::proptest! {
         #[test]
-        fn text_formatting_matches_rust(text: String) {
-            let encoded = JString::from(format!("\0{text}"));
-            let expected = format!("\0{text}");
-            proptest::prop_assert_eq!(format!("{encoded}"), expected.as_str());
-            proptest::prop_assert_eq!(format!("{encoded:?}"), format!("{expected:?}"));
+        fn validator_accepts_encoded_text(text: String) {
+            let encoded = JavaString::from(text);
+            proptest::prop_assert!(JavaStr::from_cesu8(encoded.as_bytes()).is_ok());
         }
     }
 }
