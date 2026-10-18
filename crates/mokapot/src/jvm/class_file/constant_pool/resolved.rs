@@ -1,6 +1,6 @@
 //! Eagerly resolved JVM constant-pool values.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, num::NonZeroU16};
 
 use crate::{
     jvm::{
@@ -19,15 +19,23 @@ use crate::{
 
 /// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConstantPool<'input> {
-    inner: PoolStorage<Entry<'input>>,
+pub struct ConstantPool {
+    inner: PoolStorage<Entry>,
+    method_descriptors: Vec<MethodDescriptor>,
+    descriptor_indices: Box<[Option<MethodDescriptorId>]>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Utf8Id(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MethodDescriptorId(u16);
 
 /// A resolved constant-pool entry.
 #[derive(Debug, Clone, PartialEq)]
-enum Entry<'input> {
+enum Entry {
     /// A string in JVM modified UTF-8 encoding.
-    Utf8(&'input JavaStr),
+    Utf8(JavaString),
     /// An integer.
     Integer(i32),
     /// A float.
@@ -44,7 +52,7 @@ enum Entry<'input> {
         is_binary_name: bool,
     },
     /// A string literal.
-    String(&'input JavaStr),
+    String(Utf8Id),
     /// A field reference.
     FieldRef(FieldRef),
     /// A method reference.
@@ -56,13 +64,13 @@ enum Entry<'input> {
     /// A method handle.
     MethodHandle(MethodHandle),
     /// A method descriptor.
-    MethodType(MethodDescriptor),
+    MethodType(MethodDescriptorId),
     /// A dynamic constant, retaining its bootstrap-table index.
     Dynamic {
         /// Index into the class's bootstrap method table.
         bootstrap_method_attr_index: u16,
         /// Constant name.
-        name: String,
+        name: JavaString,
         /// Constant type.
         field_type: FieldType,
     },
@@ -71,7 +79,7 @@ enum Entry<'input> {
         /// Index into the class's bootstrap method table.
         bootstrap_method_attr_index: u16,
         /// Call-site name.
-        name: String,
+        name: JavaString,
         /// Call-site descriptor.
         descriptor: MethodDescriptor,
     },
@@ -85,12 +93,12 @@ enum Entry<'input> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameAndType {
     /// A field name and type.
-    Field(String, FieldType),
+    Field(JavaString, FieldType),
     /// A method name and descriptor.
-    Method(String, MethodDescriptor),
+    Method(JavaString, MethodDescriptorId),
 }
 
-impl Entry<'_> {
+impl Entry {
     fn type_mismatch(&self, expected: &'static str) -> ParseError {
         ParseError::malform(format!(
             "Mismatched constant pool type. Expected: {expected} but got {}.",
@@ -123,13 +131,97 @@ impl Entry<'_> {
     }
 }
 
-impl<'input> ConstantPool<'input> {
+impl ConstantPool {
+    #[cfg(test)]
+    pub(crate) fn insert_utf8(&mut self, value: JavaString) -> Utf8Id {
+        let index = self.inner.push(Entry::Utf8(value));
+        let mut indices = std::mem::take(&mut self.descriptor_indices).into_vec();
+        indices.push(None);
+        self.descriptor_indices = indices.into_boxed_slice();
+        Utf8Id(NonZeroU16::new(index).expect("test pool index is nonzero"))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn insert_method_descriptor(
+        &mut self,
+        value: MethodDescriptor,
+    ) -> MethodDescriptorId {
+        let id = MethodDescriptorId(
+            u16::try_from(self.method_descriptors.len()).expect("test descriptors fit in u16"),
+        );
+        self.method_descriptors.push(value);
+        id
+    }
+
+    pub(crate) fn get_utf8(&self, index: u16) -> Result<&JavaStr, ParseError> {
+        match self.entry(index)? {
+            Entry::Utf8(value) => Ok(value.as_java_str()),
+            entry => Err(entry.type_mismatch("Utf8")),
+        }
+    }
+
+    pub(crate) fn utf8_id(&self, index: u16) -> Result<Utf8Id, ParseError> {
+        self.get_utf8(index)?;
+        Ok(Utf8Id(
+            NonZeroU16::new(index).expect("validated nonzero pool index"),
+        ))
+    }
+
+    pub(crate) fn utf8(&self, id: Utf8Id) -> &JavaStr {
+        self.get_utf8(id.0.get()).expect("validated UTF-8 pool ID")
+    }
+
+    pub(crate) fn method_descriptor(&self, id: MethodDescriptorId) -> &MethodDescriptor {
+        &self.method_descriptors[usize::from(id.0)]
+    }
+
+    pub(crate) fn method_descriptor_id(
+        &self,
+        index: u16,
+    ) -> Result<MethodDescriptorId, ParseError> {
+        self.descriptor_indices
+            .get(usize::from(index))
+            .copied()
+            .flatten()
+            .context("Unprepared method descriptor")
+    }
+
+    pub(crate) fn intern_method_descriptor(
+        &mut self,
+        index: u16,
+    ) -> Result<MethodDescriptorId, ParseError> {
+        if let Some(id) = self
+            .descriptor_indices
+            .get(usize::from(index))
+            .copied()
+            .flatten()
+        {
+            return Ok(id);
+        }
+        let descriptor = MethodDescriptor::try_from(self.get_utf8(index)?)
+            .context("Invalid method descriptor")?;
+        let id = MethodDescriptorId(
+            u16::try_from(self.method_descriptors.len())
+                .map_err(|_| ParseError::malform("Too many method descriptors"))?,
+        );
+        self.method_descriptors.push(descriptor);
+        self.descriptor_indices[usize::from(index)] = Some(id);
+        Ok(id)
+    }
+
+    pub(crate) fn finish(mut self) -> Self {
+        self.descriptor_indices = Box::new([]);
+        self
+    }
+
     /// Creates an empty resolved pool.
     #[must_use]
     #[cfg(test)]
     pub fn new() -> Self {
         Self {
             inner: PoolStorage::with_padding(1),
+            method_descriptors: Vec::new(),
+            descriptor_indices: vec![None].into_boxed_slice(),
         }
     }
 
@@ -138,18 +230,20 @@ impl<'input> ConstantPool<'input> {
     /// # Errors
     /// Returns binary parsing errors or malformed constant-pool references and values.
     #[cfg(test)]
-    pub fn from_bytes(bytes: &'input [u8], constant_pool_count: u16) -> Result<Self, ParseError> {
+    pub fn from_bytes(bytes: &[u8], constant_pool_count: u16) -> Result<Self, ParseError> {
         Self::from_raw(RawConstantPool::from_bytes(bytes, constant_pool_count)?)
     }
 
     /// Resolves all entries, preserving indices and reserved slots.
     /// # Errors
     /// Returns an error for invalid references, tags, names, descriptors, or handle kinds.
-    pub fn from_raw(raw: RawConstantPool<'input>) -> Result<Self, ParseError> {
+    pub fn from_raw(raw: RawConstantPool<'_>) -> Result<Self, ParseError> {
         let count = raw.count();
         let mut pending = raw.inner.into_slots();
         let mut pool = Self {
             inner: PoolStorage::with_padding(count),
+            method_descriptors: Vec::new(),
+            descriptor_indices: vec![None; usize::from(count)].into_boxed_slice(),
         };
         // Each tier depends only on earlier tiers, regardless of source entry order.
         for tier in 0..4 {
@@ -167,7 +261,7 @@ impl<'input> ConstantPool<'input> {
 
     /// Gets an entry, or `None` for an invalid index or reserved slot.
     #[must_use]
-    fn get_entry(&self, index: u16) -> Option<&Entry<'input>> {
+    fn get_entry(&self, index: u16) -> Option<&Entry> {
         self.inner.get_entry(index)
     }
 
@@ -178,13 +272,13 @@ impl<'input> ConstantPool<'input> {
         self.inner.count()
     }
 
-    fn entry(&self, index: u16) -> Result<&Entry<'input>, ParseError> {
+    fn entry(&self, index: u16) -> Result<&Entry, ParseError> {
         self.get_entry(index).context("Invalid constant pool index")
     }
 
     pub(crate) fn get_java_string(&self, index: u16) -> Result<JavaString, ParseError> {
         match self.entry(index)? {
-            Entry::Utf8(value) => Ok((*value).to_owned()),
+            Entry::Utf8(value) => Ok(value.clone()),
             entry => Err(entry.type_mismatch("Utf8")),
         }
     }
@@ -192,7 +286,7 @@ impl<'input> ConstantPool<'input> {
     pub(crate) fn get_invoke_dynamic(
         &self,
         index: u16,
-    ) -> Result<(u16, String, MethodDescriptor), ParseError> {
+    ) -> Result<(u16, JavaString, MethodDescriptor), ParseError> {
         match self.entry(index)? {
             Entry::InvokeDynamic {
                 bootstrap_method_attr_index,
@@ -236,7 +330,7 @@ impl<'input> ConstantPool<'input> {
     pub(crate) fn get_field_name_and_type(
         &self,
         index: u16,
-    ) -> Result<(String, FieldType), ParseError> {
+    ) -> Result<(JavaString, FieldType), ParseError> {
         match self.entry(index)? {
             Entry::NameAndType(NameAndType::Field(name, ty)) => Ok((name.clone(), ty.clone())),
             entry => Err(entry.type_mismatch("NameAndType with a field descriptor")),
@@ -246,10 +340,10 @@ impl<'input> ConstantPool<'input> {
     pub(crate) fn get_method_name_and_type(
         &self,
         index: u16,
-    ) -> Result<(String, MethodDescriptor), ParseError> {
+    ) -> Result<(JavaString, MethodDescriptor), ParseError> {
         match self.entry(index)? {
             Entry::NameAndType(NameAndType::Method(name, descriptor)) => {
-                Ok((name.clone(), descriptor.clone()))
+                Ok((name.clone(), self.method_descriptor(*descriptor).clone()))
             }
             entry => Err(entry.type_mismatch("NameAndType with a method descriptor")),
         }
@@ -310,9 +404,11 @@ impl<'input> ConstantPool<'input> {
             Entry::Float(value) => ConstantValue::Float(*value),
             Entry::Long(value) => ConstantValue::Long(*value),
             Entry::Double(value) => ConstantValue::Double(*value),
-            Entry::String(value) => ConstantValue::String((*value).to_owned()),
+            Entry::String(value) => ConstantValue::String(self.utf8(*value).to_owned()),
             Entry::Class { reference_type, .. } => ConstantValue::Class(reference_type.clone()),
-            Entry::MethodType(value) => ConstantValue::MethodType(value.clone()),
+            Entry::MethodType(value) => {
+                ConstantValue::MethodType(self.method_descriptor(*value).clone())
+            }
             Entry::MethodHandle(value) => ConstantValue::Handle(value.clone()),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
@@ -327,37 +423,33 @@ impl<'input> ConstantPool<'input> {
         })
     }
 
-    fn resolve_entry(&self, raw: RawEntry<'input>) -> Result<Entry<'input>, ParseError> {
+    fn resolve_entry(&mut self, raw: RawEntry<'_>) -> Result<Entry, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => {
-                Entry::Utf8(JavaStr::from_cesu8(bytes).context("Invalid JVM modified UTF-8")?)
-            }
+            RawEntry::Utf8(bytes) => Entry::Utf8(
+                JavaStr::from_cesu8(bytes)
+                    .context("Invalid JVM modified UTF-8")?
+                    .to_owned(),
+            ),
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
             RawEntry::Double(value) => Entry::Double(value.into()),
             RawEntry::Class { name_index } => self.resolve_class(name_index.into())?,
-            RawEntry::String { string_index } => match self.entry(string_index.into())? {
-                Entry::Utf8(value) => Entry::String(value),
-                entry => return Err(entry.type_mismatch("Utf8")),
-            },
+            RawEntry::String { string_index } => Entry::String(self.utf8_id(string_index.into())?),
             RawEntry::NameAndType {
                 name_index,
                 descriptor_index,
             } => Entry::NameAndType(
                 self.resolve_name_and_type(name_index.into(), descriptor_index.into())?,
             ),
-            RawEntry::MethodType { descriptor_index } => Entry::MethodType(
-                self.get_str(descriptor_index.into())?
-                    .parse()
-                    .context("Invalid method descriptor")?,
-            ),
+            RawEntry::MethodType { descriptor_index } => {
+                Entry::MethodType(self.intern_method_descriptor(descriptor_index.into())?)
+            }
             RawEntry::Module { name_index } => Entry::Module(ModuleRef {
                 name: self.get_str(name_index.into())?.into_owned(),
             }),
             RawEntry::Package { name_index } => Entry::Package(
-                self.get_str(name_index.into())?
-                    .parse()
+                PackageName::try_from(self.get_utf8(name_index.into())?)
                     .context("Invalid package name")?,
             ),
             RawEntry::FieldRef {
@@ -429,11 +521,11 @@ impl<'input> ConstantPool<'input> {
         })
     }
 
-    fn resolve_class(&self, name_index: u16) -> Result<Entry<'input>, ParseError> {
-        let name = self.get_str(name_index)?;
-        let reference_type = name.parse().context("Invalid type reference")?;
-        let is_binary_name =
-            !(name.starts_with('[') || name.starts_with('L') && name.ends_with(';'));
+    fn resolve_class(&self, name_index: u16) -> Result<Entry, ParseError> {
+        let name = self.get_utf8(name_index)?;
+        let reference_type = ReferenceType::try_from(name).context("Invalid type reference")?;
+        let is_binary_name = !(name.as_bytes().starts_with(b"[")
+            || name.as_bytes().starts_with(b"L") && name.as_bytes().ends_with(b";"));
         Ok(Entry::Class {
             reference_type,
             is_binary_name,
@@ -441,21 +533,18 @@ impl<'input> ConstantPool<'input> {
     }
 
     fn resolve_name_and_type(
-        &self,
+        &mut self,
         name_index: u16,
         descriptor_index: u16,
     ) -> Result<NameAndType, ParseError> {
-        let name = self.get_str(name_index)?.into_owned();
-        let descriptor = self.get_str(descriptor_index)?;
-        Ok(if descriptor.starts_with('(') {
-            NameAndType::Method(
-                name,
-                descriptor.parse().context("Invalid method descriptor")?,
-            )
+        let name = self.get_java_string(name_index)?;
+        let descriptor = self.get_utf8(descriptor_index)?;
+        Ok(if descriptor.as_bytes().starts_with(b"(") {
+            NameAndType::Method(name, self.intern_method_descriptor(descriptor_index)?)
         } else {
             NameAndType::Field(
                 name,
-                descriptor.parse().context("Invalid field descriptor")?,
+                FieldType::try_from(descriptor).context("Invalid field descriptor")?,
             )
         })
     }
@@ -485,7 +574,7 @@ impl<'input> ConstantPool<'input> {
 }
 
 #[cfg(test)]
-impl Default for ConstantPool<'_> {
+impl Default for ConstantPool {
     fn default() -> Self {
         Self::new()
     }
@@ -517,6 +606,34 @@ impl RawEntry<'_> {
 mod tests {
     use super::*;
     use crate::jvm::{class_file::constant_pool::RawEntry, errors::ParseErrorKind};
+    use crate::types::Descriptor;
+
+    #[test]
+    fn checked_ids_preserve_strings_and_share_parsed_descriptors() {
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"()V"),
+            RawEntry::Long(0.into()),
+            RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
+        ]);
+        let mut pool = ConstantPool::from_raw(raw).unwrap();
+        for index in [0, 2, 3, 5] {
+            assert_eq!(
+                pool.utf8_id(index).unwrap_err().kind(),
+                ParseErrorKind::Malformed
+            );
+            assert_eq!(
+                pool.intern_method_descriptor(index).unwrap_err().kind(),
+                ParseErrorKind::Malformed
+            );
+        }
+        let name = pool.utf8_id(4).unwrap();
+        let descriptor = pool.intern_method_descriptor(1).unwrap();
+        assert_eq!(pool.intern_method_descriptor(1).unwrap(), descriptor);
+        assert_eq!(pool.method_descriptors.len(), 1);
+        let pool = pool.finish();
+        assert_eq!(pool.utf8(name).as_bytes(), &[0xed, 0xa0, 0x80]);
+        assert_eq!(pool.method_descriptor(descriptor).descriptor(), "()V");
+    }
 
     #[test]
     fn class_and_package_names_parse_with_distinct_tags() {
@@ -606,7 +723,7 @@ mod tests {
     fn interface_method_handles_use_interface_method_refs() {
         let method = MethodRef {
             owner: ReferenceType::Class("a/b/I".parse().unwrap()),
-            name: "m".to_owned(),
+            name: "m".into(),
             descriptor: "()V".parse().unwrap(),
         };
         let handle = MethodHandle::RefInvokeInterface(method);

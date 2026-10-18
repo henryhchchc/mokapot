@@ -133,7 +133,7 @@ mod tests {
     use crate::jvm::class::Version;
     use crate::jvm::class_file::constant_pool::ConstantPool;
 
-    fn context() -> ResolutionContext<'static> {
+    fn context() -> ResolutionContext {
         ResolutionContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::LATEST,

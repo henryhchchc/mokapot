@@ -9,7 +9,7 @@ use std::{
 use super::{Instruction, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Annotations, TypeAnnotation, errors::ParseError},
+    jvm::{Annotations, JavaString, TypeAnnotation, errors::ParseError, field::Signature},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
@@ -345,7 +345,7 @@ impl ExceptionTableEntry {
         const THROWABLE_NAME: &str = "java/lang/Throwable";
         self.catch_type
             .as_ref()
-            .is_none_or(|caught| caught.as_str() == THROWABLE_NAME)
+            .is_none_or(|caught| caught.as_java_str() == THROWABLE_NAME)
     }
 }
 
@@ -370,7 +370,7 @@ impl LocalVariableTable {
     pub(crate) fn merge_type(
         &mut self,
         key: LocalVariableId,
-        name: String,
+        name: JavaString,
         field_type: FieldType,
     ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
@@ -387,8 +387,8 @@ impl LocalVariableTable {
     pub(crate) fn merge_signature(
         &mut self,
         key: LocalVariableId,
-        name: String,
-        signature: String,
+        name: JavaString,
+        signature: Signature,
     ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref()
@@ -425,11 +425,11 @@ pub struct LocalVariableId {
 #[derive(Debug, Clone, Default)]
 pub struct LocalVariableTableEntry {
     /// The name of the variable.
-    pub name: Option<String>,
+    pub name: Option<JavaString>,
     /// The type of the variable.
     pub var_type: Option<FieldType>,
     /// The generic signature of the variable.
-    pub signature: Option<String>,
+    pub signature: Option<Signature>,
 }
 
 /// The type of a value in the stack map table for verification.

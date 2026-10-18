@@ -6,8 +6,10 @@ mod name_validation;
 pub mod package_name;
 pub mod reference_type;
 
+use crate::jvm::JavaString;
+
 /// Trait for types that have a descriptor.
 pub trait Descriptor {
     /// Returns the descriptor of the type.
-    fn descriptor(&self) -> String;
+    fn descriptor(&self) -> JavaString;
 }

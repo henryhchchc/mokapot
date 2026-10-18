@@ -2,7 +2,7 @@
 
 use derive_more::Display;
 
-use super::Method;
+use super::{JavaString, Method};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
@@ -20,7 +20,7 @@ pub struct FieldRef {
     /// A reference to the class or array type that contains the field.
     pub owner: ReferenceType,
     /// The name of the field.
-    pub name: String,
+    pub name: JavaString,
     /// The type of the field.
     pub field_type: FieldType,
 }
@@ -33,7 +33,7 @@ pub struct MethodRef {
     /// The reference to the class or array type containing the method.
     pub owner: ReferenceType,
     /// The name of the method.
-    pub name: String,
+    pub name: JavaString,
     /// The descriptor of the method.
     pub descriptor: MethodDescriptor,
 }
@@ -71,7 +71,7 @@ pub(crate) mod tests {
     fn method_ref(name: &str, descriptor: &str) -> MethodRef {
         MethodRef {
             owner: ReferenceType::Class("org/mokapot/Test".parse().unwrap()),
-            name: name.to_owned(),
+            name: name.into(),
             descriptor: descriptor.parse().unwrap(),
         }
     }

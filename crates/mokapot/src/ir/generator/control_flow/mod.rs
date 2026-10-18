@@ -22,21 +22,21 @@ use crate::{
 };
 
 /// Builds the reachable control-flow graph used by the later dataflow stage.
-pub(super) fn analyze(method: &Method) -> Result<Cfg<'_>, Error> {
+pub(super) fn analyze(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     builder::build(method)
 }
 
 /// A control-flow graph whose block identities are fixed before dataflow
 /// propagation begins.
 pub(crate) struct Cfg<'method> {
-    method: &'method Method,
+    method: Method<'method>,
     body: &'method MethodBody,
     entry: BlockId,
     blocks: HashMap<BlockId, CfgNode>,
 }
 
 impl<'method> Cfg<'method> {
-    pub const fn method(&self) -> &'method Method {
+    pub const fn method(&self) -> Method<'method> {
         self.method
     }
 

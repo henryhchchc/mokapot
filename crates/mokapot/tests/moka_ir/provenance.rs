@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn builds_ir_blocks_and_provenance() {
-    let ir = MokaIRMethod::from_method(&get_test_method()).unwrap();
+    let ir = get_test_ir();
 
     // The `ldc` at `0x0000` may fail, so lifting folds it into the block's
     // `Try` terminator instead of an ordinary operation.

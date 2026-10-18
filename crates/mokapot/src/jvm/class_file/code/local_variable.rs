@@ -1,11 +1,10 @@
 //! Local variable types used during attribute parsing.
 use super::raw;
 
-use std::str::FromStr;
-
 use super::super::{ParseError, ResolutionContext, resolve::Resolve};
 use crate::{
     jvm::{
+        JavaString,
         code::{LocalVariableId, ProgramCounter},
         errors::ParsingErrorContext,
     },
@@ -15,15 +14,15 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct LocalVariableDescriptorEntry {
     pub id: LocalVariableId,
-    pub name: String,
+    pub name: JavaString,
     pub field_type: FieldType,
 }
 
 #[derive(Debug)]
 pub(crate) struct LocalVariableSignatureEntry {
     pub id: LocalVariableId,
-    pub name: String,
-    pub signature: String,
+    pub name: JavaString,
+    pub signature: crate::jvm::field::Signature,
 }
 
 impl Resolve for raw::LocalVariableInfo {
@@ -41,10 +40,9 @@ impl Resolve for raw::LocalVariableInfo {
         let length: u16 = length.into();
 
         let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index.into())?.into_owned();
-        let descriptor = ctx.constant_pool.get_str(descriptor_index.into())?;
-        let field_type =
-            FieldType::from_str(&descriptor).context("Invalid field type descriptor")?;
+        let name = ctx.constant_pool.get_java_string(name_index.into())?;
+        let field_type = FieldType::try_from(ctx.constant_pool.get_utf8(descriptor_index.into())?)
+            .context("Invalid field type descriptor")?;
         let id = LocalVariableId {
             range: effective_range,
             index: index.into(),
@@ -72,11 +70,8 @@ impl Resolve for raw::LocalVariableTypeInfo {
         let length: u16 = length.into();
 
         let range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.get_str(name_index.into())?.into_owned();
-        let signature = ctx
-            .constant_pool
-            .get_str(signature_index.into())?
-            .into_owned();
+        let name = ctx.constant_pool.get_java_string(name_index.into())?;
+        let signature = ctx.constant_pool.get_java_string(signature_index.into())?;
         let id = LocalVariableId {
             range,
             index: index.into(),

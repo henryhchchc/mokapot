@@ -74,7 +74,7 @@ fn returns_without_a_handler_unwind_conservatively() {
     );
     let monitor_free = method([(0, Instruction::Return)], "()V", vec![]);
 
-    let cases: [(&str, Method, ProgramCounter); 3] = [
+    let cases: [(&str, crate::tests::TestMethod, ProgramCounter); 3] = [
         ("a synchronized method", synchronized, 0.into()),
         ("an explicit monitor operation", monitor, 2.into()),
         ("a monitor-free method", monitor_free, 0.into()),

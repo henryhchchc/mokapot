@@ -155,7 +155,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         .successors()
         .skip(1)
         .map(|it| match it.transfer() {
-            Some(ControlTransfer::Exception(Some(caught))) => caught.as_str(),
+            Some(ControlTransfer::Exception(Some(caught))) => caught.as_java_str(),
             _ => panic!(),
         })
         .collect::<Vec<_>>();

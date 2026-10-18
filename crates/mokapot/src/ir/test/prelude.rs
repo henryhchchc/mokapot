@@ -13,7 +13,6 @@ use crate::{
     analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
     jvm::{
-        Method,
         code::{ExceptionTableEntry, Instruction, ProgramCounter},
         method::AccessFlags,
         references::MethodRef,
@@ -83,7 +82,7 @@ pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<ExceptionTableEntry>,
-) -> Method
+) -> crate::tests::TestMethod
 where
     I: IntoIterator<Item = (PC, Instruction)>,
     PC: Into<ProgramCounter>,
@@ -110,7 +109,7 @@ pub(crate) fn ref_t(name: &str) -> ReferenceType {
 pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
     MethodRef {
         owner: ref_t("java/lang/Object"),
-        name: name.to_owned(),
+        name: name.into(),
         descriptor: descriptor.parse().expect("a valid method descriptor"),
     }
 }
@@ -154,7 +153,7 @@ pub(crate) fn method_entry(
 pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) -> MokaIRMethod {
     MokaIRMethod {
         access_flags: AccessFlags::PUBLIC | AccessFlags::STATIC,
-        name: "test".to_owned(),
+        name: "test".into(),
         descriptor: "()V".parse().expect("a valid descriptor"),
         owner: cls_name("java/lang/Object"),
         entry: method_entry(entry, []),

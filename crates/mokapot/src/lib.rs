@@ -4,6 +4,9 @@
 //! ## Features
 #![doc = document_features::document_features!()]
 
+#[cfg(test)]
+extern crate self as mokapot;
+
 pub mod analysis;
 
 pub(crate) mod intrinsics;

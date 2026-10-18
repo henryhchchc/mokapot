@@ -64,6 +64,7 @@ pub(crate) use extract_attributes;
 #[cfg(test)]
 mod tests {
     use crate::jvm::{
+        JavaString,
         class_file::attribute::Attribute,
         errors::{ParseError, ParseErrorKind},
     };
@@ -90,7 +91,7 @@ mod tests {
         );
         for attributes in [
             vec![Ok(Synthetic), Ok(Synthetic)],
-            vec![Ok(Signature(String::new()))],
+            vec![Ok(Signature(JavaString::default()))],
             vec![Err(ParseError::malform("invalid attribute"))],
         ] {
             assert_eq!(

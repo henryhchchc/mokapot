@@ -171,7 +171,7 @@ impl Display for FieldFormatter<'_> {
 /// formatted as text. This formatter handles method declarations including
 /// access modifiers, return type, name, and parameters.
 pub struct MethodFormatter<'a> {
-    method: &'a Method,
+    method: Method<'a>,
 }
 
 impl<'a> MethodFormatter<'a> {
@@ -180,7 +180,7 @@ impl<'a> MethodFormatter<'a> {
     /// # Arguments
     ///
     /// * `method` - Reference to the Method to format
-    pub const fn new(method: &'a Method) -> Self {
+    pub const fn new(method: Method<'a>) -> Self {
         Self { method }
     }
 
@@ -194,7 +194,7 @@ impl<'a> MethodFormatter<'a> {
     ///
     /// A space-separated string of access flag keywords
     pub fn format_access_flags(&self) -> String {
-        let flags = self.method.access_flags;
+        let flags = self.method.access_flags();
         let mut result = Vec::new();
 
         if flags.contains(method::AccessFlags::PUBLIC) {
@@ -256,16 +256,17 @@ impl Display for MethodFormatter<'_> {
 
         // Convert the method's return type descriptor to a string
         // A return type can either be a specific type or void
-        let return_type = match &self.method.descriptor.return_type {
+        let descriptor = self.method.descriptor();
+        let return_type = match &descriptor.return_type {
             method_descriptor::ReturnType::Some(field_type) => field_type.to_string(),
             method_descriptor::ReturnType::Void => "void".to_string(),
         };
 
         // Write the return type and method name
-        write!(f, "{return_type} {}(", self.method.name)?;
+        write!(f, "{return_type} {}(", self.method.name())?;
 
         // Write the parameter list, comma-separated
-        for (i, param_type) in self.method.descriptor.parameters_types.iter().enumerate() {
+        for (i, param_type) in descriptor.parameters_types.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
