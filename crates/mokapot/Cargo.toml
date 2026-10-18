@@ -28,6 +28,10 @@ name = "jdk-ir"
 harness = false
 name = "jdk-path-conditions"
 
+[[bench]]
+harness = false
+name = "jvm-string"
+
 [dependencies]
 bitflags = { workspace = true }
 derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
