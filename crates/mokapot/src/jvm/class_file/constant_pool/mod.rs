@@ -90,36 +90,38 @@ impl<'a> RawConstantPool<'a> {
 /// An entry in the [`RawConstantPool`].
 ///
 /// Equality compares wire bytes, including floating-point sign and NaN payload bits.
+/// Discriminants match the JVM constant-pool tags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum RawEntry<'a> {
     /// Modified UTF-8 bytes borrowed from the input.
     #[doc = see_jvm_spec!(4, 4, 7)]
-    Utf8(&'a [u8]),
+    Utf8(&'a [u8]) = 1,
     /// An integer.
     #[doc = see_jvm_spec!(4, 4, 4)]
-    Integer(I32),
+    Integer(I32) = 3,
     /// A float.
     #[doc = see_jvm_spec!(4, 4, 4)]
-    Float(F32),
+    Float(F32) = 4,
     /// A long.
     #[doc = see_jvm_spec!(4, 4, 5)]
-    Long(I64),
+    Long(I64) = 5,
     /// A double.
     #[doc = see_jvm_spec!(4, 4, 5)]
-    Double(F64),
+    Double(F64) = 6,
     /// A class.
     #[doc = see_jvm_spec!(4, 4, 1)]
     Class {
         /// The index of its internal name or array descriptor.
         name_index: U16,
-    },
+    } = 7,
     /// A string.
     #[doc = see_jvm_spec!(4, 4, 3)]
     String {
         /// The index in the constant pool of its UTF-8 value.
         /// The entry at that index must be a [`RawEntry::Utf8`].
         string_index: U16,
-    },
+    } = 8,
     /// A field reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     FieldRef {
@@ -129,7 +131,7 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the name and type of the field.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
         name_and_type_index: U16,
-    },
+    } = 9,
     /// A method reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     MethodRef {
@@ -139,7 +141,7 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the name and type of the method.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
         name_and_type_index: U16,
-    },
+    } = 10,
     /// An interface method reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     InterfaceMethodRef {
@@ -149,7 +151,7 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the name and type of the method.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
         name_and_type_index: U16,
-    },
+    } = 11,
     /// A name and type.
     #[doc = see_jvm_spec!(4, 4, 6)]
     NameAndType {
@@ -159,7 +161,7 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
         /// The entry at that index must be a [`RawEntry::Utf8`].
         descriptor_index: U16,
-    },
+    } = 12,
     /// A method handle.
     #[doc = see_jvm_spec!(4, 4, 8)]
     MethodHandle {
@@ -168,14 +170,14 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the method handle.
         /// The entry at that index must be a [`RawEntry::MethodRef`], [`RawEntry::InterfaceMethodRef`] or [`RawEntry::FieldRef`].
         reference_index: U16,
-    },
+    } = 15,
     /// A method type.
     #[doc = see_jvm_spec!(4, 4, 9)]
     MethodType {
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
         /// The entry at that index must be a [`RawEntry::Utf8`].
         descriptor_index: U16,
-    },
+    } = 16,
     /// A dynamically computed constant.
     #[doc = see_jvm_spec!(4, 4, 10)]
     Dynamic {
@@ -184,7 +186,7 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the name and type of the constant.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
         name_and_type_index: U16,
-    },
+    } = 17,
     /// A dynamic call site linked through the bootstrap methods table.
     #[doc = see_jvm_spec!(4, 4, 10)]
     InvokeDynamic {
@@ -193,21 +195,21 @@ pub enum RawEntry<'a> {
         /// The index in the constant pool of the name and type of the constant.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
         name_and_type_index: U16,
-    },
+    } = 18,
     /// A module.
     #[doc = see_jvm_spec!(4, 4, 11)]
     Module {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`RawEntry::Utf8`].
         name_index: U16,
-    },
+    } = 19,
     /// A package.
     #[doc = see_jvm_spec!(4, 4, 12)]
     Package {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`RawEntry::Utf8`].
         name_index: U16,
-    },
+    } = 20,
 }
 
 impl RawEntry<'_> {
