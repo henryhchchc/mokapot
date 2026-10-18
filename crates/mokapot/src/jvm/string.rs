@@ -2,9 +2,11 @@
 
 use std::{
     borrow::{Borrow, Cow},
-    fmt,
+    fmt::{self, Write},
     ops::Deref,
 };
+
+mod cesu8;
 
 /// A borrowed JVM modified UTF-8 string, including preserved malformed bytes.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,7 +34,7 @@ impl JStr {
     /// # Errors
     /// Returns an error for undecodable bytes or unpaired surrogates.
     pub fn to_str(&self) -> Result<Cow<'_, str>, JStrDecodeError> {
-        cesu8::from_java_cesu8(&self.bytes).map_err(|_| JStrDecodeError)
+        cesu8::decode(&self.bytes)
     }
 }
 
@@ -48,19 +50,55 @@ impl ToOwned for JStr {
 
 impl fmt::Debug for JStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.to_str() {
-            Ok(value) => fmt::Debug::fmt(&value, f),
-            Err(_) => fmt::Debug::fmt(bstr::BStr::new(&self.bytes), f),
+        if let Ok(text) = cesu8::as_str(&self.bytes) {
+            return fmt::Debug::fmt(text, f);
         }
+        f.write_char('"')?;
+        for ch in cesu8::chars(&self.bytes) {
+            match ch {
+                Ok('\'') => f.write_char('\'')?,
+                Ok(ch) => write!(f, "{}", ch.escape_debug())?,
+                Err(cesu8::DecodeError::InvalidEncoding(bytes)) => {
+                    for byte in bytes {
+                        write!(f, "{}", byte.escape_ascii())?;
+                    }
+                }
+                Err(cesu8::DecodeError::UnpairedSurrogate(unit)) => {
+                    write!(f, "\\u{{{unit:x}}}")?;
+                }
+            }
+        }
+        f.write_char('"')
     }
 }
 
 impl fmt::Display for JStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.to_str() {
-            Ok(value) => fmt::Display::fmt(&value, f),
-            Err(_) => fmt::Display::fmt(bstr::BStr::new(&self.bytes), f),
+        if let Ok(text) = cesu8::as_str(&self.bytes) {
+            return fmt::Display::fmt(text, f);
         }
+        let chars = cesu8::chars(&self.bytes)
+            .map(|ch| ch.unwrap_or(char::REPLACEMENT_CHARACTER))
+            .take(f.precision().unwrap_or(usize::MAX));
+        let padding = f
+            .width()
+            .map_or(0, |width| width.saturating_sub(chars.clone().count()));
+        let before = match f.align().unwrap_or(fmt::Alignment::Left) {
+            fmt::Alignment::Left => 0,
+            fmt::Alignment::Right => padding,
+            fmt::Alignment::Center => padding / 2,
+        };
+        let fill = f.fill();
+        for _ in 0..before {
+            f.write_char(fill)?;
+        }
+        for ch in chars {
+            f.write_char(ch)?;
+        }
+        for _ in before..padding {
+            f.write_char(fill)?;
+        }
+        Ok(())
     }
 }
 
@@ -126,7 +164,7 @@ impl From<Vec<u8>> for JString {
 
 impl From<String> for JString {
     fn from(value: String) -> Self {
-        match cesu8::to_java_cesu8(&value) {
+        match cesu8::encode(&value) {
             Cow::Borrowed(_) => Self {
                 bytes: value.into_bytes(),
             },
@@ -138,7 +176,7 @@ impl From<String> for JString {
 impl From<&str> for JString {
     fn from(value: &str) -> Self {
         Self {
-            bytes: cesu8::to_java_cesu8(value).into_owned(),
+            bytes: cesu8::encode(value).into_owned(),
         }
     }
 }
@@ -207,6 +245,17 @@ mod tests {
             (&[0xc0, 0x80][..], "\0", r#""\0""#),
             (&[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80], "😀", r#""😀""#),
             (&[0xff], "�", r#""\xff""#),
+            (&[0], "�", r#""\x00""#),
+            (
+                &[0xed, 0xa0, 0x80, 0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
+                "�😀",
+                r#""\u{d800}😀""#,
+            ),
+            (
+                &[0xe1, 0x80, b'a', 0xc0, 0x80, 0xff],
+                "�a\0�",
+                r#""\xe1\x80a\0\xff""#,
+            ),
         ] {
             let borrowed = JStr::from_bytes(bytes);
             let owned = borrowed.to_owned();
@@ -214,6 +263,9 @@ mod tests {
             assert_eq!(format!("{borrowed:?}"), debug);
             assert_eq!(format!("{owned}"), display);
             assert_eq!(format!("{owned:?}"), debug);
+            assert_eq!(format!("{borrowed:8}"), format!("{display:8}"));
+            assert_eq!(format!("{borrowed:*>8.2}"), format!("{display:*>8.2}"));
+            assert_eq!(format!("{borrowed:*^7}"), format!("{display:*^7}"));
         }
     }
 
@@ -233,6 +285,16 @@ mod tests {
         }
         for bytes in [&[0xed, 0xa0, 0x80][..], &[0xff]] {
             assert_eq!(JStr::from_bytes(bytes).to_str(), Err(JStrDecodeError));
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn text_formatting_matches_rust(text: String) {
+            let encoded = JString::from(format!("\0{text}"));
+            let expected = format!("\0{text}");
+            proptest::prop_assert_eq!(format!("{encoded}"), expected.as_str());
+            proptest::prop_assert_eq!(format!("{encoded:?}"), format!("{expected:?}"));
         }
     }
 }
