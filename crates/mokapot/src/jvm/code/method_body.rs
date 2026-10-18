@@ -45,7 +45,9 @@ impl MethodBody {
     }
 }
 
-/// A list of instructions.
+/// A list of instructions ordered by program counter.
+///
+/// Collecting duplicate program counters retains the last instruction for each.
 ///
 /// ```
 /// use mokapot::jvm::code::{InstructionList, ProgramCounter, Instruction};
@@ -61,14 +63,14 @@ impl MethodBody {
 /// assert_eq!(instructions.next_pc_of(&end), None);
 /// ```
 #[derive(Debug, Clone)]
-pub struct InstructionList<I>(BTreeMap<ProgramCounter, I>);
+pub struct InstructionList<I>(Vec<(ProgramCounter, I)>);
 
 impl<I, T> From<T> for InstructionList<I>
 where
     T: Into<BTreeMap<ProgramCounter, I>>,
 {
     fn from(value: T) -> Self {
-        Self(value.into())
+        Self(value.into().into_iter().collect())
     }
 }
 
@@ -77,7 +79,7 @@ impl<I> IntoIterator for InstructionList<I> {
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = <BTreeMap<ProgramCounter, I> as IntoIterator>::IntoIter;
+    type IntoIter = std::vec::IntoIter<(ProgramCounter, I)>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -111,9 +113,32 @@ impl<I> InstructionList<I> {
         &self,
         range: impl RangeBounds<ProgramCounter>,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> {
-        self.0
-            .range(range)
-            .map(|(&pc, instruction)| (pc, instruction))
+        match (range.start_bound(), range.end_bound()) {
+            (Bound::Excluded(start), Bound::Excluded(end)) => {
+                assert!(
+                    start < end,
+                    "Excluded range bounds must be strictly increasing"
+                );
+            }
+            (
+                Bound::Included(start) | Bound::Excluded(start),
+                Bound::Included(end) | Bound::Excluded(end),
+            ) => assert!(start <= end, "Range bounds must be increasing"),
+            _ => {}
+        }
+        let start = match range.start_bound() {
+            Bound::Included(pc) => self.0.partition_point(|(key, _)| key < pc),
+            Bound::Excluded(pc) => self.0.partition_point(|(key, _)| key <= pc),
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(pc) => self.0.partition_point(|(key, _)| key <= pc),
+            Bound::Excluded(pc) => self.0.partition_point(|(key, _)| key < pc),
+            Bound::Unbounded => self.0.len(),
+        };
+        self.0[start..end]
+            .iter()
+            .map(|(pc, instruction)| (*pc, instruction))
     }
 }
 
@@ -136,7 +161,17 @@ where
 
 impl<I> FromIterator<(ProgramCounter, I)> for InstructionList<I> {
     fn from_iter<T: IntoIterator<Item = (ProgramCounter, I)>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+        let mut instructions: Vec<_> = iter.into_iter().collect();
+        instructions.sort_by_key(|(pc, _)| *pc);
+        instructions.dedup_by(|next, previous| {
+            if next.0 == previous.0 {
+                std::mem::swap(&mut next.1, &mut previous.1);
+                true
+            } else {
+                false
+            }
+        });
+        Self(instructions)
     }
 }
 
@@ -144,54 +179,53 @@ impl<I> InstructionList<I> {
     /// Returns the instruction at the given program counter.
     #[must_use]
     pub fn get(&self, pc: &ProgramCounter) -> Option<&I> {
-        self.0.get(pc)
+        self.0
+            .binary_search_by_key(pc, |(pc, _)| *pc)
+            .ok()
+            .map(|index| &self.0[index].1)
     }
 
     /// Returns the first instruction in the list.
     #[must_use]
     pub fn entry_point(&self) -> Option<(ProgramCounter, &I)> {
-        self.0.first_key_value().map(|(pc, insn)| (*pc, insn))
+        self.0.first().map(|(pc, insn)| (*pc, insn))
     }
 
     /// Returns the program counter of the next instruction after the given one.
     #[must_use]
     pub fn next_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
-        self.0
-            .range((Bound::Excluded(pc), Bound::Unbounded))
-            .next()
-            .map(|(k, _)| *k)
+        let index = self.0.partition_point(|(key, _)| key <= pc);
+        self.0.get(index).map(|(pc, _)| *pc)
     }
 
     /// Returns the program counter of the previous instruction before the given one.
     #[must_use]
     pub fn prev_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
-        self.0
-            .range((Bound::Unbounded, Bound::Excluded(pc)))
-            .next_back()
-            .map(|(k, _)| *k)
+        let index = self.0.partition_point(|(key, _)| key < pc);
+        index.checked_sub(1).map(|index| self.0[index].0)
     }
 
     /// Returns the number of instructions in the list.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns whether the list is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
 
 pub mod instruction_list {
-    use std::collections::btree_map;
+    use std::slice;
 
     use crate::jvm::code::ProgramCounter;
 
     #[derive(Debug)]
     pub struct Iter<'a, I> {
-        pub(super) inner: btree_map::Iter<'a, ProgramCounter, I>,
+        pub(super) inner: slice::Iter<'a, (ProgramCounter, I)>,
     }
 
     impl<'a, I> Iterator for Iter<'a, I> {
