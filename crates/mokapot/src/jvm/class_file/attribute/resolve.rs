@@ -35,7 +35,7 @@ impl Resolve for raw::Signature {
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
             .get_str(self.signature_index.get())
-            .map(str::to_owned)
+            .map(std::borrow::Cow::into_owned)
     }
 }
 
@@ -45,7 +45,7 @@ impl Resolve for raw::SourceFile {
     fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
             .get_str(self.sourcefile_index.get())
-            .map(str::to_owned)
+            .map(std::borrow::Cow::into_owned)
     }
 }
 
@@ -176,7 +176,7 @@ impl Resolve for raw::MethodParameterInfo {
         let name = if name_index == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_str(name_index)?.to_owned())
+            Some(ctx.constant_pool.get_str(name_index)?.into_owned())
         };
         let access_flags =
             parse_flags::<ParameterAccessFlags>(access_flags, "Invalid parameter access flags")?;

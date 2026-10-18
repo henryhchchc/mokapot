@@ -54,7 +54,7 @@ impl Resolve for MethodInfo<'_> {
         } = raw;
         let access_flags =
             parse_flags::<method::AccessFlags>(access_flags, "Invalid method access flags")?;
-        let name = ctx.constant_pool.get_str(name_index)?.to_owned();
+        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
         let descriptor: MethodDescriptor = ctx
             .constant_pool
             .get_str(descriptor_index)?

@@ -15,9 +15,9 @@ fn builds_ir_blocks_and_provenance() {
     assert!(matches!(
         first,
         Operation::Definition {
-            expr: Expression::Const(ConstantValue::String(JavaString::Utf8(value))),
+            expr: Expression::Const(ConstantValue::String(value)),
             ..
-        } if value == "233"
+        } if value.to_str().as_deref() == Ok("233")
     ));
 
     assert_eq!(

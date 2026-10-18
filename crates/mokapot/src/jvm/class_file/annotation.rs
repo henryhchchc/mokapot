@@ -54,7 +54,7 @@ impl Resolve for raw::Annotation {
             .map(|(name_idx, raw_value)| {
                 let element_name = ctx.constant_pool.get_str(name_idx)?;
                 let element_value = raw_value.resolve(ctx)?;
-                Ok((element_name.to_owned(), element_value))
+                Ok((element_name.into_owned(), element_value))
             })
             .try_collect_exact()?;
         Ok(Annotation {
@@ -92,7 +92,7 @@ impl Resolve for raw::TypeAnnotation<'_> {
             .map(|(name_idx, value)| {
                 let element_name = ctx.constant_pool.get_str(name_idx)?;
                 let element_value = value.resolve(ctx)?;
-                Ok((element_name.to_owned(), element_value))
+                Ok((element_name.into_owned(), element_value))
             })
             .try_collect_exact()?;
         Ok(TypeAnnotation {
@@ -290,7 +290,7 @@ impl Resolve for raw::ElementValueInfo {
                     .get_str(type_name_index)?
                     .parse()
                     .context("Invalid enum type descriptor")?;
-                let const_name = cp.get_str(const_name_index)?.to_owned();
+                let const_name = cp.get_str(const_name_index)?.into_owned();
                 Ok(ElementValue::EnumConstant {
                     enum_type,
                     const_name,

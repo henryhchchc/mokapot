@@ -143,7 +143,7 @@ impl Resolve for &AttributeInfo {
         let mut info = &self.info;
         let bytes = &mut info;
 
-        let result = match name {
+        let result = match name.as_ref() {
             "ConstantValue" => {
                 decode_resolved::<raw::ConstantValue>(bytes, ctx).map(Attribute::ConstantValue)
             }

@@ -10,7 +10,7 @@ use mokapot::{
         BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, Operation,
         Successor, Terminator, expression::Expression,
     },
-    jvm::{Class, ConstantValue, JavaString, Method, code::ProgramCounter},
+    jvm::{Class, ConstantValue, Method, code::ProgramCounter},
 };
 
 mod provenance;

@@ -23,9 +23,9 @@ use crate::{jvm::class::Version, types::class_name::ClassName};
 
 /// Class-wide inputs for resolving raw class-file structures.
 #[derive(Debug, Clone)]
-pub(super) struct ResolutionContext {
+pub(super) struct ResolutionContext<'input> {
     /// Constants referenced by this class.
-    pub constant_pool: constant_pool::ConstantPool,
+    pub constant_pool: constant_pool::ConstantPool<'input>,
     /// Format version used for validation.
     pub class_version: Version,
     /// Internal name of this class.

@@ -30,6 +30,7 @@ name = "jdk-path-conditions"
 
 [dependencies]
 bitflags = { workspace = true }
+bstr = { workspace = true }
 cesu8 = { workspace = true }
 derive_more = { workspace = true, features = ["as_ref", "debug", "deref", "display", "from", "into"] }
 document-features = { workspace = true }
