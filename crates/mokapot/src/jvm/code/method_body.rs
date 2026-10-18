@@ -101,6 +101,11 @@ impl<'i, I> IntoIterator for &'i InstructionList<I> {
 }
 
 impl<I> InstructionList<I> {
+    pub(crate) fn from_ordered(instructions: Vec<(ProgramCounter, I)>) -> Self {
+        debug_assert!(instructions.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        Self(instructions)
+    }
+
     /// Creates an iterator over the instructions.
     pub fn iter(
         &self,

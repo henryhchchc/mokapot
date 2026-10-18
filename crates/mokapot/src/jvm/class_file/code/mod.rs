@@ -15,8 +15,8 @@ use crate::jvm::{
     Annotations,
     class_file::code::raw_instruction::RawInstruction,
     code::{
-        ExceptionTableEntry, Instruction, LineNumberTableEntry, LocalVariableTable, MethodBody,
-        ProgramCounter,
+        ExceptionTableEntry, Instruction, InstructionList, LineNumberTableEntry,
+        LocalVariableTable, MethodBody, ProgramCounter,
     },
 };
 
@@ -71,12 +71,13 @@ impl Resolve for Code<'_> {
             attributes,
         } = raw;
 
-        let instructions = RawInstruction::iter_from_bytes(code)
-            .map(|entry| {
-                let (pc, raw) = entry?;
-                Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool).map(|it| (pc, it))
-            })
-            .collect::<Result<_, ParseError>>()?;
+        let mut instructions = Vec::new();
+        for entry in RawInstruction::iter_from_bytes(code) {
+            let (pc, raw) = entry?;
+            let instruction = Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool)?;
+            instructions.push((pc, instruction));
+        }
+        let instructions = InstructionList::from_ordered(instructions);
 
         let exception_table = exception_table
             .iter()
@@ -137,6 +138,38 @@ mod tests {
             constant_pool: ConstantPool::new(),
             class_version: Version::LATEST,
             current_class_name: "Test".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn instructions_preserve_offsets_and_reject_invalid_bytecode() {
+        let context = context();
+        let resolve = |code| {
+            Code {
+                max_stack: 2,
+                max_locals: 0,
+                code,
+                exception_table: &[],
+                attributes: Box::new([]),
+            }
+            .resolve(&context)
+        };
+        let body = resolve(&[0x10, 42, 0x04, 0x60, 0xac]).unwrap();
+        let instructions: Vec<_> = body.instructions.into_iter().collect();
+        assert_eq!(
+            instructions,
+            [
+                (0.into(), Instruction::BiPush(42)),
+                (2.into(), Instruction::IConst1),
+                (3.into(), Instruction::IAdd),
+                (4.into(), Instruction::IReturn),
+            ]
+        );
+        for bytes in [&[0x10][..], &[0xb2, 0, 1], &[0xcb]] {
+            assert_eq!(
+                resolve(bytes).unwrap_err().kind(),
+                crate::jvm::errors::ParseErrorKind::Malformed
+            );
         }
     }
 
