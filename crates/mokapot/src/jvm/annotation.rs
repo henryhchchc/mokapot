@@ -1,6 +1,6 @@
 //! Module for the APIs for the annotation in JVM.
 use super::{
-    Annotation, ConstantValue, JString,
+    Annotation, ConstantValue, JavaString,
     code::{LocalVariableId, ProgramCounter},
 };
 use crate::{
@@ -18,7 +18,7 @@ pub enum ElementValue {
     /// A constant value in primitive type.
     Primitive(PrimitiveType, ConstantValue),
     /// A constant value in String type.
-    String(JString),
+    String(JavaString),
     /// An enum constant.
     EnumConstant {
         /// The type of the enum.
