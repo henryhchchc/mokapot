@@ -1,10 +1,10 @@
 //! Eagerly resolved JVM constant-pool values.
 
-use std::num::NonZeroU16;
+use std::{fmt, num::NonZeroU16, ops::Range};
 
 use crate::{
     jvm::{
-        ConstantValueView, JavaStr, JavaString,
+        ConstantValueView, JavaStr,
         class::{MethodHandleData, MethodHandleView},
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
@@ -21,12 +21,25 @@ use crate::{
 };
 
 /// An immutable constant pool whose entries have been resolved to typed values.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ConstantPool {
     inner: PoolStorage<Entry>,
+    utf8_bytes: Vec<u8>,
     method_descriptors: ValueCache<MethodDescriptor>,
     field_types: ValueCache<FieldType>,
     return_types: ValueCache<ReturnType>,
+}
+
+impl fmt::Debug for ConstantPool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConstantPool")
+            .field("inner", &self.inner)
+            .field("utf8_bytes_len", &self.utf8_bytes.len())
+            .field("method_descriptors", &self.method_descriptors)
+            .field("field_types", &self.field_types)
+            .field("return_types", &self.return_types)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,7 +123,7 @@ pub(crate) struct InvokeDynamicId(NonZeroU16);
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
     /// A string in JVM modified UTF-8 encoding.
-    Utf8(JavaString),
+    Utf8(Range<usize>),
     /// An integer.
     Integer(i32),
     /// A float.
@@ -399,7 +412,11 @@ impl ConstantPool {
     }
     pub(crate) fn get_utf8(&self, index: u16) -> Result<&JavaStr, ParseError> {
         match self.entry(index)? {
-            Entry::Utf8(value) => Ok(value.as_java_str()),
+            Entry::Utf8(range) => {
+                let bytes = &self.utf8_bytes[range.clone()];
+                // SAFETY: append_utf8 records the exact bounds of a validated JavaStr.
+                Ok(unsafe { JavaStr::from_cesu8_unchecked(bytes) })
+            }
             entry => Err(entry.type_mismatch("Utf8")),
         }
     }
@@ -446,8 +463,19 @@ impl ConstantPool {
     pub fn from_raw(raw: RawConstantPool<'_>) -> Result<Self, ParseError> {
         let count = raw.count();
         let mut pending = raw.inner.into_slots();
+        let utf8_capacity = pending.iter().try_fold(0_usize, |total, slot| {
+            let len = match slot {
+                Slot::Entry(RawEntry::Utf8(bytes)) => bytes.len(),
+                _ => 0,
+            };
+            total
+                .checked_add(len)
+                .filter(|&len| len <= isize::MAX.unsigned_abs())
+                .context("Constant pool strings exceed allocation limits")
+        })?;
         let mut pool = Self {
             inner: PoolStorage::with_padding(count),
+            utf8_bytes: Vec::with_capacity(utf8_capacity),
             method_descriptors: ValueCache::new(count),
             field_types: ValueCache::new(count),
             return_types: ValueCache::new(count),
@@ -519,11 +547,10 @@ impl ConstantPool {
 
     fn resolve_entry(&mut self, raw: RawEntry<'_>) -> Result<Entry, ParseError> {
         Ok(match raw {
-            RawEntry::Utf8(bytes) => Entry::Utf8(
-                JavaStr::from_cesu8(bytes)
-                    .context("Invalid JVM modified UTF-8")?
-                    .to_owned(),
-            ),
+            RawEntry::Utf8(bytes) => {
+                let value = JavaStr::from_cesu8(bytes).context("Invalid JVM modified UTF-8")?;
+                Entry::Utf8(self.append_utf8(value))
+            }
             RawEntry::Integer(value) => Entry::Integer(value.into()),
             RawEntry::Float(value) => Entry::Float(value.into()),
             RawEntry::Long(value) => Entry::Long(value.into()),
@@ -605,6 +632,12 @@ impl ConstantPool {
                 self.resolve_method_handle(reference_kind, reference_index.into())?,
             ),
         })
+    }
+
+    fn append_utf8(&mut self, value: &JavaStr) -> Range<usize> {
+        let start = self.utf8_bytes.len();
+        self.utf8_bytes.extend_from_slice(value.as_bytes());
+        start..self.utf8_bytes.len()
     }
 
     fn resolve_class(&self, name_index: u16) -> Result<Entry, ParseError> {
