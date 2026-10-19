@@ -2,7 +2,7 @@
 
 use crate::jvm::{
     Class, ConstantValue,
-    class::MethodHandle,
+    class::MethodHandleView,
     class_file::constant_pool::{ConstantValueId, MethodHandleId},
 };
 
@@ -28,7 +28,7 @@ impl<'class> BootstrapMethod<'class> {
 
     /// The method handle invoked as the bootstrap method.
     #[must_use]
-    pub fn method(&self) -> &'class MethodHandle {
+    pub fn method(&self) -> MethodHandleView<'class> {
         self.class.constant_pool.method_handle(self.data.method)
     }
 
@@ -54,7 +54,7 @@ impl Eq for BootstrapMethod<'_> {}
 impl std::fmt::Debug for BootstrapMethod<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug = f.debug_struct("BootstrapMethod");
-        debug.field("method", self.method());
+        debug.field("method", &self.method());
         debug.field("arguments", &self.arguments().collect::<Vec<_>>());
         debug.finish()
     }
