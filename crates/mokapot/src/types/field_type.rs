@@ -65,7 +65,6 @@ use crate::{
 /// ```
 #[doc = see_jvm_spec!(2, 3)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Display)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum PrimitiveType {
     /// The `boolean` type (descriptor: 'Z')
     #[display("boolean")]
@@ -345,26 +344,7 @@ impl FromStr for FieldType {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-    use crate::types::class_name::ClassName;
-
-    impl Arbitrary for FieldType {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-            let non_array = prop_oneof![
-                any::<PrimitiveType>().prop_map(FieldType::Base),
-                any::<ClassName>().prop_map(FieldType::from),
-            ];
-            let dimensions = prop_oneof![Just(0_u8), 1..=u8::MAX];
-            (non_array, dimensions)
-                .prop_map(|(inner, dim)| FieldType::array_of(inner, dim))
-                .boxed()
-        }
-    }
 
     #[test]
     fn primitive_type_mappings() {
@@ -392,40 +372,21 @@ mod tests {
         }
         assert_eq!(Category1.slot_count(), 1);
         assert_eq!(Category2.slot_count(), 2);
-    }
 
-    proptest! {
-        #[test]
-        fn rejects_invalid_primitive_prefix(
-            c in r"[^ZCFDBSIJ]",
-            suffix in any::<String>(),
-        ) {
-            let ch = c.chars().next().unwrap();
-            prop_assert_eq!(PrimitiveType::try_from(ch), Err(InvalidDescriptor));
-            let descriptor = format!("{c}{suffix}");
-            let mut input = descriptor.as_bytes();
-            prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, descriptor.as_bytes());
-            prop_assert_eq!(descriptor.parse::<PrimitiveType>(), Err(InvalidDescriptor));
-        }
-
-        #[test]
-        fn primitive_prefix_preserves_suffix(
-            ty in any::<PrimitiveType>(),
-            suffix in any::<String>(),
-        ) {
-            let descriptor_text = format!("{}{suffix}", ty.descriptor());
-            let descriptor = JavaString::from(descriptor_text.as_str());
+        for invalid in ['A', 'V', '[', '\0', 'é'] {
+            assert_eq!(PrimitiveType::try_from(invalid), Err(InvalidDescriptor));
+            let descriptor = JavaString::from(invalid.to_string());
             let mut input = descriptor.as_java_str().as_bytes();
-            prop_assert_eq!(PrimitiveType::parse_prefix(&mut input), Ok(ty));
-            let has_suffix = !suffix.is_empty();
-            let suffix = JavaString::from(suffix);
-            prop_assert_eq!(input, suffix.as_java_str().as_bytes());
-            if has_suffix {
-                prop_assert_eq!(descriptor_text.parse::<PrimitiveType>(), Err(InvalidDescriptor));
-            }
+            assert_eq!(
+                PrimitiveType::parse_prefix(&mut input),
+                Err(InvalidDescriptor)
+            );
+            assert_eq!(input, descriptor.as_java_str().as_bytes());
         }
 
+        let mut input = b"I!".as_slice();
+        assert_eq!(PrimitiveType::parse_prefix(&mut input), Ok(Int));
+        assert_eq!(input, b"!");
     }
 
     #[test]

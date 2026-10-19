@@ -203,3 +203,27 @@ fn java_fixture_lifts_capturing_lambda_closures() {
         } if name == "applyAsInt" && captures.as_slice() == &ir.parameters[..1]
     )));
 }
+
+#[test]
+fn java_fixture_preserves_signed_immediate_boundaries() {
+    for (name, expected) in [
+        ("byteMin", -128),
+        ("byteMax", 127),
+        ("shortMin", -32768),
+        ("shortMax", 32767),
+    ] {
+        let ir = method_ir("IrSemantics", name);
+        let operations = operations(&ir);
+        let Terminator::Return {
+            value: Some(returned),
+            ..
+        } = &ir.block(ir.entry.block).unwrap().terminator
+        else {
+            panic!("the fixture method returns a value");
+        };
+        assert!(matches!(
+            definition(&operations, *returned),
+            Expression::Const(ConstantValue::Integer(actual)) if *actual == expected
+        ));
+    }
+}

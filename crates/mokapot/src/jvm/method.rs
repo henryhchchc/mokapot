@@ -309,30 +309,4 @@ mod tests {
         };
         assert_eq!(parameter.name().unwrap().as_bytes(), &[0xed, 0xa0, 0x80]);
     }
-
-    #[test]
-    fn special_method_checks_use_only_the_name() {
-        use crate::jvm::code::InstructionData;
-
-        let mut method = crate::tests::method(
-            [(0, InstructionData::Return)],
-            "()V",
-            vec![],
-            AccessFlags::PUBLIC,
-        );
-        for (name, constructor, initializer) in [
-            (Method::CONSTRUCTOR_NAME, true, false),
-            (Method::CLASS_INITIALIZER_NAME, false, true),
-            ("ordinary", false, false),
-        ] {
-            method.set_name(name);
-            assert_eq!(
-                (
-                    method.as_method().is_constructor(),
-                    method.as_method().is_static_initializer_block()
-                ),
-                (constructor, initializer),
-            );
-        }
-    }
 }

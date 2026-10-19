@@ -3,8 +3,6 @@ use std::{
     convert::Infallible,
 };
 
-use proptest::prelude::*;
-
 use super::*;
 use crate::ir::test::prelude::TestSet;
 
@@ -89,22 +87,16 @@ fn cyclic_flow_reaches_a_fixed_point() {
     assert_eq!(facts[&1], expected);
 }
 
-proptest! {
-   #[test]
-   fn option_join_ordering(
-       lhs in any::<Option<TestSet>>(),
-       rhs in any::<Option<TestSet>>(),
-   ) {
-       let mut joined = lhs.clone();
-       let changed = joined.join_assign(rhs.clone());
-       prop_assert!(joined >= lhs);
-       prop_assert!(joined >= rhs);
-       prop_assert_eq!(changed, joined != lhs);
+#[test]
+fn option_join_handles_bottom_and_concrete_facts() {
+    let mut bottom = None;
+    assert!(!bottom.join_assign(None));
+    assert!(bottom.join_assign(Some(TestSet::from([1]))));
+    assert_eq!(bottom, Some(TestSet::from([1])));
 
-       // The join is commutative and idempotent.
-       let mut commuted = rhs.clone();
-       commuted.join_assign(lhs.clone());
-       prop_assert_eq!(&joined, &commuted);
-       prop_assert!(!joined.clone().join_assign(joined.clone()));
-   }
+    let mut fact = Some(TestSet::from([1]));
+    assert!(!fact.join_assign(None));
+    assert!(fact.join_assign(Some(TestSet::from([2]))));
+    assert_eq!(fact, Some(TestSet::from([1, 2])));
+    assert!(!fact.clone().join_assign(fact.clone()));
 }

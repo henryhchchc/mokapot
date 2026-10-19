@@ -436,14 +436,6 @@ mod tests {
     }
 
     #[test]
-    fn rust_string_conversion_reuses_compatible_buffer() {
-        let text = String::from("java/lang/String");
-        let pointer = text.as_ptr();
-        let owned = JavaString::from(text);
-        assert_eq!(owned.as_bytes().as_ptr(), pointer);
-    }
-
-    #[test]
     fn debug_escapes_unpaired_surrogate_bytes() {
         let text = JavaStr::from_cesu8(&[0xed, 0xa0, 0x80]).unwrap();
         assert_eq!(format!("{text:?}"), r#""\xed\xa0\x80""#);

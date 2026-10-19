@@ -57,35 +57,6 @@ pub(crate) fn terminator_at(ir: &MokaIRMethod, pc: ProgramCounter) -> &Terminato
         .expect("the source PC must map to a terminator")
 }
 
-/// The block `id` in `ir`.
-pub(crate) fn block_of(ir: &MokaIRMethod, id: BlockId) -> &BasicBlock {
-    ir.block(id).expect("the block belongs to its method")
-}
-
-/// The target of the successor of `block` at `index`.
-pub(crate) fn successor_target(block: &BasicBlock, index: usize) -> BlockId {
-    block
-        .terminator
-        .successors()
-        .nth(index)
-        .expect("the successor exists")
-        .block_target()
-        .expect("the successor targets a block")
-}
-
-/// The block `location` belongs to.
-pub(crate) fn block_containing_instruction(
-    ir: &MokaIRMethod,
-    location: InstructionLocation,
-) -> &BasicBlock {
-    let id = match location {
-        InstructionLocation::BlockParameter { block, .. }
-        | InstructionLocation::Operation { block, .. }
-        | InstructionLocation::Terminator { block } => block,
-    };
-    block_of(ir, id)
-}
-
 /// Builds an exception-table entry covering `covered_pc` that jumps to `handler_pc`.
 pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,

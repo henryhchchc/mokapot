@@ -117,22 +117,6 @@ impl TryFrom<&JavaStr> for ClassName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::name_validation::tests::name_components;
-    use proptest::prelude::*;
-
-    impl Arbitrary for ClassName {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-            name_components()
-                .prop_map(|segments| {
-                    let name = segments.join("/");
-                    ClassName::new(name).unwrap()
-                })
-                .boxed()
-        }
-    }
 
     #[test]
     fn copies_class_names_with_unpaired_surrogates() {

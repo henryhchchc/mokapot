@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn rejects_methods_without_bodies() {
         let mut method = method([(0, InstructionData::Return)], "()V", vec![]);
-        method.body = None;
+        method.data_mut().body = None;
         let error = super::build(method.as_method()).err().unwrap();
         assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);
     }

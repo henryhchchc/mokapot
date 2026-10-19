@@ -24,10 +24,8 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         handler(1.into()..2.into(), 30.into(), Some(exception)),
     ];
     let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
-    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
-    let fallible = block_containing_instruction(&ir, location);
+    let fallible = terminator_at(&ir, 1.into());
     let transfers = fallible
-        .terminator
         .successors()
         .map(Successor::transfer)
         .collect::<Vec<_>>();
@@ -56,7 +54,7 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     let ir = lift(body, "()V", table);
     let entry = &ir.block(ir.entry.block).unwrap().terminator;
 
-    assert_eq!(reachable_blocks(&ir).len(), 1);
+    assert_eq!(ir.blocks.len(), 1);
     assert!(matches!(entry, Terminator::Return { value: None, .. }));
     assert_eq!(entry.successors().count(), 1);
     assert_eq!(entry.successors().next().unwrap().transfer(), None);
