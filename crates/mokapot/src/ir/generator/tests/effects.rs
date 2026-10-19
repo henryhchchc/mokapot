@@ -157,11 +157,14 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
         ("(IJ)J", "(Ljava/lang/Object;IJ)J", Instruction::LReturn),
     ] {
         let method_ref = method_ref("accept", descriptor);
+        let mut pool = crate::jvm::ConstantPool::new();
+        let id = pool.insert_method_ref(method_ref.clone());
+        let target = pool.method_ref(id);
         let invocations = [
-            Instruction::InvokeStatic(&method_ref),
-            Instruction::InvokeVirtual(&method_ref),
-            Instruction::InvokeInterface(&method_ref, 4),
-            Instruction::InvokeSpecial(&method_ref),
+            Instruction::InvokeStatic(target),
+            Instruction::InvokeVirtual(target),
+            Instruction::InvokeInterface(target, 4),
+            Instruction::InvokeSpecial(target),
         ];
         for (invocation, kind) in invocations.into_iter().zip(kinds) {
             let receiver = if matches!(invocation, Instruction::InvokeStatic(_)) {
@@ -195,10 +198,13 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
 #[test]
 fn instance_invocations_require_a_receiver() {
     let method_ref = method_ref("accept", "(IJ)V");
+    let mut pool = crate::jvm::ConstantPool::new();
+    let id = pool.insert_method_ref(method_ref);
+    let target = pool.method_ref(id);
     for invocation in [
-        Instruction::InvokeVirtual(&method_ref),
-        Instruction::InvokeInterface(&method_ref, 4),
-        Instruction::InvokeSpecial(&method_ref),
+        Instruction::InvokeVirtual(target),
+        Instruction::InvokeInterface(target, 4),
+        Instruction::InvokeSpecial(target),
     ] {
         let body = [
             (0, Instruction::ILoad0),
@@ -246,9 +252,12 @@ fn field_reads_define_values_and_writes_are_effects() {
         name: "count".into(),
         field_type: FieldType::Base(PrimitiveType::Int),
     };
+    let mut pool = crate::jvm::ConstantPool::new();
+    let id = pool.insert_field_ref(field.clone());
+    let target = pool.field_ref(id);
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::GetField(&field)),
+        (1, Instruction::GetField(target)),
         (2, Instruction::IReturn),
     ];
     let read = lift(body, "(Ljava/lang/Object;)I", vec![]);
@@ -264,7 +273,7 @@ fn field_reads_define_values_and_writes_are_effects() {
     let body = [
         (0, Instruction::ALoad0),
         (1, Instruction::ILoad1),
-        (2, Instruction::PutField(&field)),
+        (2, Instruction::PutField(target)),
         (3, Instruction::Return),
     ];
     let write = lift(body, "(Ljava/lang/Object;I)V", vec![]);
@@ -277,7 +286,7 @@ fn field_reads_define_values_and_writes_are_effects() {
     assert_eq!(operation, &expected);
 
     let body = [
-        (0, Instruction::GetStatic(&field)),
+        (0, Instruction::GetStatic(target)),
         (1, Instruction::IReturn),
     ];
     let read = lift(body, "()I", vec![]);
@@ -290,7 +299,7 @@ fn field_reads_define_values_and_writes_are_effects() {
 
     let body = [
         (0, Instruction::ILoad0),
-        (1, Instruction::PutStatic(&field)),
+        (1, Instruction::PutStatic(target)),
         (2, Instruction::Return),
     ];
     let write = lift(body, "(I)V", vec![]);

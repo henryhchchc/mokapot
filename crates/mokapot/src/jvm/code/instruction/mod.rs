@@ -14,7 +14,7 @@ use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
         ConstantValue, JavaStr,
-        references::{FieldRef, MethodRef},
+        references::{FieldRefView, MethodRefView},
     },
     types::{
         field_type::PrimitiveType, method_descriptor::MethodDescriptor,
@@ -233,14 +233,14 @@ pub enum Instruction<'class> {
     Return = 0xb1,
 
     // References
-    GetStatic(&'class FieldRef) = 0xb2,
-    PutStatic(&'class FieldRef) = 0xb3,
-    GetField(&'class FieldRef) = 0xb4,
-    PutField(&'class FieldRef) = 0xb5,
-    InvokeVirtual(&'class MethodRef) = 0xb6,
-    InvokeSpecial(&'class MethodRef) = 0xb7,
-    InvokeStatic(&'class MethodRef) = 0xb8,
-    InvokeInterface(&'class MethodRef, u8) = 0xb9,
+    GetStatic(FieldRefView<'class>) = 0xb2,
+    PutStatic(FieldRefView<'class>) = 0xb3,
+    GetField(FieldRefView<'class>) = 0xb4,
+    PutField(FieldRefView<'class>) = 0xb5,
+    InvokeVirtual(MethodRefView<'class>) = 0xb6,
+    InvokeSpecial(MethodRefView<'class>) = 0xb7,
+    InvokeStatic(MethodRefView<'class>) = 0xb8,
+    InvokeInterface(MethodRefView<'class>, u8) = 0xb9,
     InvokeDynamic {
         bootstrap_method_index: u16,
         name: &'class JavaStr,

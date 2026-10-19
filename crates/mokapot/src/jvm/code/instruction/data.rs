@@ -681,19 +681,19 @@ impl InstructionData {
             Instruction::DReturn => Self::DReturn,
             Instruction::AReturn => Self::AReturn,
             Instruction::Return => Self::Return,
-            Instruction::GetStatic(v0) => Self::GetStatic(pool.insert_field_ref(v0.clone())),
-            Instruction::PutStatic(v0) => Self::PutStatic(pool.insert_field_ref(v0.clone())),
-            Instruction::GetField(v0) => Self::GetField(pool.insert_field_ref(v0.clone())),
-            Instruction::PutField(v0) => Self::PutField(pool.insert_field_ref(v0.clone())),
+            Instruction::GetStatic(v0) => Self::GetStatic(pool.insert_field_ref(v0.into())),
+            Instruction::PutStatic(v0) => Self::PutStatic(pool.insert_field_ref(v0.into())),
+            Instruction::GetField(v0) => Self::GetField(pool.insert_field_ref(v0.into())),
+            Instruction::PutField(v0) => Self::PutField(pool.insert_field_ref(v0.into())),
             Instruction::InvokeVirtual(v0) => {
-                Self::InvokeVirtual(pool.insert_method_ref(v0.clone()))
+                Self::InvokeVirtual(pool.insert_method_ref(v0.into()))
             }
             Instruction::InvokeSpecial(v0) => {
-                Self::InvokeSpecial(pool.insert_method_ref(v0.clone()))
+                Self::InvokeSpecial(pool.insert_method_ref(v0.into()))
             }
-            Instruction::InvokeStatic(v0) => Self::InvokeStatic(pool.insert_method_ref(v0.clone())),
+            Instruction::InvokeStatic(v0) => Self::InvokeStatic(pool.insert_method_ref(v0.into())),
             Instruction::InvokeInterface(v0, v1) => {
-                Self::InvokeInterface(pool.insert_method_ref(v0.clone()), v1)
+                Self::InvokeInterface(pool.insert_method_ref(v0.into()), v1)
             }
             Instruction::InvokeDynamic {
                 bootstrap_method_index,

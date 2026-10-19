@@ -66,16 +66,17 @@ fn invokeinterface_parses_interface_method_refs() {
         constant_pool: pool,
         ..Class::default()
     };
+    let Instruction::InvokeInterface(method, count) = data.view(&class) else {
+        panic!("expected invokeinterface")
+    };
+    assert_eq!(count, 1);
     assert_eq!(
-        data.view(&class),
-        Instruction::InvokeInterface(
-            &crate::jvm::references::MethodRef {
-                owner: crate::types::reference_type::ReferenceType::Class("a/b/I".parse().unwrap()),
-                name: "m".into(),
-                descriptor: "()V".parse().unwrap(),
-            },
-            1,
-        ),
+        crate::jvm::references::MethodRef::from(method),
+        crate::jvm::references::MethodRef {
+            owner: "a/b/I".parse().unwrap(),
+            name: "m".into(),
+            descriptor: "()V".parse().unwrap(),
+        }
     );
 }
 
@@ -225,12 +226,15 @@ fn instructions_borrow_pool_operands_and_preserve_lookup() {
         Instruction::GetStatic(field) | Instruction::GetField(field) => field,
         _ => panic!("expected a field access"),
     };
-    assert!(std::ptr::eq(field(0.into()), field(3.into())));
+    assert!(std::ptr::eq(field(0.into()).name(), field(3.into()).name()));
     let method = |pc| match body.instruction_at(pc).unwrap() {
         Instruction::InvokeVirtual(method) | Instruction::InvokeStatic(method) => method,
         _ => panic!("expected a method invocation"),
     };
-    assert!(std::ptr::eq(method(6.into()), method(9.into())));
+    assert!(std::ptr::eq(
+        method(6.into()).descriptor(),
+        method(9.into()).descriptor()
+    ));
     let constant = |pc| match body.instruction_at(pc).unwrap() {
         Instruction::Ldc(value) | Instruction::LdcW(value) => value,
         _ => panic!("expected a constant"),

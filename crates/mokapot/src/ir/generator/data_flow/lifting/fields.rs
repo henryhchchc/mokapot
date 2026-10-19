@@ -3,59 +3,71 @@ use ValueCategory::Category1;
 use super::{FrameError, LiftContext};
 use crate::{
     ir::{Operation, ValueId, expression::FieldAccess},
-    jvm::references::FieldRef,
+    jvm::references::FieldRefView,
     types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {
-    pub fn read_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
+    pub fn read_static(
+        &mut self,
+        field: FieldRefView<'_>,
+    ) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         self.frame
             .stack
-            .push(value, field.field_type.value_category())?;
+            .push(value, field.field_type().value_category())?;
         let expr = FieldAccess::ReadStatic {
-            field: field.clone(),
+            field: field.into(),
         }
         .into();
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn read_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
+    pub fn read_instance(
+        &mut self,
+        field: FieldRefView<'_>,
+    ) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
             .stack
-            .push(value, field.field_type.value_category())?;
+            .push(value, field.field_type().value_category())?;
         let expr = FieldAccess::ReadInstance {
             object_ref,
-            field: field.clone(),
+            field: field.into(),
         }
         .into();
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn write_static(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
+    pub fn write_static(
+        &mut self,
+        field: FieldRefView<'_>,
+    ) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
-        let field = field.clone();
+        let field = field.into();
         Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteStatic { field, value }.into(),
         }))
     }
 
-    pub fn write_instance(&mut self, field: &FieldRef) -> Result<Option<Operation>, FrameError> {
+    pub fn write_instance(
+        &mut self,
+        field: FieldRefView<'_>,
+    ) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteInstance {
                 object_ref,
-                field: field.clone(),
+                field: field.into(),
                 value,
             }
             .into(),
         }))
     }
 
-    fn pop_field_value(&mut self, field: &FieldRef) -> Result<ValueId, FrameError> {
-        self.frame.stack.pop(field.field_type.value_category())
+    fn pop_field_value(&mut self, field: FieldRefView<'_>) -> Result<ValueId, FrameError> {
+        self.frame.stack.pop(field.field_type().value_category())
     }
 }
