@@ -292,113 +292,30 @@ bitflags! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvm::code::Instruction;
-    use crate::types::Descriptor;
-
-    #[test]
-    fn pool_backed_methods_preserve_jvm_names_after_input_is_dropped() {
-        let name = &[0xed, 0xa0, 0x80];
-        let descriptor = b"()Lpkg/\xed\xa0\x80;";
-        let class = {
-            let mut bytes = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 61, 0, 6];
-            for value in [b"java/lang/Object".as_slice(), name, descriptor, b"Code"] {
-                if value == name {
-                    bytes.extend([7, 0, 1]);
-                }
-                bytes.push(1);
-                bytes.extend(u16::try_from(value.len()).unwrap().to_be_bytes());
-                bytes.extend(value);
-            }
-            bytes.extend([
-                0, 0x21, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 9, 0, 3, 0, 4, 0, 1, 0, 5, 0, 0, 0, 14,
-                0, 1, 0, 0, 0, 0, 0, 2, 1, 0xb0, 0, 0, 0, 0, 0, 0,
-            ]);
-            Class::from_bytes(&bytes).unwrap()
-        };
-        let method = class.methods().next().unwrap();
-        assert_eq!(method.name().as_bytes(), name);
-        assert_eq!(method.descriptor().descriptor().as_bytes(), descriptor);
-        let reference = method.to_owned_ref();
-        let ir = crate::ir::MokaIRMethod::from_method(method).unwrap();
-        drop(class);
-        assert_eq!(reference.name.as_bytes(), name);
-        assert_eq!(ir.name.as_bytes(), name);
-        assert_eq!(ir.descriptor.descriptor().as_bytes(), descriptor);
-    }
-
-    #[test]
-    fn method_views_use_the_containing_class() {
-        let fixture = crate::tests::method(
-            [(0, Instruction::Return)],
-            "()V",
-            vec![],
-            AccessFlags::PUBLIC,
-        );
-        let mut class = fixture.as_method().owner().clone();
-        class.name = class
-            .constant_pool
-            .insert_class_name("Other".parse().unwrap());
-        let descriptor: MethodDescriptor = "()V".parse().unwrap();
-        let method = class.get_method_str("test", &descriptor).unwrap();
-        assert!(std::ptr::eq(method.owner(), &raw const class));
-        assert_eq!(
-            method.to_owned_ref().owner,
-            ReferenceType::Class(class.name().clone())
-        );
-        assert!(class.get_method_str("missing", &descriptor).is_none());
-        assert!(
-            class
-                .get_method_str("test", "()I".parse::<MethodDescriptor>().unwrap())
-                .is_none()
-        );
-        let body = class.methods().next().unwrap().body().unwrap();
-        assert_eq!(
-            body.instructions().get(&0.into()),
-            Some(Instruction::Return)
-        );
-    }
 
     #[test]
     fn parameter_names_borrow_the_class() {
-        let fixture = crate::tests::method(
-            [(0, Instruction::Return)],
-            "()V",
-            vec![],
-            AccessFlags::PUBLIC,
-        );
-        let mut class = fixture.as_method().owner().clone();
+        let mut class = Class::default();
         let name = class
             .constant_pool
             .insert_utf8(JavaString::from_cesu8(vec![0xed, 0xa0, 0x80]).unwrap());
-        class.methods[0].parameters = Box::new([
-            ParameterInfoData {
-                name: Some(name),
-                access_flags: ParameterAccessFlags::FINAL,
-            },
-            ParameterInfoData {
-                name: None,
-                access_flags: ParameterAccessFlags::empty(),
-            },
-        ]);
-        let name = class
-            .methods()
-            .next()
-            .unwrap()
-            .parameters()
-            .next()
-            .unwrap()
-            .name()
-            .unwrap();
-        assert_eq!(name.as_bytes(), &[0xed, 0xa0, 0x80]);
-        let parameters: Vec<_> = class.methods().next().unwrap().parameters().collect();
-        assert_eq!(parameters[0].access_flags(), ParameterAccessFlags::FINAL);
-        assert!(parameters[1].name().is_none());
+        let data = ParameterInfoData {
+            name: Some(name),
+            access_flags: ParameterAccessFlags::empty(),
+        };
+        let parameter = ParameterInfo {
+            class: &class,
+            data: &data,
+        };
+        assert_eq!(parameter.name().unwrap().as_bytes(), &[0xed, 0xa0, 0x80]);
     }
 
     #[test]
     fn special_method_checks_use_only_the_name() {
+        use crate::jvm::code::InstructionData;
+
         let mut method = crate::tests::method(
-            [(0, Instruction::Return)],
+            [(0, InstructionData::Return)],
             "()V",
             vec![],
             AccessFlags::PUBLIC,

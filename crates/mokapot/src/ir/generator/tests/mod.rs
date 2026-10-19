@@ -5,7 +5,7 @@ use std::ops::Range;
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
-    jvm::code::{Instruction, ProgramCounter},
+    jvm::code::ProgramCounter,
     tests::{TestExceptionHandler, TestMethod},
 };
 
@@ -15,16 +15,35 @@ pub(crate) fn build(method: &TestMethod) -> Result<MokaIRMethod, MokaIRBuildErro
 }
 
 /// Lifts `instructions` into IR, panicking on a build failure.
-pub(crate) fn lift<'instruction, I, PC>(
+pub(crate) fn lift<I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<TestExceptionHandler>,
 ) -> MokaIRMethod
 where
-    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
     build(&method(instructions, descriptor, exception_table)).unwrap()
+}
+
+pub(crate) fn lift_with_pool<I, PC>(
+    constant_pool: ConstantPool,
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<TestExceptionHandler>,
+) -> MokaIRMethod
+where
+    I: IntoIterator<Item = (PC, InstructionData)>,
+    PC: Into<ProgramCounter>,
+{
+    build(&method_with_pool(
+        constant_pool,
+        instructions,
+        descriptor,
+        exception_table,
+    ))
+    .unwrap()
 }
 
 /// The terminator whose source instruction is `pc`.

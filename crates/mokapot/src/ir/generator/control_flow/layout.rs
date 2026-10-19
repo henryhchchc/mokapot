@@ -135,11 +135,11 @@ fn block_end(body: MethodBody<'_>, leaders: &BTreeSet<PC>, last_pc: PC, start_pc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ir::test::prelude::*, jvm::code::Instruction};
+    use crate::ir::test::prelude::*;
 
     #[test]
     fn rejects_empty_bodies() {
-        let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
+        let method = method(std::iter::empty::<(u16, InstructionData)>(), "()V", vec![]);
         let body = method.as_method().body().unwrap();
         let error = BlockLayout::of(body).err().unwrap();
         assert_eq!(error.kind, ErrorKind::MissingOrEmptyBody);
@@ -147,8 +147,8 @@ mod tests {
 
     #[test]
     fn rejects_missing_jump_targets_in_reachable_and_unreachable_code() {
-        for entry in [Instruction::Nop, Instruction::Return] {
-            let instructions = [(0, entry), (1, Instruction::Goto(10.into()))];
+        for entry in [InstructionData::Nop, InstructionData::Return] {
+            let instructions = [(0, entry), (1, InstructionData::Goto(10.into()))];
             let method = method(instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
             let error = BlockLayout::of(body).err().unwrap();
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn validates_unreachable_instructions() {
-        let instructions = [(0, Instruction::Return), (1, Instruction::Nop)];
+        let instructions = [(0, InstructionData::Return), (1, InstructionData::Nop)];
         let method = method(instructions, "()V", vec![]);
         let body = method.as_method().body().unwrap();
         let error = BlockLayout::of(body).err().unwrap();

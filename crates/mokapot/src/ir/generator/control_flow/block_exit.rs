@@ -202,16 +202,17 @@ mod tests {
     #[test]
     fn rejects_invalid_tableswitch_ranges() {
         for (low, jump_targets) in [(i32::MAX, vec![10.into(), 10.into()]), (0, vec![])] {
-            let switch = Instruction::TableSwitch {
+            let switch = InstructionData::TableSwitch {
                 low,
-                jump_targets: &jump_targets,
+                jump_targets: jump_targets.into_boxed_slice(),
                 default: 10.into(),
             };
-            let instructions = [(0, switch), (10, Instruction::Return)];
+            let instructions = [(0, switch), (10, InstructionData::Return)];
             let method = method(instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
+            let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &switch),
+                BlockExit::of(body, 0.into(), &instruction),
                 Err(ErrorKind::InvalidTableSwitchRange)
             );
         }
@@ -220,12 +221,17 @@ mod tests {
     #[test]
     fn rejects_invalid_multianewarray_dimensions() {
         for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
-            let allocation = Instruction::MultiANewArray(&ref_t(array_type), dimensions);
-            let instructions = [(0, allocation), (1, Instruction::Return)];
-            let method = method(instructions, "()V", vec![]);
+            let mut pool = ConstantPool::new();
+            let array_type = pool.insert_reference_type(ref_t(array_type));
+            let instructions = [
+                (0, InstructionData::MultiANewArray(array_type, dimensions)),
+                (1, InstructionData::Return),
+            ];
+            let method = method_with_pool(pool, instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
+            let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &allocation),
+                BlockExit::of(body, 0.into(), &instruction),
                 Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
@@ -234,16 +240,17 @@ mod tests {
     #[test]
     fn rejects_legacy_subroutine_instructions() {
         let instructions = [
-            Instruction::Jsr(0.into()),
-            Instruction::JsrW(0.into()),
-            Instruction::Ret(0),
-            Instruction::Wide(WideInstruction::Ret(300)),
+            InstructionData::Jsr(0.into()),
+            InstructionData::JsrW(0.into()),
+            InstructionData::Ret(0),
+            InstructionData::Wide(WideInstruction::Ret(300)),
         ];
         for instruction in instructions {
             let method = method([(0, instruction)], "()V", vec![]);
             let body = method.as_method().body().unwrap();
+            let view = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                BlockExit::of(body, 0.into(), &view),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
             );
         }
@@ -251,7 +258,7 @@ mod tests {
 
     #[test]
     fn rejects_missing_fallthrough() {
-        let method = method([(4, Instruction::Nop)], "()V", vec![]);
+        let method = method([(4, InstructionData::Nop)], "()V", vec![]);
         let body = method.as_method().body().unwrap();
         assert_eq!(
             BlockExit::of(body, 4.into(), &Instruction::Nop),

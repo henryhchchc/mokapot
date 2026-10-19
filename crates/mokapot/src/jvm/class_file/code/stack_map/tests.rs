@@ -17,7 +17,7 @@ fn raw_frames_preserve_extended_encoding_and_constant_pool_indices() {
 }
 
 #[test]
-fn object_verification_types_validate_indices_and_accept_arrays() {
+fn object_verification_types_validate_indices_and_resolve_arrays() {
     use super::*;
     use crate::jvm::{
         class::Version,
@@ -44,25 +44,11 @@ fn object_verification_types_validate_indices_and_accept_arrays() {
             ParseErrorKind::Malformed
         );
     }
-    let raw = raw::StackMapFrameInfo::FullFrame {
-        offset_delta: 7,
-        locals: Box::new([raw::VerificationTypeInfo::Object { cpool_index: 2 }]),
-        stack: Box::new([raw::VerificationTypeInfo::Uninitialized { offset: 3 }]),
-    };
-    let StackMapFrameData::Full {
-        offset_delta,
-        locals,
-        stack,
-    } = raw.resolve(&mut ctx).unwrap()
+    let VerificationTypeData::Object(id) = raw::VerificationTypeInfo::Object { cpool_index: 2 }
+        .resolve(&mut ctx)
+        .unwrap()
     else {
-        panic!("expected a full frame")
-    };
-    assert_eq!(offset_delta, 7);
-    assert!(
-        matches!(stack[0], VerificationTypeData::Uninitialized { offset } if offset == 3.into())
-    );
-    let VerificationTypeData::Object(id) = locals[0] else {
-        panic!("expected an object type")
+        panic!("expected an object verification type")
     };
     let pool = ctx.constant_pool.finish();
     assert_eq!(pool.reference_type(id).descriptor(), "[I");

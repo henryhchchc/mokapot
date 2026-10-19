@@ -3,7 +3,7 @@ use crate::{
         Class, ConstantPool, Method,
         annotation::AnnotationsData,
         class,
-        code::{ExceptionTableEntryData, Instruction, MethodBodyData, ProgramCounter},
+        code::{ExceptionTableEntryData, InstructionData, MethodBodyData, ProgramCounter},
         method::{AccessFlags, MethodData},
     },
     types::class_name::ClassName,
@@ -123,25 +123,39 @@ pub(crate) struct TestExceptionHandler {
 }
 
 /// Builds a method named `test` in `org/mokapot/Test` from its body.
-pub(crate) fn method<'instruction, I, PC>(
+pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<TestExceptionHandler>,
     access_flags: AccessFlags,
 ) -> TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
-    let mut constant_pool = ConstantPool::new();
+    method_with_pool(
+        ConstantPool::new(),
+        instructions,
+        descriptor,
+        exception_table,
+        access_flags,
+    )
+}
+
+pub(crate) fn method_with_pool<I, PC>(
+    mut constant_pool: ConstantPool,
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<TestExceptionHandler>,
+    access_flags: AccessFlags,
+) -> TestMethod
+where
+    I: IntoIterator<Item = (PC, InstructionData)>,
+    PC: Into<ProgramCounter>,
+{
     let instructions = instructions
         .into_iter()
-        .map(|(pc, instruction)| {
-            (
-                pc.into(),
-                crate::jvm::code::InstructionData::from_view(instruction, &mut constant_pool),
-            )
-        })
+        .map(|(pc, instruction)| (pc.into(), instruction))
         .collect();
     let name = constant_pool.insert_utf8("test".into());
     let descriptor =

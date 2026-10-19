@@ -124,3 +124,5 @@ fn fixture_corpus_preserves_ssa_and_source_mapping() {
         source_map::assert_consistent(&label, &ir);
     }
 }
+
+mod semantics;

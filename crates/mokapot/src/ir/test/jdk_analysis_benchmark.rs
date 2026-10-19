@@ -1,15 +1,12 @@
 //! Benchmark selection tests independent of Java fixtures and extracted JDKs.
 
-use crate::ir::test::prelude::{MokaIRMethod, method};
-use crate::jvm::code::Instruction;
+use crate::ir::test::prelude::{InstructionData, MokaIRMethod, method};
 
 #[path = "../../../benches/support/path_condition_corpus.rs"]
 mod path_condition_corpus;
 use path_condition_corpus::{PathCorpus, predicate_limit};
 
-fn ir<'instruction>(
-    instructions: impl IntoIterator<Item = (u16, Instruction<'instruction>)>,
-) -> MokaIRMethod {
+fn ir(instructions: impl IntoIterator<Item = (u16, InstructionData)>) -> MokaIRMethod {
     let fixture = method(instructions, "(I)V", Vec::new());
     MokaIRMethod::from_method(fixture.as_method()).unwrap()
 }
@@ -26,12 +23,12 @@ fn predicate_limit_configuration() {
 
 #[test]
 fn path_benchmarks_group_methods_and_apply_the_inclusive_limit() {
-    let straight_line = ir([(0, Instruction::Return)]);
+    let straight_line = ir([(0, InstructionData::Return)]);
     let loop_method = ir([
-        (0, Instruction::ILoad0),
-        (1, Instruction::IfEq(7.into())),
-        (4, Instruction::Goto(0.into())),
-        (7, Instruction::Return),
+        (0, InstructionData::ILoad0),
+        (1, InstructionData::IfEq(7.into())),
+        (4, InstructionData::Goto(0.into())),
+        (7, InstructionData::Return),
     ]);
 
     for (limit, excluded) in [(0, 1), (1, 1), (2, 0)] {

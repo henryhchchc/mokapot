@@ -5,10 +5,10 @@ fn unreachable_bytecode_is_omitted() {
     // Instructions the entry cannot reach contribute no IR nodes.
     let unreachable = method(
         [
-            (0, Instruction::Goto(100.into())),
-            (10, Instruction::IConst0),
-            (11, Instruction::IReturn),
-            (100, Instruction::Return),
+            (0, InstructionData::Goto(100.into())),
+            (10, InstructionData::IConst0),
+            (11, InstructionData::IReturn),
+            (100, InstructionData::Return),
         ],
         "()V",
         vec![],
@@ -19,9 +19,9 @@ fn unreachable_bytecode_is_omitted() {
 
     let frame_invalid = method(
         [
-            (0, Instruction::Goto(10.into())),
-            (3, Instruction::IAdd),
-            (10, Instruction::Return),
+            (0, InstructionData::Goto(10.into())),
+            (3, InstructionData::IAdd),
+            (10, InstructionData::Return),
         ],
         "()V",
         vec![],
