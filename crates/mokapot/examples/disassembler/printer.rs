@@ -239,7 +239,7 @@ fn print_method_body(body: &MethodBody<'_>) {
     }
 
     // If the method has exception handlers (try-catch blocks), print them
-    if !body.exception_table().is_empty() {
+    if body.exception_table().len() != 0 {
         print_exception_table(body);
     }
 }
@@ -315,17 +315,20 @@ fn print_exception_table(body: &MethodBody<'_>) {
     println!("         from    to  target type");
     for entry in body.exception_table() {
         // Get the start and end program counters of the protected region
-        let start_pc = entry.covered_pc.start;
-        let end_pc = entry.covered_pc.end;
+        let start_pc = entry.covered_pc().start;
+        let end_pc = entry.covered_pc().end;
 
         // Get the exception type, or "any" for finally blocks (which catch all exceptions)
-        let catch_type = match &entry.catch_type {
+        let catch_type = match entry.catch_type() {
             Some(class_name) => class_name.to_string(),
             None => "any".to_string(), // "any" means a finally block or catch-all handler
         };
         println!(
             "        {} {} {} {}",
-            start_pc, end_pc, entry.handler_pc, catch_type
+            start_pc,
+            end_pc,
+            entry.handler_pc(),
+            catch_type
         );
     }
 }

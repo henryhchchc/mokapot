@@ -21,8 +21,8 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        code::{LineNumberTableEntry, StackMapFrame},
-        method::ParameterInfo,
+        code::{LineNumberTableEntry, StackMapFrameData},
+        method::ParameterInfoData,
     },
 };
 
@@ -56,7 +56,7 @@ impl<'a> Decode<'a> for &'a AttributeInfo {
 pub(crate) enum Attribute {
     ConstantValue(super::constant_pool::ConstantValueId),
     Code(crate::jvm::code::MethodBodyData),
-    StackMapTable(Box<[StackMapFrame]>),
+    StackMapTable(Box<[StackMapFrameData]>),
     Exceptions(Box<[super::constant_pool::ClassId]>),
     SourceFile(super::constant_pool::Utf8Id),
     LineNumberTable(Box<[LineNumberTableEntry]>),
@@ -76,7 +76,7 @@ pub(crate) enum Attribute {
     RuntimeInvisibleTypeAnnotations(Box<[crate::jvm::annotation::TypeAnnotationData]>),
     AnnotationDefault(crate::jvm::annotation::ElementValueData),
     BootstrapMethods(Box<[crate::jvm::class::bootstrap::BootstrapMethodData]>),
-    MethodParameters(Box<[ParameterInfo]>),
+    MethodParameters(Box<[ParameterInfoData]>),
     Module(crate::jvm::module::ModuleData),
     ModulePackages(Box<[super::constant_pool::PackageId]>),
     ModuleMainClass(super::constant_pool::ClassId),
@@ -438,7 +438,7 @@ mod tests {
         use crate::jvm::{errors::ParseErrorKind, method::ParameterAccessFlags};
         let pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"MethodParameters"),
-            RawEntry::Utf8(b"value"),
+            RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
         ]);
         let attribute_name_index = 1;
         let mut ctx = ResolutionContext {
@@ -454,7 +454,6 @@ mod tests {
             panic!("expected method parameters");
         };
         assert_eq!(parameters.len(), 1);
-        assert_eq!(parameters[0].name.as_deref(), Some("value"));
         assert_eq!(parameters[0].access_flags, ParameterAccessFlags::FINAL);
         assert!(
             matches!(resolve(&[0]).unwrap(), Attribute::MethodParameters(parameters) if parameters.is_empty())
@@ -463,5 +462,7 @@ mod tests {
             resolve(&bytes[1..bytes.len() - 1]).unwrap_err().kind(),
             ParseErrorKind::Malformed
         );
+        let name = ctx.constant_pool.utf8(parameters[0].name.unwrap());
+        assert_eq!(name.as_bytes(), &[0xed, 0xa0, 0x80]);
     }
 }

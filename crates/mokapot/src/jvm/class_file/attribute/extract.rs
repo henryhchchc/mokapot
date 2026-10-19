@@ -1,7 +1,7 @@
 #![deny(meta_variable_misuse)]
 
 macro_rules! extract_attributes {
-    (for $attrs: ident in $env:literal {
+    (for $attrs: ident in $env:literal $(resolving $ctx:ident)? {
          $( let $var: ident: $attr: ident $(as $uw: ident)?, )*
          $( if let $var_true: ident: $attr_true: ident, )*
          $( match $attr_custom: pat => $var_custom: block, )*
@@ -13,7 +13,7 @@ macro_rules! extract_attributes {
         let mut $unrecognized = Vec::new();
         {
             for attr in $attrs {
-                match attr? {
+                match extract_attributes!(@resolve attr $(, $ctx)?)? {
                 $(
                     Attribute::$attr(it) => if $var.is_none() {
                         $var = Some(it);
@@ -57,6 +57,8 @@ macro_rules! extract_attributes {
         let $unrecognized = $unrecognized.into_boxed_slice();
         $( $(let $var = $var.$uw();)? )*
     };
+    (@resolve $attr:ident) => { $attr };
+    (@resolve $attr:ident, $ctx:ident) => { $attr.resolve($ctx) };
 }
 
 pub(crate) use extract_attributes;
