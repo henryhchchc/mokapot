@@ -26,7 +26,7 @@ pub use annotation::{
 };
 pub use attribute::Attribute;
 pub use class_loader::ClassLoader;
-pub use constant_value::ConstantValue;
+pub use constant_value::{ConstantValue, ConstantValueView};
 pub use field::Field;
 pub use module::Module;
 pub use string::{Cesu8Error, FromCesu8Error, JavaStr, JavaStrDecodeError, JavaString};

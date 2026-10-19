@@ -16,7 +16,7 @@ impl Resolve for &raw::BootstrapMethod {
         let arguments = self
             .bootstrap_arguments
             .iter()
-            .map(|index| ctx.constant_pool.intern_constant(index.get()))
+            .map(|index| ctx.constant_pool.constant_value_id(index.get()))
             .try_collect_exact()?;
 
         Ok(BootstrapMethodData { method, arguments })

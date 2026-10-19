@@ -3,7 +3,7 @@
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, ConstantValue, JavaStr, JavaString,
+        Class, ConstantValueView, JavaStr, JavaString,
         annotation::{
             AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
         },
@@ -66,7 +66,7 @@ impl<'class> Field<'class> {
 
     /// The constant value, if present.
     #[must_use]
-    pub fn constant_value(&self) -> Option<&'class ConstantValue> {
+    pub fn constant_value(&self) -> Option<ConstantValueView<'class>> {
         self.data
             .constant_value
             .map(|id| self.class.constant_pool.constant_value(id))
