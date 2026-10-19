@@ -2,6 +2,9 @@
 
 pub(crate) mod bootstrap;
 mod metadata;
+mod method_handle;
+pub(crate) use method_handle::MethodHandleData;
+pub use method_handle::{MethodHandle, MethodHandleView};
 pub(crate) mod nesting;
 pub(crate) mod record_component;
 pub use bootstrap::BootstrapMethod;
@@ -12,13 +15,9 @@ use std::borrow::Borrow;
 
 use bitflags::bitflags;
 
-use super::{
-    Class, Field, Method,
-    errors::ParseError,
-    references::{FieldRef, MethodRef},
-};
+use super::{Class, Field, Method, errors::ParseError};
 use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
+    intrinsics::see_jvm_spec,
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
@@ -344,40 +343,6 @@ impl Version {
                 }
             }
         }
-    }
-}
-
-/// A method handle.
-#[doc = see_jvm_spec!(4, 4, 8)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum MethodHandle {
-    /// Get an instance field.
-    RefGetField(FieldRef) = 1,
-    /// Get a static field.
-    RefGetStatic(FieldRef) = 2,
-    /// Writes to an instance field.
-    RefPutField(FieldRef) = 3,
-    /// Writes to a static field.
-    RefPutStatic(FieldRef) = 4,
-    /// Invoke an instance method.
-    RefInvokeVirtual(MethodRef) = 5,
-    /// Invoke a static method.
-    RefInvokeStatic(MethodRef) = 6,
-    /// Invoke a special method (e.g., a constructor).
-    RefInvokeSpecial(MethodRef) = 7,
-    /// The new version a special method (e.g., a constructor).
-    RefNewInvokeSpecial(MethodRef) = 8,
-    /// Invoke an interface method.
-    RefInvokeInterface(MethodRef) = 9,
-}
-
-impl MethodHandle {
-    /// Gets the reference kind of this method handle.
-    #[must_use]
-    pub const fn reference_kind(&self) -> u8 {
-        // SAFETY: Self is marked as repr(u8)
-        unsafe { enum_discriminant(self) }
     }
 }
 

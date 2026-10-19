@@ -2,17 +2,17 @@
 
 use std::num::NonZeroU16;
 
+#[cfg(test)]
+use crate::jvm::references::{FieldRef, MethodRef};
+
 use crate::{
     jvm::{
         ConstantValue, JavaStr, JavaString,
-        class::MethodHandle,
+        class::{MethodHandleData, MethodHandleView},
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
         errors::{ParseError, ParsingErrorContext},
-        references::{
-            FieldRef, FieldRefData, FieldRefView, MethodRef, MethodRefData, MethodRefView,
-            ModuleRef,
-        },
+        references::{FieldRefData, FieldRefView, MethodRefData, MethodRefView, ModuleRef},
     },
     types::{
         class_name::ClassName,
@@ -145,7 +145,7 @@ enum Entry {
     /// A field or method name and descriptor.
     NameAndType(NameAndType),
     /// A method handle.
-    MethodHandle(MethodHandle),
+    MethodHandle(MethodHandleData),
     /// A method descriptor.
     MethodType(MethodDescriptorId),
     /// A dynamic constant, retaining its bootstrap-table index.
@@ -449,9 +449,9 @@ impl ConstantPool {
             entry => Err(entry.type_mismatch("MethodHandle")),
         }
     }
-    pub(crate) fn method_handle(&self, id: MethodHandleId) -> &MethodHandle {
+    pub(crate) fn method_handle(&self, id: MethodHandleId) -> MethodHandleView<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
-            Entry::MethodHandle(value) => value,
+            Entry::MethodHandle(value) => value.view(self),
             _ => unreachable!("validated entry kind"),
         }
     }
@@ -681,36 +681,6 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_field_ref(&self, index: u16) -> Result<FieldRef, ParseError> {
-        match self.entry(index)? {
-            Entry::FieldRef(value) => Ok(FieldRefView::new(self, value).into()),
-            entry => Err(entry.type_mismatch("Fieldref")),
-        }
-    }
-
-    pub(crate) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        match self.entry(index)? {
-            Entry::MethodRef(value) => Ok(MethodRefView::new(self, value).into()),
-            entry => Err(entry.type_mismatch("Methodref")),
-        }
-    }
-
-    pub(crate) fn get_interface_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        match self.entry(index)? {
-            Entry::InterfaceMethodRef(value) => Ok(MethodRefView::new(self, value).into()),
-            entry => Err(entry.type_mismatch("InterfaceMethodref")),
-        }
-    }
-
-    pub(crate) fn get_method_or_interface_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
-        match self.entry(index)? {
-            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => {
-                Ok(MethodRefView::new(self, value).into())
-            }
-            entry => Err(entry.type_mismatch("Methodref | InterfaceMethodref")),
-        }
-    }
-
     pub(crate) fn get_constant_value(&self, index: u16) -> Result<ConstantValue, ParseError> {
         Ok(match self.entry(index)? {
             Entry::Integer(value) => ConstantValue::Integer(*value),
@@ -722,7 +692,7 @@ impl ConstantPool {
             Entry::MethodType(value) => {
                 ConstantValue::MethodType(self.method_descriptor(*value).clone())
             }
-            Entry::MethodHandle(value) => ConstantValue::Handle(value.clone()),
+            Entry::MethodHandle(value) => ConstantValue::Handle(value.view(self).into()),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type,
@@ -857,17 +827,17 @@ impl ConstantPool {
         &self,
         reference_kind: u8,
         reference_index: u16,
-    ) -> Result<MethodHandle, ParseError> {
+    ) -> Result<MethodHandleData, ParseError> {
         Ok(match reference_kind {
-            1 => MethodHandle::RefGetField(self.get_field_ref(reference_index)?),
-            2 => MethodHandle::RefGetStatic(self.get_field_ref(reference_index)?),
-            3 => MethodHandle::RefPutField(self.get_field_ref(reference_index)?),
-            4 => MethodHandle::RefPutStatic(self.get_field_ref(reference_index)?),
-            5 => MethodHandle::RefInvokeVirtual(self.get_method_ref(reference_index)?),
-            6 => MethodHandle::RefInvokeStatic(self.get_method_or_interface_ref(reference_index)?),
-            7 => MethodHandle::RefInvokeSpecial(self.get_method_or_interface_ref(reference_index)?),
-            8 => MethodHandle::RefNewInvokeSpecial(self.get_method_ref(reference_index)?),
-            9 => MethodHandle::RefInvokeInterface(self.get_interface_method_ref(reference_index)?),
+            1 => MethodHandleData::GetField(self.field_ref_id(reference_index)?),
+            2 => MethodHandleData::GetStatic(self.field_ref_id(reference_index)?),
+            3 => MethodHandleData::PutField(self.field_ref_id(reference_index)?),
+            4 => MethodHandleData::PutStatic(self.field_ref_id(reference_index)?),
+            5 => MethodHandleData::InvokeVirtual(self.method_ref_id(reference_index)?),
+            6 => MethodHandleData::InvokeStatic(self.method_or_interface_ref_id(reference_index)?),
+            7 => MethodHandleData::InvokeSpecial(self.method_or_interface_ref_id(reference_index)?),
+            8 => MethodHandleData::NewInvokeSpecial(self.method_ref_id(reference_index)?),
+            9 => MethodHandleData::InvokeInterface(self.interface_method_ref_id(reference_index)?),
             _ => {
                 return Err(ParseError::malform(
                     "Invalid reference kind in method handle",
@@ -909,6 +879,7 @@ impl RawEntry<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jvm::class::MethodHandle;
     use crate::jvm::{class_file::constant_pool::RawEntry, errors::ParseErrorKind};
     use crate::types::Descriptor;
 
@@ -1219,73 +1190,98 @@ mod tests {
         }
     }
 
-    fn interface_method_handle_bytes(reference_tag: u8) -> Vec<u8> {
-        // Utf8 owner, Class #1, Utf8 name, Utf8 descriptor, NameAndType #3:#4,
-        // method reference #2:#5, REF_invokeInterface handle #6.
-        let bytes = [
-            1,
-            0,
-            5,
-            b'a',
-            b'/',
-            b'b',
-            b'/',
-            b'I',
-            7,
-            0,
-            1,
-            1,
-            0,
-            1,
-            b'm',
-            1,
-            0,
-            3,
-            b'(',
-            b')',
-            b'V',
-            12,
-            0,
-            3,
-            0,
-            4,
-            reference_tag,
-            0,
-            2,
-            0,
-            5,
-            15,
-            9,
-            0,
-            6,
-        ];
-        bytes.to_vec()
-    }
-
-    #[test]
-    fn interface_method_handles_use_interface_method_refs() {
-        let method = MethodRef {
-            owner: ReferenceType::Class("a/b/I".parse().unwrap()),
-            name: "m".into(),
-            descriptor: "()V".parse().unwrap(),
+    fn method_handle_pool(kind: u8, tag: u8) -> Result<ConstantPool, ParseError> {
+        let member = match tag {
+            9 => RawEntry::FieldRef {
+                class_index: 2.into(),
+                name_and_type_index: 5.into(),
+            },
+            10 => RawEntry::MethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 5.into(),
+            },
+            11 => RawEntry::InterfaceMethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 5.into(),
+            },
+            _ => unreachable!(),
         };
-        let handle = MethodHandle::RefInvokeInterface(method);
-        let bytes = interface_method_handle_bytes(11);
-        let pool = ConstantPool::from_bytes(&bytes, 8).unwrap();
-        assert_eq!(
-            pool.method_handle(pool.method_handle_id(7).unwrap())
-                .clone(),
-            handle
-        );
+        ConstantPool::from_raw(RawConstantPool::from_entries([
+            RawEntry::Utf8(b"a/b/I"),
+            RawEntry::Class {
+                name_index: 1.into(),
+            },
+            RawEntry::Utf8(b"m"),
+            RawEntry::Utf8(if tag == 9 { b"I" } else { b"()V" }),
+            RawEntry::NameAndType {
+                name_index: 3.into(),
+                descriptor_index: 4.into(),
+            },
+            member,
+            RawEntry::MethodHandle {
+                reference_kind: kind,
+                reference_index: 6.into(),
+            },
+        ]))
     }
 
     #[test]
-    fn interface_method_handles_reject_method_refs() {
-        let bytes = interface_method_handle_bytes(10);
-        assert_eq!(
-            ConstantPool::from_bytes(&bytes, 8).unwrap_err().kind(),
-            ParseErrorKind::Malformed
-        );
+    fn method_handles_validate_reference_kinds_and_tags() {
+        for kind in 0..=10 {
+            for tag in [9, 10, 11] {
+                let valid = match kind {
+                    1..=4 => tag == 9,
+                    5 | 8 => tag == 10,
+                    6 | 7 => matches!(tag, 10 | 11),
+                    9 => tag == 11,
+                    _ => false,
+                };
+                match method_handle_pool(kind, tag) {
+                    Ok(pool) => {
+                        assert!(valid, "kind {kind}, tag {tag}");
+                        let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
+                        assert_eq!(handle.reference_kind(), kind);
+                        let owned = MethodHandle::from(handle);
+                        assert_eq!(owned.reference_kind(), kind);
+                        assert_eq!(
+                            pool.get_constant_value(7).unwrap(),
+                            ConstantValue::Handle(owned)
+                        );
+                    }
+                    Err(error) => {
+                        assert!(!valid, "kind {kind}, tag {tag}");
+                        assert_eq!(error.kind(), ParseErrorKind::Malformed);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn method_handle_views_share_references_and_compare_values() {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        fn hash(value: impl Hash) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+        let pool = method_handle_pool(9, 11).unwrap();
+        let other = method_handle_pool(9, 11).unwrap();
+        let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
+        let other_handle = other.method_handle(other.method_handle_id(7).unwrap());
+        let MethodHandleView::RefInvokeInterface(method) = handle else {
+            panic!()
+        };
+        let member = pool.method_ref(pool.interface_method_ref_id(6).unwrap());
+        assert!(std::ptr::eq(method.owner(), member.owner()));
+        assert!(std::ptr::eq(method.name(), member.name()));
+        assert!(std::ptr::eq(method.descriptor(), member.descriptor()));
+        assert_eq!(handle, other_handle);
+        assert_eq!(hash(handle), hash(other_handle));
+        assert_ne!(handle, MethodHandleView::RefInvokeStatic(method));
     }
 
     #[test]
@@ -1329,12 +1325,11 @@ mod tests {
         assert_eq!(pool.count(), count);
         assert_eq!(pool.get_entry(0), None);
         assert_eq!(pool.get_entry(9), None);
-        let method = pool.get_method_ref(2).unwrap();
+        let method = MethodRef::from(pool.method_ref(pool.method_ref_id(2).unwrap()));
         assert_eq!(method.owner, "a/b/C".parse::<ReferenceType>().unwrap());
         assert_eq!(method.descriptor, "(I)V".parse().unwrap());
         assert_eq!(
-            pool.method_handle(pool.method_handle_id(1).unwrap())
-                .clone(),
+            MethodHandle::from(pool.method_handle(pool.method_handle_id(1).unwrap())),
             MethodHandle::RefInvokeVirtual(method)
         );
         assert!(matches!(
