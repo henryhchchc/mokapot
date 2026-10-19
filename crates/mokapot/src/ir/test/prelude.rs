@@ -2,7 +2,7 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap};
 
 pub(crate) use crate::jvm::ConstantPool;
 pub(crate) use crate::jvm::code::InstructionData;
@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// A set-valued fact used by fixed-point analysis tests.
-#[derive(Debug, Clone, PartialEq, Eq, Default, proptest_derive::Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct TestSet(pub(crate) BTreeSet<u8>);
 
 impl<I> From<I> for TestSet
@@ -87,7 +87,8 @@ where
     I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
-    crate::tests::method(
+    crate::tests::method_with_pool(
+        ConstantPool::new(),
         instructions,
         descriptor,
         exception_table,
@@ -144,17 +145,6 @@ pub(crate) fn call(
         method,
         args: args.into_iter().collect(),
     }
-}
-
-/// Fresh receiver and parameter identities for method-entry tests.
-pub(crate) fn entry_values(
-    instance: bool,
-    parameter_count: usize,
-) -> (Option<ValueId>, Vec<ValueId>) {
-    let mut allocator = crate::ir::IdAllocator::default();
-    let receiver = instance.then(|| allocator.new_id());
-    let parameters = (0..parameter_count).map(|_| allocator.new_id()).collect();
-    (receiver, parameters)
 }
 
 /// The method entry invoking `target` with `args`.
@@ -281,43 +271,6 @@ pub(crate) fn def(value: ValueId, expr: impl Into<Expression>) -> Operation {
         value,
         expr: expr.into(),
     }
-}
-
-/// The blocks reachable from the entry of `ir`.
-pub(crate) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
-    reachable_of(&ir.blocks, ir.entry.block)
-}
-
-/// The blocks reachable from `entry` within `blocks`.
-pub(crate) fn reachable_of(
-    blocks: &HashMap<BlockId, BasicBlock>,
-    entry: BlockId,
-) -> Vec<(BlockId, &BasicBlock)> {
-    let mut result = Vec::new();
-    let mut visited = HashSet::new();
-    let mut pending = VecDeque::from([entry]);
-    while let Some(id) = pending.pop_front() {
-        if !visited.insert(id) {
-            continue;
-        }
-        let block = blocks
-            .get(&id)
-            .expect("a successor must belong to its method");
-        pending.extend(
-            block
-                .terminator
-                .successors()
-                .filter_map(Successor::block_target),
-        );
-        result.push((id, block));
-    }
-    result
-}
-
-pub(crate) fn operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .flat_map(|(_, it)| &it.operations)
 }
 
 /// The JVM origin of `ir`'s entry terminator.

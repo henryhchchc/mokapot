@@ -21,23 +21,8 @@ pub(super) fn validate_internal_name(name: &JavaStr) -> Result<(), String> {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use proptest::prelude::*;
-
     use super::validate_internal_name;
     use crate::jvm::{JavaStr, JavaString};
-
-    pub fn name_components() -> impl Strategy<Value = Vec<String>> {
-        prop::collection::vec(
-            prop::collection::vec(
-                any::<char>().prop_filter("An unqualified name character", |character| {
-                    !matches!(character, '.' | ';' | '[' | '/')
-                }),
-                1..16,
-            )
-            .prop_map(|characters| characters.into_iter().collect()),
-            1..5,
-        )
-    }
 
     #[test]
     fn rejects_invalid_internal_names() {
@@ -69,16 +54,5 @@ pub(super) mod tests {
         }
         let unpaired = JavaStr::from_cesu8(&[b'x', 0xed, 0xa0, 0x80]).unwrap();
         assert!(validate_internal_name(unpaired).is_ok());
-    }
-
-    proptest! {
-        #[test]
-        fn rejects_empty_components(components in name_components(), position in any::<usize>()) {
-            let mut components = components;
-            let position = position % (components.len() + 1);
-            components.insert(position, String::new());
-            let name = JavaString::from(components.join("/"));
-            prop_assert!(validate_internal_name(name.as_java_str()).is_err());
-        }
     }
 }

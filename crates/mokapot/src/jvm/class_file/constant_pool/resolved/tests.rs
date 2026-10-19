@@ -70,6 +70,15 @@ fn member_pool() -> ConstantPool {
             name_and_type_index: 11.into(),
         },
         RawEntry::Long(0.into()),
+        RawEntry::Utf8(b"different"),
+        RawEntry::NameAndType {
+            name_index: 21.into(),
+            descriptor_index: 4.into(),
+        },
+        RawEntry::FieldRef {
+            class_index: 2.into(),
+            name_and_type_index: 22.into(),
+        },
     ]);
     ConstantPool::from_raw(raw).unwrap()
 }
@@ -133,15 +142,11 @@ fn member_views_compare_and_hash_values_across_pools() {
     assert_eq!(method, other_method);
     assert_eq!(hash(method), hash(other_method));
     let mut different = ConstantPool::new();
-    let different_field = different.insert_field_ref(FieldRef {
-        name: "different".into(),
-        ..field.into()
-    });
     let different_method = different.insert_method_ref(MethodRef {
         descriptor: "()I".parse().unwrap(),
         ..method.into()
     });
-    assert_ne!(field, different.field_ref(different_field));
+    assert_ne!(field, pool.field_ref(pool.field_ref_id(23).unwrap()));
     assert_ne!(method, different.method_ref(different_method));
 }
 

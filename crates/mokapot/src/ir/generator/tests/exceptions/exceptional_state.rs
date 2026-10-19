@@ -19,11 +19,9 @@ fn exceptional_state_excludes_the_fallible_result() {
         panic!("checkcast must define a result");
     };
     let result = *result;
-    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
-    let fallible = block_containing_instruction(&ir, location);
+    let fallible = terminator_at(&ir, 1.into());
     let target = |predicate: fn(&ControlTransfer) -> bool| {
         fallible
-            .terminator
             .successors()
             .find(|it| it.transfer().is_some_and(predicate))
             .unwrap()
@@ -32,11 +30,18 @@ fn exceptional_state_excludes_the_fallible_result() {
     };
     let normal_target = target(|it| *it == ControlTransfer::Unconditional);
     let pad_id = target(|it| matches!(it, ControlTransfer::Exception(None)));
-    let pad = block_of(&ir, pad_id);
-    let handler = block_of(&ir, successor_target(pad, 0));
+    let pad = ir.block(pad_id).unwrap();
+    let handler_id = pad
+        .terminator
+        .successors()
+        .next()
+        .unwrap()
+        .block_target()
+        .unwrap();
+    let handler = ir.block(handler_id).unwrap();
 
     assert!(matches!(
-        block_of(&ir, normal_target).terminator,
+        ir.block(normal_target).unwrap().terminator,
         Terminator::Return { value: Some(value), .. } if value == result
     ));
     assert!(matches!(

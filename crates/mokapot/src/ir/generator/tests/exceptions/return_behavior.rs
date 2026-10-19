@@ -12,8 +12,13 @@ fn synchronized_return_reports_handler_frame_overflow_at_return() {
         "()V",
         vec![handler(4.into()..5.into(), 10.into(), None)],
     );
-    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
-    method.body.as_mut().expect("method has a body").max_stack = 0;
+    method.data_mut().access_flags |= method::AccessFlags::SYNCHRONIZED;
+    method
+        .data_mut()
+        .body
+        .as_mut()
+        .expect("method has a body")
+        .max_stack = 0;
 
     let failure = build_failure(&method);
     assert_eq!(
@@ -38,7 +43,7 @@ fn synchronized_return_has_only_exceptional_successors() {
         Some(illegal.clone()),
     )];
     let mut method = method(body, "()I", table);
-    method.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    method.data_mut().access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&method).unwrap();
     let Terminator::Return { exceptional, .. } = terminator_at(&ir, 1.into()) else {
         panic!("expected a fallible return terminator");
@@ -62,7 +67,7 @@ fn synchronized_return_has_only_exceptional_successors() {
 #[test]
 fn returns_without_a_handler_unwind_conservatively() {
     let mut synchronized = method([(0, InstructionData::Return)], "()V", vec![]);
-    synchronized.access_flags |= method::AccessFlags::SYNCHRONIZED;
+    synchronized.data_mut().access_flags |= method::AccessFlags::SYNCHRONIZED;
     let ir = build(&synchronized).unwrap();
     let ret_term = terminator_at(&ir, 0.into());
     assert!(matches!(ret_term, Terminator::Return { value: None, .. }));

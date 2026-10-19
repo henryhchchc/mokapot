@@ -1,8 +1,5 @@
 use super::*;
-use crate::jvm::{
-    JavaString,
-    references::{FieldRef, MethodRef},
-};
+use crate::jvm::{JavaString, references::MethodRef};
 
 impl<T> ValueCache<T> {
     fn extend_sources(&mut self, count: u16) {
@@ -11,16 +8,6 @@ impl<T> ValueCache<T> {
 }
 
 impl ConstantPool {
-    pub(crate) fn insert_field_ref(&mut self, value: FieldRef) -> FieldRefId {
-        let owner = self.insert_reference_type(value.owner);
-        let name_and_type = self.insert_field_name_and_type(value.name, value.field_type);
-        let index = self.inner.push(Entry::FieldRef(FieldRefData {
-            owner,
-            name_and_type,
-        }));
-        self.extend_test_sources();
-        FieldRefId(NonZeroU16::new(index).expect("nonzero test index"))
-    }
     pub(crate) fn insert_method_ref(&mut self, value: MethodRef) -> MethodRefId {
         let owner = self.insert_reference_type(value.owner);
         let name_and_type = self.insert_method_name_and_type(value.name, value.descriptor);
@@ -31,21 +18,6 @@ impl ConstantPool {
         self.extend_test_sources();
         MethodRefId(NonZeroU16::new(index).expect("nonzero test index"))
     }
-    fn insert_field_name_and_type(
-        &mut self,
-        name: JavaString,
-        ty: FieldType,
-    ) -> FieldNameAndTypeId {
-        let name = self.insert_utf8(name);
-        let id = FieldTypeId(u16::try_from(self.field_types.values.len()).unwrap());
-        self.field_types.values.push(ty);
-        let index = self
-            .inner
-            .push(Entry::NameAndType(NameAndType::Field(name, id)));
-        self.extend_test_sources();
-        FieldNameAndTypeId(NonZeroU16::new(index).unwrap())
-    }
-
     fn insert_method_name_and_type(
         &mut self,
         name: JavaString,
