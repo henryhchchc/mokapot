@@ -12,11 +12,11 @@ pub(crate) use local_variable::{LocalVariableDescriptorEntry, LocalVariableSigna
 
 use super::{ParseError, ResolutionContext, code::raw::Code, resolve::Resolve};
 use crate::jvm::{
-    Annotations,
+    annotation::AnnotationsData,
     class_file::code::raw_instruction::RawInstruction,
     code::{
         ExceptionTableEntry, Instruction, InstructionList, LineNumberTableEntry,
-        LocalVariableTable, MethodBody, ProgramCounter,
+        LocalVariableTable, MethodBodyData, ProgramCounter,
     },
 };
 
@@ -32,7 +32,7 @@ impl From<raw::LineNumberTableEntry> for LineNumberTableEntry {
 impl Resolve for raw::ExceptionTableEntry {
     type Output = ExceptionTableEntry;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::ExceptionTableEntry {
             start_pc,
@@ -59,9 +59,9 @@ impl Resolve for raw::ExceptionTableEntry {
 }
 
 impl Resolve for Code<'_> {
-    type Output = MethodBody;
+    type Output = MethodBodyData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let Code {
             max_stack,
@@ -110,7 +110,7 @@ impl Resolve for Code<'_> {
             }
         }
 
-        Ok(MethodBody {
+        Ok(MethodBodyData {
             max_stack,
             max_locals,
             instructions,
@@ -118,7 +118,7 @@ impl Resolve for Code<'_> {
             line_number_table,
             local_variable_table,
             stack_map_table,
-            type_annotations: Annotations {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
@@ -137,14 +137,13 @@ mod tests {
         ResolutionContext {
             constant_pool: ConstantPool::new(),
             class_version: Version::LATEST,
-            current_class_name: "Test".parse().unwrap(),
         }
     }
 
     #[test]
     fn instructions_preserve_offsets_and_reject_invalid_bytecode() {
-        let context = context();
-        let resolve = |code| {
+        let mut context = context();
+        let mut resolve = |code| {
             Code {
                 max_stack: 2,
                 max_locals: 0,
@@ -152,7 +151,7 @@ mod tests {
                 exception_table: &[],
                 attributes: Box::new([]),
             }
-            .resolve(&context)
+            .resolve(&mut context)
         };
         let body = resolve(&[0x10, 42, 0x04, 0x60, 0xac]).unwrap();
         let instructions: Vec<_> = body.instructions.into_iter().collect();
@@ -175,14 +174,14 @@ mod tests {
 
     #[test]
     fn exception_table_entry_preserves_exclusive_end_pc() {
-        let context = context();
+        let mut context = context();
         let entry = raw::ExceptionTableEntry {
             start_pc: 1.into(),
             end_pc: 4.into(),
             handler_pc: 5.into(),
             catch_type: 0.into(),
         }
-        .resolve(&context)
+        .resolve(&mut context)
         .unwrap();
 
         assert_eq!(

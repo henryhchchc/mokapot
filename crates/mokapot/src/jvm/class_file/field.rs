@@ -12,11 +12,10 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Annotations, Field,
+        annotation::AnnotationsData,
         errors::ParsingErrorContext,
-        field::{self},
+        field::{self, FieldData},
     },
-    types::field_type::FieldType,
 };
 
 /// The raw representation of a `field_info` structure.
@@ -44,22 +43,22 @@ impl<'a> Decode<'a> for FieldInfo<'a> {
 }
 
 impl Resolve for FieldInfo<'_> {
-    type Output = Field;
+    type Output = FieldData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let FieldInfo {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
+        let Self {
             access_flags,
             name_index,
             descriptor_index,
             attributes,
-        } = raw;
+        } = self;
         let access_flags =
             parse_flags::<field::AccessFlags>(access_flags, "Invalid field access flags")?;
-        let name = ctx.constant_pool.get_java_string(name_index)?;
-        let field_type = FieldType::try_from(ctx.constant_pool.get_utf8(descriptor_index)?)
+        let name = ctx.constant_pool.utf8_id(name_index)?;
+        let field_type = ctx
+            .constant_pool
+            .intern_field_type(descriptor_index)
             .context("Invalid field descriptor")?;
-        let owner = ctx.current_class_name.clone();
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
 
         extract_attributes! {
@@ -80,20 +79,19 @@ impl Resolve for FieldInfo<'_> {
             }
         }
 
-        Ok(Field {
+        Ok(FieldData {
             access_flags,
             name,
-            owner,
             field_type,
             constant_value,
             is_synthetic,
             is_deprecated,
             signature,
-            annotations: Annotations {
+            annotations: AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: Annotations {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },

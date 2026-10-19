@@ -12,8 +12,11 @@ use crate::{
         references::{FieldRef, MethodRef, ModuleRef},
     },
     types::{
-        class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor,
-        package_name::PackageName, reference_type::ReferenceType,
+        class_name::ClassName,
+        field_type::FieldType,
+        method_descriptor::{MethodDescriptor, ReturnType},
+        package_name::PackageName,
+        reference_type::ReferenceType,
     },
 };
 
@@ -21,8 +24,49 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstantPool {
     inner: PoolStorage<Entry>,
-    method_descriptors: Vec<MethodDescriptor>,
-    descriptor_indices: Box<[Option<MethodDescriptorId>]>,
+    method_descriptors: ValueCache<MethodDescriptor>,
+    field_types: ValueCache<FieldType>,
+    return_types: ValueCache<ReturnType>,
+    constants: ValueCache<ConstantValue>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ValueCache<T> {
+    values: Vec<T>,
+    indices: Vec<Option<u16>>,
+}
+
+impl<T> ValueCache<T> {
+    fn new(count: u16) -> Self {
+        Self {
+            values: Vec::new(),
+            indices: vec![None; usize::from(count)],
+        }
+    }
+    fn lookup(&self, source: u16) -> Option<u16> {
+        self.indices.get(usize::from(source)).copied().flatten()
+    }
+    fn insert(&mut self, source: u16, value: T) -> Result<u16, ParseError> {
+        let slot = self
+            .indices
+            .get_mut(usize::from(source))
+            .context("Invalid source index")?;
+        let id = u16::try_from(self.values.len())
+            .map_err(|_| ParseError::malform("Too many cached values"))?;
+        self.values.push(value);
+        *slot = Some(id);
+        Ok(id)
+    }
+    fn get(&self, id: u16) -> &T {
+        &self.values[usize::from(id)]
+    }
+    fn finish(&mut self) {
+        self.indices = Vec::new();
+    }
+    #[cfg(test)]
+    fn extend_sources(&mut self, count: u16) {
+        self.indices.resize_with(usize::from(count), || None);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +74,30 @@ pub(crate) struct Utf8Id(NonZeroU16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct MethodDescriptorId(u16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ClassId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PackageId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ModuleId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MethodHandleId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MethodNameAndTypeId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FieldTypeId(u16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReturnTypeId(u16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ConstantValueId(u16);
 
 /// A resolved constant-pool entry.
 #[derive(Debug, Clone, PartialEq)]
@@ -93,7 +161,7 @@ enum Entry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameAndType {
     /// A field name and type.
-    Field(JavaString, FieldType),
+    Field(JavaString, FieldTypeId),
     /// A method name and descriptor.
     Method(JavaString, MethodDescriptorId),
 }
@@ -133,12 +201,145 @@ impl Entry {
 
 impl ConstantPool {
     #[cfg(test)]
+    fn extend_test_sources(&mut self) {
+        let count = self.inner.count();
+        self.method_descriptors.extend_sources(count);
+        self.field_types.extend_sources(count);
+        self.return_types.extend_sources(count);
+        self.constants.extend_sources(count);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn insert_class_name(&mut self, value: ClassName) -> ClassId {
+        let index = self.inner.push(Entry::Class {
+            reference_type: ReferenceType::Class(value),
+            is_binary_name: true,
+        });
+        self.extend_test_sources();
+        ClassId(NonZeroU16::new(index).expect("nonzero test index"))
+    }
+
+    pub(crate) fn class_id(&self, index: u16) -> Result<ClassId, ParseError> {
+        match self.entry(index)? {
+            Entry::Class {
+                reference_type: ReferenceType::Class(_),
+                is_binary_name: true,
+            } => Ok(ClassId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("ClassName")),
+        }
+    }
+    pub(crate) fn class_name(&self, id: ClassId) -> &ClassName {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::Class {
+                reference_type: ReferenceType::Class(value),
+                is_binary_name: true,
+            } => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn package_id(&self, index: u16) -> Result<PackageId, ParseError> {
+        match self.entry(index)? {
+            Entry::Package(_) => Ok(PackageId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("PackageName")),
+        }
+    }
+    pub(crate) fn package_name(&self, id: PackageId) -> &PackageName {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::Package(value) => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn module_id(&self, index: u16) -> Result<ModuleId, ParseError> {
+        match self.entry(index)? {
+            Entry::Module(_) => Ok(ModuleId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("ModuleRef")),
+        }
+    }
+    pub(crate) fn module_ref(&self, id: ModuleId) -> &ModuleRef {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::Module(value) => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn method_handle_id(&self, index: u16) -> Result<MethodHandleId, ParseError> {
+        match self.entry(index)? {
+            Entry::MethodHandle(_) => Ok(MethodHandleId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("MethodHandle")),
+        }
+    }
+    pub(crate) fn method_handle(&self, id: MethodHandleId) -> &MethodHandle {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::MethodHandle(value) => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn method_name_and_type_id(
+        &self,
+        index: u16,
+    ) -> Result<MethodNameAndTypeId, ParseError> {
+        match self.entry(index)? {
+            Entry::NameAndType(NameAndType::Method(..)) => Ok(MethodNameAndTypeId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("method name and type")),
+        }
+    }
+    pub(crate) fn method_name_and_type(
+        &self,
+        id: MethodNameAndTypeId,
+    ) -> (&JavaStr, &MethodDescriptor) {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::NameAndType(NameAndType::Method(name, descriptor)) => {
+                (name.as_java_str(), self.method_descriptor(*descriptor))
+            }
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn intern_field_type(&mut self, index: u16) -> Result<FieldTypeId, ParseError> {
+        if let Some(id) = self.field_types.lookup(index) {
+            return Ok(FieldTypeId(id));
+        }
+        let value =
+            FieldType::try_from(self.get_utf8(index)?).context("Invalid field descriptor")?;
+        self.field_types.insert(index, value).map(FieldTypeId)
+    }
+    pub(crate) fn field_type(&self, id: FieldTypeId) -> &FieldType {
+        self.field_types.get(id.0)
+    }
+    pub(crate) fn intern_return_type(&mut self, index: u16) -> Result<ReturnTypeId, ParseError> {
+        if let Some(id) = self.return_types.lookup(index) {
+            return Ok(ReturnTypeId(id));
+        }
+        let value =
+            ReturnType::try_from(self.get_utf8(index)?).context("Invalid return descriptor")?;
+        self.return_types.insert(index, value).map(ReturnTypeId)
+    }
+    pub(crate) fn return_type(&self, id: ReturnTypeId) -> &ReturnType {
+        self.return_types.get(id.0)
+    }
+    pub(crate) fn intern_constant(&mut self, index: u16) -> Result<ConstantValueId, ParseError> {
+        if let Some(id) = self.constants.lookup(index) {
+            return Ok(ConstantValueId(id));
+        }
+        let value = self.get_constant_value(index)?;
+        self.constants.insert(index, value).map(ConstantValueId)
+    }
+    pub(crate) fn constant_value(&self, id: ConstantValueId) -> &ConstantValue {
+        self.constants.get(id.0)
+    }
+    #[cfg(test)]
     pub(crate) fn insert_utf8(&mut self, value: JavaString) -> Utf8Id {
         let index = self.inner.push(Entry::Utf8(value));
-        let mut indices = std::mem::take(&mut self.descriptor_indices).into_vec();
-        indices.push(None);
-        self.descriptor_indices = indices.into_boxed_slice();
-        Utf8Id(NonZeroU16::new(index).expect("test pool index is nonzero"))
+        self.extend_test_sources();
+        Utf8Id(NonZeroU16::new(index).expect("nonzero test index"))
     }
 
     #[cfg(test)]
@@ -146,11 +347,10 @@ impl ConstantPool {
         &mut self,
         value: MethodDescriptor,
     ) -> MethodDescriptorId {
-        let id = MethodDescriptorId(
-            u16::try_from(self.method_descriptors.len()).expect("test descriptors fit in u16"),
-        );
-        self.method_descriptors.push(value);
-        id
+        let id = u16::try_from(self.method_descriptors.values.len())
+            .expect("test descriptors fit in u16");
+        self.method_descriptors.values.push(value);
+        MethodDescriptorId(id)
     }
 
     pub(crate) fn get_utf8(&self, index: u16) -> Result<&JavaStr, ParseError> {
@@ -172,45 +372,28 @@ impl ConstantPool {
     }
 
     pub(crate) fn method_descriptor(&self, id: MethodDescriptorId) -> &MethodDescriptor {
-        &self.method_descriptors[usize::from(id.0)]
-    }
-
-    pub(crate) fn method_descriptor_id(
-        &self,
-        index: u16,
-    ) -> Result<MethodDescriptorId, ParseError> {
-        self.descriptor_indices
-            .get(usize::from(index))
-            .copied()
-            .flatten()
-            .context("Unprepared method descriptor")
+        self.method_descriptors.get(id.0)
     }
 
     pub(crate) fn intern_method_descriptor(
         &mut self,
         index: u16,
     ) -> Result<MethodDescriptorId, ParseError> {
-        if let Some(id) = self
-            .descriptor_indices
-            .get(usize::from(index))
-            .copied()
-            .flatten()
-        {
-            return Ok(id);
+        if let Some(id) = self.method_descriptors.lookup(index) {
+            return Ok(MethodDescriptorId(id));
         }
-        let descriptor = MethodDescriptor::try_from(self.get_utf8(index)?)
+        let value = MethodDescriptor::try_from(self.get_utf8(index)?)
             .context("Invalid method descriptor")?;
-        let id = MethodDescriptorId(
-            u16::try_from(self.method_descriptors.len())
-                .map_err(|_| ParseError::malform("Too many method descriptors"))?,
-        );
-        self.method_descriptors.push(descriptor);
-        self.descriptor_indices[usize::from(index)] = Some(id);
-        Ok(id)
+        self.method_descriptors
+            .insert(index, value)
+            .map(MethodDescriptorId)
     }
 
     pub(crate) fn finish(mut self) -> Self {
-        self.descriptor_indices = Box::new([]);
+        self.method_descriptors.finish();
+        self.field_types.finish();
+        self.return_types.finish();
+        self.constants.finish();
         self
     }
 
@@ -220,8 +403,10 @@ impl ConstantPool {
     pub fn new() -> Self {
         Self {
             inner: PoolStorage::with_padding(1),
-            method_descriptors: Vec::new(),
-            descriptor_indices: vec![None].into_boxed_slice(),
+            method_descriptors: ValueCache::new(1),
+            field_types: ValueCache::new(1),
+            return_types: ValueCache::new(1),
+            constants: ValueCache::new(1),
         }
     }
 
@@ -242,8 +427,10 @@ impl ConstantPool {
         let mut pending = raw.inner.into_slots();
         let mut pool = Self {
             inner: PoolStorage::with_padding(count),
-            method_descriptors: Vec::new(),
-            descriptor_indices: vec![None; usize::from(count)].into_boxed_slice(),
+            method_descriptors: ValueCache::new(count),
+            field_types: ValueCache::new(count),
+            return_types: ValueCache::new(count),
+            constants: ValueCache::new(count),
         };
         // Each tier depends only on earlier tiers, regardless of source entry order.
         for tier in 0..4 {
@@ -332,7 +519,9 @@ impl ConstantPool {
         index: u16,
     ) -> Result<(JavaString, FieldType), ParseError> {
         match self.entry(index)? {
-            Entry::NameAndType(NameAndType::Field(name, ty)) => Ok((name.clone(), ty.clone())),
+            Entry::NameAndType(NameAndType::Field(name, ty)) => {
+                Ok((name.clone(), self.field_type(*ty).clone()))
+            }
             entry => Err(entry.type_mismatch("NameAndType with a field descriptor")),
         }
     }
@@ -374,27 +563,6 @@ impl ConstantPool {
         match self.entry(index)? {
             Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => Ok(value.clone()),
             entry => Err(entry.type_mismatch("Methodref | InterfaceMethodref")),
-        }
-    }
-
-    pub(crate) fn get_method_handle(&self, index: u16) -> Result<MethodHandle, ParseError> {
-        match self.entry(index)? {
-            Entry::MethodHandle(value) => Ok(value.clone()),
-            entry => Err(entry.type_mismatch("MethodHandle")),
-        }
-    }
-
-    pub(crate) fn get_module_ref(&self, index: u16) -> Result<ModuleRef, ParseError> {
-        match self.entry(index)? {
-            Entry::Module(value) => Ok(value.clone()),
-            entry => Err(entry.type_mismatch("Module")),
-        }
-    }
-
-    pub(crate) fn get_package_name(&self, index: u16) -> Result<PackageName, ParseError> {
-        match self.entry(index)? {
-            Entry::Package(value) => Ok(value.clone()),
-            entry => Err(entry.type_mismatch("Package")),
         }
     }
 
@@ -446,7 +614,7 @@ impl ConstantPool {
                 Entry::MethodType(self.intern_method_descriptor(descriptor_index.into())?)
             }
             RawEntry::Module { name_index } => Entry::Module(ModuleRef {
-                name: self.get_str(name_index.into())?.into_owned(),
+                name: self.get_java_string(name_index.into())?,
             }),
             RawEntry::Package { name_index } => Entry::Package(
                 PackageName::try_from(self.get_utf8(name_index.into())?)
@@ -542,10 +710,7 @@ impl ConstantPool {
         Ok(if descriptor.as_bytes().starts_with(b"(") {
             NameAndType::Method(name, self.intern_method_descriptor(descriptor_index)?)
         } else {
-            NameAndType::Field(
-                name,
-                FieldType::try_from(descriptor).context("Invalid field descriptor")?,
-            )
+            NameAndType::Field(name, self.intern_field_type(descriptor_index)?)
         })
     }
 
@@ -609,14 +774,16 @@ mod tests {
     use crate::types::Descriptor;
 
     #[test]
-    fn checked_ids_preserve_strings_and_share_parsed_descriptors() {
+    fn checked_ids_preserve_values_and_share_parsed_descriptors() {
         let raw = RawConstantPool::from_entries([
             RawEntry::Utf8(b"()V"),
             RawEntry::Long(0.into()),
             RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
+            RawEntry::Utf8(b"I"),
+            RawEntry::Utf8(b"V"),
         ]);
         let mut pool = ConstantPool::from_raw(raw).unwrap();
-        for index in [0, 2, 3, 5] {
+        for index in [0, 2, 3, 7] {
             assert_eq!(
                 pool.utf8_id(index).unwrap_err().kind(),
                 ParseErrorKind::Malformed
@@ -629,10 +796,28 @@ mod tests {
         let name = pool.utf8_id(4).unwrap();
         let descriptor = pool.intern_method_descriptor(1).unwrap();
         assert_eq!(pool.intern_method_descriptor(1).unwrap(), descriptor);
-        assert_eq!(pool.method_descriptors.len(), 1);
+        assert_eq!(pool.method_descriptors.values.len(), 1);
+        let field_type = pool.intern_field_type(5).unwrap();
+        assert_eq!(pool.intern_field_type(5).unwrap(), field_type);
+        let return_type = pool.intern_return_type(6).unwrap();
+        assert_eq!(pool.intern_return_type(6).unwrap(), return_type);
+        let constant = pool.intern_constant(2).unwrap();
+        assert_eq!(pool.intern_constant(2).unwrap(), constant);
+        for index in [0, 3, 7] {
+            for result in [
+                pool.intern_field_type(index).map(|_| ()),
+                pool.intern_return_type(index).map(|_| ()),
+                pool.intern_constant(index).map(|_| ()),
+            ] {
+                assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
+            }
+        }
         let pool = pool.finish();
         assert_eq!(pool.utf8(name).as_bytes(), &[0xed, 0xa0, 0x80]);
         assert_eq!(pool.method_descriptor(descriptor).descriptor(), "()V");
+        assert_eq!(pool.field_type(field_type).descriptor(), "I");
+        assert_eq!(pool.return_type(return_type), &ReturnType::Void);
+        assert_eq!(pool.constant_value(constant), &ConstantValue::Long(0));
     }
 
     #[test]
@@ -644,13 +829,16 @@ mod tests {
         let package_name: PackageName = "a/b/C".parse().unwrap();
         assert_eq!(pool.count(), 4);
         assert_eq!(pool.get_class_name(2).unwrap(), class_name);
-        assert_eq!(pool.get_package_name(3).unwrap(), package_name);
+        assert_eq!(
+            pool.package_name(pool.package_id(3).unwrap()).clone(),
+            package_name
+        );
         assert_eq!(
             pool.get_class_name(3).unwrap_err().kind(),
             ParseErrorKind::Malformed,
         );
         assert_eq!(
-            pool.get_package_name(2).unwrap_err().kind(),
+            pool.package_id(2).unwrap_err().kind(),
             ParseErrorKind::Malformed,
         );
     }
@@ -729,7 +917,11 @@ mod tests {
         let handle = MethodHandle::RefInvokeInterface(method);
         let bytes = interface_method_handle_bytes(11);
         let pool = ConstantPool::from_bytes(&bytes, 8).unwrap();
-        assert_eq!(pool.get_method_handle(7).unwrap(), handle);
+        assert_eq!(
+            pool.method_handle(pool.method_handle_id(7).unwrap())
+                .clone(),
+            handle
+        );
     }
 
     #[test]
@@ -786,7 +978,8 @@ mod tests {
         assert_eq!(method.owner, "a/b/C".parse::<ReferenceType>().unwrap());
         assert_eq!(method.descriptor, "(I)V".parse().unwrap());
         assert_eq!(
-            pool.get_method_handle(1).unwrap(),
+            pool.method_handle(pool.method_handle_id(1).unwrap())
+                .clone(),
             MethodHandle::RefInvokeVirtual(method)
         );
         assert!(matches!(

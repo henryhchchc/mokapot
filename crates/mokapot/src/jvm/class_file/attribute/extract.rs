@@ -42,8 +42,8 @@ macro_rules! extract_attributes {
                     },
                 )*
                 $($attr_custom => $var_custom,)*
-                    Attribute::Unrecognized(name, bytes) => {
-                        $unrecognized.push((name, bytes));
+                    Attribute::Unrecognized(data) => {
+                        $unrecognized.push(data);
                     }
                     unexpected => {
                         Err($crate::jvm::errors::ParseError::malform(format!("Unexpected attribute. Expected: {}, but got: {}",
@@ -64,7 +64,6 @@ pub(crate) use extract_attributes;
 #[cfg(test)]
 mod tests {
     use crate::jvm::{
-        JavaString,
         class_file::attribute::Attribute,
         errors::{ParseError, ParseErrorKind},
     };
@@ -84,14 +83,14 @@ mod tests {
 
     #[test]
     fn extraction_rejects_duplicates_unexpected_attributes_and_resolution_errors() {
-        use Attribute::{Deprecated, Signature, Synthetic};
+        use Attribute::{Deprecated, ModulePackages, Synthetic};
         assert_eq!(
             extract_markers([Ok(Synthetic), Ok(Deprecated)]).unwrap(),
             (true, true)
         );
         for attributes in [
             vec![Ok(Synthetic), Ok(Synthetic)],
-            vec![Ok(Signature(JavaString::default()))],
+            vec![Ok(ModulePackages(Box::new([])))],
             vec![Err(ParseError::malform("invalid attribute"))],
         ] {
             assert_eq!(

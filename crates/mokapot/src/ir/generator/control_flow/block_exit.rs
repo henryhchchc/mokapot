@@ -87,7 +87,7 @@ pub(crate) enum ArmKey {
 impl BlockExit<ProgramCounter> {
     /// Classifies the control transfer of `instruction` at `pc` within `body`.
     pub(super) fn of(
-        body: &MethodBody,
+        body: MethodBody<'_>,
         pc: ProgramCounter,
         instruction: &Instruction,
     ) -> Result<Self, ErrorKind> {
@@ -97,7 +97,7 @@ impl BlockExit<ProgramCounter> {
             IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
         };
         let next = || {
-            body.instructions
+            body.instructions()
                 .next_pc_of(&pc)
                 .ok_or(ErrorKind::MissingFallthrough)
         };
@@ -176,9 +176,13 @@ fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> b
 ///
 /// Selection walks the table in order, so the first catch-all shadows later
 /// entries and an escaping exception unwinds.
-fn exception_arms(body: &MethodBody, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
+fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
     let mut exception_arms = Vec::new();
-    for entry in body.exception_table.iter().filter(|entry| entry.covers(pc)) {
+    for entry in body
+        .exception_table()
+        .iter()
+        .filter(|entry| entry.covers(pc))
+    {
         exception_arms.push(ExceptionArm {
             target: ExceptionTarget::Handler(entry.handler_pc),
             catch_type: entry.catch_type.clone(),
@@ -209,7 +213,7 @@ mod tests {
             };
             let instructions = [(0, switch.clone()), (10, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.as_ref().unwrap();
+            let body = method.as_method().body().unwrap();
             assert_eq!(
                 BlockExit::of(body, 0.into(), &switch),
                 Err(ErrorKind::InvalidTableSwitchRange)
@@ -223,7 +227,7 @@ mod tests {
             let allocation = Instruction::MultiANewArray(ref_t(array_type), dimensions);
             let instructions = [(0, allocation.clone()), (1, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.as_ref().unwrap();
+            let body = method.as_method().body().unwrap();
             assert_eq!(
                 BlockExit::of(body, 0.into(), &allocation),
                 Err(ErrorKind::InvalidMultiArrayDimensions)
@@ -241,7 +245,7 @@ mod tests {
         ];
         for instruction in instructions {
             let method = method([(0, instruction.clone())], "()V", vec![]);
-            let body = method.body.as_ref().unwrap();
+            let body = method.as_method().body().unwrap();
             assert_eq!(
                 BlockExit::of(body, 0.into(), &instruction),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
@@ -252,7 +256,7 @@ mod tests {
     #[test]
     fn rejects_missing_fallthrough() {
         let method = method([(4, Instruction::Nop)], "()V", vec![]);
-        let body = method.body.as_ref().unwrap();
+        let body = method.as_method().body().unwrap();
         assert_eq!(
             BlockExit::of(body, 4.into(), &Instruction::Nop),
             Err(ErrorKind::MissingFallthrough)
