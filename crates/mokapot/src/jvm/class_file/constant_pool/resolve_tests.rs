@@ -4,7 +4,6 @@ use crate::jvm::{
     class::{MethodHandle, MethodHandleView},
     class_file::constant_pool::RawEntry,
     errors::ParseErrorKind,
-    references::{FieldRef, MethodRef},
 };
 use crate::types::Descriptor;
 use crate::types::class_name::ClassName;
@@ -99,8 +98,8 @@ fn member_views_share_owners_names_and_descriptors() {
     assert!(std::ptr::eq(dynamic_name, name));
     assert!(std::ptr::eq(descriptor, method.descriptor()));
     assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
-    assert_eq!(FieldRef::from(field).name.as_bytes(), name.as_bytes());
-    assert_eq!(MethodRef::from(method).name.as_bytes(), name.as_bytes());
+    assert_eq!(field.into_owned().name.as_bytes(), name.as_bytes());
+    assert_eq!(method.into_owned().name.as_bytes(), name.as_bytes());
     let ConstantValueView::Dynamic(bootstrap, dynamic_name, ty) =
         pool.constant_value(pool.constant_value_id(17).unwrap())
     else {
@@ -298,12 +297,11 @@ fn method_handles_validate_reference_kinds_and_tags() {
                     assert!(valid, "kind {kind}, tag {tag}");
                     let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
                     assert_eq!(handle.reference_kind(), kind);
-                    let owned = MethodHandle::from(handle);
+                    let owned = handle.into_owned();
                     assert_eq!(owned.reference_kind(), kind);
                     assert_eq!(
-                        ConstantValue::from(
-                            pool.constant_value(pool.constant_value_id(7).unwrap())
-                        ),
+                        pool.constant_value(pool.constant_value_id(7).unwrap())
+                            .into_owned(),
                         ConstantValue::Handle(owned)
                     );
                 }
@@ -384,11 +382,12 @@ fn forward_references_resolve_typed_values_and_keep_indices() {
     assert_eq!(pool.count(), count);
     assert!(pool.constant_value_id(0).is_err());
     assert!(pool.constant_value_id(9).is_err());
-    let method = MethodRef::from(pool.method_ref(pool.method_ref_id(2).unwrap()));
+    let method = pool.method_ref(pool.method_ref_id(2).unwrap()).into_owned();
     assert_eq!(method.owner, "a/b/C".parse::<ReferenceType>().unwrap());
     assert_eq!(method.descriptor, "(I)V".parse().unwrap());
     assert_eq!(
-        MethodHandle::from(pool.method_handle(pool.method_handle_id(1).unwrap())),
+        pool.method_handle(pool.method_handle_id(1).unwrap())
+            .into_owned(),
         MethodHandle::RefInvokeVirtual(method)
     );
     assert!(matches!(
@@ -450,10 +449,7 @@ fn string_entries_preserve_jvm_bytes() {
         panic!("expected string constant");
     };
     assert!(std::ptr::eq(value, pool.utf8(pool.utf8_id(1).unwrap())));
-    assert_eq!(
-        ConstantValue::from(constant),
-        ConstantValue::String(expected)
-    );
+    assert_eq!(constant.into_owned(), ConstantValue::String(expected));
 }
 
 #[test]

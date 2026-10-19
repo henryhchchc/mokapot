@@ -60,8 +60,8 @@ pub(super) fn lift_instruction(
         }
         BiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
         SiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        Ldc(value) | LdcW(value) => cx.constant((*value).into(), Category1),
-        Ldc2W(value) => cx.constant((*value).into(), Category2),
+        Ldc(value) | LdcW(value) => cx.constant(value.into_owned(), Category1),
+        Ldc2W(value) => cx.constant(value.into_owned(), Category2),
         ILoad(idx) | FLoad(idx) | ALoad(idx) => cx.load((*idx).into(), Category1),
         LLoad(idx) | DLoad(idx) => cx.load((*idx).into(), Category2),
         ILoad0 | FLoad0 | ALoad0 => cx.load(0, Category1),

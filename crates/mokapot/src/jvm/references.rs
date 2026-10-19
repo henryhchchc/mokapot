@@ -103,14 +103,14 @@ impl<'pool> FieldRefView<'pool> {
     pub fn field_type(self) -> &'pool FieldType {
         self.pool.field_name_and_type(self.data.name_and_type).1
     }
-}
 
-impl From<FieldRefView<'_>> for FieldRef {
-    fn from(value: FieldRefView<'_>) -> Self {
-        Self {
-            owner: value.owner().clone(),
-            name: value.name().to_owned(),
-            field_type: value.field_type().clone(),
+    /// Converts this borrowed field reference into an owned value.
+    #[must_use]
+    pub fn into_owned(self) -> FieldRef {
+        FieldRef {
+            owner: self.owner().clone(),
+            name: self.name().to_owned(),
+            field_type: self.field_type().clone(),
         }
     }
 }
@@ -186,14 +186,14 @@ impl<'pool> MethodRefView<'pool> {
             && self.descriptor().parameters_types.is_empty()
             && matches!(self.descriptor().return_type, ReturnType::Void)
     }
-}
 
-impl From<MethodRefView<'_>> for MethodRef {
-    fn from(value: MethodRefView<'_>) -> Self {
-        Self {
-            owner: value.owner().clone(),
-            name: value.name().to_owned(),
-            descriptor: value.descriptor().clone(),
+    /// Converts this borrowed method reference into an owned value.
+    #[must_use]
+    pub fn into_owned(self) -> MethodRef {
+        MethodRef {
+            owner: self.owner().clone(),
+            name: self.name().to_owned(),
+            descriptor: self.descriptor().clone(),
         }
     }
 }
