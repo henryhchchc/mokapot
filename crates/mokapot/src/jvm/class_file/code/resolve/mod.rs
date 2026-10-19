@@ -46,15 +46,15 @@ impl InstructionData {
             BiPush { value } => Self::BiPush(value),
             SiPush { value } => Self::SiPush(value),
             Ldc { const_index } => {
-                let constant = constant_pool.intern_constant(u16::from(const_index))?;
+                let constant = constant_pool.constant_value_id(u16::from(const_index))?;
                 Self::Ldc(constant)
             }
             LdcW { const_index } => {
-                let constant = constant_pool.intern_constant(const_index)?;
+                let constant = constant_pool.constant_value_id(const_index)?;
                 Self::LdcW(constant)
             }
             Ldc2W { const_index } => {
-                let constant = constant_pool.intern_constant(const_index)?;
+                let constant = constant_pool.constant_value_id(const_index)?;
                 Self::Ldc2W(constant)
             }
 

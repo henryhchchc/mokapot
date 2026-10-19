@@ -13,7 +13,7 @@ use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        ConstantValue, JavaStr,
+        ConstantValueView, JavaStr,
         references::{FieldRefView, MethodRefView},
     },
     types::{
@@ -50,9 +50,9 @@ pub enum Instruction<'class> {
     DConst1 = 0x0f,
     BiPush(i8) = 0x10,
     SiPush(i16) = 0x11,
-    Ldc(&'class ConstantValue) = 0x12,
-    LdcW(&'class ConstantValue) = 0x13,
-    Ldc2W(&'class ConstantValue) = 0x14,
+    Ldc(ConstantValueView<'class>) = 0x12,
+    LdcW(ConstantValueView<'class>) = 0x13,
+    Ldc2W(ConstantValueView<'class>) = 0x14,
 
     // Loads
     ILoad(u8) = 0x15,

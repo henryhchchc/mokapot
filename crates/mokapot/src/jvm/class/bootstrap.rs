@@ -1,7 +1,7 @@
 //! JVM bootstrap methods.
 
 use crate::jvm::{
-    Class, ConstantValue,
+    Class, ConstantValueView,
     class::MethodHandleView,
     class_file::constant_pool::{ConstantValueId, MethodHandleId},
 };
@@ -35,7 +35,7 @@ impl<'class> BootstrapMethod<'class> {
     /// The constants passed to the bootstrap method.
     pub fn arguments(
         self,
-    ) -> impl ExactSizeIterator<Item = &'class ConstantValue> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = ConstantValueView<'class>> + DoubleEndedIterator {
         self.data
             .arguments
             .iter()
