@@ -120,9 +120,9 @@ impl<'class> Field<'class> {
             .map(|data| Attribute::new(self.class, data))
     }
 
-    /// Creates a [`FieldRef`] referring to this field.
+    /// Creates an owned [`FieldRef`] referring to this field.
     #[must_use]
-    pub fn as_ref(&self) -> FieldRef {
+    pub fn to_owned_ref(&self) -> FieldRef {
         FieldRef {
             owner: ReferenceType::Class(self.owner().name().clone()),
             name: self.name().to_owned(),
