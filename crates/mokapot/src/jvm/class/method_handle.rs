@@ -1,5 +1,5 @@
 use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
+    intrinsics::see_jvm_spec,
     jvm::{
         class_file::constant_pool::{ConstantPool, FieldRefId, MethodRefId},
         references::{FieldRef, FieldRefView, MethodRef, MethodRefView},
@@ -35,8 +35,17 @@ impl MethodHandle {
     /// Gets the reference kind of this method handle.
     #[must_use]
     pub const fn reference_kind(&self) -> u8 {
-        // SAFETY: Self is marked as repr(u8)
-        unsafe { enum_discriminant(self) }
+        match self {
+            Self::RefGetField(..) => 1,
+            Self::RefGetStatic(..) => 2,
+            Self::RefPutField(..) => 3,
+            Self::RefPutStatic(..) => 4,
+            Self::RefInvokeVirtual(..) => 5,
+            Self::RefInvokeStatic(..) => 6,
+            Self::RefInvokeSpecial(..) => 7,
+            Self::RefNewInvokeSpecial(..) => 8,
+            Self::RefInvokeInterface(..) => 9,
+        }
     }
 }
 

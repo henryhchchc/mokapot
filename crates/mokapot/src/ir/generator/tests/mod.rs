@@ -6,10 +6,11 @@ pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
     jvm::code::{Instruction, ProgramCounter},
+    tests::{TestExceptionHandler, TestMethod},
 };
 
 /// Builds `method` into [`MokaIRMethod`].
-pub(crate) fn build(method: &crate::tests::TestMethod) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(crate) fn build(method: &TestMethod) -> Result<MokaIRMethod, MokaIRBuildError> {
     MokaIRMethod::from_method(method.as_method())
 }
 
@@ -17,7 +18,7 @@ pub(crate) fn build(method: &crate::tests::TestMethod) -> Result<MokaIRMethod, M
 pub(crate) fn lift<'instruction, I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<crate::tests::TestExceptionHandler>,
+    exception_table: Vec<TestExceptionHandler>,
 ) -> MokaIRMethod
 where
     I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
@@ -71,8 +72,8 @@ pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,
     handler_pc: ProgramCounter,
     catch_type: Option<ClassName>,
-) -> crate::tests::TestExceptionHandler {
-    crate::tests::TestExceptionHandler {
+) -> TestExceptionHandler {
+    TestExceptionHandler {
         covered_pc,
         handler_pc,
         catch_type,
@@ -80,9 +81,7 @@ pub(crate) fn handler(
 }
 
 /// Returns the diagnostic location and kind reported for `method`.
-pub(crate) fn build_failure(
-    method: &crate::tests::TestMethod,
-) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
+pub(crate) fn build_failure(method: &TestMethod) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
     let error = build(method).expect_err("method should fail to build");
     (error.pc, error.kind)
 }

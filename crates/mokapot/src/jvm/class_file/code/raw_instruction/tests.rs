@@ -3,7 +3,7 @@ use std::iter;
 use proptest::prelude::*;
 
 use super::*;
-use crate::jvm::errors::ParseErrorKind;
+use crate::jvm::{code::InstructionStorage, errors::ParseErrorKind};
 
 fn assert_malformed(bytes: &[u8]) {
     assert_malformed_at(bytes, 0);
@@ -311,6 +311,6 @@ fn switches_reject_unavailable_large_tables() {
 
 fn collect_instructions(
     bytes: &[u8],
-) -> Result<crate::jvm::code::InstructionStorage<RawInstruction<'_>>, ParseError> {
+) -> Result<InstructionStorage<RawInstruction<'_>>, ParseError> {
     RawInstruction::iter_from_bytes(bytes).collect()
 }

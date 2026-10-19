@@ -1,11 +1,13 @@
 //! Modules in the JPMS.
 
+use std::fmt;
+
 use bitflags::bitflags;
 
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, JavaStr,
+        Class, DebugList, JavaStr,
         class_file::constant_pool::{ClassId, ModuleId, PackageId, Utf8Id},
         references::ModuleRef,
     },
@@ -239,23 +241,23 @@ impl<'class> Provide<'class> {
     }
 }
 
-impl std::fmt::Debug for Module<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Module<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Module")
             .field("name", &self.name())
             .field("flags", &self.flags())
             .field("version", &self.version())
-            .field("requires", &self.requires().collect::<Vec<_>>())
-            .field("exports", &self.exports().collect::<Vec<_>>())
-            .field("opens", &self.opens().collect::<Vec<_>>())
-            .field("uses", &self.uses().collect::<Vec<_>>())
-            .field("provides", &self.provides().collect::<Vec<_>>())
+            .field("requires", &DebugList::new(|| self.requires()))
+            .field("exports", &DebugList::new(|| self.exports()))
+            .field("opens", &DebugList::new(|| self.opens()))
+            .field("uses", &DebugList::new(|| self.uses()))
+            .field("provides", &DebugList::new(|| self.provides()))
             .finish()
     }
 }
 
-impl std::fmt::Debug for Require<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Require<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Require")
             .field("module", self.module())
             .field("flags", &self.flags())
@@ -264,31 +266,31 @@ impl std::fmt::Debug for Require<'_> {
     }
 }
 
-impl std::fmt::Debug for Export<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Export<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Export")
             .field("package", self.package())
             .field("flags", &self.flags())
-            .field("to", &self.to().collect::<Vec<_>>())
+            .field("to", &DebugList::new(|| self.to()))
             .finish()
     }
 }
 
-impl std::fmt::Debug for Open<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Open<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Open")
             .field("package", self.package())
             .field("flags", &self.flags())
-            .field("to", &self.to().collect::<Vec<_>>())
+            .field("to", &DebugList::new(|| self.to()))
             .finish()
     }
 }
 
-impl std::fmt::Debug for Provide<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Provide<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Provide")
             .field("service", self.service())
-            .field("with", &self.with().collect::<Vec<_>>())
+            .field("with", &DebugList::new(|| self.with()))
             .finish()
     }
 }

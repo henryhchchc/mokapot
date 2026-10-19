@@ -1,7 +1,9 @@
 //! JVM bootstrap methods.
 
+use std::fmt;
+
 use crate::jvm::{
-    Class, ConstantValueView,
+    Class, ConstantValueView, DebugList,
     class::MethodHandleView,
     class_file::constant_pool::{ConstantValueId, MethodHandleId},
 };
@@ -51,11 +53,11 @@ impl PartialEq for BootstrapMethod<'_> {
 
 impl Eq for BootstrapMethod<'_> {}
 
-impl std::fmt::Debug for BootstrapMethod<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for BootstrapMethod<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("BootstrapMethod");
         debug.field("method", &self.method());
-        debug.field("arguments", &self.arguments().collect::<Vec<_>>());
+        debug.field("arguments", &DebugList::new(|| self.arguments()));
         debug.finish()
     }
 }

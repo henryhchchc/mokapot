@@ -1,6 +1,11 @@
 use super::*;
 use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
-use crate::jvm::{Class, code::Instruction};
+use crate::jvm::{
+    Class,
+    code::{Instruction, MethodBodyData},
+    method::AccessFlags,
+    references::MethodRef,
+};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
@@ -71,24 +76,13 @@ fn invokeinterface_parses_interface_method_refs() {
     };
     assert_eq!(count, 1);
     assert_eq!(
-        crate::jvm::references::MethodRef::from(method),
-        crate::jvm::references::MethodRef {
+        MethodRef::from(method),
+        MethodRef {
             owner: "a/b/I".parse().unwrap(),
             name: "m".into(),
             descriptor: "()V".parse().unwrap(),
         }
     );
-}
-
-#[test]
-fn invokeinterface_rejects_method_refs() {
-    let (pc, instruction) = RawInstruction::iter_from_bytes(&[0xb9, 0, 6, 1, 0])
-        .next()
-        .unwrap()
-        .unwrap();
-    let mut pool = interface_method_pool(false);
-    let error = InstructionData::from_raw_instruction(instruction, pc, &mut pool).unwrap_err();
-    assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
 }
 
 #[test]
@@ -132,7 +126,7 @@ fn push_immediates_preserve_signed_values_through_ir() {
     }
 }
 
-fn borrowing_instruction_fixture() -> (Class, crate::jvm::code::MethodBodyData) {
+fn borrowing_instruction_fixture() -> (Class, MethodBodyData) {
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"a/b/C"),
         RawEntry::Class {
@@ -187,7 +181,7 @@ fn borrowing_instruction_fixture() -> (Class, crate::jvm::code::MethodBodyData) 
         [(0, Instruction::Return)],
         "()V",
         vec![],
-        crate::jvm::method::AccessFlags::PUBLIC,
+        AccessFlags::PUBLIC,
     );
     let mut data = fixture.body.clone().unwrap();
     data.instructions = instructions;

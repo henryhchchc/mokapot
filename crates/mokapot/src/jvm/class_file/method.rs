@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Method, class_file::ResolutionContext, method},
+    jvm::{Method, annotation::AnnotationsData, class_file::ResolutionContext, method},
 };
 
 /// The raw representation of a `method_info` structure.
@@ -132,15 +132,15 @@ impl Resolve for MethodInfo<'_> {
             descriptor,
             body,
             exceptions,
-            annotations: crate::jvm::annotation::AnnotationsData {
+            annotations: AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: crate::jvm::annotation::AnnotationsData {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
-            parameter_annotations: crate::jvm::annotation::AnnotationsData {
+            parameter_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_parameter_annotations,
                 runtime_invisible: runtime_invisible_parameter_annotations,
             },

@@ -1,5 +1,7 @@
 //! Unrecognized JVM attributes.
 
+use std::fmt;
+
 use crate::jvm::{Class, JavaStr, class_file::constant_pool::Utf8Id};
 
 #[derive(Debug, Clone)]
@@ -47,8 +49,8 @@ impl PartialEq for Attribute<'_> {
 
 impl Eq for Attribute<'_> {}
 
-impl std::fmt::Debug for Attribute<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Attribute<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Attribute")
             .field("owner", &self.owner().name())
             .field("name", &self.name())

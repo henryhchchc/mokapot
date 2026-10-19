@@ -1,6 +1,10 @@
 //! Implementations of [`ClassPath`].
 
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::HashSet,
+    io::{self, ErrorKind},
+    path::PathBuf,
+};
 #[cfg(feature = "jar")]
 use std::{
     fs::File,
@@ -48,7 +52,7 @@ impl ClassPath for DirectoryClassPath {
         let class_name = class_name
             .as_java_str()
             .to_str()
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+            .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
         let class_file_path = self.directory.join(&*class_name).with_extension("class");
         if class_file_path.exists() {
             let bytes = std::fs::read(class_file_path)?;
@@ -113,7 +117,7 @@ impl ClassPath for JarClassPath {
         let class_name = class_name
             .as_java_str()
             .to_str()
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+            .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
         let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
         let mut jar_archive = ZipArchive::new(jar_reader).map_err(|e| match e {

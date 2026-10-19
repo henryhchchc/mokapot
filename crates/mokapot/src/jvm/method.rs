@@ -1,9 +1,11 @@
 //! JVM methods.
 
+use std::fmt;
+
 use bitflags::bitflags;
 
 use super::{
-    Annotations, Class, JavaStr, JavaString, Method, annotation,
+    Annotations, Class, DebugList, JavaStr, JavaString, Method, annotation,
     annotation::{
         AnnotationData, AnnotationsData, ElementValueData, ParameterAnnotations,
         TypeAnnotationData, TypeAnnotations,
@@ -179,26 +181,26 @@ impl<'class> Method<'class> {
     }
 }
 
-impl std::fmt::Debug for Method<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Method<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Method")
             .field("owner", &self.owner().name())
             .field("access_flags", &self.access_flags())
             .field("name", &self.name())
             .field("descriptor", &self.descriptor())
             .field("body", &self.body())
-            .field("exceptions", &self.exceptions().collect::<Vec<_>>())
+            .field("exceptions", &DebugList::new(|| self.exceptions()))
             .field("annotations", &self.annotations())
             .field("type_annotations", &self.type_annotations())
             .field("parameter_annotations", &self.parameter_annotations())
             .field("annotation_default", &self.annotation_default())
-            .field("parameters", &self.parameters().collect::<Vec<_>>())
+            .field("parameters", &DebugList::new(|| self.parameters()))
             .field("is_synthetic", &self.is_synthetic())
             .field("is_deprecated", &self.is_deprecated())
             .field("signature", &self.signature())
             .field(
                 "other_attributes",
-                &self.other_attributes().collect::<Vec<_>>(),
+                &DebugList::new(|| self.other_attributes()),
             )
             .finish()
     }
@@ -232,8 +234,8 @@ impl<'class> ParameterInfo<'class> {
     }
 }
 
-impl std::fmt::Debug for ParameterInfo<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ParameterInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ParameterInfo")
             .field("name", &self.name())
             .field("access_flags", &self.access_flags())
