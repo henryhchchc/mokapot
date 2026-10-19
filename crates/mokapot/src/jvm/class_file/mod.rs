@@ -28,7 +28,7 @@ pub(crate) use crate::jvm::errors::ParseError;
 #[derive(Debug, Clone)]
 pub(super) struct ResolutionContext {
     /// Constants referenced by this class.
-    pub constant_pool: constant_pool::ConstantPool,
+    pub constant_pool: constant_pool::ConstantPoolBuilder,
     /// Format version used for validation.
     pub class_version: Version,
 }

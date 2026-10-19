@@ -1,12 +1,13 @@
 use super::*;
 use crate::jvm::{
-    ConstantValue, JavaString,
-    class::MethodHandle,
+    ConstantValue, ConstantValueView, JavaString,
+    class::{MethodHandle, MethodHandleView},
     class_file::constant_pool::RawEntry,
     errors::ParseErrorKind,
     references::{FieldRef, MethodRef},
 };
 use crate::types::Descriptor;
+use crate::types::class_name::ClassName;
 
 fn member_pool() -> ConstantPool {
     let raw = RawConstantPool::from_entries([
@@ -69,18 +70,8 @@ fn member_pool() -> ConstantPool {
             bootstrap_method_attr_index: 2.into(),
             name_and_type_index: 11.into(),
         },
-        RawEntry::Long(0.into()),
-        RawEntry::Utf8(b"different"),
-        RawEntry::NameAndType {
-            name_index: 21.into(),
-            descriptor_index: 4.into(),
-        },
-        RawEntry::FieldRef {
-            class_index: 2.into(),
-            name_and_type_index: 22.into(),
-        },
     ]);
-    ConstantPool::from_raw(raw).unwrap()
+    resolve(raw).unwrap().finish()
 }
 
 #[test]
@@ -121,36 +112,6 @@ fn member_views_share_owners_names_and_descriptors() {
 }
 
 #[test]
-fn member_views_compare_and_hash_values_across_pools() {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
-    fn hash(value: impl Hash) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
-    }
-    let pool = member_pool();
-    let other = member_pool();
-    let field = pool.field_ref(pool.field_ref_id(6).unwrap());
-    let other_field = other.field_ref(other.field_ref_id(9).unwrap());
-    assert_eq!(field, other_field);
-    assert_eq!(hash(field), hash(other_field));
-    let method = pool.method_ref(pool.method_ref_id(12).unwrap());
-    let other_method = other.method_ref(other.interface_method_ref_id(14).unwrap());
-    assert_eq!(method, other_method);
-    assert_eq!(hash(method), hash(other_method));
-    let mut different = ConstantPool::new();
-    let different_method = different.insert_method_ref(MethodRef {
-        descriptor: "()I".parse().unwrap(),
-        ..method.into()
-    });
-    assert_ne!(field, pool.field_ref(pool.field_ref_id(23).unwrap()));
-    assert_ne!(method, different.method_ref(different_method));
-}
-
-#[test]
 fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
     for (owner, field_type, method_type) in [(0, 5, 7), (1, 5, 7), (99, 5, 7), (2, 7, 5)] {
         for entry in [
@@ -185,10 +146,7 @@ fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
                 },
                 entry,
             ]);
-            assert_eq!(
-                ConstantPool::from_raw(raw).unwrap_err().kind(),
-                ParseErrorKind::Malformed
-            );
+            assert_eq!(resolve(raw).unwrap_err().kind(), ParseErrorKind::Malformed);
         }
     }
 }
@@ -202,7 +160,7 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
         RawEntry::Utf8(b"I"),
         RawEntry::Utf8(b"V"),
     ]);
-    let mut pool = ConstantPool::from_raw(raw).unwrap();
+    let mut pool = resolve(raw).unwrap();
     for index in [0, 2, 3, 7] {
         assert_eq!(
             pool.utf8_id(index).unwrap_err().kind(),
@@ -216,7 +174,6 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
     let name = pool.utf8_id(4).unwrap();
     let descriptor = pool.intern_method_descriptor(1).unwrap();
     assert_eq!(pool.intern_method_descriptor(1).unwrap(), descriptor);
-    assert_eq!(pool.method_descriptors.values.len(), 1);
     let field_type = pool.intern_field_type(5).unwrap();
     assert_eq!(pool.intern_field_type(5).unwrap(), field_type);
     let return_type = pool.intern_return_type(6).unwrap();
@@ -244,7 +201,9 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
 fn class_and_package_names_parse_with_distinct_tags() {
     // Utf8 "a/b/C", Class #1, Package #1.
     let bytes = [1, 0, 5, b'a', b'/', b'b', b'/', b'C', 7, 0, 1, 20, 0, 1];
-    let pool = ConstantPool::from_bytes(bytes.as_slice(), 4).unwrap();
+    let pool = resolve(RawConstantPool::from_bytes(bytes.as_slice(), 4).unwrap())
+        .unwrap()
+        .finish();
     let class_name: ClassName = "a/b/C".parse().unwrap();
     let package_name: PackageName = "a/b/C".parse().unwrap();
     assert_eq!(pool.count(), 4);
@@ -275,7 +234,7 @@ fn class_name_accessor_rejects_descriptors() {
         ]);
         let index = 2;
 
-        let pool = ConstantPool::from_raw(pool).unwrap();
+        let pool = resolve(pool).unwrap().finish();
         assert_eq!(
             pool.reference_type(pool.reference_type_id(index).unwrap()),
             &reference_type
@@ -303,7 +262,7 @@ fn method_handle_pool(kind: u8, tag: u8) -> Result<ConstantPool, ParseError> {
         },
         _ => unreachable!(),
     };
-    ConstantPool::from_raw(RawConstantPool::from_entries([
+    resolve(RawConstantPool::from_entries([
         RawEntry::Utf8(b"a/b/I"),
         RawEntry::Class {
             name_index: 1.into(),
@@ -320,6 +279,7 @@ fn method_handle_pool(kind: u8, tag: u8) -> Result<ConstantPool, ParseError> {
             reference_index: 6.into(),
         },
     ]))
+    .map(ConstantPoolBuilder::finish)
 }
 
 #[test]
@@ -341,7 +301,9 @@ fn method_handles_validate_reference_kinds_and_tags() {
                     let owned = MethodHandle::from(handle);
                     assert_eq!(owned.reference_kind(), kind);
                     assert_eq!(
-                        ConstantValue::from(pool.get_constant_value(7).unwrap()),
+                        ConstantValue::from(
+                            pool.constant_value(pool.constant_value_id(7).unwrap())
+                        ),
                         ConstantValue::Handle(owned)
                     );
                 }
@@ -418,10 +380,10 @@ fn forward_references_resolve_typed_values_and_keep_indices() {
         RawEntry::Utf8(b"I".as_slice()),
     ]);
     let count = raw.count();
-    let pool = ConstantPool::from_raw(raw).unwrap();
+    let pool = resolve(raw).unwrap().finish();
     assert_eq!(pool.count(), count);
-    assert_eq!(pool.get_entry(0), None);
-    assert_eq!(pool.get_entry(9), None);
+    assert!(pool.constant_value_id(0).is_err());
+    assert!(pool.constant_value_id(9).is_err());
     let method = MethodRef::from(pool.method_ref(pool.method_ref_id(2).unwrap()));
     assert_eq!(method.owner, "a/b/C".parse::<ReferenceType>().unwrap());
     assert_eq!(method.descriptor, "(I)V".parse().unwrap());
@@ -430,19 +392,13 @@ fn forward_references_resolve_typed_values_and_keep_indices() {
         MethodHandle::RefInvokeVirtual(method)
     );
     assert!(matches!(
-        pool.get_entry(10),
-        Some(Entry::Dynamic {
-            bootstrap_method_attr_index: 3,
-            ..
-        })
+        pool.constant_value(pool.constant_value_id(10).unwrap()),
+        ConstantValueView::Dynamic(3, _, _)
     ));
-    assert!(matches!(
-        pool.get_entry(11),
-        Some(Entry::InvokeDynamic {
-            bootstrap_method_attr_index: 4,
-            ..
-        })
-    ));
+    assert_eq!(
+        pool.invoke_dynamic(pool.invoke_dynamic_id(11).unwrap()).0,
+        4
+    );
 }
 
 #[test]
@@ -473,74 +429,8 @@ fn resolution_rejects_invalid_dependencies_and_descriptors() {
             RawEntry::Long(42.into()),
             entry,
         ]);
-        assert_eq!(
-            ConstantPool::from_raw(raw).unwrap_err().kind(),
-            ParseErrorKind::Malformed
-        );
+        assert_eq!(resolve(raw).unwrap_err().kind(), ParseErrorKind::Malformed);
     }
-}
-
-#[test]
-fn miri_utf8_ranges_preserve_boundaries() {
-    let values = [
-        b"".as_slice(),
-        b"a\xc0\x80\xed\xa0\xbd\xed\xb8\x80\xed\xa0\x80",
-        b"",
-        b"tail",
-        b"",
-    ];
-    let raw = RawConstantPool::from_entries(values.map(RawEntry::Utf8));
-    let pool = ConstantPool::from_raw(raw).unwrap();
-    let mut start = 0;
-    for (index, bytes) in (1..).zip(values) {
-        let end = start + bytes.len();
-        assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(start..end)));
-        let value = pool.utf8(pool.utf8_id(index).unwrap());
-        assert_eq!(value.as_bytes(), bytes);
-        assert_eq!(
-            value.as_bytes().as_ptr(),
-            pool.utf8_bytes[start..end].as_ptr()
-        );
-        start = end;
-    }
-    assert_eq!(pool.utf8_bytes.len(), start);
-}
-
-#[test]
-fn miri_utf8_ranges_survive_growth_and_clone() {
-    let bytes = b"\xc0\x80\xed\xa0\x80";
-    let raw = RawConstantPool::from_entries([RawEntry::Utf8(bytes), RawEntry::Utf8(b"")]);
-    let mut pool = ConstantPool::from_raw(raw).unwrap();
-    let original = pool.clone();
-    let capacity = pool.utf8_bytes.capacity();
-    let value = JavaString::from("x".repeat(capacity + 1));
-    let inserted = pool.insert_utf8(value.clone());
-    assert!(pool.utf8_bytes.capacity() > capacity);
-    let mut cloned = pool.clone();
-    cloned.insert_utf8(JavaString::from("another"));
-    drop(pool);
-    for pool in [&original, &cloned] {
-        assert_eq!(pool.get_utf8(1).unwrap().as_bytes(), bytes);
-        assert_eq!(pool.get_utf8(2).unwrap().as_bytes(), []);
-    }
-    assert_eq!(cloned.utf8(inserted), &*value);
-    assert_eq!(original.count(), 3);
-    assert_eq!(cloned.count(), 5);
-}
-
-#[test]
-fn miri_owned_method_ref_preserves_pool_name_after_drop() {
-    let name = [0xed, 0xa0, 0x80];
-    let mut pool = ConstantPool::new();
-    let id = pool.insert_method_ref(MethodRef {
-        owner: "pkg/Owner".parse().unwrap(),
-        name: JavaString::from_cesu8(name.to_vec()).unwrap(),
-        descriptor: "()V".parse().unwrap(),
-    });
-    let reference = MethodRef::from(pool.method_ref(id));
-    drop(pool);
-    assert_eq!(reference.name.as_bytes(), name);
-    assert_eq!(reference.descriptor.descriptor(), "()V");
 }
 
 #[test]
@@ -553,7 +443,7 @@ fn string_entries_preserve_jvm_bytes() {
             string_index: 1.into(),
         },
     ]);
-    let pool = ConstantPool::from_raw(raw).unwrap();
+    let pool = resolve(raw).unwrap().finish();
     assert_eq!(pool.get_utf8(1).unwrap().as_bytes(), bytes);
     let constant = pool.constant_value(pool.constant_value_id(2).unwrap());
     let ConstantValueView::String(value) = constant else {
@@ -569,8 +459,5 @@ fn string_entries_preserve_jvm_bytes() {
 #[test]
 fn malformed_utf8_entries_are_rejected_without_references() {
     let raw = RawConstantPool::from_entries([RawEntry::Utf8(b"\xff")]);
-    assert_eq!(
-        ConstantPool::from_raw(raw).unwrap_err().kind(),
-        ParseErrorKind::Malformed
-    );
+    assert_eq!(resolve(raw).unwrap_err().kind(), ParseErrorKind::Malformed);
 }

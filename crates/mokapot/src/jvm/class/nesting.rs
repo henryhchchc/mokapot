@@ -6,7 +6,7 @@ use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
         Class, JavaStr,
-        class_file::constant_pool::{ClassId, MethodNameAndTypeId, Utf8Id},
+        constant_pool::{ClassId, MethodNameAndTypeId, Utf8Id},
     },
     types::{class_name::ClassName, method_descriptor::MethodDescriptor},
 };

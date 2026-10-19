@@ -7,7 +7,7 @@ use itertools::Itertools;
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
-        class_file::constant_pool::ConstantPool,
+        class_file::constant_pool::ConstantPoolBuilder,
         code::{InstructionData, ProgramCounter, WideInstruction},
         errors::ParseError,
         errors::ParsingErrorContext,
@@ -20,7 +20,7 @@ impl InstructionData {
     pub(crate) fn from_raw_instruction(
         raw_instruction: RawInstruction<'_>,
         pc: ProgramCounter,
-        constant_pool: &mut ConstantPool,
+        constant_pool: &mut ConstantPoolBuilder,
     ) -> Result<Self, ParseError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;

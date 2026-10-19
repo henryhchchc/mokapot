@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 
 use super::*;
-use crate::jvm::{code::InstructionStorage, errors::ParseErrorKind};
+use crate::jvm::errors::ParseErrorKind;
 
 fn assert_malformed(bytes: &[u8]) {
     assert_malformed_at(bytes, 0);
@@ -211,7 +211,11 @@ fn switches_decode_at_every_instruction_alignment() {
 
             let instructions = collect_instructions(&bytes).unwrap();
             let pc = ProgramCounter::from(u16::try_from(prefix_len).unwrap());
-            match instructions.get(pc).unwrap() {
+            let instruction = instructions
+                .iter()
+                .find_map(|(at, instruction)| (*at == pc).then_some(instruction))
+                .unwrap();
+            match instruction {
                 RawInstruction::TableSwitch(info) => {
                     assert_eq!(info.jump_offsets.len(), 2);
                 }
@@ -239,6 +243,6 @@ fn switches_reject_unavailable_large_tables() {
 
 fn collect_instructions(
     bytes: &[u8],
-) -> Result<InstructionStorage<RawInstruction<'_>>, ParseError> {
+) -> Result<Vec<(ProgramCounter, RawInstruction<'_>)>, ParseError> {
     RawInstruction::iter_from_bytes(bytes).collect()
 }

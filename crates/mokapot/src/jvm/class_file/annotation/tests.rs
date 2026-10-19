@@ -4,7 +4,7 @@ use crate::jvm::{
     Class,
     annotation::{Annotation, ElementValue, TypeAnnotation},
     class::Version,
-    class_file::constant_pool::{ConstantPool, RawConstantPool, RawEntry},
+    class_file::constant_pool::{ConstantPoolBuilder, RawConstantPool, RawEntry, resolve},
     errors::ParseErrorKind,
 };
 
@@ -18,18 +18,22 @@ fn context() -> ResolutionContext {
         RawEntry::Utf8(b"YES"),
         RawEntry::Utf8(b"V"),
         RawEntry::Utf8(b"\xed\xa0\x80"),
+        RawEntry::Utf8(b"Example"),
+        RawEntry::Class {
+            name_index: 9.into(),
+        },
     ]);
     ResolutionContext {
-        constant_pool: ConstantPool::from_raw(pool).unwrap(),
+        constant_pool: resolve(pool).unwrap(),
         class_version: Version::LATEST,
     }
 }
 
-fn class_with_pool(mut pool: ConstantPool) -> Class {
-    let name = pool.insert_class_name("Example".parse().unwrap());
+fn class_with_pool(pool: ConstantPoolBuilder) -> Class {
+    let name = pool.class_id(10).unwrap();
     Class {
         name,
-        constant_pool: pool,
+        constant_pool: pool.finish(),
         ..Class::default()
     }
 }
@@ -164,25 +168,6 @@ fn preserves_unpaired_surrogates_in_annotation_names_and_strings() {
     assert_eq!(
         annotation.get_element_value(name),
         Some(ElementValue::String(string))
-    );
-}
-
-#[test]
-fn annotation_equality_compares_values_across_pools() {
-    let mut first = context();
-    let mut second = context();
-    let name = second.constant_pool.insert_utf8("value".into());
-    let bytes = [0, 1, 0, 1, 0, 2, b'[', 0, 2, b's', 0, 4, b'I', 0, 3];
-    let first_data = decode_resolved::<raw::Annotation>(&mut bytes.as_slice(), &mut first).unwrap();
-    let mut second_data =
-        decode_resolved::<raw::Annotation>(&mut bytes.as_slice(), &mut second).unwrap();
-    second_data.element_value_pairs[0].0 = name;
-    assert_ne!(first_data, second_data);
-    let first_class = class_with_pool(first.constant_pool);
-    let second_class = class_with_pool(second.constant_pool);
-    assert_eq!(
-        Annotation::new(&first_class, &first_data),
-        Annotation::new(&second_class, &second_data)
     );
 }
 

@@ -12,7 +12,7 @@ pub use method_body::{
     LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType, VerificationTypes,
 };
 pub(crate) use method_body::{
-    ExceptionTableEntryData, InstructionStorage, LocalVariableTableData, MethodBodyData,
-    StackMapFrameData, VerificationTypeData,
+    ExceptionTableEntryData, InstructionStorage, LocalVariableTableData,
+    LocalVariableTableEntryData, MethodBodyData, StackMapFrameData, VerificationTypeData,
 };
 pub use pc::{InvalidOffset, ProgramCounter};

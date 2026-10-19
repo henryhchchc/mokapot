@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::jvm::{Class, JavaStr, class_file::constant_pool::Utf8Id};
+use crate::jvm::{Class, JavaStr, constant_pool::Utf8Id};
 
 #[derive(Debug, Clone)]
 pub(crate) struct AttributeData {

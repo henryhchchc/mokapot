@@ -8,7 +8,7 @@ use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
         Class, DebugList, JavaStr,
-        class_file::constant_pool::{ClassId, ModuleId, PackageId, Utf8Id},
+        constant_pool::{ClassId, ModuleId, PackageId, Utf8Id},
         references::ModuleRef,
     },
     types::{class_name::ClassName, package_name::PackageName},

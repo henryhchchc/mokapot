@@ -1,7 +1,9 @@
 //! Class metadata attribute resolution.
 
-use super::constant_pool::{ClassId, PackageId, Utf8Id};
-use crate::jvm::class_file::{ParseError, ResolutionContext, attribute::raw, resolve::Resolve};
+use crate::jvm::{
+    class_file::{ParseError, ResolutionContext, attribute::raw, resolve::Resolve},
+    constant_pool::{ClassId, PackageId, Utf8Id},
+};
 
 use crate::intrinsics::ExactSizeIteratorExt;
 

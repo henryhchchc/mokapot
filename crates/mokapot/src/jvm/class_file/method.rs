@@ -159,7 +159,7 @@ mod tests {
     use super::*;
     use crate::jvm::{
         class::Version,
-        class_file::constant_pool::{ConstantPool, RawConstantPool, RawEntry},
+        class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
         errors::ParseErrorKind,
     };
 
@@ -176,7 +176,7 @@ mod tests {
         let name_index = 1;
         let descriptor_index = 2;
         let attribute_name_index = 3_u16;
-        let mut constant_pool = ConstantPool::from_raw(pool).unwrap();
+        let mut constant_pool = resolve(pool).unwrap();
         constant_pool.intern_method_descriptor(descriptor_index)?;
         let mut ctx = ResolutionContext {
             constant_pool,
