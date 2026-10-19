@@ -1,8 +1,17 @@
 //! References to JVM elements.
 
 use derive_more::Display;
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+};
 
-use super::{JavaString, Method};
+use super::{
+    JavaStr, JavaString, Method,
+    class_file::constant_pool::{
+        ConstantPool, FieldNameAndTypeId, MethodNameAndTypeId, ReferenceTypeId,
+    },
+};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
@@ -55,6 +64,169 @@ impl MethodRef {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FieldRefData {
+    pub owner: ReferenceTypeId,
+    pub name_and_type: FieldNameAndTypeId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MethodRefData {
+    pub owner: ReferenceTypeId,
+    pub name_and_type: MethodNameAndTypeId,
+}
+
+/// A borrowed symbolic field reference.
+#[derive(Clone, Copy)]
+pub struct FieldRefView<'pool> {
+    pool: &'pool ConstantPool,
+    data: &'pool FieldRefData,
+}
+
+impl<'pool> FieldRefView<'pool> {
+    pub(crate) const fn new(pool: &'pool ConstantPool, data: &'pool FieldRefData) -> Self {
+        Self { pool, data }
+    }
+
+    /// Returns the symbolic owner, which may be an array type.
+    #[must_use]
+    pub fn owner(self) -> &'pool ReferenceType {
+        self.pool.reference_type(self.data.owner)
+    }
+
+    /// Returns the field name.
+    #[must_use]
+    pub fn name(self) -> &'pool JavaStr {
+        self.pool.field_name_and_type(self.data.name_and_type).0
+    }
+
+    /// Returns the field type.
+    #[must_use]
+    pub fn field_type(self) -> &'pool FieldType {
+        self.pool.field_name_and_type(self.data.name_and_type).1
+    }
+}
+
+impl From<FieldRefView<'_>> for FieldRef {
+    fn from(value: FieldRefView<'_>) -> Self {
+        Self {
+            owner: value.owner().clone(),
+            name: value.name().to_owned(),
+            field_type: value.field_type().clone(),
+        }
+    }
+}
+
+impl PartialEq for FieldRefView<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        (self.owner(), self.name(), self.field_type())
+            == (other.owner(), other.name(), other.field_type())
+    }
+}
+impl Eq for FieldRefView<'_> {}
+impl Hash for FieldRefView<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.owner(), self.name(), self.field_type()).hash(state);
+    }
+}
+impl fmt::Debug for FieldRefView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FieldRefView")
+            .field("owner", self.owner())
+            .field("name", &self.name())
+            .field("field_type", self.field_type())
+            .finish()
+    }
+}
+impl fmt::Display for FieldRefView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.owner(), self.name())
+    }
+}
+
+/// A borrowed symbolic method reference.
+#[derive(Clone, Copy)]
+pub struct MethodRefView<'pool> {
+    pool: &'pool ConstantPool,
+    data: &'pool MethodRefData,
+}
+
+impl<'pool> MethodRefView<'pool> {
+    pub(crate) const fn new(pool: &'pool ConstantPool, data: &'pool MethodRefData) -> Self {
+        Self { pool, data }
+    }
+
+    /// Returns the symbolic owner, which may be an array type.
+    #[must_use]
+    pub fn owner(self) -> &'pool ReferenceType {
+        self.pool.reference_type(self.data.owner)
+    }
+
+    /// Returns the method name.
+    #[must_use]
+    pub fn name(self) -> &'pool JavaStr {
+        self.pool.method_name_and_type(self.data.name_and_type).0
+    }
+
+    /// Returns the method descriptor.
+    #[must_use]
+    pub fn descriptor(self) -> &'pool MethodDescriptor {
+        self.pool.method_name_and_type(self.data.name_and_type).1
+    }
+
+    /// Checks whether this references a constructor.
+    #[must_use]
+    pub fn is_constructor(self) -> bool {
+        self.name() == Method::CONSTRUCTOR_NAME
+            && matches!(self.descriptor().return_type, ReturnType::Void)
+    }
+
+    /// Checks whether this references a static initializer.
+    #[must_use]
+    pub fn is_static_initializer_block(self) -> bool {
+        self.name() == Method::CLASS_INITIALIZER_NAME
+            && self.descriptor().parameters_types.is_empty()
+            && matches!(self.descriptor().return_type, ReturnType::Void)
+    }
+}
+
+impl From<MethodRefView<'_>> for MethodRef {
+    fn from(value: MethodRefView<'_>) -> Self {
+        Self {
+            owner: value.owner().clone(),
+            name: value.name().to_owned(),
+            descriptor: value.descriptor().clone(),
+        }
+    }
+}
+
+impl PartialEq for MethodRefView<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        (self.owner(), self.name(), self.descriptor())
+            == (other.owner(), other.name(), other.descriptor())
+    }
+}
+impl Eq for MethodRefView<'_> {}
+impl Hash for MethodRefView<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.owner(), self.name(), self.descriptor()).hash(state);
+    }
+}
+impl fmt::Debug for MethodRefView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MethodRefView")
+            .field("owner", self.owner())
+            .field("name", &self.name())
+            .field("descriptor", self.descriptor())
+            .finish()
+    }
+}
+impl fmt::Display for MethodRefView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}::{}", self.owner(), self.name())
+    }
+}
+
 /// A reference to a [`Module`](crate::jvm::Module).
 #[doc = see_jvm_spec!(4, 4, 11)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
@@ -90,6 +262,11 @@ pub(crate) mod tests {
             let method = method_ref(name, descriptor);
             assert_eq!(method.is_constructor(), constructor);
             assert_eq!(method.is_static_initializer_block(), initializer);
+            let mut pool = ConstantPool::new();
+            let id = pool.insert_method_ref(method);
+            let view = pool.method_ref(id);
+            assert_eq!(view.is_constructor(), constructor);
+            assert_eq!(view.is_static_initializer_block(), initializer);
         }
     }
 }

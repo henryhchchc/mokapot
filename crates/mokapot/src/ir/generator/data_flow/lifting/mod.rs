@@ -147,20 +147,20 @@ pub(super) fn lift_instruction(
         FCmpG => cx.compare_float(NaNTreatment::IsLargest, Category1),
         DCmpL => cx.compare_float(NaNTreatment::IsSmallest, Category2),
         DCmpG => cx.compare_float(NaNTreatment::IsLargest, Category2),
-        GetStatic(field) => cx.read_static(field),
-        GetField(field) => cx.read_instance(field),
-        PutStatic(field) => cx.write_static(field),
-        PutField(field) => cx.write_instance(field),
+        GetStatic(field) => cx.read_static(*field),
+        GetField(field) => cx.read_instance(*field),
+        PutStatic(field) => cx.write_static(*field),
+        PutField(field) => cx.write_instance(*field),
         InvokeVirtual(method) => {
-            cx.invoke_instance(method, |this| InvocationKind::Virtual { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Virtual { this })
         }
         InvokeSpecial(method) => {
-            cx.invoke_instance(method, |this| InvocationKind::Special { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Special { this })
         }
         InvokeInterface(method, _) => {
-            cx.invoke_instance(method, |this| InvocationKind::Interface { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Interface { this })
         }
-        InvokeStatic(method) => cx.invoke_static(method),
+        InvokeStatic(method) => cx.invoke_static(*method),
         InvokeDynamic {
             bootstrap_method_index,
             name,
