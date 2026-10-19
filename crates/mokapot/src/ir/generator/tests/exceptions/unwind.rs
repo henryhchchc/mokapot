@@ -20,7 +20,7 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
             Terminator::Try { exceptional, .. } if exceptional == &[Successor::Unwind]
         );
     }
-    assert_eq!(reachable_blocks(&ir).len(), 3);
+    assert_eq!(ir.blocks.len(), 3);
 }
 
 #[test]
