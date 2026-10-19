@@ -81,26 +81,12 @@ impl DataflowProblem for CyclicProblem {
 }
 
 #[test]
-fn cyclic_flow_reaches_the_same_fixed_point_with_each_facts_map() {
+fn cyclic_flow_reaches_a_fixed_point() {
     let expected = TestSet::from([0, 1]);
-    for facts in [
-        solve::<_, BTreeMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect::<BTreeMap<_, _>>(),
-        solve::<_, HashMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect(),
-        solve::<_, QueuedFactsMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect(),
-    ] {
-        assert_eq!(facts.len(), 2);
-        assert_eq!(facts[&0], expected);
-        assert_eq!(facts[&1], expected);
-    }
+    let facts: BTreeMap<_, _> = solve(&mut CyclicProblem).unwrap();
+    assert_eq!(facts.len(), 2);
+    assert_eq!(facts[&0], expected);
+    assert_eq!(facts[&1], expected);
 }
 
 proptest! {

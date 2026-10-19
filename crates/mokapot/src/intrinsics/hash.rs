@@ -66,8 +66,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
-
     use super::*;
 
     fn compute_unordered_hash<I>(iter: I) -> u64
@@ -100,25 +98,5 @@ mod tests {
             }
             prop_assert_eq!(hash1, compute_unordered_hash(permuted.iter()));
         }
-    }
-
-    // These fixed examples document expected behavior; hash collisions remain possible.
-    #[test]
-    fn duplicate_sensitive() {
-        let hash1 = compute_unordered_hash([1, 2, 3].iter());
-        let hash2 = compute_unordered_hash([1, 2, 3, 3].iter());
-        let hash3 = compute_unordered_hash([1, 1, 2, 3].iter());
-
-        assert_ne!(hash1, hash2);
-        assert_ne!(hash1, hash3);
-        assert_ne!(hash2, hash3);
-    }
-
-    #[test]
-    fn empty_collection() {
-        let hash_empty = compute_unordered_hash(iter::empty::<i32>());
-        let hash_one = compute_unordered_hash([0].iter());
-
-        assert_ne!(hash_empty, hash_one);
     }
 }

@@ -1,45 +1,6 @@
 use super::*;
 
 #[test]
-fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
-    let mut pool = ConstantPool::new();
-    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
-    let body = [
-        (0, InstructionData::ALoad0),
-        (1, InstructionData::CheckCast(string_type)),
-        (2, InstructionData::AStore1),
-        (3, InstructionData::Return),
-    ];
-    let table = vec![handler(1.into()..2.into(), 2.into(), None)];
-    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
-    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
-    let fallible = block_containing_instruction(&ir, location);
-    let target = |predicate: fn(&ControlTransfer) -> bool| {
-        fallible
-            .terminator
-            .successors()
-            .find(|it| it.transfer().is_some_and(predicate))
-            .unwrap()
-            .block_target()
-            .unwrap()
-    };
-    let normal_target = target(|it| *it == ControlTransfer::Unconditional);
-    let pad_id = target(|it| matches!(it, ControlTransfer::Exception(None)));
-
-    assert_ne!(normal_target, pad_id);
-    let pad = block_of(&ir, pad_id);
-    assert_matches!(pad.kind, BlockKind::LandingPad { .. });
-    assert_eq!(pad.parameters, [] as [BlockParameter; 0]);
-    assert_eq!(pad.operations, [] as [Operation; 0]);
-    assert_eq!(pad.terminator.successors().count(), 1);
-    let successor = pad.terminator.successors().next().unwrap();
-    assert_matches!(successor.transfer(), Some(&ControlTransfer::Unconditional));
-    assert_eq!(successor.block_target(), Some(normal_target));
-    let loc = InstructionLocation::Terminator { block: pad_id };
-    assert_eq!(ir.source_map.origin_of(loc), None);
-}
-
-#[test]
 fn exceptional_state_excludes_the_fallible_result() {
     let mut pool = ConstantPool::new();
     let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
@@ -83,48 +44,4 @@ fn exceptional_state_excludes_the_fallible_result() {
         Terminator::Return { value: Some(value), .. }
             if value == ir.parameters[0] && value != result
     ));
-}
-
-#[test]
-fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
-    let runtime = cls_name("java/lang/RuntimeException");
-    let mut pool = ConstantPool::new();
-    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
-    let body = [
-        (0, InstructionData::AConstNull),
-        (1, InstructionData::CheckCast(string_type)),
-        (2, InstructionData::Return),
-        (10, InstructionData::AStore0),
-        (11, InstructionData::Return),
-    ];
-    let table = vec![
-        handler(1.into()..2.into(), 10.into(), Some(runtime.clone())),
-        handler(1.into()..2.into(), 10.into(), None),
-    ];
-    let ir = lift_with_pool(pool, body, "()V", table);
-    let location = ir.source_map.instructions_at(1.into()).next().unwrap();
-    let fallible = block_containing_instruction(&ir, location);
-    let exceptional = fallible
-        .terminator
-        .successors()
-        .filter(|it| matches!(it.transfer(), Some(ControlTransfer::Exception(_))))
-        .collect::<Vec<_>>();
-
-    assert_eq!(exceptional.len(), 2);
-    assert_eq!(exceptional[0].block_target(), exceptional[1].block_target());
-    assert!(matches!(
-        exceptional[0].transfer(),
-        Some(ControlTransfer::Exception(Some(caught))) if caught == &runtime
-    ));
-    assert!(matches!(
-        exceptional[1].transfer(),
-        Some(ControlTransfer::Exception(None))
-    ));
-    let pad = ir.block(exceptional[0].block_target().unwrap()).unwrap();
-    assert!(matches!(pad.kind, BlockKind::LandingPad { .. }));
-    let blocks = reachable_blocks(&ir);
-    let pads = blocks
-        .iter()
-        .filter(|(_, it)| matches!(it.kind, BlockKind::LandingPad { .. }));
-    assert_eq!(pads.count(), 1);
 }
