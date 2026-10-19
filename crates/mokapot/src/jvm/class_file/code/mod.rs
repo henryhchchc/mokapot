@@ -71,13 +71,14 @@ impl Resolve for Code<'_> {
             attributes,
         } = raw;
 
-        let mut instructions = Vec::new();
+        let mut instructions = Vec::with_capacity(code.len().min(usize::from(u16::MAX)));
         for entry in RawInstruction::iter_from_bytes(code) {
             let (pc, raw) = entry?;
             let instruction =
                 InstructionData::from_raw_instruction(raw, pc, &mut ctx.constant_pool)?;
             instructions.push((pc, instruction));
         }
+        instructions.shrink_to_fit();
         let instructions = InstructionStorage::from_ordered(instructions);
 
         let exception_table = exception_table
