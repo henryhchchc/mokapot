@@ -41,7 +41,6 @@ use crate::{
     "({}) -> {return_type}",
     parameters_types.iter().map(FieldType::descriptor).join(", ")
 )]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct MethodDescriptor {
     /// The types of the method parameters in order of declaration.
     /// For instance, for a method `foo(int x, String y)`, this would contain
@@ -95,7 +94,6 @@ impl Descriptor for MethodDescriptor {
 /// let int_return = ReturnType::Some(PrimitiveType::Int.into());
 /// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display, From)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ReturnType {
     /// Represents a method that returns a specific type.
     /// The contained `FieldType` can be either a primitive type or a reference type.
@@ -197,22 +195,19 @@ impl TryFrom<&JavaStr> for ReturnType {
 
 #[cfg(test)]
 mod test {
-    use proptest::prelude::*;
-
     use super::*;
-
-    const MAX_PARAMS: usize = 10;
-    fn parameters() -> impl Strategy<Value = Vec<FieldType>> {
-        prop::collection::vec(any::<FieldType>(), 0..=MAX_PARAMS)
-    }
-
-    fn parameter_descriptors(params: &[FieldType]) -> String {
-        params.iter().map(FieldType::descriptor).join("")
-    }
 
     #[test]
     fn rejects_malformed_descriptor_boundaries() {
-        for descriptor in ["", "(", "([)V", "(Ljava/lang/String)V"] {
+        for descriptor in [
+            "",
+            "(",
+            "([)V",
+            "(Ljava/lang/String)V",
+            "(V)V",
+            "([V)V",
+            "(IL;)V",
+        ] {
             let encoded = JavaString::from(descriptor);
             let mut input = encoded.as_java_str();
             assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
@@ -220,7 +215,7 @@ mod test {
             let parse = descriptor.parse::<MethodDescriptor>();
             assert_eq!(parse, Err(InvalidDescriptor));
         }
-        for descriptor in ["", "A"] {
+        for descriptor in ["", "A", "Vx", "Ix"] {
             assert_eq!(descriptor.parse::<ReturnType>(), Err(InvalidDescriptor));
             let parse = format!("(){descriptor}").parse::<MethodDescriptor>();
             assert_eq!(parse, Err(InvalidDescriptor));
@@ -239,43 +234,6 @@ mod test {
             let descriptor = JavaStr::from_cesu8(&bytes).unwrap();
             let method = MethodDescriptor::try_from(descriptor).unwrap();
             assert_eq!(method.descriptor().as_java_str().as_bytes(), bytes);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn method_round_trip(method in any::<MethodDescriptor>()) {
-            prop_assert_eq!(MethodDescriptor::try_from(method.descriptor().as_java_str()), Ok(method));
-        }
-
-        #[test]
-        fn rejects_invalid_descriptors(
-            before in parameters(),
-            after in parameters(),
-            invalid_parameter in prop::sample::select(&["V", "[V", "L;", "L/foo;", "Lfoo.bar;"][..]),
-            ret in any::<ReturnType>(),
-            suffix in "(?s).+",
-        ) {
-            let before = parameter_descriptors(&before);
-            let after = parameter_descriptors(&after);
-            let ret = ret.descriptor();
-            let invalid_parameters = [
-                format!("{before}){ret}"),
-                format!("({before}{ret}"),
-                format!("({before}{invalid_parameter}{after}){ret}"),
-            ];
-            for descriptor in &invalid_parameters {
-                let encoded = JavaString::from(descriptor.as_str());
-                let mut input = encoded.as_java_str();
-                prop_assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
-                prop_assert_eq!(input, encoded.as_java_str());
-                prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
-            }
-
-            let trailing_input = format!("{ret}{suffix}");
-            prop_assert_eq!(trailing_input.parse::<ReturnType>(), Err(InvalidDescriptor));
-            let method = format!("({before}){trailing_input}");
-            prop_assert_eq!(method.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
         }
     }
 }

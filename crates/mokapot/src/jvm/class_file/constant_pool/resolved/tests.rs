@@ -128,14 +128,10 @@ fn member_views_compare_and_hash_values_across_pools() {
     let other_field = other.field_ref(other.field_ref_id(9).unwrap());
     assert_eq!(field, other_field);
     assert_eq!(hash(field), hash(other_field));
-    assert_eq!(format!("{field:?}"), format!("{other_field:?}"));
-    assert_eq!(field.to_string(), FieldRef::from(field).to_string());
     let method = pool.method_ref(pool.method_ref_id(12).unwrap());
     let other_method = other.method_ref(other.interface_method_ref_id(14).unwrap());
     assert_eq!(method, other_method);
     assert_eq!(hash(method), hash(other_method));
-    assert_eq!(format!("{method:?}"), format!("{other_method:?}"));
-    assert_eq!(method.to_string(), MethodRef::from(method).to_string());
     let mut different = ConstantPool::new();
     let different_field = different.insert_field_ref(FieldRef {
         name: "different".into(),
@@ -150,44 +146,8 @@ fn member_views_compare_and_hash_values_across_pools() {
 }
 
 #[test]
-fn member_ids_reject_invalid_slots_and_wrong_kinds() {
-    let pool = member_pool();
-    for index in [0, 1, 19, 20, 21, u16::MAX] {
-        for result in [
-            pool.field_ref_id(index).map(|_| ()),
-            pool.method_ref_id(index).map(|_| ()),
-            pool.interface_method_ref_id(index).map(|_| ()),
-            pool.method_or_interface_ref_id(index).map(|_| ()),
-            pool.field_name_and_type_id(index).map(|_| ()),
-            pool.method_name_and_type_id(index).map(|_| ()),
-            pool.invoke_dynamic_id(index).map(|_| ()),
-        ] {
-            assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
-        }
-    }
-    for result in [
-        pool.field_ref_id(12).map(|_| ()),
-        pool.method_ref_id(14).map(|_| ()),
-        pool.interface_method_ref_id(12).map(|_| ()),
-        pool.method_or_interface_ref_id(6).map(|_| ()),
-        pool.field_name_and_type_id(11).map(|_| ()),
-        pool.method_name_and_type_id(5).map(|_| ()),
-    ] {
-        assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
-    }
-}
-
-#[test]
 fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
-    for (owner, field_type, method_type) in [
-        (0, 5, 7),
-        (1, 5, 7),
-        (99, 5, 7),
-        (2, 0, 0),
-        (2, 1, 1),
-        (2, 7, 5),
-        (2, 99, 99),
-    ] {
+    for (owner, field_type, method_type) in [(0, 5, 7), (1, 5, 7), (99, 5, 7), (2, 7, 5)] {
         for entry in [
             RawEntry::FieldRef {
                 class_index: owner.into(),

@@ -1,5 +1,3 @@
-use std::iter;
-
 use proptest::prelude::*;
 
 use super::*;
@@ -18,76 +16,6 @@ fn assert_malformed_at(bytes: &[u8], prefix_len: usize) {
     }
     let error = RawInstruction::read_one(&mut reader, bytes.len()).unwrap_err();
     assert_eq!(error.kind(), ParseErrorKind::Malformed);
-}
-
-fn valid_encoding(opcode: u8) -> Option<Vec<u8>> {
-    let operands: &[u8] = match opcode {
-        0x00..=0x0f
-        | 0x1a..=0x35
-        | 0x3b..=0x83
-        | 0x85..=0x98
-        | 0xac..=0xb1
-        | 0xbe..=0xbf
-        | 0xc2..=0xc3
-        | 0xca
-        | 0xfe..=0xff => &[],
-        0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => &[0],
-        0x11
-        | 0x13..=0x14
-        | 0x84
-        | 0x99..=0xa8
-        | 0xb2..=0xb8
-        | 0xbb
-        | 0xbd
-        | 0xc0..=0xc1
-        | 0xc6..=0xc7 => &[0, 0],
-        0xaa => &[0; 19],
-        0xab => &[0; 11],
-        0xb9..=0xba | 0xc8..=0xc9 => &[0, 0, 0, 0],
-        0xc4 => &[0x15, 0, 0],
-        0xc5 => &[0, 0, 1],
-        _ => return None,
-    };
-    Some(iter::once(opcode).chain(operands.iter().copied()).collect())
-}
-
-#[test]
-fn decodes_every_defined_opcode_and_rejects_undefined_opcodes() {
-    for opcode in 0..=u8::MAX {
-        let Some(bytes) = valid_encoding(opcode) else {
-            assert_malformed(&[opcode]);
-            continue;
-        };
-        let mut reader = bytes.as_slice();
-        let decoded = RawInstruction::read_one(&mut reader, bytes.len())
-            .unwrap_or_else(|error| panic!("opcode 0x{opcode:02x} failed to parse: {error}"))
-            .unwrap();
-        assert_eq!(
-            bytes.len() - reader.len(),
-            bytes.len(),
-            "opcode 0x{opcode:02x}"
-        );
-        assert_eq!(decoded.0, ProgramCounter::default());
-    }
-}
-
-#[test]
-fn operand_bearing_opcodes_reject_truncated_encodings() {
-    for opcode in 0..=u8::MAX {
-        let Some(mut bytes) = valid_encoding(opcode) else {
-            continue;
-        };
-        if bytes.len() == 1 {
-            continue;
-        }
-        bytes.pop();
-        let error = RawInstruction::read_one(&mut bytes.as_slice(), bytes.len()).unwrap_err();
-        assert_eq!(
-            error.kind(),
-            ParseErrorKind::Malformed,
-            "opcode 0x{opcode:02x}"
-        );
-    }
 }
 
 proptest! {

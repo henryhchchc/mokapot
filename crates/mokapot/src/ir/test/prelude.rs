@@ -314,7 +314,6 @@ pub(crate) fn reachable_of(
     result
 }
 
-/// The operations of `ir`'s reachable blocks.
 pub(crate) fn operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
     reachable_blocks(ir)
         .into_iter()
