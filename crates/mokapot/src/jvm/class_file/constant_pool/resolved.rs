@@ -9,7 +9,10 @@ use crate::{
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
         errors::{ParseError, ParsingErrorContext},
-        references::{FieldRef, MethodRef, ModuleRef},
+        references::{
+            FieldRef, FieldRefData, FieldRefView, MethodRef, MethodRefData, MethodRefView,
+            ModuleRef,
+        },
     },
     types::{
         class_name::ClassName,
@@ -94,6 +97,9 @@ pub(crate) struct MethodHandleId(NonZeroU16);
 pub(crate) struct MethodNameAndTypeId(NonZeroU16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FieldNameAndTypeId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FieldTypeId(u16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,11 +137,11 @@ enum Entry {
     /// A string literal.
     String(Utf8Id),
     /// A field reference.
-    FieldRef(FieldRef),
+    FieldRef(FieldRefData),
     /// A method reference.
-    MethodRef(MethodRef),
+    MethodRef(MethodRefData),
     /// An interface method reference.
-    InterfaceMethodRef(MethodRef),
+    InterfaceMethodRef(MethodRefData),
     /// A field or method name and descriptor.
     NameAndType(NameAndType),
     /// A method handle.
@@ -146,19 +152,13 @@ enum Entry {
     Dynamic {
         /// Index into the class's bootstrap method table.
         bootstrap_method_attr_index: u16,
-        /// Constant name.
-        name: JavaString,
-        /// Constant type.
-        field_type: FieldType,
+        name_and_type: FieldNameAndTypeId,
     },
     /// A dynamic call site, retaining its bootstrap-table index.
     InvokeDynamic {
         /// Index into the class's bootstrap method table.
         bootstrap_method_attr_index: u16,
-        /// Call-site name.
-        name: JavaString,
-        /// Call-site descriptor.
-        descriptor: MethodDescriptor,
+        name_and_type: MethodNameAndTypeId,
     },
     /// A module reference.
     Module(ModuleRef),
@@ -168,11 +168,11 @@ enum Entry {
 
 /// A resolved field or method name and descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NameAndType {
+enum NameAndType {
     /// A field name and type.
-    Field(JavaString, FieldTypeId),
+    Field(Utf8Id, FieldTypeId),
     /// A method name and descriptor.
-    Method(JavaString, MethodDescriptorId),
+    Method(Utf8Id, MethodDescriptorId),
 }
 
 impl Entry {
@@ -249,15 +249,17 @@ impl ConstantPool {
             entry => Err(entry.type_mismatch("InvokeDynamic")),
         }
     }
-    pub(crate) fn field_ref(&self, id: FieldRefId) -> &FieldRef {
+    pub(crate) fn field_ref(&self, id: FieldRefId) -> FieldRefView<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
-            Entry::FieldRef(value) => value,
+            Entry::FieldRef(value) => FieldRefView::new(self, value),
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn method_ref(&self, id: MethodRefId) -> &MethodRef {
+    pub(crate) fn method_ref(&self, id: MethodRefId) -> MethodRefView<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
-            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => value,
+            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => {
+                MethodRefView::new(self, value)
+            }
             _ => unreachable!("validated entry kind"),
         }
     }
@@ -265,24 +267,68 @@ impl ConstantPool {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::InvokeDynamic {
                 bootstrap_method_attr_index,
-                name,
-                descriptor,
-            } => (*bootstrap_method_attr_index, name.as_java_str(), descriptor),
+                name_and_type,
+            } => {
+                let (name, descriptor) = self.method_name_and_type(*name_and_type);
+                (*bootstrap_method_attr_index, name, descriptor)
+            }
             _ => unreachable!("validated entry kind"),
         }
     }
     #[cfg(test)]
     pub(crate) fn insert_field_ref(&mut self, value: FieldRef) -> FieldRefId {
-        let index = self.inner.push(Entry::FieldRef(value));
+        let owner = self.insert_reference_type(value.owner);
+        let name_and_type = self.insert_field_name_and_type(value.name, value.field_type);
+        let index = self.inner.push(Entry::FieldRef(FieldRefData {
+            owner,
+            name_and_type,
+        }));
         self.extend_test_sources();
         FieldRefId(NonZeroU16::new(index).expect("nonzero test index"))
     }
     #[cfg(test)]
     pub(crate) fn insert_method_ref(&mut self, value: MethodRef) -> MethodRefId {
-        let index = self.inner.push(Entry::MethodRef(value));
+        let owner = self.insert_reference_type(value.owner);
+        let name_and_type = self.insert_method_name_and_type(value.name, value.descriptor);
+        let index = self.inner.push(Entry::MethodRef(MethodRefData {
+            owner,
+            name_and_type,
+        }));
         self.extend_test_sources();
         MethodRefId(NonZeroU16::new(index).expect("nonzero test index"))
     }
+    #[cfg(test)]
+    fn insert_field_name_and_type(
+        &mut self,
+        name: JavaString,
+        ty: FieldType,
+    ) -> FieldNameAndTypeId {
+        let name = self.insert_utf8(name);
+        let id = FieldTypeId(u16::try_from(self.field_types.values.len()).unwrap());
+        self.field_types.values.push(ty);
+        let index = self
+            .inner
+            .push(Entry::NameAndType(NameAndType::Field(name, id)));
+        self.extend_test_sources();
+        FieldNameAndTypeId(NonZeroU16::new(index).unwrap())
+    }
+
+    #[cfg(test)]
+    fn insert_method_name_and_type(
+        &mut self,
+        name: JavaString,
+        descriptor: MethodDescriptor,
+    ) -> MethodNameAndTypeId {
+        let name = self.insert_utf8(name);
+        let id = MethodDescriptorId(u16::try_from(self.method_descriptors.values.len()).unwrap());
+        self.method_descriptors.values.push(descriptor);
+        let index = self
+            .inner
+            .push(Entry::NameAndType(NameAndType::Method(name, id)));
+        self.extend_test_sources();
+        MethodNameAndTypeId(NonZeroU16::new(index).unwrap())
+    }
+
     #[cfg(test)]
     pub(crate) fn insert_reference_type(&mut self, value: ReferenceType) -> ReferenceTypeId {
         let index = self.inner.push(Entry::Class {
@@ -299,10 +345,10 @@ impl ConstantPool {
         name: JavaString,
         descriptor: MethodDescriptor,
     ) -> InvokeDynamicId {
+        let name_and_type = self.insert_method_name_and_type(name, descriptor);
         let index = self.inner.push(Entry::InvokeDynamic {
             bootstrap_method_attr_index,
-            name,
-            descriptor,
+            name_and_type,
         });
         self.extend_test_sources();
         InvokeDynamicId(NonZeroU16::new(index).expect("nonzero test index"))
@@ -426,7 +472,7 @@ impl ConstantPool {
     ) -> (&JavaStr, &MethodDescriptor) {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::NameAndType(NameAndType::Method(name, descriptor)) => {
-                (name.as_java_str(), self.method_descriptor(*descriptor))
+                (self.utf8(*name), self.method_descriptor(*descriptor))
             }
             _ => unreachable!("validated entry kind"),
         }
@@ -609,6 +655,7 @@ impl ConstantPool {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn get_type_ref(&self, index: u16) -> Result<ReferenceType, ParseError> {
         match self.entry(index)? {
             Entry::Class { reference_type, .. } => Ok(reference_type.clone()),
@@ -616,54 +663,50 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_field_name_and_type(
-        &self,
-        index: u16,
-    ) -> Result<(JavaString, FieldType), ParseError> {
+    fn field_name_and_type_id(&self, index: u16) -> Result<FieldNameAndTypeId, ParseError> {
         match self.entry(index)? {
-            Entry::NameAndType(NameAndType::Field(name, ty)) => {
-                Ok((name.clone(), self.field_type(*ty).clone()))
-            }
+            Entry::NameAndType(NameAndType::Field(..)) => Ok(FieldNameAndTypeId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
             entry => Err(entry.type_mismatch("NameAndType with a field descriptor")),
         }
     }
 
-    pub(crate) fn get_method_name_and_type(
-        &self,
-        index: u16,
-    ) -> Result<(JavaString, MethodDescriptor), ParseError> {
-        match self.entry(index)? {
-            Entry::NameAndType(NameAndType::Method(name, descriptor)) => {
-                Ok((name.clone(), self.method_descriptor(*descriptor).clone()))
+    pub(crate) fn field_name_and_type(&self, id: FieldNameAndTypeId) -> (&JavaStr, &FieldType) {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::NameAndType(NameAndType::Field(name, ty)) => {
+                (self.utf8(*name), self.field_type(*ty))
             }
-            entry => Err(entry.type_mismatch("NameAndType with a method descriptor")),
+            _ => unreachable!("validated entry kind"),
         }
     }
 
     pub(crate) fn get_field_ref(&self, index: u16) -> Result<FieldRef, ParseError> {
         match self.entry(index)? {
-            Entry::FieldRef(value) => Ok(value.clone()),
+            Entry::FieldRef(value) => Ok(FieldRefView::new(self, value).into()),
             entry => Err(entry.type_mismatch("Fieldref")),
         }
     }
 
     pub(crate) fn get_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
         match self.entry(index)? {
-            Entry::MethodRef(value) => Ok(value.clone()),
+            Entry::MethodRef(value) => Ok(MethodRefView::new(self, value).into()),
             entry => Err(entry.type_mismatch("Methodref")),
         }
     }
 
     pub(crate) fn get_interface_method_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
         match self.entry(index)? {
-            Entry::InterfaceMethodRef(value) => Ok(value.clone()),
+            Entry::InterfaceMethodRef(value) => Ok(MethodRefView::new(self, value).into()),
             entry => Err(entry.type_mismatch("InterfaceMethodref")),
         }
     }
 
     pub(crate) fn get_method_or_interface_ref(&self, index: u16) -> Result<MethodRef, ParseError> {
         match self.entry(index)? {
-            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => Ok(value.clone()),
+            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => {
+                Ok(MethodRefView::new(self, value).into())
+            }
             entry => Err(entry.type_mismatch("Methodref | InterfaceMethodref")),
         }
     }
@@ -682,13 +725,15 @@ impl ConstantPool {
             Entry::MethodHandle(value) => ConstantValue::Handle(value.clone()),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
-                name,
-                field_type,
-            } => ConstantValue::Dynamic(
-                *bootstrap_method_attr_index,
-                name.clone(),
-                field_type.clone(),
-            ),
+                name_and_type,
+            } => {
+                let (name, field_type) = self.field_name_and_type(*name_and_type);
+                ConstantValue::Dynamic(
+                    *bootstrap_method_attr_index,
+                    name.to_owned(),
+                    field_type.clone(),
+                )
+            }
             entry => return Err(entry.type_mismatch("Loadable constant")),
         })
     }
@@ -726,13 +771,11 @@ impl ConstantPool {
                 class_index,
                 name_and_type_index,
             } => {
-                let owner = self.get_type_ref(class_index.into())?;
-                let (name, field_type) =
-                    self.get_field_name_and_type(name_and_type_index.into())?;
-                Entry::FieldRef(FieldRef {
+                let owner = self.reference_type_id(class_index.into())?;
+                let name_and_type = self.field_name_and_type_id(name_and_type_index.into())?;
+                Entry::FieldRef(FieldRefData {
                     owner,
-                    name,
-                    field_type,
+                    name_and_type,
                 })
             }
             RawEntry::MethodRef {
@@ -744,13 +787,11 @@ impl ConstantPool {
                 name_and_type_index,
             } => {
                 let interface = matches!(raw, RawEntry::InterfaceMethodRef { .. });
-                let owner = self.get_type_ref(class_index.into())?;
-                let (name, descriptor) =
-                    self.get_method_name_and_type(name_and_type_index.into())?;
-                let value = MethodRef {
+                let owner = self.reference_type_id(class_index.into())?;
+                let name_and_type = self.method_name_and_type_id(name_and_type_index.into())?;
+                let value = MethodRefData {
                     owner,
-                    name,
-                    descriptor,
+                    name_and_type,
                 };
                 if interface {
                     Entry::InterfaceMethodRef(value)
@@ -762,24 +803,20 @@ impl ConstantPool {
                 bootstrap_method_attr_index,
                 name_and_type_index,
             } => {
-                let (name, field_type) =
-                    self.get_field_name_and_type(name_and_type_index.into())?;
+                let name_and_type = self.field_name_and_type_id(name_and_type_index.into())?;
                 Entry::Dynamic {
                     bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
-                    name,
-                    field_type,
+                    name_and_type,
                 }
             }
             RawEntry::InvokeDynamic {
                 bootstrap_method_attr_index,
                 name_and_type_index,
             } => {
-                let (name, descriptor) =
-                    self.get_method_name_and_type(name_and_type_index.into())?;
+                let name_and_type = self.method_name_and_type_id(name_and_type_index.into())?;
                 Entry::InvokeDynamic {
                     bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
-                    name,
-                    descriptor,
+                    name_and_type,
                 }
             }
             RawEntry::MethodHandle {
@@ -807,7 +844,7 @@ impl ConstantPool {
         name_index: u16,
         descriptor_index: u16,
     ) -> Result<NameAndType, ParseError> {
-        let name = self.get_java_string(name_index)?;
+        let name = self.utf8_id(name_index)?;
         let descriptor = self.get_utf8(descriptor_index)?;
         Ok(if descriptor.as_bytes().starts_with(b"(") {
             NameAndType::Method(name, self.intern_method_descriptor(descriptor_index)?)
@@ -874,6 +911,222 @@ mod tests {
     use super::*;
     use crate::jvm::{class_file::constant_pool::RawEntry, errors::ParseErrorKind};
     use crate::types::Descriptor;
+
+    fn member_pool() -> ConstantPool {
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"[I"),
+            RawEntry::Class {
+                name_index: 1.into(),
+            },
+            RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
+            RawEntry::Utf8(b"I"),
+            RawEntry::NameAndType {
+                name_index: 3.into(),
+                descriptor_index: 4.into(),
+            },
+            RawEntry::FieldRef {
+                class_index: 2.into(),
+                name_and_type_index: 5.into(),
+            },
+            RawEntry::FieldRef {
+                class_index: 2.into(),
+                name_and_type_index: 5.into(),
+            },
+            RawEntry::NameAndType {
+                name_index: 3.into(),
+                descriptor_index: 4.into(),
+            },
+            RawEntry::FieldRef {
+                class_index: 2.into(),
+                name_and_type_index: 8.into(),
+            },
+            RawEntry::Utf8(b"(I[Ljava/lang/Object;)V"),
+            RawEntry::NameAndType {
+                name_index: 3.into(),
+                descriptor_index: 10.into(),
+            },
+            RawEntry::MethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 11.into(),
+            },
+            RawEntry::MethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 11.into(),
+            },
+            RawEntry::InterfaceMethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 11.into(),
+            },
+            RawEntry::NameAndType {
+                name_index: 3.into(),
+                descriptor_index: 10.into(),
+            },
+            RawEntry::MethodRef {
+                class_index: 2.into(),
+                name_and_type_index: 15.into(),
+            },
+            RawEntry::Dynamic {
+                bootstrap_method_attr_index: 1.into(),
+                name_and_type_index: 5.into(),
+            },
+            RawEntry::InvokeDynamic {
+                bootstrap_method_attr_index: 2.into(),
+                name_and_type_index: 11.into(),
+            },
+            RawEntry::Long(0.into()),
+        ]);
+        ConstantPool::from_raw(raw).unwrap()
+    }
+
+    #[test]
+    fn member_views_share_owners_names_and_descriptors() {
+        let pool = member_pool();
+        let owner = pool.reference_type(pool.reference_type_id(2).unwrap());
+        let name = pool.utf8(pool.utf8_id(3).unwrap());
+        let field = pool.field_ref(pool.field_ref_id(6).unwrap());
+        for index in [6, 7, 9] {
+            let other = pool.field_ref(pool.field_ref_id(index).unwrap());
+            assert!(std::ptr::eq(other.owner(), owner));
+            assert!(std::ptr::eq(other.name(), name));
+            assert!(std::ptr::eq(other.field_type(), field.field_type()));
+        }
+        let method = pool.method_ref(pool.method_ref_id(12).unwrap());
+        for index in [12, 13, 14, 16] {
+            let other = pool.method_ref(pool.method_or_interface_ref_id(index).unwrap());
+            assert!(std::ptr::eq(other.owner(), owner));
+            assert!(std::ptr::eq(other.name(), name));
+            assert!(std::ptr::eq(other.descriptor(), method.descriptor()));
+        }
+        let (bootstrap, dynamic_name, descriptor) =
+            pool.invoke_dynamic(pool.invoke_dynamic_id(18).unwrap());
+        assert_eq!(bootstrap, 2);
+        assert!(std::ptr::eq(dynamic_name, name));
+        assert!(std::ptr::eq(descriptor, method.descriptor()));
+        assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
+        assert_eq!(FieldRef::from(field).name.as_bytes(), name.as_bytes());
+        assert_eq!(MethodRef::from(method).name.as_bytes(), name.as_bytes());
+        assert_eq!(
+            pool.get_constant_value(17).unwrap(),
+            ConstantValue::Dynamic(1, name.to_owned(), field.field_type().clone())
+        );
+    }
+
+    #[test]
+    fn member_views_compare_and_hash_values_across_pools() {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        fn hash(value: impl Hash) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+        let pool = member_pool();
+        let other = member_pool();
+        let field = pool.field_ref(pool.field_ref_id(6).unwrap());
+        let other_field = other.field_ref(other.field_ref_id(9).unwrap());
+        assert_eq!(field, other_field);
+        assert_eq!(hash(field), hash(other_field));
+        assert_eq!(format!("{field:?}"), format!("{other_field:?}"));
+        assert_eq!(field.to_string(), FieldRef::from(field).to_string());
+        let method = pool.method_ref(pool.method_ref_id(12).unwrap());
+        let other_method = other.method_ref(other.interface_method_ref_id(14).unwrap());
+        assert_eq!(method, other_method);
+        assert_eq!(hash(method), hash(other_method));
+        assert_eq!(format!("{method:?}"), format!("{other_method:?}"));
+        assert_eq!(method.to_string(), MethodRef::from(method).to_string());
+        let mut different = ConstantPool::new();
+        let different_field = different.insert_field_ref(FieldRef {
+            name: "different".into(),
+            ..field.into()
+        });
+        let different_method = different.insert_method_ref(MethodRef {
+            descriptor: "()I".parse().unwrap(),
+            ..method.into()
+        });
+        assert_ne!(field, different.field_ref(different_field));
+        assert_ne!(method, different.method_ref(different_method));
+    }
+
+    #[test]
+    fn member_ids_reject_invalid_slots_and_wrong_kinds() {
+        let pool = member_pool();
+        for index in [0, 1, 19, 20, 21, u16::MAX] {
+            for result in [
+                pool.field_ref_id(index).map(|_| ()),
+                pool.method_ref_id(index).map(|_| ()),
+                pool.interface_method_ref_id(index).map(|_| ()),
+                pool.method_or_interface_ref_id(index).map(|_| ()),
+                pool.field_name_and_type_id(index).map(|_| ()),
+                pool.method_name_and_type_id(index).map(|_| ()),
+                pool.invoke_dynamic_id(index).map(|_| ()),
+            ] {
+                assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
+            }
+        }
+        for result in [
+            pool.field_ref_id(12).map(|_| ()),
+            pool.method_ref_id(14).map(|_| ()),
+            pool.interface_method_ref_id(12).map(|_| ()),
+            pool.method_or_interface_ref_id(6).map(|_| ()),
+            pool.field_name_and_type_id(11).map(|_| ()),
+            pool.method_name_and_type_id(5).map(|_| ()),
+        ] {
+            assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
+        }
+    }
+
+    #[test]
+    fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
+        for (owner, field_type, method_type) in [
+            (0, 5, 7),
+            (1, 5, 7),
+            (99, 5, 7),
+            (2, 0, 0),
+            (2, 1, 1),
+            (2, 7, 5),
+            (2, 99, 99),
+        ] {
+            for entry in [
+                RawEntry::FieldRef {
+                    class_index: owner.into(),
+                    name_and_type_index: field_type.into(),
+                },
+                RawEntry::MethodRef {
+                    class_index: owner.into(),
+                    name_and_type_index: method_type.into(),
+                },
+                RawEntry::InterfaceMethodRef {
+                    class_index: owner.into(),
+                    name_and_type_index: method_type.into(),
+                },
+            ] {
+                let raw = RawConstantPool::from_entries([
+                    RawEntry::Utf8(b"a/b/C"),
+                    RawEntry::Class {
+                        name_index: 1.into(),
+                    },
+                    RawEntry::Utf8(b"name"),
+                    RawEntry::Utf8(b"I"),
+                    RawEntry::NameAndType {
+                        name_index: 3.into(),
+                        descriptor_index: 4.into(),
+                    },
+                    RawEntry::Utf8(b"()V"),
+                    RawEntry::NameAndType {
+                        name_index: 3.into(),
+                        descriptor_index: 6.into(),
+                    },
+                    entry,
+                ]);
+                assert_eq!(
+                    ConstantPool::from_raw(raw).unwrap_err().kind(),
+                    ParseErrorKind::Malformed
+                );
+            }
+        }
+    }
 
     #[test]
     fn checked_ids_preserve_values_and_share_parsed_descriptors() {

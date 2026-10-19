@@ -4,9 +4,9 @@ mod decode;
 mod resolved;
 mod storage;
 pub(crate) use resolved::{
-    ClassId, ConstantPool, ConstantValueId, FieldRefId, FieldTypeId, InvokeDynamicId,
-    MethodDescriptorId, MethodHandleId, MethodNameAndTypeId, MethodRefId, ModuleId, PackageId,
-    ReferenceTypeId, ReturnTypeId, Utf8Id,
+    ClassId, ConstantPool, ConstantValueId, FieldNameAndTypeId, FieldRefId, FieldTypeId,
+    InvokeDynamicId, MethodDescriptorId, MethodHandleId, MethodNameAndTypeId, MethodRefId,
+    ModuleId, PackageId, ReferenceTypeId, ReturnTypeId, Utf8Id,
 };
 
 use self::storage::{PoolStorage, Slot};
