@@ -138,11 +138,13 @@ impl FromStr for MethodDescriptor {
 /// Consumes the leading `(` from `input`, then extracts each parameter type
 /// descriptor until `)` is reached. On success, `input` is advanced past the
 /// closing `)`.
-fn parse_params(input: &mut &[u8]) -> Result<Box<[FieldType]>, InvalidDescriptor> {
-    let mut rest = input.strip_prefix(b"(").ok_or(InvalidDescriptor)?;
+fn parse_params(input: &mut &JavaStr) -> Result<Box<[FieldType]>, InvalidDescriptor> {
+    let Some((b'(', mut rest)) = input.split_first_ascii() else {
+        return Err(InvalidDescriptor);
+    };
 
     let parameters_types = std::iter::from_fn(|| {
-        if let Some(after_paren) = rest.strip_prefix(b")") {
+        if let Some((b')', after_paren)) = rest.split_first_ascii() {
             rest = after_paren;
             return None;
         }
@@ -158,10 +160,9 @@ impl TryFrom<&JavaStr> for MethodDescriptor {
     type Error = InvalidDescriptor;
 
     fn try_from(descriptor: &JavaStr) -> Result<Self, Self::Error> {
-        let mut bytes = descriptor.as_bytes();
-        let parameters_types = parse_params(&mut bytes)?;
-        let return_descriptor = JavaStr::from_cesu8(bytes).map_err(|_| InvalidDescriptor)?;
-        let return_type = ReturnType::try_from(return_descriptor)?;
+        let mut rest = descriptor;
+        let parameters_types = parse_params(&mut rest)?;
+        let return_type = ReturnType::try_from(rest)?;
         Ok(Self {
             parameters_types,
             return_type,
@@ -212,9 +213,10 @@ mod test {
     #[test]
     fn rejects_malformed_descriptor_boundaries() {
         for descriptor in ["", "(", "([)V", "(Ljava/lang/String)V"] {
-            let mut input = descriptor.as_bytes();
+            let encoded = JavaString::from(descriptor);
+            let mut input = encoded.as_java_str();
             assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
-            assert_eq!(input, descriptor.as_bytes());
+            assert_eq!(input, encoded.as_java_str());
             let parse = descriptor.parse::<MethodDescriptor>();
             assert_eq!(parse, Err(InvalidDescriptor));
         }
@@ -228,10 +230,16 @@ mod test {
 
     #[test]
     fn parses_and_emits_modified_utf8_class_names() {
-        let bytes = [b'(', b'L', b'p', b'/', 0xed, 0xa0, 0x80, b';', b')', b'V'];
-        let descriptor = JavaStr::from_cesu8(&bytes).unwrap();
-        let method = MethodDescriptor::try_from(descriptor).unwrap();
-        assert_eq!(method.descriptor().as_java_str().as_bytes(), bytes);
+        for name in [
+            b"p/\xed\xa0\x80".as_slice(),
+            b"p/\xed\xa0\xbd\xed\xb8\x80",
+            b"p/\xc0\x80",
+        ] {
+            let bytes = [b"(L", name, b";)[L", name, b";"].concat();
+            let descriptor = JavaStr::from_cesu8(&bytes).unwrap();
+            let method = MethodDescriptor::try_from(descriptor).unwrap();
+            assert_eq!(method.descriptor().as_java_str().as_bytes(), bytes);
+        }
     }
 
     proptest! {
@@ -258,9 +266,9 @@ mod test {
             ];
             for descriptor in &invalid_parameters {
                 let encoded = JavaString::from(descriptor.as_str());
-                let mut input = encoded.as_java_str().as_bytes();
+                let mut input = encoded.as_java_str();
                 prop_assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
-                prop_assert_eq!(input, encoded.as_java_str().as_bytes());
+                prop_assert_eq!(input, encoded.as_java_str());
                 prop_assert_eq!(descriptor.parse::<MethodDescriptor>(), Err(InvalidDescriptor));
             }
 
