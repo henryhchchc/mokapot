@@ -168,9 +168,9 @@ impl<'class> Method<'class> {
         self.name() == Self::CLASS_INITIALIZER_NAME
     }
 
-    /// Creates a [`MethodRef`] pointting to this method.
+    /// Creates an owned [`MethodRef`] referring to this method.
     #[must_use]
-    pub fn as_ref(&self) -> MethodRef {
+    pub fn to_owned_ref(&self) -> MethodRef {
         MethodRef {
             owner: ReferenceType::Class(self.owner().name().clone()),
             name: self.name().to_owned(),
@@ -316,7 +316,7 @@ mod tests {
         let method = class.methods().next().unwrap();
         assert_eq!(method.name().as_bytes(), name);
         assert_eq!(method.descriptor().descriptor().as_bytes(), descriptor);
-        let reference = method.as_ref();
+        let reference = method.to_owned_ref();
         let ir = crate::ir::MokaIRMethod::from_method(method).unwrap();
         drop(class);
         assert_eq!(reference.name.as_bytes(), name);
@@ -340,7 +340,7 @@ mod tests {
         let method = class.get_method_str("test", &descriptor).unwrap();
         assert!(std::ptr::eq(method.owner(), &raw const class));
         assert_eq!(
-            method.as_ref().owner,
+            method.to_owned_ref().owner,
             ReferenceType::Class(class.name().clone())
         );
         assert!(class.get_method_str("missing", &descriptor).is_none());

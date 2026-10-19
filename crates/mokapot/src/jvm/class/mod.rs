@@ -46,7 +46,8 @@ impl Class {
     where
         D: Borrow<MethodDescriptor>,
     {
-        self.get_method(super::JavaString::from(name).as_java_str(), descriptor)
+        self.methods()
+            .find(|method| method.name() == name && method.descriptor() == descriptor.borrow())
     }
 
     /// Iterates over fields declared by this class.
