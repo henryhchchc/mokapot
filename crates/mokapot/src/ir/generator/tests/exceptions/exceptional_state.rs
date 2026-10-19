@@ -2,14 +2,16 @@ use super::*;
 
 #[test]
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
     let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
-        (2, Instruction::AStore1),
-        (3, Instruction::Return),
+        (0, InstructionData::ALoad0),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::AStore1),
+        (3, InstructionData::Return),
     ];
     let table = vec![handler(1.into()..2.into(), 2.into(), None)];
-    let ir = lift(body, "(Ljava/lang/Object;)V", table);
+    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
     let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let target = |predicate: fn(&ControlTransfer) -> bool| {
@@ -39,16 +41,18 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
 
 #[test]
 fn exceptional_state_excludes_the_fallible_result() {
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
     let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
-        (2, Instruction::AReturn),
-        (10, Instruction::AStore1),
-        (11, Instruction::ALoad0),
-        (12, Instruction::AReturn),
+        (0, InstructionData::ALoad0),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::AReturn),
+        (10, InstructionData::AStore1),
+        (11, InstructionData::ALoad0),
+        (12, InstructionData::AReturn),
     ];
     let table = vec![handler(1.into()..2.into(), 10.into(), None)];
-    let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
+    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
     let attempted = terminator_at(&ir, 1.into()).operation().unwrap();
     let Operation::Definition { value: result, .. } = attempted else {
         panic!("checkcast must define a result");
@@ -84,18 +88,20 @@ fn exceptional_state_excludes_the_fallible_result() {
 #[test]
 fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
     let runtime = cls_name("java/lang/RuntimeException");
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
     let body = [
-        (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
-        (2, Instruction::Return),
-        (10, Instruction::AStore0),
-        (11, Instruction::Return),
+        (0, InstructionData::AConstNull),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::Return),
+        (10, InstructionData::AStore0),
+        (11, InstructionData::Return),
     ];
     let table = vec![
         handler(1.into()..2.into(), 10.into(), Some(runtime.clone())),
         handler(1.into()..2.into(), 10.into(), None),
     ];
-    let ir = lift(body, "()V", table);
+    let ir = lift_with_pool(pool, body, "()V", table);
     let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let exceptional = fallible

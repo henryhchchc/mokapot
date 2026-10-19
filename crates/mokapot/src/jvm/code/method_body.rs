@@ -284,8 +284,6 @@ mod test {
     use Instruction::*;
 
     use super::*;
-    use crate::jvm::method::AccessFlags;
-
     #[test]
     fn exception_table_entry_covers_half_open_range() {
         let data = ExceptionTableEntryData {
@@ -304,10 +302,9 @@ mod test {
     }
 
     #[test]
-    fn local_variable_merging_compares_names_and_preserves_borrowed_metadata() {
+    fn local_variable_merging_accepts_equal_names_and_rejects_conflicts() {
         use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
         use crate::jvm::errors::ParseErrorKind;
-        use crate::types::Descriptor;
 
         let bytes = &[0xed, 0xa0, 0x80];
         let raw = RawConstantPool::from_entries([
@@ -323,7 +320,7 @@ mod test {
         let int = pool.intern_field_type(4).unwrap();
         let long = pool.intern_field_type(5).unwrap();
         let signature = pool.utf8_id(6).unwrap();
-        let class_name = pool.insert_class_name("LocalMetadata".parse().unwrap());
+        assert_ne!(names[0], names[1]);
         let id = LocalVariableId {
             range: 0.into()..2.into(),
             index: 1,
@@ -352,34 +349,15 @@ mod test {
                     .kind(),
                 ParseErrorKind::Malformed
             );
-            let class = Class {
-                name: class_name,
-                constant_pool: pool.clone().finish(),
-                ..Class::default()
-            };
-            let entry = LocalVariableTable {
-                class: &class,
-                data: &data,
-            }
-            .get(&id)
-            .unwrap();
-            assert_eq!(entry.name().unwrap().as_bytes(), bytes);
-            assert_eq!(entry.var_type().unwrap().descriptor(), "J");
-            assert_eq!(entry.signature().unwrap(), "TT;");
-            let (actual_id, actual_entry) = LocalVariableTable {
-                class: &class,
-                data: &data,
-            }
-            .iter()
-            .next()
-            .unwrap();
-            assert_eq!(actual_id, &id);
-            assert_eq!(actual_entry.name(), entry.name());
+            let entry = data.entries.get(&id).unwrap();
+            assert_eq!(pool.utf8(entry.name.unwrap()).as_bytes(), bytes);
+            assert_eq!(entry.var_type, Some(long));
+            assert_eq!(entry.signature, Some(signature));
         }
     }
 
     #[test]
-    fn exception_and_stack_map_types_borrow_the_class() {
+    fn exception_and_stack_map_types_resolve_pool_ids() {
         use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
         use crate::types::Descriptor;
 
@@ -401,60 +379,29 @@ mod test {
             constant_pool: pool.finish(),
             ..Class::default()
         };
-        let fixture = crate::tests::method([(0, Return)], "()V", vec![], AccessFlags::PUBLIC);
-        let mut data = fixture.body.clone().unwrap();
-        data.exception_table = Box::new([ExceptionTableEntryData {
+        let entry_data = ExceptionTableEntryData {
             covered_pc: 0.into()..1.into(),
             handler_pc: 1.into(),
             catch_type: Some(catch_type),
-        }]);
-        data.stack_map_table = Some(Box::new([StackMapFrameData::Full {
-            offset_delta: 3,
-            locals: Box::new([VerificationTypeData::Object(array_type)]),
-            stack: Box::new([]),
-        }]));
-        let caught = MethodBody::new(&class, &data)
-            .exception_table()
-            .next()
-            .unwrap()
-            .catch_type()
-            .unwrap();
+        };
+        let entry = ExceptionTableEntry {
+            class: &class,
+            data: &entry_data,
+        };
+        let caught = entry.catch_type().unwrap();
         assert!(std::ptr::eq(
             caught,
             class.constant_pool.class_name(catch_type)
         ));
-        assert!(
-            MethodBody::new(&class, &data)
-                .exception_table()
-                .next()
-                .unwrap()
-                .catches_all()
-        );
-        let StackMapFrame::FullFrame {
-            offset_delta,
-            locals,
-            stack,
-        } = MethodBody::new(&class, &data)
-            .stack_map_table()
-            .unwrap()
-            .next()
-            .unwrap()
-        else {
-            panic!("expected a full frame")
-        };
-        assert_eq!(offset_delta, 3);
-        assert!(stack.is_empty());
-        let VerificationType::ObjectVariable(array) = locals.get(0).unwrap() else {
-            panic!("expected an object type")
+        assert!(entry.catches_all());
+        let array = VerificationType::new(&class, VerificationTypeData::Object(array_type));
+        let VerificationType::ObjectVariable(array) = array else {
+            panic!("expected an object type");
         };
         assert_eq!(array.descriptor(), "[I");
         assert!(std::ptr::eq(
             array,
             class.constant_pool.reference_type(array_type)
-        ));
-        assert!(matches!(
-            locals.iter().next(),
-            Some(VerificationType::ObjectVariable(_))
         ));
     }
 

@@ -1,7 +1,6 @@
 use super::*;
 use crate::jvm::{
-    ConstantValue, JavaString,
-    class::MethodHandle,
+    JavaString,
     references::{FieldRef, MethodRef},
 };
 
@@ -70,74 +69,6 @@ impl ConstantPool {
         self.extend_test_sources();
         ReferenceTypeId(NonZeroU16::new(index).expect("nonzero test index"))
     }
-    pub(crate) fn insert_invoke_dynamic(
-        &mut self,
-        bootstrap_method_attr_index: u16,
-        name: JavaString,
-        descriptor: MethodDescriptor,
-    ) -> InvokeDynamicId {
-        let name_and_type = self.insert_method_name_and_type(name, descriptor);
-        let index = self.inner.push(Entry::InvokeDynamic {
-            bootstrap_method_attr_index,
-            name_and_type,
-        });
-        self.extend_test_sources();
-        InvokeDynamicId(NonZeroU16::new(index).expect("nonzero test index"))
-    }
-    pub(crate) fn insert_constant(&mut self, value: ConstantValue) -> ConstantValueId {
-        let entry = match value {
-            ConstantValue::Null => panic!("null is not a pool constant"),
-            ConstantValue::Integer(value) => Entry::Integer(value),
-            ConstantValue::Float(value) => Entry::Float(value),
-            ConstantValue::Long(value) => Entry::Long(value),
-            ConstantValue::Double(value) => Entry::Double(value),
-            ConstantValue::String(value) => Entry::String(self.insert_utf8(value)),
-            ConstantValue::Class(value) => Entry::Class {
-                reference_type: value,
-                is_binary_name: false,
-            },
-            ConstantValue::MethodType(value) => {
-                Entry::MethodType(self.insert_method_descriptor(value))
-            }
-            ConstantValue::Dynamic(bootstrap_method_attr_index, name, ty) => Entry::Dynamic {
-                bootstrap_method_attr_index,
-                name_and_type: self.insert_field_name_and_type(name, ty),
-            },
-            ConstantValue::Handle(value) => Entry::MethodHandle(match value {
-                MethodHandle::RefGetField(value) => {
-                    MethodHandleData::GetField(self.insert_field_ref(value))
-                }
-                MethodHandle::RefGetStatic(value) => {
-                    MethodHandleData::GetStatic(self.insert_field_ref(value))
-                }
-                MethodHandle::RefPutField(value) => {
-                    MethodHandleData::PutField(self.insert_field_ref(value))
-                }
-                MethodHandle::RefPutStatic(value) => {
-                    MethodHandleData::PutStatic(self.insert_field_ref(value))
-                }
-                MethodHandle::RefInvokeVirtual(value) => {
-                    MethodHandleData::InvokeVirtual(self.insert_method_ref(value))
-                }
-                MethodHandle::RefInvokeStatic(value) => {
-                    MethodHandleData::InvokeStatic(self.insert_method_ref(value))
-                }
-                MethodHandle::RefInvokeSpecial(value) => {
-                    MethodHandleData::InvokeSpecial(self.insert_method_ref(value))
-                }
-                MethodHandle::RefNewInvokeSpecial(value) => {
-                    MethodHandleData::NewInvokeSpecial(self.insert_method_ref(value))
-                }
-                MethodHandle::RefInvokeInterface(value) => {
-                    MethodHandleData::InvokeInterface(self.insert_method_ref(value))
-                }
-            }),
-        };
-        let index = self.inner.push(entry);
-        self.extend_test_sources();
-        ConstantValueId(NonZeroU16::new(index).expect("nonzero test index"))
-    }
-
     fn extend_test_sources(&mut self) {
         let count = self.inner.count();
         self.method_descriptors.extend_sources(count);

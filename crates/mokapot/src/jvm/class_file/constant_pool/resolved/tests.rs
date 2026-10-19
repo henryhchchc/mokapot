@@ -564,6 +564,21 @@ fn miri_utf8_ranges_survive_growth_and_clone() {
 }
 
 #[test]
+fn miri_owned_method_ref_preserves_pool_name_after_drop() {
+    let name = [0xed, 0xa0, 0x80];
+    let mut pool = ConstantPool::new();
+    let id = pool.insert_method_ref(MethodRef {
+        owner: "pkg/Owner".parse().unwrap(),
+        name: JavaString::from_cesu8(name.to_vec()).unwrap(),
+        descriptor: "()V".parse().unwrap(),
+    });
+    let reference = MethodRef::from(pool.method_ref(id));
+    drop(pool);
+    assert_eq!(reference.name.as_bytes(), name);
+    assert_eq!(reference.descriptor.descriptor(), "()V");
+}
+
+#[test]
 fn string_entries_preserve_jvm_bytes() {
     let bytes = b"a\xc0\x80\xed\xa0\xbd\xed\xb8\x80\xed\xa0\x80";
     let expected = JavaString::from_cesu8(bytes.to_vec()).unwrap();
