@@ -34,6 +34,11 @@ When the hosting type is already private, its associated items may be `pub`: the
 
 Keep tests only when they validate functional invariants of code we write.
 Assume third-party libraries are correct; drop tests that only validate their guarantees.
+Unit tests should validate individual units directly, including private functions and methods.
+Do not exercise every public interface just for coverage; verify the units and use integration tests to validate how they work together.
+Prefer Java source fixtures for integration tests of parsing and IR, rather than assembling instruction fragments by hand.
+Keep focused unit tests for malformed inputs, algorithm edge cases, and unsafe code we write.
+Keep tests crisp; remove redundant tests and test-only machinery they no longer need.
 Opt tests into Miri only when they exercise unsafe code we write.
 
 Add unit tests near the code they cover and integration tests in `crates/mokapot/tests/<feature>.rs`.
