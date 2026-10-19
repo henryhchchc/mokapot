@@ -2,7 +2,7 @@
 use std::fmt;
 
 use super::{
-    Class, ConstantValueView, JavaStr,
+    Class, ConstantValueView, DebugList, JavaStr,
     class_file::constant_pool::{ConstantValueId, FieldTypeId, ReturnTypeId, Utf8Id},
     code::{LocalVariableId, ProgramCounter},
 };
@@ -237,7 +237,7 @@ impl fmt::Debug for Annotation<'_> {
             .field("annotation_type", &self.annotation_type())
             .field(
                 "element_value_pairs",
-                &DebugItems(self.element_value_pairs()),
+                &DebugList::new(|| self.element_value_pairs()),
             )
             .finish()
     }
@@ -311,20 +311,9 @@ impl fmt::Debug for TypeAnnotation<'_> {
             .field("target_path", &self.target_path())
             .field(
                 "element_value_pairs",
-                &DebugItems(self.element_value_pairs()),
+                &DebugList::new(|| self.element_value_pairs()),
             )
             .finish()
-    }
-}
-
-struct DebugItems<I>(I);
-
-impl<I: Iterator + Clone> fmt::Debug for DebugItems<I>
-where
-    I::Item: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.0.clone()).finish()
     }
 }
 
@@ -372,8 +361,14 @@ impl Eq for Annotations<'_> {}
 impl fmt::Debug for Annotations<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Annotations")
-            .field("runtime_visible", &DebugItems(self.runtime_visible()))
-            .field("runtime_invisible", &DebugItems(self.runtime_invisible()))
+            .field(
+                "runtime_visible",
+                &DebugList::new(|| self.runtime_visible()),
+            )
+            .field(
+                "runtime_invisible",
+                &DebugList::new(|| self.runtime_invisible()),
+            )
             .finish()
     }
 }
@@ -424,8 +419,14 @@ impl Eq for TypeAnnotations<'_> {}
 impl fmt::Debug for TypeAnnotations<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypeAnnotations")
-            .field("runtime_visible", &DebugItems(self.runtime_visible()))
-            .field("runtime_invisible", &DebugItems(self.runtime_invisible()))
+            .field(
+                "runtime_visible",
+                &DebugList::new(|| self.runtime_visible()),
+            )
+            .field(
+                "runtime_invisible",
+                &DebugList::new(|| self.runtime_invisible()),
+            )
             .finish()
     }
 }
@@ -492,11 +493,17 @@ impl fmt::Debug for ParameterAnnotations<'_> {
         f.debug_struct("ParameterAnnotations")
             .field(
                 "runtime_visible",
-                &DebugItems(self.runtime_visible().map(DebugItems)),
+                &DebugList::new(|| {
+                    self.runtime_visible()
+                        .map(|annotations| DebugList::new(move || annotations.clone()))
+                }),
             )
             .field(
                 "runtime_invisible",
-                &DebugItems(self.runtime_invisible().map(DebugItems)),
+                &DebugList::new(|| {
+                    self.runtime_invisible()
+                        .map(|annotations| DebugList::new(move || annotations.clone()))
+                }),
             )
             .finish()
     }

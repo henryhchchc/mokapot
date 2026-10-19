@@ -1,9 +1,11 @@
 //! JVM fields and constant values.
 
+use std::fmt;
+
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, ConstantValueView, JavaStr, JavaString,
+        Class, ConstantValueView, DebugList, JavaStr, JavaString,
         annotation::{
             AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
         },
@@ -11,7 +13,7 @@ use crate::{
         class_file::constant_pool::{ConstantValueId, FieldTypeId, Utf8Id},
         references::FieldRef,
     },
-    types::reference_type::ReferenceType,
+    types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// A generic type signature for a field, a formal parameter, a local variable, or a record component.
@@ -60,7 +62,7 @@ impl<'class> Field<'class> {
 
     /// The field type.
     #[must_use]
-    pub fn field_type(&self) -> &'class crate::types::field_type::FieldType {
+    pub fn field_type(&self) -> &'class FieldType {
         self.class.constant_pool.field_type(self.data.field_type)
     }
 
@@ -131,8 +133,8 @@ impl<'class> Field<'class> {
     }
 }
 
-impl std::fmt::Debug for Field<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Field<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Field")
             .field("owner", &self.owner().name())
             .field("access_flags", &self.access_flags())
@@ -146,7 +148,7 @@ impl std::fmt::Debug for Field<'_> {
             .field("type_annotations", &self.type_annotations())
             .field(
                 "other_attributes",
-                &self.other_attributes().collect::<Vec<_>>(),
+                &DebugList::new(|| self.other_attributes()),
             )
             .finish()
     }

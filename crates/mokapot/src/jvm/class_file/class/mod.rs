@@ -145,11 +145,11 @@ impl Class {
             inner_classes,
             enclosing_method,
             source_debug_extension,
-            annotations: crate::jvm::annotation::AnnotationsData {
+            annotations: AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: crate::jvm::annotation::AnnotationsData {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },

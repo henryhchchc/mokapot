@@ -1,12 +1,14 @@
 //! Views of nested and enclosing classes.
 
+use std::fmt;
+
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
         Class, JavaStr,
         class_file::constant_pool::{ClassId, MethodNameAndTypeId, Utf8Id},
     },
-    types::class_name::ClassName,
+    types::{class_name::ClassName, method_descriptor::MethodDescriptor},
 };
 
 use super::NestedClassAccessFlags;
@@ -80,12 +82,7 @@ impl<'class> EnclosingMethod<'class> {
 
     /// Returns the enclosing method name and descriptor, if present.
     #[must_use]
-    pub fn method_name_and_desc(
-        &self,
-    ) -> Option<(
-        &'class JavaStr,
-        &'class crate::types::method_descriptor::MethodDescriptor,
-    )> {
+    pub fn method_name_and_desc(&self) -> Option<(&'class JavaStr, &'class MethodDescriptor)> {
         self.data
             .method
             .map(|id| self.owner.constant_pool.method_name_and_type(id))
@@ -98,8 +95,8 @@ impl<'class> EnclosingMethod<'class> {
     }
 }
 
-impl std::fmt::Debug for InnerClassInfo<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for InnerClassInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerClassInfo")
             .field("inner_class", self.inner_class())
             .field("outer_class", &self.outer_class())
@@ -109,8 +106,8 @@ impl std::fmt::Debug for InnerClassInfo<'_> {
     }
 }
 
-impl std::fmt::Debug for EnclosingMethod<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for EnclosingMethod<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EnclosingMethod")
             .field("class", self.class())
             .field("method_name_and_desc", &self.method_name_and_desc())

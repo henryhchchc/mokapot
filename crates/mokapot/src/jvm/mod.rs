@@ -18,7 +18,9 @@ pub mod module;
 pub mod references;
 
 mod constant_value;
+mod debug;
 pub(crate) use class_file::constant_pool::ConstantPool;
+pub(crate) use debug::DebugList;
 
 mod string;
 pub use annotation::{

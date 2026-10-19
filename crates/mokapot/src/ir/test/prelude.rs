@@ -17,6 +17,7 @@ use crate::{
         method::AccessFlags,
         references::MethodRef,
     },
+    tests::{TestExceptionHandler, TestMethod},
     types::reference_type::ReferenceType,
 };
 
@@ -81,8 +82,8 @@ pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
 pub(crate) fn method<'instruction, I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<crate::tests::TestExceptionHandler>,
-) -> crate::tests::TestMethod
+    exception_table: Vec<TestExceptionHandler>,
+) -> TestMethod
 where
     I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
     PC: Into<ProgramCounter>,

@@ -2,7 +2,7 @@ use crate::types::class_name::ClassName;
 
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::{self, Display},
+    fmt,
     ops::{Bound, Range, RangeBounds},
 };
 
@@ -10,7 +10,7 @@ use super::{Instruction, InstructionData, InstructionList, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, JavaStr,
+        Class, DebugList, JavaStr,
         annotation::{AnnotationsData, TypeAnnotationData, TypeAnnotations},
         attribute::{Attribute, AttributeData},
         class_file::constant_pool::{ClassId, ConstantPool, FieldTypeId, ReferenceTypeId, Utf8Id},
@@ -137,25 +137,22 @@ impl fmt::Debug for MethodBody<'_> {
             .field("instructions", &self.instructions())
             .field(
                 "exception_table",
-                &self.exception_table().collect::<Vec<_>>(),
+                &DebugList::new(|| self.exception_table()),
             )
             .field("line_number_table", &self.line_number_table())
             .field("local_variable_table", &self.local_variable_table())
             .field(
                 "stack_map_table",
-                &self.stack_map_table().map(Iterator::collect::<Vec<_>>),
+                &self
+                    .stack_map_table()
+                    .map(|_| DebugList::new(|| self.stack_map_table().into_iter().flatten())),
             )
             .field("type_annotations", &self.type_annotations())
-            .field("other_attributes", &DebugAttributes(*self))
+            .field(
+                "other_attributes",
+                &DebugList::new(|| self.other_attributes()),
+            )
             .finish()
-    }
-}
-
-struct DebugAttributes<'class>(MethodBody<'class>);
-
-impl fmt::Debug for DebugAttributes<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.0.other_attributes()).finish()
     }
 }
 
@@ -183,20 +180,6 @@ impl<I> IntoIterator for InstructionStorage<I> {
     }
 }
 
-impl<'i, I> IntoIterator for &'i InstructionStorage<I> {
-    type Item = (ProgramCounter, &'i I);
-
-    // TODO: Replace it with opaque type when it's stable.
-    //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = storage_iter::Iter<'i, I>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        storage_iter::Iter {
-            inner: self.0.iter(),
-        }
-    }
-}
-
 impl<I> InstructionStorage<I> {
     pub(crate) fn as_slice(&self) -> &[(ProgramCounter, I)] {
         &self.0
@@ -204,13 +187,6 @@ impl<I> InstructionStorage<I> {
     pub(crate) fn from_ordered(instructions: Vec<(ProgramCounter, I)>) -> Self {
         debug_assert!(instructions.windows(2).all(|pair| pair[0].0 < pair[1].0));
         Self(instructions)
-    }
-
-    /// Creates an iterator over the instructions.
-    pub fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> + ExactSizeIterator {
-        self.into_iter()
     }
 
     pub(crate) fn range_slice(
@@ -241,23 +217,6 @@ impl<I> InstructionStorage<I> {
             Bound::Unbounded => self.0.len(),
         };
         &self.0[start..end]
-    }
-}
-
-impl<I> Display for InstructionStorage<I>
-where
-    I: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.iter();
-        if let Some((pc, instruction)) = iter.next() {
-            write!(f, "{pc}: {instruction}")?;
-        }
-        for (pc, instruction) in iter {
-            writeln!(f)?;
-            write!(f, "{pc}: {instruction}")?;
-        }
-        Ok(())
     }
 }
 
@@ -320,42 +279,12 @@ impl<I> InstructionStorage<I> {
     }
 }
 
-mod storage_iter {
-    use std::slice;
-
-    use crate::jvm::code::ProgramCounter;
-
-    #[derive(Debug)]
-    pub struct Iter<'a, I> {
-        pub(super) inner: slice::Iter<'a, (ProgramCounter, I)>,
-    }
-
-    impl<'a, I> Iterator for Iter<'a, I> {
-        type Item = (ProgramCounter, &'a I);
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.inner.next().map(|(pc, insn)| (*pc, insn))
-        }
-    }
-
-    impl<I> DoubleEndedIterator for Iter<'_, I> {
-        fn next_back(&mut self) -> Option<Self::Item> {
-            self.inner.next_back().map(|(pc, insn)| (*pc, insn))
-        }
-    }
-
-    impl<I> ExactSizeIterator for Iter<'_, I> {
-        fn len(&self) -> usize {
-            self.inner.len()
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use Instruction::*;
 
     use super::*;
+    use crate::jvm::method::AccessFlags;
 
     #[test]
     fn exception_table_entry_covers_half_open_range() {
@@ -472,12 +401,7 @@ mod test {
             constant_pool: pool.finish(),
             ..Class::default()
         };
-        let fixture = crate::tests::method(
-            [(0, Return)],
-            "()V",
-            vec![],
-            crate::jvm::method::AccessFlags::PUBLIC,
-        );
+        let fixture = crate::tests::method([(0, Return)], "()V", vec![], AccessFlags::PUBLIC);
         let mut data = fixture.body.clone().unwrap();
         data.exception_table = Box::new([ExceptionTableEntryData {
             covered_pc: 0.into()..1.into(),

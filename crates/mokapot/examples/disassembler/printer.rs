@@ -107,7 +107,7 @@ impl<'a> ClassPrinter<'a> {
         }
 
         // Print implemented interfaces if any
-        let mut interfaces = self.class.interfaces().peekable();
+        let mut interfaces = self.class.interfaces();
         if let Some(interface) = interfaces.next() {
             print!("  implements ");
             print!("{interface}");
