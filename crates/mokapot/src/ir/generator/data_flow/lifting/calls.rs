@@ -27,7 +27,7 @@ impl LiftContext<'_, '_> {
         let result = self.call_result(&method.descriptor().return_type);
         let expr = Expression::Call {
             kind: InvocationKind::Static,
-            method: method.into(),
+            method: method.into_owned(),
             args: self.frame.stack.pop_arguments(method.descriptor())?,
         };
         self.finish_call(result, expr)
@@ -43,7 +43,7 @@ impl LiftContext<'_, '_> {
         let this = self.frame.stack.pop(Category1)?;
         let expr = Expression::Call {
             kind: kind(this),
-            method: method.into(),
+            method: method.into_owned(),
             args,
         };
         self.finish_call(result, expr)

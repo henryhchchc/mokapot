@@ -17,7 +17,7 @@ impl LiftContext<'_, '_> {
             .stack
             .push(value, field.field_type().value_category())?;
         let expr = FieldAccess::ReadStatic {
-            field: field.into(),
+            field: field.into_owned(),
         }
         .into();
         Ok(Some(Operation::Definition { value, expr }))
@@ -34,7 +34,7 @@ impl LiftContext<'_, '_> {
             .push(value, field.field_type().value_category())?;
         let expr = FieldAccess::ReadInstance {
             object_ref,
-            field: field.into(),
+            field: field.into_owned(),
         }
         .into();
         Ok(Some(Operation::Definition { value, expr }))
@@ -45,7 +45,7 @@ impl LiftContext<'_, '_> {
         field: FieldRefView<'_>,
     ) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
-        let field = field.into();
+        let field = field.into_owned();
         Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteStatic { field, value }.into(),
         }))
@@ -60,7 +60,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Effect {
             expr: FieldAccess::WriteInstance {
                 object_ref,
-                field: field.into(),
+                field: field.into_owned(),
                 value,
             }
             .into(),

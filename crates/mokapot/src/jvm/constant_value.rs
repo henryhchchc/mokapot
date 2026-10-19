@@ -89,20 +89,22 @@ pub enum ConstantValueView<'pool> {
     Dynamic(u16, &'pool JavaStr, &'pool FieldType),
 }
 
-impl From<ConstantValueView<'_>> for ConstantValue {
-    fn from(value: ConstantValueView<'_>) -> Self {
-        match value {
-            ConstantValueView::Null => Self::Null,
-            ConstantValueView::Integer(value) => Self::Integer(value),
-            ConstantValueView::Float(value) => Self::Float(value),
-            ConstantValueView::Long(value) => Self::Long(value),
-            ConstantValueView::Double(value) => Self::Double(value),
-            ConstantValueView::String(value) => Self::String(value.to_owned()),
-            ConstantValueView::Class(value) => Self::Class(value.clone()),
-            ConstantValueView::Handle(value) => Self::Handle(value.into()),
-            ConstantValueView::MethodType(value) => Self::MethodType(value.clone()),
+impl ConstantValueView<'_> {
+    /// Converts this borrowed constant value into an owned value.
+    #[must_use]
+    pub fn into_owned(self) -> ConstantValue {
+        match self {
+            ConstantValueView::Null => ConstantValue::Null,
+            ConstantValueView::Integer(value) => ConstantValue::Integer(value),
+            ConstantValueView::Float(value) => ConstantValue::Float(value),
+            ConstantValueView::Long(value) => ConstantValue::Long(value),
+            ConstantValueView::Double(value) => ConstantValue::Double(value),
+            ConstantValueView::String(value) => ConstantValue::String(value.to_owned()),
+            ConstantValueView::Class(value) => ConstantValue::Class(value.clone()),
+            ConstantValueView::Handle(value) => ConstantValue::Handle(value.into_owned()),
+            ConstantValueView::MethodType(value) => ConstantValue::MethodType(value.clone()),
             ConstantValueView::Dynamic(bootstrap, name, ty) => {
-                Self::Dynamic(bootstrap, name.to_owned(), ty.clone())
+                ConstantValue::Dynamic(bootstrap, name.to_owned(), ty.clone())
             }
         }
     }
@@ -203,7 +205,7 @@ mod tests {
         hash::{Hash, Hasher},
     };
 
-    use super::{ConstantValue, ConstantValueView, FieldType, JavaString};
+    use super::{ConstantValueView, FieldType, JavaString};
 
     #[test]
     fn floating_point_identity() {
@@ -234,8 +236,8 @@ mod tests {
 
         check_identity(&floats);
         check_identity(&doubles);
-        check_identity(&floats.map(ConstantValue::from));
-        check_identity(&doubles.map(ConstantValue::from));
+        check_identity(&floats.map(ConstantValueView::into_owned));
+        check_identity(&doubles.map(ConstantValueView::into_owned));
     }
 
     #[test]
@@ -258,7 +260,7 @@ mod tests {
         ];
 
         check_partial_order(&views);
-        check_partial_order(&views.map(ConstantValue::from));
+        check_partial_order(&views.map(ConstantValueView::into_owned));
         assert_eq!(views[0].partial_cmp(&views[1]), Some(Ordering::Less));
         assert_eq!(views[3].partial_cmp(&views[4]), Some(Ordering::Less));
         assert_eq!(views[0].partial_cmp(&views[2]), None);
