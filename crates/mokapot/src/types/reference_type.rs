@@ -94,7 +94,7 @@ impl FromStr for ReferenceType {
     /// Accepts `java/lang/String`, `Ljava/lang/String;`, and `[I`.
     #[doc = see_jvm_spec!(4, 4, 1)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = JavaString::from(s);
+        let s = JavaString::from(s.to_owned());
         Self::try_from(s.as_java_str())
     }
 }
@@ -162,7 +162,7 @@ mod tests {
         let single_letter: ReferenceType = "I".parse().unwrap();
         assert_eq!(
             single_letter,
-            ReferenceType::Class(ClassName::new("I").unwrap())
+            ReferenceType::Class(ClassName::new("I".to_owned()).unwrap())
         );
     }
 

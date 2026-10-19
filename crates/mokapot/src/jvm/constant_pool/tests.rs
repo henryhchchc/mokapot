@@ -25,7 +25,7 @@ fn member_views_compare_and_hash_values_across_pools() {
     ] = [("field", "()V"), ("field", "()V"), ("other", "()I")].map(|(name, descriptor)| {
         let mut pool = ConstantPool::new();
         let owner = pool.insert_reference_type("pkg/Owner".parse().unwrap());
-        let name = pool.insert_utf8(name.into());
+        let name = pool.insert_utf8(name.to_owned().into());
         let ty = pool.insert_field_type("I".parse().unwrap());
         let index = pool
             .inner
@@ -38,7 +38,7 @@ fn member_views_compare_and_hash_values_across_pools() {
         let field = FieldRefId(NonZeroU16::new(index).unwrap());
         let method = pool.insert_method_ref(MethodRef {
             owner: "pkg/Owner".parse().unwrap(),
-            name: "method".into(),
+            name: "method".to_owned().into(),
             descriptor: descriptor.parse().unwrap(),
         });
         (pool, field, method)
@@ -105,7 +105,7 @@ fn miri_utf8_ranges_survive_growth_and_clone() {
     let inserted = pool.insert_utf8(value.clone());
     assert!(pool.utf8_bytes.capacity() > capacity);
     let mut cloned = pool.clone();
-    cloned.insert_utf8(JavaString::from("another"));
+    cloned.insert_utf8("another".to_owned().into());
     drop(pool);
     for pool in [&original, &cloned] {
         assert_eq!(pool.utf8(first).as_bytes(), bytes);

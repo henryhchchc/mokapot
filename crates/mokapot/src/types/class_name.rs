@@ -98,7 +98,7 @@ impl FromStr for ClassName {
     type Err = InvalidClassName;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new(JavaString::from(s))
+        Self::new(JavaString::from(s.to_owned()))
     }
 }
 
