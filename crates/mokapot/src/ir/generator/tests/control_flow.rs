@@ -59,12 +59,12 @@ fn comparison_branch_preserves_operand_order() {
 fn switches_preserve_ordered_parallel_arms_and_case_guards() {
     let table = Instruction::TableSwitch {
         low: 3,
-        jump_targets: Box::new([10.into(), 10.into()]),
+        jump_targets: &[10.into(), 10.into()],
         default: 10.into(),
     };
     let lookup = Instruction::LookupSwitch {
         default: 10.into(),
-        match_targets: BTreeMap::from([(1, 10.into()), (5, 10.into())]),
+        match_targets: &BTreeMap::from([(1, 10.into()), (5, 10.into())]),
     };
     for (instruction, cases) in [(table, [3, 4]), (lookup, [1, 5])] {
         let body = [
@@ -100,7 +100,7 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
     let match_targets = BTreeMap::new();
     let instruction = Instruction::LookupSwitch {
         default: 10.into(),
-        match_targets,
+        match_targets: &match_targets,
     };
     let body = [
         (0, Instruction::ILoad0),
@@ -136,7 +136,7 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     ];
     let body = [
         (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::Return),
         (10, Instruction::AStore0),

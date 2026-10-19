@@ -4,10 +4,10 @@ use super::*;
 fn unhandled_exceptions_target_the_method_unwind_exit() {
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::ALoad0),
-        (4, Instruction::CheckCast(ref_t("java/lang/Integer"))),
+        (4, Instruction::CheckCast(&ref_t("java/lang/Integer"))),
         (5, Instruction::AReturn),
     ];
     let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);

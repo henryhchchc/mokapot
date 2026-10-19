@@ -140,7 +140,7 @@ impl BlockExit<ProgramCounter> {
                 match_targets,
                 default,
             } => Self::Switch {
-                cases: match_targets.clone(),
+                cases: (*match_targets).clone(),
                 default: *default,
             },
             _ => Self::Continue {
@@ -204,10 +204,10 @@ mod tests {
         for (low, jump_targets) in [(i32::MAX, vec![10.into(), 10.into()]), (0, vec![])] {
             let switch = Instruction::TableSwitch {
                 low,
-                jump_targets: jump_targets.into(),
+                jump_targets: &jump_targets,
                 default: 10.into(),
             };
-            let instructions = [(0, switch.clone()), (10, Instruction::Return)];
+            let instructions = [(0, switch), (10, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
             assert_eq!(
@@ -220,8 +220,8 @@ mod tests {
     #[test]
     fn rejects_invalid_multianewarray_dimensions() {
         for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
-            let allocation = Instruction::MultiANewArray(ref_t(array_type), dimensions);
-            let instructions = [(0, allocation.clone()), (1, Instruction::Return)];
+            let allocation = Instruction::MultiANewArray(&ref_t(array_type), dimensions);
+            let instructions = [(0, allocation), (1, Instruction::Return)];
             let method = method(instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
             assert_eq!(
@@ -240,7 +240,7 @@ mod tests {
             Instruction::Wide(WideInstruction::Ret(300)),
         ];
         for instruction in instructions {
-            let method = method([(0, instruction.clone())], "()V", vec![]);
+            let method = method([(0, instruction)], "()V", vec![]);
             let body = method.as_method().body().unwrap();
             assert_eq!(
                 BlockExit::of(body, 0.into(), &instruction),

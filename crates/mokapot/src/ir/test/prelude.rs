@@ -78,13 +78,13 @@ pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
 }
 
 /// Builds a `static` method to lift from `instructions`.
-pub(crate) fn method<I, PC>(
+pub(crate) fn method<'instruction, I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<crate::tests::TestExceptionHandler>,
 ) -> crate::tests::TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
     PC: Into<ProgramCounter>,
 {
     crate::tests::method(

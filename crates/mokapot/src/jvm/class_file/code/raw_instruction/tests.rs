@@ -283,7 +283,7 @@ fn switches_decode_at_every_instruction_alignment() {
 
             let instructions = collect_instructions(&bytes).unwrap();
             let pc = ProgramCounter::from(u16::try_from(prefix_len).unwrap());
-            match instructions.get(&pc).unwrap() {
+            match instructions.get(pc).unwrap() {
                 RawInstruction::TableSwitch(info) => {
                     assert_eq!(info.jump_offsets.len(), 2);
                 }
@@ -311,6 +311,6 @@ fn switches_reject_unavailable_large_tables() {
 
 fn collect_instructions(
     bytes: &[u8],
-) -> Result<crate::jvm::code::InstructionList<RawInstruction<'_>>, ParseError> {
+) -> Result<crate::jvm::code::InstructionStorage<RawInstruction<'_>>, ParseError> {
     RawInstruction::iter_from_bytes(bytes).collect()
 }

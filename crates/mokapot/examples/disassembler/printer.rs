@@ -234,7 +234,7 @@ fn print_method_body(body: &MethodBody<'_>) {
     );
 
     // Print each bytecode instruction with its program counter offset
-    for (pc, instruction) in body.instructions().iter() {
+    for (pc, instruction) in body.instructions() {
         println!("      {pc}: {instruction}");
     }
 

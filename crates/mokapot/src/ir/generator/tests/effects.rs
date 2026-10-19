@@ -109,7 +109,7 @@ fn multidimensional_array_lengths_follow_array_nesting_order() {
     let body = [
         (0, Instruction::ILoad0),
         (1, Instruction::ILoad1),
-        (2, Instruction::MultiANewArray(ref_t("[[I"), 2)),
+        (2, Instruction::MultiANewArray(&ref_t("[[I"), 2)),
         (3, Instruction::AReturn),
     ];
     let ir = build(&method(body, "(II)[[I", vec![])).unwrap();
@@ -158,10 +158,10 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
     ] {
         let method_ref = method_ref("accept", descriptor);
         let invocations = [
-            Instruction::InvokeStatic(method_ref.clone()),
-            Instruction::InvokeVirtual(method_ref.clone()),
-            Instruction::InvokeInterface(method_ref.clone(), 4),
-            Instruction::InvokeSpecial(method_ref.clone()),
+            Instruction::InvokeStatic(&method_ref),
+            Instruction::InvokeVirtual(&method_ref),
+            Instruction::InvokeInterface(&method_ref, 4),
+            Instruction::InvokeSpecial(&method_ref),
         ];
         for (invocation, kind) in invocations.into_iter().zip(kinds) {
             let receiver = if matches!(invocation, Instruction::InvokeStatic(_)) {
@@ -174,7 +174,7 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
                 (1, Instruction::ILoad1),
                 (2, Instruction::LLoad2),
                 (3, invocation),
-                (4, return_instruction.clone()),
+                (4, return_instruction),
             ];
             let ir = lift(body, caller_descriptor, vec![]);
             let operation = terminator_at(&ir, 3.into()).operation().unwrap();
@@ -196,9 +196,9 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
 fn instance_invocations_require_a_receiver() {
     let method_ref = method_ref("accept", "(IJ)V");
     for invocation in [
-        Instruction::InvokeVirtual(method_ref.clone()),
-        Instruction::InvokeInterface(method_ref.clone(), 4),
-        Instruction::InvokeSpecial(method_ref),
+        Instruction::InvokeVirtual(&method_ref),
+        Instruction::InvokeInterface(&method_ref, 4),
+        Instruction::InvokeSpecial(&method_ref),
     ] {
         let body = [
             (0, Instruction::ILoad0),
@@ -217,8 +217,8 @@ fn dynamic_invocations_remain_closures() {
     let descriptor: MethodDescriptor = "(IJ)Ljava/lang/Object;".parse().unwrap();
     let invocation = Instruction::InvokeDynamic {
         bootstrap_method_index: 7,
-        name: "accept".into(),
-        descriptor: descriptor.clone(),
+        name: crate::jvm::JavaStr::from_cesu8(b"accept").unwrap(),
+        descriptor: &descriptor,
     };
     let body = [
         (0, Instruction::ILoad0),
@@ -248,7 +248,7 @@ fn field_reads_define_values_and_writes_are_effects() {
     };
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::GetField(field.clone())),
+        (1, Instruction::GetField(&field)),
         (2, Instruction::IReturn),
     ];
     let read = lift(body, "(Ljava/lang/Object;)I", vec![]);
@@ -264,7 +264,7 @@ fn field_reads_define_values_and_writes_are_effects() {
     let body = [
         (0, Instruction::ALoad0),
         (1, Instruction::ILoad1),
-        (2, Instruction::PutField(field.clone())),
+        (2, Instruction::PutField(&field)),
         (3, Instruction::Return),
     ];
     let write = lift(body, "(Ljava/lang/Object;I)V", vec![]);
@@ -277,7 +277,7 @@ fn field_reads_define_values_and_writes_are_effects() {
     assert_eq!(operation, &expected);
 
     let body = [
-        (0, Instruction::GetStatic(field.clone())),
+        (0, Instruction::GetStatic(&field)),
         (1, Instruction::IReturn),
     ];
     let read = lift(body, "()I", vec![]);
@@ -290,7 +290,7 @@ fn field_reads_define_values_and_writes_are_effects() {
 
     let body = [
         (0, Instruction::ILoad0),
-        (1, Instruction::PutStatic(field.clone())),
+        (1, Instruction::PutStatic(&field)),
         (2, Instruction::Return),
     ];
     let write = lift(body, "(I)V", vec![]);

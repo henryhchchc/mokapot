@@ -33,7 +33,7 @@ impl BlockLayout {
             .instructions()
             .iter()
             .map(|(pc, instruction)| {
-                BlockExit::of(body, pc, instruction)
+                BlockExit::of(body, pc, &instruction)
                     .at_pc(pc)
                     .map(|exit| (pc, exit))
             })

@@ -8,19 +8,19 @@ use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
         class_file::constant_pool::ConstantPool,
-        code::{Instruction, ProgramCounter, WideInstruction},
+        code::{InstructionData, ProgramCounter, WideInstruction},
         errors::ParseError,
         errors::ParsingErrorContext,
     },
     types::field_type::PrimitiveType,
 };
 
-impl Instruction {
+impl InstructionData {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn from_raw_instruction(
         raw_instruction: RawInstruction<'_>,
         pc: ProgramCounter,
-        constant_pool: &ConstantPool,
+        constant_pool: &mut ConstantPool,
     ) -> Result<Self, ParseError> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
@@ -46,15 +46,15 @@ impl Instruction {
             BiPush { value } => Self::BiPush(value),
             SiPush { value } => Self::SiPush(value),
             Ldc { const_index } => {
-                let constant = constant_pool.get_constant_value(u16::from(const_index))?;
+                let constant = constant_pool.intern_constant(u16::from(const_index))?;
                 Self::Ldc(constant)
             }
             LdcW { const_index } => {
-                let constant = constant_pool.get_constant_value(const_index)?;
+                let constant = constant_pool.intern_constant(const_index)?;
                 Self::LdcW(constant)
             }
             Ldc2W { const_index } => {
-                let constant = constant_pool.get_constant_value(const_index)?;
+                let constant = constant_pool.intern_constant(const_index)?;
                 Self::Ldc2W(constant)
             }
 
@@ -304,51 +304,45 @@ impl Instruction {
 
             // References
             GetStatic { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
+                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
                 Self::GetStatic(field_ref)
             }
             PutStatic { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
+                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
                 Self::PutStatic(field_ref)
             }
             GetField { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
+                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
                 Self::GetField(field_ref)
             }
             PutField { field_ref_index } => {
-                let field_ref = constant_pool.get_field_ref(field_ref_index)?;
+                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
                 Self::PutField(field_ref)
             }
             InvokeVirtual { method_index } => {
-                let method_ref = constant_pool.get_method_ref(method_index)?;
+                let method_ref = constant_pool.method_ref_id(method_index)?;
                 Self::InvokeVirtual(method_ref)
             }
             InvokeSpecial { method_index } => {
-                let method_ref = constant_pool.get_method_or_interface_ref(method_index)?;
+                let method_ref = constant_pool.method_or_interface_ref_id(method_index)?;
                 Self::InvokeSpecial(method_ref)
             }
             InvokeStatic { method_index } => {
-                let method_ref = constant_pool.get_method_or_interface_ref(method_index)?;
+                let method_ref = constant_pool.method_or_interface_ref_id(method_index)?;
                 Self::InvokeStatic(method_ref)
             }
             InvokeInterface {
                 method_index,
                 count,
             } => {
-                let method_ref = constant_pool.get_interface_method_ref(method_index)?;
+                let method_ref = constant_pool.interface_method_ref_id(method_index)?;
                 Self::InvokeInterface(method_ref, count)
             }
             InvokeDynamic { dynamic_index } => {
-                let (bootstrap_method_index, name, descriptor) =
-                    constant_pool.get_invoke_dynamic(dynamic_index)?;
-                Self::InvokeDynamic {
-                    bootstrap_method_index,
-                    name,
-                    descriptor,
-                }
+                Self::InvokeDynamic(constant_pool.invoke_dynamic_id(dynamic_index)?)
             }
             New { index } => {
-                let class_name = constant_pool.get_class_name(index)?;
+                let class_name = constant_pool.class_id(index)?;
                 Self::New(class_name)
             }
             NewArray { atype } => {
@@ -368,17 +362,17 @@ impl Instruction {
                 Self::NewArray(element_type)
             }
             ANewArray { index } => {
-                let element_type = constant_pool.get_type_ref(index)?;
+                let element_type = constant_pool.reference_type_id(index)?;
                 Self::ANewArray(element_type)
             }
             ArrayLength => Self::ArrayLength,
             AThrow => Self::AThrow,
             CheckCast { target_type_index } => {
-                let type_ref = constant_pool.get_type_ref(target_type_index)?;
+                let type_ref = constant_pool.reference_type_id(target_type_index)?;
                 Self::CheckCast(type_ref)
             }
             InstanceOf { target_type_index } => {
-                let type_ref = constant_pool.get_type_ref(target_type_index)?;
+                let type_ref = constant_pool.reference_type_id(target_type_index)?;
                 Self::InstanceOf(type_ref)
             }
             MonitorEnter => Self::MonitorEnter,
@@ -387,7 +381,7 @@ impl Instruction {
             // Extended
             Wide(raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
             MultiANewArray { index, dimensions } => {
-                let type_ref = constant_pool.get_type_ref(index)?;
+                let type_ref = constant_pool.reference_type_id(index)?;
                 Self::MultiANewArray(type_ref, dimensions)
             }
             IfNull { offset } => Self::IfNull((pc + offset).context("Invalid jump offset")?),

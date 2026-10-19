@@ -352,7 +352,7 @@ mod tests {
         let body = class.methods().next().unwrap().body().unwrap();
         assert_eq!(
             body.instructions().get(&0.into()),
-            Some(&Instruction::Return)
+            Some(Instruction::Return)
         );
     }
 

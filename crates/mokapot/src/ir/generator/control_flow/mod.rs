@@ -61,7 +61,7 @@ impl<'method> Cfg<'method> {
         &self,
         start: ProgramCounter,
         end: ProgramCounter,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &Instruction)> {
+    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, Instruction<'method>)> {
         self.body().instructions().range(start..=end)
     }
 }

@@ -27,7 +27,7 @@ mod cases {
     fn parallel_edges_deliver_their_join_arguments() {
         let switch = Instruction::LookupSwitch {
             default: 8.into(),
-            match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
+            match_targets: &BTreeMap::from([(1, 12.into()), (2, 12.into())]),
         };
         let body = [
             (0, Instruction::IConst0),
