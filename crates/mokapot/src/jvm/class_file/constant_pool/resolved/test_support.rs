@@ -1,6 +1,6 @@
 use super::*;
 use crate::jvm::{
-    ConstantValue,
+    ConstantValue, JavaString,
     class::MethodHandle,
     references::{FieldRef, MethodRef},
 };
@@ -154,8 +154,13 @@ impl ConstantPool {
         ClassId(NonZeroU16::new(index).expect("nonzero test index"))
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "preserve the owned fixture API"
+    )]
     pub(crate) fn insert_utf8(&mut self, value: JavaString) -> Utf8Id {
-        let index = self.inner.push(Entry::Utf8(value));
+        let range = self.append_utf8(&value);
+        let index = self.inner.push(Entry::Utf8(range));
         self.extend_test_sources();
         Utf8Id(NonZeroU16::new(index).expect("nonzero test index"))
     }
@@ -173,6 +178,7 @@ impl ConstantPool {
     pub fn new() -> Self {
         Self {
             inner: PoolStorage::with_padding(1),
+            utf8_bytes: Vec::new(),
             method_descriptors: ValueCache::new(1),
             field_types: ValueCache::new(1),
             return_types: ValueCache::new(1),
