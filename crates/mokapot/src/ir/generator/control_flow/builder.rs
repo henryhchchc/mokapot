@@ -217,11 +217,11 @@ fn visit_exception_successors(
 
 #[cfg(test)]
 mod tests {
-    use crate::{ir::test::prelude::*, jvm::code::Instruction};
+    use crate::ir::test::prelude::*;
 
     #[test]
     fn rejects_methods_without_bodies() {
-        let mut method = method([(0, Instruction::Return)], "()V", vec![]);
+        let mut method = method([(0, InstructionData::Return)], "()V", vec![]);
         method.body = None;
         let error = super::build(method.as_method()).err().unwrap();
         assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);

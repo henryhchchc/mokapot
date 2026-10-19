@@ -2,15 +2,18 @@ use super::*;
 
 #[test]
 fn unhandled_exceptions_target_the_method_unwind_exit() {
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
+    let integer_type = pool.insert_reference_type(ref_t("java/lang/Integer"));
     let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
-        (2, Instruction::Pop),
-        (3, Instruction::ALoad0),
-        (4, Instruction::CheckCast(&ref_t("java/lang/Integer"))),
-        (5, Instruction::AReturn),
+        (0, InstructionData::ALoad0),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::Pop),
+        (3, InstructionData::ALoad0),
+        (4, InstructionData::CheckCast(integer_type)),
+        (5, InstructionData::AReturn),
     ];
-    let ir = lift(body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
+    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
     for pc in [1, 4] {
         assert_matches!(
             terminator_at(&ir, pc.into()),
@@ -24,10 +27,10 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
 fn throw_has_only_ordered_exceptional_outcomes() {
     let runtime = cls_name("java/lang/RuntimeException");
     let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::AThrow),
-        (10, Instruction::AStore1),
-        (11, Instruction::Return),
+        (0, InstructionData::ALoad0),
+        (1, InstructionData::AThrow),
+        (10, InstructionData::AStore1),
+        (11, InstructionData::Return),
     ];
     let table = vec![handler(
         1.into()..2.into(),

@@ -4,24 +4,26 @@ use super::*;
 fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let runtime = cls_name("java/lang/RuntimeException");
     let exception = cls_name("java/lang/Exception");
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
     let body = [
-        (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
-        (2, Instruction::Pop),
-        (3, Instruction::Return),
-        (10, Instruction::AStore1),
-        (11, Instruction::Return),
-        (20, Instruction::AStore1),
-        (21, Instruction::Return),
-        (30, Instruction::AStore1),
-        (31, Instruction::Return),
+        (0, InstructionData::ALoad0),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::Pop),
+        (3, InstructionData::Return),
+        (10, InstructionData::AStore1),
+        (11, InstructionData::Return),
+        (20, InstructionData::AStore1),
+        (21, InstructionData::Return),
+        (30, InstructionData::AStore1),
+        (31, InstructionData::Return),
     ];
     let table = vec![
         handler(1.into()..2.into(), 10.into(), Some(runtime.clone())),
         handler(1.into()..2.into(), 20.into(), None),
         handler(1.into()..2.into(), 30.into(), Some(exception)),
     ];
-    let ir = lift(body, "(Ljava/lang/Object;)V", table);
+    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
     let location = ir.source_map.instructions_at(1.into()).next().unwrap();
     let fallible = block_containing_instruction(&ir, location);
     let transfers = fallible
@@ -44,11 +46,11 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
 #[test]
 fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
     let body = [
-        (0, Instruction::IConst0),
-        (1, Instruction::Pop),
-        (2, Instruction::Return),
-        (10, Instruction::AStore0),
-        (11, Instruction::Return),
+        (0, InstructionData::IConst0),
+        (1, InstructionData::Pop),
+        (2, InstructionData::Return),
+        (10, InstructionData::AStore0),
+        (11, InstructionData::Return),
     ];
     let table = vec![handler(0.into()..2.into(), 10.into(), None)];
     let ir = lift(body, "()V", table);

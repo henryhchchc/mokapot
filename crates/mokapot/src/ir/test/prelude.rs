@@ -4,6 +4,9 @@ use crate::types::class_name::ClassName;
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
+pub(crate) use crate::jvm::ConstantPool;
+pub(crate) use crate::jvm::code::InstructionData;
+
 pub(crate) use crate::ir::{
     BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
     MethodEntry, MokaIRMethod, Operation, SourceMap, Successor, Terminator, ValueId,
@@ -12,11 +15,7 @@ pub(crate) use crate::ir::{
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
-    jvm::{
-        code::{Instruction, ProgramCounter},
-        method::AccessFlags,
-        references::MethodRef,
-    },
+    jvm::{code::ProgramCounter, method::AccessFlags, references::MethodRef},
     tests::{TestExceptionHandler, TestMethod},
     types::reference_type::ReferenceType,
 };
@@ -79,16 +78,35 @@ pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
 }
 
 /// Builds a `static` method to lift from `instructions`.
-pub(crate) fn method<'instruction, I, PC>(
+pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<TestExceptionHandler>,
 ) -> TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
     crate::tests::method(
+        instructions,
+        descriptor,
+        exception_table,
+        AccessFlags::PUBLIC | AccessFlags::STATIC,
+    )
+}
+
+pub(crate) fn method_with_pool<I, PC>(
+    constant_pool: ConstantPool,
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<TestExceptionHandler>,
+) -> TestMethod
+where
+    I: IntoIterator<Item = (PC, InstructionData)>,
+    PC: Into<ProgramCounter>,
+{
+    crate::tests::method_with_pool(
+        constant_pool,
         instructions,
         descriptor,
         exception_table,
@@ -301,13 +319,6 @@ pub(crate) fn operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> 
     reachable_blocks(ir)
         .into_iter()
         .flat_map(|(_, it)| &it.operations)
-}
-
-/// The operations of `ir`'s reachable terminators.
-pub(crate) fn terminator_operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .filter_map(|(_, it)| it.terminator.operation())
 }
 
 /// The JVM origin of `ir`'s entry terminator.
