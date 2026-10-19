@@ -108,7 +108,7 @@ impl Descriptor for ReturnType {
     fn descriptor(&self) -> JavaString {
         match self {
             ReturnType::Some(field_type) => field_type.descriptor(),
-            ReturnType::Void => JavaString::from("V"),
+            ReturnType::Void => JavaString::from("V".to_owned()),
         }
     }
 }
@@ -126,7 +126,7 @@ impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor);
+        let descriptor = JavaString::from(descriptor.to_owned());
         Self::try_from(descriptor.as_java_str())
     }
 }
@@ -176,7 +176,7 @@ pub struct InvalidDescriptor;
 impl FromStr for ReturnType {
     type Err = InvalidDescriptor;
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor);
+        let descriptor = JavaString::from(descriptor.to_owned());
         Self::try_from(descriptor.as_java_str())
     }
 }
@@ -208,7 +208,7 @@ mod test {
             "([V)V",
             "(IL;)V",
         ] {
-            let encoded = JavaString::from(descriptor);
+            let encoded = JavaString::from(descriptor.to_owned());
             let mut input = encoded.as_java_str();
             assert_eq!(parse_params(&mut input), Err(InvalidDescriptor));
             assert_eq!(input, encoded.as_java_str());

@@ -255,11 +255,11 @@ mod tests {
                 let pool = &mut class.constant_pool;
                 if offset {
                     pool.insert_field_type("I".parse().unwrap());
-                    pool.insert_utf8("unused".into());
+                    pool.insert_utf8("unused".to_owned().into());
                 }
                 let annotation_type = pool.insert_field_type("LExample;".parse().unwrap());
-                let name = pool.insert_utf8("value".into());
-                let value = pool.insert_utf8("answer".into());
+                let name = pool.insert_utf8("value".to_owned().into());
+                let value = pool.insert_utf8("answer".to_owned().into());
                 let data = AnnotationData {
                     annotation_type,
                     element_value_pairs: Box::new([(name, ElementValueData::String(value))]),

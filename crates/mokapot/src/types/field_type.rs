@@ -153,7 +153,7 @@ impl FromStr for PrimitiveType {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor);
+        let descriptor = JavaString::from(descriptor.to_owned());
         let mut bytes = descriptor.as_java_str().as_bytes();
         let pt = Self::parse_prefix(&mut bytes)?;
         if bytes.is_empty() {
@@ -337,7 +337,7 @@ impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor);
+        let descriptor = JavaString::from(descriptor.to_owned());
         Self::try_from(descriptor.as_java_str())
     }
 }
@@ -393,7 +393,7 @@ mod tests {
     fn parses_prefix_at_array_depth_boundaries_and_rejects_invalid_elements() {
         for depth in [0_u8, 1, u8::MAX] {
             let descriptor = format!("{}I!", "[".repeat(usize::from(depth)));
-            let encoded = JavaString::from(descriptor.as_str());
+            let encoded = JavaString::from(descriptor);
             let mut input = encoded.as_java_str();
             let parsed = FieldType::parse_prefix(&mut input).unwrap();
             assert_eq!(
@@ -404,7 +404,7 @@ mod tests {
         }
 
         for descriptor in ["Lfoo", "[Lfoo", "Lfoo//bar;", "[Lfoo.bar;", "[[L;"] {
-            let encoded = JavaString::from(descriptor);
+            let encoded = JavaString::from(descriptor.to_owned());
             let mut input = encoded.as_java_str();
             assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
             assert_eq!(input, encoded.as_java_str());

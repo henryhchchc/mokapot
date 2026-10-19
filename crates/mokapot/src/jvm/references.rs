@@ -241,7 +241,7 @@ pub(crate) mod tests {
     fn method_ref(name: &str, descriptor: &str) -> MethodRef {
         MethodRef {
             owner: ReferenceType::Class("org/mokapot/Test".parse().unwrap()),
-            name: name.into(),
+            name: name.to_owned().into(),
             descriptor: descriptor.parse().unwrap(),
         }
     }

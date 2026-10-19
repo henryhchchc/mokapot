@@ -79,7 +79,7 @@ fn invokeinterface_parses_interface_method_refs() {
         method.into_owned(),
         MethodRef {
             owner: "a/b/I".parse().unwrap(),
-            name: "m".into(),
+            name: "m".to_owned().into(),
             descriptor: "()V".parse().unwrap(),
         }
     );

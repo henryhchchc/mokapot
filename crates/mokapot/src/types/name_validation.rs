@@ -35,7 +35,7 @@ pub(super) mod tests {
             "java;lang",
             "java/[lang",
         ] {
-            let name = JavaString::from(name);
+            let name = JavaString::from(name.to_owned());
             assert!(
                 validate_internal_name(name.as_java_str()).is_err(),
                 "accepted {name:?}"
@@ -46,7 +46,7 @@ pub(super) mod tests {
     #[test]
     fn accepts_jvm_names_beyond_source_identifiers() {
         for name in ["123/a name", "module-info", "class", "$", "日本語/🦀"] {
-            let name = JavaString::from(name);
+            let name = JavaString::from(name.to_owned());
             assert!(
                 validate_internal_name(name.as_java_str()).is_ok(),
                 "rejected {name:?}"

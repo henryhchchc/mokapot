@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn partial_order_agrees_with_equality() {
-        let name = JavaString::from("value");
+        let name: JavaString = "value".to_owned().into();
         let ty: FieldType = "I".parse().unwrap();
         let class = "Ljava/lang/Object;".parse().unwrap();
         let descriptor = "()V".parse().unwrap();
