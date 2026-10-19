@@ -31,7 +31,7 @@ pub(crate) struct MethodData {
     pub type_annotations: AnnotationsData<TypeAnnotationData>,
     pub parameter_annotations: AnnotationsData<Box<[AnnotationData]>>,
     pub annotation_default: Option<ElementValueData>,
-    pub parameters: Box<[ParameterInfo]>,
+    pub parameters: Box<[ParameterInfoData]>,
     pub is_synthetic: bool,
     pub is_deprecated: bool,
     pub signature: Option<Utf8Id>,
@@ -112,9 +112,13 @@ impl<'class> Method<'class> {
     }
 
     /// The method parameter information.
-    #[must_use]
-    pub fn parameters(&self) -> &'class [ParameterInfo] {
-        &self.data.parameters
+    pub fn parameters(
+        self,
+    ) -> impl ExactSizeIterator<Item = ParameterInfo<'class>> + DoubleEndedIterator {
+        self.data.parameters.iter().map(move |data| ParameterInfo {
+            class: self.class,
+            data,
+        })
     }
 
     /// Whether the method is synthetic.
@@ -188,7 +192,7 @@ impl std::fmt::Debug for Method<'_> {
             .field("type_annotations", &self.type_annotations())
             .field("parameter_annotations", &self.parameter_annotations())
             .field("annotation_default", &self.annotation_default())
-            .field("parameters", &self.parameters())
+            .field("parameters", &self.parameters().collect::<Vec<_>>())
             .field("is_synthetic", &self.is_synthetic())
             .field("is_deprecated", &self.is_deprecated())
             .field("signature", &self.signature())
@@ -202,12 +206,39 @@ impl std::fmt::Debug for Method<'_> {
 
 /// The information of a method parameter.
 #[doc = see_jvm_spec!(4, 7, 24)]
+#[derive(Clone, Copy)]
+pub struct ParameterInfo<'class> {
+    class: &'class Class,
+    data: &'class ParameterInfoData,
+}
+
 #[derive(Debug, Clone)]
-pub struct ParameterInfo {
-    /// The name of the parameter.
-    pub name: Option<String>,
-    /// The access flags of the parameter.
+pub(crate) struct ParameterInfoData {
+    pub name: Option<Utf8Id>,
     pub access_flags: ParameterAccessFlags,
+}
+
+impl<'class> ParameterInfo<'class> {
+    /// The name of the parameter, if recorded.
+    #[must_use]
+    pub fn name(self) -> Option<&'class JavaStr> {
+        self.data.name.map(|id| self.class.constant_pool.utf8(id))
+    }
+
+    /// The access flags of the parameter.
+    #[must_use]
+    pub const fn access_flags(self) -> ParameterAccessFlags {
+        self.data.access_flags
+    }
+}
+
+impl std::fmt::Debug for ParameterInfo<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParameterInfo")
+            .field("name", &self.name())
+            .field("access_flags", &self.access_flags())
+            .finish()
+    }
 }
 
 bitflags! {
@@ -323,6 +354,43 @@ mod tests {
             body.instructions().get(&0.into()),
             Some(&Instruction::Return)
         );
+    }
+
+    #[test]
+    fn parameter_names_borrow_the_class() {
+        let fixture = crate::tests::method(
+            [(0, Instruction::Return)],
+            "()V",
+            vec![],
+            AccessFlags::PUBLIC,
+        );
+        let mut class = fixture.as_method().owner().clone();
+        let name = class
+            .constant_pool
+            .insert_utf8(JavaString::from_cesu8(vec![0xed, 0xa0, 0x80]).unwrap());
+        class.methods[0].parameters = Box::new([
+            ParameterInfoData {
+                name: Some(name),
+                access_flags: ParameterAccessFlags::FINAL,
+            },
+            ParameterInfoData {
+                name: None,
+                access_flags: ParameterAccessFlags::empty(),
+            },
+        ]);
+        let name = class
+            .methods()
+            .next()
+            .unwrap()
+            .parameters()
+            .next()
+            .unwrap()
+            .name()
+            .unwrap();
+        assert_eq!(name.as_bytes(), &[0xed, 0xa0, 0x80]);
+        let parameters: Vec<_> = class.methods().next().unwrap().parameters().collect();
+        assert_eq!(parameters[0].access_flags(), ParameterAccessFlags::FINAL);
+        assert!(parameters[1].name().is_none());
     }
 
     #[test]

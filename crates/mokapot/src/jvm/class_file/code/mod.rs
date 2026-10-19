@@ -15,8 +15,8 @@ use crate::jvm::{
     annotation::AnnotationsData,
     class_file::code::raw_instruction::RawInstruction,
     code::{
-        ExceptionTableEntry, Instruction, InstructionList, LineNumberTableEntry,
-        LocalVariableTable, MethodBodyData, ProgramCounter,
+        ExceptionTableEntryData, Instruction, InstructionList, LineNumberTableEntry,
+        LocalVariableTableData, MethodBodyData, ProgramCounter,
     },
 };
 
@@ -30,7 +30,7 @@ impl From<raw::LineNumberTableEntry> for LineNumberTableEntry {
 }
 
 impl Resolve for raw::ExceptionTableEntry {
-    type Output = ExceptionTableEntry;
+    type Output = ExceptionTableEntryData;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
@@ -48,9 +48,9 @@ impl Resolve for raw::ExceptionTableEntry {
         let catch_type = if catch_type == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_class_name(catch_type)?)
+            Some(ctx.constant_pool.class_id(catch_type)?)
         };
-        Ok(ExceptionTableEntry {
+        Ok(ExceptionTableEntryData {
             covered_pc,
             handler_pc,
             catch_type,
@@ -84,10 +84,9 @@ impl Resolve for Code<'_> {
             .copied()
             .map(|it| it.resolve(ctx))
             .try_collect_exact()?;
-        let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
         let mut local_variable_table = None;
         extract_attributes! {
-            for attributes in "code" {
+            for attributes in "code" resolving ctx {
                 let line_number_table: LineNumberTable,
                 let stack_map_table: StackMapTable,
                 let runtime_visible_type_annotations:
@@ -95,15 +94,15 @@ impl Resolve for Code<'_> {
                 let runtime_invisible_type_annotations:
                     RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 match Attribute::LocalVariableTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableDescriptorEntry { id, name, field_type } in it {
-                        table.merge_type(id, name, field_type)?;
+                        table.merge_type(id, name, field_type, &ctx.constant_pool)?;
                     }
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableSignatureEntry { id, name, signature } in it {
-                        table.merge_signature(id, name, signature)?;
+                        table.merge_signature(id, name, signature, &ctx.constant_pool)?;
                     }
                 },
                 else let other_attributes
@@ -168,6 +167,37 @@ mod tests {
             assert_eq!(
                 resolve(bytes).unwrap_err().kind(),
                 crate::jvm::errors::ParseErrorKind::Malformed
+            );
+        }
+    }
+
+    #[test]
+    fn catch_types_reject_array_and_descriptor_class_entries() {
+        use crate::jvm::{
+            class_file::constant_pool::{RawConstantPool, RawEntry},
+            errors::ParseErrorKind,
+        };
+
+        for name in [b"[I".as_slice(), b"Ljava/lang/Throwable;"] {
+            let pool = RawConstantPool::from_entries([
+                RawEntry::Utf8(name),
+                RawEntry::Class {
+                    name_index: 1.into(),
+                },
+            ]);
+            let mut ctx = ResolutionContext {
+                constant_pool: ConstantPool::from_raw(pool).unwrap(),
+                class_version: Version::LATEST,
+            };
+            let entry = raw::ExceptionTableEntry {
+                start_pc: 0.into(),
+                end_pc: 1.into(),
+                handler_pc: 1.into(),
+                catch_type: 2.into(),
+            };
+            assert_eq!(
+                entry.resolve(&mut ctx).unwrap_err().kind(),
+                ParseErrorKind::Malformed
             );
         }
     }

@@ -10,9 +10,10 @@ use super::{Instruction, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, JavaString,
+        Class, JavaStr,
         annotation::{AnnotationsData, TypeAnnotationData, TypeAnnotations},
         attribute::{Attribute, AttributeData},
+        class_file::constant_pool::{ClassId, ConstantPool, FieldTypeId, ReferenceTypeId, Utf8Id},
         errors::ParseError,
     },
     types::{field_type::FieldType, reference_type::ReferenceType},
@@ -23,10 +24,10 @@ pub(crate) struct MethodBodyData {
     pub max_stack: u16,
     pub max_locals: u16,
     pub instructions: InstructionList<Instruction>,
-    pub exception_table: Box<[ExceptionTableEntry]>,
+    pub exception_table: Box<[ExceptionTableEntryData]>,
     pub line_number_table: Option<Box<[LineNumberTableEntry]>>,
-    pub local_variable_table: Option<LocalVariableTable>,
-    pub stack_map_table: Option<Box<[StackMapFrame]>>,
+    pub local_variable_table: Option<LocalVariableTableData>,
+    pub stack_map_table: Option<Box<[StackMapFrameData]>>,
     pub type_annotations: AnnotationsData<TypeAnnotationData>,
     pub other_attributes: Box<[AttributeData]>,
 }
@@ -63,9 +64,16 @@ impl<'class> MethodBody<'class> {
     }
 
     /// Returns the exception handlers.
-    #[must_use]
-    pub fn exception_table(self) -> &'class [ExceptionTableEntry] {
-        &self.data.exception_table
+    pub fn exception_table(
+        self,
+    ) -> impl ExactSizeIterator<Item = ExceptionTableEntry<'class>> + DoubleEndedIterator {
+        self.data
+            .exception_table
+            .iter()
+            .map(move |data| ExceptionTableEntry {
+                class: self.class,
+                data,
+            })
     }
 
     /// Returns the line number table.
@@ -76,14 +84,26 @@ impl<'class> MethodBody<'class> {
 
     /// Returns the local variable table.
     #[must_use]
-    pub const fn local_variable_table(self) -> Option<&'class LocalVariableTable> {
-        self.data.local_variable_table.as_ref()
+    pub fn local_variable_table(self) -> Option<LocalVariableTable<'class>> {
+        self.data
+            .local_variable_table
+            .as_ref()
+            .map(|data| LocalVariableTable {
+                class: self.class,
+                data,
+            })
     }
 
     /// Returns the stack map table.
     #[must_use]
-    pub fn stack_map_table(self) -> Option<&'class [StackMapFrame]> {
-        self.data.stack_map_table.as_deref()
+    pub fn stack_map_table(
+        self,
+    ) -> Option<impl ExactSizeIterator<Item = StackMapFrame<'class>> + DoubleEndedIterator> {
+        self.data.stack_map_table.as_ref().map(|table| {
+            table
+                .iter()
+                .map(move |data| StackMapFrame::new(self.class, data))
+        })
     }
 
     /// Returns the type annotations.
@@ -115,10 +135,16 @@ impl fmt::Debug for MethodBody<'_> {
             .field("max_stack", &self.max_stack())
             .field("max_locals", &self.max_locals())
             .field("instructions", self.instructions())
-            .field("exception_table", &self.exception_table())
+            .field(
+                "exception_table",
+                &self.exception_table().collect::<Vec<_>>(),
+            )
             .field("line_number_table", &self.line_number_table())
             .field("local_variable_table", &self.local_variable_table())
-            .field("stack_map_table", &self.stack_map_table())
+            .field(
+                "stack_map_table",
+                &self.stack_map_table().map(Iterator::collect::<Vec<_>>),
+            )
             .field("type_annotations", &self.type_annotations())
             .field("other_attributes", &DebugAttributes(*self))
             .finish()
@@ -350,16 +376,179 @@ mod test {
 
     #[test]
     fn exception_table_entry_covers_half_open_range() {
-        use super::super::ExceptionTableEntry;
-
-        let entry = ExceptionTableEntry {
+        let data = ExceptionTableEntryData {
             covered_pc: 1.into()..4.into(),
             handler_pc: 5.into(),
             catch_type: None,
         };
+        let class = Class::default();
+        let entry = ExceptionTableEntry {
+            class: &class,
+            data: &data,
+        };
         assert!(entry.covers(1.into()));
         assert!(entry.covers(3.into()));
         assert!(!entry.covers(4.into()));
+    }
+
+    #[test]
+    fn local_variable_merging_compares_names_and_preserves_borrowed_metadata() {
+        use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
+        use crate::jvm::errors::ParseErrorKind;
+        use crate::types::Descriptor;
+
+        let bytes = &[0xed, 0xa0, 0x80];
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(bytes),
+            RawEntry::Utf8(bytes),
+            RawEntry::Utf8(b"other"),
+            RawEntry::Utf8(b"I"),
+            RawEntry::Utf8(b"J"),
+            RawEntry::Utf8(b"TT;"),
+        ]);
+        let mut pool = ConstantPool::from_raw(raw).unwrap();
+        let names = [1, 2, 3].map(|index| pool.utf8_id(index).unwrap());
+        let int = pool.intern_field_type(4).unwrap();
+        let long = pool.intern_field_type(5).unwrap();
+        let signature = pool.utf8_id(6).unwrap();
+        let class_name = pool.insert_class_name("LocalMetadata".parse().unwrap());
+        let id = LocalVariableId {
+            range: 0.into()..2.into(),
+            index: 1,
+        };
+        for signature_first in [false, true] {
+            let mut data = LocalVariableTableData::default();
+            if signature_first {
+                data.merge_signature(id.clone(), names[0], signature, &pool)
+                    .unwrap();
+                data.merge_type(id.clone(), names[1], int, &pool).unwrap();
+            } else {
+                data.merge_type(id.clone(), names[0], int, &pool).unwrap();
+                data.merge_signature(id.clone(), names[1], signature, &pool)
+                    .unwrap();
+            }
+            data.merge_type(id.clone(), names[0], long, &pool).unwrap();
+            assert_eq!(
+                data.merge_type(id.clone(), names[2], int, &pool)
+                    .unwrap_err()
+                    .kind(),
+                ParseErrorKind::Malformed
+            );
+            assert_eq!(
+                data.merge_signature(id.clone(), names[2], signature, &pool)
+                    .unwrap_err()
+                    .kind(),
+                ParseErrorKind::Malformed
+            );
+            let class = Class {
+                name: class_name,
+                constant_pool: pool.clone().finish(),
+                ..Class::default()
+            };
+            let entry = LocalVariableTable {
+                class: &class,
+                data: &data,
+            }
+            .get(&id)
+            .unwrap();
+            assert_eq!(entry.name().unwrap().as_bytes(), bytes);
+            assert_eq!(entry.var_type().unwrap().descriptor(), "J");
+            assert_eq!(entry.signature().unwrap(), "TT;");
+            let (actual_id, actual_entry) = LocalVariableTable {
+                class: &class,
+                data: &data,
+            }
+            .iter()
+            .next()
+            .unwrap();
+            assert_eq!(actual_id, &id);
+            assert_eq!(actual_entry.name(), entry.name());
+        }
+    }
+
+    #[test]
+    fn exception_and_stack_map_types_borrow_the_class() {
+        use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
+        use crate::types::Descriptor;
+
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(b"java/lang/Throwable"),
+            RawEntry::Class {
+                name_index: 1.into(),
+            },
+            RawEntry::Utf8(b"[I"),
+            RawEntry::Class {
+                name_index: 3.into(),
+            },
+        ]);
+        let pool = ConstantPool::from_raw(raw).unwrap();
+        let catch_type = pool.class_id(2).unwrap();
+        let array_type = pool.reference_type_id(4).unwrap();
+        let class = Class {
+            name: catch_type,
+            constant_pool: pool.finish(),
+            ..Class::default()
+        };
+        let fixture = crate::tests::method(
+            [(0, Return)],
+            "()V",
+            vec![],
+            crate::jvm::method::AccessFlags::PUBLIC,
+        );
+        let mut data = fixture.body.clone().unwrap();
+        data.exception_table = Box::new([ExceptionTableEntryData {
+            covered_pc: 0.into()..1.into(),
+            handler_pc: 1.into(),
+            catch_type: Some(catch_type),
+        }]);
+        data.stack_map_table = Some(Box::new([StackMapFrameData::Full {
+            offset_delta: 3,
+            locals: Box::new([VerificationTypeData::Object(array_type)]),
+            stack: Box::new([]),
+        }]));
+        let caught = MethodBody::new(&class, &data)
+            .exception_table()
+            .next()
+            .unwrap()
+            .catch_type()
+            .unwrap();
+        assert!(std::ptr::eq(
+            caught,
+            class.constant_pool.class_name(catch_type)
+        ));
+        assert!(
+            MethodBody::new(&class, &data)
+                .exception_table()
+                .next()
+                .unwrap()
+                .catches_all()
+        );
+        let StackMapFrame::FullFrame {
+            offset_delta,
+            locals,
+            stack,
+        } = MethodBody::new(&class, &data)
+            .stack_map_table()
+            .unwrap()
+            .next()
+            .unwrap()
+        else {
+            panic!("expected a full frame")
+        };
+        assert_eq!(offset_delta, 3);
+        assert!(stack.is_empty());
+        let VerificationType::ObjectVariable(array) = locals.get(0).unwrap() else {
+            panic!("expected an object type")
+        };
+        assert_eq!(array.descriptor(), "[I");
+        assert!(std::ptr::eq(
+            array,
+            class.constant_pool.reference_type(array_type)
+        ));
+        assert!(matches!(
+            locals.iter().next(),
+            Some(VerificationType::ObjectVariable(_))
+        ));
     }
 
     #[test]
@@ -393,49 +582,63 @@ mod test {
     }
 }
 
-/// An entry in the exception table.
-#[doc = see_jvm_spec!(4, 7, 3)]
-///
-/// ```
-/// use mokapot::jvm::code::{ExceptionTableEntry, ProgramCounter};
-///
-/// let start = ProgramCounter::from(2);
-/// let end = ProgramCounter::from(5);
-/// let handler = ExceptionTableEntry {
-///     covered_pc: start..end,
-///     handler_pc: end,
-///     catch_type: None,
-/// };
-/// assert!(handler.covers(start));
-/// assert!(!handler.covers(end));
-/// assert!(handler.catches_all());
-/// ```
 #[derive(Debug, Clone)]
-pub struct ExceptionTableEntry {
-    /// The half-open range of locations where the exception handler is active.
-    ///
-    /// This corresponds to the JVM class file's `start_pc <= pc < end_pc` invariant.
+pub(crate) struct ExceptionTableEntryData {
     pub covered_pc: Range<ProgramCounter>,
-    /// The location of the exception handler.
     pub handler_pc: ProgramCounter,
-    /// The type of the exception to be handled.
-    pub catch_type: Option<ClassName>,
+    pub catch_type: Option<ClassId>,
 }
 
-impl ExceptionTableEntry {
+/// An entry in the exception table.
+#[doc = see_jvm_spec!(4, 7, 3)]
+#[derive(Clone, Copy)]
+pub struct ExceptionTableEntry<'class> {
+    class: &'class Class,
+    data: &'class ExceptionTableEntryData,
+}
+
+impl<'class> ExceptionTableEntry<'class> {
+    /// The half-open range where the exception handler is active.
+    #[must_use]
+    pub const fn covered_pc(self) -> &'class Range<ProgramCounter> {
+        &self.data.covered_pc
+    }
+
+    /// The location of the exception handler.
+    #[must_use]
+    pub const fn handler_pc(self) -> ProgramCounter {
+        self.data.handler_pc
+    }
+
+    /// The type of the exception to be handled.
+    #[must_use]
+    pub fn catch_type(self) -> Option<&'class ClassName> {
+        self.data
+            .catch_type
+            .map(|id| self.class.constant_pool.class_name(id))
+    }
+
     /// Checks whether the given program counter is covered by this exception handler.
     #[must_use]
-    pub fn covers(&self, pc: ProgramCounter) -> bool {
-        self.covered_pc.contains(&pc)
+    pub fn covers(self, pc: ProgramCounter) -> bool {
+        self.covered_pc().contains(&pc)
     }
 
     /// Returns whether this exception handler catches all exceptions.
     #[must_use]
-    pub fn catches_all(&self) -> bool {
-        const THROWABLE_NAME: &str = "java/lang/Throwable";
-        self.catch_type
-            .as_ref()
-            .is_none_or(|caught| caught.as_java_str() == THROWABLE_NAME)
+    pub fn catches_all(self) -> bool {
+        self.catch_type()
+            .is_none_or(|caught| caught.as_java_str() == "java/lang/Throwable")
+    }
+}
+
+impl fmt::Debug for ExceptionTableEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExceptionTableEntry")
+            .field("covered_pc", &self.covered_pc())
+            .field("handler_pc", &self.handler_pc())
+            .field("catch_type", &self.catch_type())
+            .finish()
     }
 }
 
@@ -449,55 +652,106 @@ pub struct LineNumberTableEntry {
     pub line_number: u16,
 }
 
-/// A local variable table.
-#[doc = see_jvm_spec!(4, 7, 13)]
 #[derive(Debug, Clone, Default)]
-pub struct LocalVariableTable {
-    entries: HashMap<LocalVariableId, LocalVariableTableEntry>,
+pub(crate) struct LocalVariableTableData {
+    entries: HashMap<LocalVariableId, LocalVariableTableEntryData>,
 }
 
-impl LocalVariableTable {
-    pub(crate) fn merge_type(
+impl LocalVariableTableData {
+    pub fn merge_type(
         &mut self,
         key: LocalVariableId,
-        name: JavaString,
-        field_type: FieldType,
+        name: Utf8Id,
+        field_type: FieldTypeId,
+        pool: &ConstantPool,
     ) -> Result<(), ParseError> {
-        let entry = self.entries.entry(key).or_default();
-        if let Some(existing_name) = entry.name.as_ref()
-            && existing_name != &name
-        {
-            Err(ParseError::malform("Name of local variable does not match"))?;
-        }
-        entry.name = Some(name);
+        let entry = self.entry(key, name, pool)?;
         entry.var_type = Some(field_type);
         Ok(())
     }
 
-    pub(crate) fn merge_signature(
+    pub fn merge_signature(
         &mut self,
         key: LocalVariableId,
-        name: JavaString,
-        signature: JavaString,
+        name: Utf8Id,
+        signature: Utf8Id,
+        pool: &ConstantPool,
     ) -> Result<(), ParseError> {
-        let entry = self.entries.entry(key).or_default();
-        if let Some(existing_name) = entry.name.as_ref()
-            && existing_name != &name
-        {
-            Err(ParseError::malform("Name of local variable does not match"))?;
-        }
-        entry.name = Some(name);
+        let entry = self.entry(key, name, pool)?;
         entry.signature = Some(signature);
         Ok(())
     }
+
+    fn entry(
+        &mut self,
+        key: LocalVariableId,
+        name: Utf8Id,
+        pool: &ConstantPool,
+    ) -> Result<&mut LocalVariableTableEntryData, ParseError> {
+        let entry = self.entries.entry(key).or_default();
+        if let Some(existing_name) = entry.name
+            && pool.utf8(existing_name) != pool.utf8(name)
+        {
+            return Err(ParseError::malform("Name of local variable does not match"));
+        }
+        entry.name = Some(name);
+        Ok(entry)
+    }
 }
 
-impl IntoIterator for LocalVariableTable {
-    type Item = (LocalVariableId, LocalVariableTableEntry);
-    type IntoIter = <HashMap<LocalVariableId, LocalVariableTableEntry> as IntoIterator>::IntoIter;
+/// A local variable table.
+#[doc = see_jvm_spec!(4, 7, 13)]
+#[derive(Clone, Copy)]
+pub struct LocalVariableTable<'class> {
+    class: &'class Class,
+    data: &'class LocalVariableTableData,
+}
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.entries.into_iter()
+impl<'class> LocalVariableTable<'class> {
+    /// Iterates over the local variable identifiers and their information.
+    pub fn iter(
+        self,
+    ) -> impl ExactSizeIterator<Item = (&'class LocalVariableId, LocalVariableTableEntry<'class>)>
+    {
+        self.data.entries.iter().map(move |(id, data)| {
+            (
+                id,
+                LocalVariableTableEntry {
+                    class: self.class,
+                    data,
+                },
+            )
+        })
+    }
+
+    /// Returns the information for a local variable.
+    #[must_use]
+    pub fn get(self, id: &LocalVariableId) -> Option<LocalVariableTableEntry<'class>> {
+        self.data
+            .entries
+            .get(id)
+            .map(|data| LocalVariableTableEntry {
+                class: self.class,
+                data,
+            })
+    }
+
+    /// Returns the number of local variables.
+    #[must_use]
+    pub fn len(self) -> usize {
+        self.data.entries.len()
+    }
+
+    /// Returns whether the table is empty.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.data.entries.is_empty()
+    }
+}
+
+impl fmt::Debug for LocalVariableTable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
     }
 }
 
@@ -510,22 +764,59 @@ pub struct LocalVariableId {
     pub index: u16,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct LocalVariableTableEntryData {
+    pub name: Option<Utf8Id>,
+    pub var_type: Option<FieldTypeId>,
+    pub signature: Option<Utf8Id>,
+}
+
 /// An entry in the local variable table.
 #[doc = see_jvm_spec!(4, 7, 13)]
-#[derive(Debug, Clone, Default)]
-pub struct LocalVariableTableEntry {
+#[derive(Clone, Copy)]
+pub struct LocalVariableTableEntry<'class> {
+    class: &'class Class,
+    data: &'class LocalVariableTableEntryData,
+}
+
+impl<'class> LocalVariableTableEntry<'class> {
     /// The name of the variable.
-    pub name: Option<JavaString>,
+    #[must_use]
+    pub fn name(self) -> Option<&'class JavaStr> {
+        self.data.name.map(|id| self.class.constant_pool.utf8(id))
+    }
+
     /// The type of the variable.
-    pub var_type: Option<FieldType>,
+    #[must_use]
+    pub fn var_type(self) -> Option<&'class FieldType> {
+        self.data
+            .var_type
+            .map(|id| self.class.constant_pool.field_type(id))
+    }
+
     /// The generic signature of the variable.
-    pub signature: Option<JavaString>,
+    #[must_use]
+    pub fn signature(self) -> Option<&'class JavaStr> {
+        self.data
+            .signature
+            .map(|id| self.class.constant_pool.utf8(id))
+    }
+}
+
+impl fmt::Debug for LocalVariableTableEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocalVariableTableEntry")
+            .field("name", &self.name())
+            .field("var_type", &self.var_type())
+            .field("signature", &self.signature())
+            .finish()
+    }
 }
 
 /// The type of a value in the stack map table for verification.
 #[doc = see_jvm_spec!(4, 7, 4)]
-#[derive(Debug, Clone)]
-pub enum VerificationType {
+#[derive(Debug, Clone, Copy)]
+pub enum VerificationType<'class> {
     /// Indicates that the local variable has the verification type `top`.
     TopVariable,
     /// Indicates that the local variable has the verification type `int`.
@@ -537,7 +828,7 @@ pub enum VerificationType {
     /// Indicates that the local variable has the verification type `uninitializedThis`.
     UninitializedThisVariable,
     /// Indicates that the local variable has the verification type `object` with the given type
-    ObjectVariable(ReferenceType),
+    ObjectVariable(&'class ReferenceType),
     /// Indicates that the local variable has the verification type `uninitialized` with the given offset.
     UninitializedVariable {
         /// The location of the [`Instruction::New`] that created the object.
@@ -551,8 +842,8 @@ pub enum VerificationType {
 
 /// A stack map frame for verification.
 #[doc = see_jvm_spec!(4, 7, 4)]
-#[derive(Debug, Clone)]
-pub enum StackMapFrame {
+#[derive(Debug, Clone, Copy)]
+pub enum StackMapFrame<'class> {
     /// Indicates that the frame has exactly the same locals as the previous frame and that the operand stack is empty.
     /// Corresponds to the `same_frame` and `same_frame_extended`.
     SameFrame {
@@ -565,7 +856,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The type of the one entry in the operand stack.
-        stack: VerificationType,
+        stack: VerificationType<'class>,
     },
     /// Indicates that the frame has the same local variables as the previous frame except that the last few local
     /// variables are absent, and that the operand stack is empty.
@@ -583,7 +874,7 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of additional local variables.
-        locals: Box<[VerificationType]>,
+        locals: VerificationTypes<'class>,
     },
     /// Indicates a new frame.
     /// Corresponds to `full_frame`.
@@ -591,8 +882,155 @@ pub enum StackMapFrame {
         /// The offset where the frame applies.
         offset_delta: u16,
         /// The verification information of the local variables.
-        locals: Box<[VerificationType]>,
+        locals: VerificationTypes<'class>,
         /// The verification information of the operand stack.
-        stack: Box<[VerificationType]>,
+        stack: VerificationTypes<'class>,
     },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum VerificationTypeData {
+    Top,
+    Integer,
+    Float,
+    Null,
+    UninitializedThis,
+    Object(ReferenceTypeId),
+    Uninitialized { offset: ProgramCounter },
+    Long,
+    Double,
+}
+
+impl<'class> VerificationType<'class> {
+    fn new(class: &'class Class, data: VerificationTypeData) -> Self {
+        match data {
+            VerificationTypeData::Top => Self::TopVariable,
+            VerificationTypeData::Integer => Self::IntegerVariable,
+            VerificationTypeData::Float => Self::FloatVariable,
+            VerificationTypeData::Null => Self::NullVariable,
+            VerificationTypeData::UninitializedThis => Self::UninitializedThisVariable,
+            VerificationTypeData::Object(id) => {
+                Self::ObjectVariable(class.constant_pool.reference_type(id))
+            }
+            VerificationTypeData::Uninitialized { offset } => {
+                Self::UninitializedVariable { offset }
+            }
+            VerificationTypeData::Long => Self::LongVariable,
+            VerificationTypeData::Double => Self::DoubleVariable,
+        }
+    }
+}
+
+/// The verification types of local variables or operand stack entries.
+#[derive(Clone, Copy)]
+pub struct VerificationTypes<'class> {
+    class: &'class Class,
+    data: &'class [VerificationTypeData],
+}
+
+impl<'class> VerificationTypes<'class> {
+    /// Iterates over the verification types.
+    pub fn iter(
+        self,
+    ) -> impl ExactSizeIterator<Item = VerificationType<'class>> + DoubleEndedIterator {
+        self.data
+            .iter()
+            .map(move |data| VerificationType::new(self.class, *data))
+    }
+
+    /// Returns the verification type at the given index.
+    #[must_use]
+    pub fn get(self, index: usize) -> Option<VerificationType<'class>> {
+        self.data
+            .get(index)
+            .map(|data| VerificationType::new(self.class, *data))
+    }
+
+    /// Returns the number of verification types.
+    #[must_use]
+    pub const fn len(self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns whether the sequence is empty.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.data.is_empty()
+    }
+}
+
+impl fmt::Debug for VerificationTypes<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum StackMapFrameData {
+    Same {
+        offset_delta: u16,
+    },
+    SameLocals1StackItem {
+        offset_delta: u16,
+        stack: VerificationTypeData,
+    },
+    Chop {
+        offset_delta: u16,
+        chop_count: u8,
+    },
+    Append {
+        offset_delta: u16,
+        locals: Box<[VerificationTypeData]>,
+    },
+    Full {
+        offset_delta: u16,
+        locals: Box<[VerificationTypeData]>,
+        stack: Box<[VerificationTypeData]>,
+    },
+}
+
+impl<'class> StackMapFrame<'class> {
+    fn new(class: &'class Class, data: &'class StackMapFrameData) -> Self {
+        match data {
+            StackMapFrameData::Same { offset_delta } => Self::SameFrame {
+                offset_delta: *offset_delta,
+            },
+            StackMapFrameData::SameLocals1StackItem {
+                offset_delta,
+                stack,
+            } => Self::SameLocals1StackItemFrame {
+                offset_delta: *offset_delta,
+                stack: VerificationType::new(class, *stack),
+            },
+            StackMapFrameData::Chop {
+                offset_delta,
+                chop_count,
+            } => Self::ChopFrame {
+                offset_delta: *offset_delta,
+                chop_count: *chop_count,
+            },
+            StackMapFrameData::Append {
+                offset_delta,
+                locals,
+            } => Self::AppendFrame {
+                offset_delta: *offset_delta,
+                locals: VerificationTypes {
+                    class,
+                    data: locals,
+                },
+            },
+            StackMapFrameData::Full {
+                offset_delta,
+                locals,
+                stack,
+            } => Self::FullFrame {
+                offset_delta: *offset_delta,
+                locals: VerificationTypes {
+                    class,
+                    data: locals,
+                },
+                stack: VerificationTypes { class, data: stack },
+            },
+        }
+    }
 }

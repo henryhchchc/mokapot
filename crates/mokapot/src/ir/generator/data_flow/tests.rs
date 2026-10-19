@@ -84,7 +84,7 @@ mod cases {
             (4, Instruction::IConst0),
             (5, Instruction::IReturn),
         ];
-        let handlers = vec![crate::jvm::code::ExceptionTableEntry {
+        let handlers = vec![crate::tests::TestExceptionHandler {
             covered_pc: 1.into()..2.into(),
             handler_pc: 3.into(),
             catch_type: None,

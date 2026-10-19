@@ -3,7 +3,7 @@ use crate::{
         Class, ConstantPool, Method,
         annotation::AnnotationsData,
         class,
-        code::{ExceptionTableEntry, Instruction, MethodBodyData, ProgramCounter},
+        code::{ExceptionTableEntryData, Instruction, MethodBodyData, ProgramCounter},
         method::{AccessFlags, MethodData},
     },
     types::class_name::ClassName,
@@ -115,11 +115,18 @@ impl std::ops::DerefMut for TestMethod {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct TestExceptionHandler {
+    pub covered_pc: std::ops::Range<ProgramCounter>,
+    pub handler_pc: ProgramCounter,
+    pub catch_type: Option<ClassName>,
+}
+
 /// Builds a method named `test` in `org/mokapot/Test` from its body.
 pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
+    exception_table: Vec<TestExceptionHandler>,
     access_flags: AccessFlags,
 ) -> TestMethod
 where
@@ -139,6 +146,16 @@ where
             .parse()
             .expect("the owner must be a valid class reference"),
     );
+    let exception_table = exception_table
+        .into_iter()
+        .map(|entry| ExceptionTableEntryData {
+            covered_pc: entry.covered_pc,
+            handler_pc: entry.handler_pc,
+            catch_type: entry
+                .catch_type
+                .map(|name| constant_pool.insert_class_name(name)),
+        })
+        .collect();
     let class = Class {
         constant_pool,
         name: owner,
@@ -150,7 +167,7 @@ where
                 max_stack: 4,
                 max_locals: 4,
                 instructions,
-                exception_table: exception_table.into_boxed_slice(),
+                exception_table,
                 line_number_table: None,
                 local_variable_table: None,
                 stack_map_table: None,

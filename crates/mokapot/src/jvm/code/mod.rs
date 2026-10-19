@@ -4,9 +4,13 @@ mod method_body;
 mod pc;
 
 pub use instruction::{Instruction, WideInstruction};
-pub(crate) use method_body::MethodBodyData;
 pub use method_body::{
     ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
     LocalVariableTable, LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType,
+    VerificationTypes,
+};
+pub(crate) use method_body::{
+    ExceptionTableEntryData, LocalVariableTableData, MethodBodyData, StackMapFrameData,
+    VerificationTypeData,
 };
 pub use pc::{InvalidOffset, ProgramCounter};

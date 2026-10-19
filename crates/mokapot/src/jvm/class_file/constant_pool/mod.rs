@@ -5,7 +5,7 @@ mod resolved;
 mod storage;
 pub(crate) use resolved::{
     ClassId, ConstantPool, ConstantValueId, FieldTypeId, MethodDescriptorId, MethodHandleId,
-    MethodNameAndTypeId, ModuleId, PackageId, ReturnTypeId, Utf8Id,
+    MethodNameAndTypeId, ModuleId, PackageId, ReferenceTypeId, ReturnTypeId, Utf8Id,
 };
 
 use self::storage::{PoolStorage, Slot};

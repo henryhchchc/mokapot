@@ -8,7 +8,7 @@ use std::{
 use super::BlockExit;
 use crate::{
     ir::generator::error::{Error, ErrorKind, ResultExt},
-    jvm::code::{MethodBody, ProgramCounter as PC},
+    jvm::code::{ExceptionTableEntry, MethodBody, ProgramCounter as PC},
 };
 
 pub(super) struct BlockLayout {
@@ -87,7 +87,7 @@ fn leaders(
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
     let mut leaders = BTreeSet::from([entry]);
-    leaders.extend(body.exception_table().iter().map(|it| it.handler_pc));
+    leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
 
     for (&pc, exit) in exits {
         match exit {

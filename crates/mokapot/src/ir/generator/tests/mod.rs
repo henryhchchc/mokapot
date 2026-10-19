@@ -5,7 +5,7 @@ use std::ops::Range;
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
-    jvm::code::{ExceptionTableEntry, Instruction, ProgramCounter},
+    jvm::code::{Instruction, ProgramCounter},
 };
 
 /// Builds `method` into [`MokaIRMethod`].
@@ -17,7 +17,7 @@ pub(crate) fn build(method: &crate::tests::TestMethod) -> Result<MokaIRMethod, M
 pub(crate) fn lift<I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
+    exception_table: Vec<crate::tests::TestExceptionHandler>,
 ) -> MokaIRMethod
 where
     I: IntoIterator<Item = (PC, Instruction)>,
@@ -71,8 +71,8 @@ pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,
     handler_pc: ProgramCounter,
     catch_type: Option<ClassName>,
-) -> ExceptionTableEntry {
-    ExceptionTableEntry {
+) -> crate::tests::TestExceptionHandler {
+    crate::tests::TestExceptionHandler {
         covered_pc,
         handler_pc,
         catch_type,
