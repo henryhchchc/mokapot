@@ -74,6 +74,24 @@ pub enum MethodHandleView<'pool> {
 }
 
 impl MethodHandleView<'_> {
+    /// Converts this borrowed method handle into an owned value.
+    #[must_use]
+    pub fn into_owned(self) -> MethodHandle {
+        match self {
+            Self::RefGetField(value) => MethodHandle::RefGetField(value.into_owned()),
+            Self::RefGetStatic(value) => MethodHandle::RefGetStatic(value.into_owned()),
+            Self::RefPutField(value) => MethodHandle::RefPutField(value.into_owned()),
+            Self::RefPutStatic(value) => MethodHandle::RefPutStatic(value.into_owned()),
+            Self::RefInvokeVirtual(value) => MethodHandle::RefInvokeVirtual(value.into_owned()),
+            Self::RefInvokeStatic(value) => MethodHandle::RefInvokeStatic(value.into_owned()),
+            Self::RefInvokeSpecial(value) => MethodHandle::RefInvokeSpecial(value.into_owned()),
+            Self::RefNewInvokeSpecial(value) => {
+                MethodHandle::RefNewInvokeSpecial(value.into_owned())
+            }
+            Self::RefInvokeInterface(value) => MethodHandle::RefInvokeInterface(value.into_owned()),
+        }
+    }
+
     /// Gets the reference kind of this method handle.
     #[must_use]
     pub const fn reference_kind(self) -> u8 {
@@ -87,22 +105,6 @@ impl MethodHandleView<'_> {
             Self::RefInvokeSpecial(..) => 7,
             Self::RefNewInvokeSpecial(..) => 8,
             Self::RefInvokeInterface(..) => 9,
-        }
-    }
-}
-
-impl From<MethodHandleView<'_>> for MethodHandle {
-    fn from(value: MethodHandleView<'_>) -> Self {
-        match value {
-            MethodHandleView::RefGetField(value) => Self::RefGetField(value.into()),
-            MethodHandleView::RefGetStatic(value) => Self::RefGetStatic(value.into()),
-            MethodHandleView::RefPutField(value) => Self::RefPutField(value.into()),
-            MethodHandleView::RefPutStatic(value) => Self::RefPutStatic(value.into()),
-            MethodHandleView::RefInvokeVirtual(value) => Self::RefInvokeVirtual(value.into()),
-            MethodHandleView::RefInvokeStatic(value) => Self::RefInvokeStatic(value.into()),
-            MethodHandleView::RefInvokeSpecial(value) => Self::RefInvokeSpecial(value.into()),
-            MethodHandleView::RefNewInvokeSpecial(value) => Self::RefNewInvokeSpecial(value.into()),
-            MethodHandleView::RefInvokeInterface(value) => Self::RefInvokeInterface(value.into()),
         }
     }
 }

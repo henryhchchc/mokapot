@@ -123,7 +123,7 @@ fn miri_owned_method_ref_preserves_pool_name_after_drop() {
         name: JavaString::from_cesu8(name.to_vec()).unwrap(),
         descriptor: "()V".parse().unwrap(),
     });
-    let reference = MethodRef::from(pool.method_ref(id));
+    let reference = pool.method_ref(id).into_owned();
     drop(pool);
     assert_eq!(reference.name.as_bytes(), name);
     assert_eq!(reference.descriptor.descriptor(), "()V");

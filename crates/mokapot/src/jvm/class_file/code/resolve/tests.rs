@@ -76,7 +76,7 @@ fn invokeinterface_parses_interface_method_refs() {
     };
     assert_eq!(count, 1);
     assert_eq!(
-        MethodRef::from(method),
+        method.into_owned(),
         MethodRef {
             owner: "a/b/I".parse().unwrap(),
             name: "m".into(),
