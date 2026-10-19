@@ -140,15 +140,25 @@ macro_rules! impl_value_semantics {
                     (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
                     (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
                         (true, true) => Some(Ordering::Equal),
-                        (false, false) => lhs.partial_cmp(rhs),
+                        (false, false) => Some(lhs.total_cmp(rhs)),
                         _ => None,
                     },
                     (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
                         (true, true) => Some(Ordering::Equal),
-                        (false, false) => lhs.partial_cmp(rhs),
+                        (false, false) => Some(lhs.total_cmp(rhs)),
                         _ => None,
                     },
                     (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
+                    (Self::Class(lhs), Self::Class(rhs)) if lhs == rhs => Some(Ordering::Equal),
+                    (Self::Handle(lhs), Self::Handle(rhs)) if lhs == rhs => Some(Ordering::Equal),
+                    (Self::MethodType(lhs), Self::MethodType(rhs)) if lhs == rhs => {
+                        Some(Ordering::Equal)
+                    }
+                    (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2))
+                        if lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2 =>
+                    {
+                        Some(Ordering::Equal)
+                    }
                     _ => None,
                 }
             }
@@ -188,11 +198,12 @@ impl_value_semantics!(ConstantValueView<'_>);
 #[cfg(test)]
 mod tests {
     use std::{
+        cmp::Ordering,
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };
 
-    use super::{ConstantValue, ConstantValueView};
+    use super::{ConstantValue, ConstantValueView, FieldType, JavaString};
 
     #[test]
     fn floating_point_identity() {
@@ -225,6 +236,46 @@ mod tests {
         check_identity(&doubles);
         check_identity(&floats.map(ConstantValue::from));
         check_identity(&doubles.map(ConstantValue::from));
+    }
+
+    #[test]
+    fn partial_order_agrees_with_equality() {
+        let name = JavaString::from("value");
+        let ty: FieldType = "I".parse().unwrap();
+        let class = "Ljava/lang/Object;".parse().unwrap();
+        let descriptor = "()V".parse().unwrap();
+        let views = [
+            ConstantValueView::Float(-0.0),
+            ConstantValueView::Float(0.0),
+            ConstantValueView::Float(f32::NAN),
+            ConstantValueView::Double(-0.0),
+            ConstantValueView::Double(0.0),
+            ConstantValueView::Double(f64::NAN),
+            ConstantValueView::Class(&class),
+            ConstantValueView::MethodType(&descriptor),
+            ConstantValueView::Dynamic(1, name.as_java_str(), &ty),
+            ConstantValueView::Dynamic(2, name.as_java_str(), &ty),
+        ];
+
+        check_partial_order(&views);
+        check_partial_order(&views.map(ConstantValue::from));
+        assert_eq!(views[0].partial_cmp(&views[1]), Some(Ordering::Less));
+        assert_eq!(views[3].partial_cmp(&views[4]), Some(Ordering::Less));
+        assert_eq!(views[0].partial_cmp(&views[2]), None);
+        assert_eq!(views[0].partial_cmp(&views[3]), None);
+        assert_eq!(views[8].partial_cmp(&views[9]), None);
+    }
+
+    fn check_partial_order(values: &[impl PartialOrd]) {
+        for lhs in values {
+            for rhs in values {
+                assert_eq!(lhs == rhs, lhs.partial_cmp(rhs) == Some(Ordering::Equal));
+                assert_eq!(
+                    lhs.partial_cmp(rhs),
+                    rhs.partial_cmp(lhs).map(Ordering::reverse)
+                );
+            }
+        }
     }
 
     fn check_identity(values: &[impl Eq + Hash]) {
