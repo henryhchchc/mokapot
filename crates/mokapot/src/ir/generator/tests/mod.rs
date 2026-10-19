@@ -14,13 +14,13 @@ pub(crate) fn build(method: &crate::tests::TestMethod) -> Result<MokaIRMethod, M
 }
 
 /// Lifts `instructions` into IR, panicking on a build failure.
-pub(crate) fn lift<I, PC>(
+pub(crate) fn lift<'instruction, I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<crate::tests::TestExceptionHandler>,
 ) -> MokaIRMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
     PC: Into<ProgramCounter>,
 {
     build(&method(instructions, descriptor, exception_table)).unwrap()

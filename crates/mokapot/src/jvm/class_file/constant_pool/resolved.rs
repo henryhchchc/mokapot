@@ -102,6 +102,12 @@ pub(crate) struct ReturnTypeId(u16);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ConstantValueId(u16);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FieldRefId(NonZeroU16);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MethodRefId(NonZeroU16);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct InvokeDynamicId(NonZeroU16);
 /// A resolved constant-pool entry.
 #[derive(Debug, Clone, PartialEq)]
 enum Entry {
@@ -203,6 +209,111 @@ impl Entry {
 }
 
 impl ConstantPool {
+    pub(crate) fn field_ref_id(&self, index: u16) -> Result<FieldRefId, ParseError> {
+        match self.entry(index)? {
+            Entry::FieldRef(_) => Ok(FieldRefId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("Fieldref")),
+        }
+    }
+    pub(crate) fn method_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
+        match self.entry(index)? {
+            Entry::MethodRef(_) => Ok(MethodRefId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("Methodref")),
+        }
+    }
+    pub(crate) fn interface_method_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
+        match self.entry(index)? {
+            Entry::InterfaceMethodRef(_) => Ok(MethodRefId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("InterfaceMethodref")),
+        }
+    }
+    pub(crate) fn method_or_interface_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
+        match self.entry(index)? {
+            Entry::MethodRef(_) | Entry::InterfaceMethodRef(_) => Ok(MethodRefId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("Methodref | InterfaceMethodref")),
+        }
+    }
+    pub(crate) fn invoke_dynamic_id(&self, index: u16) -> Result<InvokeDynamicId, ParseError> {
+        match self.entry(index)? {
+            Entry::InvokeDynamic { .. } => Ok(InvokeDynamicId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("InvokeDynamic")),
+        }
+    }
+    pub(crate) fn field_ref(&self, id: FieldRefId) -> &FieldRef {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::FieldRef(value) => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn method_ref(&self, id: MethodRefId) -> &MethodRef {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => value,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    pub(crate) fn invoke_dynamic(&self, id: InvokeDynamicId) -> (u16, &JavaStr, &MethodDescriptor) {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::InvokeDynamic {
+                bootstrap_method_attr_index,
+                name,
+                descriptor,
+            } => (*bootstrap_method_attr_index, name.as_java_str(), descriptor),
+            _ => unreachable!("validated entry kind"),
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn insert_field_ref(&mut self, value: FieldRef) -> FieldRefId {
+        let index = self.inner.push(Entry::FieldRef(value));
+        self.extend_test_sources();
+        FieldRefId(NonZeroU16::new(index).expect("nonzero test index"))
+    }
+    #[cfg(test)]
+    pub(crate) fn insert_method_ref(&mut self, value: MethodRef) -> MethodRefId {
+        let index = self.inner.push(Entry::MethodRef(value));
+        self.extend_test_sources();
+        MethodRefId(NonZeroU16::new(index).expect("nonzero test index"))
+    }
+    #[cfg(test)]
+    pub(crate) fn insert_reference_type(&mut self, value: ReferenceType) -> ReferenceTypeId {
+        let index = self.inner.push(Entry::Class {
+            reference_type: value,
+            is_binary_name: false,
+        });
+        self.extend_test_sources();
+        ReferenceTypeId(NonZeroU16::new(index).expect("nonzero test index"))
+    }
+    #[cfg(test)]
+    pub(crate) fn insert_invoke_dynamic(
+        &mut self,
+        bootstrap_method_attr_index: u16,
+        name: JavaString,
+        descriptor: MethodDescriptor,
+    ) -> InvokeDynamicId {
+        let index = self.inner.push(Entry::InvokeDynamic {
+            bootstrap_method_attr_index,
+            name,
+            descriptor,
+        });
+        self.extend_test_sources();
+        InvokeDynamicId(NonZeroU16::new(index).expect("nonzero test index"))
+    }
+    #[cfg(test)]
+    pub(crate) fn insert_constant(&mut self, value: ConstantValue) -> ConstantValueId {
+        let id = u16::try_from(self.constants.values.len()).expect("test constants fit in u16");
+        self.constants.values.push(value);
+        ConstantValueId(id)
+    }
+
     #[cfg(test)]
     fn extend_test_sources(&mut self) {
         let count = self.inner.count();
@@ -487,24 +598,7 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_invoke_dynamic(
-        &self,
-        index: u16,
-    ) -> Result<(u16, JavaString, MethodDescriptor), ParseError> {
-        match self.entry(index)? {
-            Entry::InvokeDynamic {
-                bootstrap_method_attr_index,
-                name,
-                descriptor,
-            } => Ok((
-                *bootstrap_method_attr_index,
-                name.clone(),
-                descriptor.clone(),
-            )),
-            entry => Err(entry.type_mismatch("InvokeDynamic")),
-        }
-    }
-
+    #[cfg(test)]
     pub(crate) fn get_class_name(&self, index: u16) -> Result<ClassName, ParseError> {
         match self.entry(index)? {
             Entry::Class {

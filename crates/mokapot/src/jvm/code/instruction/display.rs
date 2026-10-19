@@ -21,7 +21,7 @@ impl fmt::Display for WideInstruction {
     }
 }
 
-impl fmt::Display for Instruction {
+impl fmt::Display for Instruction<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         #[allow(clippy::enum_glob_use, reason = "all variants are used")]
         use Instruction::*;
@@ -99,7 +99,7 @@ impl fmt::Display for Instruction {
                 match_targets,
             } => {
                 writeln!(f, "{name} {{")?;
-                for (key, target) in match_targets {
+                for (key, target) in *match_targets {
                     writeln!(f, "  {key}: {target}")?;
                 }
                 writeln!(f, "  default: {default}")?;

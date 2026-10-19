@@ -15,7 +15,7 @@ use crate::jvm::{
     annotation::AnnotationsData,
     class_file::code::raw_instruction::RawInstruction,
     code::{
-        ExceptionTableEntryData, Instruction, InstructionList, LineNumberTableEntry,
+        ExceptionTableEntryData, InstructionData, InstructionStorage, LineNumberTableEntry,
         LocalVariableTableData, MethodBodyData, ProgramCounter,
     },
 };
@@ -74,10 +74,11 @@ impl Resolve for Code<'_> {
         let mut instructions = Vec::new();
         for entry in RawInstruction::iter_from_bytes(code) {
             let (pc, raw) = entry?;
-            let instruction = Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool)?;
+            let instruction =
+                InstructionData::from_raw_instruction(raw, pc, &mut ctx.constant_pool)?;
             instructions.push((pc, instruction));
         }
-        let instructions = InstructionList::from_ordered(instructions);
+        let instructions = InstructionStorage::from_ordered(instructions);
 
         let exception_table = exception_table
             .iter()
@@ -157,10 +158,10 @@ mod tests {
         assert_eq!(
             instructions,
             [
-                (0.into(), Instruction::BiPush(42)),
-                (2.into(), Instruction::IConst1),
-                (3.into(), Instruction::IAdd),
-                (4.into(), Instruction::IReturn),
+                (0.into(), InstructionData::BiPush(42)),
+                (2.into(), InstructionData::IConst1),
+                (3.into(), InstructionData::IAdd),
+                (4.into(), InstructionData::IReturn),
             ]
         );
         for bytes in [&[0x10][..], &[0xb2, 0, 1], &[0xcb]] {

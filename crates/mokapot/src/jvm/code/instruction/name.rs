@@ -1,6 +1,6 @@
 use super::Instruction;
 
-impl Instruction {
+impl Instruction<'_> {
     /// Gets the name of the [Instruction].
     #[must_use]
     #[allow(clippy::too_many_lines)]

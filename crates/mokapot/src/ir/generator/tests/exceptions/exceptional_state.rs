@@ -4,7 +4,7 @@ use super::*;
 fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::AStore1),
         (3, Instruction::Return),
     ];
@@ -41,7 +41,7 @@ fn exceptional_landing_splits_normal_and_exceptional_states_at_one_pc() {
 fn exceptional_state_excludes_the_fallible_result() {
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::AReturn),
         (10, Instruction::AStore1),
         (11, Instruction::ALoad0),
@@ -86,7 +86,7 @@ fn exception_table_arms_share_one_handler_entry_at_the_same_pc() {
     let runtime = cls_name("java/lang/RuntimeException");
     let body = [
         (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::Return),
         (10, Instruction::AStore0),
         (11, Instruction::Return),
