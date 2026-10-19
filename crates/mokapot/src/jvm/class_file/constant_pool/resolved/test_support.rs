@@ -192,23 +192,6 @@ impl ConstantPool {
     pub const fn count(&self) -> u16 {
         self.inner.count()
     }
-
-    pub(crate) fn get_class_name(&self, index: u16) -> Result<ClassName, ParseError> {
-        match self.entry(index)? {
-            Entry::Class {
-                reference_type: ReferenceType::Class(value),
-                is_binary_name: true,
-            } => Ok(value.clone()),
-            entry => Err(entry.type_mismatch("Class with a non-array name")),
-        }
-    }
-
-    pub(crate) fn get_type_ref(&self, index: u16) -> Result<ReferenceType, ParseError> {
-        match self.entry(index)? {
-            Entry::Class { reference_type, .. } => Ok(reference_type.clone()),
-            entry => Err(entry.type_mismatch("Class")),
-        }
-    }
 }
 
 impl Default for ConstantPool {

@@ -8,9 +8,10 @@ use crate::jvm::{
     class_file::{ParseError, ResolutionContext, resolve::Resolve},
 };
 
+use super::class::raw as class_raw;
 use super::flags::parse_flags;
 
-impl Resolve for super::class::raw::InnerClass {
+impl Resolve for class_raw::InnerClass {
     type Output = InnerClassData;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
@@ -42,7 +43,7 @@ impl Resolve for super::class::raw::InnerClass {
     }
 }
 
-impl Resolve for super::class::raw::EnclosingMethod {
+impl Resolve for class_raw::EnclosingMethod {
     type Output = EnclosingMethodData;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {

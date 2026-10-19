@@ -21,8 +21,17 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        code::{LineNumberTableEntry, StackMapFrameData},
+        annotation::{AnnotationData, ElementValueData, TypeAnnotationData},
+        attribute::AttributeData,
+        class::{
+            bootstrap::BootstrapMethodData,
+            nesting::{EnclosingMethodData, InnerClassData},
+            record_component::RecordComponentData,
+        },
+        class_file::constant_pool::{ClassId, ConstantValueId, PackageId, Utf8Id},
+        code::{LineNumberTableEntry, MethodBodyData, StackMapFrameData},
         method::ParameterInfoData,
+        module::ModuleData,
     },
 };
 
@@ -54,37 +63,37 @@ impl<'a> Decode<'a> for &'a AttributeInfo {
 
 #[derive(Debug)]
 pub(crate) enum Attribute {
-    ConstantValue(super::constant_pool::ConstantValueId),
-    Code(crate::jvm::code::MethodBodyData),
+    ConstantValue(ConstantValueId),
+    Code(MethodBodyData),
     StackMapTable(Box<[StackMapFrameData]>),
-    Exceptions(Box<[super::constant_pool::ClassId]>),
-    SourceFile(super::constant_pool::Utf8Id),
+    Exceptions(Box<[ClassId]>),
+    SourceFile(Utf8Id),
     LineNumberTable(Box<[LineNumberTableEntry]>),
-    InnerClasses(Box<[crate::jvm::class::nesting::InnerClassData]>),
+    InnerClasses(Box<[InnerClassData]>),
     Synthetic,
     Deprecated,
-    EnclosingMethod(crate::jvm::class::nesting::EnclosingMethodData),
-    Signature(super::constant_pool::Utf8Id),
+    EnclosingMethod(EnclosingMethodData),
+    Signature(Utf8Id),
     SourceDebugExtension(Box<[u8]>),
     LocalVariableTable(Box<[LocalVariableDescriptorEntry]>),
     LocalVariableTypeTable(Box<[LocalVariableSignatureEntry]>),
-    RuntimeVisibleAnnotations(Box<[crate::jvm::annotation::AnnotationData]>),
-    RuntimeInvisibleAnnotations(Box<[crate::jvm::annotation::AnnotationData]>),
-    RuntimeVisibleParameterAnnotations(Box<[Box<[crate::jvm::annotation::AnnotationData]>]>),
-    RuntimeInvisibleParameterAnnotations(Box<[Box<[crate::jvm::annotation::AnnotationData]>]>),
-    RuntimeVisibleTypeAnnotations(Box<[crate::jvm::annotation::TypeAnnotationData]>),
-    RuntimeInvisibleTypeAnnotations(Box<[crate::jvm::annotation::TypeAnnotationData]>),
-    AnnotationDefault(crate::jvm::annotation::ElementValueData),
-    BootstrapMethods(Box<[crate::jvm::class::bootstrap::BootstrapMethodData]>),
+    RuntimeVisibleAnnotations(Box<[AnnotationData]>),
+    RuntimeInvisibleAnnotations(Box<[AnnotationData]>),
+    RuntimeVisibleParameterAnnotations(Box<[Box<[AnnotationData]>]>),
+    RuntimeInvisibleParameterAnnotations(Box<[Box<[AnnotationData]>]>),
+    RuntimeVisibleTypeAnnotations(Box<[TypeAnnotationData]>),
+    RuntimeInvisibleTypeAnnotations(Box<[TypeAnnotationData]>),
+    AnnotationDefault(ElementValueData),
+    BootstrapMethods(Box<[BootstrapMethodData]>),
     MethodParameters(Box<[ParameterInfoData]>),
-    Module(crate::jvm::module::ModuleData),
-    ModulePackages(Box<[super::constant_pool::PackageId]>),
-    ModuleMainClass(super::constant_pool::ClassId),
-    NestHost(super::constant_pool::ClassId),
-    NestMembers(Box<[super::constant_pool::ClassId]>),
-    Record(Box<[crate::jvm::class::record_component::RecordComponentData]>),
-    PermittedSubclasses(Box<[super::constant_pool::ClassId]>),
-    Unrecognized(crate::jvm::attribute::AttributeData),
+    Module(ModuleData),
+    ModulePackages(Box<[PackageId]>),
+    ModuleMainClass(ClassId),
+    NestHost(ClassId),
+    NestMembers(Box<[ClassId]>),
+    Record(Box<[RecordComponentData]>),
+    PermittedSubclasses(Box<[ClassId]>),
+    Unrecognized(AttributeData),
 }
 
 impl Attribute {
@@ -134,98 +143,62 @@ impl Resolve for &AttributeInfo {
     )]
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let name_id = ctx.constant_pool.utf8_id(self.attribute_name_index.get())?;
-        let name = match ctx.constant_pool.utf8(name_id).as_bytes() {
-            b"ConstantValue" => "ConstantValue",
-            b"Code" => "Code",
-            b"StackMapTable" => "StackMapTable",
-            b"Exceptions" => "Exceptions",
-            b"InnerClasses" => "InnerClasses",
-            b"EnclosingMethod" => "EnclosingMethod",
-            b"Synthetic" => "Synthetic",
-            b"Deprecated" => "Deprecated",
-            b"Signature" => "Signature",
-            b"SourceFile" => "SourceFile",
-            b"SourceDebugExtension" => "SourceDebugExtension",
-            b"LineNumberTable" => "LineNumberTable",
-            b"LocalVariableTable" => "LocalVariableTable",
-            b"LocalVariableTypeTable" => "LocalVariableTypeTable",
-            b"RuntimeVisibleAnnotations" => "RuntimeVisibleAnnotations",
-            b"RuntimeInvisibleAnnotations" => "RuntimeInvisibleAnnotations",
-            b"RuntimeVisibleParameterAnnotations" => "RuntimeVisibleParameterAnnotations",
-            b"RuntimeInvisibleParameterAnnotations" => "RuntimeInvisibleParameterAnnotations",
-            b"RuntimeVisibleTypeAnnotations" => "RuntimeVisibleTypeAnnotations",
-            b"RuntimeInvisibleTypeAnnotations" => "RuntimeInvisibleTypeAnnotations",
-            b"AnnotationDefault" => "AnnotationDefault",
-            b"BootstrapMethods" => "BootstrapMethods",
-            b"MethodParameters" => "MethodParameters",
-            b"Module" => "Module",
-            b"ModulePackages" => "ModulePackages",
-            b"ModuleMainClass" => "ModuleMainClass",
-            b"NestHost" => "NestHost",
-            b"NestMembers" => "NestMembers",
-            b"Record" => "Record",
-            b"PermittedSubclasses" => "PermittedSubclasses",
-            _ => {
-                return Ok(Attribute::Unrecognized(
-                    crate::jvm::attribute::AttributeData {
-                        name: name_id,
-                        bytes: self.info.into(),
-                    },
-                ));
-            }
-        };
         let mut info = &self.info;
         let bytes = &mut info;
 
-        let result = match name {
-            "ConstantValue" => {
+        let result = match ctx.constant_pool.utf8(name_id).as_bytes() {
+            b"ConstantValue" => {
                 decode_resolved::<raw::ConstantValue>(bytes, ctx).map(Attribute::ConstantValue)
             }
-            "Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
-            "StackMapTable" => {
+            b"Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
+            b"StackMapTable" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<code_raw::StackMapFrameInfo>(bytes, ctx)
                 })
                 .map(Attribute::StackMapTable)
             }
-            "Exceptions" => {
+            b"Exceptions" => {
                 decode_resolved::<&raw::Exceptions>(bytes, ctx).map(Attribute::Exceptions)
             }
-            "InnerClasses" => {
+            b"InnerClasses" => {
                 decode_resolved::<&raw::InnerClasses>(bytes, ctx).map(Attribute::InnerClasses)
             }
-            "EnclosingMethod" => decode_resolved::<class_raw::EnclosingMethod>(bytes, ctx)
+            b"EnclosingMethod" => decode_resolved::<class_raw::EnclosingMethod>(bytes, ctx)
                 .map(Attribute::EnclosingMethod),
-            "Synthetic" => Ok(Attribute::Synthetic),
-            "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
-            "SourceFile" => {
+            b"Synthetic" => Ok(Attribute::Synthetic),
+            b"Deprecated" => Ok(Attribute::Deprecated),
+            b"Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
+            b"SourceFile" => {
                 decode_resolved::<raw::SourceFile>(bytes, ctx).map(Attribute::SourceFile)
             }
-            "SourceDebugExtension" => return Ok(Attribute::SourceDebugExtension(info.into())),
-            "LineNumberTable" => {
+            b"SourceDebugExtension" => {
+                return Ok(Attribute::SourceDebugExtension(info.into()));
+            }
+            b"LineNumberTable" => {
                 decode_resolved::<&raw::LineNumberTable>(bytes, ctx).map(Attribute::LineNumberTable)
             }
-            "LocalVariableTable" => decode_resolved::<&raw::LocalVariableTable>(bytes, ctx)
+            b"LocalVariableTable" => decode_resolved::<&raw::LocalVariableTable>(bytes, ctx)
                 .map(Attribute::LocalVariableTable),
-            "LocalVariableTypeTable" => decode_resolved::<&raw::LocalVariableTypeTable>(bytes, ctx)
-                .map(Attribute::LocalVariableTypeTable),
-            "RuntimeVisibleAnnotations" => {
+            b"LocalVariableTypeTable" => {
+                decode_resolved::<&raw::LocalVariableTypeTable>(bytes, ctx)
+                    .map(Attribute::LocalVariableTypeTable)
+            }
+            b"RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleAnnotations)
             }
-            "RuntimeInvisibleAnnotations" => {
+            b"RuntimeInvisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleAnnotations)
             }
-            "RuntimeVisibleParameterAnnotations" => {
+            b"RuntimeVisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
@@ -235,7 +208,7 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
-            "RuntimeInvisibleParameterAnnotations" => {
+            b"RuntimeInvisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
@@ -245,54 +218,59 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => {
+            b"RuntimeVisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
-            "RuntimeInvisibleTypeAnnotations" => {
+            b"RuntimeInvisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
+            b"AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
                 .map(Attribute::AnnotationDefault),
-            "BootstrapMethods" => {
+            b"BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<&class_raw::BootstrapMethod>(bytes, ctx)
                 })
                 .map(Attribute::BootstrapMethods)
             }
-            "MethodParameters" => decode_resolved::<&raw::MethodParameters>(bytes, ctx)
+            b"MethodParameters" => decode_resolved::<&raw::MethodParameters>(bytes, ctx)
                 .map(Attribute::MethodParameters),
-            "Module" => {
+            b"Module" => {
                 decode_resolved::<module_raw::ModuleInfo>(bytes, ctx).map(Attribute::Module)
             }
-            "ModulePackages" => {
+            b"ModulePackages" => {
                 decode_resolved::<&raw::ModulePackages>(bytes, ctx).map(Attribute::ModulePackages)
             }
-            "ModuleMainClass" => {
+            b"ModuleMainClass" => {
                 decode_resolved::<raw::ModuleMainClass>(bytes, ctx).map(Attribute::ModuleMainClass)
             }
-            "NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
-            "NestMembers" => {
+            b"NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
+            b"NestMembers" => {
                 decode_resolved::<&raw::NestMembers>(bytes, ctx).map(Attribute::NestMembers)
             }
-            "Record" => {
+            b"Record" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<class_raw::RecordComponentInfo>(bytes, ctx)
                 })
                 .map(Attribute::Record)
             }
-            "PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
+            b"PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
                 .map(Attribute::PermittedSubclasses),
-            _ => unreachable!("recognized attribute name"),
+            _ => {
+                return Ok(Attribute::Unrecognized(AttributeData {
+                    name: name_id,
+                    bytes: self.info.into(),
+                }));
+            }
         }?;
         if !bytes.is_empty() {
             return Err(ParseError::malform(
@@ -308,7 +286,8 @@ mod tests {
     use super::*;
     use crate::jvm::{
         class::Version,
-        class_file::constant_pool::{RawConstantPool, RawEntry},
+        class_file::constant_pool::{ConstantPool, RawConstantPool, RawEntry},
+        errors::ParseErrorKind,
     };
 
     fn attribute_bytes(name_index: u16, info: &[u8]) -> Vec<u8> {
@@ -339,10 +318,7 @@ mod tests {
             let raw_pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
             let mut ctx = ResolutionContext {
-                constant_pool: crate::jvm::class_file::constant_pool::ConstantPool::from_raw(
-                    raw_pool,
-                )
-                .unwrap(),
+                constant_pool: ConstantPool::from_raw(raw_pool).unwrap(),
                 class_version: Version::LATEST,
             };
             let payload = [0xaa, 0xbb];
@@ -377,7 +353,7 @@ mod tests {
             let pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
             let mut ctx = ResolutionContext {
-                constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
+                constant_pool: ConstantPool::from_raw(pool).unwrap(),
                 class_version: Version::LATEST,
             };
             let count_width = match name {
@@ -390,7 +366,7 @@ mod tests {
             let bytes = attribute_bytes(index, &payload);
             let raw = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
             let error = raw.resolve(&mut ctx).unwrap_err();
-            assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
+            assert_eq!(error.kind(), ParseErrorKind::Malformed);
         }
     }
 
@@ -408,8 +384,7 @@ mod tests {
             },
         ]);
         let attribute_name_index = 1;
-        let constant_pool =
-            crate::jvm::class_file::constant_pool::ConstantPool::from_raw(raw_pool).unwrap();
+        let constant_pool = ConstantPool::from_raw(raw_pool).unwrap();
         let mut ctx = ResolutionContext {
             constant_pool,
             class_version: Version::LATEST,
@@ -435,14 +410,14 @@ mod tests {
 
     #[test]
     fn method_parameters_resolve_borrowed_records() {
-        use crate::jvm::{errors::ParseErrorKind, method::ParameterAccessFlags};
+        use crate::jvm::method::ParameterAccessFlags;
         let pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"MethodParameters"),
             RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
         ]);
         let attribute_name_index = 1;
         let mut ctx = ResolutionContext {
-            constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
+            constant_pool: ConstantPool::from_raw(pool).unwrap(),
             class_version: Version::LATEST,
         };
         let bytes = [0xff, 1, 0, 2, 0, 0x10];

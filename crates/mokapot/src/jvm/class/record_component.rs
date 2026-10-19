@@ -1,13 +1,16 @@
 //! JVM record components.
 
+use std::fmt;
+
 use crate::jvm::{
-    Class, JavaStr,
+    Class, DebugList, JavaStr,
     annotation::{
         AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
     },
     attribute::{Attribute, AttributeData},
     class_file::constant_pool::{FieldTypeId, Utf8Id},
 };
+use crate::types::field_type::FieldType;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RecordComponentData {
@@ -41,7 +44,7 @@ impl<'class> RecordComponent<'class> {
 
     /// The component type.
     #[must_use]
-    pub fn component_type(&self) -> &'class crate::types::field_type::FieldType {
+    pub fn component_type(&self) -> &'class FieldType {
         self.class
             .constant_pool
             .field_type(self.data.component_type)
@@ -78,8 +81,8 @@ impl<'class> RecordComponent<'class> {
     }
 }
 
-impl std::fmt::Debug for RecordComponent<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for RecordComponent<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RecordComponent")
             .field("owner", &self.owner().name())
             .field("name", &self.name())
@@ -89,7 +92,7 @@ impl std::fmt::Debug for RecordComponent<'_> {
             .field("type_annotations", &self.type_annotations())
             .field(
                 "other_attributes",
-                &self.other_attributes().collect::<Vec<_>>(),
+                &DebugList::new(|| self.other_attributes()),
             )
             .finish()
     }

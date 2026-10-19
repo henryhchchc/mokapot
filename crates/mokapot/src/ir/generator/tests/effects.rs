@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     ir::expression::{ArrayOperation, Conversion, FieldAccess, LockOperation, MathOperation},
-    jvm::references::FieldRef,
+    jvm::{ConstantPool, JavaStr, references::FieldRef},
     types::{
         field_type::{FieldType, PrimitiveType},
         method_descriptor::MethodDescriptor,
@@ -157,7 +157,7 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
         ("(IJ)J", "(Ljava/lang/Object;IJ)J", Instruction::LReturn),
     ] {
         let method_ref = method_ref("accept", descriptor);
-        let mut pool = crate::jvm::ConstantPool::new();
+        let mut pool = ConstantPool::new();
         let id = pool.insert_method_ref(method_ref.clone());
         let target = pool.method_ref(id);
         let invocations = [
@@ -198,7 +198,7 @@ fn invocation_kinds_preserve_receivers_arguments_and_return_categories() {
 #[test]
 fn instance_invocations_require_a_receiver() {
     let method_ref = method_ref("accept", "(IJ)V");
-    let mut pool = crate::jvm::ConstantPool::new();
+    let mut pool = ConstantPool::new();
     let id = pool.insert_method_ref(method_ref);
     let target = pool.method_ref(id);
     for invocation in [
@@ -223,7 +223,7 @@ fn dynamic_invocations_remain_closures() {
     let descriptor: MethodDescriptor = "(IJ)Ljava/lang/Object;".parse().unwrap();
     let invocation = Instruction::InvokeDynamic {
         bootstrap_method_index: 7,
-        name: crate::jvm::JavaStr::from_cesu8(b"accept").unwrap(),
+        name: JavaStr::from_cesu8(b"accept").unwrap(),
         descriptor: &descriptor,
     };
     let body = [
@@ -252,7 +252,7 @@ fn field_reads_define_values_and_writes_are_effects() {
         name: "count".into(),
         field_type: FieldType::Base(PrimitiveType::Int),
     };
-    let mut pool = crate::jvm::ConstantPool::new();
+    let mut pool = ConstantPool::new();
     let id = pool.insert_field_ref(field.clone());
     let target = pool.field_ref(id);
     let body = [

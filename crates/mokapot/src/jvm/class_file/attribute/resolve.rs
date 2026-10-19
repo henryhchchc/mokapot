@@ -5,6 +5,7 @@ use zerocopy::byteorder::big_endian::U16;
 use super::super::{
     ParseError, ResolutionContext,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
+    constant_pool::{ClassId, ConstantValueId},
     flags::parse_flags,
     resolve::{Resolve, resolve_table},
 };
@@ -12,13 +13,14 @@ use super::raw;
 use crate::{
     intrinsics::ExactSizeIteratorExt,
     jvm::{
+        class::nesting::InnerClassData,
         code::LineNumberTableEntry,
         method::{ParameterAccessFlags, ParameterInfoData},
     },
 };
 
 impl Resolve for raw::ConstantValue {
-    type Output = super::super::constant_pool::ConstantValueId;
+    type Output = ConstantValueId;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
@@ -27,7 +29,7 @@ impl Resolve for raw::ConstantValue {
 }
 
 impl Resolve for &raw::Exceptions {
-    type Output = Box<[super::super::constant_pool::ClassId]>;
+    type Output = Box<[ClassId]>;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_indices(&self.exception_index_table, |index| {
@@ -37,7 +39,7 @@ impl Resolve for &raw::Exceptions {
 }
 
 impl Resolve for &raw::InnerClasses {
-    type Output = Box<[crate::jvm::class::nesting::InnerClassData]>;
+    type Output = Box<[InnerClassData]>;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.classes, ctx)

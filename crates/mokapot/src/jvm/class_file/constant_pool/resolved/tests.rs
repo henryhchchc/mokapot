@@ -283,13 +283,13 @@ fn class_and_package_names_parse_with_distinct_tags() {
     let class_name: ClassName = "a/b/C".parse().unwrap();
     let package_name: PackageName = "a/b/C".parse().unwrap();
     assert_eq!(pool.count(), 4);
-    assert_eq!(pool.get_class_name(2).unwrap(), class_name);
+    assert_eq!(pool.class_name(pool.class_id(2).unwrap()), &class_name);
     assert_eq!(
         pool.package_name(pool.package_id(3).unwrap()).clone(),
         package_name
     );
     assert_eq!(
-        pool.get_class_name(3).unwrap_err().kind(),
+        pool.class_id(3).unwrap_err().kind(),
         ParseErrorKind::Malformed,
     );
     assert_eq!(
@@ -311,9 +311,12 @@ fn class_name_accessor_rejects_descriptors() {
         let index = 2;
 
         let pool = ConstantPool::from_raw(pool).unwrap();
-        assert_eq!(pool.get_type_ref(index).unwrap(), reference_type);
         assert_eq!(
-            pool.get_class_name(index).unwrap_err().kind(),
+            pool.reference_type(pool.reference_type_id(index).unwrap()),
+            &reference_type
+        );
+        assert_eq!(
+            pool.class_id(index).unwrap_err().kind(),
             ParseErrorKind::Malformed,
         );
     }
