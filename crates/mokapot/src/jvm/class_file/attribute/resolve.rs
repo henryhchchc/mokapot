@@ -13,7 +13,7 @@ use crate::{
     intrinsics::ExactSizeIteratorExt,
     jvm::{
         code::LineNumberTableEntry,
-        method::{ParameterAccessFlags, ParameterInfo},
+        method::{ParameterAccessFlags, ParameterInfoData},
     },
 };
 
@@ -74,7 +74,7 @@ impl Resolve for &raw::LocalVariableTypeTable {
 }
 
 impl Resolve for &raw::MethodParameters {
-    type Output = Box<[ParameterInfo]>;
+    type Output = Box<[ParameterInfoData]>;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.parameters, ctx)
@@ -92,7 +92,7 @@ fn resolve_indices<T>(
 }
 
 impl Resolve for raw::MethodParameterInfo {
-    type Output = ParameterInfo;
+    type Output = ParameterInfoData;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
@@ -105,10 +105,10 @@ impl Resolve for raw::MethodParameterInfo {
         let name = if name_index == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_str(name_index)?.into_owned())
+            Some(ctx.constant_pool.utf8_id(name_index)?)
         };
         let access_flags =
             parse_flags::<ParameterAccessFlags>(access_flags, "Invalid parameter access flags")?;
-        Ok(ParameterInfo { name, access_flags })
+        Ok(ParameterInfoData { name, access_flags })
     }
 }

@@ -1,6 +1,6 @@
 //! Eagerly resolved JVM constant-pool values.
 
-use std::{borrow::Cow, num::NonZeroU16};
+use std::num::NonZeroU16;
 
 use crate::{
     jvm::{
@@ -77,6 +77,9 @@ pub(crate) struct MethodDescriptorId(u16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ClassId(NonZeroU16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReferenceTypeId(NonZeroU16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PackageId(NonZeroU16);
@@ -219,6 +222,20 @@ impl ConstantPool {
         ClassId(NonZeroU16::new(index).expect("nonzero test index"))
     }
 
+    pub(crate) fn reference_type_id(&self, index: u16) -> Result<ReferenceTypeId, ParseError> {
+        match self.entry(index)? {
+            Entry::Class { .. } => Ok(ReferenceTypeId(
+                NonZeroU16::new(index).expect("validated nonzero index"),
+            )),
+            entry => Err(entry.type_mismatch("Class")),
+        }
+    }
+    pub(crate) fn reference_type(&self, id: ReferenceTypeId) -> &ReferenceType {
+        match self.get_entry(id.0.get()).expect("validated pool ID") {
+            Entry::Class { reference_type, .. } => reference_type,
+            _ => unreachable!("validated entry kind"),
+        }
+    }
     pub(crate) fn class_id(&self, index: u16) -> Result<ClassId, ParseError> {
         match self.entry(index)? {
             Entry::Class {
@@ -485,15 +502,6 @@ impl ConstantPool {
                 descriptor.clone(),
             )),
             entry => Err(entry.type_mismatch("InvokeDynamic")),
-        }
-    }
-
-    pub(crate) fn get_str(&self, index: u16) -> Result<Cow<'_, str>, ParseError> {
-        match self.entry(index)? {
-            Entry::Utf8(value) => value
-                .to_str()
-                .map_err(|_| ParseError::malform("Broken UTF-8")),
-            entry => Err(entry.type_mismatch("Utf8")),
         }
     }
 

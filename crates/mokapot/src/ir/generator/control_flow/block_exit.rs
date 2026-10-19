@@ -178,14 +178,10 @@ fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> b
 /// entries and an escaping exception unwinds.
 fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
     let mut exception_arms = Vec::new();
-    for entry in body
-        .exception_table()
-        .iter()
-        .filter(|entry| entry.covers(pc))
-    {
+    for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
         exception_arms.push(ExceptionArm {
-            target: ExceptionTarget::Handler(entry.handler_pc),
-            catch_type: entry.catch_type.clone(),
+            target: ExceptionTarget::Handler(entry.handler_pc()),
+            catch_type: entry.catch_type().cloned(),
         });
         if entry.catches_all() {
             return exception_arms;

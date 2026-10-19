@@ -13,7 +13,7 @@ use crate::{
     analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
     jvm::{
-        code::{ExceptionTableEntry, Instruction, ProgramCounter},
+        code::{Instruction, ProgramCounter},
         method::AccessFlags,
         references::MethodRef,
     },
@@ -81,7 +81,7 @@ pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
 pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
+    exception_table: Vec<crate::tests::TestExceptionHandler>,
 ) -> crate::tests::TestMethod
 where
     I: IntoIterator<Item = (PC, Instruction)>,
