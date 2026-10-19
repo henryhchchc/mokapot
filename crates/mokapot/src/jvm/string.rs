@@ -243,12 +243,6 @@ impl Borrow<JavaStr> for JavaString {
     }
 }
 
-impl AsRef<JavaStr> for JavaString {
-    fn as_ref(&self) -> &JavaStr {
-        self.as_java_str()
-    }
-}
-
 impl Deref for JavaString {
     type Target = JavaStr;
 
@@ -265,26 +259,6 @@ impl From<String> for JavaString {
             },
             Cow::Owned(bytes) => Self { bytes },
         }
-    }
-}
-
-impl From<&str> for JavaString {
-    fn from(value: &str) -> Self {
-        Self {
-            bytes: mutf8::encode(value).into_owned(),
-        }
-    }
-}
-
-impl From<&JavaStr> for JavaString {
-    fn from(value: &JavaStr) -> Self {
-        value.to_owned()
-    }
-}
-
-impl From<&String> for JavaString {
-    fn from(value: &String) -> Self {
-        Self::from(value.as_str())
     }
 }
 

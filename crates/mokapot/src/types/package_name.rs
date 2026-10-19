@@ -75,7 +75,7 @@ impl FromStr for PackageName {
     type Err = InvalidPackageName;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        Self::new(JavaString::from(name))
+        Self::new(JavaString::from(name.to_owned()))
     }
 }
 

@@ -12,7 +12,7 @@ use crate::{
 impl Default for Class {
     fn default() -> Self {
         let mut constant_pool = ConstantPool::new();
-        let name = constant_pool.insert_class_name(ClassName::new("$default$").unwrap());
+        let name = constant_pool.insert_class_name(ClassName::new("$default$".to_owned()).unwrap());
         Self {
             version: class::Version::LATEST,
             constant_pool,
@@ -85,7 +85,7 @@ where
         .into_iter()
         .map(|(pc, instruction)| (pc.into(), instruction))
         .collect();
-    let name = constant_pool.insert_utf8("test".into());
+    let name = constant_pool.insert_utf8("test".to_owned().into());
     let descriptor =
         constant_pool.insert_method_descriptor(descriptor.parse().expect("valid test descriptor"));
     let owner = constant_pool.insert_class_name(
