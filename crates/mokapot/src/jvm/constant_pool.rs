@@ -41,48 +41,33 @@ impl fmt::Debug for ConstantPool {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Utf8Id(NonZeroU16);
+macro_rules! define_pool_ids {
+    ($($name:ident($inner:ty)),+ $(,)?) => {
+        $(
+            #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+            pub(crate) struct $name($inner);
+        )+
+    };
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MethodDescriptorId(u16);
+define_pool_ids! {
+    Utf8Id(NonZeroU16),
+    MethodDescriptorId(u16),
+    ClassId(NonZeroU16),
+    ReferenceTypeId(NonZeroU16),
+    PackageId(NonZeroU16),
+    ModuleId(NonZeroU16),
+    MethodHandleId(NonZeroU16),
+    MethodNameAndTypeId(NonZeroU16),
+    FieldNameAndTypeId(NonZeroU16),
+    FieldTypeId(u16),
+    ReturnTypeId(u16),
+    ConstantValueId(NonZeroU16),
+    FieldRefId(NonZeroU16),
+    MethodRefId(NonZeroU16),
+    InvokeDynamicId(NonZeroU16),
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ClassId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ReferenceTypeId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PackageId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ModuleId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MethodHandleId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MethodNameAndTypeId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FieldNameAndTypeId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FieldTypeId(u16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ReturnTypeId(u16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ConstantValueId(NonZeroU16);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FieldRefId(NonZeroU16);
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct MethodRefId(NonZeroU16);
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct InvokeDynamicId(NonZeroU16);
 /// A resolved constant-pool entry.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Entry {
