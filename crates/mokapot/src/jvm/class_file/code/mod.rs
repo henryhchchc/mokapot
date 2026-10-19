@@ -19,6 +19,13 @@ use crate::jvm::{
         LocalVariableTableData, MethodBodyData, ProgramCounter,
     },
 };
+use zerocopy::byteorder::big_endian::U16;
+
+impl From<U16> for ProgramCounter {
+    fn from(value: U16) -> Self {
+        Self::from(value.get())
+    }
+}
 
 impl From<raw::LineNumberTableEntry> for LineNumberTableEntry {
     fn from(raw: raw::LineNumberTableEntry) -> Self {
@@ -98,13 +105,13 @@ impl Resolve for Code<'_> {
                 match Attribute::LocalVariableTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableDescriptorEntry { id, name, field_type } in it {
-                        table.merge_type(id, name, field_type, &ctx.constant_pool)?;
+                        local_variable::merge_type(table, id, name, field_type, &ctx.constant_pool)?;
                     }
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableSignatureEntry { id, name, signature } in it {
-                        table.merge_signature(id, name, signature, &ctx.constant_pool)?;
+                        local_variable::merge_signature(table, id, name, signature, &ctx.constant_pool)?;
                     }
                 },
                 else let other_attributes
@@ -132,11 +139,11 @@ impl Resolve for Code<'_> {
 mod tests {
     use super::*;
     use crate::jvm::class::Version;
-    use crate::jvm::class_file::constant_pool::ConstantPool;
+    use crate::jvm::class_file::constant_pool::{RawConstantPool, resolve};
 
     fn context() -> ResolutionContext {
         ResolutionContext {
-            constant_pool: ConstantPool::new(),
+            constant_pool: resolve(RawConstantPool::from_entries([])).unwrap(),
             class_version: Version::LATEST,
         }
     }
@@ -188,7 +195,7 @@ mod tests {
                 },
             ]);
             let mut ctx = ResolutionContext {
-                constant_pool: ConstantPool::from_raw(pool).unwrap(),
+                constant_pool: resolve(pool).unwrap(),
                 class_version: Version::LATEST,
             };
             let entry = raw::ExceptionTableEntry {

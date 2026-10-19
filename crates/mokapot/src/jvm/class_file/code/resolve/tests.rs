@@ -1,5 +1,7 @@
 use super::*;
-use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
+use crate::jvm::class_file::constant_pool::{
+    ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
+};
 use crate::jvm::{Class, code::Instruction, references::MethodRef};
 
 #[test]
@@ -12,8 +14,7 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
         .next()
         .unwrap()
         .unwrap();
-    let actual =
-        InstructionData::from_raw_instruction(raw, 10.into(), &mut ConstantPool::new()).unwrap();
+    let actual = InstructionData::from_raw_instruction(raw, 10.into(), &mut empty_pool()).unwrap();
     assert_eq!(
         actual.view(&Class::default()),
         Instruction::TableSwitch {
@@ -24,7 +25,11 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
     );
 }
 
-fn interface_method_pool(is_interface: bool) -> ConstantPool {
+fn empty_pool() -> ConstantPoolBuilder {
+    resolve(RawConstantPool::from_entries([])).unwrap()
+}
+
+fn interface_method_pool(is_interface: bool) -> ConstantPoolBuilder {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
             class_index: 2.into(),
@@ -49,7 +54,7 @@ fn interface_method_pool(is_interface: bool) -> ConstantPool {
         },
         entry,
     ]);
-    ConstantPool::from_raw(raw).unwrap()
+    resolve(raw).unwrap()
 }
 
 #[test]
@@ -60,10 +65,10 @@ fn invokeinterface_parses_interface_method_refs() {
         .unwrap();
     let mut pool = interface_method_pool(true);
     let data = InstructionData::from_raw_instruction(instruction, pc, &mut pool).unwrap();
-    let name = pool.insert_class_name("Test".parse().unwrap());
+    let name = pool.class_id(2).unwrap();
     let class = Class {
         name,
-        constant_pool: pool,
+        constant_pool: pool.finish(),
         ..Class::default()
     };
     let Instruction::InvokeInterface(method, count) = data.view(&class) else {

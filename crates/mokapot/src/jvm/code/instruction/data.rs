@@ -1,10 +1,10 @@
 use super::{Instruction, WideInstruction};
 use crate::jvm::{
     Class,
-    class_file::constant_pool::{
+    code::ProgramCounter,
+    constant_pool::{
         ClassId, ConstantValueId, FieldRefId, InvokeDynamicId, MethodRefId, ReferenceTypeId,
     },
-    code::ProgramCounter,
 };
 use crate::types::field_type::PrimitiveType;
 use std::collections::BTreeMap;

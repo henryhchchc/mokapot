@@ -5,7 +5,6 @@ use zerocopy::byteorder::big_endian::U16;
 use super::super::{
     ParseError, ResolutionContext,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    constant_pool::{ClassId, ConstantValueId},
     flags::parse_flags,
     resolve::{Resolve, resolve_table},
 };
@@ -15,6 +14,7 @@ use crate::{
     jvm::{
         class::nesting::InnerClassData,
         code::LineNumberTableEntry,
+        constant_pool::{ClassId, ConstantValueId},
         method::{ParameterAccessFlags, ParameterInfoData},
     },
 };

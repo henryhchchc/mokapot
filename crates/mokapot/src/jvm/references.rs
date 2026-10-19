@@ -8,9 +8,7 @@ use std::{
 
 use super::{
     JavaStr, JavaString, Method,
-    class_file::constant_pool::{
-        ConstantPool, FieldNameAndTypeId, MethodNameAndTypeId, ReferenceTypeId,
-    },
+    constant_pool::{ConstantPool, FieldNameAndTypeId, MethodNameAndTypeId, ReferenceTypeId},
 };
 use crate::{
     intrinsics::see_jvm_spec,

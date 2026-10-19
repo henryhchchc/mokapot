@@ -5,7 +5,7 @@ use std::fmt;
 use crate::jvm::{
     Class, ConstantValueView, DebugList,
     class::MethodHandleView,
-    class_file::constant_pool::{ConstantValueId, MethodHandleId},
+    constant_pool::{ConstantValueId, MethodHandleId},
 };
 
 #[derive(Debug, Clone)]

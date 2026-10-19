@@ -1,7 +1,7 @@
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        class_file::constant_pool::{ConstantPool, FieldRefId, MethodRefId},
+        constant_pool::{ConstantPool, FieldRefId, MethodRefId},
         references::{FieldRef, FieldRefView, MethodRef, MethodRefView},
     },
 };
